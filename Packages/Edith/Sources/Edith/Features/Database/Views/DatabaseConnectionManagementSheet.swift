@@ -306,7 +306,24 @@ struct DatabaseConnectionManagementSheet: View {
                         } right: {
                             loadingField("Group", placeholder: "Optional group")
                         }
-                        loadingField("Tags", placeholder: "production, reporting")
+                        field("Tags") {
+                            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                                HStack(spacing: UIScale.pt(8)) {
+                                    EdithTextField(
+                                        placeholder: "Tag", text: .constant("production"))
+                                    Button {
+                                    } label: {
+                                        Image(systemName: "minus.circle")
+                                    }
+                                    .buttonStyle(.edith(.borderless))
+                                }
+                                Button {
+                                } label: {
+                                    Label("Add tag", systemImage: "plus")
+                                }
+                                .buttonStyle(.edith(.secondary))
+                            }
+                        }
                         Toggle("Show this connection in favorites", isOn: .constant(false))
                             .toggleStyle(.switch)
                             .font(.system(size: UIScale.pt(11.5), weight: .medium))

@@ -342,9 +342,10 @@ struct UsageView: View {
         if store.updating, store.stats.isEmpty {
             SkeletonReplica("Loading usage statistics") {
                 VStack(spacing: 9) {
-                    ForEach(0..<4, id: \.self) { index in
+                    ForEach(["Today", "Yesterday", "This week", "This cycle"], id: \.self) {
+                        label in
                         HStack {
-                            Text(index.isMultiple(of: 2) ? "Current session" : "Last seven days")
+                            Text(label)
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text("1.2M")

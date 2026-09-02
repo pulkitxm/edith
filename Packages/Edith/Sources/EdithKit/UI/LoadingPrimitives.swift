@@ -2,8 +2,6 @@ import SwiftUI
 
 public enum ContentLoadingState: Equatable, Sendable {
     case loading
-    case refreshing
-    case partial
     case content
     case empty
     case error
@@ -12,7 +10,7 @@ public enum ContentLoadingState: Equatable, Sendable {
 
     public var presentsContent: Bool {
         switch self {
-        case .refreshing, .partial, .content: true
+        case .content: true
         case .loading, .empty, .error, .offline, .cancelled: false
         }
     }
@@ -20,7 +18,7 @@ public enum ContentLoadingState: Equatable, Sendable {
     public var permitsRetry: Bool {
         switch self {
         case .empty, .error, .offline, .cancelled: true
-        case .loading, .refreshing, .partial, .content: false
+        case .loading, .content: false
         }
     }
 }
@@ -170,11 +168,11 @@ public struct SkeletonReplica<Content: View>: View {
     }
 
     public var body: some View {
-        SkeletonGroup {
-            content.skeletonized()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
+        content.skeletonized()
+            .disabled(true)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
     }
 }
 
@@ -185,29 +183,10 @@ public extension View {
 }
 
 private struct SkeletonReplicaModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.skeletonPhase) private var phase
-
     func body(content: Content) -> some View {
         content
             .redacted(reason: .placeholder)
             .opacity(0.58)
-            .overlay {
-                if !reduceMotion {
-                    GeometryReader { proxy in
-                        LinearGradient(
-                            colors: [.clear, Color.primary.opacity(0.16), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: proxy.size.width * 0.45)
-                        .offset(x: phase ? proxy.size.width : -proxy.size.width * 0.45)
-                    }
-                    .mask {
-                        content.redacted(reason: .placeholder)
-                    }
-                }
-            }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

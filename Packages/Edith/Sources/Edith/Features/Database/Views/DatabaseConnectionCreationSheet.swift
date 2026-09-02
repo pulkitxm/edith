@@ -357,10 +357,10 @@ struct DatabaseConnectionCreationSheet: View {
                     SkeletonReplica(
                         model.phase == .testing ? "Testing connection" : "Saving connection"
                     ) {
-                        Text(model.canSave ? "Save connection" : "Test and save")
+                        Text(footerActionTitle)
                     }
                 } else {
-                    Text(model.canSave ? "Save connection" : "Test and save")
+                    Text(footerActionTitle)
                 }
             }
             .buttonStyle(.edith(.primary, tint: palette.accent))
@@ -370,6 +370,10 @@ struct DatabaseConnectionCreationSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
         .background(palette.panel.opacity(0.68))
+    }
+
+    private var footerActionTitle: String {
+        model.phase == .saving || model.canSave ? "Save connection" : "Test and save"
     }
 
     @ViewBuilder

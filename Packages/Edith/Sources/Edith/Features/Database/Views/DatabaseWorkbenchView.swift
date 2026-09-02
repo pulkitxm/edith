@@ -504,7 +504,6 @@ struct DatabaseWorkbenchView: View {
                     detail: "Use the native read-only editor above, then press Command-Return.")
             } else if explorer.state == .loading {
                 loadingResults(
-                    connection,
                     label: "Loading database objects",
                     cancel: explorer.cancel)
             } else {
@@ -515,7 +514,6 @@ struct DatabaseWorkbenchView: View {
             }
         case .loading where data.records.isEmpty:
             loadingResults(
-                connection,
                 label: workbenchMode == .query ? "Running query" : "Loading data",
                 cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
@@ -535,17 +533,71 @@ struct DatabaseWorkbenchView: View {
     }
 
     private func loadingResults(
-        _ connection: DatabaseConnectionSummary,
         label: String,
         cancel: @escaping () -> Void
     ) -> some View {
         ZStack(alignment: .bottomLeading) {
-            SkeletonReplica(label) {
-                populatedResults(connection)
-            }
+            resultsSkeleton(label: label)
             Button("Cancel", action: cancel)
                 .buttonStyle(.edith(.secondary))
                 .padding(UIScale.pt(12))
+        }
+    }
+
+    private func resultsSkeleton(label: String) -> some View {
+        SkeletonGroup {
+            VStack(spacing: 0) {
+                if workbenchMode == .browse {
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: compact ? 62 : 74, height: 20, corner: 6)
+                        SkeletonBlock(width: compact ? 54 : 68, height: 20, corner: 6)
+                        Spacer(minLength: 0)
+                        SkeletonBlock(width: compact ? 48 : 64, height: 20, corner: 6)
+                    }
+                    .padding(.horizontal, UIScale.pt(10))
+                    .frame(height: UIScale.pt(38))
+                    .background(palette.panel)
+                }
+                VStack(spacing: 0) {
+                    resultSkeletonRow(0, header: true)
+                    ForEach(1..<(compact ? 9 : 11), id: \.self) { row in
+                        resultSkeletonRow(row)
+                    }
+                    Spacer(minLength: 0)
+                }
+                Divider().opacity(0.35)
+                HStack(spacing: UIScale.pt(9)) {
+                    SkeletonBlock(width: compact ? 72 : 104, height: 9)
+                    Spacer(minLength: 0)
+                    SkeletonBlock(width: compact ? 78 : 96, height: 18, corner: 5)
+                }
+                .padding(.horizontal, UIScale.pt(12))
+                .frame(height: UIScale.pt(38))
+                .background(palette.panel)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+
+    private func resultSkeletonRow(_ row: Int, header: Bool = false) -> some View {
+        HStack(spacing: UIScale.pt(compact ? 18 : 30)) {
+            SkeletonBlock(width: 18, height: 8, corner: 3)
+            ForEach(0..<(compact ? 3 : 5), id: \.self) { column in
+                SkeletonBlock(
+                    width: (row + column).isMultiple(of: 3) ? 68 : 94,
+                    height: 8,
+                    corner: 3)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(height: UIScale.pt(header ? 28 : 30))
+        .background(header ? palette.panel.opacity(0.72) : palette.canvas)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.grid.opacity(0.45))
+                .frame(height: 1)
         }
     }
 

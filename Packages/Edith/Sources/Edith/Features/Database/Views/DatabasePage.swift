@@ -58,6 +58,9 @@ final class DatabasePageModel {
             readiness = .ready
             announce("Database tools are ready.")
         } catch is CancellationError {
+            guard generation == requestGeneration else { return }
+            readiness = .failed("The database readiness check was cancelled.")
+            announce("Database tools need attention.")
         } catch {
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .failed(Self.message(for: error))

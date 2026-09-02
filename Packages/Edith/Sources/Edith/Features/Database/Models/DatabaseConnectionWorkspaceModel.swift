@@ -458,7 +458,9 @@ final class DatabaseConnectionWorkspaceModel {
             finishConnectionList(response)
         } catch is CancellationError {
             guard listGeneration == generation else { return }
-            listState = priorState
+            listState =
+                priorState == .idle
+                ? .failed([], "Loading saved database connections was cancelled.") : priorState
         } catch {
             guard listGeneration == generation else { return }
             let message = Self.message(for: error, action: .list)
