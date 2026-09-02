@@ -124,6 +124,9 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("ditto dist/Edith.app dmg-root/Edith.app");
   expect(dmgJob).toContain("-format ULMO Edith.dmg");
   expect(dmgJob).toContain("hdiutil verify Edith.dmg");
+  expect(dmgJob).toContain("for attempt in 1 2 3 4 5; do");
+  expect(dmgJob).toContain("sleep 2");
+  expect(dmgJob).toContain('exit "$verify_status"');
   expect(buildScript).toContain(
     '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );
