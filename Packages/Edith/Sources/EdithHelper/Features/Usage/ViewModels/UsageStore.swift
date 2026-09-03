@@ -237,7 +237,6 @@ final class UsageStore: FeatureModule {
         }
     }
 
-
     nonisolated static func acceptsExternalRefreshStart(updating: Bool) -> Bool {
         !updating
     }

@@ -119,7 +119,8 @@ public enum LimitsCollector {
         }
         do {
             if credential.shouldRefresh(at: Date()) {
-                credential = try await refreshClaudeCredential(credential, session: credentialSession)
+                credential = try await refreshClaudeCredential(
+                    credential, session: credentialSession)
             }
             let usage = try await fetchUsage(token: credential.accessToken)
             try persistHistory(
@@ -138,7 +139,8 @@ public enum LimitsCollector {
                     {
                         fresh = latest
                     } else {
-                        fresh = try await refreshClaudeCredential(latest, session: credentialSession)
+                        fresh = try await refreshClaudeCredential(
+                            latest, session: credentialSession)
                     }
                     let usage = try await fetchUsage(token: fresh.accessToken)
                     try persistHistory(
@@ -184,7 +186,8 @@ public enum LimitsCollector {
             provider: .claude, session: nil, week: nil, fable: nil, error: message)
     }
 
-    private static func credentialFailureMessage(_ failure: ClaudeCredentialLookupFailure) -> String {
+    private static func credentialFailureMessage(_ failure: ClaudeCredentialLookupFailure) -> String
+    {
         switch failure {
         case .missing: "Claude Code token not found"
         case .rejected: "Claude session expired - run claude to re-login"
@@ -197,9 +200,7 @@ public enum LimitsCollector {
 
     private static func fetchCodex() async -> LimitsProviderSnapshot {
         do {
-            let limits = try await Task.detached(priority: .utility) {
-                try readCodexLimits()
-            }.value
+            let limits = try await readCodexLimits()
             try persistHistory(
                 provider: .codex, session: limits.session, week: limits.week, fable: nil)
             return LimitsProviderSnapshot(
@@ -334,66 +335,39 @@ public enum LimitsCollector {
 
     private static let codexReadTimeout: TimeInterval = 25
 
-    private static func readCodexLimits() throws -> ProviderLimits {
+    private static func readCodexLimits() async throws -> ProviderLimits {
         guard let executable = codexExecutable() else { throw CodexLimitsError.executableMissing }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["app-server"]
-        process.environment = CLIToolEnvironment.sanitized()
-        let input = Pipe()
-        let output = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        process.standardError = Pipe()
-        try process.run()
-
-        let watchdog = DispatchWorkItem {
-            guard process.isRunning else { return }
-            kill(process.processIdentifier, SIGKILL)
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(
-            deadline: .now() + codexReadTimeout, execute: watchdog)
-        defer {
-            watchdog.cancel()
-            if process.isRunning { process.terminate() }
-        }
-
-        func send(_ object: [String: Any]) throws {
-            let data = try JSONSerialization.data(withJSONObject: object)
-            input.fileHandleForWriting.write(data + Data("\n".utf8))
-        }
-
-        func response(id: Int) throws -> CodexResponse {
-            var buffer = Data()
-            while process.isRunning {
-                let data = output.fileHandleForReading.availableData
-                if data.isEmpty { break }
-                buffer.append(data)
-                while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
-                    let line = buffer[..<newline]
-                    buffer.removeSubrange(...newline)
-                    if let value = try? JSONDecoder().decode(CodexResponse.self, from: line),
-                        value.id == id
-                    {
-                        return value
-                    }
-                }
-            }
-            throw CodexLimitsError.unavailable
-        }
-
-        try send([
-            "method": "initialize", "id": 0,
-            "params": [
-                "clientInfo": ["name": "edith", "title": "Edith", "version": "1.0"]
-            ],
-        ])
-        _ = try response(id: 0)
-        try send(["method": "initialized", "params": [:]])
-        try send(["method": "account/rateLimits/read", "id": 1, "params": [:]])
-        guard let snapshot = try response(id: 1).result?.rateLimits else {
-            throw CodexLimitsError.unavailable
-        }
+        let input = Data(
+            """
+            {"method":"initialize","id":0,"params":{"clientInfo":{"name":"edith","title":"Edith","version":"1.0"}}}
+            {"method":"initialized","params":{}}
+            {"method":"account/rateLimits/read","id":1,"params":{}}
+            """.utf8)
+        var lines: [String] = []
+        let result = try await CLICommandRunner.run(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/bash"),
+                arguments: ["-c", "\(executable.path) app-server"],
+                environment: CLIToolEnvironment.sanitized(),
+                timeout: codexReadTimeout,
+                maximumOutputBytes: 1_048_576,
+                standardInputData: input,
+                discardsStandardError: true,
+                terminatesProcessGroup: true),
+            onLine: { lines.append($0) })
+        guard result.terminationStatus == 0 else { throw CodexLimitsError.unavailable }
+        guard
+            let line = lines.first(where: { line in
+                guard let data = line.data(using: .utf8),
+                    let value = try? JSONDecoder().decode(CodexResponse.self, from: data),
+                    value.id == 1
+                else { return false }
+                return true
+            }),
+            let data = line.data(using: .utf8),
+            let response = try? JSONDecoder().decode(CodexResponse.self, from: data),
+            let snapshot = response.result?.rateLimits
+        else { throw CodexLimitsError.unavailable }
         let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
         let mapped = windows.map { window in
             (

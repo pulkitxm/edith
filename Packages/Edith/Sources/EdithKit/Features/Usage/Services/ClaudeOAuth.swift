@@ -17,7 +17,9 @@ public struct ClaudeOAuthCredential {
     public let source: ClaudeCredentialSource
     private let document: [String: Any]
 
-    public static func decode(_ data: Data, source: ClaudeCredentialSource) -> ClaudeOAuthCredential? {
+    public static func decode(_ data: Data, source: ClaudeCredentialSource)
+        -> ClaudeOAuthCredential?
+    {
         guard let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let oauth = document["claudeAiOauth"] as? [String: Any],
             let accessToken = oauth["accessToken"] as? String,
