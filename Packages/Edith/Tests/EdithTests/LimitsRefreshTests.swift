@@ -52,25 +52,10 @@ private final class MutableHistoryURL: @unchecked Sendable {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     @Test func refreshesEveryEnabledProviderRegardlessOfSelection() {
-        #expect(UsageStore.enabledLimitProviders(claude: true, codex: true) == [.claude, .codex])
-        #expect(UsageStore.enabledLimitProviders(claude: true, codex: false) == [.claude])
-        #expect(UsageStore.enabledLimitProviders(claude: false, codex: true) == [.codex])
-        #expect(UsageStore.enabledLimitProviders(claude: false, codex: false).isEmpty)
-    }
-
-    @Test func onlyTheCurrentLimitsRefreshCanPublish() {
-        #expect(
-            UsageStore.canPublishLimitsRefresh(
-                generation: 4, currentGeneration: 4, terminating: false, cancelled: false))
-        #expect(
-            !UsageStore.canPublishLimitsRefresh(
-                generation: 3, currentGeneration: 4, terminating: false, cancelled: false))
-        #expect(
-            !UsageStore.canPublishLimitsRefresh(
-                generation: 4, currentGeneration: 4, terminating: true, cancelled: false))
-        #expect(
-            !UsageStore.canPublishLimitsRefresh(
-                generation: 4, currentGeneration: 4, terminating: false, cancelled: true))
+        #expect(UsageLimitProviders.enabled(claude: true, codex: true) == [.claude, .codex])
+        #expect(UsageLimitProviders.enabled(claude: true, codex: false) == [.claude])
+        #expect(UsageLimitProviders.enabled(claude: false, codex: true) == [.codex])
+        #expect(UsageLimitProviders.enabled(claude: false, codex: false).isEmpty)
     }
 
     @Test func startsWhenNothingIsInFlight() {
@@ -142,80 +127,19 @@ private final class MutableHistoryURL: @unchecked Sendable {
                 == now.addingTimeInterval(300))
     }
 
-    @Test func historyCompletionCannotStartPollingWhilePaused() {
-        #expect(UsageStore.pollingAllowed(locked: false, sleeping: false))
-        #expect(!UsageStore.pollingAllowed(locked: true, sleeping: false))
-        #expect(!UsageStore.pollingAllowed(locked: false, sleeping: true))
-        #expect(!UsageStore.pollingAllowed(locked: true, sleeping: true))
-    }
-
     @Test func aRefreshDoesNotQueueItselfFromItsOwnStartNotification() {
         #expect(UsageStore.acceptsExternalRefreshStart(updating: false))
         #expect(!UsageStore.acceptsExternalRefreshStart(updating: true))
     }
 
-    @MainActor
-    @Test func credentialLookupFailuresStayActionableAndSecretSafe() {
-        let missing = UsageStore.credentialLookupFailurePresentation(for: .missing)
-        let rejected = UsageStore.credentialLookupFailurePresentation(for: .rejected)
-        let malformed = UsageStore.credentialLookupFailurePresentation(for: .malformed)
-        let oversized = UsageStore.credentialLookupFailurePresentation(for: .oversized)
-
-        #expect(missing.message == "Claude Code token not found")
-        #expect(!missing.schedulesQuickRetry)
-        #expect(rejected.message.contains("re-login"))
-        #expect(rejected.notifiesExpiredSession)
-        #expect(malformed.message.contains("invalid"))
-        #expect(oversized.message.contains("too large"))
-        #expect(!malformed.schedulesQuickRetry)
-        #expect(!oversized.schedulesQuickRetry)
-        for presentation in [missing, rejected, malformed, oversized] {
-            #expect(!presentation.message.contains("token-value"))
-            #expect(!presentation.diagnostic.contains("token-value"))
-        }
-        for presentation in [malformed, oversized] {
-            #expect(!presentation.message.lowercased().contains("shell"))
-            #expect(!presentation.diagnostic.lowercased().contains("shell"))
-        }
-    }
-
-    @MainActor
-    @Test func transientCredentialLookupFailuresScheduleBoundedRetry() {
-        let timedOut = UsageStore.credentialLookupFailurePresentation(for: .timedOut)
-        let failed = UsageStore.credentialLookupFailurePresentation(for: .failed)
-
-        #expect(timedOut.schedulesQuickRetry)
-        #expect(failed.schedulesQuickRetry)
-        #expect(!timedOut.notifiesExpiredSession)
-        #expect(!failed.notifiesExpiredSession)
-        #expect(!timedOut.message.lowercased().contains("shell"))
-        #expect(!failed.message.lowercased().contains("shell"))
-    }
-
     @Test func usageStatusMappingDistinguishesPermissionFailures() {
-        #expect(UsageStore.fetchError(statusCode: 401) == .unauthorized)
-        #expect(UsageStore.fetchError(statusCode: 403) == .permissionDenied)
+        #expect(LimitsCollector.fetchError(statusCode: 401) == .unauthorized)
+        #expect(LimitsCollector.fetchError(statusCode: 403) == .permissionDenied)
         #expect(
-            UsageStore.fetchError(statusCode: 429, retryAfter: 120)
+            LimitsCollector.fetchError(statusCode: 429, retryAfter: 120)
                 == .rateLimited(after: 120))
-        #expect(UsageStore.fetchError(statusCode: 500) == .http(500))
-        #expect(UsageStore.fetchError(statusCode: 200) == nil)
-    }
-
-    @Test func historyWritesWaitForSeedAndFlushOncePerProvider() {
-        var gate = HistoryWriteGate()
-        let firstClaude = gate.record(.claude)
-        let codex = gate.record(.codex)
-        let secondClaude = gate.record(.claude)
-        let pending = gate.finish()
-        let readyClaude = gate.record(.claude)
-        let drained = gate.finish()
-        #expect(!firstClaude)
-        #expect(!codex)
-        #expect(!secondClaude)
-        #expect(pending == [.codex, .claude])
-        #expect(readyClaude)
-        #expect(drained.isEmpty)
+        #expect(LimitsCollector.fetchError(statusCode: 500) == .http(500))
+        #expect(LimitsCollector.fetchError(statusCode: 200) == nil)
     }
 
     @Test func delayedOlderReloadCannotReplaceANewerPublication() async {

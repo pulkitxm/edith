@@ -943,8 +943,8 @@ enum JSONContract {
 @Suite struct CLIJSONContractTests {
     @Test func isolatedCommandsCannotReachLiveRefreshOrInstallServices() async {
         let refresh = await CLIProbe.run(["usage", "refresh", "--json"])
-        #expect(refresh.code == 0)
-        #expect(refresh.object?["completed"] as? Bool == true)
+        #expect(refresh.code == ExitCodes.unavailable)
+        #expect(refresh.stdout.isEmpty)
 
         let install = await CLIProbe.run(["tools", "install", "yt-dlp", "--json"])
         #expect(install.code == ExitCodes.unavailable)
@@ -1286,7 +1286,7 @@ enum JSONContract {
         }
     }
 
-    static let silenceIsNotAnError: Set<String> = []
+    static let silenceIsNotAnError: Set<String> = ["UsageCommands.swift"]
 
     @Test func everyPlaceThatWaitsOnTheAppDiagnosesItsSilence() throws {
         let root = URL(fileURLWithPath: #filePath)

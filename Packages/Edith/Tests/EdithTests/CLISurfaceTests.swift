@@ -103,7 +103,7 @@ import Testing
     @Test func refreshRunsWithoutTheAppAndReportsWhatItCollected() async throws {
         await CLIProbe.inWorld { world in
             world.helperRunning(false)
-            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
+            world.configureUsageRefreshAgent(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["completed"] as? Bool == true)
@@ -116,8 +116,8 @@ import Testing
     }
 
     @Test func refreshAttachesToARunOneWhenTheLockIsAlreadyHeld() async throws {
-        await CLIProbe.inWorld { _ in
-            CLIEnvironment.usageRefresh = .scripted(events: Self.run, busy: true)
+        await CLIProbe.inWorld { world in
+            world.configureUsageRefreshAgent(events: Self.run, busy: true)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["followed"] as? Bool == true)
@@ -125,8 +125,8 @@ import Testing
     }
 
     @Test func followWithNothingRunningIsUnavailableRatherThanAFreshRun() async throws {
-        await CLIProbe.inWorld { _ in
-            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
+        await CLIProbe.inWorld { world in
+            world.configureUsageRefreshAgent(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh", "--follow"])
             #expect(result.code == ExitCodes.unavailable)
             #expect(result.stderr.contains("no usage refresh is running"))
@@ -134,8 +134,8 @@ import Testing
     }
 
     @Test func aPipelineFailureIsAnErrorRatherThanASilentSuccess() async throws {
-        await CLIProbe.inWorld { _ in
-            CLIEnvironment.usageRefresh = .scripted(
+        await CLIProbe.inWorld { world in
+            world.configureUsageRefreshAgent(
                 events: [], failure: .reported("no usage found from any source"))
             let result = await CLIProbe.capture(["usage", "refresh"])
             #expect(result.code == ExitCodes.unavailable)
@@ -145,8 +145,8 @@ import Testing
     }
 
     @Test func refreshKeepsStdoutCleanForPipes() async throws {
-        await CLIProbe.inWorld { _ in
-            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
+        await CLIProbe.inWorld { world in
+            world.configureUsageRefreshAgent(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh"])
             #expect(result.code == 0)
             #expect(result.stdoutLines == ["usage refreshed"])

@@ -174,6 +174,7 @@ final class CLIWorld: @unchecked Sendable {
             .appendingPathComponent("ed-cli-world-\(label)")
         try? FileManager.default.createDirectory(
             at: sandbox, withIntermediateDirectories: true)
+        setenv(DataRoot.devOverrideVariable, sandbox.path, 1)
         ClipboardPaths.root = sandbox
         AttentionPaths.root = sandbox
         MachinePaths.root = sandbox
@@ -305,6 +306,34 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { running }
     }
 
+    func configureUsageRefreshAgent(
+        events: [UsageRefreshEvent],
+        busy: Bool = false,
+        failure: UsageRefreshFailure? = nil
+    ) {
+        let refreshID = UsageCollectionOperation.refresh.descriptor.id.rawValue
+        let handshake = AgentHandshake(
+            protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        CLIEnvironment.verifyAgentHandshake = { handshake }
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == refreshID else { return Data() }
+            if busy {
+                guard
+                    let lock = UsageRefreshLock.acquire(
+                        at: UsageRefreshRunner.lockURL(dataDir: Repo.dataDir))
+                else { throw UsageRefreshFailure.busy }
+                Task {
+                    try? UsageRefreshPlayback.replayBlocking(
+                        events: events, holdLock: true, failure: failure)
+                    lock.release()
+                }
+                return Data()
+            }
+            try UsageRefreshPlayback.replayBlocking(events: events, failure: failure)
+            return Data()
+        }
+    }
+
     func answers(_ block: @escaping @Sendable (Notification.Name) -> [AnyHashable: Any]?) {
         CLIEnvironment.answer = block
     }
@@ -331,6 +360,7 @@ final class CLIWorld: @unchecked Sendable {
     }
 
     func tearDown() {
+        unsetenv(DataRoot.devOverrideVariable)
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
