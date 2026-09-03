@@ -28,6 +28,7 @@ public enum AgentJobCatalog {
         let backup = BackupJob(store: store)
         let downloads = DownloadQueueJob(store: store)
         let siteAudit = SiteAuditJob(store: store)
+        let companion = CompanionHealthJob(store: store)
         let sessions = SessionsJob(store: store) {
             guard let scheduler else { return false }
             return await scheduler.subscriberCount(topic: .sessions) > 0
@@ -41,6 +42,7 @@ public enum AgentJobCatalog {
             "downloads.queue": { try await downloads.run() },
             "sessions.discover": { try await sessions.run() },
             "siteAudit.crawl": { try await siteAudit.run() },
+            "companion.health": { try await companion.run() },
         ]
     }
 

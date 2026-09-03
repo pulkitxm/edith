@@ -77,10 +77,10 @@ import Testing
         #expect(names.count == OperationMCPCatalog.tools.count)
     }
 
-    @Test func aMissingExecutableFailsRatherThanHanging() throws {
+    @Test func aMissingExecutableFailsRatherThanHanging() async throws {
         let status = try #require(OperationMCPCatalog.tool(named: "edith_agent_status"))
 
-        let invocation = OperationMCPRunner.run(
+        let invocation = await OperationMCPRunner.run(
             status, arguments: [], confirm: false, executable: nil)
 
         #expect(invocation.failed)

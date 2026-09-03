@@ -63,7 +63,7 @@ public struct OperationMCPServer: Sendable {
         let arguments = (parameters.arguments?["arguments"]?.arrayValue ?? [])
             .compactMap(\.stringValue)
         let confirm = parameters.arguments?["confirm"]?.boolValue ?? false
-        let invocation = OperationMCPRunner.run(
+        let invocation = await OperationMCPRunner.run(
             tool, arguments: arguments, confirm: confirm)
         return CallTool.Result(
             content: [.text(invocation.output)], isError: invocation.failed)

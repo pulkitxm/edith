@@ -35,7 +35,7 @@ public enum AgentStoreLayout {
 }
 
 public enum AgentSchema {
-    public static let version = 1
+    public static let version = 2
 
     public static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -98,6 +98,14 @@ public enum AgentSchema {
                 table.column("startedAt", .datetime).notNull()
                 table.column("duration", .double).notNull()
                 table.column("failure", .text)
+            }
+        }
+        migrator.registerMigration("0002-companion-health") { database in
+            try database.create(table: "companion_health") { table in
+                table.autoIncrementedPrimaryKey("id")
+                table.column("checkedAt", .datetime).notNull().indexed()
+                table.column("reachable", .boolean).notNull()
+                table.column("payload", .blob).notNull()
             }
         }
         return migrator

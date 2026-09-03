@@ -18,9 +18,8 @@ public enum BoundedTaskRunner {
         var results = [Result?](repeating: nil, count: elements.count)
         await withTaskGroup(of: (Int, Result).self) { group in
             var next = 0
-            for _ in 0..<slots {
+            while next < slots {
                 let index = next
-                guard index < elements.count else { break }
                 next += 1
                 group.addTask { (index, await transform(index, elements[index])) }
             }

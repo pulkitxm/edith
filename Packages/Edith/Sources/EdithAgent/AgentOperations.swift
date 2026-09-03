@@ -35,10 +35,7 @@ public enum AgentOperations {
         await runtime.register(operation: AgentControlOperation.logs.descriptor.id.rawValue) {
             payload in
             let window = String(data: payload, encoding: .utf8) ?? "1h"
-            let lines = await Task.detached(priority: .userInitiated) {
-                AgentLogQuery.recent(last: window)
-            }.value
-            return try AgentPayload.encode(lines)
+            return try AgentPayload.encode(await AgentLogQuery.recent(last: window))
         }
         await runtime.register(operation: AgentControlOperation.restart.descriptor.id.rawValue) {
             _ in
@@ -59,21 +56,25 @@ public enum AgentLogQuery {
         window.range(of: windowPattern, options: .regularExpression) != nil
     }
 
-    public static func recent(last: String) -> [String] {
+    public static let timeout: TimeInterval = 20
+    public static let maximumOutputBytes = 4 << 20
+
+    public static func request(last: String) -> CLICommandRequest {
         let window = isValidWindow(last) ? last : "1h"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = [
-            "show", "--style", "compact", "--last", window, "--predicate",
-            "subsystem == \"\(AgentLog.subsystem)\"",
-        ]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return [] }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (String(data: data, encoding: .utf8) ?? "")
-            .split(separator: "\n").map(String.init)
+        return CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/usr/bin/log"),
+            arguments: [
+                "show", "--style", "compact", "--last", window, "--predicate",
+                "subsystem == \"\(AgentLog.subsystem)\"",
+            ],
+            environment: CLIToolEnvironment.sanitized(), timeout: timeout,
+            maximumOutputBytes: maximumOutputBytes, discardsStandardError: true,
+            terminatesProcessGroup: true)
+    }
+
+    public static func recent(last: String) async -> [String] {
+        guard let result = try? await CLICommandRunner.run(request(last: last), onLine: { _ in })
+        else { return [] }
+        return result.standardOutput.split(separator: "\n").map(String.init)
     }
 }

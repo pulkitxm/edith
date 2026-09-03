@@ -1,6 +1,7 @@
 import CoreGraphics
 import EdithKit
 import Foundation
+import IOKit.ps
 import os
 
 public enum AgentLog {
@@ -94,11 +95,11 @@ public struct LivePowerSource: AgentPowerSource {
 
 enum PowerState {
     static func isOnBattery() -> Bool {
-        guard
-            let output = try? Shell.capture(
-                "/usr/bin/pmset", arguments: ["-g", "batt"])
-        else { return false }
-        return output.contains("Battery Power")
+        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
+            return false
+        }
+        return IOPSGetProvidingPowerSourceType(snapshot).takeRetainedValue()
+            as String == kIOPMBatteryPowerKey
     }
 
     static func isScreenLocked() -> Bool {
@@ -107,20 +108,5 @@ enum PowerState {
             let locked = session["CGSSessionScreenIsLocked"] as? Int
         else { return false }
         return locked == 1
-    }
-}
-
-enum Shell {
-    static func capture(_ path: String, arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
     }
 }

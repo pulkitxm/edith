@@ -76,33 +76,32 @@ public struct OperationMCPInvocation: Equatable, Sendable {
 }
 
 public enum OperationMCPRunner {
+    public static let timeout: TimeInterval = 120
+    public static let maximumOutputBytes = 4 << 20
+
     public static func run(
         _ tool: OperationMCPTool, arguments: [String], confirm: Bool,
         executable: URL? = OperationMCPCatalog.executableURL()
-    ) -> OperationMCPInvocation {
+    ) async -> OperationMCPInvocation {
         guard let executable else {
             return OperationMCPInvocation(
                 output: "The ed executable could not be located.", failed: true)
         }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = tool.arguments(arguments, confirm: confirm)
-        let out = Pipe()
-        let error = Pipe()
-        process.standardOutput = out
-        process.standardError = error
-        guard (try? process.run()) != nil else {
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: tool.arguments(arguments, confirm: confirm),
+            environment: CLIToolEnvironment.sanitized(), timeout: timeout,
+            maximumOutputBytes: maximumOutputBytes, terminatesProcessGroup: true)
+        guard
+            let result = try? await CLICommandRunner.runSeparated(
+                request, onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+        else {
             return OperationMCPInvocation(output: "ed could not be started.", failed: true)
         }
-        let stdout = out.fileHandleForReading.readDataToEndOfFile()
-        let stderr = error.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let text = String(data: stdout, encoding: .utf8) ?? ""
-        guard process.terminationStatus == 0 else {
-            let detail = String(data: stderr, encoding: .utf8) ?? ""
+        guard result.terminationStatus == 0 else {
+            let detail = result.standardError
             return OperationMCPInvocation(
-                output: detail.isEmpty ? text : detail, failed: true)
+                output: detail.isEmpty ? result.standardOutput : detail, failed: true)
         }
-        return OperationMCPInvocation(output: text, failed: false)
+        return OperationMCPInvocation(output: result.standardOutput, failed: false)
     }
 }
