@@ -130,7 +130,7 @@ public enum HerdrKind {
     }
 }
 
-public enum HerdrPaneCategory: String, Sendable, Hashable, CaseIterable {
+public enum HerdrPaneCategory: String, Codable, Sendable, Hashable, CaseIterable {
     case agent
     case terminal
 
@@ -142,7 +142,7 @@ public enum HerdrPaneCategory: String, Sendable, Hashable, CaseIterable {
     }
 }
 
-public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
+public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: String
     public var machineID: String
     public var machineName: String
@@ -193,7 +193,7 @@ public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
     public var isTerminal: Bool { category == .terminal }
 }
 
-public struct HerdrHostSnapshot: Identifiable, Equatable, Sendable {
+public struct HerdrHostSnapshot: Identifiable, Codable, Equatable, Sendable {
     public var id: String
     public var name: String
     public var isLocal: Bool

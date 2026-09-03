@@ -1,28 +1,10 @@
 import EdithKit
 import Foundation
 
-public struct DownloadQueueSnapshot: Codable, Equatable, Sendable {
-    public let readAt: Date
-    public let queued: Int
-    public let running: Int
-    public let finished: Int
-    public let failed: Int
-
-    public init(readAt: Date, queued: Int, running: Int, finished: Int, failed: Int) {
-        self.readAt = readAt
-        self.queued = queued
-        self.running = running
-        self.finished = finished
-        self.failed = failed
-    }
-
-    public var pending: Int { queued + running }
-}
-
 public enum DownloadQueueTally {
     public static func snapshot(
         records: [DownloadRecord], now: Date = Date()
-    ) -> DownloadQueueSnapshot {
+    ) -> DownloadQueueTopicSnapshot {
         var queued = 0
         var running = 0
         var finished = 0
@@ -35,7 +17,7 @@ public enum DownloadQueueTally {
             case .error, .interrupted: failed += 1
             }
         }
-        return DownloadQueueSnapshot(
+        return DownloadQueueTopicSnapshot(
             readAt: now, queued: queued, running: running, finished: finished, failed: failed)
     }
 }

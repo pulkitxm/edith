@@ -373,6 +373,12 @@ final class HerdrStore {
         }
     }
 
+    func adopt(_ snapshot: SessionsSnapshot) {
+        if watchTask != nil { stopWatching() }
+        settling = false
+        apply(snapshot.hosts)
+    }
+
     func stopWatching() {
         watchGeneration += 1
         watchTask?.cancel()

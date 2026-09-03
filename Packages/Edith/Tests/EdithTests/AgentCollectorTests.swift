@@ -373,7 +373,7 @@ import Testing
         #expect(snapshot.working == 3)
         #expect(snapshot.total == 7)
         #expect(snapshot.hosts.map(\.id) == ["local", "box"])
-        #expect(snapshot.hosts.first?.working == 2)
+        #expect(snapshot.summaries.first?.working == 2)
     }
 
     @Test func anUnwatchedDiscoveryPublishesNothing() async throws {
@@ -427,7 +427,7 @@ import Testing
         let job = DownloadQueueJob(store: nil, load: { [] })
 
         let payload = try #require(try await job.run())
-        let snapshot = try AgentPayload.decode(DownloadQueueSnapshot.self, from: payload)
+        let snapshot = try AgentPayload.decode(DownloadQueueTopicSnapshot.self, from: payload)
 
         #expect(snapshot.pending == 0)
         #expect(snapshot.finished == 0)

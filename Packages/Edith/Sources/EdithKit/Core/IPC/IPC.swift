@@ -83,6 +83,8 @@ public enum IPC {
         public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
         public static let permissionHintDue = Notification.Name(
             "com.pulkit.edith.permissionHintDue")
+        public static let presentNotification = Notification.Name(
+            "com.pulkit.edith.presentNotification")
         public static let musicFolderChanged = Notification.Name(
             "com.pulkit.edith.musicFolderChanged")
         public static let musicFavouritesChanged = Notification.Name(
