@@ -128,6 +128,11 @@ public actor JobScheduler {
         }
     }
 
+    public func enqueue(_ id: String) {
+        guard let state = states[id], state.job.isEnabled() else { return }
+        Task { await runNow(id) }
+    }
+
     @discardableResult
     public func runNow(_ id: String) async -> Data? {
         guard let state = states[id], state.job.isEnabled() else { return nil }
