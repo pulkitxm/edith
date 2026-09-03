@@ -141,7 +141,7 @@ public enum IPC {
 
     public static func stopObserving(_ token: NSObjectProtocol) {
         if let observation = token as? IPCObservation {
-            observation.cancel()
+            IPCObservationRegistry.shared.release(observation)
             return
         }
         DistributedNotificationCenter.default().removeObserver(token)
@@ -171,6 +171,32 @@ public final class IPCDeduplicator: @unchecked Sendable {
             seen.remove(order.removeFirst())
         }
         return true
+    }
+}
+
+public final class IPCObservationRegistry: @unchecked Sendable {
+    public static let shared = IPCObservationRegistry()
+
+    private let lock = NSLock()
+    private var observations: [ObjectIdentifier: IPCObservation] = [:]
+
+    public var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return observations.count
+    }
+
+    public func retain(_ observation: IPCObservation) {
+        lock.lock()
+        observations[ObjectIdentifier(observation)] = observation
+        lock.unlock()
+    }
+
+    public func release(_ observation: IPCObservation) {
+        lock.lock()
+        observations.removeValue(forKey: ObjectIdentifier(observation))
+        lock.unlock()
+        observation.cancel()
     }
 }
 
@@ -257,6 +283,7 @@ public enum IPCTransport {
             forName: name, object: nil, queue: .main
         ) { note in deliver(note.userInfo ?? [:]) }
         let observation = IPCObservation(fallback: fallback)
+        IPCObservationRegistry.shared.retain(observation)
         guard state.shouldAttempt() else { return observation }
         work.async {
             guard state.shouldAttempt() else { return }

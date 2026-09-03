@@ -46,6 +46,27 @@ import Testing
         #expect(AgentBusEncoding.isTransportable(body))
     }
 
+    @Test func aDiscardedObservationKeepsListening() {
+        let before = IPCObservationRegistry.shared.count
+        var token: NSObjectProtocol? = IPC.observe(IPC.Name.settingsChanged) {}
+
+        #expect(IPCObservationRegistry.shared.count == before + 1)
+
+        token = nil
+        _ = token
+        #expect(IPCObservationRegistry.shared.count == before + 1)
+    }
+
+    @Test func stoppingAnObservationReleasesIt() {
+        let before = IPCObservationRegistry.shared.count
+        let token = IPC.observe(IPC.Name.settingsChanged) {}
+        #expect(IPCObservationRegistry.shared.count == before + 1)
+
+        IPC.stopObserving(token)
+
+        #expect(IPCObservationRegistry.shared.count == before)
+    }
+
     @Test func theTransportRetriesOnlyAfterItsCooldown() {
         let now = Date()
 
