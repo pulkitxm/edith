@@ -189,7 +189,7 @@ import Testing
 
             let result = await CLIProbe.capture(["usage", "limits", "--refresh", "--json"])
 
-            #expect(world.postedNames().isEmpty)
+            #expect(world.postedNames() == [IPC.Name.limitsUpdated.rawValue])
             #expect(result.code == 0 || result.code == ExitCodes.unavailable)
             if result.code != 0 { #expect(result.stdout.isEmpty) }
         }
