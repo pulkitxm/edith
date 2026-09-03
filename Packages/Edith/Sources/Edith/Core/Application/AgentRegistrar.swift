@@ -15,12 +15,13 @@ final class AgentRegistrar {
             return
         }
         AgentBuildStamp.record()
-        reregister()
+        reregister(restartingRunningAgent: true)
     }
 
-    private func reregister() {
+    private func reregister(restartingRunningAgent: Bool) {
         try? service.unregister()
         attemptRegistration()
+        guard restartingRunningAgent else { return }
         restartRunningAgent()
     }
 
@@ -32,7 +33,7 @@ final class AgentRegistrar {
                 guard let self, !didRepair else { return }
                 didRepair = true
                 AgentClient.shared.reset()
-                reregister()
+                reregister(restartingRunningAgent: false)
             }
         }
     }
@@ -57,7 +58,7 @@ final class AgentRegistrar {
     }
 
     func restart() {
-        reregister()
+        reregister(restartingRunningAgent: true)
     }
 
     private func attemptRegistration() {
