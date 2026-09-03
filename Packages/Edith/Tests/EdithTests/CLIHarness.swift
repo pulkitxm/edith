@@ -217,11 +217,6 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.runningApps = { [] }
         CLIEnvironment.usageRefresh = .scripted(events: [])
-        CLIEnvironment.verifyAgentHandshake = {
-            AgentHandshake(
-                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
-        }
-        CLIEnvironment.performAgentOperation = { _ in Data() }
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
         }
@@ -320,6 +315,10 @@ final class CLIWorld: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: UsageRefreshRunner.lockURL(dataDir: dataDir))
         try? FileManager.default.removeItem(at: UsageRefreshRunner.eventsURL(dataDir: dataDir))
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
         let refreshID = UsageCollectionOperation.refresh.descriptor.id.rawValue
         CLIEnvironment.performAgentOperation = { operation in
             guard operation == refreshID else { return Data() }
