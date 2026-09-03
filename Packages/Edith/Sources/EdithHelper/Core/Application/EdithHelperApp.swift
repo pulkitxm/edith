@@ -243,6 +243,16 @@ struct EdithApp {
                     IPC.Name.keyboardCleanResult,
                     userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
             })
+        _ = IPC.observe(
+            IPC.Name.presentNotification,
+            info: { info in
+                guard let notification = AgentNotification(userInfo: info) else { return }
+                NotificationReplacementQueue.shared.submit(
+                    NotificationReplacement(
+                        identifier: notification.identifier, title: notification.title,
+                        body: notification.body,
+                        failureContext: "Edith notifications: agent alert failed"))
+            })
         _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
             IPC.post(
                 IPC.Name.appDiagnostics,

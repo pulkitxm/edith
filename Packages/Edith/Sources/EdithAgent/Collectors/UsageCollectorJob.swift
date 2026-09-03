@@ -1,24 +1,6 @@
 import EdithKit
 import Foundation
 
-public struct UsageTopicSnapshot: Codable, Equatable, Sendable {
-    public let refreshedAt: Date
-    public let seconds: Double
-    public let days: Int
-    public let totalCostCents: Int
-    public let failure: String?
-
-    public init(
-        refreshedAt: Date, seconds: Double, days: Int, totalCostCents: Int, failure: String?
-    ) {
-        self.refreshedAt = refreshedAt
-        self.seconds = seconds
-        self.days = days
-        self.totalCostCents = totalCostCents
-        self.failure = failure
-    }
-}
-
 public enum UsageStoreWriter {
     public static func record(
         _ snapshot: UsageTopicSnapshot, days: [UsageDayRow], store: AgentStore?
@@ -88,21 +70,31 @@ public final class UsageCollectorJob: @unchecked Sendable {
     private let store: AgentStore?
     private let runner: @Sendable () async throws -> UsageRefreshResult
     private let documentURL: URL
+    private let notifies: Bool
 
     public init(
         store: AgentStore?,
         documentURL: URL = Repo.usageJSON,
+        notifies: Bool = true,
         runner: @escaping @Sendable () async throws -> UsageRefreshResult = {
             try await UsageRefreshRunner.run()
         }
     ) {
         self.store = store
         self.documentURL = documentURL
+        self.notifies = notifies
         self.runner = runner
+    }
+
+    private func announce(_ name: Notification.Name) {
+        guard notifies else { return }
+        IPC.post(name)
     }
 
     public func run() async throws -> Data? {
         let startedAt = Date()
+        announce(IPC.Name.usageRefreshStarted)
+        defer { announce(IPC.Name.usageRefreshFinished) }
         do {
             let result = try await runner()
             let days = UsageDocumentReader.days(at: documentURL)

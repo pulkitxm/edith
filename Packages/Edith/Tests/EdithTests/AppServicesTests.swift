@@ -36,7 +36,6 @@ private actor AppServicesCallProbe {
         #expect(services.usage == nil)
         #expect(services.music == nil)
         #expect(services.system == nil)
-        #expect(services.machines == nil)
         #expect(services.calendar == nil)
         #expect(services.notchShelf == nil)
         #expect(services.colorPicker == nil)

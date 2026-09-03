@@ -1,49 +1,13 @@
 import EdithKit
 import Foundation
 
-public struct SessionsHost: Codable, Equatable, Sendable {
-    public let id: String
-    public let name: String
-    public let isLocal: Bool
-    public let reachable: Bool
-    public let herdrPresent: Bool
-    public let working: Int
-    public let total: Int
-    public let failure: String?
-
-    public init(_ host: HerdrHostSnapshot) {
-        id = host.id
-        name = host.name
-        isLocal = host.isLocal
-        reachable = host.reachable
-        herdrPresent = host.herdrPresent
-        working = host.agents.filter { $0.status == .working }.count
-        total = host.agents.count
-        failure = host.error
-    }
-}
-
-public struct SessionsSnapshot: Codable, Equatable, Sendable {
-    public let discoveredAt: Date
-    public let hosts: [SessionsHost]
-    public let working: Int
-    public let total: Int
-
-    public init(discoveredAt: Date, hosts: [SessionsHost], working: Int, total: Int) {
-        self.discoveredAt = discoveredAt
-        self.hosts = hosts
-        self.working = working
-        self.total = total
-    }
-}
-
 public enum SessionsTally {
     public static func snapshot(
         hosts: [HerdrHostSnapshot], now: Date = Date()
     ) -> SessionsSnapshot {
         let agents = hosts.flatMap(\.agents)
         return SessionsSnapshot(
-            discoveredAt: now, hosts: hosts.map(SessionsHost.init),
+            discoveredAt: now, hosts: hosts,
             working: agents.filter { $0.status == .working }.count, total: agents.count)
     }
 

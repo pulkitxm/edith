@@ -2,20 +2,6 @@ import EdithKit
 import Foundation
 import GRDB
 
-public struct BackupSnapshotResult: Codable, Equatable, Sendable {
-    public let ranAt: Date
-    public let classes: [String]
-    public let snapshotTables: [String]
-    public let skipped: Bool
-
-    public init(ranAt: Date, classes: [String], snapshotTables: [String], skipped: Bool) {
-        self.ranAt = ranAt
-        self.classes = classes
-        self.snapshotTables = snapshotTables
-        self.skipped = skipped
-    }
-}
-
 public enum BackupSnapshotTables {
     public static let synced = ["usage_day", "limits_sample", "attention_event"]
 

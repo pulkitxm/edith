@@ -7,7 +7,6 @@ final class AppServices {
     private(set) var usage: UsageStore?
     private(set) var music: MusicPlayer?
     private(set) var system: SystemStore?
-    private(set) var machines: MachineMonitor?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
@@ -237,13 +236,6 @@ final class AppServices {
             !FeatureGates.preventSleepPersisted(systemOn: systemOn, current: sleepKeyOn)
         {
             SharedDefaults.store.set(false, forKey: AppStorageKeys.General.preventSleep)
-        }
-
-        let machinesOn = !MachineRegistry.machines().isEmpty
-        if machinesOn, machines == nil { machines = MachineMonitor() }
-        if !machinesOn, let monitor = machines {
-            monitor.shutdown()
-            machines = nil
         }
 
         let calendarOn = Self.extensionEnabled(AppStorageKeys.Tabs.calendarEnabled)

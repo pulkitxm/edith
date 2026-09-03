@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithHelper
+@testable import EdithAgent
 @testable import EdithKit
 
 private final class MachineNotificationProbe: @unchecked Sendable {
@@ -19,7 +20,7 @@ private final class MachineNotificationProbe: @unchecked Sendable {
     ]
 
     @Test func parsesDfOutput() {
-        let parsed = MachineMonitor.parseDisks(
+        let parsed = MachineHealthProbe.parseDisks(
             """
             Filesystem     1024-blocks      Used Available Capacity Mounted on
             /dev/nvme0n1p2   500000000 250000000 225000000      50% /
@@ -32,12 +33,12 @@ private final class MachineNotificationProbe: @unchecked Sendable {
     }
 
     @Test func skipsReadOnlyFilesystemsThatAreAlwaysFull() {
-        let parsed = MachineMonitor.parseDisks(
+        let parsed = MachineHealthProbe.parseDisks(
             """
             Filesystem     1024-blocks      Used Available Capacity Mounted on
             /dev/nvme0n1p5   503648256 289598472 188392392      61% /
             /dev/sr0                5638      5638         0     100% /media/pulkit/SanDisk Unlocker
-            \(MachineMonitor.mountsMarker)
+            \(MachineHealthProbe.mountsMarker)
             /dev/nvme0n1p5 on / type ext4 (rw,relatime,errors=remount-ro)
             /dev/sr0 on /media/pulkit/SanDisk Unlocker type udf (ro,nosuid,nodev,uid=1000)
             """)
@@ -45,7 +46,7 @@ private final class MachineNotificationProbe: @unchecked Sendable {
     }
 
     @Test func readsReadOnlyMountsFromBothMountFormats() {
-        let linux = MachineMonitor.readOnlyMounts(
+        let linux = MachineHealthProbe.readOnlyMounts(
             """
             /dev/sr0 on /media/pulkit/SanDisk Unlocker type udf (ro,nosuid,nodev)
             /dev/nvme0n1p5 on / type ext4 (rw,relatime,stripe=32)
@@ -53,7 +54,7 @@ private final class MachineNotificationProbe: @unchecked Sendable {
             """)
         #expect(linux == ["/media/pulkit/SanDisk Unlocker"])
 
-        let macOS = MachineMonitor.readOnlyMounts(
+        let macOS = MachineHealthProbe.readOnlyMounts(
             """
             /dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
             /dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)
@@ -62,20 +63,20 @@ private final class MachineNotificationProbe: @unchecked Sendable {
     }
 
     @Test func theDiskProbeOnlyAsksAboutFilesystemsItUnderstands() {
-        let command = MachineMonitor.diskCommand
+        let command = MachineHealthProbe.diskCommand
         #expect(command.contains("-t ext4"))
         #expect(command.contains("-t btrfs"))
         #expect(command.contains("[ -r /proc/mounts ]"))
     }
 
     @Test func stillParsesOutputThatCarriesTheStalledSection() {
-        let parsed = MachineMonitor.parseDisks(
+        let parsed = MachineHealthProbe.parseDisks(
             """
             Filesystem     1024-blocks      Used Available Capacity Mounted on
             /dev/nvme0n1p5   503648256 289598472 188392392      61% /
-            \(MachineMonitor.mountsMarker)
+            \(MachineHealthProbe.mountsMarker)
             /dev/nvme0n1p5 on / type ext4 (rw,relatime)
-            \(MachineMonitor.stalledMarker)
+            \(MachineHealthProbe.stalledMarker)
             7
             """)
         #expect(parsed.map(\.mount) == ["/"])
@@ -84,12 +85,12 @@ private final class MachineNotificationProbe: @unchecked Sendable {
     @Test func readsTheStalledProcessCount() {
         let output = """
             Filesystem     1024-blocks      Used Available Capacity Mounted on
-            \(MachineMonitor.mountsMarker)
-            \(MachineMonitor.stalledMarker)
+            \(MachineHealthProbe.mountsMarker)
+            \(MachineHealthProbe.stalledMarker)
             39
             """
-        #expect(MachineMonitor.parseStalledProcesses(output) == 39)
-        #expect(MachineMonitor.parseStalledProcesses("no markers here") == 0)
+        #expect(MachineHealthProbe.parseStalledProcesses(output) == 39)
+        #expect(MachineHealthProbe.parseStalledProcesses("no markers here") == 0)
     }
 
     @Test func warnsOnceWhenProcessesWedgeOnAFilesystem() {
@@ -193,67 +194,41 @@ private final class MachineNotificationProbe: @unchecked Sendable {
         #expect(alert.body == "/ is 95% full.")
     }
 
-    @Test func stalledNotificationCenterDoesNotBlockMachineMonitor() {
+    @Test func aStalledNotificationCentreDoesNotBlockTheProbe() {
         let probe = MachineNotificationProbe()
-        let queue = NotificationReplacementQueue(
-            label: "test.machine-notifications.\(UUID().uuidString)"
-        ) { _ in
-            probe.entered.signal()
-            probe.release.wait()
-        }
+        let notifier = AgentNotifier(
+            present: { _ in
+                probe.entered.signal()
+                probe.release.wait()
+                return true
+            }, relay: { _ in })
 
-        DispatchQueue.global().async {
-            MachineMonitor.notify(.unreachable(machine: "Tuf"), queue: queue)
-            probe.returned.signal()
-        }
+        notifier.send(MachineAlert.unreachable(machine: "Tuf"))
+        probe.returned.signal()
 
         #expect(probe.entered.wait(timeout: .now() + 1) == .success)
         #expect(probe.returned.wait(timeout: .now() + 0.2) == .success)
         probe.release.signal()
     }
-}
 
-@Suite struct MetricsStreamRecoveryTests {
-    @Test func aStreamThatKeepsFailingIsRetriedLessOften() {
-        #expect(MachineSession.metricsRestartDelay(failures: 0) == 3)
-        #expect(MachineSession.metricsRestartDelay(failures: 1) == 6)
-        #expect(MachineSession.metricsRestartDelay(failures: 2) == 12)
+    @Test func anAlertThatCannotBePresentedIsRelayedToTheMenuBar() {
+        let relayed = MachineNotificationProbe()
+        let notifier = AgentNotifier(
+            present: { _ in false }, relay: { _ in relayed.entered.signal() })
+
+        notifier.send(MachineAlert.diskFull(machine: "Tuf", mount: "/", percent: 96))
+
+        #expect(relayed.entered.wait(timeout: .now() + 1) == .success)
     }
 
-    @Test func theRetryDelayIsCappedSoAMachineIsNeverAbandoned() {
-        #expect(MachineSession.metricsRestartDelay(failures: 20) == 60)
-        #expect(MachineSession.metricsRestartDelay(failures: -1) == 3)
-    }
+    @Test func anAlertCarriesItsIdentityThroughTheRelay() throws {
+        let alert = MachineAlert.unreachable(machine: "Tuf")
+        let notification = AgentNotification(
+            identifier: alert.identifier, title: alert.title, body: alert.body)
 
-    @Test func silenceIsJudgedGenerouslyAgainstTheTwoSecondCadence() {
-        #expect(MachineSession.metricsSilenceLimit >= 10)
-    }
-}
+        let round = try #require(AgentNotification(userInfo: notification.userInfo))
 
-@Suite @MainActor struct MetricHistoryShapeTests {
-    @Test func theFirstSampleFillsTheWholeWindow() {
-        let seeded = MachineSession.appending(42, to: [])
-        #expect(seeded.count == MachineSession.historyLength)
-        #expect(seeded.allSatisfy { $0 == 42 })
-    }
-
-    @Test func laterSamplesKeepTheWindowLengthConstant() {
-        var history = MachineSession.appending(10, to: [])
-        for value in 1...20 {
-            history = MachineSession.appending(Double(value), to: history)
-            #expect(history.count == MachineSession.historyLength)
-        }
-        #expect(history.last == 20)
-        #expect(history.suffix(3) == [18, 19, 20])
-    }
-
-    @Test func aFullWindowScrollsByExactlyOneSample() {
-        var history = MachineSession.appending(0, to: [])
-        for value in 1...MachineSession.historyLength {
-            history = MachineSession.appending(Double(value), to: history)
-        }
-        let before = history
-        history = MachineSession.appending(999, to: history)
-        #expect(Array(history.dropLast()) == Array(before.dropFirst()))
+        #expect(round == notification)
+        #expect(round.identifier == "machine.reachability.Tuf")
     }
 }

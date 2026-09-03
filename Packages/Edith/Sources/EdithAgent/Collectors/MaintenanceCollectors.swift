@@ -16,56 +16,23 @@ public enum MachineHealthPolicy {
     }
 }
 
-public struct MachineHealthSnapshot: Codable, Equatable, Sendable {
-    public struct Machine: Codable, Equatable, Sendable {
-        public let id: String
-        public let name: String
-        public let reachable: Bool
-        public let detail: String?
-
-        public init(id: String, name: String, reachable: Bool, detail: String?) {
-            self.id = id
-            self.name = name
-            self.reachable = reachable
-            self.detail = detail
-        }
-    }
-
-    public let checkedAt: Date
-    public let machines: [Machine]
-    public let skipped: Bool
-
-    public init(checkedAt: Date, machines: [Machine], skipped: Bool) {
-        self.checkedAt = checkedAt
-        self.machines = machines
-        self.skipped = skipped
-    }
-}
-
 public struct MachineHealthJob: Sendable {
     private let store: AgentStore?
+    private let monitor: MachineHealthMonitor
 
-    public init(store: AgentStore?) {
+    public init(store: AgentStore?, monitor: MachineHealthMonitor = MachineHealthMonitor()) {
         self.store = store
+        self.monitor = monitor
     }
 
     public func run() async throws -> Data? {
-        guard MachineHealthPolicy.shouldProbe() else {
-            return try AgentPayload.encode(
-                MachineHealthSnapshot(checkedAt: Date(), machines: [], skipped: true))
-        }
-        let machines = MachineRegistry.machines().map { machine in
-            MachineHealthSnapshot.Machine(
-                id: machine.id.uuidString, name: machine.name, reachable: true, detail: nil)
-        }
-        let snapshot = MachineHealthSnapshot(
-            checkedAt: Date(), machines: machines, skipped: false)
+        let snapshot = await monitor.run()
         try? record(snapshot)
         return try AgentPayload.encode(snapshot)
     }
 
     private func record(_ snapshot: MachineHealthSnapshot) throws {
-        guard let store else { return }
+        guard let store, !snapshot.skipped else { return }
         let payload = try AgentPayload.encode(snapshot)
         try store.write { database in
             for machine in snapshot.machines {
@@ -80,18 +47,6 @@ public struct MachineHealthJob: Sendable {
                 sql: "DELETE FROM machine_metric WHERE capturedAt < ?",
                 arguments: [snapshot.checkedAt.addingTimeInterval(-24 * 60 * 60)])
         }
-    }
-}
-
-public struct UpdateDiscoverySnapshot: Codable, Equatable, Sendable {
-    public let checkedAt: Date
-    public let available: Int
-    public let sources: [String]
-
-    public init(checkedAt: Date, available: Int, sources: [String]) {
-        self.checkedAt = checkedAt
-        self.available = available
-        self.sources = sources
     }
 }
 
@@ -136,18 +91,6 @@ public struct UpdateDiscoveryJob: Sendable {
                     ])
             }
         }
-    }
-}
-
-public struct CleanerEstimateSnapshot: Codable, Equatable, Sendable {
-    public let scannedAt: Date
-    public let reclaimableBytes: Int64
-    public let categories: Int
-
-    public init(scannedAt: Date, reclaimableBytes: Int64, categories: Int) {
-        self.scannedAt = scannedAt
-        self.reclaimableBytes = reclaimableBytes
-        self.categories = categories
     }
 }
 

@@ -76,6 +76,10 @@ struct HerdrPage: View {
                 store.stopWatching()
             }
         }
+        .agentTopic(.sessions, as: SessionsSnapshot.self, active: automaticActions) { snapshot in
+            store.adopt(snapshot)
+
+        }
     }
 
     private var railDisplayWidth: Double {
