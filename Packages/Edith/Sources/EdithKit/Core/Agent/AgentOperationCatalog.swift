@@ -2,9 +2,13 @@ import EdithCore
 import Foundation
 
 public enum AgentOperationCatalog {
-    public static let served: [UserOperationID] = AgentControlOperation.allCases.map {
-        $0.descriptor.id
-    }
+    private static let usageOperations: [UserOperationID] = [
+        UsageCollectionOperation.refresh.descriptor.id,
+        UsageCollectionOperation.limitsRefresh.descriptor.id,
+    ]
+
+    public static let served: [UserOperationID] =
+        AgentControlOperation.allCases.map { $0.descriptor.id } + usageOperations
 
     public static let internalOperations: [String] = [
         AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
