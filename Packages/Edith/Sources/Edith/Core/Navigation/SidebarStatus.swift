@@ -69,7 +69,7 @@ final class SidebarStatusModel {
         guard refreshTask == nil else { return }
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.refresh()
+                await self?.refresh()
                 try? await Task.sleep(for: .seconds(5))
             }
         }
@@ -80,8 +80,8 @@ final class SidebarStatusModel {
         refreshTask = nil
     }
 
-    func refresh() {
-        refreshAgent()
+    func refresh() async {
+        await refreshAgent()
         refreshSessions()
         refreshLimits()
         refreshMaintenance()
@@ -127,10 +127,11 @@ final class SidebarStatusModel {
         reclaimableBytes = cleanerOn ? SidebarBadgeStore.reclaimableBytes() : 0
     }
 
-    private func refreshAgent() {
-        guard let runtime = try? AgentClient.shared.runtimeSnapshot(),
-            let jobs = try? AgentClient.shared.jobSnapshots()
-        else {
+    private func refreshAgent() async {
+        let probe = await AgentQuery.optional {
+            (try AgentClient.shared.runtimeSnapshot(), try AgentClient.shared.jobSnapshots())
+        }
+        guard let (runtime, jobs) = probe else {
             agentRunning = false
             agentSummary = AgentRegistrationState.current.title
             return

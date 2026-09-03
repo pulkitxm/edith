@@ -161,16 +161,16 @@ struct OnboardingAgentPanel: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(DashSkin.line(dark)))
         }
-        .onAppear(perform: refresh)
+        .task { await refresh() }
     }
 
     private var displayedJobs: [AgentJobSnapshot] {
         jobs.isEmpty ? AgentJobPreview.placeholders : jobs
     }
 
-    private func refresh() {
+    private func refresh() async {
         registration = .current
-        jobs = (try? AgentClient.shared.jobSnapshots()) ?? []
+        jobs = await AgentQuery.optional { try AgentClient.shared.jobSnapshots() } ?? []
     }
 }
 

@@ -6,12 +6,35 @@ import ServiceManagement
 final class AgentRegistrar {
     private let service = SMAppService.agent(plistName: AgentService.plistName)
     private var refresh: DispatchWorkItem?
+    private var didRepair = false
 
     func registerAndRestartIfStale() {
         register()
-        guard AgentBuildStamp.hasChanged() else { return }
+        guard AgentBuildStamp.hasChanged() else {
+            repairIfUnreachable()
+            return
+        }
         AgentBuildStamp.record()
+        reregister()
+    }
+
+    private func reregister() {
+        try? service.unregister()
+        attemptRegistration()
         restartRunningAgent()
+    }
+
+    private func repairIfUnreachable() {
+        guard service.status == .enabled, !didRepair else { return }
+        DispatchQueue.global(qos: .utility).async {
+            guard (try? AgentClient.shared.verifyHandshake()) == nil else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !didRepair else { return }
+                didRepair = true
+                AgentClient.shared.reset()
+                reregister()
+            }
+        }
     }
 
     private func restartRunningAgent() {
@@ -34,8 +57,7 @@ final class AgentRegistrar {
     }
 
     func restart() {
-        try? service.unregister()
-        attemptRegistration()
+        reregister()
     }
 
     private func attemptRegistration() {

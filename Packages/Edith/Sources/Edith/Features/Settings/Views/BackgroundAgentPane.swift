@@ -10,24 +10,27 @@ final class BackgroundAgentModel {
     var jobs: [AgentJobSnapshot] = []
     var failure: String?
 
-    func refresh() {
+    func refresh() async {
         registration = .current
-        do {
-            runtime = try AgentClient.shared.runtimeSnapshot()
-            jobs = try AgentClient.shared.jobSnapshots()
+        let result = await AgentQuery.value {
+            (try AgentClient.shared.runtimeSnapshot(), try AgentClient.shared.jobSnapshots())
+        }
+        switch result {
+        case let .success(value):
+            runtime = value.0
+            jobs = value.1
             failure = nil
-        } catch {
+        case let .failure(error):
             runtime = nil
             jobs = []
             failure = error.localizedDescription
         }
     }
 
-    func restart() {
-        try? AgentClient.shared.restart()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.refresh()
-        }
+    func restart() async {
+        await AgentQuery.run { try AgentClient.shared.restart() }
+        try? await Task.sleep(for: .milliseconds(1_500))
+        await refresh()
     }
 
     func copyLogCommand() {
@@ -57,15 +60,13 @@ struct BackgroundAgentPane: View {
             jobsSection
         }
         .formStyle(.grouped)
-        .onAppear {
-            if automaticActionsEnabled { model.refresh() }
-        }
         .task {
             guard automaticActionsEnabled else { return }
+            await model.refresh()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
-                model.refresh()
+                await model.refresh()
             }
         }
     }
@@ -90,7 +91,7 @@ struct BackgroundAgentPane: View {
                     .foregroundStyle(.orange)
             }
             HStack {
-                Button("Restart") { model.restart() }
+                Button("Restart") { Task { await model.restart() } }
                     .disabled(model.runtime == nil)
                 Button("Copy log command") { model.copyLogCommand() }
                 if model.registration.needsAttention {

@@ -10,12 +10,14 @@ final class DataBackupModel {
     var schemaVersion: Int?
     var restorePreview: [String] = []
 
-    func refresh() {
+    func refresh() async {
         footprints = BackupFootprintReader.entries()
         lastBackupAt =
             SharedDefaults.store.object(forKey: AppStorageKeys.Backup.lastBackupAt)
             as? Date
-        schemaVersion = (try? AgentClient.shared.runtimeSnapshot())?.schemaVersion
+        schemaVersion = await AgentQuery.optional {
+            try AgentClient.shared.runtimeSnapshot()
+        }?.schemaVersion
     }
 
     func loadRestorePreview() {
@@ -57,9 +59,9 @@ struct DataBackupPane: View {
             restoreSection
         }
         .formStyle(.grouped)
-        .onAppear {
+        .task {
             guard automaticActionsEnabled else { return }
-            model.refresh()
+            await model.refresh()
             model.loadRestorePreview()
         }
     }
@@ -126,7 +128,7 @@ struct DataBackupPane: View {
                     }
                 }
             }
-            Button("Refresh sizes") { model.refresh() }
+            Button("Refresh sizes") { Task { await model.refresh() } }
         }
     }
 

@@ -4,10 +4,15 @@ import Foundation
 public final class AgentClient: NSObject, @unchecked Sendable {
     public static let shared = AgentClient()
 
+    public static let replyTimeout: TimeInterval = 4
+    public static let logTimeout: TimeInterval = 30
+    public static let unavailableCooldown: TimeInterval = 20
+
     private let queue = DispatchQueue(label: "com.pulkit.edith.agent.client")
     private var connection: NSXPCConnection?
     private var handshake: AgentHandshake?
     private var subscriptions: [String: [UUID: @Sendable (Data) -> Void]] = [:]
+    private var unavailableUntil: Date?
 
     public override init() {
         super.init()
@@ -22,7 +27,23 @@ public final class AgentClient: NSObject, @unchecked Sendable {
             connection?.invalidate()
             connection = nil
             handshake = nil
+            unavailableUntil = nil
         }
+    }
+
+    public var isCoolingDown: Bool {
+        queue.sync {
+            guard let unavailableUntil else { return false }
+            return unavailableUntil > Date()
+        }
+    }
+
+    private func beginCooldown(now: Date = Date()) {
+        queue.sync { unavailableUntil = now.addingTimeInterval(Self.unavailableCooldown) }
+    }
+
+    private func endCooldown() {
+        queue.sync { unavailableUntil = nil }
     }
 
     private func proxy() throws -> EdithAgentXPC {
@@ -59,8 +80,12 @@ public final class AgentClient: NSObject, @unchecked Sendable {
     }
 
     private func call<T>(
+        timeout: TimeInterval = AgentClient.replyTimeout,
         _ body: (EdithAgentXPC, @escaping (T?, String?) -> Void) -> Void
     ) throws -> T {
+        guard !isCoolingDown else {
+            throw AgentError(.unavailable, "The background agent is not answering.")
+        }
         let remote = try proxy()
         let semaphore = DispatchSemaphore(value: 0)
         var value: T?
@@ -73,10 +98,12 @@ public final class AgentClient: NSObject, @unchecked Sendable {
             failure = message
             semaphore.signal()
         }
-        guard semaphore.wait(timeout: .now() + 10) == .success else {
+        guard semaphore.wait(timeout: .now() + timeout) == .success else {
             clear()
+            beginCooldown()
             throw AgentError(.unavailable, "The background agent did not answer in time.")
         }
+        endCooldown()
         if let failure { throw AgentError(.failed, failure) }
         guard let value else { throw AgentError.unavailable }
         return value
@@ -149,9 +176,14 @@ public final class AgentClient: NSObject, @unchecked Sendable {
     }
 
     public func logLines(last: String) throws -> [String] {
-        try perform(
-            [String].self, operation: AgentControlOperation.logs.descriptor.id,
-            payload: Data(last.utf8))
+        try verifyHandshake()
+        let data: Data = try call(timeout: Self.logTimeout) { remote, reply in
+            remote.perform(
+                operation: AgentControlOperation.logs.descriptor.id.rawValue,
+                payload: Data(last.utf8)
+            ) { reply($0, $1) }
+        }
+        return try AgentPayload.decode([String].self, from: data)
     }
 
     public func publishBus(channel: String, userInfo: [String: Any]) throws {

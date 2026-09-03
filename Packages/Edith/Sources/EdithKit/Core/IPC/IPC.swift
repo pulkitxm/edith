@@ -120,10 +120,11 @@ public enum IPC {
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
-        let body = userInfo ?? [:]
-        if IPCTransport.deliverOverAgent(channel: name.rawValue, userInfo: body) { return }
+        var body = userInfo ?? [:]
+        body[IPCMessage.idKey] = UUID().uuidString
+        IPCTransport.deliverOverAgent(channel: name.rawValue, userInfo: body)
         DistributedNotificationCenter.default().postNotificationName(
-            name, object: nil, userInfo: userInfo, deliverImmediately: true)
+            name, object: nil, userInfo: body, deliverImmediately: true)
     }
 
     public static func observe(_ name: Notification.Name, using block: @escaping () -> Void)
@@ -147,20 +148,60 @@ public enum IPC {
     }
 }
 
+public enum IPCMessage {
+    public static let idKey = "com.pulkit.edith.ipcID"
+}
+
+public final class IPCDeduplicator: @unchecked Sendable {
+    public static let capacity = 256
+
+    private let lock = NSLock()
+    private var order: [String] = []
+    private var seen: Set<String> = []
+
+    public init() {}
+
+    public func accept(_ identifier: String?) -> Bool {
+        guard let identifier else { return true }
+        lock.lock()
+        defer { lock.unlock() }
+        guard seen.insert(identifier).inserted else { return false }
+        order.append(identifier)
+        while order.count > Self.capacity {
+            seen.remove(order.removeFirst())
+        }
+        return true
+    }
+}
+
 public final class IPCObservation: NSObject, @unchecked Sendable {
+    private let lock = NSLock()
     private var busSubscription: AgentBusSubscription?
     private var fallback: NSObjectProtocol?
+    private var cancelled = false
 
-    init(busSubscription: AgentBusSubscription?, fallback: NSObjectProtocol?) {
-        self.busSubscription = busSubscription
+    init(fallback: NSObjectProtocol?) {
         self.fallback = fallback
     }
 
+    func attach(busSubscription: AgentBusSubscription?) {
+        lock.lock()
+        let discard = cancelled
+        if !discard { self.busSubscription = busSubscription }
+        lock.unlock()
+        if discard { busSubscription?.cancel() }
+    }
+
     func cancel() {
-        busSubscription?.cancel()
+        lock.lock()
+        cancelled = true
+        let subscription = busSubscription
+        let observer = fallback
         busSubscription = nil
-        if let fallback { DistributedNotificationCenter.default().removeObserver(fallback) }
         fallback = nil
+        lock.unlock()
+        subscription?.cancel()
+        if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
     }
 
     deinit { cancel() }
@@ -174,8 +215,10 @@ public enum IPCTransport {
     public static var isEnabled: Bool { state.isEnabled }
 
     public static func enable() {
-        guard (try? AgentClient.shared.verifyHandshake()) != nil else { return }
-        state.enable()
+        work.async {
+            guard (try? AgentClient.shared.verifyHandshake()) != nil else { return }
+            state.enable()
+        }
     }
 
     public static func disable() {
@@ -187,16 +230,17 @@ public enum IPCTransport {
         return now.timeIntervalSince(lastFailure) >= cooldown
     }
 
-    public static func deliverOverAgent(channel: String, userInfo: [String: Any]) -> Bool {
-        guard state.shouldAttempt(), AgentBusEncoding.isTransportable(userInfo) else {
-            return false
-        }
-        do {
-            try AgentClient.shared.publishBus(channel: channel, userInfo: userInfo)
-            return true
-        } catch {
-            state.recordFailure()
-            return false
+    static let work = DispatchQueue(label: "com.pulkit.edith.ipc.transport", qos: .utility)
+
+    public static func deliverOverAgent(channel: String, userInfo: [String: Any]) {
+        guard state.shouldAttempt(), AgentBusEncoding.isTransportable(userInfo) else { return }
+        work.async {
+            guard state.shouldAttempt() else { return }
+            do {
+                try AgentClient.shared.publishBus(channel: channel, userInfo: userInfo)
+            } catch {
+                state.recordFailure()
+            }
         }
     }
 
@@ -204,16 +248,25 @@ public enum IPCTransport {
         channel: String, name: Notification.Name,
         info block: @escaping ([AnyHashable: Any]) -> Void
     ) -> NSObjectProtocol {
+        let seen = IPCDeduplicator()
+        let deliver: @Sendable ([AnyHashable: Any]) -> Void = { info in
+            guard seen.accept(info[IPCMessage.idKey] as? String) else { return }
+            block(info)
+        }
         let fallback = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
-        ) { note in block(note.userInfo ?? [:]) }
-        let subscription =
-            state.shouldAttempt()
-            ? try? AgentClient.shared.subscribeBus(channel: channel) { userInfo in
-                DispatchQueue.main.async { block(userInfo) }
+        ) { note in deliver(note.userInfo ?? [:]) }
+        let observation = IPCObservation(fallback: fallback)
+        guard state.shouldAttempt() else { return observation }
+        work.async {
+            guard state.shouldAttempt() else { return }
+            let subscription = try? AgentClient.shared.subscribeBus(channel: channel) { userInfo in
+                DispatchQueue.main.async { deliver(userInfo) }
             }
-            : nil
-        return IPCObservation(busSubscription: subscription, fallback: fallback)
+            if subscription == nil { state.recordFailure() }
+            observation.attach(busSubscription: subscription)
+        }
+        return observation
     }
 }
 
