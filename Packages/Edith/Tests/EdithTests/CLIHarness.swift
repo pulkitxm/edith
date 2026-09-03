@@ -174,7 +174,6 @@ final class CLIWorld: @unchecked Sendable {
             .appendingPathComponent("ed-cli-world-\(label)")
         try? FileManager.default.createDirectory(
             at: sandbox, withIntermediateDirectories: true)
-        setenv(DataRoot.devOverrideVariable, sandbox.path, 1)
         ClipboardPaths.root = sandbox
         AttentionPaths.root = sandbox
         MachinePaths.root = sandbox
@@ -316,6 +315,7 @@ final class CLIWorld: @unchecked Sendable {
         busy: Bool = false,
         failure: UsageRefreshFailure? = nil
     ) {
+        setenv(DataRoot.devOverrideVariable, sandbox.path, 1)
         let dataDir = Repo.dataDir
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: UsageRefreshRunner.lockURL(dataDir: dataDir))
