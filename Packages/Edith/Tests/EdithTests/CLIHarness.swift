@@ -339,6 +339,19 @@ final class CLIWorld: @unchecked Sendable {
         }
     }
 
+    func configureLimitsRefreshAgent() {
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
+        let limitsID = UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == limitsID else { return Data() }
+            CLIEnvironment.deliver(IPC.Name.limitsUpdated, nil)
+            return Data()
+        }
+    }
+
     func answers(_ block: @escaping @Sendable (Notification.Name) -> [AnyHashable: Any]?) {
         CLIEnvironment.answer = block
     }
