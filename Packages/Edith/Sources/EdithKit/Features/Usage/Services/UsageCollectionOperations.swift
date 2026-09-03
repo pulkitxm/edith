@@ -190,7 +190,16 @@ public enum UsageCollectionOperationExecution {
         _ signal: UsageCollectionSignal,
         deliver: (Notification.Name) -> Void = { IPC.post($0) }
     ) -> UsageCollectionOperation {
-        deliver(signal.notification)
+        switch signal {
+        case .refresh:
+            if (try? UsageAgentOperations.requestRefresh()) == nil {
+                deliver(signal.notification)
+            }
+        case .limitsRefresh:
+            if (try? UsageAgentOperations.requestLimitsRefresh()) == nil {
+                deliver(signal.notification)
+            }
+        }
         return signal.operation
     }
 
