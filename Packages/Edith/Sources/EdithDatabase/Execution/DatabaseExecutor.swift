@@ -1000,6 +1000,7 @@ public actor DatabaseExecutor {
                 operationID,
                 reason: .sessionDisconnected)
         }
+        await Task.yield()
         let deadline = Self.deadline(
             after: managementDrainTimeoutNanoseconds)
         for operationID in operationIDs {
@@ -2036,9 +2037,7 @@ public actor DatabaseExecutor {
         guard !active.serverCancellationInvoked else { return .cooperative }
         active.serverCancellationInvoked = true
         activeOperations[operationID] = active
-        let invocation = Task {
-            await session.cancel(operationID)
-        }
+        let invocation = Self.startSessionCancellation(session, operationID)
         let task = Task { [weak self] in
             _ = await invocation.value
             await self?.finishServerCancellation(operationID)
@@ -2364,6 +2363,20 @@ public actor DatabaseExecutor {
 
     private static let zeroUUID = UUID(
         uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    private static func startSessionCancellation(
+        _ session: any DatabaseAdapterSession,
+        _ operationID: DatabaseOperationID
+    ) -> Task<DatabaseAdapterCancellationResult, Never> {
+        if #available(macOS 26.0, *) {
+            return Task.immediate {
+                await session.cancel(operationID)
+            }
+        }
+        return Task {
+            await session.cancel(operationID)
+        }
+    }
 
     private static func deadline(after timeoutNanoseconds: UInt64) -> UInt64 {
         let now = DispatchTime.now().uptimeNanoseconds
