@@ -1,8 +1,7 @@
 import Darwin
-import EdithKit
 import Foundation
 
-enum ClaudeShellProcessResult: Equatable, Sendable {
+public enum ClaudeShellProcessResult: Equatable, Sendable {
     case output(Data)
     case cancelled
     case timedOut
@@ -10,15 +9,25 @@ enum ClaudeShellProcessResult: Equatable, Sendable {
     case failed
 }
 
-struct ClaudeShellInvocation: Equatable, Sendable {
-    let executable: URL
-    let arguments: [String]
-    let environment: [String: String]
-    let currentDirectory: URL
+public struct ClaudeShellInvocation: Equatable, Sendable {
+    public let executable: URL
+    public let arguments: [String]
+    public let environment: [String: String]
+    public let currentDirectory: URL
+
+    public init(
+        executable: URL, arguments: [String], environment: [String: String],
+        currentDirectory: URL
+    ) {
+        self.executable = executable
+        self.arguments = arguments
+        self.environment = environment
+        self.currentDirectory = currentDirectory
+    }
 }
 
-enum ClaudeShellProcessRunner {
-    static func run(
+public enum ClaudeShellProcessRunner {
+    public static func run(
         _ invocation: ClaudeShellInvocation, timeout: TimeInterval, maximumOutputBytes: Int
     ) async -> ClaudeShellProcessResult {
         let request = CLICommandRequest(
@@ -46,7 +55,7 @@ enum ClaudeShellProcessRunner {
     }
 }
 
-enum ClaudeShellCredentialResolution {
+public enum ClaudeShellCredentialResolution {
     case credential(ClaudeOAuthCredential)
     case cancelled
     case missing
@@ -56,21 +65,21 @@ enum ClaudeShellCredentialResolution {
     case failed
 }
 
-struct ClaudeShellCredentialResolver: Sendable {
-    typealias Runner =
+public struct ClaudeShellCredentialResolver: Sendable {
+    public typealias Runner =
         @Sendable (
             ClaudeShellInvocation, TimeInterval, Int
         ) async -> ClaudeShellProcessResult
 
-    let shell: URL
-    let home: URL
-    let username: String
-    let timeout: TimeInterval
-    let maximumOutputBytes: Int
-    let marker: String
-    let runner: Runner
+    public let shell: URL
+    public let home: URL
+    public let username: String
+    public let timeout: TimeInterval
+    public let maximumOutputBytes: Int
+    public let marker: String
+    public let runner: Runner
 
-    init(
+    public init(
         shell: URL = Self.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         username: String = NSUserName(),
@@ -91,7 +100,7 @@ struct ClaudeShellCredentialResolver: Sendable {
         self.runner = runner
     }
 
-    func resolve() async -> ClaudeShellCredentialResolution {
+    public func resolve() async -> ClaudeShellCredentialResolution {
         let invocation = ClaudeShellInvocation(
             executable: shell,
             arguments: ["-l", "-i", "-c", command],
@@ -151,7 +160,7 @@ struct ClaudeShellCredentialResolver: Sendable {
         return .credential(credential)
     }
 
-    private static func loginShell() -> URL {
+    public static func loginShell() -> URL {
         guard let entry = getpwuid(getuid()), let shell = entry.pointee.pw_shell else {
             return URL(fileURLWithPath: "/bin/zsh")
         }
@@ -161,7 +170,7 @@ struct ClaudeShellCredentialResolver: Sendable {
     }
 }
 
-enum ClaudeCredentialLookupFailure: Equatable {
+public enum ClaudeCredentialLookupFailure: Equatable {
     case missing
     case rejected
     case malformed
@@ -170,23 +179,22 @@ enum ClaudeCredentialLookupFailure: Equatable {
     case failed
 }
 
-enum ClaudeCredentialLookup {
+public enum ClaudeCredentialLookup {
     case credential(ClaudeOAuthCredential)
     case failure(ClaudeCredentialLookupFailure)
     case cancelled
 }
 
-@MainActor
-final class ClaudeCredentialSession {
-    typealias PersistedReader = () async -> ClaudeCredentialLookup
-    typealias ShellReader = () async -> ClaudeShellCredentialResolution
+public final class ClaudeCredentialSession {
+    public typealias PersistedReader = () async -> ClaudeCredentialLookup
+    public typealias ShellReader = () async -> ClaudeShellCredentialResolution
 
     private var cached: ClaudeOAuthCredential?
     private var rejectedAccessToken: String?
     private let persistedReader: PersistedReader
     private let shellReader: ShellReader
 
-    init(
+    public init(
         persistedReader: @escaping PersistedReader = ClaudeCredentialStore.read,
         shellReader: @escaping ShellReader = {
             await ClaudeShellCredentialResolver().resolve()
@@ -196,18 +204,18 @@ final class ClaudeCredentialSession {
         self.shellReader = shellReader
     }
 
-    func current() async -> ClaudeCredentialLookup {
+    public func current() async -> ClaudeCredentialLookup {
         if let cached { return .credential(cached) }
         return await load()
     }
 
-    func reload(rejectingAccessToken: String? = nil) async -> ClaudeCredentialLookup {
+    public func reload(rejectingAccessToken: String? = nil) async -> ClaudeCredentialLookup {
         cached = nil
         if let rejectingAccessToken { rejectedAccessToken = rejectingAccessToken }
         return await load()
     }
 
-    func store(_ credential: ClaudeOAuthCredential) {
+    public func store(_ credential: ClaudeOAuthCredential) {
         rejectedAccessToken = nil
         cached = credential
     }

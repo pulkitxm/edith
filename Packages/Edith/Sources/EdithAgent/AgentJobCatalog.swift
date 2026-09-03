@@ -21,6 +21,7 @@ public enum AgentJobCatalog {
     static func collectors(
         store: AgentStore?, scheduler: JobScheduler? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
+        let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
         let machines = MachineHealthJob(store: store)
         let updates = UpdateDiscoveryJob(store: store)
@@ -35,6 +36,7 @@ public enum AgentJobCatalog {
         }
         return [
             "usage.refresh": { try await usage.run() },
+            "usage.limits": { try await limits.run() },
             "machines.health": { try await machines.run() },
             "updates.discover": { try await updates.run() },
             "cleaner.estimate": { try await cleaner.run() },
