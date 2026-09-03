@@ -10,7 +10,7 @@ ed usage limits [--refresh] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--refresh` | flag | off | Asks the app to poll the providers again and waits up to 20 seconds for it to say it did, before reading the file. Fails when nothing answers |
+| `--refresh` | flag | off | Ask the background agent to poll providers again and wait up to 20 seconds before reading the file. Fails when `edithd` is not running |
 | `--json` | flag | off | Emit JSON on stdout |
 
 ## `--json` shape
@@ -73,15 +73,14 @@ once the reset moment has passed. The human table shows the session reset as a
 coarse duration instead, `3h 10m` or `2d 4h`, clamped at zero, and a `-` in any
 column the provider has not reported.
 
-`--refresh` is the refresh button on the rate limit cards. It needs the menu bar
-app and exits 4 with `refreshing the rate limits needs the Edith menu bar app to
-be running` when Edith is closed. The reply it waits for is only posted when a
-poll actually succeeds, so a provider that is failing to answer costs you the
-full 20 seconds and then the command fails rather than printing the old numbers:
-exit 4 with `Edith did not answer for refreshing the rate limits in time`, or
-with `the extension behind refreshing the rate limits is off` when
-`tabUsageEnabled` is false. After one second of waiting `ed` prints `waiting for
-Edith to answer...` once, on stderr.
+`--refresh` asks the background agent to poll the providers again and waits up
+to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
+is not running: exit 4 with `refreshing the rate limits needs the background
+agent`, hinted with `run ed agent restart or enable the background agent in
+Settings`. The reply it waits for is only posted when a poll actually succeeds,
+so a provider that is failing to answer costs you the full 20 seconds and then
+the command fails rather than printing the old numbers: exit 4 with `the
+background agent did not refresh the rate limits in time`.
 
 The listener goes up before the request goes out, so an app that answers within
 the same instant cannot beat it and a poll that worked is never reported as

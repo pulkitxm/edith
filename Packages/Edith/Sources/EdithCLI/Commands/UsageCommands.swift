@@ -86,18 +86,21 @@ struct UsageLimitsCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             if refresh {
-                try AppBridge.requireHelper("refreshing the rate limits")
+                guard (try? CLIEnvironment.verifyAgentHandshake()) != nil else {
+                    throw CLIFailure.unavailable(
+                        "refreshing the rate limits needs the background agent",
+                        hint: "run `ed agent restart` or enable the background agent in Settings")
+                }
                 let answered = await AppBridge.awaitReply(
                     IPC.Name.limitsUpdated, timeout: 20
                 ) {
-                    UsageCollectionOperationExecution.request(.limitsRefresh) {
-                        AppBridge.post($0)
-                    }
+                    try? CLIEnvironment.performAgentOperation(
+                        UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue)
                 }
                 guard answered != nil else {
-                    throw AppBridge.silence(
-                        "refreshing the rate limits", extensionKey: AppStorageKeys.Tabs.usageEnabled
-                    )
+                    throw CLIFailure.unavailable(
+                        "the background agent did not refresh the rate limits in time",
+                        hint: "check `ed agent status` and retry")
                 }
             }
             let providers = LimitsReport.providers()
@@ -611,26 +614,38 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             let printer = UsageRefreshPrinter(progress: progress)
             let sink: @Sendable (UsageRefreshEvent) -> Void = { printer.show($0) }
 
-            let driver = CLIEnvironment.usageRefresh
             progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
             if !skipMachines, !follow {
                 try await Self.topUpMachines(
                     force: forceMachines, progress: progress, sink: sink)
             }
+            guard (try? CLIEnvironment.verifyAgentHandshake()) != nil else {
+                throw CLIFailure.unavailable(
+                    "usage refresh needs the background agent",
+                    hint: "run `ed agent restart` or enable the background agent in Settings")
+            }
             do {
-                let execution = try await UsageCollectionOperationExecution.refresh(
-                    follow: follow, driver: driver,
-                    onStart: { progress.begin("starting") },
-                    onFollow: { progress.begin("following") },
-                    onBusyAttach: {
+                let refresh: UsageRefreshResult
+                var attached = false
+                if follow {
+                    guard UsageRefreshRunner.isRunning else {
+                        throw UsageCollectionOperationError.noRefreshRunning
+                    }
+                    progress.begin("following")
+                    refresh = try await UsageRefreshFollower.follow(onEvent: sink)
+                } else {
+                    progress.begin("starting")
+                    try CLIEnvironment.performAgentOperation(
+                        UsageCollectionOperation.refresh.descriptor.id.rawValue)
+                    if UsageRefreshRunner.isRunning {
+                        attached = true
                         progress.note("a refresh is already running, attaching to it")
-                    },
-                    onEvent: sink)
+                    }
+                    refresh = try await UsageRefreshFollower.follow(onEvent: sink)
+                }
                 progress.end()
                 guard !json else {
-                    CLIOut.json(
-                        Self.payload(
-                            result: execution.refresh, followed: execution.followed))
+                    CLIOut.json(Self.payload(result: refresh, followed: follow || attached))
                     return
                 }
                 CLIOut.out("usage refreshed")
@@ -666,7 +681,7 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                 timeout: MachineUsageCollector.defaultTimeout, verbose: false),
             includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
             onEvent: sink,
-            afterChange: { IPC.post(IPC.Name.requestUsageRefresh) })
+            afterChange: { try? UsageAgentOperations.requestRefresh() })
         let round = result.round
         progress.end()
         if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
