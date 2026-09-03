@@ -126,13 +126,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         termination.begin {
             await AppState.services.prepareForTermination()
         } persistence: {
-            let usage = AppState.services.usage
-            let backup = SettingsBackup.shared
-            async let historyDrain: Void? = usage?.drainHistoryPersistence(
-                syncLimitsAfterDrain: false)
-            async let backupFlush: Void = backup.flushForTermination()
-            _ = await historyDrain
-            await backupFlush
+            await SettingsBackup.shared.flushForTermination()
         } finish: {
             sender.reply(toApplicationShouldTerminate: true)
         }
