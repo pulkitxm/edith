@@ -49,6 +49,8 @@ public struct EdRoot: AsyncParsableCommand {
             UninstallCommand.self,
             ConfigCommand.self,
             AppCommand.self,
+            AgentCommand.self,
+            MCPCommand.self,
             ExtensionsCommand.self,
             LidAwakeCLICommand.self,
             PermissionsCommand.self,

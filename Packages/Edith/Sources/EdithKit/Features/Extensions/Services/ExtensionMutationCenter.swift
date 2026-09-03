@@ -78,15 +78,18 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case seoAudit
     case system
     case appMaintenance
-    case machines
+    case homebrew
+    case cleaner
     case database
     case companion
     case systemStats
     case micMute
     case lidAwake
     case music
+    case downloads
     case calendar
     case notchShelf
+    case audioMixer
     case clipboard
     case keystrokeHighlight
     case focusDim
@@ -375,6 +378,12 @@ public struct ExtensionMutationCenter: Sendable {
                 selectedIDs.contains(entry.id), for: entry,
                 markPermissionsSeen: selectedIDs.contains(entry.id), announce: false)
         }
+        for suite in SuiteRegistry.suites {
+            let wanted = SuiteRegistry.abilities(in: suite.id).contains {
+                selectedIDs.contains($0.id)
+            }
+            environment.defaults.set(wanted, forKey: suite.defaultsKey)
+        }
         environment.defaults.set(icloudBackup, forKey: OnboardingFlow.iCloudBackupKey)
         environment.defaults.set(true, forKey: OnboardingFlow.completionKey)
         environment.defaults.synchronize()
@@ -439,6 +448,23 @@ public struct ExtensionMutationCenter: Sendable {
     }
 
     private func reconcileDependencies(for entry: ExtensionRegistryEntry, enabled: Bool) {
+        if enabled {
+            environment.defaults.set(true, forKey: entry.suiteDescriptor.defaultsKey)
+            for requirement in entry.requires {
+                guard let required = ExtensionRegistry.entry(requirement),
+                    !required.isEnabled(in: environment.defaults)
+                else { continue }
+                environment.defaults.set(true, forKey: required.defaultsKey)
+                reconcileDependencies(for: required, enabled: true)
+            }
+        } else {
+            for dependent in ExtensionRegistry.entries
+            where dependent.requires.contains(entry.id)
+                && dependent.isSelected(in: environment.defaults)
+            {
+                environment.defaults.set(false, forKey: dependent.defaultsKey)
+            }
+        }
         if entry.id == "usage", enabled,
             !environment.defaults.bool(forKey: AppStorageKeys.Limits.claudeEnabled),
             !environment.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled)

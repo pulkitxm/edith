@@ -666,7 +666,15 @@ final class SettingsBackup {
     private(set) var musicBackupRunning = false
     private(set) var clipboardBackupRunning = false
 
-    nonisolated static let backedKeys = [
+    nonisolated static let registryV2Keys =
+        SuiteRegistry.defaultsKeys + [
+            AppStorageKeys.Homebrew.enabled, AppStorageKeys.Cleaner.enabled,
+            AppStorageKeys.Downloads.enabled, AppStorageKeys.Music.barCollapsed,
+            AppStorageKeys.Music.barAutoHide, AgentSettingsKeys.pauseAmbientOnBattery,
+            AgentSettingsKeys.notifyWhenBlocked,
+        ]
+
+    private nonisolated static let baseBackedKeys = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
         AppStorageKeys.General.theme, AppStorageKeys.General.panelTab,
         AppStorageKeys.Presenter.mode,
@@ -687,12 +695,11 @@ final class SettingsBackup {
         AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
         AppStorageKeys.General.hotKeyLabel, AppStorageKeys.Music.volume,
         AppStorageKeys.Music.downloadKind,
-        Repo.pathKey,
         AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
         AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
         AppStorageKeys.Tabs.order,
-        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDown,
         AppStorageKeys.Machines.notifyDiskFull,
         AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
         AppStorageKeys.Tabs.databaseEnabled,
@@ -789,7 +796,9 @@ final class SettingsBackup {
         AppStorageKeys.AppMaintenance.updateRetries,
     ]
 
-    nonisolated static let sharedKeys: Set<String> = [
+    nonisolated static let backedKeys = baseBackedKeys + registryV2Keys
+
+    private nonisolated static let baseSharedKeys: Set<String> = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
         AppStorageKeys.General.theme, AppStorageKeys.General.lastPaletteTheme,
         AppStorageKeys.General.appearance, AppStorageKeys.Music.downloadKind,
@@ -810,7 +819,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
         AppStorageKeys.Tabs.order,
         "usageMachines",
-        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDown,
         AppStorageKeys.Machines.notifyDiskFull,
         AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
         AppStorageKeys.Tabs.databaseEnabled,
@@ -850,7 +859,7 @@ final class SettingsBackup {
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        AppStorageKeys.General.preventSleep, Repo.pathKey,
+        AppStorageKeys.General.preventSleep,
         LidAwakeState.enabledKey, LidAwakeState.restoreOnQuitKey, LidAwakeState.sessionKey,
         LidAwakeState.batteryThresholdKey,
         AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
@@ -909,7 +918,10 @@ final class SettingsBackup {
         AppStorageKeys.AppMaintenance.categoriesExpanded,
     ]
 
+    nonisolated static let sharedKeys = baseSharedKeys.union(registryV2Keys)
+
     nonisolated static let deviceLocalKeys: Set<String> = [
+        AgentService.stateKey,
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
         AppStorageKeys.Music.lastBackupAt,
         AppStorageKeys.Clipboard.lastBackupAt, "micMuted", "migratedFromControlCenter",
@@ -930,7 +942,7 @@ final class SettingsBackup {
         Repo.musicFolderPathKey,
         Repo.musicFolderStaleKey,
         LidAwakeState.activeKey,
-        "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
+        "musicFolderExternalConfirmation", "musicRevealPath",
         "cleanerConfirmedExternalPaths",
         "mainWindowZoom", AppStorageKeys.General.editMainWindowFullScreen,
         AppStorageKeys.Machines.selection, AppStorageKeys.Machines.tab,
@@ -1995,14 +2007,6 @@ final class SettingsBackup {
         for (key, encodedValue) in dict where Self.backedKeys.contains(key) {
             guard let value = settingsBackupDecodeJSONValue(encodedValue) else { continue }
             switch key {
-            case Repo.pathKey:
-                guard let path = value as? String else { continue }
-                guard RestoredPathValidation.verdict(for: path) == .keep else {
-                    Repo.setDevRootPath(nil)
-                    SharedDefaults.store.set(true, forKey: Repo.musicFolderStaleKey)
-                    continue
-                }
-                store(for: key).set(path, forKey: key)
             case "cleanerSelectedDrives", "cleanerCustomFolders":
                 guard let paths = value as? [String] else { continue }
                 store(for: key).set(

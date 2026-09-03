@@ -16,6 +16,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var launchCleanupTask: Task<Void, Never>?
     private var helperMaintenanceTask: Task<Void, Never>?
     private let lidAwakeDaemonRegistrar = LidAwakeDaemonRegistrar()
+    private let agentRegistrar = AgentRegistrar()
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,7 +37,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         appStarted = true
         ExtensionDefaultsMigration.migrate()
+        AttentionRepository.sink = AgentAttentionSink()
+        IPCTransport.enable()
         lidAwakeDaemonRegistrar.register()
+        agentRegistrar.registerAndRestartIfStale()
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
@@ -59,6 +63,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.launchCleanupTask?.cancel()
                 self.launchCleanupTask = Task.detached(priority: .utility) {
+                    DataRoot.prepare()
+                    DataRoot.pruneLogs()
                     Repo.prepareStoredPaths()
                     RetiredLicenseCleanup.run()
                 }

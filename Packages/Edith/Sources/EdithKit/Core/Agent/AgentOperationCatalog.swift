@@ -1,0 +1,29 @@
+import EdithCore
+import Foundation
+
+public enum AgentOperationCatalog {
+    public static let served: [UserOperationID] = AgentControlOperation.allCases.map {
+        $0.descriptor.id
+    }
+
+    public static let internalOperations: [String] = [
+        AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
+        AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
+    ]
+
+    public static func serves(_ id: UserOperationID) -> Bool {
+        served.contains(id)
+    }
+
+    public static func servesInternal(_ name: String) -> Bool {
+        internalOperations.contains(name)
+    }
+
+    public static var allNames: [String] {
+        served.map(\.rawValue) + internalOperations
+    }
+
+    public static var descriptors: [UserOperationDescriptor] {
+        served.compactMap { UserOperationCatalog.descriptor(id: $0) }
+    }
+}

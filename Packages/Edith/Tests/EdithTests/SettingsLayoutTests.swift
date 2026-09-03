@@ -20,38 +20,34 @@ import EdithKit
         let settings = try String(contentsOf: settingsURL, encoding: .utf8)
         let navigation = try String(contentsOf: navigationURL, encoding: .utf8)
 
-        #expect(navigation.contains("ForEach(SettingsPane.Tab.allCases"))
-        #expect(navigation.contains("ForEach(AppMaintenanceSection.allCases"))
-        #expect(navigation.contains("SettingsSidebarRow"))
-        #expect(navigation.contains("AppMaintenanceSidebarRow"))
-        #expect(navigation.contains("settingsCategoriesExpanded.toggle()"))
-        #expect(navigation.contains("appMaintenanceSectionsExpanded.toggle()"))
+        #expect(navigation.contains("NavigationCatalog.rows()"))
+        #expect(navigation.contains("SidebarSectionRow"))
         #expect(navigation.contains("CollapsibleSidebarLayout"))
         #expect(navigation.contains(".clipped()"))
-        #expect(navigation.contains("disclosureAction: item == .settings"))
         #expect(navigation.contains("Button(action: disclosureAction)"))
-        #expect(navigation.contains("if item == .settings, destination == .settings"))
-        #expect(
-            navigation.contains(
-                "if item == .appMaintenance, destination == .appMaintenance"))
         #expect(navigation.contains("rowHovered && !selected"))
         #expect(navigation.contains("if disclosureExpanded != nil"))
-        #expect(
-            !navigation.contains(
-                "minLength: disclosureExpanded == nil"
-            )
-        )
         #expect(!navigation.contains("SidebarDisclosureInteraction"))
         #expect(navigation.contains(".zIndex(1)"))
         #expect(!navigation.contains(".move(edge: .top).combined(with: .opacity)"))
         #expect(navigation.contains("rotationEffect(.degrees(expanded ? 90 : 0))"))
-        #expect(navigation.contains(".padding(.top, UIScale.pt(6))"))
-        #expect(navigation.contains("detach: { detachSettings(category) }"))
-        #expect(navigation.contains("item == .about || item == .settings ? nil"))
+        #expect(!navigation.contains("SettingsSidebarRow"))
+        #expect(!navigation.contains("AppMaintenanceSidebarRow"))
+
+        let settingsPage = try #require(NavigationCatalog.byID["settings"])
+        let maintenancePage = try #require(NavigationCatalog.byID["appMaintenance"])
+        #expect(settingsPage.children.map(\.id) == SettingsPane.Tab.allCases.map(\.rawValue))
+        #expect(
+            maintenancePage.children.map(\.id)
+                == AppMaintenanceSection.allCases.map(\.rawValue))
+        #expect(settingsPage.expansionKey == AppStorageKeys.General.settingsCategoriesExpanded)
+        #expect(maintenancePage.expansionKey == SuiteExpansion.key(for: .maintenance))
+        #expect(!settingsPage.detachable)
+
         #expect(settings.contains(".pickerStyle(.menu)"))
         #expect(!settings.contains(".pickerStyle(.segmented)"))
         #expect(!settings.contains("List(selection: tab)"))
-        #expect(settings.contains("case .permissions: .infinity"))
+        #expect(settings.contains("case .permissions, .agent, .data: .infinity"))
         #expect(settings.contains("UIScale.pt(1180)"))
         #expect(settings.contains("alignment: .topLeading"))
     }
@@ -64,7 +60,10 @@ import EdithKit
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/GeneralPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        for category in ["general", "permissions", "shortcuts", "terminal", "icloud", "updates"] {
+        for category in [
+            "general", "permissions", "agent", "data", "shortcuts", "terminal", "icloud",
+            "updates",
+        ] {
             #expect(source.contains("case .\(category): return"))
         }
         #expect(source.contains("tab.wrappedValue.summary"))

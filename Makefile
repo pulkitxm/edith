@@ -153,7 +153,6 @@ verify-bundle: verify-release-build-settings
 	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
 	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/ghostty/shell-integration/zsh/ghostty-integration' -type f | grep -q .
 	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/terminfo/78/xterm-ghostty' -type f | grep -q .
-	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
@@ -171,6 +170,12 @@ verify-bundle: verify-release-build-settings
 	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test "$$(stat -f %z dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake)" -le 500000
 	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
+	test -x dist/Edith.app/Contents/MacOS/edithd
+	test -f dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist
+	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx Contents/MacOS/edithd
+	/usr/libexec/PlistBuddy -c 'Print :Label' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx com.pulkit.edith.agent
+	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx com.pulkit.edith
+	codesign -dvv dist/Edith.app/Contents/MacOS/edithd 2>&1 | grep -qx Identifier=com.pulkit.edith.agent
 	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
 	codesign -dvv dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake 2>&1 | grep -qx Identifier=com.pulkit.edith.lidawake

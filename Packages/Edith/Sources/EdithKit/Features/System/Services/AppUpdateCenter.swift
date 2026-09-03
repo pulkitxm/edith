@@ -656,20 +656,6 @@ public actor AppUpdateExecutor {
     }
 }
 
-public enum AppUpdateAutomationHook {
-    public static let refreshCommand = "ed maintenance updates --json"
-
-    public static func isAvailable(
-        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries,
-        defaults: UserDefaults = SharedDefaults.store
-    ) -> Bool {
-        guard let automation = entries.first(where: { $0.id == "automations" }) else {
-            return false
-        }
-        return automation.isEnabled(in: defaults)
-    }
-}
-
 private extension JSONEncoder {
     static var updateCenter: JSONEncoder {
         let encoder = JSONEncoder()

@@ -148,6 +148,14 @@ struct ExtensionsPane: View {
             entries: inspectionCenter.list().map(\.entry), query: query, category: category)
     }
 
+    private var visibleSuites: [(suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry])] {
+        let matches = filteredEntries
+        return SuiteRegistry.suites.compactMap { suite in
+            let abilities = matches.filter { $0.suite == suite.id }
+            return abilities.isEmpty ? nil : (suite, abilities)
+        }
+    }
+
     @ViewBuilder
     private var extensionGrid: some View {
         if filteredEntries.isEmpty {
@@ -159,20 +167,35 @@ struct ExtensionsPane: View {
             }
             .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
         } else {
-            LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
-                ForEach(filteredEntries) { entry in
-                    ExtensionMarketplaceCard(
-                        entry: entry,
-                        dark: colorScheme == .dark,
-                        switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
-                            && lidAwakeOperations.applying,
-                        open: { openSettings(for: entry) },
-                        setEnabled: { setEnabled($0, for: entry) }
-                    )
-                    .id(entry.id)
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(22)) {
+                ForEach(visibleSuites, id: \.suite.id) { group in
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        SuiteHeader(
+                            suite: group.suite, abilities: group.abilities,
+                            dark: colorScheme == .dark,
+                            setEnabled: { setSuiteEnabled($0, for: group.suite) })
+                        LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
+                            ForEach(group.abilities) { entry in
+                                ExtensionMarketplaceCard(
+                                    entry: entry,
+                                    dark: colorScheme == .dark,
+                                    switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
+                                        && lidAwakeOperations.applying,
+                                    open: { openSettings(for: entry) },
+                                    setEnabled: { setEnabled($0, for: entry) }
+                                )
+                                .id(entry.id)
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func setSuiteEnabled(_ newValue: Bool, for suite: SuiteDescriptor) {
+        SuiteEnablement.setEnabled(newValue, suite: suite.id)
+        ExtensionMutationCenter.application.environment.announceChange()
     }
 
     private var gridColumns: [GridItem] {
@@ -266,6 +289,72 @@ struct ExtensionsPane: View {
         lidAwakeOperations.errorMessage ?? lidAwakeOperations.lastSnapshot?.lastError
     }
 
+}
+
+private struct SuiteHeader: View {
+    let suite: SuiteDescriptor
+    let abilities: [ExtensionRegistryEntry]
+    let dark: Bool
+    let setEnabled: (Bool) -> Void
+    @ExtensionEnablementStorage private var enabled: Bool
+
+    init(
+        suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry], dark: Bool,
+        setEnabled: @escaping (Bool) -> Void
+    ) {
+        self.suite = suite
+        self.abilities = abilities
+        self.dark = dark
+        self.setEnabled = setEnabled
+        _enabled = ExtensionEnablementStorage(defaultsKey: suite.defaultsKey)
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(get: { enabled }, set: setEnabled)
+    }
+
+    private var onCount: Int {
+        abilities.filter { $0.isEnabled(in: SharedDefaults.store) }.count
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(10)) {
+            Image(systemName: suite.symbolName)
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(18))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(suite.title)
+                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text(suite.subtitle)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .lineLimit(1)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            Rectangle()
+                .fill(DashSkin.line(dark))
+                .frame(height: UIScale.pt(1))
+                .frame(minWidth: UIScale.pt(24))
+            Text(enabled ? "\(onCount) of \(abilities.count) on" : "off")
+                .font(DashSkin.mono(10, weight: .medium))
+                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                .padding(.horizontal, UIScale.pt(7))
+                .padding(.vertical, UIScale.pt(3))
+                .background(
+                    (enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)).opacity(0.12),
+                    in: Capsule()
+                )
+                .fixedSize()
+            Toggle("", isOn: enabledBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(DashSkin.accent(dark))
+                .accessibilityLabel("\(suite.title) suite enabled")
+        }
+    }
 }
 
 private struct ExtensionMarketplaceCard: View {
@@ -957,15 +1046,20 @@ private struct ExtensionDetailRows: View {
             case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
             case .appMaintenance: AppMaintenanceRows()
-            case .machines: MachinesRows()
+            case .homebrew: HomebrewRows()
+            case .cleaner: CleanerRows()
             case .database: DatabaseRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
-            case .music: MusicRows()
+            case .music:
+                MusicRows()
+                MusicBarRows()
+            case .downloads: DownloadsRows()
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
+            case .audioMixer: AudioMixerRows()
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
@@ -979,6 +1073,120 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct HomebrewRows: View {
+    @AppStorage(AppStorageKeys.Homebrew.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Packages") {
+            LabeledContent("Client", value: "Homebrew")
+            Text(
+                "One client for formulae, casks and taps, with every change reviewed before it runs."
+            )
+            .settingsCaption()
+            Button("Open Packages") {
+                SharedDefaults.store.set(
+                    AppMaintenanceSection.packages.rawValue,
+                    forKey: AppStorageKeys.AppMaintenance.section)
+                SectionWindow.open(.appMaintenance)
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct CleanerRows: View {
+    @AppStorage(AppStorageKeys.Cleaner.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Cleaner") {
+            LabeledContent("Removal", value: "Moves to Trash")
+            Text(
+                "Scan drives for reclaimable space and review every category before anything moves."
+            )
+            .settingsCaption()
+            Button("Open Cleaner") {
+                SharedDefaults.store.set(
+                    AppMaintenanceSection.cleaner.rawValue,
+                    forKey: AppStorageKeys.AppMaintenance.section)
+                SectionWindow.open(.appMaintenance)
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct MusicBarRows: View {
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var collapsed = false
+    @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
+        var autoHide = false
+
+    var body: some View {
+        Section("Player bar") {
+            Toggle(
+                "Collapse to a progress line",
+                isOn: $collapsed.configured(AppStorageKeys.Music.barCollapsed))
+            Toggle(
+                "Hide when nothing is playing",
+                isOn: $autoHide.configured(AppStorageKeys.Music.barAutoHide))
+            Text("The chevron at the right end of the bar toggles the collapsed state too.")
+                .settingsCaption()
+        }
+    }
+}
+
+private struct DownloadsRows: View {
+    @AppStorage(AppStorageKeys.Downloads.enabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
+        var downloadKind = DownloadKind.audio.rawValue
+
+    var body: some View {
+        Section("Downloads") {
+            Picker(
+                "Default format",
+                selection: $downloadKind.configured(AppStorageKeys.Music.downloadKind)
+            ) {
+                ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
+                    Text(kind.title).tag(kind.rawValue)
+                }
+            }
+            Text("Queued downloads keep running in the background and land in your music folder.")
+                .settingsCaption()
+            Button("Open Music") { SectionWindow.open(.music) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct AudioMixerRows: View {
+    @AppStorage(AppStorageKeys.Notch.audioMixerEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    private var available: Bool {
+        PlatformCapabilities.macOS.state(for: .applicationAudio).isSupported
+    }
+
+    var body: some View {
+        Section("Mixer") {
+            LabeledContent("Lives in", value: "Notch Shelf")
+            Text(
+                available
+                    ? "Set the volume of each app from the shelf's audio tab."
+                    : "Requires macOS 14.4 or later."
+            )
+            .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

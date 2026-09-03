@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 import Observation
 
@@ -307,28 +308,40 @@ final class SEOAuditModel {
         guard let run = selectedRun else { return }
         var capturedProjectArtwork = false
         do {
-            for (index, url) in urls.enumerated() {
-                try Task.checkCancellation()
-                stage = .auditing(current: index + 1, total: urls.count, url: url.absoluteString)
-                var page = await pageAuditor.audit(url)
-                async let imageSnapshots = imageStore.capture(
-                    metadata: page.metadata, projectID: projectID, runID: run.id,
-                    runStartedAt: run.startedAt)
-                if lighthouseEnabled {
-                    let result = await lighthouse.audit(url)
+            let auditor = pageAuditor
+            let images = imageStore
+            let lighthouseRunner = lighthouse
+            let wantsLighthouse = lighthouseEnabled
+            let runID = run.id
+            let runStartedAt = run.startedAt
+            let audited = await BoundedTaskRunner.map(
+                urls, limit: SiteAuditConcurrency.limit
+            ) { index, url in
+                await MainActor.run {
+                    self.stage = .auditing(
+                        current: index + 1, total: urls.count, url: url.absoluteString)
+                }
+                var page = await auditor.audit(url)
+                let snapshots = await images.capture(
+                    metadata: page.metadata, projectID: projectID, runID: runID,
+                    runStartedAt: runStartedAt)
+                if wantsLighthouse {
+                    let result = await lighthouseRunner.audit(url)
                     page = page.with(scores: result.scores, lighthouseError: result.error)
                 }
-                let snapshots = await imageSnapshots
-                page = page.with(metadata: page.metadata.withImageSnapshots(snapshots))
+                return page.with(metadata: page.metadata.withImageSnapshots(snapshots))
+            }
+            try Task.checkCancellation()
+            for page in audited {
                 updateRun { $0.pages.append(page) }
                 if !capturedProjectArtwork, let imageURL = page.metadata.openGraphImageURL {
                     selectedProject?.imageURL = imageURL
                     selectedProject?.imageSnapshotURL = page.metadata.openGraphImageSnapshotURL
                     capturedProjectArtwork = true
                 }
-                selectedProject?.updatedAt = Date()
-                if index.isMultiple(of: 25) { saveSelectedProject() }
             }
+            selectedProject?.updatedAt = Date()
+            saveSelectedProject()
             stage = .saving
             updateRun {
                 $0.state = .completed

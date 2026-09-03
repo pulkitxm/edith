@@ -1,9 +1,26 @@
 import AppKit
+import EdithKit
 import Foundation
 import Testing
 @testable import Edith
 
 @Suite struct MainDestinationTests {
+    @Test func everySuiteHasALandingPageInTheSidebar() {
+        for suite in SuiteID.allCases {
+            let landing = NavigationCatalog.landing(for: suite)
+            #expect(landing != nil, "\(suite.rawValue) has no sidebar landing page")
+            #expect(landing?.expansionKey == SuiteExpansion.key(for: suite))
+        }
+    }
+
+    @Test func everyPageBearingAbilitySitsUnderItsSuite() {
+        for page in NavigationCatalog.pages where page.parentID != nil {
+            let parent = NavigationCatalog.byID[page.parentID!]
+            #expect(parent?.isSuiteLanding == true, "\(page.id) is not under a suite landing")
+            #expect(parent?.suite == page.suite, "\(page.id) sits under the wrong suite")
+        }
+    }
+
     @Test func sidebarSectionsAreDisjointAndCoverAllDestinations() {
         let listed = MainDestination.homeItems + MainDestination.appItems
         #expect(Set(listed).count == listed.count)
@@ -43,16 +60,21 @@ import Testing
     @Test func homeItemsUseInformationArchitectureOrder() {
         #expect(
             MainDestination.homeItems == [
-                .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar,
-                .system,
-                .appMaintenance, .machines, .database, .companion,
+                .home, .machines,
+                .agents, .dashboard, .herdr, .quinjet, .companion,
+                .appMaintenance,
+                .system, .runningApps,
+                .desk,
+                .media, .music, .calendar,
+                .data, .database, .attention, .seoAudit,
             ])
     }
 
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [
-                .general, .permissions, .shortcuts, .terminal, .icloud, .updates,
+                .general, .permissions, .agent, .data, .shortcuts, .terminal, .icloud,
+                .updates,
             ])
     }
 
@@ -131,6 +153,6 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("value: sidebarUtilityVisibility"))
-        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 5)
+        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 6)
     }
 }

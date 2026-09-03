@@ -90,7 +90,6 @@ not here cannot be set, and `import` skips it.
 | `settingsTab` | string | none | shared | Settings tab shown on open. |
 | `mainSidebarOpen` | bool | `true` | shared | Whether the main window sidebar starts open. |
 | `mainSidebarWidth` | number | none | shared | Main window sidebar width in points. |
-| `repoPath` | string | none | shared | Development repository root used for usage data and music. |
 
 ### `attention`
 

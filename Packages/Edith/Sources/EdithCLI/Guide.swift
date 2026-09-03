@@ -543,6 +543,27 @@ public enum Guide {
         ed app snapshot                 the open windows as PNGs, no screen recording
         ```
 
+        ## The background agent
+
+        `edithd` is a headless LaunchAgent that owns collection and long jobs.
+        It has no window and never asks for a permission:
+
+        ```
+        ed agent status                 registration, build, uptime, memory, store schema
+        ed agent jobs                   the live job table with cadences and subscribers
+        ed agent restart                stop it so launchd starts a fresh one
+        ed agent logs --last 10m        recent lines from its log subsystem
+        ```
+
+        ## Serving yourself
+
+        `ed mcp` exposes every operation above as an MCP tool over stdio, so an
+        agent can call them directly instead of shelling out:
+
+        ```
+        ed mcp                          one tool per route, JSON in and out
+        ```
+
         ## Completions
 
         ```

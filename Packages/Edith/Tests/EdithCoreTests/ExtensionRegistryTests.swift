@@ -13,12 +13,28 @@ import Testing
     @Test func identifiersMatchCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "seoAudit", "system",
-                "appMaintenance", "machines", "database", "companion", "systemStats", "micMute",
-                "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
-                "focusDim", "presenter", "emoji",
-                "colorPicker",
+                "usage", "herdr", "quinjet", "companion",
+                "appMaintenance", "homebrew", "cleaner",
+                "system", "lidAwake", "systemStats", "micMute",
+                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "database", "attention", "seoAudit",
             ])
+    }
+
+    @Test func everySuiteOwnsAtLeastOneAbility() {
+        for suite in SuiteRegistry.suites {
+            #expect(!SuiteRegistry.abilities(in: suite.id).isEmpty)
+            #expect(!suite.title.isEmpty)
+            #expect(!suite.subtitle.isEmpty)
+            #expect(!suite.defaultsKey.isEmpty)
+        }
+        #expect(Set(SuiteRegistry.suites.map(\.id)) == Set(SuiteID.allCases))
+    }
+
+    @Test func onlyTheAgentsSuiteDeclaresAFleetDependency() {
+        let requiring = SuiteRegistry.suites.filter(\.requiresFleet).map(\.id)
+        #expect(requiring == [.agents])
     }
 
     @Test func toolRequirementsUsePortableIdentifiers() {
@@ -29,8 +45,20 @@ import Testing
 
         #expect(requiredByExtension["usage"] == ["claude", "codex"])
         #expect(requiredByExtension["music"]?.isEmpty == true)
-        #expect(optionalByExtension["music"] == ["yt-dlp"])
+        #expect(requiredByExtension["downloads"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
+        #expect(requiredByExtension["homebrew"] == ["homebrew"])
         #expect(optionalByExtension["appMaintenance"] == ["homebrew"])
+    }
+
+    @Test func suiteToolsCoverTheirAbilities() {
+        for suite in SuiteRegistry.suites {
+            let declared = Set(suite.toolIDs)
+            let used = Set(
+                SuiteRegistry.abilities(in: suite.id).flatMap {
+                    $0.requiredToolIDs + $0.optionalToolIDs
+                })
+            #expect(declared.subtracting(used).subtracting(["mas"]).isEmpty)
+        }
     }
 }

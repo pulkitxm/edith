@@ -7,28 +7,31 @@ import Testing
 
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
-        "tabAttentionEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
-        "tabSEOAuditEnabled",
-        "tabSystemEnabled",
-        "appMaintenanceEnabled",
-        "tabMachinesEnabled",
-        "tabDatabaseEnabled",
         "tabCompanionEnabled",
+        "appMaintenanceEnabled",
+        "homebrewEnabled",
+        "cleanerEnabled",
+        "tabSystemEnabled",
+        "lidAwakeEnabled",
         "menuBarSystemStats",
         "micMuteEnabled",
-        "lidAwakeEnabled",
-        "tabMusicEnabled",
-        "tabCalendarEnabled",
-        "notchShelfEnabled",
         "clipboardEnabled",
+        "emojiEnabled",
+        "colorPickerEnabled",
         "keystrokeHighlightEnabled",
         "focusDimEnabled",
         "presenterEnabled",
-        "colorPickerEnabled",
-        "emojiEnabled",
+        "tabMusicEnabled",
+        "downloadsEnabled",
+        "notchShelfEnabled",
+        "notchAudioMixerEnabled",
+        "tabCalendarEnabled",
+        "tabDatabaseEnabled",
+        "tabAttentionEnabled",
+        "tabSEOAuditEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -39,12 +42,52 @@ import Testing
     @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "seoAudit", "system",
-                "appMaintenance", "machines", "database", "companion", "systemStats", "micMute",
-                "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
-                "focusDim", "presenter", "emoji",
-                "colorPicker",
+                "usage", "herdr", "quinjet", "companion",
+                "appMaintenance", "homebrew", "cleaner",
+                "system", "lidAwake", "systemStats", "micMute",
+                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "database", "attention", "seoAudit",
             ])
+    }
+
+    @Test func everyAbilityBelongsToOneSuiteAndOneHost() {
+        for suite in SuiteRegistry.suites {
+            #expect(!SuiteRegistry.abilities(in: suite.id).isEmpty)
+        }
+        let grouped = ExtensionRegistry.entries.flatMap { entry in
+            SuiteRegistry.abilities(in: entry.suite).map(\.id)
+        }
+        #expect(Set(grouped) == Set(ExtensionRegistry.entries.map(\.id)))
+        #expect(ExtensionRegistry.entries.allSatisfy { AbilityHost.allCases.contains($0.host) })
+    }
+
+    @Test func suiteDefaultsKeysAreUniqueAndDistinctFromAbilities() {
+        let suiteKeys = SuiteRegistry.defaultsKeys
+        #expect(Set(suiteKeys).count == suiteKeys.count)
+        #expect(Set(suiteKeys).isDisjoint(with: knownDefaultsKeys))
+        for key in suiteKeys {
+            #expect(ConfigCatalog.definition(for: key)?.fallback == .bool(false))
+        }
+    }
+
+    @Test func abilityRequirementsPointAtRegisteredAbilities() {
+        let identifiers = Set(ExtensionRegistry.entries.map(\.id))
+        for entry in ExtensionRegistry.entries {
+            for requirement in entry.requires {
+                #expect(identifiers.contains(requirement))
+                #expect(requirement != entry.id)
+            }
+        }
+        #expect(ExtensionRegistry.entry("quinjet")?.requires == ["herdr"])
+        #expect(ExtensionRegistry.entry("audioMixer")?.requires == ["notchShelf"])
+        #expect(ExtensionRegistry.entry("downloads")?.requires == ["music"])
+        #expect(ExtensionRegistry.entry("homebrew")?.requires == ["appMaintenance"])
+    }
+
+    @Test func fleetIsCoreAndNoLongerAnAbility() {
+        #expect(ExtensionRegistry.entry("machines") == nil)
+        #expect(!knownDefaultsKeys.contains("tabMachinesEnabled"))
     }
 
     @Test func lifecycleCatalogCoversEveryRegistryEntry() throws {
@@ -74,7 +117,7 @@ import Testing
             .deletingLastPathComponent()
             .deletingLastPathComponent()
 
-        for descriptor in ExtensionLifecycleCatalog.descriptors {
+        for descriptor in ExtensionLifecycleCatalog.allDescriptors {
             for document in descriptor.documentation {
                 let target = repository.appendingPathComponent(document.path)
                 #expect(
@@ -148,6 +191,7 @@ import Testing
             source.components(
                 separatedBy: "ExtensionEnablementStorage(entry: entry)"
             ).count == 3)
+        #expect(source.contains("ExtensionEnablementStorage(defaultsKey: suite.defaultsKey)"))
     }
 
     @Test func featuredEntriesArePresent() {
@@ -155,24 +199,28 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "keystrokeHighlight", "appMaintenance", "database",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "clipboard",
+                "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
 
     @Test func toolRequirementsMatchExtensionDependencies() {
-        let music = ExtensionRegistry.entries.first { $0.id == "music" }!
-        let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
-        let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
-        let maintenance = ExtensionRegistry.entries.first { $0.id == "appMaintenance" }!
+        let music = ExtensionRegistry.entry("music")!
+        let downloads = ExtensionRegistry.entry("downloads")!
+        let usage = ExtensionRegistry.entry("usage")!
+        let quinjet = ExtensionRegistry.entry("quinjet")!
+        let maintenance = ExtensionRegistry.entry("appMaintenance")!
+        let homebrew = ExtensionRegistry.entry("homebrew")!
 
         #expect(music.requiredTools.isEmpty)
-        #expect(music.optionalTools == [.youtubeDownloader])
+        #expect(music.optionalTools.isEmpty)
+        #expect(downloads.requiredTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])
         #expect(maintenance.requiredTools.isEmpty)
         #expect(maintenance.optionalTools == [.homebrew])
+        #expect(homebrew.requiredTools == [.homebrew])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -185,33 +233,71 @@ import Testing
 
         for entry in ExtensionRegistry.entries {
             #expect(defaults.object(forKey: entry.defaultsKey) == nil)
+            #expect(!entry.isSelected(in: defaults))
             #expect(!entry.isEnabled(in: defaults))
             #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(false))
         }
     }
 
+    @Test func anAbilityNeedsItsSuiteAndItsRequirements() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let quinjet = ExtensionRegistry.entry("quinjet")!
+
+        defaults.set(true, forKey: quinjet.defaultsKey)
+        #expect(quinjet.isSelected(in: defaults))
+        #expect(!quinjet.isEnabled(in: defaults))
+
+        defaults.set(true, forKey: AppStorageKeys.Suites.agents)
+        #expect(!quinjet.isEnabled(in: defaults))
+        #expect(quinjet.unmetRequirements(in: defaults).map(\.id) == ["herdr"])
+
+        defaults.set(true, forKey: AppStorageKeys.Tabs.herdrEnabled)
+        #expect(quinjet.isEnabled(in: defaults))
+        #expect(quinjet.unmetRequirements(in: defaults).isEmpty)
+    }
+
+    @Test func turningASuiteOffAndOnRestoresTheSameAbilities() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(true, forKey: AppStorageKeys.Suites.desk)
+        defaults.set(true, forKey: AppStorageKeys.Clipboard.enabled)
+        defaults.set(true, forKey: AppStorageKeys.Emoji.enabled)
+
+        SuiteEnablement.setEnabled(false, suite: .desk, defaults: defaults)
+        #expect(!SuiteEnablement.isEnabled(.desk, defaults: defaults))
+        #expect(defaults.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool == false)
+
+        SuiteEnablement.setEnabled(true, suite: .desk, defaults: defaults)
+        #expect(SuiteEnablement.isEnabled(.desk, defaults: defaults))
+        #expect(
+            Set(SuiteEnablement.enabledAbilities(in: .desk, defaults: defaults).map(\.id))
+                == ["clipboard", "emoji"])
+    }
+
     @Test func marketplaceFilterMatchesQueryAndCategory() {
         let titleMatches = ExtensionMarketplaceFilter.filter(
-            entries: ExtensionRegistry.entries, query: "AGENT", category: .all)
+            entries: ExtensionRegistry.entries, query: "MIXER", category: .all)
         let subtitleMatches = ExtensionMarketplaceFilter.filter(
             entries: ExtensionRegistry.entries, query: "schedule", category: .all)
         let categoryMatches = ExtensionMarketplaceFilter.filter(
-            entries: ExtensionRegistry.entries, query: "", category: .utilities)
+            entries: ExtensionRegistry.entries, query: "", category: .desk)
         let combinedMatches = ExtensionMarketplaceFilter.filter(
-            entries: ExtensionRegistry.entries, query: "screen", category: .utilities)
+            entries: ExtensionRegistry.entries, query: "screen", category: .desk)
         let attentionMatches = ExtensionMarketplaceFilter.filter(
             entries: ExtensionRegistry.entries, query: "attention", category: .all)
 
-        #expect(titleMatches.map(\.id) == ["usage"])
+        #expect(titleMatches.map(\.id) == ["audioMixer"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
-        #expect(categoryMatches.allSatisfy { $0.group == .utilities })
+        #expect(categoryMatches.allSatisfy { $0.suite == .desk })
         #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
     @Test func marketplaceTextSearchIgnoresAStaleCategory() {
         for category in [
-            ExtensionMarketplaceCategory.agent, .system, .media,
+            ExtensionMarketplaceCategory.agents, .system, .media,
         ] {
             let matches = ExtensionMarketplaceFilter.filter(
                 entries: ExtensionRegistry.entries, query: " attention ", category: category)
@@ -221,67 +307,73 @@ import Testing
 
     @Test func marketplaceEmptyStateExplainsSearchAndCategory() {
         let search = ExtensionMarketplaceFilter.emptyState(
-            query: " missing extension ", category: .agent)
-        #expect(search.title == "No extensions found")
-        #expect(search.detail == "No extension matches \"missing extension\". Try another search.")
+            query: " missing ability ", category: .agents)
+        #expect(search.title == "No abilities found")
+        #expect(search.detail == "No ability matches \"missing ability\". Try another search.")
 
-        let category = ExtensionMarketplaceFilter.emptyState(query: "", category: .utilities)
-        #expect(category.title == "No Utilities extensions")
-        #expect(category.detail == "No extensions are available in this category.")
+        let category = ExtensionMarketplaceFilter.emptyState(query: "", category: .desk)
+        #expect(category.title == "No Desk abilities")
+        #expect(category.detail == "This suite has no abilities available.")
 
         let marketplace = ExtensionMarketplaceFilter.emptyState(query: "  ", category: .all)
-        #expect(marketplace.title == "No extensions available")
-        #expect(marketplace.detail == "No extensions are registered yet.")
+        #expect(marketplace.title == "No abilities available")
+        #expect(marketplace.detail == "No abilities are registered yet.")
     }
 
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
-            "attention": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
-            "seoAudit": [],
-            "system": [],
-            "appMaintenance": [],
-            "machines": [],
-            "database": [],
             "companion": [],
+            "appMaintenance": [],
+            "homebrew": [],
+            "cleaner": [],
+            "system": [],
+            "lidAwake": [],
             "systemStats": [],
             "micMute": [],
-            "lidAwake": [],
-            "music": [],
-            "calendar": [.calendar],
-            "notchShelf": [],
             "clipboard": [],
+            "emoji": [],
+            "colorPicker": [.screenRecording],
             "keystrokeHighlight": [.inputMonitoring],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
-            "colorPicker": [.screenRecording],
-            "emoji": [],
+            "music": [],
+            "downloads": [],
+            "notchShelf": [],
+            "audioMixer": [],
+            "calendar": [.calendar],
+            "database": [],
+            "attention": [],
+            "seoAudit": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
-            "attention": [],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
-            "seoAudit": [],
-            "system": [.accessibility, .inputMonitoring],
-            "appMaintenance": [],
-            "machines": [.notifications],
-            "database": [],
             "companion": [],
+            "appMaintenance": [.notifications],
+            "homebrew": [],
+            "cleaner": [],
+            "system": [.accessibility, .inputMonitoring],
+            "lidAwake": [],
             "systemStats": [],
             "micMute": [],
-            "lidAwake": [],
-            "music": [],
-            "calendar": [],
-            "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "emoji": [.accessibility],
+            "colorPicker": [],
             "keystrokeHighlight": [],
             "focusDim": [],
             "presenter": [],
-            "colorPicker": [],
-            "emoji": [.accessibility],
+            "music": [],
+            "downloads": [],
+            "notchShelf": [.bluetooth, .camera, .automation],
+            "audioMixer": [.applicationAudio],
+            "calendar": [],
+            "database": [],
+            "attention": [],
+            "seoAudit": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))
@@ -294,8 +386,8 @@ import Testing
     }
 
     @Test func capabilityTiersDriveExtensionAvailability() {
-        let clipboard = ExtensionRegistry.entries.first { $0.id == "clipboard" }!
-        let notchShelf = ExtensionRegistry.entries.first { $0.id == "notchShelf" }!
+        let clipboard = ExtensionRegistry.entry("clipboard")!
+        let audioMixer = ExtensionRegistry.entry("audioMixer")!
         let macOS143 = PlatformCapabilities.macOS(
             version: OperatingSystemVersion(majorVersion: 14, minorVersion: 3, patchVersion: 0))
         let macOS144 = PlatformCapabilities.macOS(
@@ -305,9 +397,9 @@ import Testing
         #expect(
             macOS143.state(for: .applicationAudio)
                 == .unsupported("Application audio mixing requires macOS 14.4 or later."))
-        #expect(notchShelf.availability(on: macOS143) == .degraded([.applicationAudio]))
+        #expect(audioMixer.availability(on: macOS143) == .unavailable([.applicationAudio]))
         #expect(macOS144.state(for: .applicationAudio) == .permissionRequired)
-        #expect(notchShelf.availability(on: macOS144) == .available)
+        #expect(audioMixer.availability(on: macOS144) == .available)
     }
 
     @Test func capabilityTiersDoNotOverlap() {
@@ -319,7 +411,7 @@ import Testing
     }
 
     @Test func missingRequiredPermissionsShowSheet() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "presenter" }!
+        let entry = ExtensionRegistry.entry("presenter")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.screenRecording: false], hasSeenPermissions: true)
         #expect(
@@ -329,14 +421,14 @@ import Testing
     }
 
     @Test func grantedRequiredPermissionsEnableDirectly() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "presenter" }!
+        let entry = ExtensionRegistry.entry("presenter")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.screenRecording: true], hasSeenPermissions: false)
         #expect(decision == .enableDirectly)
     }
 
     @Test func unseenSystemPermissionsAreOptional() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "system" }!
+        let entry = ExtensionRegistry.entry("system")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.accessibility: true, .inputMonitoring: false],
             hasSeenPermissions: false)
@@ -344,7 +436,7 @@ import Testing
     }
 
     @Test func unseenMissingOptionalPermissionsEnableDirectly() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "notchShelf" }!
+        let entry = ExtensionRegistry.entry("notchShelf")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.bluetooth: false, .camera: true],
             hasSeenPermissions: false)
@@ -352,7 +444,7 @@ import Testing
     }
 
     @Test func seenOptionalPermissionsEnableDirectly() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "notchShelf" }!
+        let entry = ExtensionRegistry.entry("notchShelf")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.bluetooth: false, .camera: false],
             hasSeenPermissions: true)
@@ -360,7 +452,7 @@ import Testing
     }
 
     @Test func grantedOptionalPermissionsEnableDirectlyWithoutPriorEnable() {
-        let entry = ExtensionRegistry.entries.first { $0.id == "clipboard" }!
+        let entry = ExtensionRegistry.entry("clipboard")!
         let decision = ExtensionPermissionFlow.decision(
             for: entry, granted: [.accessibility: true], hasSeenPermissions: false)
         #expect(decision == .enableDirectly)
@@ -384,6 +476,12 @@ import Testing
             #expect(defaults.object(forKey: key) == nil)
             #expect(!defaults.bool(forKey: key))
         }
+        for key in SuiteRegistry.defaultsKeys {
+            #expect(defaults.object(forKey: key) == nil)
+        }
+        #expect(
+            defaults.integer(forKey: ExtensionDefaultsMigration.registryVersionKey)
+                == ExtensionDefaultsMigration.registryVersion)
     }
 
     @Test func priorInstallPreservesEffectiveLegacyValues() {
@@ -402,7 +500,6 @@ import Testing
             "tabQuinjetEnabled": false,
             "tabSEOAuditEnabled": false,
             "tabSystemEnabled": true,
-            "tabMachinesEnabled": false,
             "tabDatabaseEnabled": false,
             "tabCompanionEnabled": false,
             "menuBarSystemStats": false,
@@ -420,6 +517,38 @@ import Testing
         for (key, value) in expected {
             #expect(defaults.object(forKey: key) as? Bool == value)
         }
+    }
+
+    @Test func priorInstallSeedsSuitesAndSplitAbilities() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: "hasPromptedPermissions")
+        defaults.set(true, forKey: AppStorageKeys.AppMaintenance.enabled)
+
+        ExtensionDefaultsMigration.migrate(defaults: defaults)
+
+        #expect(defaults.object(forKey: AppStorageKeys.Homebrew.enabled) as? Bool == true)
+        #expect(defaults.object(forKey: AppStorageKeys.Cleaner.enabled) as? Bool == true)
+        #expect(defaults.object(forKey: AppStorageKeys.Downloads.enabled) as? Bool == true)
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.maintenance))
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.media))
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.system))
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.data))
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.desk))
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.agents))
+    }
+
+    @Test func registryMigrationRunsOnlyOnce() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: AppStorageKeys.Clipboard.enabled)
+
+        ExtensionDefaultsMigration.migrateRegistry(defaults: defaults)
+        #expect(defaults.bool(forKey: AppStorageKeys.Suites.desk))
+
+        defaults.set(false, forKey: AppStorageKeys.Suites.desk)
+        ExtensionDefaultsMigration.migrateRegistry(defaults: defaults)
+        #expect(!defaults.bool(forKey: AppStorageKeys.Suites.desk))
     }
 
     @Test func explicitToggleCountsAsPriorInstallEvidence() {

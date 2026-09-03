@@ -2024,29 +2024,82 @@ struct MusicFooter: View {
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
         var presenterBlurMusic =
         true
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var collapsed = false
     private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
     private var dark: Bool { scheme == .dark }
 
+    static let expandedHeight: CGFloat = 64
+    static let collapsedHeight: CGFloat = 2
+
     var body: some View {
-        Group {
-            if let track = remote.current {
-                playing(track)
+        ZStack(alignment: .trailing) {
+            if collapsed {
+                collapsedLine
             } else {
-                idle
+                Group {
+                    if let track = remote.current {
+                        playing(track)
+                    } else {
+                        idle
+                    }
+                }
+                .frame(height: UIScale.pt(Self.expandedHeight))
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(height: UIScale.pt(1))
+                }
+            }
+            collapseToggle
+        }
+        .frame(
+            height: UIScale.pt(collapsed ? Self.collapsedHeight : Self.expandedHeight),
+            alignment: .bottom
+        )
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: collapsed)
+    }
+
+    private var collapsedLine: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                Rectangle()
+                    .fill(theme)
+                    .frame(
+                        width: geo.size.width
+                            * MusicBarProgress.fraction(
+                                elapsed: remote.elapsed, duration: remote.duration))
             }
         }
-        .frame(height: UIScale.pt(64))
+        .frame(height: UIScale.pt(Self.collapsedHeight))
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(height: UIScale.pt(1))
+    }
+
+    private var collapseToggle: some View {
+        Button {
+            collapsed.toggle()
+        } label: {
+            Image(systemName: "chevron.up")
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(collapsed ? 0 : 180))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.edith(.borderless))
+        .padding(.trailing, UIScale.pt(6))
+        .padding(.bottom, UIScale.pt(collapsed ? 4 : 0))
+        .help(collapsed ? "Show the player bar" : "Collapse the player bar")
+        .accessibilityLabel(collapsed ? "Show the player bar" : "Collapse the player bar")
     }
 
     private func playing(_ track: Track) -> some View {
@@ -2266,5 +2319,62 @@ private struct PageArtworkThumb: View {
             }
             artwork = await TrackMeta.artwork(for: track)
         }
+    }
+}
+
+enum MusicBarProgress {
+    static func fraction(elapsed: Double, duration: Double) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(1, max(0, elapsed / duration))
+    }
+}
+
+struct MusicSidebarPill: View {
+    let theme: Color
+    let expand: () -> Void
+    @State private var remote = MusicRemote.shared
+    @ObservedObject private var visibility = WindowVisibility.shared
+
+    private var progress: Double {
+        MusicBarProgress.fraction(elapsed: remote.elapsed, duration: remote.duration)
+    }
+
+    var body: some View {
+        Button(action: expand) {
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(theme)
+                    Text(remote.current?.title ?? "Nothing playing")
+                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if remote.current != nil {
+                        PlaybackWave(
+                            playing: remote.isPlaying && visibility.visible,
+                            color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
+                    }
+                }
+                if remote.current != nil {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.12))
+                            Capsule()
+                                .fill(theme)
+                                .frame(width: max(2, geo.size.width * progress))
+                        }
+                    }
+                    .frame(height: UIScale.pt(2))
+                }
+            }
+            .padding(.horizontal, UIScale.pt(9))
+            .padding(.vertical, UIScale.pt(7))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        }
+        .buttonStyle(.edith(.borderless))
+        .help("Show the player bar")
+        .accessibilityLabel("Show the player bar")
     }
 }

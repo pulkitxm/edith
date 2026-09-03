@@ -8,9 +8,11 @@ let products: [Product] = [
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
+    .library(name: "EdithAgent", targets: ["EdithAgent"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
+    .executable(name: "edithd", targets: ["edithd"]),
 ]
 
 let dependencies: [Package.Dependency] = [
@@ -138,6 +140,20 @@ let targets: [Target] = [
         dependencies: ["EdithCLI"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    .target(
+        name: "EdithAgent",
+        dependencies: [
+            "EdithCore",
+            "EdithKit",
+            .product(name: "GRDB", package: "GRDB.swift"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
+        name: "edithd",
+        dependencies: ["EdithAgent"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .executableTarget(
         name: "EdithLidAwakeHelper",
         dependencies: ["EdithLidAwakeSupport"],
@@ -150,11 +166,6 @@ let targets: [Target] = [
                 "-Xlinker", "Sources/EdithLidAwakeHelper/Info.plist",
             ])
         ]
-    ),
-    .executableTarget(
-        name: "UsageSnapshotCrashDriver",
-        dependencies: ["EdithKit"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .binaryTarget(
         name: "GhosttyKit",
@@ -194,17 +205,6 @@ let targets: [Target] = [
         ]
     ),
     .executableTarget(
-        name: "EdithFiles",
-        dependencies: ["Edith"],
-        swiftSettings: [.swiftLanguageMode(.v5)],
-        linkerSettings: [
-            .unsafeFlags([
-                "-Xlinker", "-rpath", "-Xlinker",
-                "@executable_path/../../../../../Frameworks",
-            ])
-        ]
-    ),
-    .executableTarget(
         name: "EdithHelper",
         dependencies: ["EdithKit", "EdithLidAwakeSupport"],
         resources: [.copy("MenuBar.png")],
@@ -214,8 +214,8 @@ let targets: [Target] = [
         name: "EdithTests",
         dependencies: [
             "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
-            "EdithHelper",
-            "EdithCLI", "Highlighter", "ed", "UsageSnapshotCrashDriver",
+            "EdithHelper", "EdithAgent",
+            "EdithCLI", "Highlighter", "ed",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

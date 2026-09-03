@@ -1,3 +1,4 @@
+import ArgumentParser
 import Foundation
 
 public enum ArgumentKind: Equatable, Sendable {
@@ -104,1654 +105,962 @@ public struct CommandNode: Equatable, Sendable {
     }
 }
 
+public struct CommandSpec: Equatable, Sendable {
+    public let options: [String]
+    public let optionValues: [String: ArgumentKind]
+    public let arguments: [ArgumentKind]
+    public let repeatingArgument: ArgumentKind?
+    public let destructivePolicy: DestructivePolicy?
+    public let passthroughCompletion: PassthroughCompletion?
+
+    public init(
+        options: [String] = [], optionValues: [String: ArgumentKind] = [:],
+        arguments: [ArgumentKind] = [], repeatingArgument: ArgumentKind? = nil,
+        destructivePolicy: DestructivePolicy? = nil,
+        passthroughCompletion: PassthroughCompletion? = nil
+    ) {
+        self.options = options
+        self.optionValues = optionValues
+        self.arguments = arguments
+        self.repeatingArgument = repeatingArgument
+        self.destructivePolicy = destructivePolicy
+        self.passthroughCompletion = passthroughCompletion
+    }
+}
+
 public enum CommandTree {
     public static let inherited = ["-h", "--help", "--version"]
     public static let common = ["--json"] + inherited
-    public static let playback = ["--json", "--help", "--player"]
-    public static let playbackValues: [String: ArgumentKind] = ["--player": .musicPlayer]
-    public static let usageValues: [String: ArgumentKind] = [
-        "--range": .usageRange, "--source": .usageSource, "--machine": .machine,
-    ]
-    public static let help = CommandNode(
-        "help", "Show detailed help for a command.", arguments: [.free])
 
-    public static let root = CommandNode(
-        "ed", "The command line for Edith.", options: ["--help", "--version"],
-        children: [
-            CommandNode(
-                "guide", "Print the built-in manual.", options: ["--json"],
-                arguments: [.guideTopic]),
-            CommandNode("schema", "Print the JSON Schema for the config document.", options: []),
-            CommandNode("version", "Print the Edith CLI version.", options: common),
-            CommandNode(
-                "status", "Inspect command-line tools and shell completions.", options: common),
-            CommandNode(
-                "completions", "Generate or install shell completions.",
-                children: [
-                    CommandNode(
-                        "install", "Install completions for the detected shells.",
-                        options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
-                    CommandNode(
-                        "source", "Print a fallback completion source line.",
-                        options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
-                    CommandNode("zsh", "Print the zsh completion script."),
-                    CommandNode("bash", "Print the bash completion script."),
-                    CommandNode("fish", "Print the fish completion script."),
-                ]),
-            CommandNode(
-                "install", "Link ed and edith into a directory on PATH.",
-                options: ["--json", "--directory"]),
-            CommandNode(
-                "uninstall", "Remove the ed and edith links.", options: ["--json"]),
-            CommandNode(
-                "config", "Read and write every setting the UI exposes.",
-                children: [
-                    CommandNode(
-                        "ls", "List settings and their current values.", aliases: ["list"],
-                        options: ["--json", "--group", "--changed"],
-                        optionValues: ["--group": .group]),
-                    CommandNode(
-                        "get", "Print one setting.", options: common, arguments: [.configKey]),
-                    CommandNode(
-                        "set", "Write one setting.", options: ["--json"],
-                        arguments: [.configKey, .configValue]),
-                    CommandNode(
-                        "unset", "Restore one setting to its default.", options: ["--json"],
-                        arguments: [.configKey]),
-                    CommandNode(
-                        "describe", "Explain one setting.", options: common,
-                        arguments: [.configKey]),
-                    CommandNode(
-                        "export", "Print changed settings as one JSON document.",
-                        options: ["--defaults"]),
-                    CommandNode(
-                        "import", "Apply a JSON document of settings.",
-                        options: ["--json", "--dry-run"], arguments: [.localPath]),
-                ]),
-            CommandNode(
-                "app", "One-shot actions the Edith app performs.",
-                children: [
-                    CommandNode("info", "Show the installed app identity.", options: common),
-                    CommandNode(
-                        "diagnostics", "Show live helper diagnostics.", options: common),
-                    CommandNode("paths", "List Edith folders and files.", options: common),
-                    CommandNode("links", "List Edith external links.", options: common),
-                    CommandNode(
-                        "open-path", "Open or reveal one Edith path.", options: common,
-                        arguments: [.appPath]),
-                    CommandNode(
-                        "open-link", "Open one Edith external link.", options: common,
-                        arguments: [.appLink]),
-                    CommandNode(
-                        "actions", "List the one-shot actions.", aliases: ["ls"],
-                        options: common),
-                    CommandNode("clean-keys", "Lock the keyboard for wiping.", options: common),
-                    CommandNode(
-                        "test-notification", "Send a test notification.", options: common),
-                    CommandNode("open", "Open Edith's panel.", options: common),
-                    CommandNode(
-                        "quit", "Quit the Edith main window.",
-                        options: ["--json", "--help", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "check-updates", "Check for an update now.",
-                        options: ["--json", "--help", "--no-wait"]),
-                    CommandNode(
-                        "updates", "The update checks already made.",
-                        options: ["--json", "--help", "--limit"]),
-                    CommandNode(
-                        "relaunch", "Quit Edith and start it again.",
-                        options: ["--json", "--help", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "clear-updates", "Forget the record of past update checks.",
-                        options: ["--json", "--help", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "reveal", "Show a section of the main window.",
-                        options: ["--json", "--help", "--tab"]),
-                    CommandNode(
-                        "snapshot", "Capture the open windows as PNG files.",
-                        options: ["--json", "--help", "--dir"]),
-                ]),
-            CommandNode(
-                "extensions", "Turn Edith's extensions on and off.",
-                children: [
-                    CommandNode(
-                        "ls", "List extensions.", aliases: ["list"], options: common),
-                    CommandNode(
-                        "enable", "Turn an extension on.", options: ["--json"],
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "disable", "Turn an extension off.", options: ["--json"],
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "info", "Describe one extension.", options: common,
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "status", "Check extension readiness.", options: common,
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "setup", "Enable an extension and report remaining setup.",
-                        options: ["--json", "--help", "--dry-run", "--install-tools"],
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "verify", "Run readiness checks for one extension.", options: common,
-                        arguments: [.extensionID]),
-                    CommandNode(
-                        "doctor", "Diagnose extension problems.", options: common,
-                        arguments: [.extensionID]),
-                ]),
-            CommandNode(
-                "lid-awake", "Keep the Mac running with its lid closed.",
-                children: [
-                    CommandNode("status", "Show the live state.", options: common),
-                    CommandNode(
-                        "on", "Keep running with the lid closed.", aliases: ["start"],
-                        options: ["--json", "--help", "--for", "--until-lid-reopens", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "off", "Restore normal lid-close sleep.", aliases: ["stop"],
-                        options: common),
-                    CommandNode(
-                        "battery", "Set low-battery auto-pause.", options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "restore-on-quit", "Choose whether quitting restores sleep.",
-                        options: ["--json", "--help", "--yes"], arguments: [.free],
-                        destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "permissions", "Inspect and request Edith's macOS permissions.",
-                children: [
-                    CommandNode(
-                        "ls", "List permissions.", aliases: ["list"],
-                        options: ["--json", "--help", "--attention"]),
-                    CommandNode(
-                        "request", "Ask the app to request a permission.", options: ["--json"],
-                        arguments: [.permission]),
-                    CommandNode(
-                        "refresh", "Ask the app to re-read the real TCC state.",
-                        options: ["--json"]),
-                    CommandNode(
-                        "settings", "Open System Settings for a permission.",
-                        options: ["--json"], arguments: [.permission]),
-                ]),
-            CommandNode(
-                "usage", "Agent usage, token counts, cost and rate limits.",
-                children: [
-                    CommandNode(
-                        "limits", "Session and weekly limits per provider.",
-                        options: ["--json", "--help", "--refresh"]),
-                    CommandNode(
-                        "summary", "Cost and tokens over a window.",
-                        options: ["--json", "--range", "--source", "--machine"],
-                        optionValues: usageValues),
-                    CommandNode(
-                        "daily", "Per-day cost and tokens.",
-                        options: ["--json", "--range", "--source", "--machine"],
-                        optionValues: usageValues),
-                    CommandNode(
-                        "models", "Cost and tokens per model.",
-                        options: ["--json", "--range", "--source", "--machine"],
-                        optionValues: usageValues),
-                    CommandNode(
-                        "projects", "Inspect usage by GitHub repository.",
-                        children: [
-                            CommandNode(
-                                "list", "List usage grouped by repository.",
-                                options: ["--json", "--range", "--limit"],
-                                optionValues: ["--range": .usageRange]),
-                            CommandNode(
-                                "show", "Show one repository and its usage hierarchy.",
-                                options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange],
-                                arguments: [.usageProject]),
-                            CommandNode(
-                                "open", "Open a usage repository in the browser.",
-                                options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange],
-                                arguments: [.usageProject]),
-                            CommandNode(
-                                "copy-link", "Copy a usage repository link.",
-                                options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange],
-                                arguments: [.usageProject]),
-                            CommandNode(
-                                "copy-chat", "Copy a usage chat identifier.",
-                                options: common, arguments: [.usageChat]),
-                        ]),
-                    CommandNode(
-                        "sources", "The agents that produced the history.",
-                        options: common),
-                    CommandNode(
-                        "export", "Render branded usage cards as PNG images.",
-                        options: [
-                            "--json", "--help", "--range", "--source", "--machine", "--card",
-                            "-o", "--output",
-                        ],
-                        optionValues: usageValues.merging([
-                            "--card": .usageShareCard, "-o": .localPath, "--output": .localPath,
-                        ]) { current, _ in current }),
-                    CommandNode(
-                        "machines", "Machines counted with this Mac.",
-                        children: [
-                            CommandNode(
-                                "ls", "Every machine and what its usage adds up to.",
-                                options: common),
-                            CommandNode(
-                                "collect", "Run the collector on a machine and bring it back.",
-                                options: ["--json", "--verbose", "--once", "--timeout"],
-                                arguments: [.machine]),
-                            CommandNode(
-                                "enable", "Count this machine on every refresh.",
-                                options: ["--json"], arguments: [.machine]),
-                            CommandNode(
-                                "disable", "Stop collecting from this machine.",
-                                options: ["--json"], arguments: [.machine]),
-                            CommandNode(
-                                "forget", "Drop what a machine gave and stop counting it.",
-                                options: ["--json"], arguments: [.machine]),
-                        ]),
-                    CommandNode(
-                        "refresh", "Re-collect usage here and on the machines.",
-                        options: ["--json", "--follow", "--machines", "--no-machines"]),
-                ]),
-            CommandNode(
-                "system", "Metrics for this Mac.",
-                children: [
-                    CommandNode(
-                        "stats", "Sample CPU, memory, load and network.",
-                        options: ["--json", "-f", "--follow", "--interval", "--processes"]),
-                    CommandNode("disks", "Mounted volumes and their free space.", options: common),
-                ]),
-            CommandNode(
-                "music", "Whatever is playing, and playback control.",
-                aliases: ["nowplaying", "np"], options: playback,
-                optionValues: playbackValues,
-                children: [
-                    CommandNode(
-                        "status", "What is playing right now.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode("players", "Every player, and which is active.", options: common),
-                    CommandNode(
-                        "play", "Resume playback.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "pause", "Pause playback.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "stop", "Stop playback and reset the position.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "toggle", "Toggle play and pause.", aliases: ["playpause"],
-                        options: playback, optionValues: playbackValues),
-                    CommandNode(
-                        "next", "Skip to the next track.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "previous", "Go back to the previous track.", aliases: ["prev"],
-                        options: playback, optionValues: playbackValues),
-                    CommandNode(
-                        "volume", "Set the player volume from 0 to 1.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "open-current", "Open the active music player.", options: playback,
-                        optionValues: playbackValues),
-                    CommandNode(
-                        "reveal-current", "Reveal the current track or open its player.",
-                        options: playback, optionValues: playbackValues),
-                    CommandNode(
-                        "library", "Choose the folder Edith uses as its music library.",
-                        options: common, arguments: [.localPath]),
-                    CommandNode(
-                        "start", "Play one track, or a whole folder.",
-                        options: ["--json", "--help", "--folder"], arguments: [.free]),
-                    CommandNode(
-                        "favorite", "Add a track to favourites.", aliases: ["favourite"],
-                        options: common, arguments: [.musicTrack]),
-                    CommandNode(
-                        "unfavorite", "Remove a track from favourites.",
-                        aliases: ["unfavourite"], options: common, arguments: [.musicTrack]),
-                    CommandNode(
-                        "reveal", "Reveal a track in Finder.", options: common,
-                        arguments: [.musicTrack]),
-                    CommandNode("open", "Open the music library in Finder.", options: common),
-                    CommandNode("rescan", "Read the music folder again.", options: common),
-                    CommandNode(
-                        "seek", "Jump to a point in the track.", options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "shuffle", "Turn shuffle on or off.", options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "repeat", "Turn repeat on or off.", aliases: ["loop"], options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "ls", "List the library a folder at a time.", aliases: ["list"],
-                        options: ["--json", "--help", "--folders", "--recursive", "--search"],
-                        arguments: [.free]),
-                    CommandNode(
-                        "mkdir", "Make a folder in the library.", aliases: ["newfolder"],
-                        options: ["--json", "--help", "--under"], arguments: [.free]),
-                    CommandNode(
-                        "mv", "Move a track into a folder.", aliases: ["move"], options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "rename", "Rename a track or folder.",
-                        options: ["--json", "--help", "--folder"], arguments: [.free]),
-                    CommandNode(
-                        "rm", "Move a track or folder to the Trash.",
-                        options: ["--json", "--help", "--folder", "--yes"], arguments: [.free],
-                        destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "calendar", "Your schedule.",
-                children: [
-                    CommandNode(
-                        "ls", "Upcoming events.", aliases: ["list"],
-                        options: ["--json", "--days"]),
-                    CommandNode("open", "Open Calendar.", options: common),
-                    CommandNode(
-                        "join", "Join an event's meeting.", options: common,
-                        arguments: [.calendarEvent]),
-                    CommandNode(
-                        "directions", "Open directions to an event.", aliases: ["route"],
-                        options: common, arguments: [.calendarEvent]),
-                ]),
-            CommandNode(
-                "presenter", "Manual presenter mode at runtime.",
-                children: [
-                    CommandNode("status", "Show presenter runtime state.", options: common),
-                    CommandNode("start", "Start manual presenter mode.", options: common),
-                    CommandNode("stop", "Stop manual presenter mode.", options: common),
-                ]),
-            CommandNode(
-                "herdr", "Live Herdr sessions on this Mac and your SSH machines.",
-                children: [
-                    CommandNode(
-                        "ls", "List live Herdr sessions.", aliases: ["list"],
-                        options: common + ["--machine"]),
-                    CommandNode(
-                        "command", "Print the command that attaches to a pane.",
-                        options: common + ["--machine", "--session"],
-                        arguments: [.free]),
-                    CommandNode(
-                        "attach", "Attach this terminal to a live pane.",
-                        options: common + ["--machine", "--session"],
-                        arguments: [.free]),
-                ]),
-            CommandNode(
-                "tools", "Command line tools the extensions rely on.",
-                children: [
-                    CommandNode(
-                        "ls", "List the tools and whether they are installed.",
-                        aliases: ["list"], options: common),
-                    CommandNode(
-                        "install", "Install one of the tools.", options: common,
-                        arguments: [.tool]),
-                ]),
-            CommandNode(
-                "apps", "The applications running on this Mac.",
-                children: [
-                    CommandNode(
-                        "ls", "List apps with a window open.", aliases: ["list"],
-                        options: common),
-                    CommandNode(
-                        "quit", "Quit one app, or everything else.",
-                        options: ["--json", "--help", "--all", "--force", "--yes"],
-                        arguments: [.runningApp], destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "download", "The download queue Edith feeds to yt-dlp.",
-                aliases: ["downloads", "dl"],
-                children: [
-                    CommandNode(
-                        "ls", "List the queue.", aliases: ["list"],
-                        options: ["--json", "--help", "--active", "--limit"]),
-                    CommandNode("status", "Summarize download states.", options: common),
-                    CommandNode(
-                        "add", "Queue one or more URLs.",
-                        options: ["--json", "--help", "--kind", "--prefix"],
-                        optionValues: ["--kind": .downloadKind], arguments: [.free]),
-                    CommandNode(
-                        "retry", "Queue a failed download again.",
-                        options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
-                    CommandNode(
-                        "rm", "Take one entry out of the queue.",
-                        options: common + ["--yes"],
-                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "clear", "Forget what has finished.",
-                        options: ["--json", "--help", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "cancel", "Stop active downloads and keep their history.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "open", "Open completed download files.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "reveal", "Reveal completed download files.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "tool", "Report or update yt-dlp.",
-                        options: ["--json", "--help", "--update"]),
-                ]),
-            CommandNode(
-                "clipboard", "The clipboard history Edith keeps.",
-                children: [
-                    CommandNode(
-                        "ls", "List the clipboard history.", aliases: ["list"],
-                        options: ["--json", "--help", "--pinned", "--search", "--limit"]),
-                    CommandNode(
-                        "stats", "How many entries there are and what they weigh.",
-                        aliases: ["size"], options: common),
-                    CommandNode(
-                        "get", "Print one entry as text.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "copy", "Put one entry back on the pasteboard.",
-                        options: ["--json", "--help", "--plain"], arguments: [.historyIndex]),
-                    CommandNode(
-                        "pin", "Keep one entry at the top.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "unpin", "Let one entry age out again.", options: common,
-                        arguments: [.historyIndex]),
-                    CommandNode(
-                        "rm", "Forget one entry.", options: ["--json", "--help", "--yes"],
-                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "clear", "Forget the whole history.",
-                        options: ["--json", "--help", "--keep-pinned", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "attention", "Local attention, application, website, music and focus data.",
-                children: [
-                    CommandNode("status", "Show tracking, data and focus state.", options: common),
-                    CommandNode(
-                        "summary", "Summarize focus, distraction and top destinations.",
-                        options: ["--json", "--help", "--range"],
-                        optionValues: ["--range": .attentionRange]),
-                    CommandNode(
-                        "timeline", "List raw observed attention events.",
-                        options: ["--json", "--help", "--range", "--limit"],
-                        optionValues: ["--range": .attentionRange]),
-                    CommandNode(
-                        "music", "Summarize tracks, artists, albums and listening time.",
-                        options: ["--json", "--help", "--range", "--limit"],
-                        optionValues: ["--range": .attentionRange]),
-                    CommandNode(
-                        "categories", "List categories or classify an entity.",
-                        children: [
-                            CommandNode(
-                                "ls", "List categories and identity rules.", aliases: ["list"],
-                                options: common),
-                            CommandNode(
-                                "set", "Assign an entity ID to a category.",
-                                options: ["--json", "--help", "--name"],
-                                arguments: [.attentionEntity, .attentionCategory]),
-                        ]),
-                    CommandNode(
-                        "focus", "Start, inspect or finish a focus session.",
-                        children: [
-                            CommandNode(
-                                "status", "Show the active focus session.", options: common),
-                            CommandNode(
-                                "start", "Start a named focus session.",
-                                options: ["--json", "--help", "--for", "--name"]),
-                            CommandNode(
-                                "stop", "Finish the active focus session.", aliases: ["end"],
-                                options: common),
-                        ]),
-                    CommandNode(
-                        "doctor", "Check collectors, data and extension files.", options: common),
-                ]),
-            CommandNode(
-                "color", "The colours picked with the colour picker.", aliases: ["colour"],
-                children: [
-                    CommandNode(
-                        "pick", "Open Edith's system colour sampler.", options: common),
-                    CommandNode(
-                        "copy", "Copy one picked colour to the pasteboard.",
-                        options: ["--json", "--help", "--format"],
-                        optionValues: ["--format": .colorFormat], arguments: [.colorIndex]),
-                    CommandNode(
-                        "ls", "List picked colours.", aliases: ["list"],
-                        options: ["--json", "--help", "--format", "--limit"],
-                        optionValues: ["--format": .colorFormat]),
-                    CommandNode(
-                        "clear", "Forget every picked colour.",
-                        options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "emoji", "The emoji picker and the emoji it knows about.",
-                children: [
-                    CommandNode("pick", "Open Edith's emoji picker.", options: common),
-                    CommandNode(
-                        "ls", "List the emoji this Mac can render.", aliases: ["list"],
-                        options: [
-                            "--json", "--help", "--frequent", "--search", "--group", "--limit",
-                        ],
-                        optionValues: ["--group": .emojiGroup]),
-                    CommandNode(
-                        "insert", "Type an emoji into the frontmost app.",
-                        options: common, arguments: [.emojiCharacter]),
-                    CommandNode(
-                        "tone", "Set the default emoji skin tone.",
-                        options: common, arguments: [.emojiTone]),
-                    CommandNode("clear", "Forget the frequently used emoji.", options: common),
-                ]),
-            CommandNode(
-                "shelf", "The files parked on the notch shelf.",
-                children: [
-                    CommandNode(
-                        "ls", "List what is on the shelf.", aliases: ["list"], options: common),
-                    CommandNode(
-                        "path", "Print the path of one item.", options: common,
-                        arguments: [.shelfItem]),
-                    CommandNode(
-                        "add", "Copy a file onto the shelf.", options: ["--json"],
-                        arguments: [.localPath]),
-                    CommandNode(
-                        "add-text", "Add text to the shelf.", options: common,
-                        arguments: [.free]),
-                    CommandNode(
-                        "update", "Update one shelf item's canvas position.",
-                        options: ["--json", "--help", "--x", "--y"], arguments: [.shelfItem]),
-                    CommandNode(
-                        "rm", "Take selected items off the shelf.",
-                        options: ["--json", "--yes"],
-                        arguments: [.shelfItem], repeatingArgument: .shelfItem,
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "clear", "Empty the shelf.", options: ["--json", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "purge", "Remove shelf items past an expiry window.",
-                        options: ["--json", "--yes"], arguments: [.shelfKeepDuration],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "open", "Open selected shelf items.", options: common,
-                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
-                    CommandNode(
-                        "reveal", "Reveal selected shelf items in Finder.", options: common,
-                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
-                    CommandNode(
-                        "share", "Open sharing for selected shelf items.", options: common,
-                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
-                ]),
-            CommandNode(
-                "cleaner", "The developer caches the disk cleaner can reclaim.",
-                children: [
-                    CommandNode(
-                        "scan", "Measure what could be reclaimed.",
-                        options: ["--json", "--help", "--category", "--root"],
-                        optionValues: ["--category": .cleanerCategory]),
-                    CommandNode(
-                        "categories", "The caches the cleaner knows.", aliases: ["ls"],
-                        options: common),
-                    CommandNode(
-                        "clean", "Move the scanned caches to the Trash.",
-                        options: ["--json", "--help", "--category", "--root", "--yes"],
-                        optionValues: ["--category": .cleanerCategory],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode("drives", "The volumes the cleaner can scan.", options: common),
-                ]),
-            CommandNode(
-                "brew", "Search and manage Homebrew formulae and casks.",
-                children: [
-                    CommandNode(
-                        "status", "Inspect the local Homebrew installation.", options: common),
-                    CommandNode(
-                        "ls", "List installed Homebrew packages.", aliases: ["list"],
-                        options: ["--json", "--help", "--kind", "--outdated"],
-                        optionValues: ["--kind": .homebrewKind]),
-                    CommandNode(
-                        "search", "Search available Homebrew packages.",
-                        options: ["--json", "--help", "--kind"],
-                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
-                    CommandNode(
-                        "install", "Install a Homebrew package.",
-                        options: ["--json", "--help", "--kind"],
-                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
-                    CommandNode(
-                        "upgrade", "Upgrade a Homebrew package.",
-                        options: ["--json", "--help", "--kind"],
-                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
-                    CommandNode(
-                        "uninstall", "Uninstall a Homebrew package.",
-                        options: ["--json", "--help", "--kind", "--yes"],
-                        optionValues: ["--kind": .homebrewKind], arguments: [.free],
-                        destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "maintenance", "Installed app inventory, updates, and review-first removal.",
-                children: [
-                    CommandNode(
-                        "inventory", "List installed applications and Homebrew updates.",
-                        aliases: ["ls", "list"],
-                        options: ["--json", "--help", "--no-updates"]),
-                    CommandNode(
-                        "scan", "Preview an app and its exact support files.",
-                        options: common, arguments: [.localPath]),
-                    CommandNode(
-                        "remove", "Move a reviewed app selection to the Trash.",
-                        options: ["--json", "--help", "--only-app", "--yes"],
-                        arguments: [.localPath], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "install", "Verify and install one app from a disk image.",
-                        options: [
-                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
-                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "updates", "Discover updates from every available source.", options: common),
-                    CommandNode(
-                        "update", "Review and run selected updates.",
-                        options: ["--json", "--help", "--yes", "--concurrency", "--retries"],
-                        repeatingArgument: .free, destructivePolicy: .previewThenYes),
-                    CommandNode("history", "Show recent update results.", options: common),
-                    CommandNode(
-                        "backup-updates", "Back up update policy and history.", options: common,
-                        arguments: [.localPath]),
-                ]),
-            CommandNode(
-                "quinjet", "Discover and open Quinjet review workspaces.",
-                children: [
-                    CommandNode(
-                        "projects", "List recent Quinjet projects.",
-                        options: ["--json", "--help", "--machine"],
-                        optionValues: ["--machine": .quinjetMachine]),
-                    CommandNode(
-                        "worktrees", "List the worktrees in a Quinjet project.",
-                        options: ["--json", "--help", "--machine"],
-                        optionValues: ["--machine": .quinjetMachine],
-                        arguments: [.quinjetPath]),
-                    CommandNode(
-                        "open", "Print a Quinjet launch request without running it.",
-                        options: [
-                            "--json", "--help", "--machine", "--theme", "--appearance",
-                            "--cmux", "--embedded",
-                        ],
-                        optionValues: [
-                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
-                            "--appearance": .quinjetAppearance,
-                        ], arguments: [.quinjetPath]),
-                    CommandNode(
-                        "launch", "Launch a Quinjet review session.",
-                        options: [
-                            "--json", "--help", "--machine", "--theme", "--appearance",
-                            "--cmux", "--embedded",
-                        ],
-                        optionValues: [
-                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
-                            "--appearance": .quinjetAppearance,
-                        ],
-                        arguments: [.quinjetPath]),
-                    CommandNode(
-                        "status", "Show the selected native Quinjet session.",
-                        options: common, arguments: [.quinjetSession]),
-                    CommandNode(
-                        "sessions", "List native Quinjet sessions in the running app.",
-                        aliases: ["list", "ls"], options: common),
-                    CommandNode(
-                        "new", "Create and select a native Quinjet session.",
-                        aliases: ["create"], options: common),
-                    CommandNode(
-                        "focus", "Select and focus a native Quinjet session.",
-                        aliases: ["select"], options: common, arguments: [.quinjetSession]),
-                    CommandNode(
-                        "close", "Close a native Quinjet session.",
-                        options: ["--json", "--help", "--yes"],
-                        arguments: [.quinjetSession], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "restart", "Restart a native Quinjet session in place.",
-                        options: common, arguments: [.quinjetSession]),
-                    CommandNode(
-                        "switch", "Switch a native Quinjet session to another worktree.",
-                        options: common, arguments: [.quinjetSession, .quinjetPath]),
-                ]),
-            CommandNode(
-                "database", "Inspect saved database connections and their capabilities.",
-                children: [
-                    CommandNode(
-                        "connections", "Inspect and create saved database connections.",
-                        children: [
-                            CommandNode(
-                                "list", "List saved database connections.", aliases: ["ls"],
-                                options: [
-                                    "--json", "--help", "--search", "--product",
-                                    "--environment", "--group", "--tag", "--favorites-only",
-                                    "--order", "--limit", "--offset",
-                                ],
-                                optionValues: [
-                                    "--search": .free, "--product": .free,
-                                    "--environment": .free, "--group": .free,
-                                    "--tag": .free, "--order": .free, "--limit": .free,
-                                    "--offset": .free,
-                                ]),
-                            CommandNode(
-                                "get", "Show one saved database connection without credentials.",
-                                options: common, arguments: [.free]),
-                            CommandNode(
-                                "add", "Test and save a database connection.",
-                                options: [
-                                    "--json", "--help", "--product", "--host", "--port",
-                                    "--path", "--username", "--database",
-                                    "--authentication-database", "--password-stdin",
-                                    "--tls", "--environment", "--environment-label",
-                                    "--protection", "--read-only", "--production-policy",
-                                ],
-                                optionValues: [
-                                    "--product": .free, "--host": .free, "--port": .free,
-                                    "--path": .free, "--username": .free, "--database": .free,
-                                    "--authentication-database": .free,
-                                    "--environment": .free, "--environment-label": .free,
-                                    "--protection": .free, "--read-only": .free,
-                                    "--production-policy": .free,
-                                ],
-                                arguments: [.free]),
-                            CommandNode(
-                                "test", "Test one saved database connection.",
-                                options: ["--json", "--help", "--timeout-milliseconds"],
-                                optionValues: ["--timeout-milliseconds": .free],
-                                arguments: [.free]),
-                            CommandNode(
-                                "edit", "Edit saved connection metadata and safety policies.",
-                                options: [
-                                    "--json", "--help", "--environment", "--environment-label",
-                                    "--protection", "--read-only", "--production-policy", "--group",
-                                    "--clear-group", "--tag", "--clear-tags", "--color",
-                                    "--clear-color", "--favorite", "--not-favorite",
-                                ],
-                                optionValues: [
-                                    "--environment": .free, "--environment-label": .free,
-                                    "--protection": .free, "--read-only": .free,
-                                    "--production-policy": .free, "--group": .free,
-                                    "--tag": .free, "--color": .free,
-                                ], arguments: [.free]),
-                            CommandNode(
-                                "duplicate", "Duplicate a saved database connection.",
-                                options: common, arguments: [.free, .free]),
-                            CommandNode(
-                                "rename", "Rename a saved database connection.",
-                                options: common, arguments: [.free, .free]),
-                            CommandNode(
-                                "delete", "Delete a saved database connection.",
-                                options: ["--json", "--help", "--yes"], arguments: [.free],
-                                destructivePolicy: .previewThenYes),
-                        ]),
-                    CommandNode(
-                        "saved-queries", "Manage reusable database queries.",
-                        children: [
-                            CommandNode(
-                                "list", "List saved database queries.", aliases: ["ls"],
-                                options: [
-                                    "--json", "--help", "--search", "--connection", "--language",
-                                    "--tag", "--favorites-only", "--order", "--limit", "--offset",
-                                ],
-                                optionValues: [
-                                    "--search": .free, "--connection": .free,
-                                    "--language": .free, "--tag": .free, "--order": .free,
-                                    "--limit": .free, "--offset": .free,
-                                ]),
-                            CommandNode(
-                                "get", "Show one saved database query.", options: common,
-                                arguments: [.free]),
-                            CommandNode(
-                                "save", "Save query text read from stdin or a UTF-8 file.",
-                                options: [
-                                    "--json", "--help", "--id", "--connection", "--language",
-                                    "--file", "--tag", "--favorite",
-                                ],
-                                optionValues: [
-                                    "--id": .free, "--connection": .free, "--language": .free,
-                                    "--file": .free, "--tag": .free,
-                                ], arguments: [.free]),
-                            CommandNode(
-                                "duplicate", "Duplicate a saved database query.",
-                                options: common, arguments: [.free, .free]),
-                            CommandNode(
-                                "rename", "Rename a saved database query.",
-                                options: common, arguments: [.free, .free]),
-                            CommandNode(
-                                "delete", "Delete a saved database query.",
-                                options: ["--json", "--help", "--yes"], arguments: [.free],
-                                destructivePolicy: .previewThenYes),
-                        ]),
-                    CommandNode(
-                        "capabilities", "Show detected capabilities for one saved connection.",
-                        options: ["--json", "--help", "--refresh"], arguments: [.free]),
-                    CommandNode(
-                        "connect", "Open a broker session for one saved connection.",
-                        options: ["--json", "--help", "--timeout-milliseconds"],
-                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
-                    CommandNode(
-                        "disconnect", "Close a broker session for one saved connection.",
-                        options: ["--json", "--help", "--timeout-milliseconds"],
-                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
-                    CommandNode(
-                        "browse", "Read one bounded page from a database object.",
-                        options: [
-                            "--json", "--ndjson", "--help", "--kind", "--path", "--limit",
-                            "--continuation", "--timeout-milliseconds",
-                        ],
-                        optionValues: [
-                            "--kind": .free, "--path": .free, "--limit": .free,
-                            "--continuation": .free, "--timeout-milliseconds": .free,
-                        ], arguments: [.free]),
-                    CommandNode(
-                        "query", "Execute one bounded read query from stdin or a UTF-8 file.",
-                        options: [
-                            "--json", "--ndjson", "--help", "--language", "--file", "--kind",
-                            "--path", "--limit", "--continuation", "--timeout-milliseconds",
-                        ],
-                        optionValues: [
-                            "--language": .free, "--file": .free, "--kind": .free,
-                            "--path": .free, "--limit": .free, "--continuation": .free,
-                            "--timeout-milliseconds": .free,
-                        ], arguments: [.free]),
-                    CommandNode(
-                        "mutations", "Preview, apply, and reconcile destructive database work.",
-                        children: [
-                            CommandNode(
-                                "row-request", "Build a safe PostgreSQL row mutation request.",
-                                options: [
-                                    "--json", "--help", "--action", "--path", "--identity",
-                                    "--values",
-                                ],
-                                optionValues: [
-                                    "--action": .free, "--path": .free, "--identity": .free,
-                                    "--values": .free,
-                                ], arguments: [.free]),
-                            CommandNode(
-                                "key-request",
-                                "Build a safe Redis or Valkey string-key mutation request.",
-                                options: [
-                                    "--json", "--help", "--action", "--product",
-                                    "--logical-database", "--key", "--value",
-                                    "--ttl-milliseconds",
-                                ],
-                                optionValues: [
-                                    "--action": .free, "--product": .free,
-                                    "--logical-database": .free, "--key": .free,
-                                    "--value": .free, "--ttl-milliseconds": .free,
-                                ], arguments: [.free]),
-                            CommandNode(
-                                "document-request",
-                                "Build a safe MongoDB or Elasticsearch document mutation request.",
-                                options: [
-                                    "--json", "--help", "--product", "--action", "--path",
-                                    "--document", "--document-id", "--id-kind",
-                                    "--sequence-number", "--primary-term",
-                                ],
-                                optionValues: [
-                                    "--product": .free, "--action": .free, "--path": .free,
-                                    "--document": .free, "--document-id": .free,
-                                    "--id-kind": .free, "--sequence-number": .free,
-                                    "--primary-term": .free,
-                                ], arguments: [.free]),
-                            CommandNode(
-                                "preview", "Preview a destructive request without applying it.",
-                                options: [
-                                    "--json", "--help", "--request", "--timeout-milliseconds",
-                                ],
-                                optionValues: [
-                                    "--request": .free, "--timeout-milliseconds": .free,
-                                ]),
-                            CommandNode(
-                                "apply", "Apply the exact request bound to a fresh preview.",
-                                options: [
-                                    "--json", "--help", "--yes", "--request", "--confirmation",
-                                    "--timeout-milliseconds",
-                                ],
-                                optionValues: [
-                                    "--request": .free, "--confirmation": .free,
-                                    "--timeout-milliseconds": .free,
-                                ], destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "status", "Check an accepted asynchronous database mutation.",
-                                options: [
-                                    "--json", "--help", "--receipt", "--timeout-milliseconds",
-                                ],
-                                optionValues: [
-                                    "--receipt": .free, "--timeout-milliseconds": .free,
-                                ]),
-                            CommandNode(
-                                "cancel",
-                                "Request cancellation of an accepted asynchronous mutation.",
-                                options: [
-                                    "--json", "--help", "--yes", "--receipt",
-                                    "--timeout-milliseconds",
-                                ],
-                                optionValues: [
-                                    "--receipt": .free, "--timeout-milliseconds": .free,
-                                ], destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "outcome", "Read the durable outcome for a mutation operation.",
-                                options: common, arguments: [.free]),
-                        ]),
-                    CommandNode(
-                        "operations", "Inspect and cancel tracked database operations.",
-                        children: [
-                            CommandNode(
-                                "list", "List tracked database operations.", aliases: ["ls"],
-                                options: [
-                                    "--json", "--help", "--connection", "--state", "--kind",
-                                    "--before", "--limit",
-                                ],
-                                optionValues: [
-                                    "--connection": .free, "--state": .free, "--kind": .free,
-                                    "--before": .free, "--limit": .free,
-                                ]),
-                            CommandNode(
-                                "get", "Show one tracked database operation.",
-                                options: common, arguments: [.free]),
-                            CommandNode(
-                                "cancel", "Request cancellation of one database operation.",
-                                options: common, arguments: [.free]),
-                        ]),
-                    CommandNode(
-                        "mcp", "Serve read-only database inspection over MCP stdio."),
-                ]),
-            CommandNode(
-                "machines", "The computers Edith can reach over SSH.",
-                arguments: [.machine],
-                children: [
-                    CommandNode(
-                        "ls", "List configured machines.", aliases: ["list"], options: common),
-                    CommandNode(
-                        "show", "One machine, with live facts.", options: common,
-                        arguments: [.machine]),
-                    CommandNode(
-                        "add", "Add a machine to Edith's list.",
-                        options: [
-                            "--json", "--help", "--host", "--port", "--user", "--key",
-                            "--alias", "--mac", "--password-stdin", "--key-passphrase-stdin",
-                        ],
-                        arguments: [.free]),
-                    CommandNode(
-                        "edit", "Change a machine already on the list.",
-                        options: [
-                            "--json", "--help", "--name", "--host", "--port", "--user",
-                            "--key", "--agent", "--mac", "--sudo-password-stdin",
-                            "--forget-sudo-password", "--password-stdin", "--key-passphrase-stdin",
-                        ],
-                        arguments: [.machine]),
-                    CommandNode(
-                        "rm", "Forget a machine and everything saved against it.",
-                        aliases: ["remove"], options: ["--json", "--help", "--yes"],
-                        arguments: [.machine], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "forwards", "Saved port forwards.", aliases: ["forward"],
-                        children: [
-                            CommandNode(
-                                "ls", "List a machine's port forwards.", aliases: ["list"],
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "add", "Save a port forward.",
-                                options: [
-                                    "--json", "--help", "--local", "--remote",
-                                    "--remote-host", "--title",
-                                ],
-                                arguments: [.machine]),
-                            CommandNode(
-                                "on", "Open a saved forward on the connection.",
-                                options: common, arguments: [.machine, .historyIndex]),
-                            CommandNode(
-                                "off", "Close a saved forward.", options: common,
-                                arguments: [.machine, .historyIndex]),
-                            CommandNode(
-                                "open", "Open a forwarded service in the browser.",
-                                options: common, arguments: [.machine, .historyIndex]),
-                            CommandNode(
-                                "rm", "Forget one port forward.", aliases: ["remove"],
-                                options: common, arguments: [.machine, .historyIndex]),
-                        ]),
-                    CommandNode(
-                        "snippets", "Saved commands.", aliases: ["snippet"],
-                        children: [
-                            CommandNode(
-                                "ls", "List a machine's snippets.", aliases: ["list"],
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "add", "Save a command against a machine.",
-                                options: ["--json", "--help", "--shared"],
-                                arguments: [.machine, .free, .free],
-                                passthroughCompletion: PassthroughCompletion(
-                                    afterPositionals: 2)),
-                            CommandNode(
-                                "rm", "Forget one snippet.", aliases: ["remove"],
-                                options: common, arguments: [.machine, .historyIndex]),
-                            CommandNode(
-                                "run", "Run one saved command on a machine.", options: common,
-                                arguments: [.machine, .historyIndex]),
-                        ]),
-                    CommandNode(
-                        "power", "Restart, shut down or wake a machine.",
-                        children: [
-                            CommandNode(
-                                "status", "Whether a machine is up and what it can be told.",
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "reboot", "Restart a machine.", aliases: ["restart"],
-                                options: ["--json", "--help", "--yes"], arguments: [.machine],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "shutdown", "Shut a machine down.", aliases: ["poweroff"],
-                                options: ["--json", "--help", "--yes"], arguments: [.machine],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "wake", "Send a wake-on-LAN packet.", options: common,
-                                arguments: [.machine]),
-                        ]),
-                    CommandNode(
-                        "thermal", "Inspect and switch the platform thermal profile.",
-                        children: [
-                            CommandNode(
-                                "status", "Show the active and available thermal profiles.",
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "set", "Switch the thermal profile permanently or for a while.",
-                                options: ["--json", "--help", "--minutes"],
-                                arguments: [.machine, .free]),
-                        ]),
-                    CommandNode(
-                        "control", "Inspect and change live machine controls.",
-                        children: [
-                            CommandNode(
-                                "status", "Read the available live controls.",
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "brightness", "Set display brightness.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "volume", "Set system output volume.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "mute", "Mute or unmute system audio.", options: common,
-                                arguments: [.machine, .onOff]),
-                            CommandNode(
-                                "wifi", "Turn Wi-Fi on or off.",
-                                options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .onOff],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "bluetooth", "Turn Bluetooth on or off.", options: common,
-                                arguments: [.machine, .onOff]),
-                            CommandNode(
-                                "airplane", "Turn airplane mode on or off.",
-                                options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .onOff],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "dnd", "Turn Do Not Disturb on or off.", options: common,
-                                arguments: [.machine, .onOff]),
-                            CommandNode(
-                                "caffeinate", "Prevent automatic sleep.", options: common,
-                                arguments: [.machine, .onOff]),
-                            CommandNode(
-                                "keyboard-light", "Set keyboard backlight brightness.",
-                                options: common, arguments: [.machine, .free]),
-                        ]),
-                    CommandNode(
-                        "workspace", "Saved multi-pane layouts.", aliases: ["workspaces"],
-                        children: [
-                            CommandNode(
-                                "ls", "List saved workspaces.", aliases: ["list"],
-                                options: common),
-                            CommandNode(
-                                "use", "Make one the current workspace.", options: common,
-                                arguments: [.free]),
-                            CommandNode(
-                                "new", "Build one with a pane per machine.",
-                                options: ["--json", "--help", "--screen", "--name"],
-                                arguments: [.machine]),
-                            CommandNode(
-                                "rename", "Rename a workspace.", options: common,
-                                arguments: [.free]),
-                            CommandNode(
-                                "rm", "Forget a workspace.", aliases: ["remove"],
-                                options: common, arguments: [.free]),
-                            CommandNode(
-                                "panes", "The panes and what they show.",
-                                options: ["--json", "--help", "--workspace"]),
-                            CommandNode(
-                                "split", "Split a pane.",
-                                options: ["--json", "--help", "--workspace", "--side", "--screen"],
-                                arguments: [.historyIndex, .machine]),
-                            CommandNode(
-                                "close", "Close a pane.",
-                                options: ["--json", "--help", "--workspace"],
-                                arguments: [.historyIndex]),
-                            CommandNode(
-                                "point", "Point a pane somewhere else.",
-                                options: ["--json", "--help", "--workspace", "--screen"],
-                                arguments: [.historyIndex, .machine]),
-                            CommandNode(
-                                "equalize", "Even out every split.", aliases: ["even"],
-                                options: ["--json", "--help", "--workspace"]),
-                        ]),
-                    CommandNode(
-                        "broadcast", "Run one command on every machine.",
-                        options: ["--json", "--help", "--only"], arguments: [.free]),
-                    CommandNode(
-                        "terminal", "Act on terminal tabs that are open in the Edith app.",
-                        children: [
-                            CommandNode(
-                                "broadcast",
-                                "Send one line to every open terminal tab for one machine.",
-                                options: common, arguments: [.machineOrLocal, .free])
-                        ]),
-                    CommandNode(
-                        "kill", "End a process on a machine.",
-                        options: ["--json", "--help", "--signal", "--yes"],
-                        arguments: [.machine, .historyIndex],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "metrics", "Sample a machine.",
-                        options: ["--json", "-f", "--follow", "--interval", "--processes"],
-                        arguments: [.machine]),
-                    CommandNode(
-                        "exec", "Run a command on a machine.", aliases: ["run"],
-                        options: ["-t", "--tty"],
-                        arguments: [.machine, .free],
-                        passthroughCompletion: PassthroughCompletion(
-                            afterPositionals: 1, remoteMachinePosition: 0)),
-                    CommandNode(
-                        "files", "Browse and transfer files.",
-                        children: [
-                            CommandNode(
-                                "ls", "List a remote directory.", aliases: ["list"],
-                                options: ["--json", "--help", "-a", "--all"],
-                                arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "get", "Download a file.",
-                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
-                                arguments: [.machine, .remotePath, .localPath],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "preview", "Print a text preview of a remote file.",
-                                options: common, arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "launch", "Open a remote file in its default Mac app.",
-                                options: common, arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "reveal", "Reveal a downloaded remote file in Finder.",
-                                options: common, arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "get-many", "Download multiple files.",
-                                options: [
-                                    "--json", "--help", "--dry-run", "--replace", "--yes", "--to",
-                                ], optionValues: ["--to": .localPath],
-                                arguments: [.machine, .remotePath],
-                                repeatingArgument: .remotePath,
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "transfer", "Transfer files between two machines.",
-                                options: [
-                                    "--json", "--help", "--dry-run", "--replace", "--yes", "--into",
-                                ], optionValues: ["--into": .remotePath],
-                                arguments: [.machine, .machine, .remotePath],
-                                repeatingArgument: .remotePath,
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "put", "Upload a file.",
-                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
-                                arguments: [.machine, .localPath, .remotePath],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "cp", "Copy files into a directory there.",
-                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
-                                arguments: [.machine, .remotePath],
-                                repeatingArgument: .remotePath,
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "mv", "Move files into a directory there.",
-                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
-                                arguments: [.machine, .remotePath],
-                                repeatingArgument: .remotePath,
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "rename", "Rename one file there.", options: common,
-                                arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "mkdir", "Make a directory there.", options: common,
-                                arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "search", "Find files by name under a directory.",
-                                options: ["--json", "--help", "--limit"],
-                                arguments: [.machine, .remotePath, .free]),
-                            CommandNode(
-                                "info", "How big something is, directories included.",
-                                options: common, arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "undo", "Undo the last change a Finder window made.",
-                                options: common, arguments: [.machine]),
-                            CommandNode(
-                                "duplicate", "Copy a file beside itself.", options: common,
-                                arguments: [.machine, .remotePath]),
-                            CommandNode(
-                                "rm", "Trash or delete files there.",
-                                options: ["--json", "--help", "--delete", "--yes"],
-                                arguments: [.machine, .remotePath],
-                                destructivePolicy: .previewThenYes),
-                        ]),
-                    CommandNode(
-                        "docker", "Containers on a machine.",
-                        children: [
-                            CommandNode(
-                                "shell", "Open an interactive shell in a container.",
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "ps", "List containers.", options: ["--json", "-a", "--all"],
-                                arguments: [.machine]),
-                            CommandNode(
-                                "images", "List images.", options: common,
-                                arguments: [.machine]),
-                            CommandNode(
-                                "volumes", "List volumes.", options: common,
-                                arguments: [.machine]),
-                            CommandNode(
-                                "networks", "List networks.", options: common,
-                                arguments: [.machine]),
-                            CommandNode(
-                                "df", "Disk usage by object type.", options: common,
-                                arguments: [.machine]),
-                            CommandNode(
-                                "logs", "Container logs.",
-                                options: ["--tail", "-f", "--follow"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "inspect", "Inspect a container with stable fields.",
-                                options: common,
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "top", "Read processes running in a container.", options: common,
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "open", "Open a published container port in the browser.",
-                                options: ["--json", "--help", "--port"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "start", "Start a container.", options: ["--json"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "stop", "Stop a container.", options: ["--json"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "restart", "Restart a container.", options: ["--json"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "rm", "Remove a container.", options: ["--json", "--yes"],
-                                arguments: [.machine, .container],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "pause", "Freeze a container.", options: ["--json"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "unpause", "Let a frozen container run.", options: ["--json"],
-                                arguments: [.machine, .container]),
-                            CommandNode(
-                                "rmi", "Remove an image.", aliases: ["remove-image"],
-                                options: ["--json", "--help", "--force", "--yes"],
-                                arguments: [.machine, .free],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "volume-rm", "Remove a volume and the data in it.",
-                                options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .free],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "prune", "Reclaim space from unused objects.",
-                                options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .pruneTarget],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "compose", "Compose projects on a machine.",
-                                children: [
-                                    CommandNode(
-                                        "ls", "List compose projects.", aliases: ["list"],
-                                        options: common, arguments: [.machine]),
-                                    CommandNode(
-                                        "up", "Bring a project up.", options: ["--json"],
-                                        arguments: [.machine, .composeProject]),
-                                    CommandNode(
-                                        "down", "Take a project down.", options: ["--json"],
-                                        arguments: [.machine, .composeProject]),
-                                    CommandNode(
-                                        "restart", "Restart a project.", options: ["--json"],
-                                        arguments: [.machine, .composeProject]),
-                                    CommandNode(
-                                        "pull", "Pull a project's images.",
-                                        options: ["--json"],
-                                        arguments: [.machine, .composeProject]),
-                                    CommandNode(
-                                        "logs", "Logs for a whole project.",
-                                        options: ["--tail", "-f", "--follow", "--help"],
-                                        arguments: [.machine, .composeProject]),
-                                ]),
-                        ]),
-                    CommandNode(
-                        "services", "systemd units on a machine.",
-                        children: [
-                            CommandNode(
-                                "ls", "List systemd units.", aliases: ["list"],
-                                options: ["--json", "--failed"], arguments: [.machine]),
-                            CommandNode(
-                                "start", "Start a unit.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "stop", "Stop a unit.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "restart", "Restart a unit.", options: common,
-                                arguments: [.machine, .free]),
-                        ]),
-                    CommandNode(
-                        "connect", "Open the shared SSH connection.", options: ["--json"],
-                        arguments: [.machine]),
-                    CommandNode(
-                        "disconnect", "Close the shared SSH connection.", options: ["--json"],
-                        arguments: [.machine]),
-                    CommandNode(
-                        "mount", "Mount a machine's file system on this Mac.",
-                        options: ["--json", "--help", "--at", "--read-only"],
-                        arguments: [.machine, .remotePath]),
-                    CommandNode(
-                        "unmount", "Unmount a machine's file system.", aliases: ["umount"],
-                        options: ["--json"], arguments: [.machine]),
-                    CommandNode(
-                        "mounts", "Every machine file system mounted here.", options: common),
-                    CommandNode(
-                        "mount-reveal", "Reveal a mounted machine file system in Finder.",
-                        options: common, arguments: [.machine]),
-                ]),
-            CommandNode(
-                "companion", "The companion memory backend.",
-                children: [
-                    CommandNode(
-                        "status", "Count what the companion remembers.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "doctor", "Check the companion's dependencies.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "search", "Search companion memory with hybrid retrieval.",
-                        options: common + ["--endpoint", "--limit"], arguments: [.free]),
-                    CommandNode(
-                        "index", "Embed pending companion episodes.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "ingest", "Ingest Markdown notes and voice recordings as episodes.",
-                        options: ["--json", "--endpoint"], arguments: [.localPath]),
-                    CommandNode(
-                        "episodes", "List recent companion episodes.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "episode", "Read one episode in full.",
-                        options: common + ["--endpoint", "--body", "--open"],
-                        arguments: [.free]),
-                    CommandNode(
-                        "sync", "Pull a connector's activity into observations.",
-                        options: common + ["--endpoint", "--full"], arguments: [.free]),
-                    CommandNode(
-                        "observations", "List what the connectors saw you do.",
-                        options: common + ["--endpoint", "--limit", "--kind"]),
-                    CommandNode(
-                        "reflect", "Distill fresh beliefs from recent episodes.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "beliefs", "List what the companion believes about you.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "ask", "Ask a question answered from your own memory.",
-                        options: common + ["--endpoint", "--persona"], arguments: [.free]),
-                    CommandNode(
-                        "council", "Ask several lenses at once and find the crux.",
-                        options: common + ["--endpoint", "--personas"], arguments: [.free]),
-                    CommandNode(
-                        "personas", "List the lenses that can answer, and how each thinks.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "lenses", "What each lens learned about being useful to you.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "core", "Read or edit the standing summary of who you are.",
-                        children: [
-                            CommandNode(
-                                "show", "Print the standing summary section by section.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "set", "Rewrite one section of the standing summary.",
-                                options: common + ["--endpoint"], arguments: [.free, .free]),
-                        ]),
-                    CommandNode(
-                        "why", "Print the whole chain behind a belief, theory or claim.",
-                        options: common + ["--endpoint"], arguments: [.free]),
-                    CommandNode(
-                        "hypotheses", "The theories it holds about you.",
-                        children: [
-                            CommandNode(
-                                "ls", "List the theories and how they are faring.",
-                                options: common + ["--endpoint", "--limit"]),
-                            CommandNode(
-                                "run", "Resolve due predictions, then form new theories.",
-                                options: common + ["--endpoint"]),
-                        ]),
-                    CommandNode(
-                        "predictions", "What it expects to happen, and what did.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "commitments", "What you said you would do, and what happened.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "discrepancies", "Where your account and the record parted company.",
-                        children: [
-                            CommandNode(
-                                "ls", "List where the two parted company.",
-                                options: common + ["--endpoint", "--limit"]),
-                            CommandNode(
-                                "override", "Say the work was real and the record missed it.",
-                                options: common + ["--endpoint", "--real"], arguments: [.free]),
-                        ]),
-                    CommandNode(
-                        "calibration", "How your account compares with the record.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "inquire", "The questions it wants to ask you.",
-                        children: [
-                            CommandNode(
-                                "next", "The one question worth asking right now.",
-                                options: common + ["--endpoint", "--explain"]),
-                            CommandNode(
-                                "answer", "Answer a question it asked.",
-                                options: common + ["--endpoint"], arguments: [.free, .free]),
-                            CommandNode(
-                                "skip", "Pass on a question.",
-                                options: common + ["--endpoint"], arguments: [.free]),
-                            CommandNode(
-                                "mute", "Never be asked about a topic again.",
-                                options: common + ["--endpoint"], arguments: [.free]),
-                            CommandNode(
-                                "ls", "Every question queued, asked or dropped.",
-                                options: common + ["--endpoint", "--limit"]),
-                        ]),
-                    CommandNode(
-                        "entities", "The people, projects and places it knows.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "eval", "Score the friend layer against the cases it should fail.",
-                        children: [
-                            CommandNode(
-                                "run", "Run the suite now and print every case.",
-                                options: common + ["--endpoint", "--persona"]),
-                            CommandNode(
-                                "ls", "Past eval runs.",
-                                options: common + ["--endpoint", "--limit"]),
-                        ]),
-                    CommandNode(
-                        "standup", "Record a standup and see what they add up to.",
-                        children: [
-                            CommandNode(
-                                "record", "Record a standup, optionally verified.",
-                                options: common + ["--endpoint", "--verify"],
-                                arguments: [.localPath]),
-                            CommandNode(
-                                "report", "What your standups have added up to.",
-                                options: common + ["--endpoint"]),
-                        ]),
-                    CommandNode(
-                        "machines", "Where the companion stack runs.",
-                        children: [
-                            CommandNode(
-                                "ls", "Every machine registered, and what was found.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "add", "Register a machine the stack could run on.",
-                                options: common + ["--endpoint", "--transport", "--at"],
-                                arguments: [.free]),
-                            CommandNode(
-                                "probe", "Ask a machine what it is rather than assuming.",
-                                options: common + ["--endpoint"], arguments: [.free]),
-                            CommandNode(
-                                "plan", "What would run where, before anything starts.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "profile", "Override the tier a machine was given.",
-                                options: common + ["--endpoint"], arguments: [.free, .free]),
-                        ]),
-                    CommandNode(
-                        "baselines", "Your own delivery baselines.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "connectors", "The tokens the behavioural connectors run on.",
-                        children: [
-                            CommandNode(
-                                "show", "Which connectors have a token.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "set", "Store a connector token on the companion.",
-                                options: common + ["--endpoint", "--github", "--notion"]),
-                            CommandNode(
-                                "import", "Import a calendar, music or YouTube export.",
-                                options: common + ["--endpoint"],
-                                arguments: [.free, .localPath]),
-                        ]),
-                    CommandNode(
-                        "facts", "What was true, and what it believed at the time.",
-                        options: common + ["--endpoint", "--as-of", "--timeline", "--limit"]),
-                    CommandNode(
-                        "correct", "Retire a wrong belief, or rewrite it yourself.",
-                        options: common + ["--endpoint", "--retire", "--edit"],
-                        arguments: [.free]),
-                    CommandNode(
-                        "weekly", "The wider weekly pass over the beliefs.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "db", "Migrate, reindex, or rebuild what is derived.",
-                        children: [
-                            CommandNode(
-                                "migrate", "Apply any migrations not yet run.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "reindex", "Drop the chunks so episodes embed again.",
-                                options: common + ["--endpoint", "--yes"],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode(
-                                "rebuild-derived", "Rebuild everything from the episodes.",
-                                options: common + ["--endpoint", "--yes"],
-                                destructivePolicy: .previewThenYes),
-                        ]),
-                    CommandNode(
-                        "chat", "Talk with the companion, streamed as it thinks.",
-                        options: common + ["--endpoint", "--conversation", "--persona"],
-                        arguments: [.free]),
-                    CommandNode(
-                        "conversations", "List chats, or replay one by id.",
-                        options: common + ["--endpoint", "--limit"], arguments: [.free]),
-                    CommandNode(
-                        "forget", "Delete a conversation and its messages.",
-                        options: common + ["--endpoint", "--yes"], arguments: [.free],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "extract", "Pull typed claims out of recent episodes.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "claims", "List the claims you have made, with verdicts.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "corroborate", "Check testable claims against the record.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "runs", "List the background learning runs.",
-                        options: common + ["--endpoint", "--limit"]),
-                    CommandNode(
-                        "nightly", "Run the nightly learning pipeline right now.",
-                        options: common + ["--endpoint"]),
-                    CommandNode(
-                        "reason", "Show or change how the companion reasons.",
-                        children: [
-                            CommandNode(
-                                "show", "Show the active reasoning provider.",
-                                options: common + ["--endpoint"]),
-                            CommandNode(
-                                "set",
-                                "Change the reasoning provider, model, URL, or API key.",
-                                options: common
-                                    + [
-                                        "--endpoint", "--provider", "--model", "--url",
-                                        "--api-key",
-                                    ]),
-                            CommandNode(
-                                "test", "Round-trip one tiny completion through the reasoner.",
-                                options: common + ["--endpoint"]),
-                        ]),
-                    CommandNode(
-                        "hosts", "Machines that could run the companion, and what each needs.",
-                        options: common + ["--machine"]),
-                    CommandNode(
-                        "deploy", "Choose the machine that runs the companion.",
-                        options: common + ["--directory", "--port", "--adopt"],
-                        arguments: [.machine]),
-                    CommandNode(
-                        "stack", "Start, stop and inspect the companion stack on its host.",
-                        children: [
-                            CommandNode(
-                                "status", "Which host runs the stack, and what is up.",
-                                options: common),
-                            CommandNode("up", "Start the stack.", options: common + ["--build"]),
-                            CommandNode(
-                                "down", "Stop the stack.",
-                                options: common + ["--wipe", "--yes"],
-                                destructivePolicy: .previewThenYes),
-                            CommandNode("restart", "Restart the stack.", options: common),
-                            CommandNode(
-                                "logs", "Read the stack's logs.", options: common + ["--tail"],
-                                arguments: [.free]),
-                            CommandNode(
-                                "env", "Print the environment the stack would be given.",
-                                options: common + ["--reveal"]),
-                        ]),
-                    CommandNode(
-                        "export", "Save everything remembered as a restorable bundle.",
-                        options: common + ["--endpoint", "--include-media"],
-                        arguments: [.localPath]),
-                    CommandNode(
-                        "import", "Restore a bundle written by export.",
-                        options: common + ["--endpoint"], arguments: [.localPath]),
-                    CommandNode(
-                        "erase", "Delete one episode and everything derived from it.",
-                        options: common + ["--endpoint", "--yes"], arguments: [.free],
-                        destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "wipe", "Delete the companion's entire memory.",
-                        options: common + ["--endpoint", "--yes"],
-                        destructivePolicy: .previewThenYes),
-                ]),
-        ])
+    typealias Spec = CommandSpec
+
+    static let specs: [String: Spec] = [
+        "ed": Spec(options: ["--help", "--version"]),
+        "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
+        "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed completions install": Spec(
+            options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
+        "ed completions source": Spec(
+            options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
+        "ed install": Spec(options: ["--json", "--directory"]),
+        "ed uninstall": Spec(options: ["--json"]),
+        "ed config ls": Spec(
+            options: ["--json", "--group", "--changed"], optionValues: ["--group": .group]),
+        "ed config get": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.configKey]),
+        "ed config set": Spec(options: ["--json"], arguments: [.configKey, .configValue]),
+        "ed config unset": Spec(options: ["--json"], arguments: [.configKey]),
+        "ed config describe": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.configKey]),
+        "ed config export": Spec(options: ["--defaults"]),
+        "ed config import": Spec(options: ["--json", "--dry-run"], arguments: [.localPath]),
+        "ed app info": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app diagnostics": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app paths": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app links": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app open-path": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.appPath]),
+        "ed app open-link": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.appLink]),
+        "ed agent status": Spec(options: common),
+        "ed agent jobs": Spec(options: common),
+        "ed agent restart": Spec(options: common),
+        "ed agent logs": Spec(options: ["--json", "--last"]),
+        "ed app actions": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app clean-keys": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app test-notification": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app open": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed app quit": Spec(
+            options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
+        "ed app check-updates": Spec(options: ["--json", "--help", "--no-wait"]),
+        "ed app updates": Spec(options: ["--json", "--help", "--limit"]),
+        "ed app relaunch": Spec(
+            options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
+        "ed app clear-updates": Spec(
+            options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
+        "ed app reveal": Spec(options: ["--json", "--help", "--tab"]),
+        "ed app snapshot": Spec(options: ["--json", "--help", "--dir"]),
+        "ed extensions ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed extensions enable": Spec(options: ["--json"], arguments: [.extensionID]),
+        "ed extensions disable": Spec(options: ["--json"], arguments: [.extensionID]),
+        "ed extensions info": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.extensionID]),
+        "ed extensions status": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.extensionID]),
+        "ed extensions setup": Spec(
+            options: ["--json", "--help", "--dry-run", "--install-tools"], arguments: [.extensionID]
+        ),
+        "ed extensions verify": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.extensionID]),
+        "ed extensions doctor": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.extensionID]),
+        "ed lid-awake status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed lid-awake on": Spec(
+            options: ["--json", "--help", "--for", "--until-lid-reopens", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed lid-awake off": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed lid-awake battery": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed lid-awake restore-on-quit": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed permissions ls": Spec(options: ["--json", "--help", "--attention"]),
+        "ed permissions request": Spec(options: ["--json"], arguments: [.permission]),
+        "ed permissions refresh": Spec(options: ["--json"]),
+        "ed permissions settings": Spec(options: ["--json"], arguments: [.permission]),
+        "ed usage limits": Spec(options: ["--json", "--help", "--refresh"]),
+        "ed usage summary": Spec(
+            options: ["--json", "--range", "--source", "--machine"],
+            optionValues: ["--machine": .machine, "--range": .usageRange, "--source": .usageSource]),
+        "ed usage daily": Spec(
+            options: ["--json", "--range", "--source", "--machine"],
+            optionValues: ["--machine": .machine, "--range": .usageRange, "--source": .usageSource]),
+        "ed usage models": Spec(
+            options: ["--json", "--range", "--source", "--machine"],
+            optionValues: ["--machine": .machine, "--range": .usageRange, "--source": .usageSource]),
+        "ed usage projects list": Spec(
+            options: ["--json", "--range", "--limit"], optionValues: ["--range": .usageRange]),
+        "ed usage projects show": Spec(
+            options: ["--json", "--range"], optionValues: ["--range": .usageRange],
+            arguments: [.usageProject]),
+        "ed usage projects open": Spec(
+            options: ["--json", "--range"], optionValues: ["--range": .usageRange],
+            arguments: [.usageProject]),
+        "ed usage projects copy-link": Spec(
+            options: ["--json", "--range"], optionValues: ["--range": .usageRange],
+            arguments: [.usageProject]),
+        "ed usage projects copy-chat": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.usageChat]),
+        "ed usage sources": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed usage export": Spec(
+            options: [
+                "--json", "--help", "--range", "--source", "--machine", "--card", "-o", "--output",
+            ],
+            optionValues: [
+                "--card": .usageShareCard, "--machine": .machine, "--output": .localPath,
+                "--range": .usageRange, "--source": .usageSource, "-o": .localPath,
+            ]),
+        "ed usage machines ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed usage machines collect": Spec(
+            options: ["--json", "--verbose", "--once", "--timeout"], arguments: [.machine]),
+        "ed usage machines enable": Spec(options: ["--json"], arguments: [.machine]),
+        "ed usage machines disable": Spec(options: ["--json"], arguments: [.machine]),
+        "ed usage machines forget": Spec(options: ["--json"], arguments: [.machine]),
+        "ed usage refresh": Spec(options: ["--json", "--follow", "--machines", "--no-machines"]),
+        "ed system stats": Spec(options: ["--json", "-f", "--follow", "--interval", "--processes"]),
+        "ed system disks": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed music": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music status": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music players": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed music play": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music pause": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music stop": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music toggle": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music next": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music previous": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music volume": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music open-current": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music reveal-current": Spec(
+            options: ["--json", "--help", "--player"], optionValues: ["--player": .musicPlayer]),
+        "ed music library": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed music start": Spec(options: ["--json", "--help", "--folder"], arguments: [.free]),
+        "ed music favorite": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.musicTrack]),
+        "ed music unfavorite": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.musicTrack]),
+        "ed music reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.musicTrack]),
+        "ed music open": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed music rescan": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed music seek": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed music shuffle": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed music repeat": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed music ls": Spec(
+            options: ["--json", "--help", "--folders", "--recursive", "--search"],
+            arguments: [.free]),
+        "ed music mkdir": Spec(options: ["--json", "--help", "--under"], arguments: [.free]),
+        "ed music mv": Spec(options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed music rename": Spec(options: ["--json", "--help", "--folder"], arguments: [.free]),
+        "ed music rm": Spec(
+            options: ["--json", "--help", "--folder", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed calendar ls": Spec(options: ["--json", "--days"]),
+        "ed calendar open": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed calendar join": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.calendarEvent]),
+        "ed calendar directions": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.calendarEvent]),
+        "ed presenter status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed presenter start": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed presenter stop": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed herdr ls": Spec(options: ["--json", "-h", "--help", "--version", "--machine"]),
+        "ed herdr command": Spec(
+            options: ["--json", "-h", "--help", "--version", "--machine", "--session"],
+            arguments: [.free]),
+        "ed herdr attach": Spec(
+            options: ["--json", "-h", "--help", "--version", "--machine", "--session"],
+            arguments: [.free]),
+        "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed tools install": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),
+        "ed apps ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed apps quit": Spec(
+            options: ["--json", "--help", "--all", "--force", "--yes"], arguments: [.runningApp],
+            destructivePolicy: .previewThenYes),
+        "ed download ls": Spec(options: ["--json", "--help", "--active", "--limit"]),
+        "ed download status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed download add": Spec(
+            options: ["--json", "--help", "--kind", "--prefix"],
+            optionValues: ["--kind": .downloadKind], arguments: [.free]),
+        "ed download retry": Spec(
+            options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
+        "ed download rm": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"], arguments: [.historyIndex],
+            destructivePolicy: .previewThenYes),
+        "ed download clear": Spec(
+            options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
+        "ed download cancel": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed download open": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed download reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed download tool": Spec(options: ["--json", "--help", "--update"]),
+        "ed clipboard ls": Spec(options: ["--json", "--help", "--pinned", "--search", "--limit"]),
+        "ed clipboard stats": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed clipboard get": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed clipboard copy": Spec(
+            options: ["--json", "--help", "--plain"], arguments: [.historyIndex]),
+        "ed clipboard pin": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed clipboard unpin": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
+        "ed clipboard rm": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.historyIndex],
+            destructivePolicy: .previewThenYes),
+        "ed clipboard clear": Spec(
+            options: ["--json", "--help", "--keep-pinned", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed attention status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention summary": Spec(
+            options: ["--json", "--help", "--range"], optionValues: ["--range": .attentionRange]),
+        "ed attention timeline": Spec(
+            options: ["--json", "--help", "--range", "--limit"],
+            optionValues: ["--range": .attentionRange]),
+        "ed attention music": Spec(
+            options: ["--json", "--help", "--range", "--limit"],
+            optionValues: ["--range": .attentionRange]),
+        "ed attention categories ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention categories set": Spec(
+            options: ["--json", "--help", "--name"],
+            arguments: [.attentionEntity, .attentionCategory]),
+        "ed attention focus status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),
+        "ed attention focus stop": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention doctor": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed color pick": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed color copy": Spec(
+            options: ["--json", "--help", "--format"], optionValues: ["--format": .colorFormat],
+            arguments: [.colorIndex]),
+        "ed color ls": Spec(
+            options: ["--json", "--help", "--format", "--limit"],
+            optionValues: ["--format": .colorFormat]),
+        "ed color clear": Spec(options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
+        "ed emoji pick": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed emoji ls": Spec(
+            options: ["--json", "--help", "--frequent", "--search", "--group", "--limit"],
+            optionValues: ["--group": .emojiGroup]),
+        "ed emoji insert": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.emojiCharacter]),
+        "ed emoji tone": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.emojiTone]),
+        "ed emoji clear": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed shelf ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed shelf path": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.shelfItem]),
+        "ed shelf add": Spec(options: ["--json"], arguments: [.localPath]),
+        "ed shelf add-text": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed shelf update": Spec(
+            options: ["--json", "--help", "--x", "--y"], arguments: [.shelfItem]),
+        "ed shelf rm": Spec(
+            options: ["--json", "--yes"], arguments: [.shelfItem], repeatingArgument: .shelfItem,
+            destructivePolicy: .previewThenYes),
+        "ed shelf clear": Spec(options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
+        "ed shelf purge": Spec(
+            options: ["--json", "--yes"], arguments: [.shelfKeepDuration],
+            destructivePolicy: .previewThenYes),
+        "ed shelf open": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.shelfItem],
+            repeatingArgument: .shelfItem),
+        "ed shelf reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.shelfItem],
+            repeatingArgument: .shelfItem),
+        "ed shelf share": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.shelfItem],
+            repeatingArgument: .shelfItem),
+        "ed cleaner scan": Spec(
+            options: ["--json", "--help", "--category", "--root"],
+            optionValues: ["--category": .cleanerCategory]),
+        "ed cleaner categories": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed cleaner clean": Spec(
+            options: ["--json", "--help", "--category", "--root", "--yes"],
+            optionValues: ["--category": .cleanerCategory], destructivePolicy: .previewThenYes),
+        "ed cleaner drives": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed brew status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed brew ls": Spec(
+            options: ["--json", "--help", "--kind", "--outdated"],
+            optionValues: ["--kind": .homebrewKind]),
+        "ed brew search": Spec(
+            options: ["--json", "--help", "--kind"], optionValues: ["--kind": .homebrewKind],
+            arguments: [.free]),
+        "ed brew install": Spec(
+            options: ["--json", "--help", "--kind"], optionValues: ["--kind": .homebrewKind],
+            arguments: [.free]),
+        "ed brew upgrade": Spec(
+            options: ["--json", "--help", "--kind"], optionValues: ["--kind": .homebrewKind],
+            arguments: [.free]),
+        "ed brew uninstall": Spec(
+            options: ["--json", "--help", "--kind", "--yes"],
+            optionValues: ["--kind": .homebrewKind], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed maintenance inventory": Spec(options: ["--json", "--help", "--no-updates"]),
+        "ed maintenance scan": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed maintenance remove": Spec(
+            options: ["--json", "--help", "--only-app", "--yes"], arguments: [.localPath],
+            destructivePolicy: .previewThenYes),
+        "ed maintenance install": Spec(
+            options: ["--json", "--help", "--system", "--replace", "--keep-image", "--yes"],
+            arguments: [.localPath], destructivePolicy: .previewThenYes),
+        "ed maintenance updates": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed maintenance update": Spec(
+            options: ["--json", "--help", "--yes", "--concurrency", "--retries"],
+            repeatingArgument: .free, destructivePolicy: .previewThenYes),
+        "ed maintenance history": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed maintenance backup-updates": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed quinjet projects": Spec(
+            options: ["--json", "--help", "--machine"], optionValues: ["--machine": .quinjetMachine]
+        ),
+        "ed quinjet worktrees": Spec(
+            options: ["--json", "--help", "--machine"],
+            optionValues: ["--machine": .quinjetMachine], arguments: [.quinjetPath]),
+        "ed quinjet open": Spec(
+            options: [
+                "--json", "--help", "--machine", "--theme", "--appearance", "--cmux", "--embedded",
+            ],
+            optionValues: [
+                "--appearance": .quinjetAppearance, "--machine": .quinjetMachine,
+                "--theme": .quinjetTheme,
+            ], arguments: [.quinjetPath]),
+        "ed quinjet launch": Spec(
+            options: [
+                "--json", "--help", "--machine", "--theme", "--appearance", "--cmux", "--embedded",
+            ],
+            optionValues: [
+                "--appearance": .quinjetAppearance, "--machine": .quinjetMachine,
+                "--theme": .quinjetTheme,
+            ], arguments: [.quinjetPath]),
+        "ed quinjet status": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.quinjetSession]),
+        "ed quinjet sessions": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed quinjet new": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed quinjet focus": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.quinjetSession]),
+        "ed quinjet close": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.quinjetSession],
+            destructivePolicy: .previewThenYes),
+        "ed quinjet restart": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.quinjetSession]),
+        "ed quinjet switch": Spec(
+            options: ["--json", "-h", "--help", "--version"],
+            arguments: [.quinjetSession, .quinjetPath]),
+        "ed database connections list": Spec(
+            options: [
+                "--json", "--help", "--search", "--product", "--environment", "--group", "--tag",
+                "--favorites-only", "--order", "--limit", "--offset",
+            ],
+            optionValues: [
+                "--environment": .free, "--group": .free, "--limit": .free, "--offset": .free,
+                "--order": .free, "--product": .free, "--search": .free, "--tag": .free,
+            ]),
+        "ed database connections get": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed database connections add": Spec(
+            options: [
+                "--json", "--help", "--product", "--host", "--port", "--path", "--username",
+                "--database", "--authentication-database", "--password-stdin", "--tls",
+                "--environment", "--environment-label", "--protection", "--read-only",
+                "--production-policy",
+            ],
+            optionValues: [
+                "--authentication-database": .free, "--database": .free, "--environment": .free,
+                "--environment-label": .free, "--host": .free, "--path": .free, "--port": .free,
+                "--product": .free, "--production-policy": .free, "--protection": .free,
+                "--read-only": .free, "--username": .free,
+            ], arguments: [.free]),
+        "ed database connections test": Spec(
+            options: ["--json", "--help", "--timeout-milliseconds"],
+            optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+        "ed database connections edit": Spec(
+            options: [
+                "--json", "--help", "--environment", "--environment-label", "--protection",
+                "--read-only", "--production-policy", "--group", "--clear-group", "--tag",
+                "--clear-tags", "--color", "--clear-color", "--favorite", "--not-favorite",
+            ],
+            optionValues: [
+                "--color": .free, "--environment": .free, "--environment-label": .free,
+                "--group": .free, "--production-policy": .free, "--protection": .free,
+                "--read-only": .free, "--tag": .free,
+            ], arguments: [.free]),
+        "ed database connections duplicate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed database connections rename": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed database connections delete": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed database saved-queries list": Spec(
+            options: [
+                "--json", "--help", "--search", "--connection", "--language", "--tag",
+                "--favorites-only", "--order", "--limit", "--offset",
+            ],
+            optionValues: [
+                "--connection": .free, "--language": .free, "--limit": .free, "--offset": .free,
+                "--order": .free, "--search": .free, "--tag": .free,
+            ]),
+        "ed database saved-queries get": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed database saved-queries save": Spec(
+            options: [
+                "--json", "--help", "--id", "--connection", "--language", "--file", "--tag",
+                "--favorite",
+            ],
+            optionValues: [
+                "--connection": .free, "--file": .free, "--id": .free, "--language": .free,
+                "--tag": .free,
+            ], arguments: [.free]),
+        "ed database saved-queries duplicate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed database saved-queries rename": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed database saved-queries delete": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed database capabilities": Spec(
+            options: ["--json", "--help", "--refresh"], arguments: [.free]),
+        "ed database connect": Spec(
+            options: ["--json", "--help", "--timeout-milliseconds"],
+            optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+        "ed database disconnect": Spec(
+            options: ["--json", "--help", "--timeout-milliseconds"],
+            optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+        "ed database browse": Spec(
+            options: [
+                "--json", "--ndjson", "--help", "--kind", "--path", "--limit", "--continuation",
+                "--timeout-milliseconds",
+            ],
+            optionValues: [
+                "--continuation": .free, "--kind": .free, "--limit": .free, "--path": .free,
+                "--timeout-milliseconds": .free,
+            ], arguments: [.free]),
+        "ed database query": Spec(
+            options: [
+                "--json", "--ndjson", "--help", "--language", "--file", "--kind", "--path",
+                "--limit", "--continuation", "--timeout-milliseconds",
+            ],
+            optionValues: [
+                "--continuation": .free, "--file": .free, "--kind": .free, "--language": .free,
+                "--limit": .free, "--path": .free, "--timeout-milliseconds": .free,
+            ], arguments: [.free]),
+        "ed database mutations row-request": Spec(
+            options: ["--json", "--help", "--action", "--path", "--identity", "--values"],
+            optionValues: [
+                "--action": .free, "--identity": .free, "--path": .free, "--values": .free,
+            ], arguments: [.free]),
+        "ed database mutations key-request": Spec(
+            options: [
+                "--json", "--help", "--action", "--product", "--logical-database", "--key",
+                "--value", "--ttl-milliseconds",
+            ],
+            optionValues: [
+                "--action": .free, "--key": .free, "--logical-database": .free, "--product": .free,
+                "--ttl-milliseconds": .free, "--value": .free,
+            ], arguments: [.free]),
+        "ed database mutations document-request": Spec(
+            options: [
+                "--json", "--help", "--product", "--action", "--path", "--document",
+                "--document-id", "--id-kind", "--sequence-number", "--primary-term",
+            ],
+            optionValues: [
+                "--action": .free, "--document": .free, "--document-id": .free, "--id-kind": .free,
+                "--path": .free, "--primary-term": .free, "--product": .free,
+                "--sequence-number": .free,
+            ], arguments: [.free]),
+        "ed database mutations preview": Spec(
+            options: ["--json", "--help", "--request", "--timeout-milliseconds"],
+            optionValues: ["--request": .free, "--timeout-milliseconds": .free]),
+        "ed database mutations apply": Spec(
+            options: [
+                "--json", "--help", "--yes", "--request", "--confirmation",
+                "--timeout-milliseconds",
+            ],
+            optionValues: [
+                "--confirmation": .free, "--request": .free, "--timeout-milliseconds": .free,
+            ], destructivePolicy: .previewThenYes),
+        "ed database mutations status": Spec(
+            options: ["--json", "--help", "--receipt", "--timeout-milliseconds"],
+            optionValues: ["--receipt": .free, "--timeout-milliseconds": .free]),
+        "ed database mutations cancel": Spec(
+            options: ["--json", "--help", "--yes", "--receipt", "--timeout-milliseconds"],
+            optionValues: ["--receipt": .free, "--timeout-milliseconds": .free],
+            destructivePolicy: .previewThenYes),
+        "ed database mutations outcome": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed database operations list": Spec(
+            options: [
+                "--json", "--help", "--connection", "--state", "--kind", "--before", "--limit",
+            ],
+            optionValues: [
+                "--before": .free, "--connection": .free, "--kind": .free, "--limit": .free,
+                "--state": .free,
+            ]),
+        "ed database operations get": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed database operations cancel": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed machines": Spec(arguments: [.machine]),
+        "ed machines ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed machines show": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines add": Spec(
+            options: [
+                "--json", "--help", "--host", "--port", "--user", "--key", "--alias", "--mac",
+                "--password-stdin", "--key-passphrase-stdin",
+            ], arguments: [.free]),
+        "ed machines edit": Spec(
+            options: [
+                "--json", "--help", "--name", "--host", "--port", "--user", "--key", "--agent",
+                "--mac", "--sudo-password-stdin", "--forget-sudo-password", "--password-stdin",
+                "--key-passphrase-stdin",
+            ], arguments: [.machine]),
+        "ed machines rm": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine],
+            destructivePolicy: .previewThenYes),
+        "ed machines forwards ls": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines forwards add": Spec(
+            options: ["--json", "--help", "--local", "--remote", "--remote-host", "--title"],
+            arguments: [.machine]),
+        "ed machines forwards on": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines forwards off": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines forwards open": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines forwards rm": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines snippets ls": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines snippets add": Spec(
+            options: ["--json", "--help", "--shared"], arguments: [.machine, .free, .free],
+            passthroughCompletion: PassthroughCompletion(afterPositionals: 2)),
+        "ed machines snippets rm": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines snippets run": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .historyIndex]),
+        "ed machines power status": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines power reboot": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine],
+            destructivePolicy: .previewThenYes),
+        "ed machines power shutdown": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine],
+            destructivePolicy: .previewThenYes),
+        "ed machines power wake": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines thermal status": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines thermal set": Spec(
+            options: ["--json", "--help", "--minutes"], arguments: [.machine, .free]),
+        "ed machines control status": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines control brightness": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines control volume": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines control mute": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .onOff]),
+        "ed machines control wifi": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine, .onOff],
+            destructivePolicy: .previewThenYes),
+        "ed machines control bluetooth": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .onOff]),
+        "ed machines control airplane": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine, .onOff],
+            destructivePolicy: .previewThenYes),
+        "ed machines control dnd": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .onOff]),
+        "ed machines control caffeinate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .onOff]),
+        "ed machines control keyboard-light": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines workspace ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed machines workspace use": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed machines workspace new": Spec(
+            options: ["--json", "--help", "--screen", "--name"], arguments: [.machine]),
+        "ed machines workspace rename": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed machines workspace rm": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed machines workspace panes": Spec(options: ["--json", "--help", "--workspace"]),
+        "ed machines workspace split": Spec(
+            options: ["--json", "--help", "--workspace", "--side", "--screen"],
+            arguments: [.historyIndex, .machine]),
+        "ed machines workspace close": Spec(
+            options: ["--json", "--help", "--workspace"], arguments: [.historyIndex]),
+        "ed machines workspace point": Spec(
+            options: ["--json", "--help", "--workspace", "--screen"],
+            arguments: [.historyIndex, .machine]),
+        "ed machines workspace equalize": Spec(options: ["--json", "--help", "--workspace"]),
+        "ed machines broadcast": Spec(options: ["--json", "--help", "--only"], arguments: [.free]),
+        "ed machines terminal broadcast": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machineOrLocal, .free]),
+        "ed machines kill": Spec(
+            options: ["--json", "--help", "--signal", "--yes"],
+            arguments: [.machine, .historyIndex], destructivePolicy: .previewThenYes),
+        "ed machines metrics": Spec(
+            options: ["--json", "-f", "--follow", "--interval", "--processes"],
+            arguments: [.machine]),
+        "ed machines exec": Spec(
+            options: ["-t", "--tty"], arguments: [.machine, .free],
+            passthroughCompletion: PassthroughCompletion(
+                afterPositionals: 1, remoteMachinePosition: 0)),
+        "ed machines files ls": Spec(
+            options: ["--json", "--help", "-a", "--all"], arguments: [.machine, .remotePath]),
+        "ed machines files get": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+            arguments: [.machine, .remotePath, .localPath], destructivePolicy: .previewThenYes),
+        "ed machines files preview": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files launch": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files get-many": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes", "--to"],
+            optionValues: ["--to": .localPath], arguments: [.machine, .remotePath],
+            repeatingArgument: .remotePath, destructivePolicy: .previewThenYes),
+        "ed machines files transfer": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes", "--into"],
+            optionValues: ["--into": .remotePath], arguments: [.machine, .machine, .remotePath],
+            repeatingArgument: .remotePath, destructivePolicy: .previewThenYes),
+        "ed machines files put": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+            arguments: [.machine, .localPath, .remotePath], destructivePolicy: .previewThenYes),
+        "ed machines files cp": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+            arguments: [.machine, .remotePath], repeatingArgument: .remotePath,
+            destructivePolicy: .previewThenYes),
+        "ed machines files mv": Spec(
+            options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+            arguments: [.machine, .remotePath], repeatingArgument: .remotePath,
+            destructivePolicy: .previewThenYes),
+        "ed machines files rename": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files mkdir": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files search": Spec(
+            options: ["--json", "--help", "--limit"], arguments: [.machine, .remotePath, .free]),
+        "ed machines files info": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files undo": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines files duplicate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
+        "ed machines files rm": Spec(
+            options: ["--json", "--help", "--delete", "--yes"], arguments: [.machine, .remotePath],
+            destructivePolicy: .previewThenYes),
+        "ed machines docker shell": Spec(arguments: [.machine, .container]),
+        "ed machines docker ps": Spec(options: ["--json", "-a", "--all"], arguments: [.machine]),
+        "ed machines docker images": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines docker volumes": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines docker networks": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines docker df": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines docker logs": Spec(
+            options: ["--tail", "-f", "--follow"], arguments: [.machine, .container]),
+        "ed machines docker inspect": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .container]),
+        "ed machines docker top": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .container]),
+        "ed machines docker open": Spec(
+            options: ["--json", "--help", "--port"], arguments: [.machine, .container]),
+        "ed machines docker start": Spec(options: ["--json"], arguments: [.machine, .container]),
+        "ed machines docker stop": Spec(options: ["--json"], arguments: [.machine, .container]),
+        "ed machines docker restart": Spec(options: ["--json"], arguments: [.machine, .container]),
+        "ed machines docker rm": Spec(
+            options: ["--json", "--yes"], arguments: [.machine, .container],
+            destructivePolicy: .previewThenYes),
+        "ed machines docker pause": Spec(options: ["--json"], arguments: [.machine, .container]),
+        "ed machines docker unpause": Spec(options: ["--json"], arguments: [.machine, .container]),
+        "ed machines docker rmi": Spec(
+            options: ["--json", "--help", "--force", "--yes"], arguments: [.machine, .free],
+            destructivePolicy: .previewThenYes),
+        "ed machines docker volume-rm": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine, .free],
+            destructivePolicy: .previewThenYes),
+        "ed machines docker prune": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.machine, .pruneTarget],
+            destructivePolicy: .previewThenYes),
+        "ed machines docker compose ls": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed machines docker compose up": Spec(
+            options: ["--json"], arguments: [.machine, .composeProject]),
+        "ed machines docker compose down": Spec(
+            options: ["--json"], arguments: [.machine, .composeProject]),
+        "ed machines docker compose restart": Spec(
+            options: ["--json"], arguments: [.machine, .composeProject]),
+        "ed machines docker compose pull": Spec(
+            options: ["--json"], arguments: [.machine, .composeProject]),
+        "ed machines docker compose logs": Spec(
+            options: ["--tail", "-f", "--follow", "--help"], arguments: [.machine, .composeProject]),
+        "ed machines services ls": Spec(options: ["--json", "--failed"], arguments: [.machine]),
+        "ed machines services start": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines services stop": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines services restart": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
+        "ed machines connect": Spec(options: ["--json"], arguments: [.machine]),
+        "ed machines disconnect": Spec(options: ["--json"], arguments: [.machine]),
+        "ed machines mount": Spec(
+            options: ["--json", "--help", "--at", "--read-only"],
+            arguments: [.machine, .remotePath]),
+        "ed machines unmount": Spec(options: ["--json"], arguments: [.machine]),
+        "ed machines mounts": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed machines mount-reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
+        "ed companion status": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]),
+        "ed companion doctor": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]),
+        "ed companion search": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--limit"],
+            arguments: [.free]),
+        "ed companion index": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]),
+        "ed companion ingest": Spec(options: ["--json", "--endpoint"], arguments: [.localPath]),
+        "ed companion episodes": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion episode": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--body", "--open"],
+            arguments: [.free]),
+        "ed companion sync": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--full"],
+            arguments: [.free]),
+        "ed companion observations": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit", "--kind",
+        ]),
+        "ed companion reflect": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]
+        ),
+        "ed companion beliefs": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion ask": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--persona"],
+            arguments: [.free]),
+        "ed companion council": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--personas"],
+            arguments: [.free]),
+        "ed companion personas": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion lenses": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]),
+        "ed companion core show": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion core set": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"],
+            arguments: [.free, .free]),
+        "ed companion why": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"], arguments: [.free]),
+        "ed companion hypotheses ls": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion hypotheses run": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion predictions": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion commitments": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion discrepancies ls": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion discrepancies override": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--real"],
+            arguments: [.free]),
+        "ed companion calibration": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion inquire next": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--explain",
+        ]),
+        "ed companion inquire answer": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"],
+            arguments: [.free, .free]),
+        "ed companion inquire skip": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"], arguments: [.free]),
+        "ed companion inquire mute": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"], arguments: [.free]),
+        "ed companion inquire ls": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion entities": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion eval run": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--persona",
+        ]),
+        "ed companion eval ls": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion standup record": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--verify"],
+            arguments: [.localPath]),
+        "ed companion standup report": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion machines ls": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion machines add": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--transport", "--at"],
+            arguments: [.free]),
+        "ed companion machines probe": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"], arguments: [.free]),
+        "ed companion machines plan": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion machines profile": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"],
+            arguments: [.free, .free]),
+        "ed companion baselines": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion connectors show": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion connectors set": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--github", "--notion",
+        ]),
+        "ed companion connectors import": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"],
+            arguments: [.free, .localPath]),
+        "ed companion facts": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--as-of", "--timeline", "--limit",
+        ]),
+        "ed companion correct": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--retire", "--edit"],
+            arguments: [.free]),
+        "ed companion weekly": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]),
+        "ed companion db migrate": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion db reindex": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed companion db rebuild-derived": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed companion chat": Spec(
+            options: [
+                "--json", "-h", "--help", "--version", "--endpoint", "--conversation", "--persona",
+            ], arguments: [.free]),
+        "ed companion conversations": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--limit"],
+            arguments: [.free]),
+        "ed companion forget": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
+            arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed companion extract": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]
+        ),
+        "ed companion claims": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion corroborate": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion runs": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--limit",
+        ]),
+        "ed companion nightly": Spec(options: ["--json", "-h", "--help", "--version", "--endpoint"]
+        ),
+        "ed companion reason show": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion reason set": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint", "--provider", "--model", "--url",
+            "--api-key",
+        ]),
+        "ed companion reason test": Spec(options: [
+            "--json", "-h", "--help", "--version", "--endpoint",
+        ]),
+        "ed companion hosts": Spec(options: ["--json", "-h", "--help", "--version", "--machine"]),
+        "ed companion deploy": Spec(
+            options: ["--json", "-h", "--help", "--version", "--directory", "--port", "--adopt"],
+            arguments: [.machine]),
+        "ed companion stack status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed companion stack up": Spec(options: ["--json", "-h", "--help", "--version", "--build"]),
+        "ed companion stack down": Spec(
+            options: ["--json", "-h", "--help", "--version", "--wipe", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed companion stack restart": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed companion stack logs": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tail"], arguments: [.free]),
+        "ed companion stack env": Spec(options: ["--json", "-h", "--help", "--version", "--reveal"]
+        ),
+        "ed companion export": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--include-media"],
+            arguments: [.localPath]),
+        "ed companion import": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint"], arguments: [.localPath]),
+        "ed companion erase": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
+            arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed companion wipe": Spec(
+            options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "help": Spec(arguments: [.free]),
+    ]
+
+    public static let root = node(for: EdRoot.self, path: ["ed"])
+
+    public static let help = CommandNode(
+        "help", "Show detailed help for a command.",
+        arguments: specs["help"]?.arguments ?? [])
 
     public static var topLevelNames: [String] {
         root.children.flatMap(\.names) + help.names
@@ -1764,5 +1073,22 @@ public enum CommandTree {
             current = next
         }
         return current
+    }
+
+    static func node(for command: ParsableCommand.Type, path: [String]) -> CommandNode {
+        let configuration = command.configuration
+        let spec = specs[path.joined(separator: " ")] ?? Spec()
+        let children = configuration.subcommands.filter { $0.configuration.shouldDisplay }
+            .map { child in
+                let name =
+                    child.configuration.commandName ?? String(describing: child).lowercased()
+                return node(for: child, path: path + [name])
+            }
+        return CommandNode(
+            path.last ?? "ed", configuration.abstract, aliases: configuration.aliases,
+            options: spec.options, optionValues: spec.optionValues, arguments: spec.arguments,
+            repeatingArgument: spec.repeatingArgument, children: children,
+            destructivePolicy: spec.destructivePolicy,
+            passthroughCompletion: spec.passthroughCompletion)
     }
 }
