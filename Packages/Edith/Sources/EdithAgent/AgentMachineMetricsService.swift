@@ -49,6 +49,10 @@ public final class AgentMachineMetricsService {
 
     public func register(on runtime: AgentRuntime) async {
         self.runtime = runtime
+        await runtime.registerShutdown(id: "machine.metrics") { [self] in
+            await stop()
+            await finishActivityUpdates()
+        }
         await runtime.register(operation: AgentMachineMetricsRefresh.operation) { [self] payload in
             let request = try AgentPayload.decode(AgentMachineMetricsRefresh.self, from: payload)
             try await refresh(request)
