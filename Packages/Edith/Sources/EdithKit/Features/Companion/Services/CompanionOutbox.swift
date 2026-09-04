@@ -42,9 +42,11 @@ public enum CompanionOutbox {
 
     public static func keep(_ source: URL, in root: URL = directory) -> URL? {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let destination = root.appendingPathComponent(source.lastPathComponent)
+        var destination = root.appendingPathComponent(source.lastPathComponent)
+        if source.standardizedFileURL == destination.standardizedFileURL { return source }
         if FileManager.default.fileExists(atPath: destination.path) {
-            try? FileManager.default.removeItem(at: destination)
+            destination = root.appendingPathComponent(
+                "\(UUID().uuidString)-\(source.lastPathComponent)")
         }
         do {
             try FileManager.default.moveItem(at: source, to: destination)
@@ -58,18 +60,27 @@ public enum CompanionOutbox {
         let manager = FileManager.default
         guard
             let names = try? manager.contentsOfDirectory(
-                at: root, includingPropertiesForKeys: [.creationDateKey],
+                at: root,
+                includingPropertiesForKeys: [
+                    .creationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ],
                 options: [.skipsHiddenFiles])
         else { return [] }
         return
             names
-            .map { url in
-                let created =
-                    (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate)
-                    ?? Date.distantPast
-                return CompanionOutboxItem(url: url, recordedAt: created)
+            .compactMap { url in
+                guard
+                    let values = try? url.resourceValues(
+                        forKeys: [.creationDateKey, .isRegularFileKey, .isSymbolicLinkKey]),
+                    values.isRegularFile == true, values.isSymbolicLink != true
+                else { return nil }
+                return CompanionOutboxItem(
+                    url: url, recordedAt: values.creationDate ?? .distantPast)
             }
-            .sorted { $0.recordedAt < $1.recordedAt }
+            .sorted {
+                if $0.recordedAt != $1.recordedAt { return $0.recordedAt < $1.recordedAt }
+                return $0.name < $1.name
+            }
     }
 
     public static func forget(_ item: CompanionOutboxItem) {
@@ -78,20 +89,27 @@ public enum CompanionOutbox {
 
     public static func drain(
         in root: URL = directory,
+        limit: Int = .max,
         send: (CompanionOutboxItem, Data) async throws -> String
     ) async -> CompanionOutboxDrain {
         var result = CompanionOutboxDrain()
-        for item in waiting(in: root) {
-            guard let data = try? Data(contentsOf: item.url) else {
+        for item in waiting(in: root).prefix(max(0, limit)) {
+            guard !Task.isCancelled else { break }
+            guard let data = try? Data(contentsOf: item.url, options: .mappedIfSafe) else {
                 result.failed += 1
                 continue
             }
             do {
                 let status = try await send(item, data)
+                guard status == "ingested" || status == "duplicate" else {
+                    result.failed += 1
+                    break
+                }
                 if status == "duplicate" { result.duplicates += 1 } else { result.sent += 1 }
                 forget(item)
             } catch {
                 result.failed += 1
+                break
             }
         }
         return result

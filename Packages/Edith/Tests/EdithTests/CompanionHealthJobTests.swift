@@ -14,7 +14,7 @@ import Testing
             probe: { _ in
                 probed.mark()
                 return CompanionHealth(ok: true, checks: [])
-            })
+            }, repair: { _ in false }, deliverOutbox: { _ in })
 
         let snapshot = try decode(await job.run())
 
@@ -31,7 +31,7 @@ import Testing
                 CompanionHealth(
                     ok: true, degraded: false,
                     checks: [CompanionCheck(name: "postgres", ok: true, detail: "ready")])
-            })
+            }, repair: { _ in false }, deliverOutbox: { _ in })
 
         let snapshot = try decode(await job.run())
 
@@ -49,7 +49,7 @@ import Testing
                 CompanionHealth(
                     ok: true, degraded: true,
                     checks: [CompanionCheck(name: "embeddings", ok: false, detail: "queued")])
-            })
+            }, repair: { _ in false }, deliverOutbox: { _ in })
 
         let snapshot = try decode(await job.run())
 
@@ -61,7 +61,8 @@ import Testing
     @Test func anUnreachableServiceKeepsTheFailureInsteadOfThrowing() async throws {
         let job = CompanionHealthJob(
             store: nil, isConfigured: { true }, endpoint: { self.endpoint },
-            probe: { _ in throw URLError(.cannotConnectToHost) })
+            probe: { _ in throw URLError(.cannotConnectToHost) },
+            repair: { _ in false }, deliverOutbox: { _ in })
 
         let snapshot = try decode(await job.run())
 
