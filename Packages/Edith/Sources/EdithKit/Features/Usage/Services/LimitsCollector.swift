@@ -64,22 +64,15 @@ public enum LimitsCollector {
     public static func refresh(
         force: Bool = false, defaults: UserDefaults = SharedDefaults.store,
         credentialSession: ClaudeCredentialSession = ClaudeCredentialSession(),
+        refreshSession: LimitsRefreshSession = .shared,
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
         let startedAt = Date()
-        var inFlightSince: Date?
         var retryNotBefore: Date?
-        switch LimitsRefreshGate.decide(
-            force: force, inFlightSince: inFlightSince, retryNotBefore: retryNotBefore,
-            now: startedAt)
-        {
-        case .skipInFlight, .skipBackoff:
-            return LimitsTopicSnapshot(
-                refreshedAt: startedAt, providers: [], failure: nil)
-        case .recoverStalled, .start:
-            break
+        switch await refreshSession.begin(force: force, now: startedAt) {
+        case .cached(let snapshot): return snapshot
+        case .collect: break
         }
-        inFlightSince = startedAt
         let providers = enabledProviders(defaults: defaults)
         var snapshots: [LimitsProviderSnapshot] = []
         var topFailure: String?
@@ -93,13 +86,16 @@ public enum LimitsCollector {
             case .codex:
                 let result = await fetchCodex()
                 snapshots.append(result)
+                if result.error != nil { topFailure = result.error }
             }
         }
         if snapshots.contains(where: { $0.session != nil || $0.week != nil || $0.fable != nil }) {
             announce(IPC.Name.limitsUpdated)
         }
-        return LimitsTopicSnapshot(
+        let snapshot = LimitsTopicSnapshot(
             refreshedAt: startedAt, providers: snapshots, failure: topFailure)
+        await refreshSession.finish(snapshot, retryNotBefore: retryNotBefore)
+        return snapshot
     }
 
     private static func fetchClaude(
@@ -178,6 +174,8 @@ public enum LimitsCollector {
             retryNotBefore = deadline
             message =
                 "Rate limited by Claude - retrying at \(deadline.formatted(date: .omitted, time: .shortened))"
+        case LimitsHistoryPersistenceError.failed:
+            message = error.localizedDescription
         default:
             message = "Offline"
         }
@@ -217,8 +215,8 @@ public enum LimitsCollector {
         fable: LimitWindow? = nil
     ) throws {
         var history = LimitsHistory()
-        guard !history.append(provider: provider, session: session, week: week, fable: fable) else {
-            return
+        guard history.append(provider: provider, session: session, week: week, fable: fable) else {
+            throw LimitsHistoryPersistenceError.failed
         }
     }
 
@@ -385,6 +383,12 @@ public enum LimitsCollector {
     private static func codexExecutable() -> URL? {
         CLIToolEnvironment.executable(named: "codex")
     }
+}
+
+private enum LimitsHistoryPersistenceError: LocalizedError {
+    case failed
+
+    var errorDescription: String? { "The limits history could not be saved." }
 }
 
 public enum UsageLimitProviders {

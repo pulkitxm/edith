@@ -51,15 +51,18 @@ import Testing
 }
 
 @Suite struct UsageCollectorTests {
-    @Test func usageDaysAreReadFromTheCollectorDocument() {
+    @Test func usageDaysAreReadFromTheCollectorDocument() throws {
         let root: [String: Any] = [
             "daily": [
-                ["date": "2026-09-01", "totalCost": 1.25, "inputTokens": 10, "outputTokens": 5],
-                ["date": "2026-09-02", "totalCost": 0.5, "source": "codex"],
+                [
+                    "period": "2026-09-01",
+                    "bySource": ["first": [["cost": 1.25, "inputTokens": 10, "outputTokens": 5]]],
+                ],
+                ["period": "2026-09-02", "bySource": ["second": [["cost": 0.5]]]],
             ]
         ]
 
-        let rows = UsageDocumentReader.rows(from: root)
+        let rows = try UsageDocumentReader.rows(from: root)
 
         #expect(rows.count == 2)
         #expect(
@@ -67,13 +70,15 @@ import Testing
                 == UsageDayRow(
                     day: "2026-09-01", source: "all", costCents: 125, inputTokens: 10,
                     outputTokens: 5))
-        #expect(rows[1].source == "codex")
+        #expect(rows[1].source == "all")
         #expect(rows[1].costCents == 50)
     }
 
-    @Test func aDocumentWithoutDailyRowsReadsAsEmpty() {
-        #expect(UsageDocumentReader.rows(from: ["totals": 3]).isEmpty)
-        #expect(UsageDocumentReader.days(at: URL(fileURLWithPath: "/nowhere.json")).isEmpty)
+    @Test func missingOrMalformedDocumentsAreRejected() {
+        #expect(throws: (any Error).self) { try UsageDocumentReader.rows(from: ["totals": 3]) }
+        #expect(throws: (any Error).self) {
+            try UsageDocumentReader.days(at: URL(fileURLWithPath: "/nowhere.json"))
+        }
     }
 
     @Test func aBusyRefreshPublishesNothingRatherThanAnError() async throws {
@@ -104,7 +109,7 @@ import Testing
         let document = root.appendingPathComponent("usage.json")
         try JSONSerialization.data(
             withJSONObject: [
-                "daily": [["date": "2026-09-01", "totalCost": 2.0]]
+                "daily": [["period": "2026-09-01", "bySource": ["first": [["cost": 2.0]]]]]
             ]
         ).write(to: document)
         let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")

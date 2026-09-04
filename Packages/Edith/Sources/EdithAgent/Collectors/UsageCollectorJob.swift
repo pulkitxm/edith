@@ -5,8 +5,9 @@ public enum UsageStoreWriter {
     public static func record(
         _ snapshot: UsageTopicSnapshot, days: [UsageDayRow], store: AgentStore?
     ) throws {
-        guard let store else { return }
+        guard let store else { throw AgentStoreError("The usage store is unavailable.") }
         try store.write { database in
+            try database.execute(sql: "DELETE FROM usage_day")
             for day in days {
                 try database.execute(
                     sql: """
@@ -45,23 +46,36 @@ public struct UsageDayRow: Equatable, Sendable {
 }
 
 public enum UsageDocumentReader {
-    public static func days(at url: URL) -> [UsageDayRow] {
-        guard let data = try? Data(contentsOf: url),
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return [] }
-        return rows(from: root)
+    public static func days(at url: URL) throws -> [UsageDayRow] {
+        guard
+            let data = try UsageDataFiles.readRegularFile(
+                at: url, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes),
+            let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { throw AgentStoreError("The usage document is unavailable.") }
+        return try rows(from: root)
     }
 
-    public static func rows(from root: [String: Any]) -> [UsageDayRow] {
-        guard let daily = root["daily"] as? [[String: Any]] else { return [] }
-        return daily.compactMap { entry in
-            guard let day = entry["date"] as? String else { return nil }
-            let cost = entry["totalCost"] as? Double ?? 0
+    public static func rows(from root: [String: Any]) throws -> [UsageDayRow] {
+        guard let daily = root["daily"] as? [[String: Any]] else {
+            throw AgentStoreError("The usage document has no daily history.")
+        }
+        return try daily.map { entry in
+            guard let day = entry["period"] as? String,
+                let sources = entry["bySource"] as? [String: [[String: Any]]]
+            else { throw AgentStoreError("A usage day is malformed.") }
+            let models = sources.values.flatMap { $0 }
+            let cost = models.reduce(0.0) { $0 + ($1["cost"] as? Double ?? 0) }
+            let input = models.reduce(0.0) { $0 + ($1["inputTokens"] as? Double ?? 0) }
+            let output = models.reduce(0.0) { $0 + ($1["outputTokens"] as? Double ?? 0) }
+            guard
+                [cost * 100, input, output].allSatisfy({
+                    $0.isFinite && $0 >= 0 && $0.rounded() < Double(Int.max)
+                })
+            else { throw AgentStoreError("A usage total is outside the supported range.") }
             return UsageDayRow(
-                day: day, source: entry["source"] as? String ?? "all",
+                day: day, source: "all",
                 costCents: Int((cost * 100).rounded()),
-                inputTokens: entry["inputTokens"] as? Int ?? 0,
-                outputTokens: entry["outputTokens"] as? Int ?? 0)
+                inputTokens: Int(input.rounded()), outputTokens: Int(output.rounded()))
         }
     }
 }
@@ -97,11 +111,16 @@ public final class UsageCollectorJob: @unchecked Sendable {
         defer { announce(IPC.Name.usageRefreshFinished) }
         do {
             let result = try await runner()
-            let days = UsageDocumentReader.days(at: documentURL)
+            let days = try UsageDocumentReader.days(at: documentURL)
+            let total = try days.reduce(0) { sum, day in
+                let (value, overflow) = sum.addingReportingOverflow(day.costCents)
+                guard !overflow else { throw AgentStoreError("The usage total is too large.") }
+                return value
+            }
             let snapshot = UsageTopicSnapshot(
                 refreshedAt: startedAt, seconds: result.seconds, days: days.count,
-                totalCostCents: days.reduce(0) { $0 + $1.costCents }, failure: nil)
-            try? UsageStoreWriter.record(snapshot, days: days, store: store)
+                totalCostCents: total, failure: nil)
+            try UsageStoreWriter.record(snapshot, days: days, store: store)
             return try AgentPayload.encode(snapshot)
         } catch UsageRefreshFailure.busy {
             return nil
