@@ -185,15 +185,64 @@ public enum MachineHealthProbe {
         defer { Task { await connection.disconnect() } }
         do {
             try await connection.connect()
-            let result = try await connection.run(diskCommand, timeout: timeout)
-            let disks = parseDisks(result.stdoutText)
-            let health = MachineHealth(
-                reachable: true,
-                fullMounts: MachineMonitorLogic.fullMounts(disks: disks, threshold: threshold),
-                stalledProcesses: parseStalledProcesses(result.stdoutText))
-            return (health, disks, nil)
+            let platform = await connection.remotePlatform ?? .linux
+            let result = try await connection.run(command(for: platform), timeout: timeout)
+            return outcome(result, platform: platform, threshold: threshold)
         } catch {
             return (MachineHealth(reachable: false, fullMounts: []), [], error.localizedDescription)
         }
+    }
+
+    public static func command(for platform: RemoteMachinePlatform) -> String {
+        guard platform == .windows else { return diskCommand }
+        return PowerShell.userCommand(
+            "$ErrorActionPreference='Stop'; "
+                + "$disks=@(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | "
+                + "ForEach-Object { [ordered]@{ fs=$_.DeviceID; "
+                + "totalKB=[long]($_.Size/1024); availKB=[long]($_.FreeSpace/1024) } }); "
+                + "ConvertTo-Json -InputObject $disks -Compress")
+    }
+
+    static func outcome(
+        _ result: SSHExecResult, platform: RemoteMachinePlatform, threshold: Double
+    ) -> (health: MachineHealth, disks: [MachineFilesystem], failure: String?) {
+        guard result.succeeded else {
+            let detail = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (
+                MachineHealth(reachable: result.status != 255), [],
+                detail.isEmpty ? "Health collection exited with status \(result.status)." : detail
+            )
+        }
+        let disks: [MachineFilesystem]
+        if platform == .windows {
+            struct Disk: Decodable {
+                let fs: String
+                let totalKB: Int64
+                let availKB: Int64
+            }
+            guard let values = try? JSONDecoder().decode([Disk].self, from: result.stdout) else {
+                return (MachineHealth(reachable: true), [], "The disk health response was invalid.")
+            }
+            disks = values.filter { $0.totalKB > 0 }.map {
+                MachineFilesystem(
+                    fs: $0.fs, mount: $0.fs, totalKB: $0.totalKB,
+                    usedKB: max(0, $0.totalKB - $0.availKB), availKB: $0.availKB)
+            }
+        } else {
+            guard result.stdoutText.contains(mountsMarker) else {
+                return (
+                    MachineHealth(reachable: true), [], "The disk health response was incomplete."
+                )
+            }
+            disks = parseDisks(result.stdoutText)
+        }
+        return (
+            MachineHealth(
+                reachable: true,
+                fullMounts: MachineMonitorLogic.fullMounts(disks: disks, threshold: threshold),
+                stalledProcesses: platform == .windows
+                    ? 0 : parseStalledProcesses(result.stdoutText)),
+            disks, nil
+        )
     }
 }
