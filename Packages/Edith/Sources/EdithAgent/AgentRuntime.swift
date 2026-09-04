@@ -18,11 +18,13 @@ public actor AgentRuntime {
     private var latest: [AgentTopic: Data] = [:]
     private var operations: [String: OperationHandler] = [:]
     private var busSubscribers: [UUID: Set<String>] = [:]
+    private var events: [AgentEvent] = []
 
     public init(build: String, store: AgentStore?, startedAt: Date = Date()) {
         self.build = build
         self.store = store
         self.startedAt = startedAt
+        self.events = AgentEventJournal.load(store: store)
     }
 
     public func attach(scheduler: JobScheduler) {
@@ -39,10 +41,25 @@ public actor AgentRuntime {
     }
 
     public func publish(topic: AgentTopic, payload: Data) {
+        guard latest[topic] != payload else { return }
         latest[topic] = payload
         for subscriber in subscribers.values where subscriber.topics.contains(topic) {
             subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
         }
+    }
+
+    public func record(_ event: AgentEvent) {
+        events.append(event)
+        if events.count > AgentDiagnostics.capacity {
+            events.removeFirst(events.count - AgentDiagnostics.capacity)
+        }
+        AgentEventJournal.append(event, store: store)
+        if let payload = try? AgentPayload.encode(events) {
+            publish(topic: .events, payload: payload)
+        }
+        AgentLog.logger.info(
+            "\(event.category, privacy: .public).\(event.name, privacy: .public): \(event.message, privacy: .private)"
+        )
     }
 
     public func subscribeBus(peer: UUID, channel: String, subscriber: EdithAgentSubscriberXPC?) {
@@ -55,6 +72,9 @@ public actor AgentRuntime {
     public func unsubscribeBus(peer: UUID, channel: String) {
         busSubscribers[peer]?.remove(channel)
         if busSubscribers[peer]?.isEmpty == true { busSubscribers[peer] = nil }
+        if busSubscribers[peer] == nil, subscribers[peer]?.topics.isEmpty == true {
+            subscribers[peer] = nil
+        }
     }
 
     public func publishBus(_ message: AgentBusMessage, from peer: UUID?) {
@@ -70,6 +90,8 @@ public actor AgentRuntime {
     }
 
     public func snapshot(topic: AgentTopic) async throws -> Data {
+        if topic == .events { return try AgentPayload.encode(events) }
+        if topic == .jobs { return try AgentPayload.encode(await jobSnapshots()) }
         if let cached = latest[topic] { return cached }
         guard let scheduler else { throw AgentError(.unavailable, "The agent is still starting.") }
         for snapshot in await scheduler.snapshots where snapshot.descriptor.topic == topic {
@@ -77,6 +99,8 @@ public actor AgentRuntime {
                 latest[topic] = payload
                 return payload
             }
+            let job = await scheduler.snapshots.first { $0.id == snapshot.id }
+            throw AgentError(.failed, job?.lastError ?? "This job has no data yet or is disabled.")
         }
         throw AgentError(.unknownTopic, "No job publishes \(topic.rawValue) yet.")
     }
@@ -90,9 +114,14 @@ public actor AgentRuntime {
             topics: topics, proxy: subscriber ?? subscribers[peer]?.proxy)
         guard isNew else { return }
         await scheduler?.addSubscriber(topic: topic)
-        if let cached = latest[topic] {
-            subscriber?.topicChanged(topic: topic.rawValue, payload: cached)
-        }
+        Task { await deliverSnapshot(peer: peer, topic: topic) }
+    }
+
+    private func deliverSnapshot(peer: UUID, topic: AgentTopic) async {
+        guard let payload = try? await snapshot(topic: topic),
+            let subscriber = subscribers[peer], subscriber.topics.contains(topic)
+        else { return }
+        subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
     }
 
     public func unsubscribe(peer: UUID, topic: AgentTopic) async {
@@ -100,7 +129,7 @@ public actor AgentRuntime {
         var topics = existing.topics
         topics.remove(topic)
         existing = Subscriber(topics: topics, proxy: existing.proxy)
-        subscribers[peer] = topics.isEmpty ? nil : existing
+        subscribers[peer] = topics.isEmpty && busSubscribers[peer] == nil ? nil : existing
         await scheduler?.removeSubscriber(topic: topic)
     }
 
@@ -116,7 +145,15 @@ public actor AgentRuntime {
         guard let handler = operations[operation] else {
             throw AgentError(.unknownOperation, "The agent does not serve \(operation).")
         }
-        return try await handler(payload)
+        do {
+            return try await handler(payload)
+        } catch {
+            record(
+                AgentEvent(
+                    level: .error, category: "operation", name: operation,
+                    message: error.localizedDescription))
+            throw error
+        }
     }
 
     public func jobSnapshots() async -> [AgentJobSnapshot] {

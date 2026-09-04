@@ -23,8 +23,27 @@ public enum AgentOperations {
             }
         }
         await registerControls(on: runtime)
+        await AgentNotificationOperations.register(on: runtime)
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)
+            await runtime.register(operation: CompanionBackgroundOperation.refresh) { _ in
+                guard await scheduler.enqueue("companion.health") else {
+                    throw AgentError(.refused, "Memory is disabled.")
+                }
+                return Data()
+            }
+            await runtime.register(operation: AgentDiagnostics.runJob) { payload in
+                let id = try AgentPayload.decode(String.self, from: payload)
+                guard await scheduler.enqueue(id) else {
+                    throw AgentError(.refused, "This job is disabled or is not registered.")
+                }
+                return Data()
+            }
+            await runtime.register(operation: AgentDiagnostics.cancelJob) { payload in
+                let id = try AgentPayload.decode(String.self, from: payload)
+                await scheduler.cancel(id)
+                return Data()
+            }
         }
     }
 
@@ -32,13 +51,17 @@ public enum AgentOperations {
         await runtime.register(
             operation: UsageCollectionOperation.refresh.descriptor.id.rawValue
         ) { _ in
-            await scheduler.enqueue("usage.refresh")
+            guard await scheduler.enqueue("usage.refresh") else {
+                throw AgentError(.refused, "Usage collection is disabled.")
+            }
             return Data()
         }
         await runtime.register(
             operation: UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
         ) { _ in
-            await scheduler.enqueue("usage.limits")
+            guard await scheduler.enqueue("usage.limits") else {
+                throw AgentError(.refused, "Usage collection is disabled.")
+            }
             return Data()
         }
     }
