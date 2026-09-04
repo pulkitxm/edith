@@ -47,7 +47,9 @@ struct SEOAuditProjectView: View {
             "Delete \(project.name)?", isPresented: $confirmsDeletion,
             titleVisibility: .visible
         ) {
-            Button("Delete Project", role: .destructive, action: model.deleteSelectedProject)
+            Button("Delete Project", role: .destructive) {
+                Task { await model.deleteSelectedProject() }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Every saved run and page result for this project will be removed from this Mac.")

@@ -1,6 +1,7 @@
 import EdithKit
 import Foundation
 import Testing
+@testable import EdithAgent
 
 @testable import Edith
 
@@ -154,7 +155,7 @@ import Testing
     @Test @MainActor func pageSelectionSupportsBulkAndIndividualChanges() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let model = SEOAuditModel(repository: SEOAuditRepository(root: root))
+        let model = SEOAuditModel(client: client(repository: SEOAuditRepository(root: root)))
         model.discoveredPageURLs = [
             "https://example.com/", "https://example.com/docs", "https://example.com/about",
         ]
@@ -167,19 +168,19 @@ import Testing
         #expect(model.selectedPageCount == 0)
     }
 
-    @Test @MainActor func projectManagementRenamesAndDeletesStoredProjects() throws {
+    @Test @MainActor func projectManagementRenamesAndDeletesStoredProjects() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = SEOAuditRepository(root: root)
         let project = SEOAuditProject(name: "Before", baseURL: "https://example.com")
         try repository.save(project)
-        let model = SEOAuditModel(repository: repository)
+        let model = SEOAuditModel(client: client(repository: repository))
 
-        model.renameProject(id: project.id, to: "After")
+        await model.renameProject(id: project.id, to: "After")
         #expect(model.projects.first?.name == "After")
         #expect(try repository.loadProject(id: project.id).name == "After")
 
-        model.deleteProject(id: project.id)
+        await model.deleteProject(id: project.id)
         #expect(model.projects.isEmpty)
         #expect(try repository.loadSummaries().isEmpty)
     }
@@ -302,7 +303,7 @@ import Testing
         #expect(!source.contains("State(initialValue: SEOAuditModel())"))
     }
 
-    @Test @MainActor func backNavigationKeepsTheActiveAuditAttached() throws {
+    @Test @MainActor func backNavigationKeepsTheActiveAuditAttached() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = SEOAuditRepository(root: root)
@@ -310,9 +311,9 @@ import Testing
         let other = SEOAuditProject(name: "Other", baseURL: "https://other.example")
         try repository.save(active)
         try repository.save(other)
-        let model = SEOAuditModel(repository: repository)
+        let model = SEOAuditModel(client: client(repository: repository))
 
-        model.selectProject(id: active.id)
+        await model.selectProject(id: active.id)
         model.stage = .auditing(current: 2, total: 55, url: "https://active.example/two")
         model.closeProject()
 
@@ -320,11 +321,11 @@ import Testing
         #expect(model.selectedProject?.id == active.id)
         #expect(model.isRunning)
 
-        model.selectProject(id: other.id)
+        await model.selectProject(id: other.id)
         #expect(model.selectedProject?.id == active.id)
         #expect(!model.projectDetailPresented)
 
-        model.selectProject(id: active.id)
+        await model.selectProject(id: active.id)
         #expect(model.projectDetailPresented)
         #expect(model.selectedProject?.id == active.id)
     }
@@ -350,6 +351,11 @@ import Testing
         #expect(source.contains("usesXSummaryCard"))
         #expect(source.contains("1:1 · summary"))
         #expect(source.contains("twitterImageURL ?? page.metadata.openGraphImageURL"))
+    }
+
+    private func client(repository: SEOAuditRepository) -> SEOAuditProjectClient {
+        let workflow = SEOAuditWorkflow(repository: repository)
+        return SEOAuditProjectClient { try await workflow.perform(operation: $0, payload: $1) }
     }
 
     private func page(url: String, date: Date) -> SEOAuditPageResult {

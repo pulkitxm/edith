@@ -25,30 +25,27 @@ final class SEOAuditModel {
     var activeLighthouseURL: String?
     var errorMessage: String?
 
-    @ObservationIgnored private let repository: SEOAuditRepository
-    @ObservationIgnored private let crawler: SitemapCrawler
-    @ObservationIgnored private let pageAuditor: SEOPageAuditor
+    @ObservationIgnored private let client: SEOAuditProjectClient
+    @ObservationIgnored private let tasks: AgentTaskClient
     @ObservationIgnored private let lighthouse: LighthouseAuditor
-    @ObservationIgnored private let imageStore: SEOAuditImageStore
     @ObservationIgnored private var auditTask: Task<Void, Never>?
+    @ObservationIgnored private var projectRequestID = UUID()
+    @ObservationIgnored private var progressTask: Task<Void, Never>?
+    @ObservationIgnored private var activeTaskID: UUID?
+    private var isMutatingProject = false
 
     init(
-        repository: SEOAuditRepository = SEOAuditRepository(),
-        crawler: SitemapCrawler = SitemapCrawler(),
-        pageAuditor: SEOPageAuditor = SEOPageAuditor(),
-        lighthouse: LighthouseAuditor = LighthouseAuditor(),
-        imageStore: SEOAuditImageStore? = nil
+        client: SEOAuditProjectClient = SEOAuditProjectClient(),
+        tasks: AgentTaskClient = AgentTaskClient(),
+        lighthouse: LighthouseAuditor = LighthouseAuditor()
     ) {
-        self.repository = repository
-        self.crawler = crawler
-        self.pageAuditor = pageAuditor
+        self.client = client
+        self.tasks = tasks
         self.lighthouse = lighthouse
-        self.imageStore = imageStore ?? SEOAuditImageStore(root: repository.root)
         lighthouseEnabled = lighthouse.isAvailable
-        projects = (try? repository.loadSummaries()) ?? []
     }
 
-    var isRunning: Bool { stage != .idle }
+    var isRunning: Bool { stage != .idle || isMutatingProject }
     var lighthouseAvailable: Bool { lighthouse.isAvailable }
     var selectedPageCount: Int { selectedPageURLs.intersection(discoveredPageURLs).count }
 
@@ -80,7 +77,7 @@ final class SEOAuditModel {
         }
     }
 
-    func beginNewProject() {
+    func beginNewProject() async {
         guard !isRunning else { return }
         guard let url = SEOAuditURLInput.normalize(input) else {
             errorMessage = "Enter a valid site URL."
@@ -90,7 +87,16 @@ final class SEOAuditModel {
         let project = SEOAuditProject(
             name: name.isEmpty ? SEOAuditURLInput.projectName(for: url) : name,
             baseURL: url.absoluteString)
-        selectedProject = project
+        isMutatingProject = true
+        do {
+            selectedProject = try await client.create(project)
+            refreshSummary(project)
+        } catch {
+            isMutatingProject = false
+            errorMessage = error.localizedDescription
+            return
+        }
+        isMutatingProject = false
         projectDetailPresented = true
         selectedRunID = nil
         discoveredPageURLs = []
@@ -98,7 +104,6 @@ final class SEOAuditModel {
         input = ""
         projectName = ""
         newProjectPresented = false
-        saveSelectedProject()
         discoverPages()
     }
 
@@ -115,14 +120,18 @@ final class SEOAuditModel {
         presentNewProject()
     }
 
-    func selectProject(id: UUID) {
+    func selectProject(id: UUID) async {
         if isRunning {
             guard selectedProject?.id == id else { return }
             projectDetailPresented = true
             return
         }
+        let requestID = UUID()
+        projectRequestID = requestID
         do {
-            let project = try repository.loadProject(id: id)
+            let project = try await client.project(id)
+            try Task.checkCancellation()
+            guard projectRequestID == requestID else { return }
             selectedProject = project
             projectDetailPresented = true
             selectedRunID = project.latestRun?.id
@@ -130,36 +139,49 @@ final class SEOAuditModel {
             selectedPageURLs = Set(discoveredPageURLs)
             query = ""
             severity = nil
+            if let run = project.runs.first(where: { $0.state == .running }) {
+                activeTaskID = run.id
+                stage = .auditing(
+                    current: run.pages.count, total: run.discoveredPageCount,
+                    url: "Running in background")
+                auditTask = Task { [weak self] in
+                    await self?.resumeProject(project.id, runID: run.id)
+                }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func renameProject(id: UUID, to value: String) {
+    func renameProject(id: UUID, to value: String) async {
         guard !isRunning else { return }
         let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             errorMessage = "Enter a project name."
             return
         }
+        isMutatingProject = true
+        defer { isMutatingProject = false }
         do {
-            var project = try repository.loadProject(id: id)
-            project.name = name
-            project.updatedAt = Date()
-            try repository.save(project)
+            let project = try await client.rename(id, name: name)
             if selectedProject?.id == id { selectedProject = project }
-            projects = try repository.loadSummaries()
+            refreshSummary(project)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func deleteProject(id: UUID) {
+    func deleteProject(id: UUID) async {
         guard !isRunning else { return }
+        isMutatingProject = true
+        defer { isMutatingProject = false }
         do {
-            try repository.delete(id: id)
+            try await client.delete(id)
             projects.removeAll { $0.id == id }
-            if selectedProject?.id == id { closeProject() }
+            if selectedProject?.id == id {
+                isMutatingProject = false
+                closeProject()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -185,6 +207,7 @@ final class SEOAuditModel {
         guard let project = selectedProject,
             let url = SEOAuditURLInput.normalize(project.baseURL), !isRunning
         else { return }
+        stage = .discovering
         auditTask?.cancel()
         auditTask = Task { [weak self] in
             guard let self else { return }
@@ -208,7 +231,7 @@ final class SEOAuditModel {
         project.updatedAt = Date()
         selectedProject = project
         selectedRunID = newRun.id
-        run(projectID: project.id, urls: urls)
+        run(project: project, runID: newRun.id, urls: urls)
     }
 
     func togglePage(_ url: String) {
@@ -228,42 +251,52 @@ final class SEOAuditModel {
     }
 
     func runLighthouse(for page: SEOAuditPageResult) {
-        guard lighthouseAvailable, !isRunning, let url = URL(string: page.url) else { return }
+        guard lighthouseAvailable, !isRunning, let url = URL(string: page.url),
+            let project = selectedProject, let runID = selectedRunID
+        else { return }
         activeLighthouseURL = page.url
         stage = .lighthouse(url: page.url)
         auditTask?.cancel()
-        let task = Task { [weak self] in
-            guard let self else { return }
-            let result = await lighthouse.audit(url)
-            if Task.isCancelled {
+        let taskID = UUID()
+        activeTaskID = taskID
+        auditTask = Task {
+            defer {
+                activeTaskID = nil
                 activeLighthouseURL = nil
                 stage = .idle
                 auditTask = nil
-                return
             }
-            updateRun { run in
-                guard let index = run.pages.firstIndex(where: { $0.id == page.id }) else {
-                    return
-                }
-                run.pages[index] = page.with(
-                    scores: result.scores, lighthouseError: result.error)
+            do {
+                let request = SEOAuditTaskRequest(
+                    projectID: project.id, runID: runID, urls: [url], lighthouse: true)
+                let data = try await tasks.run(
+                    AgentTaskSubmission(
+                        id: taskID, operation: SEOAuditTaskOperation.lighthouse,
+                        title: "Lighthouse audit",
+                        payload: AgentPayload.encode(request)))
+                try Task.checkCancellation()
+                let completed = try AgentPayload.decode(SEOAuditProject.self, from: data)
+                guard selectedProject?.id == project.id else { return }
+                selectedProject = completed
+                refreshSummary(completed)
+            } catch {
+                if !(error is CancellationError) { errorMessage = error.localizedDescription }
             }
-            selectedProject?.updatedAt = Date()
-            saveSelectedProject()
-            activeLighthouseURL = nil
-            stage = .idle
-            auditTask = nil
         }
-        auditTask = task
     }
 
     func cancel() {
-        auditTask?.cancel()
+        guard let id = activeTaskID else { return }
+        Task {
+            do { _ = try await tasks.cancel(id) } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
-    func deleteSelectedProject() {
+    func deleteSelectedProject() async {
         guard let project = selectedProject, !isRunning else { return }
-        deleteProject(id: project.id)
+        await deleteProject(id: project.id)
     }
 
     func selectRun(_ id: UUID) {
@@ -277,18 +310,29 @@ final class SEOAuditModel {
         return project.history(for: page.url, excluding: run.id)
     }
 
-    private func run(projectID: UUID, urls: [URL]) {
+    private func run(project: SEOAuditProject, runID: UUID, urls: [URL]) {
+        let request = SEOAuditTaskRequest(
+            projectID: project.id, runID: runID, urls: urls, lighthouse: lighthouseEnabled)
+        stage = .auditing(current: 0, total: urls.count, url: "Queued in background")
         auditTask?.cancel()
         auditTask = Task { [weak self] in
             guard let self else { return }
-            await execute(projectID: projectID, urls: urls)
+            await execute(request, projectName: project.name)
         }
     }
 
     private func executeDiscovery(startURL: URL) async {
         stage = .discovering
+        let taskID = UUID()
+        activeTaskID = taskID
+        defer { activeTaskID = nil }
         do {
-            let urls = try await crawler.pages(startingAt: startURL)
+            let data = try await tasks.run(
+                AgentTaskSubmission(
+                    id: taskID, operation: SEOAuditTaskOperation.discover,
+                    title: "Discover site pages",
+                    payload: AgentPayload.encode(startURL)))
+            let urls = try AgentPayload.decode([URL].self, from: data)
             try Task.checkCancellation()
             let values = urls.map(\.absoluteString)
             let previous = Set(discoveredPageURLs)
@@ -302,69 +346,91 @@ final class SEOAuditModel {
         auditTask = nil
     }
 
-    private func execute(projectID: UUID, urls: [URL]) async {
-        updateRun { $0.discoveredPageCount = urls.count }
-        saveSelectedProject()
-        guard let run = selectedRun else { return }
-        var capturedProjectArtwork = false
+    private func execute(_ request: SEOAuditTaskRequest, projectName: String) async {
+        let projectID = request.projectID
+        activeTaskID = request.runID
+        progressTask?.cancel()
+        progressTask = Task { [weak self] in await self?.observeProject(request) }
+        defer {
+            activeTaskID = nil
+            progressTask?.cancel()
+            progressTask = nil
+        }
         do {
-            let auditor = pageAuditor
-            let images = imageStore
-            let lighthouseRunner = lighthouse
-            let wantsLighthouse = lighthouseEnabled
-            let runID = run.id
-            let runStartedAt = run.startedAt
-            let audited = await BoundedTaskRunner.map(
-                urls, limit: SiteAuditConcurrency.limit
-            ) { index, url in
-                await MainActor.run {
-                    self.stage = .auditing(
-                        current: index + 1, total: urls.count, url: url.absoluteString)
-                }
-                var page = await auditor.audit(url)
-                let snapshots = await images.capture(
-                    metadata: page.metadata, projectID: projectID, runID: runID,
-                    runStartedAt: runStartedAt)
-                if wantsLighthouse {
-                    let result = await lighthouseRunner.audit(url)
-                    page = page.with(scores: result.scores, lighthouseError: result.error)
-                }
-                return page.with(metadata: page.metadata.withImageSnapshots(snapshots))
-            }
+            let data = try await tasks.run(
+                AgentTaskSubmission(
+                    id: request.runID, operation: SEOAuditTaskOperation.audit,
+                    title: "Audit \(projectName)",
+                    payload: AgentPayload.encode(request))
+            )
             try Task.checkCancellation()
-            for page in audited {
-                updateRun { $0.pages.append(page) }
-                if !capturedProjectArtwork, let imageURL = page.metadata.openGraphImageURL {
-                    selectedProject?.imageURL = imageURL
-                    selectedProject?.imageSnapshotURL = page.metadata.openGraphImageSnapshotURL
-                    capturedProjectArtwork = true
-                }
-            }
-            selectedProject?.updatedAt = Date()
-            saveSelectedProject()
-            stage = .saving
-            updateRun {
-                $0.state = .completed
-                $0.finishedAt = Date()
-            }
-        } catch is CancellationError {
-            updateRun {
-                $0.state = .cancelled
-                $0.finishedAt = Date()
+            let completed = try AgentPayload.decode(SEOAuditProject.self, from: data)
+            if selectedProject?.id == projectID {
+                selectedProject = completed
+                refreshSummary(completed)
             }
         } catch {
-            updateRun {
-                $0.state = .failed
-                $0.finishedAt = Date()
-                $0.error = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if let saved = try? await client.project(projectID),
+                selectedProject?.id == projectID
+            {
+                selectedProject = saved
+                refreshSummary(saved)
             }
-            errorMessage = error.localizedDescription
         }
-        selectedProject?.updatedAt = Date()
-        saveSelectedProject()
         stage = .idle
         auditTask = nil
-        if selectedProject?.id != projectID { return }
+    }
+
+    private func resumeProject(_ projectID: UUID, runID: UUID) async {
+        defer {
+            activeTaskID = nil
+            auditTask = nil
+            stage = .idle
+        }
+        while !Task.isCancelled {
+            do {
+                let saved = try await client.project(projectID)
+                try Task.checkCancellation()
+                guard selectedProject?.id == projectID else { return }
+                selectedProject = saved
+                refreshSummary(saved)
+                guard let run = saved.runs.first(where: { $0.id == runID }), run.state == .running
+                else { return }
+                stage = .auditing(
+                    current: run.pages.count, total: run.discoveredPageCount,
+                    url: run.pages.last?.url ?? "Starting audit")
+                try await Task.sleep(for: .seconds(1))
+            } catch is CancellationError { return } catch {
+                errorMessage = error.localizedDescription
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            }
+        }
+    }
+
+    private func observeProject(_ request: SEOAuditTaskRequest) async {
+        while !Task.isCancelled {
+            do {
+                let saved = try await client.project(request.projectID)
+                try Task.checkCancellation()
+                if selectedProject?.id == request.projectID,
+                    let run = saved.runs.first(where: { $0.id == request.runID })
+                {
+                    selectedProject = saved
+                    refreshSummary(saved)
+                    stage = .auditing(
+                        current: run.pages.count, total: request.urls.count,
+                        url: run.pages.last?.url ?? "Starting audit")
+                }
+            } catch is CancellationError { return } catch {}
+            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+        }
+    }
+
+    private func refreshSummary(_ project: SEOAuditProject) {
+        projects.removeAll { $0.id == project.id }
+        projects.append(SEOAuditProjectSummary(project: project))
+        projects.sort { $0.updatedAt > $1.updatedAt }
     }
 
     private static func knownPageURLs(in project: SEOAuditProject) -> [String] {
@@ -380,22 +446,12 @@ final class SEOAuditModel {
         return values.filter { seen.insert($0).inserted }
     }
 
-    private func updateRun(_ mutation: (inout SEOAuditRun) -> Void) {
-        guard let runID = selectedRunID,
-            let index = selectedProject?.runs.firstIndex(where: { $0.id == runID })
-        else { return }
-        mutation(&selectedProject!.runs[index])
-    }
-
-    private func saveSelectedProject() {
-        guard let project = selectedProject else { return }
+    func refreshProjects() async {
         do {
-            try repository.save(project)
-            projects.removeAll { $0.id == project.id }
-            projects.append(SEOAuditProjectSummary(project: project))
-            projects.sort { $0.updatedAt > $1.updatedAt }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+            let value = try await client.projects()
+            try Task.checkCancellation()
+            projects = value
+        } catch is CancellationError {
+        } catch { errorMessage = error.localizedDescription }
     }
 }
