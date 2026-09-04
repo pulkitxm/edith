@@ -7,11 +7,12 @@ public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
     public var outputFilename: String?
     public var createdAt: Date
     public var kind: DownloadKind?
+    public var resultPaths: [String]?
 
     public init(
         id: UUID = UUID(), url: URL, status: DownloadStatus, outputFilename: String?,
         createdAt: Date,
-        kind: DownloadKind?
+        kind: DownloadKind?, resultPaths: [String]? = nil
     ) {
         self.id = id
         self.url = url
@@ -19,6 +20,7 @@ public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
         self.outputFilename = outputFilename
         self.createdAt = createdAt
         self.kind = kind
+        self.resultPaths = resultPaths
     }
 
     public var state: String {

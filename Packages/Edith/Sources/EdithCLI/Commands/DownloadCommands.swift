@@ -7,9 +7,8 @@ struct DownloadCommand: AsyncParsableCommand {
         commandName: "download",
         abstract: "The download queue Edith feeds to yt-dlp.",
         discussion: """
-            The queue is a file, so listing it, adding to it and clearing it work whether
-            or not the app is running. Edith is what actually runs yt-dlp, so anything
-            added while it is closed waits in the queue and starts when you open it.
+            The Edith daemon runs queued downloads even when the app is closed.
+            Queue mutations require the daemon; saved history remains readable offline.
             """,
         subcommands: [
             DownloadListCommand.self, DownloadStatusCommand.self, DownloadAddCommand.self,
@@ -49,15 +48,6 @@ enum DownloadBridge {
 
     static func index(of record: DownloadRecord, in records: [DownloadRecord]) -> Int {
         (records.firstIndex { $0.id == record.id } ?? -1) + 1
-    }
-
-    static func announce() {
-        AppBridge.post(IPC.Name.downloadQueueChanged)
-    }
-
-    static func note(_ changed: Int) {
-        guard changed > 0, !AppBridge.helperIsRunning else { return }
-        CLIOut.note("Edith is not running, so this starts when you next open it")
     }
 
     static func failure(_ error: Error) -> CLIFailure {
@@ -194,7 +184,6 @@ struct DownloadAddCommand: AsyncParsableCommand {
             let added = try DownloadOperationExecution.enqueue(
                 urls: parsed, prefix: prefix, kind: wanted, file: DownloadBridge.file)
             let records = DownloadBridge.records()
-            DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -205,7 +194,6 @@ struct DownloadAddCommand: AsyncParsableCommand {
                 return
             }
             for record in added { CLIOut.out("queued \(record.url.absoluteString)") }
-            DownloadBridge.note(added.count)
         }
     }
 }
@@ -243,7 +231,6 @@ struct DownloadRetryCommand: AsyncParsableCommand {
                     throw DownloadBridge.failure(error)
                 }
             }
-            DownloadBridge.announce()
             guard !json else {
                 var object: [String: JSONValue] = ["retried": .int(changed)]
                 if let index {
@@ -254,7 +241,6 @@ struct DownloadRetryCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out(changed == 1 ? "queued it again" : "queued \(changed) again")
-            DownloadBridge.note(changed)
         }
     }
 }
@@ -294,7 +280,6 @@ struct DownloadRemoveCommand: AsyncParsableCommand {
                 result = try DownloadOperationExecution.remove(
                     id: record.id, file: DownloadBridge.file)
             } catch { throw DownloadBridge.failure(error) }
-            DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -337,7 +322,6 @@ struct DownloadClearCommand: AsyncParsableCommand {
                 return
             }
             let result = try DownloadOperationExecution.clear(file: DownloadBridge.file)
-            DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -485,7 +469,6 @@ struct DownloadCancelCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let appRunning = AppBridge.mainAppIsRunning
             let targets: [(Int, DownloadRecord)]
             let result: DownloadMutationResult
             if let index {
@@ -509,8 +492,7 @@ struct DownloadCancelCommand: AsyncParsableCommand {
                 guard !json else {
                     CLIOut.json(
                         .object([
-                            "cancelled": .int(0), "appNotified": .bool(false),
-                            "appRunning": .bool(appRunning),
+                            "cancelled": .int(0),
                             "records": .array([]),
                         ]))
                     return
@@ -518,16 +500,10 @@ struct DownloadCancelCommand: AsyncParsableCommand {
                 CLIOut.note("nothing is downloading")
                 return
             }
-            if appRunning {
-                let info = index == nil ? nil : ["id": cancelled[0].1.id.uuidString]
-                AppBridge.post(IPC.Name.requestDownloadCancel, userInfo: info)
-            }
-            DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "cancelled": .int(result.changed), "appNotified": .bool(appRunning),
-                        "appRunning": .bool(appRunning),
+                        "cancelled": .int(result.changed),
                         "records": .array(
                             cancelled.map { DownloadBridge.json($0.1, index: $0.0) }),
                     ]))
@@ -538,10 +514,7 @@ struct DownloadCancelCommand: AsyncParsableCommand {
             } else {
                 CLIOut.out("cancelled \(result.changed)")
             }
-            if !appRunning {
-                CLIOut.note(
-                    "Edith was not running, so queued entries were marked interrupted")
-            }
+
         }
     }
 }
