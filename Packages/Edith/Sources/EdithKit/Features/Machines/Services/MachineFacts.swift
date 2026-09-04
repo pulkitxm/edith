@@ -1,6 +1,6 @@
 import Foundation
 
-public struct MachineSessionSummary: Equatable, Sendable {
+public struct MachineSessionSummary: Codable, Equatable, Sendable {
     public var who: [String]
     public var updatesAvailable: Int?
     public var macAddress: String?

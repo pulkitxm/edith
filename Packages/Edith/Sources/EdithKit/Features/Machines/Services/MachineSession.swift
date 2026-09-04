@@ -59,6 +59,8 @@ public final class MachineSession {
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
     private let taskClient: AgentTaskClient?
+    private let metricsClient: AgentClient?
+    @ObservationIgnored private nonisolated(unsafe) var agentMetrics: AgentMachineMetricObservation?
     private var metricsStream: SSHLineStream?
     private var metricsStreamGeneration = 0
     private var supervisor: Task<Void, Never>?
@@ -86,26 +88,101 @@ public final class MachineSession {
 
     public init(
         machine: Machine, local: Bool = false, observesWakeRequests: Bool = true,
-        taskClient: AgentTaskClient? = nil
+        taskClient: AgentTaskClient? = nil, metricsClient: AgentClient? = nil
     ) {
         self.machine = machine
         self.taskClient = taskClient
+        self.metricsClient = metricsClient
         isLocal = local
         connection =
             local
             ? nil
             : SSHConnection(machine: machine, controlSocketMode: .shared, taskClient: taskClient)
-        localSampler = local ? LocalMachineSampler() : nil
+        localSampler =
+            local && metricsClient == nil && !AgentCommandRouting.isEnabled
+            ? LocalMachineSampler() : nil
         if observesWakeRequests { observeWake() }
     }
 
     deinit {
+        if let agentMetrics { Task { @MainActor in agentMetrics.stop() } }
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
     }
 
     public var connectionRef: SSHConnection? { connection }
+
+    public var collectsMetricsLocally: Bool { !usesAgentMetrics && isCollecting }
+
+    private var usesAgentMetrics: Bool {
+        metricsClient != nil || AgentCommandRouting.isEnabled
+    }
+
+    private func updateAgentObservation() {
+        guard usesAgentMetrics else { return }
+        if agentMetrics == nil {
+            agentMetrics = AgentMachineMetricObservation(
+                client: metricsClient ?? .shared, machineID: machine.id,
+                receive: { [weak self] in self?.apply(agentSnapshot: $0) },
+                failed: { [weak self] message in
+                    self?.state = .failed(message: message, recoverable: true)
+                })
+        }
+        var interests: Set<AgentMachineMetricInterest> = []
+        if !foregroundObservers.isEmpty {
+            interests.insert(.metrics)
+            if dockerObserverCount > 0 { interests.insert(.docker) }
+            if internetSpeedObserverCount > 0 { interests.insert(.speed) }
+        }
+        isCollecting = !interests.isEmpty
+        agentMetrics?.update(interests)
+    }
+
+    private func apply(agentSnapshot snapshot: AgentMachineMetricsSnapshot) {
+        guard snapshot.machineID == machine.id else { return }
+        if state != snapshot.state { state = snapshot.state }
+        if remotePlatform != snapshot.platform {
+            remotePlatform = snapshot.platform
+            if let platform = snapshot.platform, let connection {
+                Task { await connection.acceptPlatform(platform) }
+            }
+        }
+        if hello != snapshot.hello { hello = snapshot.hello }
+        if slow != snapshot.slow { slow = snapshot.slow }
+        if let sample = snapshot.sample, sample != liveMetrics.sample { apply(sample: sample) }
+        if docker != snapshot.docker { docker = snapshot.docker }
+        if containersLoaded != snapshot.containersLoaded {
+            containersLoaded = snapshot.containersLoaded
+        }
+        if containers != snapshot.containers { containers = snapshot.containers }
+        if images != snapshot.images { images = snapshot.images }
+        if volumes != snapshot.volumes { volumes = snapshot.volumes }
+        if diskUsage != snapshot.diskUsage { diskUsage = snapshot.diskUsage }
+        if networks != snapshot.networks { networks = snapshot.networks }
+        if facts != snapshot.facts { facts = snapshot.facts }
+        if mount != snapshot.mount { mount = snapshot.mount }
+        if mountHealth != snapshot.mountHealth { mountHealth = snapshot.mountHealth }
+        if let speed = snapshot.internetSpeed, speed != internetSpeed {
+            apply(internetSpeed: speed)
+        }
+        if internetSpeedError != snapshot.internetSpeedError {
+            internetSpeedError = snapshot.internetSpeedError
+        }
+        if isTestingInternetSpeed != snapshot.isTestingInternetSpeed {
+            isTestingInternetSpeed = snapshot.isTestingInternetSpeed
+        }
+    }
+
+    private func refreshAgentMetrics(_ action: AgentMachineMetricsRefresh.Action) async {
+        let request = AgentMachineMetricsRefresh(machineID: machine.id, action: action)
+        do {
+            _ = try await (metricsClient ?? .shared).performInternalAsync(
+                AgentMachineMetricsRefresh.operation, payload: AgentPayload.encode(request))
+        } catch {
+            if action == .speed { internetSpeedError = error.localizedDescription }
+        }
+    }
 
     public func setForegroundObservation(_ token: UUID, active: Bool) {
         if active {
@@ -114,11 +191,20 @@ public final class MachineSession {
             resumeCollection()
         } else {
             foregroundObservers.remove(token)
-            if foregroundObservers.isEmpty { pauseCollection() }
+            if foregroundObservers.isEmpty {
+                pauseCollection()
+                supervisor?.cancel()
+                supervisor = nil
+                if state.isBusy { state = .disconnected }
+            }
         }
     }
 
     private func resumeCollection() {
+        if usesAgentMetrics {
+            updateAgentObservation()
+            return
+        }
         guard state.isConnected, !foregroundObservers.isEmpty, !isCollecting else { return }
         isCollecting = true
         if isLocal {
@@ -135,6 +221,7 @@ public final class MachineSession {
 
     private func pauseCollection() {
         isCollecting = false
+        agentMetrics?.stop()
         metricsStreamGeneration &+= 1
         dockerTask?.cancel()
         dockerTask = nil
@@ -166,6 +253,11 @@ public final class MachineSession {
                 message: "This machine is no longer configured.", recoverable: false)
             return
         }
+        if usesAgentMetrics {
+            state = .connecting
+            updateAgentObservation()
+            return
+        }
         if isLocal {
             startLocal()
             return
@@ -179,12 +271,22 @@ public final class MachineSession {
         cancelWork()
         rememberedForwards.removeAll()
         activeForwards.removeAll()
+        if usesAgentMetrics {
+            state = .disconnected
+            return
+        }
         let connection = connection
         Task { await connection?.disconnect() }
         state = .disconnected
     }
 
     public func retry() {
+        if usesAgentMetrics {
+            state = .connecting
+            updateAgentObservation()
+            Task { await refreshAgentMetrics(.reconnect) }
+            return
+        }
         guard !isLocal else {
             stop()
             start()
@@ -269,6 +371,7 @@ public final class MachineSession {
     }
 
     private func reconnectAfterWake() {
+        if usesAgentMetrics { return }
         guard reconnects, !machine.isMissing else { return }
         Task { await restoreMount() }
         switch state {
@@ -429,6 +532,10 @@ public final class MachineSession {
     }
 
     public func refreshInternetSpeed() {
+        if usesAgentMetrics {
+            Task { await refreshAgentMetrics(.speed) }
+            return
+        }
         guard state.isConnected, !isTestingInternetSpeed else { return }
         internetSpeedRunTask?.cancel()
         internetSpeedRunTask = Task { [weak self] in
@@ -463,11 +570,13 @@ public final class MachineSession {
 
     public func beginInternetSpeedObservation() {
         internetSpeedObserverCount += 1
+        if usesAgentMetrics { updateAgentObservation(); return }
         if internetSpeedObserverCount == 1, isCollecting { startInternetSpeedSchedule() }
     }
 
     public func endInternetSpeedObservation() {
         internetSpeedObserverCount = max(0, internetSpeedObserverCount - 1)
+        if usesAgentMetrics { updateAgentObservation(); return }
         guard internetSpeedObserverCount == 0 else { return }
         internetSpeedScheduleTask?.cancel()
         internetSpeedScheduleTask = nil
@@ -522,11 +631,13 @@ public final class MachineSession {
 
     public func beginDockerObservation() {
         dockerObserverCount += 1
-        refreshDockerNow()
+        if usesAgentMetrics { updateAgentObservation(); return }
+        if state.isConnected { refreshDockerNow() }
     }
 
     public func endDockerObservation() {
         dockerObserverCount = max(0, dockerObserverCount - 1)
+        if usesAgentMetrics { updateAgentObservation() }
     }
 
     var currentDockerPollInterval: TimeInterval {
@@ -564,6 +675,7 @@ public final class MachineSession {
     }
 
     private func refreshDocker() async {
+        if usesAgentMetrics { await refreshAgentMetrics(.docker); return }
         guard let connection, docker.isAvailable, !dockerRefreshRunning else { return }
         dockerRefreshRunning = true
         defer { dockerRefreshRunning = false }
@@ -581,6 +693,7 @@ public final class MachineSession {
     }
 
     public func refreshImagesAndVolumes() async {
+        if usesAgentMetrics { await refreshAgentMetrics(.inventory); return }
         guard let connection, docker.isAvailable, !dockerInventoryRefreshRunning else { return }
         dockerInventoryRefreshRunning = true
         defer { dockerInventoryRefreshRunning = false }

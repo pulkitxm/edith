@@ -419,10 +419,16 @@ public final class AgentClient: NSObject, @unchecked Sendable {
     public func subscribeBusAsync(
         channel: String, handler: @escaping @Sendable ([String: Any]) -> Void
     ) async throws -> AgentBusSubscription {
-        let topic = AgentBus.topic(for: channel)
-        let token = insert(topic: topic) {
+        try await subscribeBusDataAsync(channel: channel) {
             handler(AgentBusMessage(channel: channel, body: $0).userInfo)
         }
+    }
+
+    public func subscribeBusDataAsync(
+        channel: String, handler: @escaping @Sendable (Data) -> Void
+    ) async throws -> AgentBusSubscription {
+        let topic = AgentBus.topic(for: channel)
+        let token = insert(topic: topic, handler: handler)
         do {
             try await verifyHandshakeAsync()
             let _: Data = try await callAsync { remote, reply in
