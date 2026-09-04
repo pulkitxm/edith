@@ -323,6 +323,7 @@ enum MachineTab: String, CaseIterable, Identifiable {
     case processes
     case docker
     case terminal
+    case files
     case tools
 
     var id: String { rawValue }
@@ -333,6 +334,7 @@ enum MachineTab: String, CaseIterable, Identifiable {
         case .processes: return "Processes"
         case .docker: return "Docker"
         case .terminal: return "Terminal"
+        case .files: return "Files"
         case .tools: return "Tools"
         }
     }
@@ -343,12 +345,13 @@ enum MachineTab: String, CaseIterable, Identifiable {
         case .processes: return "list.bullet.rectangle"
         case .docker: return "shippingbox"
         case .terminal: return "terminal"
+        case .files: return "folder"
         case .tools: return "wrench.and.screwdriver"
         }
     }
 
     static func tabs(isLocal: Bool, hasDocker: Bool) -> [MachineTab] {
-        if isLocal { return [.overview, .processes, .terminal] }
+        if isLocal { return [.overview, .processes, .terminal, .files] }
         return MachineTab.allCases.filter { $0 != .docker || hasDocker }
     }
 }

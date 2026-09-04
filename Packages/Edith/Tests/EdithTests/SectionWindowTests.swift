@@ -13,10 +13,12 @@ import Testing
         #expect(!SectionWindowCommand.shouldDetach(.option))
     }
 
-    @Test func filesIsNotATabBecauseItOpensItsOwnWindow() {
-        #expect(!MachineTab.allCases.map(\.rawValue).contains("files"))
+    @Test func filesSharesTheMachineTabs() {
+        #expect(MachineTab.allCases.map(\.rawValue).contains("files"))
         #expect(
-            MachineTab.tabs(isLocal: true, hasDocker: true) == [.overview, .processes, .terminal])
+            MachineTab.tabs(isLocal: true, hasDocker: true) == [
+                .overview, .processes, .terminal, .files,
+            ])
         #expect(MachineTab.tabs(isLocal: false, hasDocker: true).contains(.docker))
     }
 

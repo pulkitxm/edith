@@ -213,9 +213,6 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
-        .onAppear {
-            if connectionsEnabled { machines.connectAll() }
-        }
         .alert("Rename Workspace", isPresented: renameBinding) {
             TextField("Workspace name", text: $renameText)
             Button("Cancel", role: .cancel) { renameTarget = nil }

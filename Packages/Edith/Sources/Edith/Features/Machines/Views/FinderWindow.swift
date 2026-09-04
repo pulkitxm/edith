@@ -31,6 +31,7 @@ struct FinderWindowView: View {
 }
 
 struct FinderBody: View {
+    @Environment(\.machineViewPresented) private var presented
     @Bindable var model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
@@ -58,15 +59,18 @@ struct FinderBody: View {
             statusBar
         }
         .background(DashSkin.paper(dark))
-        .task {
-            guard connectionsEnabled else { return }
+        .task(id: presented) {
+            guard connectionsEnabled, presented else {
+                model.stopLoading()
+                return
+            }
             model.connectIfNeeded()
             await model.waitForConnection()
             await model.loadPlaces()
             await model.load()
         }
         .onChange(of: model.session.state.isConnected) { _, connected in
-            if connectionsEnabled, connected { model.refresh() }
+            if connectionsEnabled, presented, connected { model.refresh() }
         }
         .onDisappear { model.stopLoading() }
         .overlay {

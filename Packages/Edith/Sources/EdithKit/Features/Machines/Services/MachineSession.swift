@@ -59,6 +59,7 @@ public final class MachineSession {
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
     private var metricsStream: SSHLineStream?
+    private var metricsStreamGeneration = 0
     private var supervisor: Task<Void, Never>?
     private var dockerTask: Task<Void, Never>?
     private var latencyTask: Task<Void, Never>?
@@ -79,6 +80,8 @@ public final class MachineSession {
     private var dockerObserverCount = 0
     private var dockerRefreshRunning = false
     private var dockerInventoryRefreshRunning = false
+    private var foregroundObservers: Set<UUID> = []
+    public private(set) var isCollecting = false
 
     public init(machine: Machine, local: Bool = false, observesWakeRequests: Bool = true) {
         self.machine = machine
@@ -96,6 +99,58 @@ public final class MachineSession {
     }
 
     public var connectionRef: SSHConnection? { connection }
+
+    public func setForegroundObservation(_ token: UUID, active: Bool) {
+        if active {
+            foregroundObservers.insert(token)
+            if case .disconnected = state { start() }
+            resumeCollection()
+        } else {
+            foregroundObservers.remove(token)
+            if foregroundObservers.isEmpty { pauseCollection() }
+        }
+    }
+
+    private func resumeCollection() {
+        guard state.isConnected, !foregroundObservers.isEmpty, !isCollecting else { return }
+        isCollecting = true
+        if isLocal {
+            startLocalSampling()
+        } else {
+            startMetricsStream()
+            startDockerPolling()
+            startLatencyProbe()
+            startMountWatch()
+            probeTask = Task { [weak self] in await self?.loadFacts() }
+        }
+        if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
+    }
+
+    private func pauseCollection() {
+        isCollecting = false
+        metricsStreamGeneration &+= 1
+        dockerTask?.cancel()
+        dockerTask = nil
+        latencyTask?.cancel()
+        latencyTask = nil
+        localTask?.cancel()
+        localTask = nil
+        metricsRestartTask?.cancel()
+        metricsRestartTask = nil
+        metricsWatchdog?.cancel()
+        metricsWatchdog = nil
+        probeTask?.cancel()
+        probeTask = nil
+        mountTask?.cancel()
+        mountTask = nil
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = nil
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = nil
+        isTestingInternetSpeed = false
+        metricsStream?.cancel()
+        metricsStream = nil
+    }
 
     public func start() {
         guard !state.isConnected, !state.isBusy else { return }
@@ -139,31 +194,11 @@ public final class MachineSession {
     }
 
     private func cancelWork() {
+        pauseCollection()
         supervisor?.cancel()
         supervisor = nil
-        dockerTask?.cancel()
-        dockerTask = nil
-        latencyTask?.cancel()
-        latencyTask = nil
-        localTask?.cancel()
-        localTask = nil
-        metricsRestartTask?.cancel()
-        metricsRestartTask = nil
-        metricsWatchdog?.cancel()
-        metricsWatchdog = nil
-        probeTask?.cancel()
-        probeTask = nil
-        mountTask?.cancel()
-        mountTask = nil
         platformProfileTask?.cancel()
         platformProfileTask = nil
-        internetSpeedScheduleTask?.cancel()
-        internetSpeedScheduleTask = nil
-        internetSpeedRunTask?.cancel()
-        internetSpeedRunTask = nil
-        isTestingInternetSpeed = false
-        metricsStream?.cancel()
-        metricsStream = nil
     }
 
     private func connect(afterFailures failures: Int, closingFirst: Bool) {
@@ -187,12 +222,7 @@ public final class MachineSession {
                     await replayForwards(on: connection)
                     guard !Task.isCancelled else { return }
                     state = .connected(latencyMillis: nil)
-                    startMetricsStream()
-                    startDockerPolling()
-                    startLatencyProbe()
-                    startMountWatch()
-                    if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
-                    await loadFacts()
+                    resumeCollection()
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -258,7 +288,10 @@ public final class MachineSession {
         state = .connected(latencyMillis: 0)
         remotePlatform = .darwin
         hello = localSampler?.hello()
-        if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
+        resumeCollection()
+    }
+
+    private func startLocalSampling() {
         localTask = Task { [weak self] in
             var tick = 0
             while !Task.isCancelled {
@@ -301,9 +334,11 @@ public final class MachineSession {
     }
 
     private func startMetricsStream() {
-        guard let connection, let remotePlatform,
+        guard isCollecting, metricsStream == nil, let connection, let remotePlatform,
             let invocation = MachineCollector.invocation(for: remotePlatform, follow: true)
         else { return }
+        metricsStreamGeneration &+= 1
+        let generation = metricsStreamGeneration
         let process = connection.streamProcess(command: invocation.command)
         let stream = SSHLineStream(
             process: process, stdinData: invocation.stdinData,
@@ -311,10 +346,16 @@ public final class MachineSession {
                 guard !isStderr, let record = MachineMetricsDecoder.decode(line: line) else {
                     return
                 }
-                Task { @MainActor in self?.apply(record: record) }
+                Task { @MainActor in
+                    guard let self, generation == self.metricsStreamGeneration else { return }
+                    self.apply(record: record)
+                }
             },
             onExit: { [weak self] _ in
-                Task { @MainActor in self?.handleMetricsStreamEnded() }
+                Task { @MainActor in
+                    guard let self, generation == self.metricsStreamGeneration else { return }
+                    self.handleMetricsStreamEnded()
+                }
             })
         do {
             try stream.start()
@@ -327,7 +368,7 @@ public final class MachineSession {
     }
 
     private func handleMetricsStreamEnded() {
-        guard state.isConnected else { return }
+        guard state.isConnected, isCollecting else { return }
         metricsStream = nil
         metricsWatchdog?.cancel()
         metricsWatchdog = nil
@@ -415,7 +456,7 @@ public final class MachineSession {
 
     public func beginInternetSpeedObservation() {
         internetSpeedObserverCount += 1
-        if internetSpeedObserverCount == 1 { startInternetSpeedSchedule() }
+        if internetSpeedObserverCount == 1, isCollecting { startInternetSpeedSchedule() }
     }
 
     public func endInternetSpeedObservation() {

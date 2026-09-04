@@ -407,8 +407,7 @@ struct MachineOverviewTab: View {
             }
             .pageContent(compact)
         }
-        .onAppear { session.beginInternetSpeedObservation() }
-        .onDisappear { session.endInternetSpeedObservation() }
+        .machineActivity(session, kind: .internetSpeed)
     }
 
     @ViewBuilder
