@@ -82,16 +82,7 @@ public struct AgentTaskClient: Sendable {
             _ = try await submit(request)
             return try await wait(request.id, onOutput: onOutput)
         } onCancel: {
-            Task.detached(priority: .utility) {
-                for _ in 0..<30 {
-                    do {
-                        _ = try await cancel(request.id)
-                        return
-                    } catch {
-                        try? await Task.sleep(for: .seconds(1))
-                    }
-                }
-            }
+            AgentTaskCancellationRelay.shared.cancel(request.id, client: client)
         }
     }
 
@@ -146,4 +137,32 @@ public enum AgentCommandRouting {
 
     public static func enable() { lock.withLock { enabled = true } }
     public static var isEnabled: Bool { lock.withLock { enabled } }
+}
+
+private final class AgentTaskCancellationRelay: @unchecked Sendable {
+    static let shared = AgentTaskCancellationRelay()
+    private let lock = NSLock()
+    private var retries: [UUID: Task<Void, Never>] = [:]
+
+    func cancel(_ id: UUID, client: AgentClient) {
+        lock.withLock {
+            guard retries[id] == nil else { return }
+            retries[id] = Task.detached(priority: .utility) { [weak self] in
+                defer { self?.finish(id) }
+                for attempt in 0..<30 {
+                    do {
+                        _ = try await AgentTaskClient(client: client).cancel(id)
+                        return
+                    } catch {
+                        guard attempt < 29 else { return }
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                    }
+                }
+            }
+        }
+    }
+
+    private func finish(_ id: UUID) { lock.withLock { retries[id] = nil } }
+
+    deinit { for retry in retries.values { retry.cancel() } }
 }

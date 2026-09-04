@@ -139,6 +139,11 @@ public actor AgentTaskService {
         entries = restored
     }
 
+    deinit {
+        for worker in workers.values { worker.cancel() }
+        progressTask?.cancel()
+    }
+
     public func register(operation: String, handler: @escaping Handler) {
         handlers[operation] = handler
     }
