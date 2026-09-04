@@ -10,7 +10,7 @@ public enum AgentJobPlan {
             cadence: .every(ambient: 900, live: 300), power: .any, abilityID: "usage"),
         AgentJobDescriptor(
             id: "sessions.discover", title: "Herdr session discovery", trigger: .subscription,
-            topic: .sessions, cadence: .every(live: 2), power: .pauseOnLock,
+            topic: .sessions, cadence: .every(ambient: 30, live: 2), power: .pauseOnLock,
             abilityID: "herdr"),
         AgentJobDescriptor(
             id: "machines.health", title: "Machine health probe", trigger: .timer,

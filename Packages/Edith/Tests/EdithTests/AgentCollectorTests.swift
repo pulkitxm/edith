@@ -380,7 +380,8 @@ import Testing
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let job = SessionsJob(
-            store: nil, isSubscribed: { false }, defaults: defaults, collect: { _ in [] })
+            store: nil, isSubscribed: { false }, defaults: defaults, notify: { _ in },
+            collect: { _ in [] })
 
         #expect(try await job.run() == nil)
     }
@@ -390,7 +391,8 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let hosts = [host(id: "local", working: 2, idle: 0)]
         let job = SessionsJob(
-            store: nil, isSubscribed: { true }, defaults: defaults, collect: { _ in hosts })
+            store: nil, isSubscribed: { true }, defaults: defaults, notify: { _ in },
+            collect: { _ in hosts })
 
         let payload = try #require(try await job.run())
         let snapshot = try AgentPayload.decode(SessionsSnapshot.self, from: payload)

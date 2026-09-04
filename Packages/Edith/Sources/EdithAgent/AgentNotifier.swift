@@ -3,7 +3,19 @@ import Foundation
 import UserNotifications
 
 public final class AgentNotifier: @unchecked Sendable {
-    public static let shared = AgentNotifier()
+    public static let shared = AgentNotifier(
+        present: { notification in
+            Task {
+                do {
+                    try await AgentNotificationService.shared.enqueue(notification)
+                } catch {
+                    AgentLog.logger.error(
+                        "notification persistence failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
+            return true
+        })
 
     private let queue = DispatchQueue(label: "com.pulkit.edith.agent.notifications")
     private let present: @Sendable (AgentNotification) -> Bool

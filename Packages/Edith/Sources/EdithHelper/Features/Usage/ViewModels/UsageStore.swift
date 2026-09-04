@@ -132,7 +132,7 @@ final class UsageStore: FeatureModule {
     private var usageRestoreReloadGeneration = UsageReloadGenerationState()
     private var limitsRestoreReloadGeneration = UsageReloadGenerationState()
     private var statsReloadGeneration = UsageReloadGenerationState()
-    let notifier = LimitNotifier()
+    var notifier: LimitNotifier { .shared }
     private(set) var limitPoints: [LimitPoint] = []
     private var historyMtime: Date?
     private var limitHistoryProvider = LimitProvider.claude
@@ -261,7 +261,6 @@ final class UsageStore: FeatureModule {
         limitPoints = []
         statusItem?.remove()
         statusItem = nil
-        notifier.cancelReminders()
         if let launchObserver {
             NotificationCenter.default.removeObserver(launchObserver)
             self.launchObserver = nil
@@ -318,7 +317,6 @@ final class UsageStore: FeatureModule {
         await loadLimitHistory(provider: limitHistoryProvider)
         limitsError = nil
         updateStatusItem()
-        notifier.evaluate(session: session, week: week)
         _ = await SettingsBackup.shared.syncLimits()
         refreshingLimits = false
     }
