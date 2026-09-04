@@ -153,6 +153,53 @@ import Testing
         #expect(service.activeMachineCount == 0)
     }
 
+    @Test func schedulerDemandAndEventsFollowFirstAndLastCollector() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let scheduler = JobScheduler()
+        await runtime.attach(scheduler: scheduler)
+        let descriptor = try #require(
+            AgentJobPlan.descriptors.first { $0.id == "machines.metrics" })
+        await scheduler.register(AgentJob(descriptor: descriptor, run: { Data() }))
+        let service = AgentMachineMetricsService(lookup: { _ in .local })
+        await service.register(on: runtime)
+        defer { service.stop() }
+        let channel = AgentMachineMetricInterest.metrics.channel(machineID: Machine.localID)
+        await service.setDemand(channel: channel, count: 1)
+        await service.setDemand(channel: channel, count: 2)
+        await service.finishActivityUpdates()
+        #expect(await scheduler.subscriberCount(topic: .machineMetrics) == 1)
+        await service.setDemand(channel: channel, count: 1)
+        await service.finishActivityUpdates()
+        #expect(await scheduler.subscriberCount(topic: .machineMetrics) == 1)
+        await service.setDemand(channel: channel, count: 0)
+        await service.finishActivityUpdates()
+        #expect(await scheduler.subscriberCount(topic: .machineMetrics) == 0)
+        let events = try AgentPayload.decode(
+            [AgentEvent].self, from: await runtime.snapshot(topic: .events))
+        #expect(
+            events.filter { $0.category == "machines" }.map(\.name) == [
+                "metrics.started", "metrics.stopped",
+            ])
+    }
+
+    @Test func repeatedFailedSnapshotsDoNotRepeatFailureEvents() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let service = AgentMachineMetricsService(
+            lookup: { _ in .local },
+            makeSession: {
+                MachineSession(machine: .missing(id: $0.id), observesWakeRequests: false)
+            })
+        await service.register(on: runtime)
+        defer { service.stop() }
+        let channel = AgentMachineMetricInterest.metrics.channel(machineID: Machine.localID)
+        await service.setDemand(channel: channel, count: 1)
+        await service.setDemand(channel: channel, count: 2)
+        await service.finishActivityUpdates()
+        let events = try AgentPayload.decode(
+            [AgentEvent].self, from: await runtime.snapshot(topic: .events))
+        #expect(events.filter { $0.name == "metrics.failed" }.count == 1)
+    }
+
     private func eventually(_ condition: @MainActor () async -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while !(await condition()), ContinuousClock.now < deadline {

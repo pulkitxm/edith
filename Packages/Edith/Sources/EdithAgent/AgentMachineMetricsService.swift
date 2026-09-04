@@ -15,6 +15,7 @@ public final class AgentMachineMetricsService {
         var generation = UUID()
         var publicationTask: Task<Void, Never>?
         var inventoryTask: Task<Void, Never>?
+        var lastFailure: String?
 
         init(session: MachineSession) { self.session = session }
         deinit { publicationTask?.cancel(); inventoryTask?.cancel() }
@@ -26,6 +27,8 @@ public final class AgentMachineMetricsService {
     private var entries: [UUID: Entry] = [:]
     private var idle: [UUID] = []
     private let retainedIdleSessions = 16
+    private var activityTask: Task<Void, Never>?
+    private var reportsActive = false
 
     public init(
         lookup: @escaping Lookup = { id in
@@ -111,6 +114,7 @@ public final class AgentMachineMetricsService {
             }
         }
         entry.session.setForegroundObservation(entry.token, active: !entry.interests.isEmpty)
+        updateActivity()
         if entry.interests.isEmpty {
             entry.generation = UUID()
             entry.publicationTask?.cancel()
@@ -145,6 +149,26 @@ public final class AgentMachineMetricsService {
         }
         entries.removeAll()
         idle.removeAll()
+        updateActivity()
+    }
+
+    func finishActivityUpdates() async { await activityTask?.value }
+
+    private func updateActivity() {
+        let count = activeMachineCount
+        let active = count > 0
+        guard let runtime, reportsActive != active else { return }
+        reportsActive = active
+        let previous = activityTask
+        activityTask = Task {
+            await previous?.value
+            await runtime.setMachineMetricsActive(active)
+            await runtime.record(
+                AgentEvent(
+                    category: "machines", name: active ? "metrics.started" : "metrics.stopped",
+                    message: active
+                        ? "Collecting live machine data." : "Stopped live machine collection."))
+        }
     }
 
     private func refresh(_ request: AgentMachineMetricsRefresh) async throws {
@@ -193,6 +217,19 @@ public final class AgentMachineMetricsService {
     }
 
     private func emit(_ snapshot: AgentMachineMetricsSnapshot) async {
+        let entry = entries[snapshot.machineID]
+        if let failure = snapshot.state.failureMessage, failure != entry?.lastFailure, let runtime {
+            let previous = activityTask
+            let name = entry?.session.machine.name ?? snapshot.machineID.uuidString
+            activityTask = Task {
+                await previous?.value
+                await runtime.record(
+                    AgentEvent(
+                        level: .warning, category: "machines", name: "metrics.failed",
+                        message: "\(name): \(failure)"))
+            }
+        }
+        entry?.lastFailure = snapshot.state.failureMessage
         await publish(snapshot)
         guard let runtime, let payload = try? AgentPayload.encode(snapshot) else { return }
         await runtime.publishBus(
