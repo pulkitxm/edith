@@ -57,10 +57,19 @@ public enum AgentMachineOperations {
         let executable: URL
         let arguments: [String]
         let environment: [String: String]
+        var cleanupArguments: [String]?
+        var remoteWindows = false
         if let machine = request.machine {
             let connection = try await AgentMachineConnectionPool.shared.connection(for: machine)
             executable = SSHConnection.executable
-            arguments = connection.execArguments(command: request.command)
+            if await connection.remotePlatform == .windows {
+                arguments = connection.execArguments(command: request.command)
+                remoteWindows = true
+            } else {
+                let scope = AgentRemoteCommandScope(command: request.command)
+                arguments = connection.execArguments(command: scope.command)
+                cleanupArguments = connection.execArguments(command: scope.cleanupCommand)
+            }
             environment = MachineSSHEnvironment.make(for: machine)
         } else {
             executable = URL(fileURLWithPath: "/bin/zsh")
@@ -68,17 +77,39 @@ public enum AgentMachineOperations {
             environment = CLIToolEnvironment.sanitized()
         }
         try Task.checkCancellation()
-        let result = try await CLICommandRunner.runLocalSeparated(
-            CLICommandRequest(
-                executableURL: executable, arguments: arguments, environment: environment,
-                timeout: min(request.timeout, 7_200), maximumOutputBytes: 2 << 20,
-                standardInputData: request.standardInput, terminatesProcessGroup: true),
-            streamsWhileRunning: true,
-            onStandardOutputLine: { context.report($0, stream: .standardOutput) },
-            onStandardErrorLine: { context.report($0, stream: .standardError) })
-        return SSHExecResult(
-            status: result.terminationStatus, stdout: result.standardOutputData,
-            stderr: result.standardErrorData)
+        do {
+            let result = try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: executable, arguments: arguments, environment: environment,
+                    timeout: min(request.timeout, 7_200), maximumOutputBytes: 2 << 20,
+                    standardInputData: request.standardInput, terminatesProcessGroup: true),
+                streamsWhileRunning: true,
+                onStandardOutputLine: { context.report($0, stream: .standardOutput) },
+                onStandardErrorLine: { context.report($0, stream: .standardError) })
+            return SSHExecResult(
+                status: result.terminationStatus, stdout: result.standardOutputData,
+                stderr: result.standardErrorData)
+        } catch {
+            if let cleanupArguments {
+                let cleanup = Task {
+                    try? await CLICommandRunner.runLocalSeparated(
+                        CLICommandRequest(
+                            executableURL: executable, arguments: cleanupArguments,
+                            environment: environment, timeout: 5, maximumOutputBytes: 4_096,
+                            terminatesProcessGroup: true),
+                        onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+                }
+                if await cleanup.value?.terminationStatus != 0 {
+                    context.report(
+                        "Remote command cleanup could not be confirmed.", stream: .standardError)
+                }
+            } else if remoteWindows {
+                context.report(
+                    "The SSH client stopped. Remote Windows child processes may still be running.",
+                    stream: .standardError)
+            }
+            throw error
+        }
     }
 
     private static func executeTransfer(
