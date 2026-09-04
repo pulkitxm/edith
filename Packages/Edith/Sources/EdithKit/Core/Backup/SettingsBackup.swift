@@ -958,7 +958,9 @@ final class SettingsBackup {
         Self.sharedKeys.contains(key) ? SharedDefaults.store : Self.helperDefaults
     }
 
-    private static let helperDefaults = UserDefaults(suiteName: MainApp.statusBarBundleIdentifier)!
+    private static let helperDefaults = UserDefaults(
+        suiteName: ProcessInfo.processInfo.environment["EDITH_HELPER_DEFAULTS_SUITE"]
+            ?? MainApp.statusBarBundleIdentifier)!
     private var started = false
     private var defaultsObserver: NSObjectProtocol?
     private var musicBackupTask: Task<Void, Never>?
@@ -1475,6 +1477,7 @@ final class SettingsBackup {
     }
 
     private func maintenance() {
+        guard started else { return }
         export()
         if !pendingPersistence.isEmpty {
             queuePersistence(
@@ -1533,8 +1536,10 @@ final class SettingsBackup {
         return (music, clipboard)
     }
 
-    func shutdown() {
+    func shutdown() async {
         started = false
+        let musicTransfer = musicBackupTask
+        let clipboardTransfer = clipboardBackupTask
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil
         if let musicFolderObserver { IPC.stopObserving(musicFolderObserver) }
@@ -1577,6 +1582,8 @@ final class SettingsBackup {
         for dataClass in SettingsBackupDataClass.allCases where dataClass != .settings {
             setRestorePending(0, for: dataClass)
         }
+        await musicTransfer?.value
+        await clipboardTransfer?.value
     }
 
     func debounceFlush() {
@@ -1597,7 +1604,7 @@ final class SettingsBackup {
     }
 
     func backupMusic() {
-        guard !musicBackupRunning, cloudEnabled,
+        guard started, !musicBackupRunning, cloudEnabled,
             pendingRestoreStates[.music] == nil,
             transferDecision(for: .music).shouldExport,
             FileManager.default.fileExists(atPath: Repo.musicDir.path)
@@ -1658,7 +1665,7 @@ final class SettingsBackup {
     private var clipboardDebounce: Timer?
 
     func scheduleClipboardBackup() {
-        guard cloudEnabled, transferDecision(for: .clipboard).shouldExport else {
+        guard started, cloudEnabled, transferDecision(for: .clipboard).shouldExport else {
             clipboardDebounce?.invalidate()
             clipboardDebounce = nil
             return
@@ -1670,7 +1677,7 @@ final class SettingsBackup {
     }
 
     func backupClipboard() {
-        guard !clipboardBackupRunning, cloudEnabled,
+        guard started, !clipboardBackupRunning, cloudEnabled,
             pendingRestoreStates[.clipboard] == nil,
             transferDecision(for: .clipboard).shouldExport,
             FileManager.default.fileExists(atPath: localClipboardDir.path)
@@ -1712,6 +1719,7 @@ final class SettingsBackup {
     }
 
     func scheduleExport() {
+        guard started else { return }
         debounce?.invalidate()
         debounce = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
             Task { @MainActor in SettingsBackup.shared.export() }

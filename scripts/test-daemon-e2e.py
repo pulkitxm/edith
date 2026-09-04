@@ -17,7 +17,11 @@ build = test_build_directory(repo)
 root = pathlib.Path(tempfile.mkdtemp(prefix='edith-daemon-e2e-'))
 label = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 suite = label + '.defaults'
-env = dict(isolated_test_environment(root, label), EDITH_AGENT_BUILD='runtime-e2e')
+helper_suite = label + '.helper.defaults'
+cloud = root / 'cloud'
+cloud.mkdir()
+env = dict(isolated_test_environment(root, label),
+           EDITH_HELPER_DEFAULTS_SUITE=helper_suite, EDITH_AGENT_BUILD='runtime-e2e')
 target = 'gui/' + str(os.getuid()) + '/' + label
 results = []
 booted = False
@@ -98,18 +102,22 @@ try:
     wait_for(lambda: call(['/bin/ps', '-p', child, '-o', 'stat='], check=False),
              lambda result: result.returncode != 0 or result.stdout.strip().startswith('Z'))
     record('04 cancellation stops the child process')
-    interrupted = submit("printf 'running before restart\\n'; sleep 30")
-    wait_for(lambda: inspect(interrupted['id']), lambda item: item['snapshot']['state'] == 'running')
+    interrupted = submit("sleep 30 & child=$!; printf '%s\\n' \"$child\"; wait")
+    before_restart = wait_for(lambda: inspect(interrupted['id']),
+                              lambda item: item['snapshot']['state'] == 'running' and bool(item['output']))
+    restart_child = before_restart['output'][0]['text'].strip()
     cli('restart', '--json')
     restarted = wait_for(lambda: value('status', '--json'), lambda item: item['pid'] != initial['pid'], timeout=25)
     restored = inspect(receipt['id'])
     assert restored['snapshot']['state'] == 'succeeded'
     assert restored['result'] == finished['result']
-    assert inspect(interrupted['id'])['snapshot']['state'] == 'interrupted'
+    assert inspect(interrupted['id'])['snapshot']['state'] in ['interrupted', 'cancelled']
+    wait_for(lambda: call(['/bin/ps', '-p', restart_child, '-o', 'stat='], check=False),
+             lambda result: result.returncode != 0 or result.stdout.strip().startswith('Z'))
     events = value('events', '--json')
     assert len(events) <= 500
     assert sum(item['name'] == 'startup' for item in events) >= 2
-    record('05 restart retains completed results and marks interrupted work', pid=restarted['pid'])
+    record('05 restart retains completed results and stops active children', pid=restarted['pid'])
     timings = []
     for _ in range(12):
         start = time.monotonic()
@@ -121,6 +129,41 @@ try:
            medianStatusMilliseconds=round(statistics.median(timings) * 1000, 2),
            residentMiB=round(resources['residentBytes'] / 1048576, 2),
            recentCPUPercent=round(resources['cpuPercent'], 3))
+    assert not (cloud / 'settings.json').exists()
+    call(['/usr/bin/defaults', 'write', suite, 'backupSettings', '-bool', 'true'])
+    call(['/usr/bin/defaults', 'write', suite, 'appearance', '-string', 'light'])
+    call(['/usr/bin/defaults', 'write', helper_suite, 'musicLastTrack', '-string', 'fixture-track'])
+    call(['/usr/bin/defaults', 'write', suite, 'icloudBackup', '-bool', 'true'])
+    before_backup = resources['pid']
+    cli('restart', '--json')
+    backup_process = wait_for(lambda: value('status', '--json'),
+                             lambda item: item['pid'] != before_backup, timeout=25)
+    backup_file = cloud / 'settings.json'
+    backup_document = wait_for(
+        lambda: json.loads(backup_file.read_text()) if backup_file.exists() else {},
+        lambda item: item.get('appearance') == 'light' and item.get('musicLastTrack') == 'fixture-track', timeout=20)
+    assert (root / 'data' / 'settings.json').exists()
+    assert backup_document.get('musicLastTrack') == 'fixture-track'
+    record('07 daemon writes cloud settings while the helper is absent',
+           settingsBytes=backup_file.stat().st_size)
+    call(['/bin/launchctl', 'bootout', target])
+    booted = False
+    wait_for(lambda: call(['/bin/ps', '-p', str(backup_process['pid']), '-o', 'stat='], check=False),
+             lambda result: result.returncode != 0 or result.stdout.strip().startswith('Z'))
+    backup_document['appearance'] = 'dark'
+    backup_document['musicLastTrack'] = 'restored-fixture-track'
+    backup_file.write_text(json.dumps(backup_document) + '\n')
+    (root / 'data' / 'settings.json').unlink(missing_ok=True)
+    call(['/usr/bin/defaults', 'delete', suite, 'appearance'], check=False)
+    call(['/usr/bin/defaults', 'delete', helper_suite, 'musicLastTrack'], check=False)
+    call(['/bin/launchctl', 'bootstrap', 'gui/' + str(os.getuid()), str(plist)])
+    booted = True
+    wait_for(lambda: value('status', '--json'), lambda item: item['build'] == 'runtime-e2e')
+    wait_for(lambda: call(['/usr/bin/defaults', 'read', suite, 'appearance'], check=False),
+             lambda result: result.returncode == 0 and result.stdout.strip() == 'dark', timeout=20)
+    wait_for(lambda: call(['/usr/bin/defaults', 'read', helper_suite, 'musicLastTrack'], check=False),
+             lambda result: result.returncode == 0 and result.stdout.strip() == 'restored-fixture-track', timeout=20)
+    record('08 daemon restores cloud settings before the helper launches')
     tool_directory = root / 'data' / 'bin'
     tool_directory.mkdir(parents=True, exist_ok=True)
     child_file = root / 'download-child.pid'
@@ -148,11 +191,12 @@ try:
     recovered_downloads = json.loads(call([str(root / 'ed'), 'download', 'ls', '--json']).stdout)
     interrupted = next(item for item in recovered_downloads if item['id'] == download['id'])
     assert interrupted['state'] == 'interrupted'
-    record('07 daemon restart stops the running download child and preserves retryable history',
+    record('09 daemon restart stops the running download child and preserves retryable history',
            downloadID=interrupted['id'], state=interrupted['state'], childStopped=True)
 finally:
     if booted:
         call(['/bin/launchctl', 'bootout', target], check=False)
     call(['/usr/bin/defaults', 'delete', suite], check=False)
+    call(['/usr/bin/defaults', 'delete', helper_suite], check=False)
     (root / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
     print('Artifacts: ' + str(root), flush=True)

@@ -78,7 +78,7 @@ public enum BackgroundBackupRuntime {
         observations.forEach(IPC.stopObserving)
         observations.removeAll()
         await SettingsBackup.shared.flushForTermination()
-        SettingsBackup.shared.shutdown()
+        await SettingsBackup.shared.shutdown()
     }
 
     private static func enabled(_ dataClass: SettingsBackupDataClass) -> Bool {

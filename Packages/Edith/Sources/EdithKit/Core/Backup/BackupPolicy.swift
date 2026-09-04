@@ -80,7 +80,7 @@ public enum BackupCatalog {
         BackupClass(
             id: "settings", title: "Settings and suite selection",
             location: "defaults suite, exported to settings.json", sync: .always,
-            merge: .newestPerKey, retention: "Forever",
+            merge: .newestFile, retention: "Forever",
             defaultsKey: AppStorageKeys.Backup.settings),
         BackupClass(
             id: "machines", title: "Machines, forwards, snippets", location: "machines/*.json",
@@ -101,7 +101,7 @@ public enum BackupCatalog {
             merge: .unionByPrimaryKey, retention: "365 days"),
         BackupClass(
             id: "clipboard", title: "Clipboard history", location: "clipboard/", sync: .optIn,
-            merge: .unionByHash, retention: "200 items or 30 days",
+            merge: .newestFile, retention: "200 items or 30 days",
             defaultsKey: AppStorageKeys.Clipboard.backup),
         BackupClass(
             id: "music", title: "Music library and download queue",
