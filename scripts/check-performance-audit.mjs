@@ -177,6 +177,26 @@ const detachedExpression = (masked, index) => {
   return { closure: null, end: closing };
 };
 
+const taskOwnerIsCancelled = (masked, owner, indexed) => {
+  const subscript = indexed ? "\\s*\\[[^\\]\\n]+\\]" : "";
+  if (
+    new RegExp(`\\b${owner}${subscript}\\s*\\??\\.cancel\\s*\\(`).test(masked)
+  )
+    return true;
+  if (!indexed) return false;
+  const loops = new RegExp(
+    `\\bfor\\s+(\\w+)\\s+in\\s+(?:self\\s*\\.\\s*)?${owner}\\.values\\s*\\{`,
+    "g",
+  );
+  for (const match of masked.matchAll(loops)) {
+    const opening = masked.indexOf("{", match.index);
+    const body = masked.slice(opening + 1, closingBrace(masked, opening));
+    if (new RegExp(`\\b${match[1]}\\s*\\.cancel\\s*\\(`).test(body))
+      return true;
+  }
+  return false;
+};
+
 const addViolation = (violations, rule, path, source, index) => {
   violations.push({
     rule,
@@ -199,7 +219,9 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     if (expression.closure) detachedRanges.push(expression.closure);
     const assignment = masked
       .slice(Math.max(0, match.index - 160), match.index)
-      .match(/(?:let|var)?\s*([A-Za-z_]\w*)\s*=\s*(?:try\s+)?(?:await\s+)?$/);
+      .match(
+        /(?:let|var)?\s*([A-Za-z_]\w*)\s*(\[[^\]\n]+\])?\s*=\s*(?:try\s+)?(?:await\s+)?$/,
+      );
     const awaited =
       /(?:try\s+)?await\s*$/.test(
         masked.slice(Math.max(0, match.index - 40), match.index),
@@ -209,7 +231,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     );
     const owned =
       assignment &&
-      new RegExp(`\\b${assignment[1]}\\s*\\??\\.cancel\\s*\\(`).test(masked);
+      taskOwnerIsCancelled(masked, assignment[1], Boolean(assignment[2]));
     if (!awaited && !returned && !owned) {
       addViolation(
         violations,
@@ -351,7 +373,10 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
       .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
     const guarded =
       /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
-        body.slice(lastAwait, publication?.index ?? body.length),
+        body.slice(
+          lastAwait,
+          publication ? lastAwait + publication.index : body.length,
+        ),
       );
     if (publication && (!cancellation || !guarded)) {
       addViolation(

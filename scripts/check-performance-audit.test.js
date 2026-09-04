@@ -341,3 +341,54 @@ test("the change ratchet permits existing debt and rejects an added occurrence",
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("indexed detached tasks require direct or collection cancellation", () => {
+  const examples = [
+    ["workers[id]?.cancel()", false],
+    ["for worker in workers.values { worker.cancel() }", false],
+    ["for other in unrelated.values { other.cancel() }", true],
+    ["for worker in workers.values { observe(worker) }; other.cancel()", true],
+    ["", true],
+  ];
+  for (const [cleanup, unsafe] of examples) {
+    const source = `
+      final class Service {
+        func start(_ id: UUID) {
+          workers[id] = Task.detached { await work() }
+        }
+        deinit { ${cleanup} }
+      }
+    `;
+    expect(
+      findPerformanceViolations(source).some(
+        ({ rule }) => rule === "unowned-detached-task",
+      ),
+    ).toBe(unsafe);
+  }
+});
+
+test("stream tasks check cancellation after their final suspension", () => {
+  const createSource = (guardStatement) => `
+    @MainActor final class Model {
+      func observe() {
+        limitsTask?.cancel()
+        limitsTask = Task { [weak self] in
+          for await snapshot in values() {
+            guard let self, !Task.isCancelled else { break }
+            await self.reload()
+            ${guardStatement}
+            self.failure = snapshot.failure
+          }
+        }
+      }
+    }
+  `;
+  expect(
+    findPerformanceViolations(
+      createSource("guard !Task.isCancelled else { break }"),
+    ).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(createSource("")).map(({ rule }) => rule),
+  ).toContain("stale-task-publication");
+});
