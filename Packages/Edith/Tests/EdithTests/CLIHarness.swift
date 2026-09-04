@@ -305,6 +305,53 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { running }
     }
 
+    func configureUsageRefreshAgent(
+        events: [UsageRefreshEvent],
+        busy: Bool = false,
+        failure: UsageRefreshFailure? = nil
+    ) {
+        setenv(DataRoot.devOverrideVariable, sandbox.path, 1)
+        let dataDir = Repo.dataDir
+        try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: UsageRefreshRunner.lockURL(dataDir: dataDir))
+        try? FileManager.default.removeItem(at: UsageRefreshRunner.eventsURL(dataDir: dataDir))
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
+        let refreshID = UsageCollectionOperation.refresh.descriptor.id.rawValue
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == refreshID else { return Data() }
+            if busy {
+                guard
+                    let lock = UsageRefreshLock.acquire(
+                        at: UsageRefreshRunner.lockURL(dataDir: Repo.dataDir))
+                else { throw UsageRefreshFailure.busy }
+                DispatchQueue.global().async {
+                    try? UsageRefreshPlayback.replayBlocking(
+                        events: events, holdLock: true, failure: failure)
+                    lock.release()
+                }
+                return Data()
+            }
+            try UsageRefreshPlayback.replayBlocking(events: events, failure: failure)
+            return Data()
+        }
+    }
+
+    func configureLimitsRefreshAgent() {
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
+        let limitsID = UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == limitsID else { return Data() }
+            CLIEnvironment.deliver(IPC.Name.limitsUpdated, nil)
+            return Data()
+        }
+    }
+
     func answers(_ block: @escaping @Sendable (Notification.Name) -> [AnyHashable: Any]?) {
         CLIEnvironment.answer = block
     }
@@ -331,6 +378,7 @@ final class CLIWorld: @unchecked Sendable {
     }
 
     func tearDown() {
+        unsetenv(DataRoot.devOverrideVariable)
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")

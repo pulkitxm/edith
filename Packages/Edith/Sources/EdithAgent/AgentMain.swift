@@ -62,7 +62,7 @@ public enum AgentBoot {
             "watching \(watcher.watchedPaths.count, privacy: .public) usage paths")
         Task {
             await runtime.attach(scheduler: scheduler)
-            await AgentOperations.register(on: runtime, store: store)
+            await AgentOperations.register(on: runtime, store: store, scheduler: scheduler)
             for job in AgentJobCatalog.jobs(store: store, scheduler: scheduler) {
                 await scheduler.register(job)
             }

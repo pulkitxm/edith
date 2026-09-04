@@ -74,16 +74,15 @@ ed usage refresh && ed usage summary --range today
 
 ## Behaviour
 
-This is the only verb in the group that changes anything, and `ed` does the work
-itself. It runs the same collection pipeline EdithKit hands the app, in this
-process, so it needs no menu bar app and there is nothing to time out on. A
-first run takes noticeably longer, because the collector installs `ccusage`, and
-`jq` or `bun` when they are missing, before it can read anything.
+This is the only verb in the group that changes anything. `ed` asks the
+background agent (`edithd`) to re-collect usage; the agent runs the same
+pipeline EdithKit uses, so the CLI and dashboard stay aligned without the menu
+bar app doing the work in-process.
 
-The dashboard refresh button and this command enter the same refresh operation.
-The app sends that operation to its helper, while the CLI starts or follows it in
-the current process, so both paths keep the same lock, progress and completion
-semantics without requiring the same process boundary.
+The dashboard refresh button and this command both call the `usage.refresh`
+agent operation. The background agent enqueues the collector job and returns
+immediately; progress streams through the same lock, transcript, and completion
+semantics as before.
 
 Progress goes to stderr and stdout stays clean: one `usage refreshed` line at
 the end, or the JSON object. Each phase is printed as it lands, with a spinner on

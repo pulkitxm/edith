@@ -17,7 +17,7 @@ public final class DashboardRefreshBridge {
     public init(
         logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log"),
         requestUsageRefresh: @escaping () -> Void = {
-            UsageCollectionOperationExecution.request(.refresh)
+            try? UsageAgentOperations.requestRefresh()
         }
     ) {
         self.logURL = logURL

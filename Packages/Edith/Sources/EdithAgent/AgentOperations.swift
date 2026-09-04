@@ -2,7 +2,9 @@ import EdithKit
 import Foundation
 
 public enum AgentOperations {
-    public static func register(on runtime: AgentRuntime, store: AgentStore? = nil) async {
+    public static func register(
+        on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil
+    ) async {
         if let store {
             let attention = AttentionEventStore(store: store)
             await runtime.register(operation: AttentionOperation.record) { payload in
@@ -21,6 +23,24 @@ public enum AgentOperations {
             }
         }
         await registerControls(on: runtime)
+        if let scheduler {
+            await registerUsage(on: runtime, scheduler: scheduler)
+        }
+    }
+
+    static func registerUsage(on runtime: AgentRuntime, scheduler: JobScheduler) async {
+        await runtime.register(
+            operation: UsageCollectionOperation.refresh.descriptor.id.rawValue
+        ) { _ in
+            await scheduler.enqueue("usage.refresh")
+            return Data()
+        }
+        await runtime.register(
+            operation: UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
+        ) { _ in
+            await scheduler.enqueue("usage.limits")
+            return Data()
+        }
     }
 
     static func registerControls(on runtime: AgentRuntime) async {

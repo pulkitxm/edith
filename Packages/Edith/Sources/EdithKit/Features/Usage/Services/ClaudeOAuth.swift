@@ -3,21 +3,23 @@ import Foundation
 import LocalAuthentication
 import Security
 
-enum ClaudeCredentialSource: Equatable {
+public enum ClaudeCredentialSource: Equatable {
     case keychain
     case file(URL)
     case shell
 }
 
-struct ClaudeOAuthCredential {
-    let accessToken: String
-    let refreshToken: String?
-    let expiresAt: Date?
-    let refreshTokenExpiresAt: Date?
-    let source: ClaudeCredentialSource
+public struct ClaudeOAuthCredential {
+    public let accessToken: String
+    public let refreshToken: String?
+    public let expiresAt: Date?
+    public let refreshTokenExpiresAt: Date?
+    public let source: ClaudeCredentialSource
     private let document: [String: Any]
 
-    static func decode(_ data: Data, source: ClaudeCredentialSource) -> ClaudeOAuthCredential? {
+    public static func decode(_ data: Data, source: ClaudeCredentialSource)
+        -> ClaudeOAuthCredential?
+    {
         guard let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let oauth = document["claudeAiOauth"] as? [String: Any],
             let accessToken = oauth["accessToken"] as? String,
@@ -32,7 +34,7 @@ struct ClaudeOAuthCredential {
             document: document)
     }
 
-    static func transient(accessToken: String, maximumBytes: Int = 8_192)
+    public static func transient(accessToken: String, maximumBytes: Int = 8_192)
         -> ClaudeOAuthCredential?
     {
         guard !accessToken.isEmpty, accessToken.utf8.count <= maximumBytes,
@@ -47,18 +49,18 @@ struct ClaudeOAuthCredential {
             document: [:])
     }
 
-    func shouldRefresh(at now: Date, leeway: TimeInterval = 60) -> Bool {
+    public func shouldRefresh(at now: Date, leeway: TimeInterval = 60) -> Bool {
         guard let expiresAt else { return false }
         return expiresAt <= now.addingTimeInterval(leeway)
     }
 
-    func usableRefreshToken(at now: Date) -> String? {
+    public func usableRefreshToken(at now: Date) -> String? {
         guard let refreshToken else { return nil }
         if let refreshTokenExpiresAt, refreshTokenExpiresAt <= now { return nil }
         return refreshToken
     }
 
-    func updatedData(with response: ClaudeOAuthRefreshResponse, now: Date) throws -> Data {
+    public func updatedData(with response: ClaudeOAuthRefreshResponse, now: Date) throws -> Data {
         var updated = document
         var oauth = updated["claudeAiOauth"] as? [String: Any] ?? [:]
         oauth["accessToken"] = response.accessToken
@@ -86,13 +88,23 @@ struct ClaudeOAuthCredential {
     }
 }
 
-struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
-    let accessToken: String
-    let refreshToken: String?
-    let expiresIn: TimeInterval
-    let refreshTokenExpiresIn: TimeInterval?
+public struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
+    public let accessToken: String
+    public let refreshToken: String?
+    public let expiresIn: TimeInterval
+    public let refreshTokenExpiresIn: TimeInterval?
 
-    enum CodingKeys: String, CodingKey {
+    public init(
+        accessToken: String, refreshToken: String?, expiresIn: TimeInterval,
+        refreshTokenExpiresIn: TimeInterval?
+    ) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.expiresIn = expiresIn
+        self.refreshTokenExpiresIn = refreshTokenExpiresIn
+    }
+
+    public enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
@@ -100,11 +112,11 @@ struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
     }
 }
 
-enum ClaudeCredentialStoreError: LocalizedError, Equatable {
+public enum ClaudeCredentialStoreError: LocalizedError, Equatable {
     case keychainUpdateFailed
     case transientCredential
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .keychainUpdateFailed:
             return "Keychain update failed"
@@ -114,7 +126,7 @@ enum ClaudeCredentialStoreError: LocalizedError, Equatable {
     }
 }
 
-enum ClaudeCredentialDataLookup: Equatable {
+public enum ClaudeCredentialDataLookup: Equatable {
     case data(Data)
     case missing
     case cancelled
@@ -123,15 +135,16 @@ enum ClaudeCredentialDataLookup: Equatable {
     case failed
 }
 
-enum ClaudeCredentialStore {
-    typealias KeychainReader = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
-    typealias KeychainItemUpdater = (CFDictionary, CFDictionary) -> OSStatus
-    typealias KeychainUpdater = (Data) throws -> Void
+public enum ClaudeCredentialStore {
+    public typealias KeychainReader = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
+    public typealias KeychainItemUpdater = (CFDictionary, CFDictionary) -> OSStatus
+    public typealias KeychainUpdater = (Data) throws -> Void
+
+    public static let maximumCredentialBytes = 65_536
 
     private static let keychainService = "Claude Code-credentials"
-    private static let maximumCredentialBytes = 65_536
 
-    static func read() async -> ClaudeCredentialLookup {
+    public static func read() async -> ClaudeCredentialLookup {
         let keychain = keychainData()
         return read(
             home: FileManager.default.homeDirectoryForCurrentUser,
@@ -139,7 +152,7 @@ enum ClaudeCredentialStore {
             fileData: { credentialFileData(at: $0) })
     }
 
-    static func read(
+    public static func read(
         home: URL,
         keychainData: ClaudeCredentialDataLookup,
         fileData: (URL) -> ClaudeCredentialDataLookup
@@ -182,11 +195,11 @@ enum ClaudeCredentialStore {
         }
     }
 
-    static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
+    public static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
         try await persist(data, source: source, keychainUpdater: { try updateKeychain($0) })
     }
 
-    static func persist(
+    public static func persist(
         _ data: Data, source: ClaudeCredentialSource, keychainUpdater: KeychainUpdater
     ) async throws {
         switch source {
@@ -208,7 +221,7 @@ enum ClaudeCredentialStore {
         }
     }
 
-    static func keychainData(
+    public static func keychainData(
         maximumOutputBytes: Int = maximumCredentialBytes,
         readItem: KeychainReader = SecItemCopyMatching
     ) -> ClaudeCredentialDataLookup {
@@ -235,7 +248,7 @@ enum ClaudeCredentialStore {
         }
     }
 
-    static func credentialFileData(
+    public static func credentialFileData(
         at url: URL, maximumOutputBytes: Int = maximumCredentialBytes
     ) -> ClaudeCredentialDataLookup {
         guard maximumOutputBytes >= 0, maximumOutputBytes < Int.max else { return .failed }
@@ -256,7 +269,7 @@ enum ClaudeCredentialStore {
         }
     }
 
-    static func updateKeychain(
+    public static func updateKeychain(
         _ data: Data, updateItem: KeychainItemUpdater = SecItemUpdate
     ) throws {
         let query: [CFString: Any] = [

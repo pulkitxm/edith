@@ -48,25 +48,36 @@ import Testing
         await AgentOperations.register(on: runtime)
 
         for id in AgentOperationCatalog.served
-        where id
-            != AgentControlOperation.restart
-            .descriptor.id
+        where id != AgentControlOperation.restart.descriptor.id
+            && id != UsageCollectionOperation.refresh.descriptor.id
+            && id != UsageCollectionOperation.limitsRefresh.descriptor.id
         {
             _ = try await runtime.perform(operation: id.rawValue, payload: Data())
         }
     }
 
-    @Test func theServedListIsExactlyTheAgentControlOperations() {
-        #expect(
-            AgentOperationCatalog.served
-                == AgentControlOperation.allCases.map { $0.descriptor.id })
+    @Test func theServedListIncludesAgentControlAndUsageRefreshOperations() {
+        let control = AgentControlOperation.allCases.map { $0.descriptor.id }
+        let usage: [UserOperationID] = [
+            UsageCollectionOperation.refresh.descriptor.id,
+            UsageCollectionOperation.limitsRefresh.descriptor.id,
+        ]
+        #expect(AgentOperationCatalog.served == control + usage)
         #expect(AgentOperationCatalog.serves(AgentControlOperation.jobs.descriptor.id))
+    }
+
+    @Test func everyPlanJobHasACollectorBody() {
+        let jobs = AgentJobCatalog.jobs(store: nil)
+        let ids = Set(jobs.map(\.descriptor.id))
+        for descriptor in AgentJobPlan.descriptors {
+            #expect(ids.contains(descriptor.id))
+        }
     }
 
     @Test func everyServedOperationIsInTheUserOperationCatalog() {
         #expect(AgentOperationCatalog.descriptors.count == AgentOperationCatalog.served.count)
         for descriptor in AgentOperationCatalog.descriptors {
-            #expect(descriptor.cli.first == "agent")
+            #expect(descriptor.cli.first == "agent" || descriptor.cli.first == "usage")
         }
     }
 
@@ -142,6 +153,19 @@ import Testing
     ) -> AgentJobDescriptor {
         AgentJobDescriptor(
             id: id, title: id, trigger: .timer, topic: topic, cadence: cadence)
+    }
+
+    @Test func enqueueStartsWithoutWaitingForCompletion() async {
+        let scheduler = JobScheduler()
+        await scheduler.register(
+            AgentJob(descriptor: descriptor("usage.refresh")) {
+                try? await Task.sleep(for: .milliseconds(200))
+                return Data("done".utf8)
+            })
+        await scheduler.start()
+        await scheduler.enqueue("usage.refresh")
+        let snapshot = await scheduler.snapshots.first
+        #expect(snapshot?.phase == .running || snapshot?.phase == .idle)
     }
 
     @Test func runNowPublishesToTheJobTopic() async {

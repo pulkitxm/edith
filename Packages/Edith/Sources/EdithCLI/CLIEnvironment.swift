@@ -74,6 +74,16 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
 
+    nonisolated(unsafe) public static var verifyAgentHandshake:
+        @Sendable () throws -> AgentHandshake = {
+            try AgentClient.shared.verifyHandshake()
+        }
+
+    nonisolated(unsafe) public static var performAgentOperation: @Sendable (String) throws -> Data =
+        {
+            try AgentClient.shared.performInternal($0)
+        }
+
     nonisolated(unsafe) public static var installTool:
         @Sendable (CLIToolSpec, @escaping @Sendable (String) -> Void) async throws -> String = {
             try await ToolInstaller().install($0, log: $1)
@@ -222,6 +232,8 @@ public enum CLIEnvironment {
         runningApps = { RunningAppOperationCenter.liveSnapshots() }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
+        verifyAgentHandshake = { try AgentClient.shared.verifyHandshake() }
+        performAgentOperation = { try AgentClient.shared.performInternal($0) }
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         homebrewClient = { HomebrewClient() }
