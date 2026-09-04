@@ -928,8 +928,11 @@ private struct AttentionSettingsView: View {
                     isOn: $model.settings.iCloudBackupEnabled)
                 HStack {
                     Button("Back up now") { model.backupNow() }
+                        .disabled(model.transferringBackup)
                     Button("Restore before tracking") { model.restoreBackup() }
-                        .disabled(!model.cloudBackup.available || model.hasStoredEvents)
+                        .disabled(
+                            model.transferringBackup || !model.cloudBackup.available
+                                || model.hasStoredEvents)
                     Spacer()
                     if let date = model.cloudBackup.lastBackupAt {
                         Text("Last backup \(date.formatted(date: .abbreviated, time: .shortened))")

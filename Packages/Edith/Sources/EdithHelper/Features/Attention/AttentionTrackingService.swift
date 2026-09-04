@@ -22,8 +22,6 @@ final class AttentionTrackingService {
     private var observers: [NSObjectProtocol] = []
     private var lastHeartbeatAt = Date()
     private var locked = false
-    private var server: AttentionIngestionServer?
-    private var lastBackupAt = Date.distantPast
     private var appendTask: Task<Void, Never>?
 
     init(repository: AttentionRepository = AttentionRepository()) {
@@ -31,16 +29,12 @@ final class AttentionTrackingService {
         settings = repository.loadSettings()
         installObservers()
         startTimer()
-        startServer()
     }
 
     func shutdown() {
         writeHeartbeat()
         timer?.invalidate()
         timer = nil
-        server?.stop()
-        server = nil
-        backupIfNeeded(force: true)
         let center = NSWorkspace.shared.notificationCenter
         observers.forEach(center.removeObserver)
         observers.removeAll()
@@ -48,19 +42,9 @@ final class AttentionTrackingService {
     }
 
     func sync(_ nextSettings: AttentionSettings) {
-        let serverChanged =
-            settings.isEnabled != nextSettings.isEnabled
-            || settings.browserTrackingEnabled != nextSettings.browserTrackingEnabled
-            || settings.serverPort != nextSettings.serverPort
-            || settings.serverToken != nextSettings.serverToken
         writeHeartbeat()
         settings = nextSettings
-        if serverChanged {
-            server?.stop()
-            server = nil
-            startServer()
-        }
-        backupIfNeeded(force: true)
+
     }
 
     private func startTimer() {
@@ -70,18 +54,6 @@ final class AttentionTrackingService {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-    }
-
-    private func startServer() {
-        guard settings.isEnabled, settings.browserTrackingEnabled else { return }
-        let server = AttentionIngestionServer(repository: repository, settings: settings)
-        do {
-            try server.start()
-            self.server = server
-        } catch {
-            Log.lifecycle.error(
-                "attention server failed: \(error.localizedDescription, privacy: .public)")
-        }
     }
 
     private func installObservers() {
@@ -121,7 +93,6 @@ final class AttentionTrackingService {
 
     private func writeHeartbeat(now: Date = Date()) {
         let duration = min(30, max(0, now.timeIntervalSince(lastHeartbeatAt)))
-        backupIfNeeded()
         guard settings.isEnabled, settings.trackingEnabled, duration > 0.2,
             let app = NSWorkspace.shared.frontmostApplication
         else {
@@ -167,13 +138,4 @@ final class AttentionTrackingService {
         return (titleValue as? String).map { String($0.prefix(500)) }
     }
 
-    private func backupIfNeeded(force: Bool = false) {
-        guard settings.iCloudBackupEnabled,
-            force || Date().timeIntervalSince(lastBackupAt) >= 900
-        else { return }
-        lastBackupAt = Date()
-        DispatchQueue.global(qos: .utility).async {
-            _ = try? AttentionCloudBackup().backup()
-        }
-    }
 }
