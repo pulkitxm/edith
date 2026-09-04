@@ -163,7 +163,14 @@ public actor AgentTaskService {
                 bounded, streamsWhileRunning: true,
                 onStandardOutputLine: { context.report($0, stream: .standardOutput) },
                 onStandardErrorLine: { context.report($0, stream: .standardError) })
-            return try AgentPayload.encode(result)
+            let encoded = try AgentPayload.encode(result)
+            guard result.terminationStatus == 0 else {
+                throw AgentTaskExecutionError(
+                    code: "commandExit",
+                    message: "Command exited with status \(result.terminationStatus).",
+                    result: encoded)
+            }
+            return encoded
         }
     }
 
@@ -310,6 +317,11 @@ public actor AgentTaskService {
                 wasCancelled || error is CancellationError ? .cancelled : .failed
             entry.status.snapshot.failure = String(error.localizedDescription.prefix(2_000))
             entry.status.snapshot.failureCode = Self.failureCode(error)
+            if !wasCancelled, let failure = error as? AgentTaskExecutionError,
+                let result = failure.result, result.count <= limits.resultBytes
+            {
+                entry.status.result = result
+            }
         }
         entries[id] = entry
         persistOrReport(entry)
@@ -414,6 +426,7 @@ public actor AgentTaskService {
     }
 
     private static func failureCode(_ error: Error) -> String? {
+        if let failure = error as? AgentTaskExecutionError { return failure.code }
         guard let command = error as? CLICommandRunnerError else { return nil }
         return switch command {
         case .launchFailed: "launchFailed"

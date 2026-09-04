@@ -42,6 +42,8 @@ public struct AgentTaskClient: Sendable {
         _ id: UUID, onOutput: @escaping @Sendable (AgentTaskOutput) -> Void = { _ in }
     ) async throws -> Data {
         var sequence = 0
+        var previousState: AgentTaskState?
+        var delay = pollInterval
         while true {
             try Task.checkCancellation()
             let state: AgentTaskStatus
@@ -51,14 +53,23 @@ public struct AgentTaskClient: Sendable {
                 try await Task.sleep(for: .seconds(1))
                 continue
             }
+            let previousSequence = sequence
             for output in state.output where output.sequence > sequence {
                 onOutput(output)
                 sequence = output.sequence
             }
             if state.snapshot.state == .succeeded { return state.result ?? Data() }
             if state.snapshot.state == .cancelled { throw CancellationError() }
-            if state.snapshot.state.isTerminal { throw AgentTaskFailure(snapshot: state.snapshot) }
-            try await Task.sleep(for: .seconds(pollInterval))
+            if state.snapshot.state.isTerminal {
+                throw AgentTaskFailure(snapshot: state.snapshot, result: state.result)
+            }
+            if previousState == state.snapshot.state, sequence == previousSequence {
+                delay = min(2, delay * 1.5)
+            } else {
+                delay = pollInterval
+            }
+            previousState = state.snapshot.state
+            try await Task.sleep(for: .seconds(delay))
         }
     }
 
@@ -95,16 +106,16 @@ public struct AgentTaskClient: Sendable {
                 title: "Running \(request.executableURL.lastPathComponent)",
                 payload: try AgentPayload.encode(request))
             let data = try await run(submission)
-            let result = try AgentPayload.decode(CLICommandResult.self, from: data)
-            for line in result.standardOutput.split(whereSeparator: \.isNewline) {
-                onStandardOutputLine(String(line))
-            }
-            for line in result.standardError.split(whereSeparator: \.isNewline) {
-                onStandardErrorLine(String(line))
-            }
-            return result
+            return try commandResult(
+                data, onStandardOutputLine: onStandardOutputLine,
+                onStandardErrorLine: onStandardErrorLine)
         } catch let failure as AgentTaskFailure {
             switch failure.snapshot.failureCode {
+            case "commandExit":
+                guard let result = failure.result else { throw failure }
+                return try commandResult(
+                    result, onStandardOutputLine: onStandardOutputLine,
+                    onStandardErrorLine: onStandardErrorLine)
             case "timedOut": throw CLICommandRunnerError.timedOut
             case "outputLimitExceeded": throw CLICommandRunnerError.outputLimitExceeded
             case "launchFailed": throw CLICommandRunnerError.launchFailed
@@ -112,6 +123,20 @@ public struct AgentTaskClient: Sendable {
             default: throw failure
             }
         }
+    }
+
+    private func commandResult(
+        _ data: Data, onStandardOutputLine: @Sendable (String) -> Void,
+        onStandardErrorLine: @Sendable (String) -> Void
+    ) throws -> CLICommandResult {
+        let result = try AgentPayload.decode(CLICommandResult.self, from: data)
+        for line in result.standardOutput.split(whereSeparator: \.isNewline) {
+            onStandardOutputLine(String(line))
+        }
+        for line in result.standardError.split(whereSeparator: \.isNewline) {
+            onStandardErrorLine(String(line))
+        }
+        return result
     }
 }
 

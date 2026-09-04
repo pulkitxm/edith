@@ -198,6 +198,8 @@ import Testing
         _ = try await service.submit(task)
         let status = try await finished(task.id, service: service)
         let result = try AgentPayload.decode(CLICommandResult.self, from: #require(status.result))
+        #expect(status.snapshot.state == .failed)
+        #expect(status.snapshot.failureCode == "commandExit")
         #expect(result.terminationStatus == 7)
         #expect(result.standardOutput == "fixture-input\n")
         #expect(result.standardError == "diagnostic\n")

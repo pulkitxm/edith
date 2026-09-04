@@ -107,8 +107,25 @@ public struct AgentTaskIDRequest: Codable, Sendable {
 
 public struct AgentTaskFailure: LocalizedError, Sendable {
     public let snapshot: AgentTaskSnapshot
+    public let result: Data?
     public var errorDescription: String? {
         snapshot.failure ?? "The background task did not finish."
     }
-    public init(snapshot: AgentTaskSnapshot) { self.snapshot = snapshot }
+    public init(snapshot: AgentTaskSnapshot, result: Data? = nil) {
+        self.snapshot = snapshot
+        self.result = result
+    }
+}
+
+public struct AgentTaskExecutionError: LocalizedError, Sendable {
+    public let code: String
+    public let message: String
+    public let result: Data?
+    public var errorDescription: String? { message }
+
+    public init(code: String, message: String, result: Data? = nil) {
+        self.code = code
+        self.message = message
+        self.result = result
+    }
 }
