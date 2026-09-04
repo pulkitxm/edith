@@ -31,7 +31,8 @@ public actor CompanionOutboxDelivery {
 
     public func drain(endpoint: URL) async -> CompanionOutboxDrain {
         if let active { return await active.value }
-        let task = begin(endpoint: endpoint)
+        let task = makeDeliveryTask(endpoint: endpoint)
+        active = task
         let result = await task.value
         active = nil
         return result
@@ -39,18 +40,19 @@ public actor CompanionOutboxDelivery {
 
     public func enqueue(endpoint: URL) {
         guard active == nil else { return }
-        let task = begin(endpoint: endpoint)
+        let task = makeDeliveryTask(endpoint: endpoint)
+        active = task
         Task {
             _ = await task.value
             active = nil
         }
     }
 
-    private func begin(endpoint: URL) -> Task<CompanionOutboxDrain, Never> {
+    private func makeDeliveryTask(endpoint: URL) -> Task<CompanionOutboxDrain, Never> {
         let directory = directory
         let send = send
         let notify = notify
-        let task = Task.detached(priority: .utility) {
+        return Task.detached(priority: .utility) {
             let result = await CompanionOutbox.drain(in: directory, limit: Self.batchSize) {
                 item, data in
                 try await send(endpoint, item, data)
@@ -58,7 +60,5 @@ public actor CompanionOutboxDelivery {
             if !result.isEmpty { notify() }
             return result
         }
-        active = task
-        return task
     }
 }
