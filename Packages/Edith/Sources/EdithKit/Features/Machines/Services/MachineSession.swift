@@ -58,6 +58,7 @@ public final class MachineSession {
 
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
+    private let taskClient: AgentTaskClient?
     private var metricsStream: SSHLineStream?
     private var metricsStreamGeneration = 0
     private var supervisor: Task<Void, Never>?
@@ -83,11 +84,17 @@ public final class MachineSession {
     private var foregroundObservers: Set<UUID> = []
     public private(set) var isCollecting = false
 
-    public init(machine: Machine, local: Bool = false, observesWakeRequests: Bool = true) {
+    public init(
+        machine: Machine, local: Bool = false, observesWakeRequests: Bool = true,
+        taskClient: AgentTaskClient? = nil
+    ) {
         self.machine = machine
+        self.taskClient = taskClient
         isLocal = local
         connection =
-            local ? nil : SSHConnection(machine: machine, controlSocketMode: .shared)
+            local
+            ? nil
+            : SSHConnection(machine: machine, controlSocketMode: .shared, taskClient: taskClient)
         localSampler = local ? LocalMachineSampler() : nil
         if observesWakeRequests { observeWake() }
     }
@@ -617,7 +624,14 @@ public final class MachineSession {
                     command: command, status: 1, stderr: "Not connected."))
         }
         do {
-            let result = try await connection.run(command, timeout: timeout)
+            let result: SSHExecResult
+            if AgentCommandRouting.isEnabled || taskClient != nil {
+                result = try await (taskClient ?? AgentTaskClient()).runMachineCommand(
+                    AgentMachineCommandRequest(machine: machine, command: command, timeout: timeout)
+                )
+            } else {
+                result = try await connection.run(command, timeout: timeout)
+            }
             guard result.succeeded else {
                 let message = result.stderrText.isEmpty ? result.stdoutText : result.stderrText
                 return .failure(
@@ -634,6 +648,21 @@ public final class MachineSession {
     public func runCommand(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
+        if AgentCommandRouting.isEnabled || taskClient != nil {
+            do {
+                let result = try await (taskClient ?? AgentTaskClient()).runMachineCommand(
+                    AgentMachineCommandRequest(
+                        machine: isLocal ? nil : machine, command: command,
+                        standardInput: stdin, timeout: timeout))
+                guard result.succeeded else {
+                    return .failure(
+                        SSHConnectionError.commandFailed(
+                            command: command, status: result.status,
+                            stderr: result.successfulCommandText))
+                }
+                return .success(result.successfulCommandText)
+            } catch { return .failure(error) }
+        }
         guard let connection else {
             return await runLocalCommand(command, stdin: stdin, timeout: timeout)
         }
