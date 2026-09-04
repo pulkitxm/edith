@@ -19,7 +19,14 @@ public enum AgentMachineOperations {
                 !request.command.contains("\0")
             else { throw AgentError(.refused, "The machine command request is invalid.") }
             try Task.checkCancellation()
-            return try AgentPayload.encode(await command(request, context))
+            let result = try await command(request, context)
+            let encoded = try AgentPayload.encode(result)
+            guard result.succeeded else {
+                throw AgentTaskExecutionError(
+                    code: "commandExit", message: "Command exited with status \(result.status).",
+                    result: encoded)
+            }
+            return encoded
         }
         await tasks.register(operation: AgentMachineTaskOperation.transfer) { payload, context in
             let request = try AgentPayload.decode(AgentMachineTransferRequest.self, from: payload)
@@ -82,8 +89,15 @@ public enum AgentMachineOperations {
         try Task.checkCancellation()
         switch request.direction {
         case .upload:
-            try await connection.upload(
-                localURL: request.localURL, toRemotePath: request.remotePath, progress: progress)
+            if let replacing = request.replacesExisting {
+                try await RemoteTransferEndpoint.remote(
+                    machine: request.machine, connection: connection, progress: progress
+                ).store(request.localURL, at: request.remotePath, replacing: replacing)
+            } else {
+                try await connection.upload(
+                    localURL: request.localURL, toRemotePath: request.remotePath, progress: progress
+                )
+            }
         case .download:
             try await AgentMachineDownload.write(to: request.localURL) { staged in
                 try await connection.download(

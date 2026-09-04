@@ -170,6 +170,12 @@ public actor SSHConnection {
 
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
 
+    nonisolated var fileTaskClient: AgentTaskClient? {
+        taskClient ?? (AgentCommandRouting.isEnabled ? AgentTaskClient() : nil)
+    }
+
+    public func acceptPlatform(_ platform: RemoteMachinePlatform) { remotePlatform = platform }
+
     public func connect() async throws {
         if await masterIsAlive() {
             if remotePlatform == nil { try await validatePlatform() }
@@ -335,8 +341,8 @@ public actor SSHConnection {
     public func download(
         remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        if AgentCommandRouting.isEnabled || taskClient != nil {
-            try await (taskClient ?? AgentTaskClient()).transferMachineFile(
+        if let client = fileTaskClient {
+            try await client.transferMachineFile(
                 AgentMachineTransferRequest(
                     machine: machine, direction: .download, localURL: localURL,
                     remotePath: remotePath), progress: progress)
@@ -422,8 +428,8 @@ public actor SSHConnection {
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        if AgentCommandRouting.isEnabled || taskClient != nil {
-            try await (taskClient ?? AgentTaskClient()).transferMachineFile(
+        if let client = fileTaskClient {
+            try await client.transferMachineFile(
                 AgentMachineTransferRequest(
                     machine: machine, direction: .upload, localURL: localURL,
                     remotePath: remotePath), progress: progress)

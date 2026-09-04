@@ -33,16 +33,18 @@ public struct AgentMachineTransferRequest: Codable, Sendable {
     public let localURL: URL
     public let remotePath: String
     public let timeout: TimeInterval
+    public let replacesExisting: Bool?
 
     public init(
         machine: Machine, direction: AgentMachineTransferDirection, localURL: URL,
-        remotePath: String, timeout: TimeInterval = 3_600
+        remotePath: String, timeout: TimeInterval = 3_600, replacesExisting: Bool? = nil
     ) {
         self.machine = machine
         self.direction = direction
         self.localURL = localURL
         self.remotePath = remotePath
         self.timeout = timeout
+        self.replacesExisting = replacesExisting
     }
 }
 
@@ -60,7 +62,14 @@ extension AgentTaskClient {
             operation: AgentMachineTaskOperation.command,
             title: "Run command on \(request.machine?.name ?? "This Mac")",
             payload: try AgentPayload.encode(request))
-        return try AgentPayload.decode(SSHExecResult.self, from: await run(submission))
+        do {
+            return try AgentPayload.decode(SSHExecResult.self, from: await run(submission))
+        } catch let failure as AgentTaskFailure {
+            guard failure.snapshot.failureCode == "commandExit", let result = failure.result else {
+                throw failure
+            }
+            return try AgentPayload.decode(SSHExecResult.self, from: result)
+        }
     }
 
     public func transferMachineFile(

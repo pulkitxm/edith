@@ -19,6 +19,9 @@ import Testing
         #expect(result.stdout == input)
         #expect(result.stderrText == "warning")
         #expect(result.status == 23)
+        let snapshot = try #require(await service.snapshots().first)
+        #expect(snapshot.state == .failed)
+        #expect(snapshot.failureCode == "commandExit")
     }
 
     @Test @MainActor func localSessionCommandsUseTheDaemonWithoutStartingSampling() async throws {
@@ -116,6 +119,34 @@ import Testing
             AgentMachineTransferResult.self, from: await replacement.wait(submission.id))
         #expect(result.bytes == 321)
         #expect(try await replacement.status(submission.id).snapshot.state == .succeeded)
+    }
+
+    @Test func remotePublicationRunsAsOneDaemonTask() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source")
+        let destination = directory.appendingPathComponent("destination")
+        try Data("published".utf8).write(to: source)
+        let service = try AgentTaskService(directory: nil)
+        await AgentMachineOperations.register(
+            on: service,
+            transfer: { request, _ in
+                #expect(request.direction == .upload)
+                #expect(request.replacesExisting == true)
+                try FileManager.default.copyItem(
+                    at: request.localURL, to: URL(fileURLWithPath: request.remotePath))
+                return 9
+            })
+        let listener = TaskTestListener(service: service)
+        defer { listener.stop() }
+        let machine = Machine(name: "Publication fixture", host: "fixture.invalid")
+        let connection = SSHConnection(
+            machine: machine,
+            taskClient: AgentTaskClient(client: listener.client(), pollInterval: 0.01))
+        try await RemoteTransferEndpoint.remote(machine: machine, connection: connection)
+            .store(source, at: destination.path, replacing: true)
+        #expect(try String(contentsOf: destination, encoding: .utf8) == "published")
+        #expect(await service.snapshots().count == 1)
     }
 
     @Test func invalidTransferPathFailsBeforeRunningAdapter() async throws {

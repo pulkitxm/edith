@@ -199,7 +199,8 @@ public struct RemoteTransferEndpoint: Sendable {
     }
 
     public static func remote(
-        machine: Machine, connection: SSHConnection
+        machine: Machine, connection: SSHConnection,
+        progress: (@Sendable (Int64) -> Void)? = nil
     ) -> RemoteTransferEndpoint {
         RemoteTransferEndpoint(
             machineID: machine.id, name: machine.name,
@@ -242,6 +243,13 @@ public struct RemoteTransferEndpoint: Sendable {
             },
             store: { source, path, replacing in
                 try Task.checkCancellation()
+                if let client = connection.fileTaskClient {
+                    try await client.transferMachineFile(
+                        AgentMachineTransferRequest(
+                            machine: machine, direction: .upload, localURL: source,
+                            remotePath: path, replacesExisting: replacing), progress: progress)
+                    return
+                }
                 let platform = await connection.remotePlatform ?? .linux
                 let values = try source.resourceValues(forKeys: [.isDirectoryKey])
                 guard values.isDirectory != true else {
@@ -249,7 +257,8 @@ public struct RemoteTransferEndpoint: Sendable {
                 }
                 let staged = path + NameConflicts.stagingSuffix + "-" + UUID().uuidString
                 do {
-                    try await connection.upload(localURL: source, toRemotePath: staged)
+                    try await connection.upload(
+                        localURL: source, toRemotePath: staged, progress: progress)
                     try Task.checkCancellation()
                     _ = try await connection.runChecked(
                         remoteStoreCommand(
