@@ -27,19 +27,29 @@ public enum AgentTopicStream {
     public static func values<Value: Decodable & Sendable>(
         _ type: Value.Type, topic: AgentTopic, client: AgentClient = .shared
     ) -> AsyncStream<Value> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let box = AgentSubscriptionBox()
             let worker = Task.detached(priority: .utility) {
-                do {
-                    let subscription = try client.subscribe(topic) { payload in
-                        guard let value = try? AgentPayload.decode(Value.self, from: payload)
-                        else { return }
-                        continuation.yield(value)
+                while !Task.isCancelled {
+                    do {
+                        let subscription = try await client.subscribeAsync(topic) { payload in
+                            guard let value = try? AgentPayload.decode(Value.self, from: payload)
+                            else { return }
+                            continuation.yield(value)
+                        }
+                        box.store(subscription)
+                        return
+                    } catch let error as AgentError where error.kind == .unavailable {
+                        do {
+                            try await Task.sleep(for: .seconds(client.subscriptionRetryDelay))
+                        } catch {
+                            break
+                        }
+                    } catch {
+                        break
                     }
-                    box.store(subscription)
-                } catch {
-                    continuation.finish()
                 }
+                continuation.finish()
             }
             continuation.onTermination = { _ in
                 worker.cancel()
@@ -51,6 +61,6 @@ public enum AgentTopicStream {
     public static func snapshot<Value: Decodable & Sendable>(
         _ type: Value.Type, topic: AgentTopic, client: AgentClient = .shared
     ) async -> Value? {
-        await AgentQuery.optional { try client.snapshot(type, topic: topic) }
+        try? await client.snapshotAsync(type, topic: topic)
     }
 }
