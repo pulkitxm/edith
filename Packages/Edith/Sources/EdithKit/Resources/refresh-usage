@@ -881,7 +881,7 @@ _billing_blocks() {
 BILLING_HISTORY="$OUT_DIR/billing-history/cli"
 CLI_SOURCE="$HOME/.claude"
 CLI_CFG="$TMP/billing-input"
-if [ -s "$OUT" ]; then
+if [ -e "$OUT" ] || [ -L "$OUT" ]; then
   if ! jq -e "$HISTORY_INPUT" "$OUT" >/dev/null 2>&1 \
     || ! _billing_blocks "$OUT" >"$TMP/billing-baseline.json"; then
     _error "published billing baseline is invalid; previous data preserved"

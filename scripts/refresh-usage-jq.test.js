@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -109,6 +110,7 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
@@ -204,7 +206,8 @@ function runCollectorFixture({
         bySource: {},
       },
     })}\n`;
-  writeFileSync(join(output, "usage.json"), existing);
+  if (!missingExistingUsage)
+    writeFileSync(join(output, "usage.json"), existing);
   const originalMachine = join(
     output,
     "machines",
@@ -298,6 +301,9 @@ exec "$REAL_JQ" "$@"
     output: readFileSync(join(output, "usage.json"), "utf8"),
     existing,
     deletedCwd,
+    archiveCreated: existsSync(
+      join(output, "billing-history", "cli", "billing.sqlite"),
+    ),
   };
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -2522,6 +2528,33 @@ describe("FLEET", () => {
 });
 
 describe("collector failure handling", () => {
+  for (const [name, contents] of [
+    ["empty", ""],
+    ["whitespace", " \n"],
+    ["undecodable", '{"daily":'],
+  ]) {
+    test(`published ${name} baseline is refused before archive bootstrap`, () => {
+      const result = runCollectorFixture({
+        hasLocalUsage: true,
+        existingUsage: contents,
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("published billing baseline is invalid");
+      expect(result.output).toBe(contents);
+      expect(result.archiveCreated).toBe(false);
+    }, 15_000);
+  }
+
+  test("missing published baseline permits first archive bootstrap", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      missingExistingUsage: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.archiveCreated).toBe(true);
+    expect(JSON.parse(result.output).totals.tokens).toBe(1);
+  }, 15_000);
+
   test("nonzero Claude daily collection preserves the existing report", () => {
     const result = runCollectorFixture({
       hasLocalUsage: true,
