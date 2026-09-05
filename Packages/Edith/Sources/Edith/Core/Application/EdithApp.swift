@@ -136,6 +136,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        CalendarPermission.shutdown()
         flushSettingsChangedBroadcast()
         launchCleanupTask?.cancel()
         helperMaintenanceTask?.cancel()

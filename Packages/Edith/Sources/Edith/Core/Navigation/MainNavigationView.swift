@@ -484,7 +484,7 @@ struct MainWindowView: View {
     @State private var musicFolderPath = ""
     @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
-    @State private var permissionsProbe: Task<Void, Never>?
+    @State private var permissionsObserverID = UUID()
     @State private var presenterQuickActionsPresented = false
     @State private var hoveredPresenterQuickAction: String?
     @State private var keyboardCleanTrigger = 0
@@ -603,6 +603,7 @@ struct MainWindowView: View {
             installCommandHintMonitor()
             syncMusicResources()
             PresenterState.shared.syncEnabled(presenterEnabled)
+            CalendarPermission.observe(permissionsObserverID)
             refreshPermissionsPill()
             if nav.entries.isEmpty { nav.record(currentLocation) }
         }
@@ -614,7 +615,7 @@ struct MainWindowView: View {
         }
         .onDisappear {
             guard automaticActionsEnabled else { return }
-            permissionsProbe?.cancel()
+            CalendarPermission.stopObserving(permissionsObserverID)
             removeWindowKeys()
             removeCommandHintMonitor()
             removeMusicKeys()
@@ -769,12 +770,7 @@ struct MainWindowView: View {
 
     private func refreshPermissionsPill() {
         permissionsNeedAttention = PermissionsStatus.current
-        permissionsProbe?.cancel()
-        permissionsProbe = Task.detached(priority: .utility) {
-            guard !Task.isCancelled else { return }
-            CalendarPermission.mirror()
-            IPC.post(IPC.Name.requestPermissionsRefresh)
-        }
+        CalendarPermission.refresh(observer: permissionsObserverID)
     }
 
     private func chromeOverlay() -> some View {
