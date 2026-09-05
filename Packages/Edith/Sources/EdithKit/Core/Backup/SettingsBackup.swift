@@ -1369,7 +1369,25 @@ final class SettingsBackup {
             }
             restoreDidChange(.limits)
             return true
-        case .music, .clipboard:
+        case .clipboard:
+            let archive = ClipboardArchive(root: localClipboardDir)
+            let cloudIndex = cloudClipboardDir.appendingPathComponent("index.jsonl")
+            let restored = await Task.detached(priority: .utility) {
+                do {
+                    return try restoreToken.performIfValid {
+                        if item.name.hasPrefix("blobs/") {
+                            try archive.restoreBlob(
+                                from: item.source, name: item.source.lastPathComponent)
+                        }
+                        try archive.mergeAvailableCloudEntries(from: cloudIndex)
+                    }
+                } catch { return false }
+            }.value
+            guard !Task.isCancelled, restoreGenerationState.accepts(generation, for: dataClass)
+            else { return false }
+            if restored { restoreDidChange(dataClass) }
+            return restored
+        case .music:
             let restored = await Task.detached(priority: .utility) {
                 let fm = FileManager.default
                 if fm.fileExists(atPath: item.destination.path) { return true }
@@ -1426,7 +1444,6 @@ final class SettingsBackup {
         setRestorePending(0, for: dataClass)
         setRestoreTimedOut(0, for: dataClass)
         if dataClass == .clipboard {
-            ClipboardRepository.pruneEntriesMissingBlobs()
             IPC.post(IPC.Name.clipboardChanged)
         }
     }
@@ -1723,18 +1740,31 @@ final class SettingsBackup {
             FileManager.default.fileExists(atPath: localClipboardDir.path)
         else { return }
         clipboardBackupRunning = true
-        let source = localClipboardDir
+        let archive = ClipboardArchive(root: localClipboardDir)
         let destination = cloudClipboardDir
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "clipboard-export-" + UUID().uuidString)
         clipboardBackupTask?.cancel()
         clipboardBackupTask = Task { [weak self] in
-            let succeeded = await Self.synchronizeFiles(
-                arguments: [
-                    "-a", "--delete", "--max-size=1m",
-                    "--include", "*/", "--include", "index.jsonl",
-                    "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
-                    "--include", "*.url", "--include", "*.png", "--include", "*.tiff",
-                    "--exclude", "*", source.path + "/", destination.path + "/",
-                ], destination: destination)
+            let preparation = Task.detached(priority: .utility) {
+                do { try archive.stageExport(to: staging); return true } catch { return false }
+            }
+            let prepared = await withTaskCancellationHandler {
+                await preparation.value
+            } onCancel: {
+                preparation.cancel()
+            }
+            let succeeded: Bool
+            if prepared, !Task.isCancelled {
+                succeeded = await Self.synchronizeFiles(
+                    arguments: ["-a", "--delete", staging.path + "/", destination.path + "/"],
+                    destination: destination)
+            } else {
+                succeeded = false
+            }
+            await Task.detached(priority: .utility) {
+                try? FileManager.default.removeItem(at: staging)
+            }.value
             guard let self, !Task.isCancelled else { return }
             self.clipboardBackupRunning = false
             self.clipboardBackupTask = nil
@@ -1753,7 +1783,16 @@ final class SettingsBackup {
             clearRestoreState(for: .clipboard)
             return false
         }
-        let items = missingRestoreItems(from: cloudClipboardDir, to: localClipboardDir)
+        var items = missingRestoreItems(from: cloudClipboardDir, to: localClipboardDir).filter {
+            $0.name.hasPrefix("blobs/") && $0.name.split(separator: "/").count == 2
+        }
+        let cloudIndex = cloudClipboardDir.appendingPathComponent("index.jsonl")
+        if cloudFileExists(at: cloudIndex) {
+            items.append(
+                SettingsBackupRestoreItem(
+                    name: "index.jsonl", source: cloudIndex,
+                    destination: localClipboardDir.appendingPathComponent("index.jsonl")))
+        }
         beginProgressiveRestore(items, for: .clipboard)
         return !items.isEmpty
     }

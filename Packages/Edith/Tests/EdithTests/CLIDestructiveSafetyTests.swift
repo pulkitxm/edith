@@ -209,7 +209,7 @@ import Testing
         try await CLIProbe.inWorld { world in
             try CLIClipboardTests.seed(world, count: 3)
             let before = try Data(contentsOf: ClipboardPaths.indexFile)
-            let entries = ClipboardBridge.entries()
+            let entries = try await ClipboardBridge.entries()
             let blobBytes = try Dictionary(
                 uniqueKeysWithValues: entries.map {
                     (
@@ -247,7 +247,7 @@ import Testing
     @Test func clipboardRemovePreviewsTheExactEntryBeforeDeletingIt() async throws {
         try await CLIProbe.inWorld { world in
             try CLIClipboardTests.seed(world, count: 2)
-            let entries = ClipboardBridge.entries()
+            let entries = try await ClipboardBridge.entries()
             let target = entries[0]
             let blob = ClipboardPaths.blobFile(sha256: target.sha256, ext: target.ext)
             let before = try Data(contentsOf: ClipboardPaths.indexFile)

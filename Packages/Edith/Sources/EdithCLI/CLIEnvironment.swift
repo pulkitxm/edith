@@ -218,6 +218,7 @@ public enum CLIEnvironment {
         deliver = { IPC.post($0, userInfo: $1) }
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         clipboardPasteboard = .general
+        ClipboardCLIEnvironment.reset()
         downloadQueueFile = DownloadQueue.file
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir

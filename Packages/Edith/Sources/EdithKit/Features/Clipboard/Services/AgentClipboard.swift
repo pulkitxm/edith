@@ -77,8 +77,15 @@ public struct ClipboardStoredPayload: Codable, Sendable {
 }
 
 public struct AgentClipboardClient: Sendable {
-    private let client: AgentClient
-    public init(client: AgentClient = .shared) { self.client = client }
+    private let send: @Sendable (String, Data) async throws -> Data
+
+    public init(client: AgentClient = .shared) {
+        send = { try await client.performInternalAsync($0, payload: $1, timeout: 30) }
+    }
+
+    public init(send: @escaping @Sendable (String, Data) async throws -> Data) {
+        self.send = send
+    }
 
     public func capture(_ capture: ClipboardCapture) async throws -> ClipboardMutationResult {
         try await request(AgentClipboardOperation.capture, capture)
@@ -132,7 +139,6 @@ public struct AgentClipboardClient: Sendable {
         try Task.checkCancellation()
         return try AgentPayload.decode(
             Output.self,
-            from: await client.performInternalAsync(
-                operation, payload: AgentPayload.encode(input), timeout: 30))
+            from: await send(operation, AgentPayload.encode(input)))
     }
 }

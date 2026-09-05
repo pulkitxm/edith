@@ -221,6 +221,27 @@ public final class ClipboardArchive: @unchecked Sendable {
         }
     }
 
+    public func stageExport(to destination: URL) throws {
+        try withLock {
+            let entries = try load()
+            let supported: Set<String> = ["txt", "rtf", "html", "url", "png", "tiff"]
+            let output = destination.appendingPathComponent("blobs")
+            try ensureDirectory(output)
+            var exported: [ClipboardEntry] = []
+            for entry in entries where supported.contains(entry.ext) && entry.size <= 1_048_576 {
+                try Task.checkCancellation()
+                guard let data = try read(blobURL(entry), maximum: 1_048_576),
+                    data.count == entry.size, ClipboardRepository.sha256Hex(data) == entry.sha256
+                else { continue }
+                try data.write(to: output.appendingPathComponent(entry.sha256 + "." + entry.ext))
+                exported.append(entry)
+            }
+            try Task.checkCancellation()
+            try Data(ClipboardIndex.encode(exported).utf8).write(
+                to: destination.appendingPathComponent("index.jsonl"), options: .atomic)
+        }
+    }
+
     private func withLock<Value>(_ body: () throws -> Value) throws -> Value {
         try ensureDirectory(root)
         let descriptor = open(
@@ -291,6 +312,10 @@ public final class ClipboardArchive: @unchecked Sendable {
     private func blobURL(_ entry: ClipboardEntry) throws -> URL {
         guard validHash(entry.sha256), validExtension(entry.ext) else {
             throw AgentError(.refused, "The clipboard payload path is invalid.")
+        }
+        var metadata = stat()
+        if lstat(blobs.path, &metadata) == 0, metadata.st_mode & S_IFMT != S_IFDIR {
+            throw AgentError(.refused, "The clipboard payload directory is invalid.")
         }
         return blobs.appendingPathComponent(entry.sha256 + "." + entry.ext)
     }
