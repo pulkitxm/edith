@@ -41,6 +41,53 @@ private struct AttentionDaemonFixture {
 }
 
 @Suite struct AttentionDaemonIntegrationTests {
+    @Test func duplicateCategoryIdentifiersCannotCrashTheDaemonSummary() async throws {
+        let fixture = try AttentionDaemonFixture()
+        let now = Date()
+        try await fixture.service.record(
+            AttentionBatch(events: [fixture.event(at: now.addingTimeInterval(-30))]))
+        let category = AttentionSettings.defaultCategories[0]
+        let settings = AttentionSettings(categories: [category, category])
+        let summary = try await fixture.service.summary(
+            AttentionSummaryRequest(from: now.addingTimeInterval(-60), to: now, settings: settings))
+        #expect(summary.hasStoredEvents)
+        #expect(summary.events.count == 1)
+        await fixture.close()
+    }
+
+    @Test func failedMetadataPublicationRollsBackImportedEvents() async throws {
+        let fixture = try AttentionDaemonFixture()
+        let event = fixture.event(at: Date().addingTimeInterval(-30))
+        try fixture.repository.append(event)
+        #expect(throws: CocoaError.self) {
+            try fixture.events.restoreEvents(from: fixture.repository.eventsDirectory) {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+        }
+        #expect(try !fixture.events.hasEvents())
+        try fixture.events.restoreEvents(from: fixture.repository.eventsDirectory)
+        #expect(try fixture.events.hasEvents())
+        await fixture.close()
+    }
+
+    @Test func malformedRestoredSettingsLeaveEventsEmptyAndAllowRetry() async throws {
+        let fixture = try AttentionDaemonFixture()
+        let cloud = fixture.root.appendingPathComponent("cloud")
+        try fixture.repository.append(fixture.event(at: Date().addingTimeInterval(-30)))
+        try AttentionCloudBackup(
+            localDirectory: fixture.repository.directory, cloudDirectory: cloud
+        ).backup()
+        try FileManager.default.removeItem(at: fixture.repository.eventsDirectory)
+        try Data("invalid settings".utf8).write(to: cloud.appendingPathComponent("settings.json"))
+        await #expect(throws: (any Error).self) { try await fixture.service.restore() }
+        #expect(try !fixture.events.hasEvents())
+        try AgentPayload.encode(AttentionSettings()).write(
+            to: cloud.appendingPathComponent("settings.json"))
+        try await fixture.service.restore()
+        #expect(try fixture.events.hasEvents())
+        await fixture.close()
+    }
+
     @Test func shutdownRejectsNewWorkAndCannotRestartTheListener() async throws {
         let fixture = try AttentionDaemonFixture()
         await fixture.service.start()

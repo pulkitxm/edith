@@ -101,11 +101,18 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
             files: files, events: imported, alreadyImported: files == 0)
     }
 
-    public func restoreEvents(from directory: URL, now: Date = Date()) throws {
+    public func restoreEvents(
+        from directory: URL, now: Date = Date(), publish: () throws -> Void = {}
+    ) throws {
         let files = try FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )
         .filter { $0.pathExtension == "jsonl" }.sorted { $0.path < $1.path }
+        guard files.count <= 4096 else {
+            throw AgentStoreError("The Attention archive has too many event files.")
+        }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(60))
+        var bytes = 0
         try store.write { database in
             guard
                 try Bool.fetchOne(database, sql: "SELECT EXISTS(SELECT 1 FROM attention_event)")
@@ -114,6 +121,7 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                 throw AttentionCloudBackupError.localStoreNotEmpty
             }
             for file in files {
+                try Task.checkCancellation()
                 guard
                     let data = try UsageDataFiles.readRegularFile(
                         at: file, maximumBytes: 67_108_864),
@@ -121,13 +129,23 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                 else {
                     throw AgentStoreError("The Attention backup contains an unreadable event file.")
                 }
+                bytes += data.count
+                guard bytes <= 536_870_912 else {
+                    throw AgentStoreError("The Attention archive exceeds 512 MiB.")
+                }
                 for line in text.split(separator: "\n") {
+                    try Task.checkCancellation()
+                    guard ContinuousClock.now < deadline else {
+                        throw AgentStoreError("Attention restore exceeded 60 seconds.")
+                    }
                     let event = try AgentPayload.decode(AttentionEvent.self, from: Data(line.utf8))
                     if !AttentionRetention.isExpired(event, now: now) {
                         try insert(event, into: database, preservingExisting: true)
                     }
                 }
             }
+            try Task.checkCancellation()
+            try publish()
         }
     }
 
@@ -142,8 +160,12 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                 arguments: [AttentionRetention.cutoff(now: now)])
             var openName: String?
             var handle: FileHandle?
+            var totalBytes = 0
+            var fileBytes = 0
+            let deadline = ContinuousClock.now.advanced(by: .seconds(60))
             defer { try? handle?.close() }
             while let row = try rows.next() {
+                try Task.checkCancellation()
                 let startedAt: Date = row["startedAt"]
                 let payload: Data = row["payload"]
                 let name = AttentionPaths.eventFile(for: startedAt).lastPathComponent
@@ -153,6 +175,15 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                     try Data().write(to: file)
                     handle = try FileHandle(forWritingTo: file)
                     openName = name
+                    fileBytes = 0
+                }
+                totalBytes += payload.count + 1
+                fileBytes += payload.count + 1
+                guard totalBytes <= 536_870_912, fileBytes <= 67_108_864,
+                    ContinuousClock.now < deadline
+                else {
+                    throw AgentStoreError(
+                        "Attention export exceeded its archive size or 60-second limit.")
                 }
                 try handle?.write(contentsOf: payload + Data([0x0A]))
             }

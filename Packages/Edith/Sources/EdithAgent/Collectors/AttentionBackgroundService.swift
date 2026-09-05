@@ -19,6 +19,7 @@ public actor AttentionBackgroundService {
     private var observation: NSObjectProtocol?
     private var lastBackupAt: Date?
     private var backupTask: Task<Void, Error>?
+    private var restoreTask: Task<Void, Error>?
     private var refreshTask: Task<Void, Never>?
     private var summaryTasks: [UUID: Task<AttentionPageSnapshot, Error>] = [:]
     private var stopped = false
@@ -39,6 +40,7 @@ public actor AttentionBackgroundService {
 
     deinit {
         backupTask?.cancel()
+        restoreTask?.cancel()
         refreshTask?.cancel()
         for task in summaryTasks.values { task.cancel() }
         server?.stop()
@@ -66,6 +68,7 @@ public actor AttentionBackgroundService {
 
     public func run(now: Date = Date()) async throws -> Data? {
         guard !stopped else { throw CancellationError() }
+        guard restoreTask == nil else { return nil }
         let report = try events.importLegacyFiles(directory: repository.eventsDirectory, now: now)
         let settings = repository.loadSettings()
         let enabled = defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled)
@@ -100,12 +103,15 @@ public actor AttentionBackgroundService {
     public func stop() async {
         stopped = true
         let backup = backupTask
+        let restore = restoreTask
         let refresh = refreshTask
         let summaries = Array(summaryTasks.values)
         backupTask = nil
+        restoreTask = nil
         refreshTask = nil
         summaryTasks.removeAll()
         backup?.cancel()
+        restore?.cancel()
         refresh?.cancel()
         for task in summaries { task.cancel() }
         server?.stop()
@@ -114,6 +120,7 @@ public actor AttentionBackgroundService {
         if let observation { IPC.stopObserving(observation) }
         observation = nil
         _ = try? await backup?.value
+        _ = try? await restore?.value
         await refresh?.value
         for task in summaries { _ = await task.result }
     }
@@ -169,6 +176,9 @@ public actor AttentionBackgroundService {
 
     public func backup(now: Date = Date()) async throws {
         guard !stopped else { throw CancellationError() }
+        guard restoreTask == nil else {
+            throw AgentError(.unavailable, "Attention is restoring an archive.")
+        }
         if let backupTask {
             try await backupTask.value
             return
@@ -203,22 +213,55 @@ public actor AttentionBackgroundService {
         }
     }
 
-    public func restore() throws {
+    public func restore() async throws {
+        guard !stopped else { throw CancellationError() }
+        if let restoreTask { return try await restoreTask.value }
+        guard backupTask == nil else {
+            throw AgentError(.unavailable, "Attention is creating an archive.")
+        }
         guard cloudAvailable() else { throw AgentStoreError("iCloud Drive is unavailable.") }
         guard try !hasEvents() else { throw AttentionCloudBackupError.localStoreNotEmpty }
-        let staging = FileManager.default.temporaryDirectory
-            .appendingPathComponent("attention-restore-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: staging) }
-        try AttentionCloudBackup(localDirectory: staging, cloudDirectory: cloudDirectory)
-            .restoreWhenLocalStoreIsEmpty()
-        let stagedEvents = staging.appendingPathComponent("events")
-        try FileManager.default.createDirectory(at: stagedEvents, withIntermediateDirectories: true)
-        try events.restoreEvents(from: stagedEvents)
-        try FileManager.default.removeItem(at: stagedEvents)
-        try AttentionCloudBackup(localDirectory: staging, cloudDirectory: repository.directory)
-            .backup()
-        try importSpool()
-        IPC.post(IPC.Name.settingsChanged)
+        server?.stop()
+        server = nil
+        serverSettings = nil
+        let events = events
+        let directory = repository.directory
+        let cloudDirectory = cloudDirectory
+        let task = Task.detached(priority: .utility) {
+            let staging = FileManager.default.temporaryDirectory
+                .appendingPathComponent("attention-restore-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: staging) }
+            try AttentionCloudBackup(localDirectory: staging, cloudDirectory: cloudDirectory)
+                .restoreWhenLocalStoreIsEmpty()
+            let stagedEvents = staging.appendingPathComponent(".events")
+            let originalEvents = staging.appendingPathComponent("events")
+            if FileManager.default.fileExists(atPath: originalEvents.path) {
+                try FileManager.default.moveItem(at: originalEvents, to: stagedEvents)
+            } else {
+                try FileManager.default.createDirectory(
+                    at: stagedEvents, withIntermediateDirectories: true)
+            }
+            let settings = staging.appendingPathComponent("settings.json")
+            if let data = try UsageDataFiles.readRegularFile(at: settings, maximumBytes: 1_048_576)
+            {
+                _ = try AgentPayload.decode(AttentionSettings.self, from: data)
+            }
+            let publication = try AttentionArchivePublication(
+                source: staging, destination: directory)
+            do {
+                try events.restoreEvents(from: stagedEvents) { try publication.publish() }
+                publication.finish()
+            } catch {
+                try publication.rollback()
+                throw error
+            }
+        }
+        restoreTask = task
+        defer {
+            restoreTask = nil
+            IPC.post(IPC.Name.settingsChanged)
+        }
+        try await task.value
     }
 }
 
