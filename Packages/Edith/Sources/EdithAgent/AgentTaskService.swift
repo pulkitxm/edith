@@ -73,6 +73,7 @@ public actor AgentTaskService {
     private let record: RecordEvent
     private var entries: [UUID: PersistedAgentTask]
     private var handlers: [String: Handler] = [:]
+    private var operationConcurrency: [String: Int] = [:]
     private var payloads: [UUID: Data] = [:]
     private var order: [UUID] = []
     private var workers: [UUID: Task<Void, Never>] = [:]
@@ -167,8 +168,13 @@ public actor AgentTaskService {
         await publish(snapshots())
     }
 
-    public func register(operation: String, handler: @escaping Handler) {
+    public func register(
+        operation: String, concurrency: Int? = nil, handler: @escaping Handler
+    ) {
+        guard !stopping else { return }
         handlers[operation] = handler
+        operationConcurrency[operation] = concurrency.map { max(1, min(limits.concurrency, $0)) }
+        startNext()
     }
 
     public func registerCommand() {
@@ -298,7 +304,18 @@ public actor AgentTaskService {
     private func startNext() {
         guard !stopping else { return }
         while workers.count < limits.concurrency, !order.isEmpty {
-            let id = order.removeFirst()
+            guard
+                let index = order.firstIndex(where: { id in
+                    guard let operation = entries[id]?.status.snapshot.operation,
+                        let maximum = operationConcurrency[operation]
+                    else { return true }
+                    let active = workers.keys.lazy.filter {
+                        self.entries[$0]?.status.snapshot.operation == operation
+                    }.count
+                    return active < maximum
+                })
+            else { break }
+            let id = order.remove(at: index)
             guard var entry = entries[id], let payload = payloads.removeValue(forKey: id),
                 let handler = handlers[entry.status.snapshot.operation]
             else { continue }
