@@ -42,10 +42,14 @@ struct ClipboardRows: View {
     @State private var recentEntries: [ClipboardEntry] = []
     @State private var showHistory = false
     @State private var refreshObserver: NSObjectProtocol?
+    @State private var refreshTask: Task<Void, Never>?
+    @State private var refreshError: String?
 
     private var maxItemMB: Binding<Int> {
         Binding(
-            get: { max(1, maxItemBytes / 1_000_000) },
+            get: {
+                min(ClipboardArchive.maximumBlobBytes / 1_000_000, max(1, maxItemBytes / 1_000_000))
+            },
             set: {
                 $maxItemBytes.configured(AppStorageKeys.Clipboard.maxItemBytes).wrappedValue =
                     $0 * 1_000_000
@@ -77,6 +81,9 @@ struct ClipboardRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
+                if let refreshError {
+                    Text(refreshError).settingsCaption().foregroundStyle(.orange)
+                }
                 if recentEntries.isEmpty {
                     Text("No clipboard history yet.")
                         .settingsCaption()
@@ -95,6 +102,8 @@ struct ClipboardRows: View {
             refreshObserver = IPC.observe(IPC.Name.clipboardChanged) { reload() }
         }
         .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
             if let refreshObserver { IPC.stopObserving(refreshObserver) }
             refreshObserver = nil
         }
@@ -187,7 +196,7 @@ struct ClipboardRows: View {
             }
             Stepper(
                 value: maxItemMB,
-                in: 1...200
+                in: 1...(ClipboardArchive.maximumBlobBytes / 1_000_000)
             ) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Maximum item size: \(maxItemMB.wrappedValue) MB")
@@ -272,8 +281,19 @@ struct ClipboardRows: View {
     }
 
     private func reload() {
-        recentEntries = Array(
-            ClipboardRepository.loadEntries().sorted { $0.createdAt > $1.createdAt }.prefix(5))
+        refreshTask?.cancel()
+        refreshTask = Task { @MainActor in
+            do {
+                let snapshot = try await AgentClipboardClient().snapshot(
+                    .init(limit: 5, recentlyCreated: true))
+                guard !Task.isCancelled else { return }
+                recentEntries = snapshot.entries
+                refreshError = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                refreshError = error.localizedDescription
+            }
+        }
     }
 
     private func recentRow(_ entry: ClipboardEntry) -> some View {

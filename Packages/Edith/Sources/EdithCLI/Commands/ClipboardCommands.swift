@@ -94,8 +94,9 @@ enum ClipboardBridge {
     }
 
     static func text(_ entry: ClipboardEntry) async throws -> String {
-        let data = try await ClipboardCLIEnvironment.client.blob(id: entry.id).data
-        guard let text = ClipboardRepository.plainText(for: entry, data: data) else {
+        let payload = try await ClipboardCLIEnvironment.client.copy(
+            id: entry.id, plainTextOnly: true)
+        guard entry.isTextual, let text = payload.text else {
             throw CLIFailure(
                 "entry \(entry.ext) is not text",
                 hint: "use `ed clipboard copy` to put it back on the pasteboard instead")
@@ -286,11 +287,11 @@ struct ClipboardCopyCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let found = try await ClipboardBridge.entry(at: index)
-            let payload = try await ClipboardCLIEnvironment.client.blob(id: found.entry.id)
+            let payload = try await ClipboardCLIEnvironment.client.copy(
+                id: found.entry.id, plainTextOnly: plain)
             await MainActor.run {
                 ClipboardRepository.copyToPasteboard(
-                    payload.entry, data: payload.data, asPlainText: plain,
-                    pasteboard: CLIEnvironment.clipboardPasteboard)
+                    payload, pasteboard: CLIEnvironment.clipboardPasteboard)
             }
             _ = try await ClipboardCLIEnvironment.client.mutate(
                 .init(.copied, ids: [found.entry.id]))

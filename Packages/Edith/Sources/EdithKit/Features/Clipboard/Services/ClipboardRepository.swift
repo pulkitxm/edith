@@ -105,6 +105,32 @@ public enum ClipboardRepository {
         }
     }
 
+    @MainActor public static func copyToPasteboard(
+        _ payload: ClipboardCopyPayload, pasteboard: NSPasteboard = .general
+    ) {
+        pasteboard.clearContents()
+        if payload.plainTextOnly {
+            pasteboard.setString(payload.text ?? payload.entry.preview ?? "", forType: .string)
+        } else {
+            if let urls = payload.urls {
+                pasteboard.writeObjects(urls.map { $0 as NSURL })
+            } else {
+                let type: NSPasteboard.PasteboardType
+                switch payload.entry.ext {
+                case "png": type = .png
+                case "tiff": type = .tiff
+                case "rtf": type = .rtf
+                case "html": type = .html
+                default:
+                    type = .init(payload.entry.types.first ?? "public.data")
+                }
+                pasteboard.setData(payload.data, forType: type)
+            }
+            if let text = payload.text { pasteboard.setString(text, forType: .string) }
+        }
+        pasteboard.setData(Data(), forType: .init(ClipboardPasteboardFilter.edithOwnTag))
+    }
+
     @discardableResult
     public static func copyToPasteboard(
         _ entry: ClipboardEntry, asPlainText: Bool, pasteboard: NSPasteboard = .general

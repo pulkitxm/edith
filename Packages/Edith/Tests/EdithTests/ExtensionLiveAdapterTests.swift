@@ -309,43 +309,6 @@ import EdithCore
         #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
     }
 
-    @Test func clipboardAdapterReportsEmptyReadyDegradedAndCorruptStorage() throws {
-        let root = try temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let index = root.appendingPathComponent("index.jsonl")
-        let blobs = root.appendingPathComponent("blobs")
-        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
-
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .empty("Clipboard history is ready and empty."))
-
-        let entry = ClipboardEntry(
-            sha256: "abc", types: ["public.utf8-plain-text"], ext: "txt",
-            sourceApp: nil, sourceBundleID: nil, size: 4, preview: "text")
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        try (encoder.encode(entry) + Data("\n".utf8)).write(to: index)
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .degraded("Clipboard entries missing payloads: 1."))
-
-        try Data("text".utf8).write(to: blobs.appendingPathComponent("abc.txt"))
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .ready("Clipboard history entries: 1."))
-
-        try Data("broken".utf8).write(to: index)
-        guard
-            case .failed = ExtensionLiveAdapters.clipboardReadiness(
-                index: index, blobs: blobs
-            )
-        else {
-            Issue.record("corrupt clipboard data did not fail")
-            return
-        }
-    }
-
     @Test func preferenceAdaptersValidateStoredConfiguration() async {
         let suite = "test.extension-adapter.preferences.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

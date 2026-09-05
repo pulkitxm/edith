@@ -7,8 +7,37 @@ public final class ClipboardArchive: @unchecked Sendable {
     public static let maximumEntries = 4096
     public let root: URL
     private let writeBlob: @Sendable (Data, URL) throws -> Void
+    private var cachedIndex: CachedIndex?
     private var index: URL { root.appendingPathComponent("index.jsonl") }
     private var blobs: URL { root.appendingPathComponent("blobs") }
+
+    private struct FileVersion: Equatable {
+        let device: Int32
+        let inode: UInt64
+        let size: Int64
+        let modified: Int
+        let modifiedNanoseconds: Int
+        let changed: Int
+        let changedNanoseconds: Int
+
+        init(_ value: stat) {
+            device = value.st_dev
+            inode = value.st_ino
+            size = value.st_size
+            modified = value.st_mtimespec.tv_sec
+            modifiedNanoseconds = value.st_mtimespec.tv_nsec
+            changed = value.st_ctimespec.tv_sec
+            changedNanoseconds = value.st_ctimespec.tv_nsec
+        }
+    }
+
+    private struct CachedIndex {
+        let version: FileVersion
+        let entries: [ClipboardEntry]
+        let arranged: [ClipboardEntry]
+        let recentlyCreated: [ClipboardEntry]
+        let revision: String
+    }
 
     public init(
         root: URL = ClipboardPaths.dir,
@@ -121,15 +150,28 @@ public final class ClipboardArchive: @unchecked Sendable {
         else { throw AgentError(.refused, "The clipboard page is outside the supported limits.") }
         return try withLock {
             let entries = try load()
-            let revision = ClipboardRepository.sha256Hex(Data(ClipboardIndex.encode(entries).utf8))
+            let revision = cachedIndex?.revision ?? ClipboardRepository.sha256Hex(Data())
             if let expected = request.revision, expected != revision {
                 throw AgentError(.unavailable, AgentClipboardOperation.changedDuringRead)
             }
+            let ordered =
+                request.recentlyCreated
+                ? cachedIndex?.recentlyCreated ?? [] : cachedIndex?.arranged ?? []
             return ClipboardSnapshot(
-                entries: Array(
-                    ClipboardActions.arrange(entries).dropFirst(request.offset).prefix(
-                        request.limit)),
+                entries: Array(ordered.dropFirst(request.offset).prefix(request.limit)),
                 revision: revision, total: entries.count)
+        }
+    }
+
+    public func entry(id: String) throws -> ClipboardEntry {
+        guard id.utf8.count <= 128 else {
+            throw AgentError(.refused, "The clipboard identifier is invalid.")
+        }
+        return try withLock {
+            guard let entry = try load().first(where: { $0.id == id }) else {
+                throw AgentError(.unavailable, "The clipboard entry is missing.")
+            }
+            return entry
         }
     }
 
@@ -146,6 +188,24 @@ public final class ClipboardArchive: @unchecked Sendable {
                 throw AgentError(.failed, "The stored clipboard payload failed verification.")
             }
             return ClipboardStoredPayload(entry: entry, data: data)
+        }
+    }
+
+    public func inspect() throws -> ClipboardInspection {
+        try withLock {
+            let entries = try load()
+            var missing = 0
+            for entry in entries {
+                try Task.checkCancellation()
+                let url = try blobURL(entry)
+                var metadata = stat()
+                if lstat(url.path, &metadata) != 0 || metadata.st_mode & S_IFMT != S_IFREG
+                    || metadata.st_size != entry.size
+                {
+                    missing += 1
+                }
+            }
+            return ClipboardInspection(entries: entries.count, missingPayloads: missing)
         }
     }
 
@@ -269,8 +329,27 @@ public final class ClipboardArchive: @unchecked Sendable {
     }
 
     private func load() throws -> [ClipboardEntry] {
+        var metadata = stat()
+        if lstat(index.path, &metadata) != 0 {
+            guard errno == ENOENT else {
+                throw AgentError(.failed, "The clipboard index cannot be inspected.")
+            }
+            cachedIndex = nil
+            return []
+        }
+        guard metadata.st_mode & S_IFMT == S_IFREG,
+            metadata.st_size <= Self.maximumIndexBytes
+        else { throw AgentError(.refused, "The clipboard index is invalid.") }
+        let version = FileVersion(metadata)
+        if let cachedIndex, cachedIndex.version == version { return cachedIndex.entries }
         guard let data = try read(index, maximum: Self.maximumIndexBytes) else { return [] }
-        return try decode(data)
+        let entries = try decode(data)
+        cachedIndex = CachedIndex(
+            version: version, entries: entries, arranged: ClipboardActions.arrange(entries),
+            recentlyCreated: entries.sorted {
+                $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt
+            }, revision: ClipboardRepository.sha256Hex(data))
+        return entries
     }
 
     private func decode(_ data: Data) throws -> [ClipboardEntry] {
@@ -300,6 +379,7 @@ public final class ClipboardArchive: @unchecked Sendable {
             throw AgentError(.refused, "The clipboard index exceeds the supported size.")
         }
         try UsageDataFiles.write(data, to: index)
+        cachedIndex = nil
     }
 
     private func pruneRemoved(_ previous: [ClipboardEntry], keeping entries: [ClipboardEntry]) {
