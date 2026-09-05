@@ -33,6 +33,7 @@ public struct AgentServices {
         async let runtimeStopped: Void = runtime.shutdown()
         async let schedulerStopped: Void = scheduler.shutdown()
         await startup?.value
+        await BackgroundBackupRuntime.stop()
         _ = await (runtimeStopped, schedulerStopped)
     }
 }
@@ -120,6 +121,8 @@ public enum AgentBoot {
                 await scheduler.register(job)
             }
             await scheduler.start()
+            guard !Task.isCancelled, await !runtime.isShuttingDown else { return }
+            await BackgroundBackupRuntime.start()
             guard !Task.isCancelled, await !runtime.isShuttingDown else { return }
             hub.resume()
             await runtime.record(
