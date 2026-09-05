@@ -1,9 +1,93 @@
+import Darwin
 import Foundation
 import Testing
 
 @testable import EdithKit
 
 @Suite struct AttentionCloudBackupTests {
+    @Test func oversizedArchiveFilePreservesTheExistingDestination() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.createDirectory(
+            at: fixture.localRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: fixture.cloudRoot, withIntermediateDirectories: true)
+        let source = fixture.localRoot.appendingPathComponent("large.jsonl")
+        let target = fixture.cloudRoot.appendingPathComponent("large.jsonl")
+        try Data().write(to: source)
+        let handle = try FileHandle(forWritingTo: source)
+        try handle.truncate(atOffset: 67_108_865)
+        try handle.close()
+        try Data("previous".utf8).write(to: target)
+        #expect(throws: AttentionArchiveError.self) {
+            try AttentionArchiveCopy.copy(from: fixture.localRoot, to: fixture.cloudRoot)
+        }
+        #expect(try String(contentsOf: target, encoding: .utf8) == "previous")
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: fixture.cloudRoot.path) == [
+                "large.jsonl"
+            ])
+    }
+
+    @Test func archiveRefusesPipesAndLinkedDestinationDirectories() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let source = fixture.localRoot.appendingPathComponent("events")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let pipe = source.appendingPathComponent("pipe.jsonl")
+        #expect(mkfifo(pipe.path, 0o600) == 0)
+        #expect(throws: AttentionArchiveError.self) {
+            try AttentionArchiveCopy.copy(from: fixture.localRoot, to: fixture.cloudRoot)
+        }
+        try FileManager.default.removeItem(at: pipe)
+        try Data("event".utf8).write(to: source.appendingPathComponent("day.jsonl"))
+        let outside = fixture.root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let destination = fixture.cloudRoot.appendingPathComponent("events")
+        try FileManager.default.removeItem(at: destination)
+        try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: outside)
+        #expect(throws: AttentionArchiveError.self) {
+            try AttentionArchiveCopy.copy(from: fixture.localRoot, to: fixture.cloudRoot)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+    }
+
+    @Test func cancelledArchiveDoesNotPublishPartialFiles() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.createDirectory(
+            at: fixture.localRoot, withIntermediateDirectories: true)
+        try Data(repeating: 42, count: 1_048_576).write(
+            to: fixture.localRoot.appendingPathComponent("data.jsonl"))
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            try AttentionArchiveCopy.copy(from: fixture.localRoot, to: fixture.cloudRoot)
+        }
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(!FileManager.default.fileExists(atPath: fixture.cloudRoot.path))
+    }
+
+    @Test func spoolRefusesAnOccupiedLockAndKeepsItsEvents() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let repository = AttentionRepository(root: fixture.localRoot)
+        let event = AttentionEvent(
+            startedAt: Date(), duration: 5, source: .application, appName: "Fixture")
+        try repository.append(event)
+        let lock = open(repository.lockFile.path, O_RDWR | O_CLOEXEC)
+        #expect(lock >= 0)
+        defer { close(lock) }
+        #expect(flock(lock, LOCK_EX | LOCK_NB) == 0)
+        defer { _ = flock(lock, LOCK_UN) }
+        let start = ContinuousClock.now
+        #expect(throws: CocoaError.self) {
+            try AttentionFileSpool.drain(directory: repository.eventsDirectory) { _ in true }
+        }
+        #expect(start.duration(to: .now) < .seconds(1))
+        #expect(
+            FileManager.default.fileExists(atPath: repository.eventFile(for: event.startedAt).path))
+    }
+
     @Test func backupAndEmptyRestoreRoundTripRealFiles() throws {
         let fixture = fixture()
         defer { fixture.cleanup() }

@@ -25,7 +25,7 @@ public struct AttentionCloudBackup: Sendable {
     public func backup(now: Date = Date()) throws -> Date {
         let manager = FileManager.default
         try manager.createDirectory(at: cloudDirectory, withIntermediateDirectories: true)
-        try copyTree(from: localDirectory, to: cloudDirectory, skippingLock: true)
+        try AttentionArchiveCopy.copy(from: localDirectory, to: cloudDirectory)
         try manager.setAttributes([.modificationDate: now], ofItemAtPath: cloudDirectory.path)
         return now
     }
@@ -40,30 +40,7 @@ public struct AttentionCloudBackup: Sendable {
         }
         try FileManager.default.createDirectory(
             at: localDirectory, withIntermediateDirectories: true)
-        try copyTree(from: cloudDirectory, to: localDirectory, skippingLock: true)
-    }
-
-    private func copyTree(from source: URL, to destination: URL, skippingLock: Bool) throws {
-        let manager = FileManager.default
-        guard manager.fileExists(atPath: source.path) else { return }
-        try manager.createDirectory(at: destination, withIntermediateDirectories: true)
-        let items = try manager.contentsOfDirectory(
-            at: source,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles])
-        for item in items {
-            if skippingLock, item.lastPathComponent == ".lock" { continue }
-            let target = destination.appendingPathComponent(item.lastPathComponent)
-            let values = try item.resourceValues(forKeys: [
-                .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey,
-            ])
-            guard values.isSymbolicLink != true else { continue }
-            if values.isDirectory == true {
-                try copyTree(from: item, to: target, skippingLock: skippingLock)
-            } else if values.isRegularFile == true {
-                try Data(contentsOf: item).write(to: target, options: .atomic)
-            }
-        }
+        try AttentionArchiveCopy.copy(from: cloudDirectory, to: localDirectory)
     }
 }
 
