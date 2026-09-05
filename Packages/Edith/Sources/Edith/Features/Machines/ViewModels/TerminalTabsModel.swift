@@ -102,7 +102,7 @@ final class TerminalTabsModel {
 struct TerminalTabsView: View {
     let session: MachineSession
     var presented = true
-    @State private var model = TerminalTabsModel()
+    @State var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
     @State private var broadcastError: String?
@@ -262,11 +262,16 @@ struct TerminalTabsView: View {
 
 @MainActor
 enum TerminalWindow {
-    private static var windows: [UUID: NSWindow] = [:]
+    private struct Entry {
+        let window: NSWindow
+        let model: TerminalTabsModel
+    }
 
-    static func open(session: MachineSession) {
+    private static var windows: [UUID: Entry] = [:]
+
+    static func open(session: MachineSession, model: TerminalTabsModel? = nil) {
         if let existing = windows[session.machine.id] {
-            existing.makeKeyAndOrderFront(nil)
+            existing.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
@@ -279,21 +284,26 @@ enum TerminalWindow {
         window.contentMinSize = NSSize(width: 520, height: 320)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithTerminal"
+        let ownedModel = model ?? TerminalTabsModel()
         let hosting = NSHostingController(
-            rootView: ZoomableRoot { TerminalTabsView(session: session) })
+            rootView: ZoomableRoot { TerminalTabsView(session: session, model: ownedModel) })
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 900, height: 560))
         window.setFrameAutosaveName("EdithTerminalWindow")
         if window.frame.origin == .zero { window.center() }
         window.delegate = TerminalWindowDelegate.shared
-        windows[session.machine.id] = window
+        windows[session.machine.id] = Entry(window: window, model: ownedModel)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     static func forget(_ window: NSWindow) {
-        windows = windows.filter { $0.value !== window }
+        guard let entry = windows.first(where: { $0.value.window === window }) else { return }
+        entry.value.model.stopAll()
+        window.contentViewController = nil
+        window.contentView = nil
+        windows.removeValue(forKey: entry.key)
     }
 }
 

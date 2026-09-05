@@ -101,6 +101,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        PermissionsModel.shared.shutdown()
+        await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }

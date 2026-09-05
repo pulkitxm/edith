@@ -207,7 +207,10 @@ import Testing
         #expect(reports.contains { $0.hasPrefix("[<64;") || $0.hasPrefix("[<65;") })
     }
 
-    @Test @MainActor func commandHoverAndClickOwnALinkInsideAMouseReportingTUI() async throws {
+    @Test(arguments: [false, true]) @MainActor
+    func commandHoverAndClickOwnALinkInsideAMouseReportingTUI(buttonInitiallyHeld: Bool)
+        async throws
+    {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-ghostty-command-link-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: output) }
@@ -264,7 +267,15 @@ import Testing
                 timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "",
                 charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
 
-        view.applyModifierChange(commandDown, mouseOverSurface: true)
+        #expect(view.terminalTargetAtPointer()?.contains(url) == true)
+        if buttonInitiallyHeld {
+            view.applyModifierChange(
+                commandDown, mouseOverSurface: true, pressedMouseButtons: 1)
+            #expect(view.hoveredLink == nil)
+            #expect(view.terminalCursor == .arrow)
+        }
+        view.applyModifierChange(
+            commandDown, mouseOverSurface: true, pressedMouseButtons: 0)
 
         #expect(view.hoveredLink == url)
         #expect(view.terminalCursor == .pointingHand)
@@ -291,7 +302,7 @@ import Testing
                 with: .flagsChanged, location: linkPoint, modifierFlags: [], timestamp: 5,
                 windowNumber: window.windowNumber, context: nil, characters: "",
                 charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
-        view.applyModifierChange(commandUp, mouseOverSurface: true)
+        view.applyModifierChange(commandUp, mouseOverSurface: true, pressedMouseButtons: 0)
         #expect(view.hoveredLink == nil)
         try await Task.sleep(for: .milliseconds(150))
         #expect((try? Data(contentsOf: output))?.isEmpty == true)

@@ -141,7 +141,10 @@ extension GhosttyTerminalView {
         applyModifierChange(event, mouseOverSurface: mouseOverSurface)
     }
 
-    func applyModifierChange(_ event: NSEvent, mouseOverSurface: Bool) {
+    func applyModifierChange(
+        _ event: NSEvent, mouseOverSurface: Bool,
+        pressedMouseButtons: Int = NSEvent.pressedMouseButtons
+    ) {
         guard let surface else { return }
         var key = ghostty_input_key_s()
         key.action = Self.modifierAction(for: event)
@@ -155,7 +158,7 @@ extension GhosttyTerminalView {
         if Self.shouldRefreshCapturedLink(
             commandActive: event.modifierFlags.contains(.command),
             mouseCaptured: ghostty_surface_mouse_captured(surface)),
-            mouseOverSurface, NSEvent.pressedMouseButtons == 0
+            mouseOverSurface, pressedMouseButtons == 0
         {
             var refresh = ghostty_input_key_s()
             refresh.action = GHOSTTY_ACTION_RELEASE
