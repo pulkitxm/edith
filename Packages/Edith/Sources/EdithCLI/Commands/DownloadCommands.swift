@@ -91,7 +91,7 @@ struct DownloadListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
-            let records = DownloadOperationExecution.list(limit: 0, file: DownloadBridge.file)
+            let records = await DownloadOperationExecution.liveRecords(file: DownloadBridge.file)
             let all = active ? records.filter { !$0.isFinished } : records
             let shown = limit == 0 ? all : Array(all.prefix(limit))
             guard !json else {
@@ -132,7 +132,8 @@ struct DownloadStatusCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let status = DownloadOperationExecution.status(file: DownloadBridge.file)
+            let status = DownloadQueueSnapshot(
+                records: await DownloadOperationExecution.liveRecords(file: DownloadBridge.file))
             let fields: [(String, Int)] = [
                 ("total", status.total), ("active", status.active), ("queued", status.queued),
                 ("resolving", status.resolving), ("downloading", status.downloading),

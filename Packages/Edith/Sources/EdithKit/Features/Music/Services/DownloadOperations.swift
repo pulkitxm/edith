@@ -210,6 +210,15 @@ public enum DownloadOperationExecution {
         file.standardizedFileURL == DownloadQueue.file.standardizedFileURL
     }
 
+    public static func liveRecords(
+        file: URL = DownloadQueue.file, client: AgentDownloadClient = AgentDownloadClient()
+    ) async -> [DownloadRecord] {
+        if isDaemonQueue(file), let snapshot = try? await client.snapshot() {
+            return snapshot.records
+        }
+        return DownloadQueue.load(from: file)
+    }
+
     public static func list(
         activeOnly: Bool = false, limit: Int = 25, file: URL = DownloadQueue.file
     ) -> [DownloadRecord] {

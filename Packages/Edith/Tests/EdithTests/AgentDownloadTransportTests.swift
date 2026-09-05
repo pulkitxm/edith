@@ -5,6 +5,44 @@ import Testing
 @testable import EdithKit
 
 @Suite struct AgentDownloadTransportTests {
+    @Test func commandLineReadsCurrentProgressThroughTheDaemonSnapshot() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "download-progress-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("queue.json")
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let worker = DownloadWorker(
+            file: file, executable: { URL(fileURLWithPath: "/bin/sh") },
+            isEnabled: { true },
+            runCommand: { _, line in
+                line("[download] 10.0% of")
+                try await Task.sleep(for: .seconds(30))
+                return CLICommandResult(terminationStatus: 0, output: "")
+            })
+        await AgentOperations.register(on: runtime, downloads: worker)
+        try await worker.start()
+        _ = try await worker.mutate(
+            .enqueue(
+                urls: [URL(string: "https://example.com/fixture")!],
+                prefix: "", kind: .audio, outputDirectory: directory))
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let client = AgentDownloadClient(client: listener.client())
+        var records: [DownloadRecord] = []
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while ContinuousClock.now < deadline {
+            records = await DownloadOperationExecution.liveRecords(client: client)
+            if records.first?.state == "downloading" { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(DownloadQueueSnapshot(records: records).downloading == 1)
+        #expect(DownloadQueue.load(from: file).first?.status == .resolving)
+        let offline = await DownloadOperationExecution.liveRecords(file: file)
+        #expect(offline.first?.status == .resolving)
+        await worker.stop()
+    }
+
     @Test func downloadFinishesAfterClientDisconnectAndPublishesItsCompletedFile() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "download-xpc-\(UUID().uuidString)")
