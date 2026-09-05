@@ -391,7 +391,7 @@ struct FinderBody: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.iconOnly))
                     .help("Cancel transfer")
                     .accessibilityLabel("Cancel transfer")
                 }
