@@ -369,6 +369,72 @@ HISTORY='
         | trimProject(.; $allowed)
         | select((.bySource | length) > 0) ]
     };
+  def historyKey($block): [$block.period, $block.source] | tojson;
+  def validRetention($blocks):
+    ($blocks | type) == "array"
+    and ($blocks | length) <= 4096
+    and ([ $blocks[].candidates | length ] | add // 0) <= 8192
+    and ({blocks: $blocks} | tojson | utf8bytelength) <= 16777216
+    and all($blocks[];
+      (.period | type) == "string" and (.period | length) > 0
+      and (.source | type) == "string" and (.source | length) > 0
+      and (.source | startswith("machine:") | not)
+      and .state == "partial-overlap"
+      and (.provenance.kind | type) == "string"
+      and (.source as $source | (.baseline.bySource | has($source)))
+      and (.candidates | type) == "array"
+      and (. as $block | all(([$block.baseline] + $block.candidates)[];
+        .period == $block.period and (.bySource | type) == "object"
+        and all(.bySource | keys[]; . == $block.source)
+        and (.hours | type) == "array" and (.projects | type) == "array")));
+  def retainedBlocks($document):
+    if $document.historyRetention == null then []
+    elif $document.historyRetention.version == 1
+      and validRetention($document.historyRetention.blocks)
+    then $document.historyRetention.blocks
+    else error("usage retained history is invalid") end;
+  def coverageRegressed($old; $new):
+    ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens", "cost"] as $fields
+    | any(($old // [])[]; .modelName as $model
+        | any($fields[]; . as $field
+          | ([($new // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0) + 0.000001
+            < ([($old // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0)));
+  def retainHistory($old; $fresh):
+    (reduce ((retainedBlocks($old) + retainedBlocks($fresh))[]) as $block ({};
+      historyKey($block) as $key
+      | if .[$key] == null then .[$key] = $block
+        elif .[$key].baseline == $block.baseline then
+          .[$key].candidates = ((.[$key].candidates + $block.candidates) | unique)
+        else error("usage retained history baseline conflicts") end)) as $retained
+    | (reduce (($old.daily // [])[]) as $oldDay ({blocks: $retained, excluded: {}};
+        ([($fresh.daily // [])[] | select(.period == $oldDay.period)][0]
+          // {period: $oldDay.period}) as $newDay
+        | reduce (localSources(($oldDay.bySource // {}) | keys)[]) as $source (.;
+            {period: $oldDay.period, source: $source} as $identity
+            | historyKey($identity) as $key
+            | if .blocks[$key] != null
+                or coverageRegressed($oldDay.bySource[$source]; $newDay.bySource[$source])
+              then trimDay($oldDay; [$source]) as $baseline
+                | trimDay($newDay; [$source]) as $candidate
+                | if .blocks[$key] == null then
+                    .blocks[$key] = ($identity + {
+                      state: "partial-overlap", baseline: $baseline, candidates: [],
+                      provenance: {kind: "published-aggregate", generatedAt: ($old.generatedAt // "")}
+                    })
+                  elif .blocks[$key].baseline != $baseline then
+                    error("usage retained history baseline changed")
+                  else . end
+                | if $candidate != $baseline then
+                    .blocks[$key].candidates = ((.blocks[$key].candidates + [$candidate]) | unique)
+                  else . end
+                | .excluded[$oldDay.period] = ((.excluded[$oldDay.period] // []) + [$source] | unique)
+              else . end))) as $retention
+    | ($retention.blocks | to_entries | sort_by(.key) | map(.value)) as $blocks
+    | if validRetention($blocks) then . else error("usage retained history capacity reached") end
+    | $fresh
+    | .daily = [(.daily // [])[]
+        | trimDay(.; ((.bySource // {} | keys) - ($retention.excluded[.period] // [])))]
+    | if ($blocks | length) > 0 then .historyRetention = {version: 1, blocks: $blocks} else . end;
   def mergeDay($old; $new):
     localSources(($old.bySource // {}) | keys) as $oldSources
     | (($new.bySource // {}) | keys) as $newSources
@@ -385,13 +451,14 @@ HISTORY='
         projects: ($history.projects + ($new.projects // []))
       };
   $previous[0] as $old
-  | $fresh[0] as $new
+  | retainHistory($old; $fresh[0]) as $new
   | localSources($old.sources // []) as $oldSources
   | localSources($old.defaultSources // []) as $oldDefaults
   | (($old.sourceMeta // {})
       | with_entries(select(.key | startswith("machine:") | not))) as $oldMeta
   | ([ ($old.daily // [])[].period, ($new.daily // [])[].period ] | unique | sort) as $periods
   | {
+      historyRetention: ($new.historyRetention // {version: 1, blocks: []}),
       schemaVersion: $new.schemaVersion,
       generatedAt: $new.generatedAt,
       sources: (($oldSources + ($new.sources // [])) | dedupe),
@@ -558,6 +625,7 @@ FLEET='
   | {
       schemaVersion: 8,
       generatedAt: $base.generatedAt,
+      historyRetention: ($base.historyRetention // {version: 1, blocks: []}),
       sources: ((($base.sources // []) + [ $fleet[].sources[] ]) | dedupe),
       defaultSources: ((($base.defaultSources // []) + [ $fleet[].defaultSources[] ]) | dedupe),
       sourceMeta: ( reduce $fleet[] as $m (($base.sourceMeta // {}); . + $m.sourceMeta) ),
@@ -1864,6 +1932,10 @@ if [ -s "$OUT" ] && jq -e "$HISTORY_INPUT" "$OUT" >/dev/null 2>&1; then
   fi
   mv "$TMP/history.json" "$TMP/usage.json"
   _phase "history" "$(jq '.daily | length' "$TMP/usage.json") days retained"
+  RETAINED_BLOCKS=$(jq '.historyRetention.blocks | length' "$TMP/usage.json")
+  if [ "$RETAINED_BLOCKS" -gt 0 ]; then
+    _note "$RETAINED_BLOCKS day/source blocks retain prior usage; overlapping changes remain unresolved, newer days continue"
+  fi
 fi
 
 if [ "$HAS_MACHINES" = "1" ]; then

@@ -228,7 +228,16 @@ public enum UsageRefreshRunner {
             throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
         }
         do {
-            try publish(stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+            let retained = try publish(
+                stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+            if retained > 0 {
+                let message =
+                    "\(retained) day/source blocks retain prior usage; "
+                    + "overlapping changes remain unresolved, newer days continue"
+                if !collector.events.contains(.note(message)) {
+                    collector.ingestStandardOutput(Data("note\t\(message)\n".utf8))
+                }
+            }
         } catch {
             throw UsageRefreshFailure.reported(
                 "usage refresh publication failed; previous data preserved")
@@ -238,15 +247,17 @@ public enum UsageRefreshRunner {
             events: collector.events, seconds: elapsed, startedAt: startedAt)
     }
 
+    @discardableResult
     static func publish(
         stagedUsage: URL, baseline: UsageRefreshBaseline, dataDir: URL
-    ) throws {
+    ) throws -> Int {
         guard
             let fresh = try UsageDataFiles.readRegularFile(
                 at: stagedUsage, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes),
             UsageHistory.isValidDocument(fresh)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
-        guard let merged = UsageHistory.merge(local: fresh, cloud: baseline.usage),
+        guard let merged = UsageHistory.mergeRefresh(fresh: fresh, previous: baseline.usage),
+            merged.count <= UsageDataFiles.maximumUsageDocumentBytes,
             UsageHistory.isValidDocument(merged)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
         try UsageDataLock.withLock(dataDirectory: dataDir) {
@@ -260,6 +271,7 @@ public enum UsageRefreshRunner {
             }
             try UsageDataFiles.write(merged, to: dataDir.appendingPathComponent("usage.json"))
         }
+        return UsageHistory.retainedHistoryBlockCount(in: merged)
     }
 
     static func stageCurrentUsage(
