@@ -14,6 +14,7 @@ import tempfile
 import time
 import uuid
 
+from edith_test_environment import isolated_test_environment, test_build_directory
 
 client_source = r'''
 import Darwin
@@ -109,12 +110,11 @@ do {
 '''
 
 repo = pathlib.Path(__file__).resolve().parents[1]
+build = test_build_directory(repo)
 root = pathlib.Path(tempfile.mkdtemp(prefix="emach-", dir="/tmp"))
 label = "com.pulkit.edith.machine-test." + uuid.uuid4().hex
 suite = label + ".defaults"
-env = dict(os.environ, EDITH_AGENT_MACH_SERVICE=label,
-           EDITH_SHARED_DEFAULTS_SUITE=suite, EDITH_DATA_ROOT=str(root / "data"),
-           EDITH_AGENT_BUILD="machine-e2e")
+env = dict(isolated_test_environment(root, label), EDITH_AGENT_BUILD="machine-e2e")
 results = []
 booted = False
 sshd = None
@@ -186,8 +186,8 @@ def process_running(pid):
 try:
     (root / "client.swift").write_text(client_source)
     call(["/usr/bin/swiftc", str(root / "client.swift"), "-o", str(root / "client")], timeout=60)
-    shutil.copy2(repo / "Packages/Edith/.build/debug/edithd", root / "edithd")
-    shutil.copytree(repo / "Packages/Edith/.build/debug/Edith_EdithKit.bundle",
+    shutil.copy2(build / "edithd", root / "edithd")
+    shutil.copytree(build / "Edith_EdithKit.bundle",
         root / "Edith_EdithKit.bundle")
     for name, identity in [("client", "ed"), ("edithd", "com.pulkit.edith.agent")]:
         call(["/usr/bin/codesign", "--force", "--sign", "-", "--identifier", identity, str(root / name)])

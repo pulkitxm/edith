@@ -10,12 +10,14 @@ import tempfile
 import time
 import uuid
 
+from edith_test_environment import isolated_test_environment, test_build_directory
+
 repo = pathlib.Path(__file__).resolve().parents[1]
+build = test_build_directory(repo)
 root = pathlib.Path(tempfile.mkdtemp(prefix='edith-daemon-e2e-'))
 label = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 suite = label + '.defaults'
-env = dict(os.environ, EDITH_AGENT_MACH_SERVICE=label, EDITH_SHARED_DEFAULTS_SUITE=suite,
-           EDITH_DATA_ROOT=str(root / 'data'), EDITH_AGENT_BUILD='runtime-e2e')
+env = dict(isolated_test_environment(root, label), EDITH_AGENT_BUILD='runtime-e2e')
 target = 'gui/' + str(os.getuid()) + '/' + label
 results = []
 booted = False
@@ -58,7 +60,7 @@ def record(name, **data):
 
 try:
     for name, identity in [('ed', 'ed'), ('edithd', 'com.pulkit.edith.agent')]:
-        shutil.copy2(repo / 'Packages/Edith/.build/debug' / name, root / name)
+        shutil.copy2(build / name, root / name)
         call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identity, str(root / name)])
     for key in ['suiteAgentsEnabled', 'suiteMaintenanceEnabled', 'suiteSystemEnabled',
                 'suiteDeskEnabled', 'suiteMediaEnabled', 'suiteDataEnabled', 'icloudBackup']:
