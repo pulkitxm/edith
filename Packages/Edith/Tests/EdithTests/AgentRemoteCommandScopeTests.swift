@@ -21,11 +21,13 @@ import Testing
         let second = AgentRemoteCommandScope(command: command)
         let firstPID = RemoteScopePID()
         let secondPID = RemoteScopePID()
-        let firstWorker = Task { try await run(first.command, receive: firstPID.receive) }
-        let secondWorker = Task { try await run(second.command, receive: secondPID.receive) }
+        let firstWorker = Task { try await run(first.command, receive: { firstPID.receive($0) }) }
+        let secondWorker = Task {
+            try await run(second.command, receive: { secondPID.receive($0) })
+        }
         defer { firstWorker.cancel(); secondWorker.cancel() }
         var phase = "waiting for child processes"
-        var cleanupOutput = ""
+        let cleanupOutput = RemoteScopeCleanupTrace()
         var knownProcesses: [Int32] = []
         do {
             let firstChild = try await waitForPID(firstPID)
@@ -37,8 +39,10 @@ import Testing
             #expect(kill(firstChild, 0) == 0)
             #expect(kill(secondChild, 0) == 0)
             phase = "cleaning the first session"
-            let firstCleanup = try await run(first.cleanupCommand)
-            cleanupOutput = firstCleanup.standardOutput + firstCleanup.standardError
+            let firstCleanup = try await run(
+                traced(first.cleanupCommand),
+                receive: { cleanupOutput.receive($0, stream: "stdout") },
+                receiveError: { cleanupOutput.receive($0, stream: "stderr") })
             #expect(firstCleanup.terminationStatus == 0)
             try #require(firstCleanup.standardOutput == "matched:\(firstGroup)\n")
             phase = "waiting for the first session to exit"
@@ -46,8 +50,10 @@ import Testing
             #expect(kill(firstChild, 0) != 0)
             #expect(kill(secondChild, 0) == 0)
             phase = "cleaning the second session"
-            let secondCleanup = try await run(second.cleanupCommand)
-            cleanupOutput = secondCleanup.standardOutput + secondCleanup.standardError
+            let secondCleanup = try await run(
+                traced(second.cleanupCommand),
+                receive: { cleanupOutput.receive($0, stream: "stdout") },
+                receiveError: { cleanupOutput.receive($0, stream: "stderr") })
             #expect(secondCleanup.terminationStatus == 0)
             try #require(secondCleanup.standardOutput == "matched:\(secondGroup)\n")
             phase = "waiting for the second session to exit"
@@ -56,7 +62,7 @@ import Testing
         } catch {
             let rows = await diagnostics(processes: knownProcesses)
             Issue.record(
-                "Remote cleanup failed while \(phase): \(error). Cleanup: \(cleanupOutput). Processes: \(rows)"
+                "Remote cleanup failed while \(phase): \(error). Cleanup: \(cleanupOutput.text). Processes: \(rows)"
             )
             firstWorker.cancel()
             secondWorker.cancel()
@@ -71,6 +77,10 @@ import Testing
         let result = try await run(scope.cleanupCommand)
         #expect(result.terminationStatus == 0)
         #expect(result.standardOutput.isEmpty)
+    }
+
+    private func traced(_ command: String) -> String {
+        command.replacingOccurrences(of: "exec sh -c ", with: "exec sh -x -c ")
     }
 
     private func diagnostics(processes: [Int32]) async -> String {
@@ -94,7 +104,8 @@ import Testing
 
     private func run(
         _ command: String, input: Data? = nil,
-        receive: @escaping @Sendable (String) -> Void = { _ in }
+        receive: @escaping @Sendable (String) -> Void = { _ in },
+        receiveError: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> CLICommandResult {
         try await CLICommandRunner.runLocalSeparated(
             CLICommandRequest(
@@ -103,7 +114,7 @@ import Testing
                 maximumOutputBytes: 128 << 10, standardInputData: input,
                 terminatesProcessGroup: true),
             streamsWhileRunning: true, onStandardOutputLine: receive,
-            onStandardErrorLine: { _ in })
+            onStandardErrorLine: receiveError)
     }
 
     private func waitForPID(_ value: RemoteScopePID) async throws -> Int32 {
@@ -120,4 +131,16 @@ private final class RemoteScopePID: @unchecked Sendable {
     private var pid: Int32?
     var value: Int32? { lock.withLock { pid } }
     func receive(_ line: String) { lock.withLock { pid = Int32(line) } }
+}
+
+private final class RemoteScopeCleanupTrace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var bytes = Data()
+    var text: String { lock.withLock { String(decoding: bytes, as: UTF8.self) } }
+    func receive(_ line: String, stream: String) {
+        lock.withLock {
+            bytes.append(contentsOf: (stream + ": " + line + "\n").utf8)
+            if bytes.count > 4096 { bytes.removeFirst(bytes.count - 4096) }
+        }
+    }
 }
