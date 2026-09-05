@@ -149,7 +149,7 @@ public enum BackupCadence {
     }
 }
 
-public struct BackupFootprint: Identifiable, Equatable, Sendable {
+public struct BackupFootprint: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let url: URL
