@@ -17,7 +17,7 @@ public enum AgentOperationCatalog {
             AgentDiagnostics.runJob, AgentDiagnostics.cancelJob,
             AgentNotificationOperation.pending, AgentNotificationOperation.acknowledge,
             CompanionBackgroundOperation.refresh,
-        ] + AgentTaskOperation.internalOperations
+        ] + AgentTaskOperation.internalOperations + AgentDownloadOperation.internalOperations
 
     public static func serves(_ id: UserOperationID) -> Bool {
         served.contains(id)

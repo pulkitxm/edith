@@ -3,7 +3,8 @@ import Foundation
 
 public enum AgentOperations {
     public static func register(
-        on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil
+        on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
+        downloads: DownloadWorker? = nil
     ) async {
         if let store {
             let attention = AttentionEventStore(store: store)
@@ -20,6 +21,16 @@ public enum AgentOperations {
             }
             await runtime.register(operation: AttentionOperation.importLegacy) { _ in
                 try AgentPayload.encode(try attention.importLegacyFiles())
+            }
+        }
+        if let downloads {
+            await runtime.registerShutdown(id: "downloads") { await downloads.stop() }
+            await runtime.register(operation: AgentDownloadOperation.snapshot) { _ in
+                try await AgentPayload.encode(downloads.snapshot())
+            }
+            await runtime.register(operation: AgentDownloadOperation.mutate) { payload in
+                let request = try AgentPayload.decode(AgentDownloadMutation.self, from: payload)
+                return try await AgentPayload.encode(downloads.mutate(request))
             }
         }
         await registerControls(on: runtime)

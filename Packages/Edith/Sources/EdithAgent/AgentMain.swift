@@ -57,6 +57,13 @@ public enum AgentBoot {
         let build = build()
         let store = makeStore(build: build)
         let runtime = AgentRuntime(build: build, store: store)
+        let downloads = DownloadWorker(
+            publish: { snapshot in
+                if let payload = try? AgentPayload.encode(snapshot) {
+                    await runtime.publish(topic: .downloads, payload: payload)
+                }
+            },
+            completed: { IPC.post(IPC.Name.musicFolderChanged) })
         let scheduler = JobScheduler(
             publish: { topic, payload in
                 Task { await runtime.publish(topic: topic, payload: payload) }
@@ -75,7 +82,8 @@ public enum AgentBoot {
         let startup = Task {
             guard !Task.isCancelled else { return }
             await runtime.attach(scheduler: scheduler)
-            await AgentOperations.register(on: runtime, store: store, scheduler: scheduler)
+            await AgentOperations.register(
+                on: runtime, store: store, scheduler: scheduler, downloads: downloads)
             do {
                 let tasks = try AgentTaskService(
                     publish: { snapshots in
@@ -84,6 +92,7 @@ public enum AgentBoot {
                         }
                     }, record: { await runtime.record($0) })
                 await tasks.registerCommand()
+                await downloads.registerEstimate(on: tasks)
                 await AgentTaskOperations.register(on: runtime, service: tasks)
             } catch {
                 await runtime.record(
@@ -92,7 +101,15 @@ public enum AgentBoot {
                         message: error.localizedDescription))
             }
             guard !Task.isCancelled, await !runtime.isShuttingDown else { return }
-            for job in AgentJobCatalog.jobs(store: store, scheduler: scheduler) {
+            do { try await downloads.start() } catch {
+                await runtime.record(
+                    AgentEvent(
+                        level: .error, category: "download", name: "startup",
+                        message: error.localizedDescription))
+            }
+            for job in AgentJobCatalog.jobs(
+                store: store, scheduler: scheduler, downloads: downloads)
+            {
                 await scheduler.register(job)
             }
             await scheduler.start()
@@ -111,6 +128,7 @@ public enum AgentBoot {
         }
         _ = IPC.observe(IPC.Name.settingsChanged) {
             Task {
+                await downloads.refresh()
                 await scheduler.setPauseAmbientOnBattery(
                     SharedDefaults.store.bool(
                         forKey: AgentSettingsKeys.pauseAmbientOnBattery))

@@ -52,6 +52,7 @@ public actor DownloadWorker {
     private var output: DownloadWorkerOutput?
     private var publishedRevision = 0
     private var started = false
+    private var stopping = false
     private let generation = UUID()
     private var revision = 0
     private var pendingSnapshot: DownloadWorkerSnapshot?
@@ -102,7 +103,7 @@ public actor DownloadWorker {
 
     public func start() throws {
         if let loadError { throw AgentError(.failed, loadError) }
-        guard !started else { return }
+        guard !started, !stopping else { return }
         started = true
         var changed = false
         for index in records.indices {
@@ -116,6 +117,19 @@ public actor DownloadWorker {
         if changed { try save() }
         startNext()
         notify()
+    }
+
+    public func stop() async {
+        stopping = true
+        started = false
+        let active = task
+        if let currentID { interrupt(currentID, reason: "The background agent stopped.") }
+        active?.cancel()
+        progressTask?.cancel()
+        progressTask = nil
+        await active?.value
+        notify()
+        await publicationTask?.value
     }
 
     public func snapshot() -> DownloadWorkerSnapshot {
@@ -138,12 +152,14 @@ public actor DownloadWorker {
     }
 
     public func refresh() {
+        guard !stopping else { return }
         if !isEnabled(), let currentID { interrupt(currentID, reason: "Downloads are disabled.") }
         startNext()
         notify()
     }
 
     public func mutate(_ request: AgentDownloadMutation) throws -> AgentDownloadMutationResult {
+        guard !stopping else { throw AgentError(.unavailable, "The agent is shutting down.") }
         if let loadError { throw AgentError(.failed, loadError) }
         let previousRecords = records
         let previousLogs = logs
@@ -238,7 +254,9 @@ public actor DownloadWorker {
     }
 
     private func startNext() {
-        guard started, task == nil, isEnabled(), let executable = executable() else { return }
+        guard started, !stopping, task == nil, isEnabled(), let executable = executable() else {
+            return
+        }
         let queued = records.indices.filter { records[$0].status == .queued }
         guard let index = queued.min(by: { records[$0].createdAt < records[$1].createdAt }) else {
             return
