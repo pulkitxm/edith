@@ -41,6 +41,16 @@ public struct AgentTaskClient: Sendable {
     public func wait(
         _ id: UUID, onOutput: @escaping @Sendable (AgentTaskOutput) -> Void = { _ in }
     ) async throws -> Data {
+        let (signals, continuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1))
+        let subscription = try? await client.subscribeAsync(.tasks) { data in
+            guard let snapshots = try? AgentPayload.decode([AgentTaskSnapshot].self, from: data),
+                snapshots.contains(where: { $0.id == id })
+            else { return }
+            continuation.yield(())
+        }
+        defer { subscription?.cancel(); continuation.finish() }
+        var signalsIterator = signals.makeAsyncIterator()
         var sequence = 0
         var previousState: AgentTaskState?
         var delay = pollInterval
@@ -69,7 +79,14 @@ public struct AgentTaskClient: Sendable {
                 delay = pollInterval
             }
             previousState = state.snapshot.state
-            try await Task.sleep(for: .seconds(delay))
+            let sleepInterval = delay
+            let timeout = Task {
+                do { try await Task.sleep(for: .seconds(sleepInterval)) } catch { return }
+                guard !Task.isCancelled else { return }
+                continuation.yield(())
+            }
+            _ = await signalsIterator.next()
+            timeout.cancel()
         }
     }
 

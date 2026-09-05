@@ -355,6 +355,10 @@ public actor AgentTaskService {
                 }
             }
         }
+        if entry.status.snapshot.state == .cancelled {
+            entry.status.snapshot.failure = "Cancelled by request."
+            entry.status.snapshot.failureCode = "cancelled"
+        }
         entries[id] = entry
         persistOrReport(entry)
         notify(entry.status.snapshot, name: "task.\(entry.status.snapshot.state.rawValue)")

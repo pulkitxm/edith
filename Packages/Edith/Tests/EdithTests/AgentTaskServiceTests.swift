@@ -226,7 +226,10 @@ import Testing
             (try? await service.status(task.id).output.contains { $0.text == "started" }) == true
         }
         _ = try await service.cancel(task.id)
-        #expect(try await finished(task.id, service: service).snapshot.state == .cancelled)
+        let cancelled = try await finished(task.id, service: service).snapshot
+        #expect(cancelled.state == .cancelled)
+        #expect(cancelled.failure == "Cancelled by request.")
+        #expect(cancelled.failureCode == "cancelled")
         try await Task.sleep(for: .milliseconds(1_100))
         #expect(
             !FileManager.default.fileExists(
