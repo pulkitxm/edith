@@ -9,9 +9,31 @@ final class DataBackupModel {
     var lastBackupAt: Date?
     var schemaVersion: Int?
     var restorePreview: [String] = []
+    var issues: [String] = []
+    var failure: String?
+    var isRefreshing = false
+    var collectedAt: Date?
 
-    func refresh() async {
-        footprints = BackupFootprintReader.entries()
+    func refresh(force: Bool = false) async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let value = try await StorageInspectionClient().inspect(force: force)
+            try Task.checkCancellation()
+            footprints = value.footprints
+            restorePreview = value.restoreEntries.map {
+                "\($0.name) · \(ByteCountFormatter.string(fromByteCount: $0.bytes, countStyle: .file))"
+            }
+            issues = value.issues
+            collectedAt = value.collectedAt
+            failure = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            failure = error.localizedDescription
+            return
+        }
         lastBackupAt =
             SharedDefaults.store.object(forKey: AppStorageKeys.Backup.lastBackupAt)
             as? Date
@@ -20,31 +42,14 @@ final class DataBackupModel {
         }?.schemaVersion
     }
 
-    func loadRestorePreview() {
-        restorePreview = BackupRestorePreview.lines()
-    }
-
     var totalBytes: Int64 {
-        footprints.reduce(0) { $0 + $1.bytes }
-    }
-}
-
-enum BackupRestorePreview {
-    static func lines(
-        cloudDirectory: URL = AppData.cloudDir, fileManager: FileManager = .default
-    ) -> [String] {
-        guard let names = try? fileManager.contentsOfDirectory(atPath: cloudDirectory.path)
-        else { return [] }
-        return names.filter { $0 != ".DS_Store" }.sorted().map { name in
-            let url = cloudDirectory.appendingPathComponent(name)
-            let bytes = BackupFootprintReader.size(of: url, fileManager: fileManager)
-            return "\(name) · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
-        }
+        footprints.first { $0.id == "data" }?.bytes ?? 0
     }
 }
 
 struct DataBackupPane: View {
     @State private var model = DataBackupModel()
+    @State private var refreshRevision = 0
     @AppStorage(AppStorageKeys.Backup.icloud, store: SharedDefaults.store) private var icloud = true
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -57,12 +62,19 @@ struct DataBackupPane: View {
             classesSection
             footprintSection
             restoreSection
+            if let failure = model.failure {
+                Section { Text(failure).foregroundStyle(.orange) }
+            }
+            if !model.issues.isEmpty {
+                Section("Partial inspection") {
+                    ForEach(model.issues, id: \.self) { Text($0).foregroundStyle(.orange) }
+                }
+            }
         }
         .formStyle(.grouped)
-        .task {
+        .task(id: refreshRevision) {
             guard automaticActionsEnabled else { return }
-            await model.refresh()
-            model.loadRestorePreview()
+            await model.refresh(force: refreshRevision > 0)
         }
     }
 
@@ -128,13 +140,30 @@ struct DataBackupPane: View {
                     }
                 }
             }
-            Button("Refresh sizes") { Task { await model.refresh() } }
+            if model.isRefreshing {
+                SkeletonGroup {
+                    SkeletonBlock(width: 180, height: 9, corner: 4)
+                }
+                .accessibilityLabel("Inspecting storage in the background")
+            }
+            if let collectedAt = model.collectedAt {
+                Text("Measured \(collectedAt.formatted(date: .omitted, time: .shortened))")
+                    .settingsCaption()
+            }
+            Button("Refresh sizes") { refreshRevision &+= 1 }
+                .disabled(model.isRefreshing)
         }
     }
 
     private var restoreSection: some View {
         Section("Restore") {
-            if model.restorePreview.isEmpty {
+            if model.collectedAt == nil {
+                Text(
+                    model.isRefreshing
+                        ? "Checking backup files…" : "Backup files have not been inspected."
+                )
+                .settingsCaption()
+            } else if model.restorePreview.isEmpty {
                 Text("No iCloud backup was found for this account.")
                     .settingsCaption()
             } else {
@@ -149,7 +178,8 @@ struct DataBackupPane: View {
                 )
                 .settingsCaption()
             }
-            Button("Reload preview") { model.loadRestorePreview() }
+            Button("Reload preview") { refreshRevision &+= 1 }
+                .disabled(model.isRefreshing)
         }
     }
 }

@@ -243,7 +243,9 @@ import Testing
 
         let enabled = Set(BackupCatalog.enabled(in: defaults).map(\.id))
 
-        #expect(enabled.contains("machines"))
+        #expect(enabled.contains("settings"))
+        #expect(!enabled.contains("machines"))
+        #expect(!enabled.contains("database"))
         #expect(!enabled.contains("attention"))
         #expect(!enabled.contains("clipboard"))
         #expect(!enabled.contains("metrics"))
@@ -314,15 +316,22 @@ import Testing
         #expect(result.classes.isEmpty)
     }
 
-    @Test func theFootprintReaderMeasuresAFolderItCanSee() throws {
+    @Test func theDaemonInspectionMeasuresAFolderItCanSee() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("Footprint.\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try Data(repeating: 7, count: 2_048).write(to: root.appendingPathComponent("a.bin"))
 
-        #expect(BackupFootprintReader.size(of: root) == 2_048)
-        #expect(BackupFootprintReader.size(of: root.appendingPathComponent("missing")) == 0)
+        let missing = root.appendingPathComponent("missing")
+        let workflow = StorageInspectionWorkflow(
+            targets: [
+                .init(id: "data", title: "Data", url: root),
+                .init(id: "missing", title: "Missing", url: missing),
+            ], cloudDirectory: missing)
+        let result = try await workflow.inspect()
+        #expect(result.footprints.map(\.bytes) == [2_048, 0])
+        #expect(result.footprints.map(\.exists) == [true, false])
     }
 
     private func makeDefaults() -> (UserDefaults, String) {
