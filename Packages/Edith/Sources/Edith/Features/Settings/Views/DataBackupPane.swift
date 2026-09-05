@@ -52,6 +52,7 @@ final class DataBackupModel {
 
 struct DataBackupPane: View {
     @State private var model = DataBackupModel()
+    @State private var refreshRevision = 0
     @AppStorage(AppStorageKeys.Backup.icloud, store: SharedDefaults.store) private var icloud = true
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -74,9 +75,9 @@ struct DataBackupPane: View {
             }
         }
         .formStyle(.grouped)
-        .task {
+        .task(id: refreshRevision) {
             guard automaticActionsEnabled else { return }
-            await model.refresh()
+            await model.refresh(force: refreshRevision > 0)
         }
     }
 
@@ -149,7 +150,7 @@ struct DataBackupPane: View {
                 Text("Measured \(collectedAt.formatted(date: .omitted, time: .shortened))")
                     .settingsCaption()
             }
-            Button("Refresh sizes") { Task { await model.refresh(force: true) } }
+            Button("Refresh sizes") { refreshRevision &+= 1 }
                 .disabled(model.isRefreshing)
         }
     }
@@ -177,7 +178,7 @@ struct DataBackupPane: View {
                 )
                 .settingsCaption()
             }
-            Button("Reload preview") { Task { await model.refresh(force: true) } }
+            Button("Reload preview") { refreshRevision &+= 1 }
                 .disabled(model.isRefreshing)
         }
     }
