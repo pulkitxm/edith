@@ -62,7 +62,7 @@ import Testing
             contentsOf: Self.sources.appendingPathComponent("EdithKit/Core/IPC/IPC.swift"),
             encoding: .utf8)
         let declared = Self.matches(
-            #"public static let (\w+) = Notification\.Name"#, in: [catalog])
+            #"public static let (\w+) = IPC\.scopedName"#, in: [catalog])
         let used = Self.matches(#"IPC\.Name\.(\w+)"#, in: Self.cli + Self.app)
         #expect(!declared.isEmpty)
         #expect(
