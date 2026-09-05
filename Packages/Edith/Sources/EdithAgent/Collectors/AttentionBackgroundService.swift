@@ -19,6 +19,7 @@ public actor AttentionBackgroundService {
     private var observation: NSObjectProtocol?
     private var lastBackupAt: Date?
     private var backupTask: Task<Void, Error>?
+    private var stopped = false
 
     public init(
         store: AgentStore, root: URL = AttentionPaths.root,
@@ -35,11 +36,13 @@ public actor AttentionBackgroundService {
     }
 
     deinit {
+        backupTask?.cancel()
         server?.stop()
         if let observation { IPC.stopObserving(observation) }
     }
 
     public func run(now: Date = Date()) async throws -> Data? {
+        guard !stopped else { throw CancellationError() }
         if observation == nil {
             observation = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                 Task {
@@ -82,13 +85,17 @@ public actor AttentionBackgroundService {
                 port: server?.boundPort, lastBackupAt: lastBackupAt))
     }
 
-    public func stop() {
-        backupTask?.cancel()
+    public func stop() async {
+        stopped = true
+        let backup = backupTask
+        backupTask = nil
+        backup?.cancel()
         server?.stop()
         server = nil
         serverSettings = nil
         if let observation { IPC.stopObserving(observation) }
         observation = nil
+        _ = try? await backup?.value
     }
 
     public func record(_ batch: AttentionBatch) throws {
@@ -124,6 +131,7 @@ public actor AttentionBackgroundService {
     }
 
     public func backup(now: Date = Date()) async throws {
+        guard !stopped else { throw CancellationError() }
         if let backupTask {
             try await backupTask.value
             return
@@ -180,6 +188,7 @@ public actor AttentionBackgroundService {
 public enum AttentionBackgroundOperations {
     public static func register(on runtime: AgentRuntime, service: AttentionBackgroundService) async
     {
+        await runtime.registerShutdown(id: "attention") { await service.stop() }
         await runtime.register(operation: AttentionOperation.record) { payload in
             let batch = try AgentPayload.decode(AttentionBatch.self, from: payload)
             try await service.record(batch)

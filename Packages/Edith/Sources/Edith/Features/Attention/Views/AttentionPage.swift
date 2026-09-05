@@ -733,7 +733,7 @@ private struct AttentionResolvedIcon: View {
         .task(id: faviconURL) {
             faviconImage = nil
             guard let faviconURL,
-                let data = await AttentionFaviconStore.shared.data(for: faviconURL),
+                let data = try? await AgentFaviconClient().data(for: faviconURL),
                 !Task.isCancelled
             else { return }
             faviconImage = NSImage(data: data)
