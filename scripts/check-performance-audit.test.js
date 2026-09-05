@@ -442,3 +442,37 @@ test("loop comparisons after suspension are not treated as state assignments", (
   expect(findPerformanceViolations(source).map(({ rule }) => rule))
     .not.toContain("stale-task-publication");
 });
+
+test("default callback bodies do not hide a guarded task owner", () => {
+  const source = `
+    func perform(rollback: () -> Void = {}) {
+      guard actionTask == nil else { return }
+      actionTask = Task {
+        await refresh()
+        guard !Task.isCancelled else { return }
+        status = result
+      }
+    }
+  `;
+  expect(findPerformanceViolations(source)).toEqual([]);
+  const unsafe = source.replace("guard !Task.isCancelled else { return }", "");
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule))
+    .toContain("stale-task-publication");
+});
+
+test("qualified task guards only protect the same receiver", () => {
+  const source = `
+    func refresh() {
+      guard entry.inventoryTask == nil else { return }
+      entry.inventoryTask = Task {
+        await refreshInventory()
+        guard !Task.isCancelled else { return }
+        entry.inventoryTask = nil
+      }
+    }
+  `;
+  expect(findPerformanceViolations(source)).toEqual([]);
+  const unsafe = source.replace("guard entry.inventoryTask", "guard other.inventoryTask");
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule))
+    .toContain("stale-task-publication");
+});
