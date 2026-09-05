@@ -3,6 +3,35 @@ import Foundation
 import Testing
 
 @Suite(.serialized) struct CLIProcessProbeTests {
+    @Test func nativeLaunchOwnsItsGroupAndPreservesEnvironmentAndDirectory() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ed-cli-probe-native-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let result = try CLIProcessProbe.run(
+            [
+                "-c",
+                "printf '%s\\n' \"$$\" \"$PPID\" \"$PROBE_VALUE\"; "
+                    + "/bin/ps -p \"$$\" -o pgid=; /bin/pwd -P; printf native-error >&2; exit 17",
+            ], executable: URL(fileURLWithPath: "/bin/sh"), currentDirectory: directory,
+            environment: ["PATH": "/usr/bin:/bin", "PROBE_VALUE": "space value"], timeout: 3)
+        let lines = result.stdoutLines
+        try #require(lines.count == 5)
+        #expect(Int32(lines[0]) == Int32(lines[3].trimmingCharacters(in: .whitespaces)))
+        #expect(Int32(lines[1]) == getpid())
+        #expect(lines[2] == "space value")
+        let expectedDirectory = try FileManager.default.attributesOfItem(atPath: directory.path)
+        let actualDirectory = try FileManager.default.attributesOfItem(atPath: lines[4])
+        #expect(
+            try #require(actualDirectory[.systemNumber] as? NSNumber)
+                == #require(expectedDirectory[.systemNumber] as? NSNumber))
+        #expect(
+            try #require(actualDirectory[.systemFileNumber] as? NSNumber)
+                == #require(expectedDirectory[.systemFileNumber] as? NSNumber))
+        #expect(result.stderr == "native-error")
+        #expect(result.code == 17)
+    }
+
     @Test func largeStandardStreamsDrainWithoutBlockingEachOther() throws {
         let bytes = 1_048_576
         let result = try CLIProcessProbe.run(
