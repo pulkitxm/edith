@@ -82,90 +82,106 @@ const fixture = (action) => {
   }
 };
 
-test("restart and disappeared files retain exact native daily and session results with appended new events", () =>
-  fixture(({ root, config, history }) => {
-    const old = line("old", 20);
-    const live = line("live", 15);
-    const next = line("new", 7, "2026-09-06T01:00:00Z");
-    const oldPath = put(config, "a/session-a.jsonl", old);
-    const livePath = put(config, "b/session-b.jsonl", live);
-    let archive = openArchive(history);
-    expect(archive.ingest(config).retainedFiles).toBe(0);
-    archive.close();
-    unlinkSync(oldPath);
-    appendFileSync(livePath, next);
-    archive = openArchive(history);
-    expect(archive.ingest(config)).toEqual({
-      version: 1,
-      collectorVersion: "20.0.19",
-      retainedFiles: 1,
-      unresolvedCandidates: 0,
-      rawFilesRead: 1,
-      rawBytesRead: Buffer.byteLength(live + next),
-    });
-    const expected = join(root, "expected");
-    put(expected, "a/session-a.jsonl", old);
-    put(expected, "b/session-b.jsonl", live + next);
-    const output = join(root, "snapshot");
-    archive.materialize(output);
-    if (binary) {
-      for (const mode of ["daily", "session"])
-        expect(native(root, output, mode)).toEqual(
-          native(root, expected, mode),
-        );
-    }
-    expect(
-      readFileSync(join(output, "projects/a/session-a.jsonl"), "utf8"),
-    ).not.toContain("PRIVATE_CONTENT_CANARY");
-    put(config, "a/session-a.jsonl", old);
-    expect(archive.ingest(config).retainedFiles).toBe(0);
-    expect(
-      archive.database.query("SELECT records FROM capacity").get().records,
-    ).toBe(3);
-    archive.close();
-  }));
+const archiveScenario = (name, action) => {
+  test(name, () => action(false));
+  test.skipIf(!binary)(`native collector: ${name}`, () => action(true));
+};
 
-test("anonymous rewritten records remain uncounted candidates while exact later appends continue", () =>
-  fixture(({ root, config, history }) => {
-    const old = line(null, 20);
-    const rewritten = line(null, 90);
-    const next = line(null, 7, "2026-09-06T01:00:00Z");
-    const file = put(config, "project/session.jsonl", old);
-    const archive = openArchive(history);
-    archive.ingest(config);
-    writeFileSync(file, rewritten + rewritten);
-    expect(archive.ingest(config).unresolvedCandidates).toBe(2);
-    expect(archive.ingest(config).unresolvedCandidates).toBe(2);
-    appendFileSync(file, next);
-    expect(archive.ingest(config).unresolvedCandidates).toBe(2);
-    const expected = join(root, "expected");
-    put(expected, "project/session.jsonl", old + next);
-    const output = join(root, "snapshot");
-    archive.materialize(output);
-    if (binary) expect(native(root, output)).toEqual(native(root, expected));
-    expect(
-      archive.database.query("SELECT records FROM capacity").get().records,
-    ).toBe(4);
-    archive.close();
-  }));
+archiveScenario(
+  "restart and disappeared files retain archived events with appended new events",
+  (verifyNative) =>
+    fixture(({ root, config, history }) => {
+      const old = line("old", 20);
+      const live = line("live", 15);
+      const next = line("new", 7, "2026-09-06T01:00:00Z");
+      const oldPath = put(config, "a/session-a.jsonl", old);
+      const livePath = put(config, "b/session-b.jsonl", live);
+      let archive = openArchive(history);
+      expect(archive.ingest(config).retainedFiles).toBe(0);
+      archive.close();
+      unlinkSync(oldPath);
+      appendFileSync(livePath, next);
+      archive = openArchive(history);
+      expect(archive.ingest(config)).toEqual({
+        version: 1,
+        collectorVersion: "20.0.19",
+        retainedFiles: 1,
+        unresolvedCandidates: 0,
+        rawFilesRead: 1,
+        rawBytesRead: Buffer.byteLength(live + next),
+      });
+      const expected = join(root, "expected");
+      put(expected, "a/session-a.jsonl", old);
+      put(expected, "b/session-b.jsonl", live + next);
+      const output = join(root, "snapshot");
+      archive.materialize(output);
+      if (verifyNative) {
+        for (const mode of ["daily", "session"])
+          expect(native(root, output, mode)).toEqual(
+            native(root, expected, mode),
+          );
+      }
+      expect(
+        readFileSync(join(output, "projects/a/session-a.jsonl"), "utf8"),
+      ).not.toContain("PRIVATE_CONTENT_CANARY");
+      put(config, "a/session-a.jsonl", old);
+      expect(archive.ingest(config).retainedFiles).toBe(0);
+      expect(
+        archive.database.query("SELECT records FROM capacity").get().records,
+      ).toBe(3);
+      archive.close();
+    }),
+);
 
-test("stable identities retain streaming revisions and delegate exact duplicate choice to native collector", () =>
-  fixture(({ root, config, history }) => {
-    const old = line("same", 20);
-    const fresh = line("same", 25) + line("new", 9);
-    const file = put(config, "project/session.jsonl", old);
-    const archive = openArchive(history);
-    archive.ingest(config);
-    writeFileSync(file, fresh);
-    expect(archive.ingest(config).unresolvedCandidates).toBe(0);
-    const output = join(root, "snapshot");
-    archive.materialize(output);
-    if (binary) expect(native(root, output)).toEqual(native(root, config));
-    expect(
-      archive.database.query("SELECT records FROM capacity").get().records,
-    ).toBe(3);
-    archive.close();
-  }));
+archiveScenario(
+  "anonymous rewritten records remain uncounted candidates while exact later appends continue",
+  (verifyNative) =>
+    fixture(({ root, config, history }) => {
+      const old = line(null, 20);
+      const rewritten = line(null, 90);
+      const next = line(null, 7, "2026-09-06T01:00:00Z");
+      const file = put(config, "project/session.jsonl", old);
+      const archive = openArchive(history);
+      archive.ingest(config);
+      writeFileSync(file, rewritten + rewritten);
+      expect(archive.ingest(config).unresolvedCandidates).toBe(2);
+      expect(archive.ingest(config).unresolvedCandidates).toBe(2);
+      appendFileSync(file, next);
+      expect(archive.ingest(config).unresolvedCandidates).toBe(2);
+      const expected = join(root, "expected");
+      put(expected, "project/session.jsonl", old + next);
+      const output = join(root, "snapshot");
+      archive.materialize(output);
+      if (verifyNative)
+        expect(native(root, output)).toEqual(native(root, expected));
+      expect(
+        archive.database.query("SELECT records FROM capacity").get().records,
+      ).toBe(4);
+      archive.close();
+    }),
+);
+
+archiveScenario(
+  "stable identities retain streaming revisions and delegate exact duplicate choice to native collector",
+  (verifyNative) =>
+    fixture(({ root, config, history }) => {
+      const old = line("same", 20);
+      const fresh = line("same", 25) + line("new", 9);
+      const file = put(config, "project/session.jsonl", old);
+      const archive = openArchive(history);
+      archive.ingest(config);
+      writeFileSync(file, fresh);
+      expect(archive.ingest(config).unresolvedCandidates).toBe(0);
+      const output = join(root, "snapshot");
+      archive.materialize(output);
+      if (verifyNative)
+        expect(native(root, output)).toEqual(native(root, config));
+      expect(
+        archive.database.query("SELECT records FROM capacity").get().records,
+      ).toBe(3);
+      archive.close();
+    }),
+);
 
 test("capacity refusal rolls back new records and file receipt while preserving previously admitted billing", () =>
   fixture(({ config, history }) => {
@@ -359,5 +375,41 @@ test("aggregate candidate capacity refusal retains the exact earlier baseline an
         .query("SELECT COUNT(*) AS count FROM aggregate_candidates")
         .get().count,
     ).toBe(1);
+    archive.close();
+  }));
+
+test("historical project and model ordering creates neither warnings nor duplicate candidates", () =>
+  fixture(({ history }) => {
+    const historical = block("2026-08-05", 100);
+    historical.bySource.cli.push({
+      ...historical.bySource.cli[0],
+      modelName: "other",
+    });
+    historical.projects = [
+      { name: "second", chats: [{ id: "b" }, { id: "a" }] },
+      { name: "first", chats: [] },
+    ];
+    const reordered = structuredClone(historical);
+    reordered.bySource.cli.reverse();
+    reordered.projects[0].chats.reverse();
+    reordered.projects.reverse();
+    const archive = new BillingArchive(history);
+    archive.bootstrap({
+      generatedAt: "2026-09-06T01:00:00Z",
+      blocks: [historical],
+    });
+    expect(archive.reconcile([reordered]).blocks).toHaveLength(0);
+    historical.bySource.cli[0].inputTokens = 90;
+    const first = archive.reconcile([historical]);
+    historical.bySource.cli.reverse();
+    historical.projects.reverse();
+    expect(archive.reconcile([historical]).blocks[0].candidates).toHaveLength(
+      1,
+    );
+    expect(
+      first.blocks[0].baseline.bySource.cli.find(
+        (row) => row.modelName === "model",
+      ).inputTokens,
+    ).toBe(100);
     archive.close();
   }));

@@ -49,6 +49,10 @@ cases["invalid-utf8"] = Buffer.concat([
   Buffer.from('"}'),
 ]);
 
+cases["nontrivial-working-directory"] =
+  cases["large-integer"].replace("9007199254740993", "10").slice(0, -1) +
+  ',"cwd":"/synthetic/Team Projects/project/.claude/worktrees/review tree"}';
+
 for (const [name, raw] of Object.entries(cases)) {
   test(`minimal billing envelope removes prompt content from ${name}`, () => {
     const minimal = billingEnvelope(raw);
@@ -85,7 +89,10 @@ test.skipIf(!binary)(
           ["minimal", billingEnvelope(raw)],
         ]) {
           const config = join(root, name, label);
-          const projects = join(config, "projects/project");
+          const projects = join(
+            config,
+            "projects/-synthetic-Team-Projects-project/session/subagents",
+          );
           mkdirSync(projects, { recursive: true, mode: 0o700 });
           writeFileSync(join(projects, "session.jsonl"), contents);
           const modes = [];

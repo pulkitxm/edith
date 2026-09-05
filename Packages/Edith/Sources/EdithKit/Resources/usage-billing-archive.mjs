@@ -8,10 +8,13 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  readFileSync,
   readSync,
   writeSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+
+export const billingCollectorVersion = "20.0.19";
 
 const nullFields = new Set([
   "id",
@@ -280,6 +283,25 @@ const canonical = (value) =>
         )
       : item;
   });
+const contentIdentity = (value) => {
+  const ordered = (item, key) => {
+    if (Array.isArray(item)) {
+      const values = item.map((value) => ordered(value, ""));
+      return key === "hours"
+        ? values
+        : values.sort((a, b) => canonical(a).localeCompare(canonical(b)));
+    }
+    if (item !== null && typeof item === "object")
+      return Object.fromEntries(
+        Object.keys(item)
+          .sort()
+          .map((key) => [key, ordered(item[key], key)]),
+      );
+    return item;
+  };
+  return canonical(ordered(value, ""));
+};
+
 const validBlock = (block) =>
   block !== null &&
   typeof block === "object" &&
@@ -517,6 +539,20 @@ export class BillingArchive {
       CREATE TRIGGER IF NOT EXISTS aggregate_candidate_capacity AFTER INSERT ON aggregate_candidates BEGIN
         UPDATE capacity SET bytes=bytes+length(CAST(NEW.payload AS BLOB)) WHERE singleton=1; END;
       PRAGMA user_version=1;`);
+      this.database
+        .transaction(() => {
+          const collector = this.database
+            .query("SELECT value FROM metadata WHERE key=?")
+            .get("collector");
+          limit(
+            collector === null || collector.value === billingCollectorVersion,
+            "Billing history requires its original pinned collector version.",
+          );
+          this.database
+            .query("INSERT OR IGNORE INTO metadata(key,value) VALUES(?,?)")
+            .run("collector", billingCollectorVersion);
+        })
+        .immediate();
     } catch (error) {
       this.database.close();
       throw error;
@@ -622,8 +658,9 @@ export class BillingArchive {
               })),
               projects: [],
             });
-          if (incoming !== baseline.payload)
-            insert.run(baseline.period, digest(incoming), incoming);
+          const identity = contentIdentity(JSON.parse(incoming));
+          if (identity !== contentIdentity(JSON.parse(baseline.payload)))
+            insert.run(baseline.period, digest(identity), incoming);
         }
         const admission = this.database
           .query(`SELECT COUNT(*) AS count,
@@ -797,7 +834,7 @@ export class BillingArchive {
       .get().count;
     return {
       version: 1,
-      collectorVersion: "20.0.19",
+      collectorVersion: billingCollectorVersion,
       retainedFiles: retained,
       unresolvedCandidates: candidates,
       rawFilesRead,
@@ -858,5 +895,68 @@ export class BillingArchive {
 
   close() {
     this.database.close();
+  }
+}
+
+function inputJSON(path) {
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_CLOEXEC,
+  );
+  try {
+    const before = fstatSync(descriptor);
+    limit(
+      before.isFile() && before.size <= 67_108_864,
+      "Billing input document exceeds its admission limit.",
+    );
+    const content = readFileSync(descriptor);
+    const after = fstatSync(descriptor);
+    limit(
+      content.length === before.size &&
+        before.size === after.size &&
+        before.mtimeMs === after.mtimeMs,
+      "Billing input document changed during admission.",
+    );
+    return JSON.parse(content.toString("utf8"));
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+if (import.meta.main) {
+  let archive;
+  try {
+    const [operation, root, ...arguments_] = process.argv.slice(2);
+    limit(
+      root && (operation === "prepare" || operation === "reconcile"),
+      "Billing archive operation is invalid.",
+    );
+    archive = new BillingArchive(root);
+    if (operation === "prepare") {
+      limit(
+        arguments_.length === 3,
+        "Billing archive preparation arguments are invalid.",
+      );
+      const [source, baseline, output] = arguments_;
+      archive.bootstrap(inputJSON(baseline));
+      const receipt = archive.ingest(source);
+      archive.materialize(output);
+      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    } else {
+      limit(
+        arguments_.length === 1,
+        "Billing archive reconciliation arguments are invalid.",
+      );
+      process.stdout.write(
+        `${JSON.stringify(archive.reconcile(inputJSON(arguments_[0]).blocks))}\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(
+      `Billing history preserved: ${error instanceof Error ? error.message : "archive operation failed"}\n`,
+    );
+    process.exitCode = 1;
+  } finally {
+    archive?.close();
   }
 }
