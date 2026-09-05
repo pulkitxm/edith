@@ -640,6 +640,56 @@ private enum DatabaseBrokerHealthTransportFixtures {
         #expect(system.now == 1_000_000_000)
     }
 
+    @Test(arguments: [UInt64(4_900_000_000), 5_000_000_000])
+    func responseWaitPreservesFiveSecondFrameBudget(frameDelay: UInt64) throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        let frame = try DatabaseBrokerHealthTransportFixtures.responseFrame()
+        system.readSteps = [
+            .init(advanceNanoseconds: 6_000_000_000, result: .bytes(Data(frame.prefix(1)))),
+            .init(advanceNanoseconds: frameDelay, result: .bytes(Data(frame.dropFirst()))),
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        var failure: DatabaseBrokerHealthTransportError?
+        do {
+            let response: DatabaseBrokerEnvelope<DatabaseBrokerHealthResponse> =
+                try transport.readFrame(
+                    socketDescriptor: 46, stream: .responses, bytesWritten: 100,
+                    absoluteDeadline: 30_000_000_000,
+                    responseFirstByteDeadline: 30_000_000_000)
+            #expect(response.payload.isReady)
+        } catch let error as DatabaseBrokerHealthTransportError {
+            failure = error
+        }
+
+        if frameDelay < 5_000_000_000 {
+            #expect(failure == nil)
+        } else {
+            #expect(failure?.failure == .readTimedOut)
+            #expect(failure?.bytesWritten == 100)
+            #expect(failure?.isReplaySafe == false)
+        }
+        #expect(system.readDeadlines.prefix(2) == [30_000_000_000, 11_000_000_000])
+    }
+
+    @Test func responseWaitCannotExtendAbsoluteDeadline() throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.readSteps = [
+            .init(advanceNanoseconds: 3_000_000_000, result: .timedOut)
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            let _: DatabaseBrokerEnvelope<DatabaseBrokerHealthResponse> = try transport.readFrame(
+                socketDescriptor: 46, stream: .responses, bytesWritten: 100,
+                absoluteDeadline: 3_000_000_000,
+                responseFirstByteDeadline: 30_000_000_000)
+        }
+
+        #expect(error?.failure == .readTimedOut)
+        #expect(error?.bytesWritten == 100)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.readDeadlines == [3_000_000_000])
+    }
+
     @Test func absoluteDeadlineReachesTerminalTrailingRead() throws {
         let system = DatabaseBrokerHealthTransportSystemStub()
         system.readSteps = [
