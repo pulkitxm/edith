@@ -20,7 +20,7 @@ final class ClipboardStore: FeatureModule {
     @ObservationIgnored private var activationGeneration = 0
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var lastChangeCount = NSPasteboard.general.changeCount
-    @ObservationIgnored private var visibility = SystemStatsVisibility()
+    @ObservationIgnored private var visibility = ClipboardMonitoringState()
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var workspaceObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var clipboardObserver: NSObjectProtocol?
@@ -320,4 +320,11 @@ final class ClipboardStore: FeatureModule {
         mutationTail?.cancel()
         for task in mutations.values { task.cancel() }
     }
+}
+
+private struct ClipboardMonitoringState {
+    var enabled = true
+    var sleeping = false
+    var locked = false
+    var active: Bool { enabled && !sleeping && !locked }
 }
