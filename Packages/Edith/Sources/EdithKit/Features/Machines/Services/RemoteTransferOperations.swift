@@ -662,12 +662,26 @@ public enum RemoteTransferOperationExecution {
             let failure =
                 "edith_status=$?; rm -rf \(stageRoot) || true; exit \"$edith_status\""
             return
-                "umask 077; mkdir \(stageRoot)"
+                withinMachineIdentityCheck(item) + "umask 077; mkdir \(stageRoot)"
                 + " && if cp -a \(source) \(staged); then "
                 + "if (\(publish)); then \(success); else \(failure); fi; "
                 + "else \(failure); fi"
         }
         return commands.isEmpty ? nil : commands.joined(separator: " && ")
+    }
+
+    private static func withinMachineIdentityCheck(_ item: RemoteTransferPlanItem) -> String {
+        let source = ShellQuote.quote(item.sourcePath)
+        let destination = ShellQuote.quote(item.destinationPath)
+        let parent = ShellQuote.quote(FileListing.parentPath(of: item.destinationPath) ?? ".")
+        return
+            "if [ \(source) -ef \(destination) ]; then "
+            + "printf '%s\\n' 'The source and destination are the same item.' >&2; exit 73; fi; "
+            + "if [ -d \(source) ] && [ ! -L \(source) ]; then "
+            + "edith_source_root=$(cd -P \(source) && pwd -P) || exit $?; "
+            + "edith_destination_parent=$(cd -P \(parent) && pwd -P) || exit $?; "
+            + "case \"$edith_destination_parent/\" in \"$edith_source_root/\"*) "
+            + "printf '%s\\n' 'A folder cannot be copied into itself.' >&2; exit 73;; esac; fi; "
     }
 
     public static func execute(

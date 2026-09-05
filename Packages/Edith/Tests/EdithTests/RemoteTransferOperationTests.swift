@@ -133,6 +133,68 @@ import Testing
         }
     }
 
+    @Test(arguments: [false, true])
+    func withinMachineAliasesCannotRemoveTheOriginal(hardLink: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-alias-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source, original.txt")
+        let destination = root.appendingPathComponent("destination alias.txt")
+        try Data("original".utf8).write(to: source)
+        if hardLink {
+            try FileManager.default.linkItem(at: source, to: destination)
+        } else {
+            try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: source)
+        }
+        let plan = RemoteTransferPlan(
+            destination: root.path,
+            items: [
+                RemoteTransferPlanItem(
+                    sourcePath: source.path, destinationPath: destination.path,
+                    replacesExisting: true)
+            ], skipped: [])
+        let command = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: true))
+
+        let result = await LocalMachineCommandExecution.run(command)
+
+        #expect(throws: Error.self) { try result.get() }
+        #expect(try String(contentsOf: source, encoding: .utf8) == "original")
+        #expect(try String(contentsOf: destination, encoding: .utf8) == "original")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).count == 2)
+    }
+
+    @Test func withinMachineDirectoryAliasesCannotCreateRecursiveCopies() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-descendant-\(UUID().uuidString)")
+        let source = root.appendingPathComponent("source, folder")
+        let child = source.appendingPathComponent("child")
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("original".utf8).write(to: source.appendingPathComponent("keep.txt"))
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: child)
+        let destination = alias.appendingPathComponent("copy")
+        let plan = RemoteTransferPlan(
+            destination: alias.path,
+            items: [
+                RemoteTransferPlanItem(
+                    sourcePath: source.path, destinationPath: destination.path,
+                    replacesExisting: false)
+            ], skipped: [])
+        let command = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: false))
+
+        let result = await LocalMachineCommandExecution.run(command)
+
+        #expect(throws: Error.self) { try result.get() }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: child.path).isEmpty)
+        #expect(
+            try String(contentsOf: source.appendingPathComponent("keep.txt"), encoding: .utf8)
+                == "original")
+    }
+
     @Test func localExecutionKeepsExistingFilesAndPublishesAsyncProgress() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-transfer-local-\(UUID().uuidString)")
