@@ -6,6 +6,8 @@ public enum AgentOperations {
         on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
         downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil
     ) async {
+        let clipboard = ClipboardService()
+        await clipboard.register(on: runtime)
         await FaviconService().register(on: runtime)
         if let attention {
             await AttentionBackgroundOperations.register(on: runtime, service: attention)

@@ -97,7 +97,7 @@ public struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    public enum Kind: String, CaseIterable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable {
         case text, richText, html, image, file, document, media, data
     }
 
