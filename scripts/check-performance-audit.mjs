@@ -370,7 +370,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const lastAwait = body.lastIndexOf("await");
     const publication = body
       .slice(lastAwait)
-      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
+      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=(?!=)\s*/);
     const guarded =
       /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
         body.slice(
@@ -378,7 +378,12 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
           publication ? lastAwait + publication.index : body.length,
         ),
       );
-    if (publication && (!cancellation || !guarded)) {
+    const replacementGuard = owner.match(new RegExp(
+      `\\bguard\\s+${match[1]}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,
+    ));
+    const refusesReplacement = replacementGuard !== null
+      && !/\bawait\b/.test(owner.slice(replacementGuard.index + replacementGuard[0].length));
+    if (publication && ((!cancellation && !refusesReplacement) || !guarded)) {
       addViolation(
         violations,
         "stale-task-publication",

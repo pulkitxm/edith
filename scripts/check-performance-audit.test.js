@@ -392,3 +392,53 @@ test("stream tasks check cancellation after their final suspension", () => {
     findPerformanceViolations(createSource("")).map(({ rule }) => rule),
   ).toContain("stale-task-publication");
 });
+
+test("single-flight tasks reject replacement while retaining publication guards", () => {
+  const createSource = (replacementGuard, publicationGuard) => `
+    @MainActor
+    final class Model {
+      var actionTask: Task<Void, Never>?
+      func install() {
+        ${replacementGuard}
+        actionTask = Task {
+          defer { actionTask = nil }
+          let result = await service.install()
+          ${publicationGuard}
+          rows = result
+        }
+      }
+    }
+  `;
+  const replacementGuard = "guard actionTask == nil else { return }";
+  const publicationGuard = "guard !Task.isCancelled else { return }";
+  expect(findPerformanceViolations(createSource(replacementGuard, publicationGuard))
+    .map(({ rule }) => rule)).not.toContain("stale-task-publication");
+  expect(findPerformanceViolations(createSource(replacementGuard, ""))
+    .map(({ rule }) => rule)).toContain("stale-task-publication");
+  expect(findPerformanceViolations(createSource(
+    "guard actionTask == nil else { pending = true; return }", publicationGuard))
+    .map(({ rule }) => rule)).not.toContain("stale-task-publication");
+  expect(findPerformanceViolations(createSource(replacementGuard + "\nawait service.prepare()", publicationGuard))
+    .map(({ rule }) => rule)).toContain("stale-task-publication");
+  expect(findPerformanceViolations(createSource("", publicationGuard))
+    .map(({ rule }) => rule)).toContain("stale-task-publication");
+});
+
+test("loop comparisons after suspension are not treated as state assignments", () => {
+  const source = `
+    @MainActor final class Model {
+      func refresh() {
+        guard refreshTask == nil else { pending = true; return }
+        refreshTask = Task {
+          repeat {
+            await service.refresh()
+          } while pending == true && !Task.isCancelled
+          guard !Task.isCancelled else { return }
+          refreshTask = nil
+        }
+      }
+    }
+  `;
+  expect(findPerformanceViolations(source).map(({ rule }) => rule))
+    .not.toContain("stale-task-publication");
+});
