@@ -125,6 +125,62 @@ import Testing
         #expect(UsageRefreshLock.acquire(at: url) != nil)
     }
 
+    @Test(arguments: ["", "{\"daily\":", "[]"])
+    func stagingRejectsUndecodablePreviousUsage(previous: String) throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let bytes = Data(previous.utf8)
+        try bytes.write(to: live)
+
+        #expect(throws: UsageDataFileError.self) {
+            try UsageRefreshRunner.stageCurrentUsage(at: staged, dataDir: dir)
+        }
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        #expect(try Data(contentsOf: live) == bytes)
+    }
+
+    @Test(arguments: ["", "{\"daily\":", "[]"])
+    func publicationRejectsUndecodablePreviousUsage(previous: String) throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let bytes = Data(previous.utf8)
+        let fresh = try usage(period: "2026-08-24", source: "fresh")
+        try bytes.write(to: live)
+        try fresh.write(to: staged)
+
+        #expect(throws: UsageDataFileError.self) {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged, baseline: UsageRefreshBaseline(usage: bytes, machines: nil),
+                dataDir: dir)
+        }
+        #expect(try Data(contentsOf: live) == bytes)
+        #expect(try Data(contentsOf: staged) == fresh)
+    }
+
+    @Test func missingPreviousUsageAllowsFirstRefreshPublication() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let baseline = try UsageRefreshRunner.stageCurrentUsage(at: staged, dataDir: dir)
+        #expect(baseline.usage == nil)
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+
+        try UsageRefreshRunner.publish(stagedUsage: staged, baseline: baseline, dataDir: dir)
+
+        let published = try Data(contentsOf: live)
+        #expect(UsageHistory.isValidDocument(published))
+        let document = try #require(
+            JSONSerialization.jsonObject(with: published) as? [String: Any])
+        #expect(document["sources"] as? [String] == ["fresh"])
+        #expect((document["daily"] as? [[String: Any]])?.count == 1)
+    }
+
     @Test func publicationRetainsUnavailableMachineHistory() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
