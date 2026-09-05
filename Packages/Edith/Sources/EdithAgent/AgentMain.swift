@@ -111,7 +111,7 @@ public enum AgentBoot {
                         message: error.localizedDescription))
             }
             for job in AgentJobCatalog.jobs(
-                store: store, scheduler: scheduler, downloads: downloads)
+                store: store, scheduler: scheduler, downloads: downloads, metrics: metrics)
             {
                 await scheduler.register(job)
             }

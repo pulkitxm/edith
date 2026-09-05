@@ -135,7 +135,8 @@ def invoke(operation, payload):
     path = root / ("request-" + uuid.uuid4().hex + ".json")
     path.write_text(json.dumps(payload))
     try:
-        return json.loads(call([str(root / "client"), label, operation, str(path)]).stdout)
+        output = call([str(root / "client"), label, operation, str(path)]).stdout
+        return json.loads(output) if output else None
     finally:
         path.unlink(missing_ok=True)
 
@@ -257,7 +258,16 @@ try:
     samples = json.loads(call([str(root / "client"), label, "watch",
         "machine.metrics." + machine["id"], "4"], timeout=20).stdout)
     assert any(item.get("sample") is not None for item in samples), samples
-    record("06 daemon metrics stream reaches an XPC subscriber", snapshots=len(samples))
+    def metrics_job():
+        return next(job for job in invoke("agent.jobs", None)
+                    if job["descriptor"]["id"] == "machines.metrics")
+    previous_runs = metrics_job()["runCount"]
+    invoke("agent.run", "machines.metrics")
+    completed_job = wait_for(metrics_job, lambda job: job["runCount"] > previous_runs
+                             and job["phase"] != "running")
+    assert completed_job.get("lastError") is None, completed_job
+    record("06 daemon metrics stream and registered refresh job both succeed",
+           snapshots=len(samples), completedRuns=completed_job["runCount"])
 
     cancel_command = dict(machine=machine,
         command="sleep 30 & child=$!; printf '%s\\n' \"$child\"; wait", timeout=40)
