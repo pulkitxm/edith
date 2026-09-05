@@ -8,8 +8,8 @@ struct ClipboardCommand: AsyncParsableCommand {
         commandName: "clipboard",
         abstract: "The clipboard history Edith keeps.",
         discussion: """
-            The history is a file on disk, so these read commands work whether or not
-            the app is running. Entries are numbered from 1, newest first, and that
+            Clipboard storage is owned by the Edith daemon and remains available when
+            the app is closed. Entries are numbered from 1, newest first, and that
             number is what `get`, `copy` and `rm` take.
             """,
         subcommands: [
@@ -21,12 +21,15 @@ struct ClipboardCommand: AsyncParsableCommand {
 }
 
 enum ClipboardBridge {
-    static func entries(query: String = "") -> [ClipboardEntry] {
-        ClipboardActions.listed(query: query, defaults: CLIEnvironment.sharedDefaults)
+    static func entries(query: String = "") async throws -> [ClipboardEntry] {
+        ClipboardActions.arrange(
+            try await ClipboardCLIEnvironment.client.entries(), query: query,
+            pinToTop: ClipboardActions.pinToTopPreference(CLIEnvironment.sharedDefaults))
     }
 
-    static func entry(at index: Int) throws -> (entry: ClipboardEntry, all: [ClipboardEntry]) {
-        let all = entries()
+    static func entry(at index: Int) async throws -> (entry: ClipboardEntry, all: [ClipboardEntry])
+    {
+        let all = try await entries()
         guard !all.isEmpty else {
             let recording =
                 CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.Clipboard.enabled)
@@ -68,10 +71,9 @@ enum ClipboardBridge {
         _ pinned: Bool, index: Int, json: Bool
     ) async throws {
         try await execute {
-            let found = try ClipboardBridge.entry(at: index)
-            let operation: ClipboardOperation = pinned ? .pin : .unpin
-            let outcome = try ClipboardOperationExecution.perform(operation, entry: found.entry)
-            AppBridge.post(IPC.Name.clipboardChanged)
+            let found = try await ClipboardBridge.entry(at: index)
+            let outcome = try await ClipboardCLIEnvironment.client.mutate(
+                .init(pinned ? .pin : .unpin, ids: [found.entry.id]))
             let verb = pinned ? "pinned" : "unpinned"
             guard !json else {
                 CLIOut.json(
@@ -91,12 +93,8 @@ enum ClipboardBridge {
         }
     }
 
-    static func text(_ entry: ClipboardEntry) throws -> String {
-        guard let data = ClipboardRepository.blobData(for: entry) else {
-            throw CLIFailure.notFound(
-                "the stored copy of that entry is gone",
-                hint: "run `ed clipboard ls` to see what is still there")
-        }
+    static func text(_ entry: ClipboardEntry) async throws -> String {
+        let data = try await ClipboardCLIEnvironment.client.blob(id: entry.id).data
         guard let text = ClipboardRepository.plainText(for: entry, data: data) else {
             throw CLIFailure(
                 "entry \(entry.ext) is not text",
@@ -126,7 +124,7 @@ struct ClipboardListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
-            let all = ClipboardBridge.entries()
+            let all = try await ClipboardBridge.entries()
             var numbered = Array(all.enumerated().map { (index: $0 + 1, entry: $1) })
             if let search, !ClipboardActions.normalized(search).isEmpty {
                 let needle = ClipboardActions.normalized(search)
@@ -167,7 +165,7 @@ struct ClipboardStatsCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let stats = ClipboardOperationExecution.stats()
+            let stats = try await ClipboardCLIEnvironment.client.stats()
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -258,8 +256,8 @@ struct ClipboardGetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let found = try ClipboardBridge.entry(at: index)
-            let text = try ClipboardBridge.text(found.entry)
+            let found = try await ClipboardBridge.entry(at: index)
+            let text = try await ClipboardBridge.text(found.entry)
             guard !json else {
                 guard case var .object(fields) = ClipboardBridge.json(found.entry, index: index)
                 else { return }
@@ -287,15 +285,15 @@ struct ClipboardCopyCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let found = try ClipboardBridge.entry(at: index)
-            do {
-                try ClipboardOperationExecution.perform(
-                    .copy, entry: found.entry, asPlainText: plain,
+            let found = try await ClipboardBridge.entry(at: index)
+            let payload = try await ClipboardCLIEnvironment.client.blob(id: found.entry.id)
+            await MainActor.run {
+                ClipboardRepository.copyToPasteboard(
+                    payload.entry, data: payload.data, asPlainText: plain,
                     pasteboard: CLIEnvironment.clipboardPasteboard)
-            } catch ClipboardOperationError.blobMissing {
-                throw CLIFailure.notFound("the stored copy of that entry is gone")
             }
-            AppBridge.post(IPC.Name.clipboardChanged)
+            _ = try await ClipboardCLIEnvironment.client.mutate(
+                .init(.copied, ids: [found.entry.id]))
             guard !json else {
                 CLIOut.json(ClipboardBridge.json(found.entry, index: index))
                 return
@@ -320,7 +318,7 @@ struct ClipboardRemoveCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let found = try ClipboardBridge.entry(at: index)
+            let found = try await ClipboardBridge.entry(at: index)
             let plan = CLIDestructivePlan(
                 action: "remove clipboard entry", targets: [found.entry.id], confirmed: yes,
                 json: json,
@@ -330,13 +328,13 @@ struct ClipboardRemoveCommand: AsyncParsableCommand {
                     "preview": .optional(found.entry.preview),
                 ])
             guard plan.shouldApply() else { return }
-            let outcome = try ClipboardOperationExecution.perform(.remove, entry: found.entry)
-            AppBridge.post(IPC.Name.clipboardChanged)
+            let outcome = try await ClipboardCLIEnvironment.client.mutate(
+                .init(.delete, ids: [found.entry.id]))
             plan.finish(
                 changed: outcome.changed > 0,
-                plain: "removed entry \(index), \(outcome.entries.count) left",
+                plain: "removed entry \(index), \(outcome.total) left",
                 fields: [
-                    "removed": .int(index), "remaining": .int(outcome.entries.count),
+                    "removed": .int(index), "remaining": .int(outcome.total),
                 ])
         }
     }
@@ -357,7 +355,7 @@ struct ClipboardClearCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let entries = ClipboardBridge.entries()
+            let entries = try await ClipboardBridge.entries()
             let clearPlan = ClipboardOperationExecution.clearPlan(
                 entries: entries, keepPinned: keepPinned)
             let plan = CLIDestructivePlan(
@@ -369,13 +367,13 @@ struct ClipboardClearCommand: AsyncParsableCommand {
                     "remaining": .int(clearPlan.remaining),
                 ])
             guard plan.shouldApply() else { return }
-            let outcome = try ClipboardOperationExecution.clear(clearPlan)
-            AppBridge.post(IPC.Name.clipboardChanged)
+            let outcome = try await ClipboardCLIEnvironment.client.mutate(
+                .init(.delete, ids: clearPlan.targetIDs))
             plan.finish(
                 changed: outcome.changed > 0, plain: "cleared \(outcome.changed) entries",
                 fields: [
                     "removed": .int(outcome.changed),
-                    "remaining": .int(outcome.entries.count),
+                    "remaining": .int(outcome.total),
                 ])
         }
     }

@@ -392,3 +392,113 @@ test("stream tasks check cancellation after their final suspension", () => {
     findPerformanceViolations(createSource("")).map(({ rule }) => rule),
   ).toContain("stale-task-publication");
 });
+
+test("single-flight tasks reject replacement while retaining publication guards", () => {
+  const createSource = (replacementGuard, publicationGuard) => `
+    @MainActor
+    final class Model {
+      var actionTask: Task<Void, Never>?
+      func install() {
+        ${replacementGuard}
+        actionTask = Task {
+          defer { actionTask = nil }
+          let result = await service.install()
+          ${publicationGuard}
+          rows = result
+        }
+      }
+    }
+  `;
+  const replacementGuard = "guard actionTask == nil else { return }";
+  const publicationGuard = "guard !Task.isCancelled else { return }";
+  expect(
+    findPerformanceViolations(
+      createSource(replacementGuard, publicationGuard),
+    ).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(createSource(replacementGuard, "")).map(
+      ({ rule }) => rule,
+    ),
+  ).toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      createSource(
+        "guard actionTask == nil else { pending = true; return }",
+        publicationGuard,
+      ),
+    ).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      createSource(
+        replacementGuard + "\nawait service.prepare()",
+        publicationGuard,
+      ),
+    ).map(({ rule }) => rule),
+  ).toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(createSource("", publicationGuard)).map(
+      ({ rule }) => rule,
+    ),
+  ).toContain("stale-task-publication");
+});
+
+test("loop comparisons after suspension are not treated as state assignments", () => {
+  const source = `
+    @MainActor final class Model {
+      func refresh() {
+        guard refreshTask == nil else { pending = true; return }
+        refreshTask = Task {
+          repeat {
+            await service.refresh()
+          } while pending == true && !Task.isCancelled
+          guard !Task.isCancelled else { return }
+          refreshTask = nil
+        }
+      }
+    }
+  `;
+  expect(
+    findPerformanceViolations(source).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+});
+
+test("default callback bodies do not hide a guarded task owner", () => {
+  const source = `
+    func perform(rollback: () -> Void = {}) {
+      guard actionTask == nil else { return }
+      actionTask = Task {
+        await refresh()
+        guard !Task.isCancelled else { return }
+        status = result
+      }
+    }
+  `;
+  expect(findPerformanceViolations(source)).toEqual([]);
+  const unsafe = source.replace("guard !Task.isCancelled else { return }", "");
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
+    "stale-task-publication",
+  );
+});
+
+test("qualified task guards only protect the same receiver", () => {
+  const source = `
+    func refresh() {
+      guard entry.inventoryTask == nil else { return }
+      entry.inventoryTask = Task {
+        await refreshInventory()
+        guard !Task.isCancelled else { return }
+        entry.inventoryTask = nil
+      }
+    }
+  `;
+  expect(findPerformanceViolations(source)).toEqual([]);
+  const unsafe = source.replace(
+    "guard entry.inventoryTask",
+    "guard other.inventoryTask",
+  );
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
+    "stale-task-publication",
+  );
+});

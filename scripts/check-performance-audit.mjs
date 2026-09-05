@@ -133,10 +133,26 @@ const declarationRanges = (masked, prefix) => {
 const callableRanges = (masked) => {
   const ranges = [];
   const callable =
-    /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)[^{]{0,1_000}\{/gm;
+    /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)/gm;
   for (const match of masked.matchAll(callable)) {
-    const opening = masked.indexOf("{", match.index);
-    ranges.push([opening, closingBrace(masked, opening)]);
+    let parentheses = 0;
+    let brackets = 0;
+    const limit = Math.min(masked.length, match.index + 1_000);
+    for (
+      let cursor = match.index + match[0].length;
+      cursor < limit;
+      cursor += 1
+    ) {
+      const character = masked[cursor];
+      if (character === "(") parentheses += 1;
+      else if (character === ")") parentheses -= 1;
+      else if (character === "[") brackets += 1;
+      else if (character === "]") brackets -= 1;
+      else if (character === "{" && parentheses === 0 && brackets === 0) {
+        ranges.push([cursor, closingBrace(masked, cursor)]);
+        break;
+      }
+    }
   }
   return ranges;
 };
@@ -353,7 +369,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   }
 
   for (const match of masked.matchAll(
-    /\b([A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g,
+    /\b((?:[A-Za-z_]\w*\s*\.\s*)*[A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g,
   )) {
     const range = closureRange(masked, match.index);
     if (!range) continue;
@@ -364,13 +380,17 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const owner = ownerRange
       ? masked.slice(ownerRange[0], match.index)
       : masked.slice(Math.max(0, match.index - 2_000), match.index);
+    const receiver = match[1]
+      .replaceAll(/\s+/g, "")
+      .split(".")
+      .join("\\s*\\.\\s*");
     const cancellation = new RegExp(
-      `\\b${match[1]}\\s*\\??\\.cancel\\s*\\(`,
+      `\\b${receiver}\\s*\\??\\.cancel\\s*\\(`,
     ).test(owner);
     const lastAwait = body.lastIndexOf("await");
     const publication = body
       .slice(lastAwait)
-      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
+      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=(?!=)\s*/);
     const guarded =
       /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
         body.slice(
@@ -378,7 +398,17 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
           publication ? lastAwait + publication.index : body.length,
         ),
       );
-    if (publication && (!cancellation || !guarded)) {
+    const replacementGuard = owner.match(
+      new RegExp(
+        `\\bguard\\s+${receiver}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,
+      ),
+    );
+    const refusesReplacement =
+      replacementGuard !== null &&
+      !/\bawait\b/.test(
+        owner.slice(replacementGuard.index + replacementGuard[0].length),
+      );
+    if (publication && ((!cancellation && !refusesReplacement) || !guarded)) {
       addViolation(
         violations,
         "stale-task-publication",

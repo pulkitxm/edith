@@ -5,6 +5,7 @@ import Dispatch
 import Foundation
 
 @testable import EdithCLI
+@testable import EdithAgent
 @testable import EdithDatabase
 @testable import EdithKit
 
@@ -194,6 +195,13 @@ final class CLIWorld: @unchecked Sendable {
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
         CLIEnvironment.sharedDefaults = shared
+        let clipboard = ClipboardService(
+            archive: ClipboardArchive(root: sandbox.appendingPathComponent("clipboard")),
+            defaults: shared,
+            changed: { CLIEnvironment.deliver(IPC.Name.clipboardChanged, nil) })
+        ClipboardCLIEnvironment.client = AgentClipboardClient {
+            try await clipboard.perform(operation: $0, payload: $1)
+        }
         CLIEnvironment.standardDefaults = standard
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }

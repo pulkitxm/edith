@@ -110,6 +110,13 @@ public enum ClipboardRepository {
         _ entry: ClipboardEntry, asPlainText: Bool, pasteboard: NSPasteboard = .general
     ) -> Bool {
         guard let data = blobData(for: entry) else { return false }
+        copyToPasteboard(entry, data: data, asPlainText: asPlainText, pasteboard: pasteboard)
+        return true
+    }
+
+    public static func copyToPasteboard(
+        _ entry: ClipboardEntry, data: Data, asPlainText: Bool, pasteboard: NSPasteboard
+    ) {
         pasteboard.clearContents()
         if asPlainText, entry.isTextual {
             let text = plainText(for: entry, data: data) ?? entry.preview ?? ""
@@ -119,7 +126,6 @@ public enum ClipboardRepository {
         }
         pasteboard.setData(
             Data(), forType: NSPasteboard.PasteboardType(ClipboardPasteboardFilter.edithOwnTag))
-        return true
     }
 
     private static func write(data: Data, entry: ClipboardEntry, to pasteboard: NSPasteboard) {
