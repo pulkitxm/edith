@@ -303,6 +303,8 @@ func settingsBackupTransferLimits(
                 }
                 let data = Data(merged.utf8)
                 guard data.count <= UsageDataFiles.maximumLimitsHistoryBytes else { return false }
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
                 if shouldRestore, localData != data {
                     let prepared = try UsageDataFiles.prepareWrite(data, to: localURL)
                     guard
@@ -320,6 +322,8 @@ func settingsBackupTransferLimits(
                 return true
             }
             if transferred, shouldExport, let publication, cloudData != publication {
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
                 try publication.write(to: coordinatedCloudURL, options: .atomic)
             }
             return transferred
@@ -362,6 +366,8 @@ func settingsBackupTransferUsage(
                 guard merged.count <= UsageDataFiles.maximumUsageDocumentBytes,
                     UsageHistory.isValidDocument(merged)
                 else { return false }
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
                 if shouldRestore, localData != merged {
                     let prepared = try UsageDataFiles.prepareWrite(merged, to: localURL)
                     guard
@@ -379,6 +385,8 @@ func settingsBackupTransferUsage(
                 return true
             }
             if transferred, shouldExport, let publication, cloudData != publication {
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
                 try publication.write(to: coordinatedCloudURL, options: .atomic)
             }
             return transferred
@@ -391,6 +399,8 @@ func settingsBackupTransferUsage(
 private func settingsBackupCoordinateCloud<T>(
     at cloudURL: URL, writing: Bool, _ accessor: (URL) throws -> T
 ) throws -> T {
+    try Task.checkCancellation()
+    try BackupCancellation.current?.check()
     if writing {
         try FileManager.default.createDirectory(
             at: cloudURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -399,19 +409,30 @@ private func settingsBackupCoordinateCloud<T>(
         return try accessor(cloudURL)
     }
     let coordinator = NSFileCoordinator(filePresenter: nil)
+    try BackupCancellation.current?.register(coordinator)
+    defer { BackupCancellation.current?.unregister() }
+    try BackupCancellation.current?.check()
     var result: Result<T, Error>?
     var coordinationError: NSError?
     if writing {
         coordinator.coordinate(
             writingItemAt: cloudURL, options: .forMerging, error: &coordinationError
         ) { coordinatedURL in
-            result = Result { try accessor(coordinatedURL) }
+            result = Result {
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
+                return try accessor(coordinatedURL)
+            }
         }
     } else {
         coordinator.coordinate(
             readingItemAt: cloudURL, options: .withoutChanges, error: &coordinationError
         ) { coordinatedURL in
-            result = Result { try accessor(coordinatedURL) }
+            result = Result {
+                try Task.checkCancellation()
+                try BackupCancellation.current?.check()
+                return try accessor(coordinatedURL)
+            }
         }
     }
     if let coordinationError { throw coordinationError }
@@ -453,21 +474,19 @@ func settingsBackupBoundedTransfer(
     timeout: Duration,
     operation: @escaping @Sendable () async -> SettingsBackupTransferOutcome
 ) async -> SettingsBackupTransferOutcome {
-    let (stream, continuation) = AsyncStream.makeStream(of: SettingsBackupTransferOutcome.self)
-    let work = Task {
-        continuation.yield(await operation())
-        continuation.finish()
+    await settingsBackupWithCancellation {
+        await withTaskGroup(of: SettingsBackupTransferOutcome.self) { group in
+            group.addTask { await operation() }
+            group.addTask {
+                do { try await Task.sleep(for: timeout) } catch { return .unavailable }
+                return .unavailable
+            }
+            let outcome = await group.next() ?? .unavailable
+            group.cancelAll()
+            BackupCancellation.current?.cancel()
+            return outcome
+        }
     }
-    let timer = Task {
-        try? await Task.sleep(for: timeout)
-        continuation.yield(.unavailable)
-        continuation.finish()
-    }
-    var iterator = stream.makeAsyncIterator()
-    let outcome = await iterator.next() ?? .unavailable
-    timer.cancel()
-    work.cancel()
-    return outcome
 }
 
 actor SettingsBackupUsageWorker {
@@ -600,9 +619,14 @@ func settingsBackupReadCloudSettingsFileAsync(
         settingsBackupReadCloudSettingsFile(at: $0, maximumBytes: $1)
     }
 ) async -> Data? {
-    await Task.detached(priority: .utility) {
-        reader(url, maximumBytes)
-    }.value
+    let work = Task.detached(priority: .utility) {
+        await settingsBackupWithCancellation { reader(url, maximumBytes) }
+    }
+    return await withTaskCancellationHandler {
+        await work.value
+    } onCancel: {
+        work.cancel()
+    }
 }
 
 @MainActor
@@ -632,8 +656,18 @@ actor SettingsBackupFileWorker {
 
     func exportSettings(
         data: Data?, localURL: URL, cloudURL: URL, shouldExportCloud: Bool
+    ) async -> Bool {
+        await settingsBackupWithCancellation {
+            await self.publishSettings(
+                data: data, localURL: localURL, cloudURL: cloudURL,
+                shouldExportCloud: shouldExportCloud)
+        }
+    }
+
+    private func publishSettings(
+        data: Data?, localURL: URL, cloudURL: URL, shouldExportCloud: Bool
     ) -> Bool {
-        guard let data else { return false }
+        guard let data, !Task.isCancelled else { return false }
         do {
             try FileManager.default.createDirectory(
                 at: localURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -1540,6 +1574,13 @@ final class SettingsBackup {
         started = false
         let musicTransfer = musicBackupTask
         let clipboardTransfer = clipboardBackupTask
+        let ownedTasks =
+            Array(restoreTasks.values)
+            + [
+                persistenceMaintenanceTask, settingsExportTask, settingsImportTask,
+                settingsDownloadTask,
+            ]
+            .compactMap { $0 }
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil
         if let musicFolderObserver { IPC.stopObserving(musicFolderObserver) }
@@ -1584,6 +1625,7 @@ final class SettingsBackup {
         }
         await musicTransfer?.value
         await clipboardTransfer?.value
+        for task in ownedTasks { await task.value }
     }
 
     func debounceFlush() {
@@ -1598,9 +1640,7 @@ final class SettingsBackup {
         debounce = nil
         settingsImportGeneration += 1
         settingsImportTask?.cancel()
-        settingsImportTask = nil
         settingsDownloadTask?.cancel()
-        settingsDownloadTask = nil
     }
 
     func backupMusic() {
@@ -1813,14 +1853,7 @@ final class SettingsBackup {
         guard shouldRestore || shouldExport else { return .done }
         let localURL = localLimits
         let cloudURL = cloudLimits
-        guard let attemptTimeout else {
-            return await SettingsBackupUsageWorker.shared.transferLimitsOutcome(
-                localURL: localURL, cloudURL: cloudURL,
-                shouldRestore: shouldRestore, shouldExport: shouldExport,
-                backupEnabled: backupEnabled,
-                restoreToken: restoreToken)
-        }
-        return await settingsBackupBoundedTransfer(timeout: attemptTimeout) {
+        return await settingsBackupBoundedTransfer(timeout: attemptTimeout ?? .seconds(30)) {
             await SettingsBackupUsageWorker.shared.transferLimitsOutcome(
                 localURL: localURL, cloudURL: cloudURL,
                 shouldRestore: shouldRestore, shouldExport: shouldExport,
@@ -1862,14 +1895,7 @@ final class SettingsBackup {
         guard shouldRestore || shouldExport else { return .done }
         let localURL = localUsage
         let cloudURL = cloudUsage
-        guard let attemptTimeout else {
-            return await SettingsBackupUsageWorker.shared.transferUsageOutcome(
-                localURL: localURL, cloudURL: cloudURL,
-                shouldRestore: shouldRestore, shouldExport: shouldExport,
-                backupEnabled: backupEnabled,
-                restoreToken: restoreToken)
-        }
-        return await settingsBackupBoundedTransfer(timeout: attemptTimeout) {
+        return await settingsBackupBoundedTransfer(timeout: attemptTimeout ?? .seconds(30)) {
             await SettingsBackupUsageWorker.shared.transferUsageOutcome(
                 localURL: localURL, cloudURL: cloudURL,
                 shouldRestore: shouldRestore, shouldExport: shouldExport,
@@ -2016,7 +2042,7 @@ final class SettingsBackup {
                 cloudFile: cloudFile, localFile: localFile, freshInstall: freshInstall)
             let data =
                 action == .importFile
-                ? settingsBackupReadCloudSettingsFile(at: cloudFile) : nil
+                ? await settingsBackupReadCloudSettingsFileAsync(at: cloudFile) : nil
             guard !Task.isCancelled else { return }
             await self?.completeSettingsImport(action, data: data, generation: generation)
         }

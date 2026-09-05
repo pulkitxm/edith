@@ -879,4 +879,56 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
 
         #expect(await task.value == intents)
     }
+
+    @Test func timedOutTransferStopsWaitingForTheOwnedUsageLock() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let local = directory.appendingPathComponent("usage.json")
+        let cloud = directory.appendingPathComponent("cloud.json")
+        let original = try usage(period: "2026-09-01", source: "fixture")
+        try original.write(to: local)
+        let owner = try UsageDataLock.acquire(dataDirectory: directory)
+        defer { owner.release() }
+        let started = ContinuousClock.now
+        let outcome = await settingsBackupBoundedTransfer(timeout: .milliseconds(50)) {
+            await SettingsBackupUsageWorker.shared.transferUsageOutcome(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                backupEnabled: true, requireCloudAvailability: false)
+        }
+        #expect(outcome == .unavailable)
+        #expect(started.duration(to: .now) < .seconds(1))
+        #expect(try Data(contentsOf: local) == original)
+        #expect(!FileManager.default.fileExists(atPath: cloud.path))
+        let transaction = try UsageDataLock.acquire(
+            at: directory.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        transaction.release()
+    }
+
+    @Test func cancellationUnblocksNativeFileCoordinationBeforeTheOtherWriterFinishes() async throws
+    {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("{}".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let probe = SettingsBackupBlockingReaderProbe()
+        let writer = Task.detached {
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var error: NSError?
+            coordinator.coordinate(writingItemAt: file, error: &error) { _ in
+                probe.entered.signal()
+                _ = probe.release.wait(timeout: .now() + 2)
+            }
+        }
+        #expect(await waitForSignal(probe.entered))
+        let started = ContinuousClock.now
+        let outcome = await settingsBackupBoundedTransfer(timeout: .milliseconds(50)) {
+            await settingsBackupReadCloudSettingsFileAsync(at: file) == nil ? .retryable : .done
+        }
+        #expect(outcome == .unavailable)
+        #expect(started.duration(to: .now) < .seconds(1))
+        probe.release.signal()
+        await writer.value
+        #expect(try Data(contentsOf: file) == Data("{}".utf8))
+    }
 }
