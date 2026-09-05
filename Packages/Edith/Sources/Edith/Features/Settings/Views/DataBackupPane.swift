@@ -43,10 +43,7 @@ final class DataBackupModel {
     }
 
     var totalBytes: Int64 {
-        footprints.reduce(0) { total, footprint in
-            let (sum, overflow) = total.addingReportingOverflow(footprint.bytes)
-            return overflow ? Int64.max : sum
-        }
+        footprints.first { $0.id == "data" }?.bytes ?? 0
     }
 }
 

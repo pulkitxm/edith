@@ -6,6 +6,27 @@ import Testing
 @testable import EdithKit
 
 @Suite struct StorageInspectionTests {
+    @Test func theDataTotalIncludesDatabaseJournalsAndTaskHistoryInOneTraversal() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tasks = root.appendingPathComponent("Tasks")
+        try FileManager.default.createDirectory(at: tasks, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 4096).write(to: root.appendingPathComponent("edith.sqlite"))
+        try Data(repeating: 1, count: 8192).write(
+            to: root.appendingPathComponent("edith.sqlite-wal"))
+        try Data(repeating: 1, count: 128).write(to: tasks.appendingPathComponent("task.json"))
+        let workflow = StorageInspectionWorkflow(
+            targets: [
+                .init(id: "data", title: "Data", url: root),
+                .init(id: "tasks", title: "Tasks", url: tasks),
+            ],
+            cloudDirectory: root.appendingPathComponent("missing"), maximumEntries: 4)
+        let result = try await workflow.inspect()
+        #expect(result.footprints.first?.bytes == 12_416)
+        #expect(result.footprints.last?.bytes == 128)
+        #expect(result.issues.isEmpty)
+    }
+
     @Test func inspectionCrossesXPCAndExplicitRefreshReplacesCachedSizes() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }

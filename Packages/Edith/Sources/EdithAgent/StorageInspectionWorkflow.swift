@@ -1,3 +1,4 @@
+import Darwin
 import EdithKit
 import Foundation
 
@@ -14,9 +15,7 @@ public struct StorageInspectionTarget: Sendable {
 
     public static var defaults: [StorageInspectionTarget] {
         [
-            Self(
-                id: "store", title: "Store",
-                url: AppData.supportDir.appendingPathComponent("edith.sqlite")),
+            Self(id: "data", title: "Application data", url: AppData.supportDir),
             Self(id: "machines", title: "Machines", url: DataRoot.machines),
             Self(id: "clipboard", title: "Clipboard", url: DataRoot.clipboard),
             Self(id: "seo", title: "Site audits", url: DataRoot.siteAudit),
@@ -99,6 +98,8 @@ private final class StorageInspectionReader {
     private let deadline: ContinuousClock.Instant
     private var visited = 0
     private var issues: [String] = []
+    private var targets: [URL] = []
+    private var measurements: [URL: Int64] = [:]
     private let fileManager = FileManager.default
     private let keys: Set<URLResourceKey> = [
         .isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey,
@@ -113,6 +114,7 @@ private final class StorageInspectionReader {
         targets: [StorageInspectionTarget], cloud: URL,
         report: @Sendable (String) -> Void
     ) throws -> StorageInspectionSnapshot {
+        self.targets = targets.map { canonicalURL($0.url) }
         var footprints: [BackupFootprint] = []
         for target in targets {
             try Task.checkCancellation()
@@ -160,7 +162,8 @@ private final class StorageInspectionReader {
     private func size(_ source: URL) throws -> Int64 {
         try Task.checkCancellation()
         guard fileManager.fileExists(atPath: source.path) else { return 0 }
-        let source = source.resolvingSymlinksInPath()
+        let source = canonicalURL(source)
+        if let measured = measurements[source] { return measured }
         let values: URLResourceValues
         do { values = try source.resourceValues(forKeys: keys) } catch {
             issue("Some storage entries could not be read; sizes are partial.")
@@ -180,6 +183,8 @@ private final class StorageInspectionReader {
             return 0
         }
         var total: Int64 = 0
+        let nested = targets.filter { $0.path.hasPrefix(source.path + "/") }
+        var nestedSizes = Dictionary(nested.map { ($0, Int64(0)) }, uniquingKeysWith: max)
         for case let file as URL in files {
             try Task.checkCancellation()
             guard visited < maximumEntries, ContinuousClock.now < deadline else {
@@ -200,14 +205,28 @@ private final class StorageInspectionReader {
                     return Int64.max
                 }
                 total = sum
+                for target in nested where file == target || file.path.hasPrefix(target.path + "/")
+                {
+                    let (bytes, overflow) = nestedSizes[target, default: 0].addingReportingOverflow(
+                        Int64(max(0, values.fileSize ?? 0)))
+                    nestedSizes[target] = overflow ? Int64.max : bytes
+                }
             } catch {
                 issue("Some storage entries could not be read; sizes are partial.")
             }
         }
+        measurements[source] = total
+        measurements.merge(nestedSizes, uniquingKeysWith: { _, latest in latest })
         return total
     }
 
     private func issue(_ message: String) {
         if !issues.contains(message) { issues.append(message) }
+    }
+
+    private func canonicalURL(_ url: URL) -> URL {
+        guard let path = realpath(url.path, nil) else { return url.standardizedFileURL }
+        defer { free(path) }
+        return URL(fileURLWithPath: String(cString: path))
     }
 }
