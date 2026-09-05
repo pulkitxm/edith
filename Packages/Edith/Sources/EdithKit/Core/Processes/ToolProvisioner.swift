@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import Observation
 
-public struct CLICommandRequest: Equatable, Sendable {
+public struct CLICommandRequest: Codable, Equatable, Sendable {
     public let executableURL: URL
     public let arguments: [String]
     public let environment: [String: String]
@@ -50,7 +50,7 @@ public enum ToolVersionProbe {
     }
 }
 
-public struct CLICommandResult: Equatable, Sendable {
+public struct CLICommandResult: Codable, Equatable, Sendable {
     public let terminationStatus: Int32
     public let standardOutputData: Data
     public let standardErrorData: Data
@@ -97,49 +97,106 @@ public enum CLIToolProvisionState: Equatable, Sendable {
 private final class CLIStreamingOutput: @unchecked Sendable {
     private let lock = NSLock()
     private let maximumBytes: Int?
-    private var pending = ""
+    private let onLine: (@Sendable (String) -> Void)?
+    private var pending = Data()
     private var complete = Data()
-    private var completeLines: [String] = []
     private var exceededLimit = false
+    private var readFailed = false
 
-    init(maximumBytes: Int?) {
+    init(maximumBytes: Int?, onLine: (@Sendable (String) -> Void)?) {
         self.maximumBytes = maximumBytes
+        self.onLine = onLine
     }
 
     func receive(_ data: Data) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !exceededLimit else { return }
-        if let maximumBytes, complete.count + data.count > maximumBytes {
-            complete.removeAll(keepingCapacity: false)
-            completeLines.removeAll(keepingCapacity: false)
-            pending = ""
-            exceededLimit = true
-            return
+        let lines = lock.withLock { () -> [String] in
+            guard !exceededLimit else { return [] }
+            if let maximumBytes, complete.count + data.count > maximumBytes {
+                complete.removeAll(keepingCapacity: false)
+                pending.removeAll(keepingCapacity: false)
+                exceededLimit = true
+                return []
+            }
+            complete.append(data)
+            guard onLine != nil else { return [] }
+            var lines: [String] = []
+            var start = data.startIndex
+            for index in data.indices where data[index] == 10 || data[index] == 13 {
+                pending.append(data[start..<index])
+                if !pending.isEmpty { lines.append(String(decoding: pending, as: UTF8.self)) }
+                pending.removeAll(keepingCapacity: true)
+                start = data.index(after: index)
+            }
+            pending.append(data[start..<data.endIndex])
+            return lines
         }
-        complete.append(data)
-        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
-        pending += text.replacingOccurrences(of: "\r", with: "\n")
-        while let newline = pending.firstIndex(of: "\n") {
-            let line = String(pending[..<newline])
-            pending.removeSubrange(...newline)
-            if !line.isEmpty { completeLines.append(line) }
+        for line in lines { onLine?(line) }
+    }
+
+    func finish() -> (output: Data, exceededLimit: Bool) {
+        let finished = lock.withLock { () -> (String?, Data, Bool) in
+            let line =
+                !exceededLimit && !pending.isEmpty ? String(decoding: pending, as: UTF8.self) : nil
+            pending.removeAll(keepingCapacity: false)
+            return (line, complete, exceededLimit)
+        }
+        if let line = finished.0 { onLine?(line) }
+        return (finished.1, finished.2)
+    }
+
+    var hasExceededLimit: Bool { lock.withLock { exceededLimit } }
+    var hasReadFailure: Bool { lock.withLock { readFailed } }
+    func recordReadFailure() { lock.withLock { readFailed = true } }
+}
+
+private final class CLIProcessOutputReader: @unchecked Sendable {
+    let finished = DispatchSemaphore(value: 0)
+    private let source: DispatchSourceRead
+    private let descriptor: Int32
+    private let output: CLIStreamingOutput
+
+    init(handle: FileHandle, output: CLIStreamingOutput) {
+        self.descriptor = handle.fileDescriptor
+        self.output = output
+        source = DispatchSource.makeReadSource(
+            fileDescriptor: descriptor, queue: .global(qos: .utility))
+        source.setEventHandler { [weak self] in self?.readAvailable() }
+        source.setCancelHandler { [finished] in
+            try? handle.close()
+            finished.signal()
+        }
+        let flags = fcntl(descriptor, F_GETFL)
+        if flags < 0 || fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) < 0 {
+            output.recordReadFailure()
+            source.cancel()
+        }
+        source.activate()
+    }
+
+    func cancel() { source.cancel() }
+
+    private func readAvailable() {
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress, $0.count)
+            }
+            if count > 0 {
+                output.receive(Data(buffer.prefix(count)))
+                if output.hasExceededLimit { source.cancel(); return }
+            } else if count < 0, errno == EINTR {
+                continue
+            } else if count < 0, errno == EAGAIN || errno == EWOULDBLOCK {
+                return
+            } else {
+                if count < 0 { output.recordReadFailure() }
+                source.cancel()
+                return
+            }
         }
     }
 
-    func finish() -> (lines: [String], output: Data, exceededLimit: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
-        if !exceededLimit, !pending.isEmpty { completeLines.append(pending) }
-        pending = ""
-        return (completeLines, complete, exceededLimit)
-    }
-
-    var hasExceededLimit: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return exceededLimit
-    }
+    deinit { source.cancel() }
 }
 
 public enum CLICommandRunner {
@@ -180,6 +237,18 @@ public enum CLICommandRunner {
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
+        if AgentCommandRouting.isEnabled {
+            return try await AgentTaskClient().runCommand(
+                request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
+        }
+        return try await runLocalSeparated(
+            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
+    }
+
+    public static func runLocal(
+        _ request: CLICommandRequest,
+        onLine: @escaping @Sendable (String) -> Void
+    ) async throws -> CLICommandResult {
         let worker = Task.detached(priority: .utility) {
             try runBlocking(request, onLine: onLine)
         }
@@ -195,9 +264,25 @@ public enum CLICommandRunner {
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
+        if AgentCommandRouting.isEnabled {
+            return try await AgentTaskClient().runCommand(
+                request, onStandardOutputLine: onStandardOutputLine,
+                onStandardErrorLine: onStandardErrorLine)
+        }
+        return try await runLocalSeparated(
+            request, onStandardOutputLine: onStandardOutputLine,
+            onStandardErrorLine: onStandardErrorLine)
+    }
+
+    public static func runLocalSeparated(
+        _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
+        onStandardOutputLine: @escaping @Sendable (String) -> Void,
+        onStandardErrorLine: @escaping @Sendable (String) -> Void
+    ) async throws -> CLICommandResult {
         let worker = Task.detached(priority: .utility) {
             try runBlockingSeparated(
-                request, onStandardOutputLine: onStandardOutputLine,
+                request, streamsWhileRunning: streamsWhileRunning,
+                onStandardOutputLine: onStandardOutputLine,
                 onStandardErrorLine: onStandardErrorLine)
         }
         return try await withTaskCancellationHandler {
@@ -215,7 +300,7 @@ public enum CLICommandRunner {
             request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
     }
     private static func runBlockingSeparated(
-        _ request: CLICommandRequest,
+        _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) throws -> CLICommandResult {
@@ -249,30 +334,19 @@ public enum CLICommandRunner {
         process.standardOutput = standardOutput
         process.standardError =
             request.discardsStandardError ? FileHandle.nullDevice : standardError
-        let output = CLIStreamingOutput(maximumBytes: request.maximumOutputBytes)
-        let error = CLIStreamingOutput(maximumBytes: request.maximumOutputBytes)
-        let outputFinished = DispatchSemaphore(value: 0)
-        let errorFinished = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
-            while true {
-                let chunk = standardOutput.fileHandleForReading.readData(ofLength: 4_096)
-                guard !chunk.isEmpty else { break }
-                output.receive(chunk)
-            }
-            outputFinished.signal()
-        }
-        if request.discardsStandardError {
-            errorFinished.signal()
-        } else {
-            DispatchQueue.global(qos: .utility).async {
-                while true {
-                    let chunk = standardError.fileHandleForReading.readData(ofLength: 4_096)
-                    guard !chunk.isEmpty else { break }
-                    error.receive(chunk)
-                }
-                errorFinished.signal()
-            }
-        }
+        let output = CLIStreamingOutput(
+            maximumBytes: request.maximumOutputBytes,
+            onLine: streamsWhileRunning ? onStandardOutputLine : nil)
+        let error = CLIStreamingOutput(
+            maximumBytes: request.maximumOutputBytes,
+            onLine: streamsWhileRunning ? onStandardErrorLine : nil)
+        let outputReader = CLIProcessOutputReader(
+            handle: standardOutput.fileHandleForReading, output: output)
+        let errorReader =
+            request.discardsStandardError
+            ? nil
+            : CLIProcessOutputReader(
+                handle: standardError.fileHandleForReading, output: error)
 
         let processFinished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in processFinished.signal() }
@@ -286,8 +360,8 @@ public enum CLICommandRunner {
             try? standardError.fileHandleForWriting.close()
             try? input?.fileHandleForReading.close()
             try? input?.fileHandleForWriting.close()
-            _ = drain(standardOutput, readerFinished: outputFinished)
-            _ = drain(standardError, readerFinished: errorFinished)
+            _ = drain(outputReader)
+            _ = drain(errorReader)
             throw CLICommandRunnerError.launchFailed
         }
         let inputFinished = DispatchSemaphore(value: 0)
@@ -324,8 +398,8 @@ public enum CLICommandRunner {
                 process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
                 processFinished: processFinished,
                 escalationSignal: processGroupEscalationSignal)
-            _ = drain(standardOutput, readerFinished: outputFinished)
-            _ = drain(standardError, readerFinished: errorFinished)
+            _ = drain(outputReader)
+            _ = drain(errorReader)
             _ = inputFinished.wait(timeout: .now() + terminationGrace)
             switch stop {
             case .cancelled:
@@ -337,8 +411,8 @@ public enum CLICommandRunner {
             }
         }
 
-        guard drain(standardOutput, readerFinished: outputFinished),
-            drain(standardError, readerFinished: errorFinished)
+        guard drain(outputReader),
+            drain(errorReader)
         else { throw CLICommandRunnerError.streamFailed }
         guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
             try? input?.fileHandleForWriting.close()
@@ -349,8 +423,21 @@ public enum CLICommandRunner {
         guard !finishedOutput.exceededLimit, !finishedError.exceededLimit else {
             throw CLICommandRunnerError.outputLimitExceeded
         }
-        for line in finishedOutput.lines { onStandardOutputLine(line) }
-        for line in finishedError.lines { onStandardErrorLine(line) }
+        guard !output.hasReadFailure, !error.hasReadFailure else {
+            throw CLICommandRunnerError.streamFailed
+        }
+        if !streamsWhileRunning {
+            for line in String(decoding: finishedOutput.output, as: UTF8.self).split(
+                whereSeparator: \.isNewline)
+            {
+                onStandardOutputLine(String(line))
+            }
+            for line in String(decoding: finishedError.output, as: UTF8.self).split(
+                whereSeparator: \.isNewline)
+            {
+                onStandardErrorLine(String(line))
+            }
+        }
         return CLICommandResult(
             terminationStatus: process.terminationStatus,
             standardOutputData: finishedOutput.output,
@@ -400,10 +487,11 @@ public enum CLICommandRunner {
     }
 
     @discardableResult
-    private static func drain(_ pipe: Pipe, readerFinished: DispatchSemaphore) -> Bool {
-        if readerFinished.wait(timeout: .now() + terminationGrace) == .success { return true }
-        try? pipe.fileHandleForReading.close()
-        return readerFinished.wait(timeout: .now() + terminationGrace) == .success
+    private static func drain(_ reader: CLIProcessOutputReader?) -> Bool {
+        guard let reader else { return true }
+        if reader.finished.wait(timeout: .now() + terminationGrace) == .success { return true }
+        reader.cancel()
+        return reader.finished.wait(timeout: .now() + terminationGrace) == .success
     }
 }
 

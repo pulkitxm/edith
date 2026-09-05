@@ -61,6 +61,8 @@ public actor JobScheduler {
     private let clock: @Sendable () -> Date
     private var pauseAmbientOnBattery: Bool
     private var started = false
+    private var shuttingDown = false
+    private var shutdownFlights: [Task<Data?, Error>] = []
     private var timer: Task<Void, Never>?
 
     public init(
@@ -78,6 +80,7 @@ public actor JobScheduler {
     }
 
     public func register(_ job: AgentJob) {
+        guard !shuttingDown else { return }
         let id = job.descriptor.id
         let subscribers = states[id]?.subscribers ?? 0
         states[id]?.flight?.task.cancel()
@@ -87,7 +90,7 @@ public actor JobScheduler {
     }
 
     public func start() {
-        guard !started else { return }
+        guard !started, !shuttingDown else { return }
         started = true
         refreshSchedule()
     }
@@ -103,6 +106,16 @@ public actor JobScheduler {
             states[id]?.interval = nil
         }
         publishJobs()
+    }
+
+    public func shutdown() async {
+        if !shuttingDown {
+            shuttingDown = true
+            shutdownFlights = states.values.compactMap { $0.flight?.task }
+            stop()
+        }
+        for flight in shutdownFlights { _ = await flight.result }
+        shutdownFlights.removeAll()
     }
 
     public func setPauseAmbientOnBattery(_ paused: Bool) {
@@ -144,7 +157,7 @@ public actor JobScheduler {
 
     @discardableResult
     public func enqueue(_ id: String) -> Bool {
-        guard let state = states[id], state.job.isEnabled() else { return false }
+        guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return false }
         guard state.flight == nil else { return true }
         Task { await runNow(id) }
         return true
@@ -152,7 +165,7 @@ public actor JobScheduler {
 
     @discardableResult
     public func runNow(_ id: String) async -> Data? {
-        guard let state = states[id], state.job.isEnabled() else { return nil }
+        guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return nil }
         if let flight = state.flight { return try? await flight.task.value }
         let token = UUID()
         let began = clock()
