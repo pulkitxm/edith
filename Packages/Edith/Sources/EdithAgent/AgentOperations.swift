@@ -67,6 +67,10 @@ public enum AgentOperations {
     }
 
     static func registerControls(on runtime: AgentRuntime) async {
+        await runtime.register(operation: AgentControlOperation.events.descriptor.id.rawValue) {
+            _ in
+            try await runtime.snapshot(topic: .events)
+        }
         await runtime.register(operation: AgentControlOperation.status.descriptor.id.rawValue) {
             _ in
             try AgentPayload.encode(await runtime.runtimeSnapshot())

@@ -31,6 +31,6 @@ public struct AgentEvent: Codable, Equatable, Sendable, Identifiable {
 
 public enum AgentDiagnostics {
     public static let capacity = 500
-    public static let runJob = "diagnostics.runJob"
-    public static let cancelJob = "diagnostics.cancelJob"
+    public static let runJob = AgentControlOperation.run.descriptor.id.rawValue
+    public static let cancelJob = AgentControlOperation.cancel.descriptor.id.rawValue
 }

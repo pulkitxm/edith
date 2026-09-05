@@ -39,6 +39,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
+        AgentCommandRouting.enable()
         if !AgentService.usesCustomService {
             lidAwakeDaemonRegistrar.register()
             agentRegistrar.registerAndRestartIfStale()

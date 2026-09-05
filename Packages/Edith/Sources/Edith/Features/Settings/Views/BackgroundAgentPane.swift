@@ -8,6 +8,7 @@ final class BackgroundAgentModel {
     var registration: AgentRegistrationState = .current
     var runtime: AgentRuntimeSnapshot?
     var jobs: [AgentJobSnapshot] = []
+    var tasks: [AgentTaskSnapshot] = []
     var failure: String?
     var events: [AgentEvent] = []
     var search = ""
@@ -35,6 +36,13 @@ final class BackgroundAgentModel {
                 for await jobs in AgentTopicStream.values([AgentJobSnapshot].self, topic: .jobs) {
                     guard !Task.isCancelled else { return }
                     self.jobs = jobs
+                }
+            }
+            group.addTask { @MainActor in
+                for await tasks in AgentTopicStream.values([AgentTaskSnapshot].self, topic: .tasks)
+                {
+                    guard !Task.isCancelled else { return }
+                    self.tasks = tasks
                 }
             }
             group.addTask { @MainActor in
@@ -121,6 +129,7 @@ struct BackgroundAgentPane: View {
             statusSection
             behaviourSection
             jobsSection
+            AgentTasksSection(tasks: model.tasks)
             eventsSection
         }
         .formStyle(.grouped)

@@ -72,6 +72,8 @@ struct AgentCommand: AsyncParsableCommand {
         subcommands: [
             AgentStatusCommand.self, AgentJobsCommand.self, AgentRestartCommand.self,
             AgentLogsCommand.self,
+            AgentEventsCommand.self, AgentRunCommand.self, AgentCancelCommand.self,
+            AgentTasksCommand.self,
         ],
         defaultSubcommand: AgentStatusCommand.self)
 }
@@ -186,6 +188,76 @@ struct AgentLogsCommand: AsyncParsableCommand {
                 return
             }
             for line in lines { CLIOut.out(line) }
+        }
+    }
+}
+
+struct AgentEventsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "events", abstract: "Read the daemon's retained event timeline.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let events = try AgentClient.shared.perform(
+                [AgentEvent].self, operation: AgentControlOperation.events.descriptor.id)
+            if json {
+                CLIOut.out(String(decoding: try AgentPayload.encode(events), as: UTF8.self))
+            } else {
+                for event in events {
+                    CLIOut.out(
+                        "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.name): \(event.message)"
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct AgentRunCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "run", abstract: "Queue a registered background job immediately.")
+
+    @Argument(help: "Job identifier from ed agent jobs.")
+    var job: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            _ = try AgentClient.shared.perform(
+                .init(rawValue: AgentDiagnostics.runJob), payload: AgentPayload.encode(job))
+            if json {
+                CLIOut.json(.object(["queued": .string(job)]))
+            } else {
+                CLIOut.out("queued \(job)")
+            }
+        }
+    }
+}
+
+struct AgentCancelCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "cancel", abstract: "Cancel a running background job.")
+
+    @Argument(help: "Job identifier from ed agent jobs.")
+    var job: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            _ = try AgentClient.shared.perform(
+                .init(rawValue: AgentDiagnostics.cancelJob), payload: AgentPayload.encode(job))
+            if json {
+                CLIOut.json(.object(["cancelled": .string(job)]))
+            } else {
+                CLIOut.out("cancellation requested for \(job)")
+            }
         }
     }
 }
