@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithKit
+@testable import EdithAgent
 
 @Suite struct ClipboardPayloadTests {
     private let options = ClipboardCaptureOptions(
@@ -10,17 +11,17 @@ import Testing
 
     @Test func uuidNamedFilesShowTheirKindInsteadOfTheUUID() {
         let uuid = "86789B21-5238-4B94-8DCC-BAC684D59D6E"
-        #expect(ClipboardPayloadExtractor.isOpaqueName("\(uuid).png"))
-        #expect(ClipboardPayloadExtractor.isOpaqueName(uuid))
-        #expect(!ClipboardPayloadExtractor.isOpaqueName("budget.png"))
-        #expect(!ClipboardPayloadExtractor.isOpaqueName("Screenshot 2026-07-21.png"))
+        #expect(ClipboardPreviewPreparation.isOpaqueName("\(uuid).png"))
+        #expect(ClipboardPreviewPreparation.isOpaqueName(uuid))
+        #expect(!ClipboardPreviewPreparation.isOpaqueName("budget.png"))
+        #expect(!ClipboardPreviewPreparation.isOpaqueName("Screenshot 2026-07-21.png"))
 
         let url = URL(fileURLWithPath: "/tmp/\(uuid).png")
-        let kind = ClipboardPayloadExtractor.kindDescription(for: url)
+        let kind = ClipboardPreviewPreparation.kindDescription(for: url)
         #expect(kind?.isEmpty == false)
         #expect(kind?.localizedCaseInsensitiveContains("png") == true)
         let extensionless = URL(fileURLWithPath: "/tmp/x")
-        #expect(ClipboardPayloadExtractor.kindDescription(for: extensionless) == nil)
+        #expect(ClipboardPreviewPreparation.kindDescription(for: extensionless) == nil)
     }
 
     @Test @MainActor func symbolHeavyTextHasPreview() throws {
@@ -139,7 +140,11 @@ import Testing
 
         #expect(payload.ext == "files")
         #expect(payload.preview.contains("2 items"))
-        #expect(payload.preview.contains("fixtures · Folder"))
+        #expect(payload.preview.contains("fixtures"))
+        let prepared = try ClipboardPreviewPreparation.prepare(
+            ClipboardCapture(
+                payload: payload, sourceApp: nil, sourceBundleID: nil))
+        #expect(prepared.preview.contains("fixtures · Folder"))
         #expect(payload.preview.contains("events.jsonl"))
     }
 
@@ -157,7 +162,11 @@ import Testing
         let payload = try #require(
             ClipboardPayloadExtractor.extract(from: pasteboard, options: options))
 
-        #expect(payload.preview.hasPrefix("events.jsonl · \(beginning)"))
+        #expect(payload.preview == "events.jsonl")
+        let prepared = try ClipboardPreviewPreparation.prepare(
+            ClipboardCapture(
+                payload: payload, sourceApp: nil, sourceBundleID: nil))
+        #expect(prepared.preview.hasPrefix("events.jsonl · \(beginning)"))
         #expect(payload.preview.count <= 500)
         #expect(payload.data == Data(file.absoluteString.utf8))
     }

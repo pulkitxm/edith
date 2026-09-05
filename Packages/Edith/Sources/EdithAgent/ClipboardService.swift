@@ -5,6 +5,7 @@ public actor ClipboardService {
     public static let maximumRequests = 16
     public static let maximumQueuedBytes = 48 << 20
     private let archive: ClipboardArchive
+    private let thumbnails: ClipboardThumbnailService
     private let defaults: UserDefaults
     private let changed: @Sendable () -> Void
     private var workers: [UUID: Task<Data, Error>] = [:]
@@ -18,6 +19,7 @@ public actor ClipboardService {
         changed: @escaping @Sendable () -> Void = { IPC.post(IPC.Name.clipboardChanged) }
     ) {
         self.archive = archive
+        thumbnails = ClipboardThumbnailService(archive: archive)
         self.defaults = defaults
         self.changed = changed
     }
@@ -35,6 +37,20 @@ public actor ClipboardService {
 
     public func perform(operation: String, payload: Data) async throws -> Data {
         guard !stopped else { throw AgentError(.unavailable, "Clipboard storage is stopping.") }
+        if operation == AgentClipboardOperation.thumbnail {
+            guard payload.count <= 4096 else {
+                throw AgentError(.refused, "The clipboard preview request is too large.")
+            }
+            return try await AgentPayload.encode(
+                thumbnails.read(AgentPayload.decode(ClipboardThumbnailRequest.self, from: payload)))
+        }
+        if operation == AgentClipboardOperation.cancelThumbnail {
+            guard payload.count <= 128 else {
+                throw AgentError(.refused, "The clipboard preview cancellation is invalid.")
+            }
+            await thumbnails.cancel(try AgentPayload.decode(UUID.self, from: payload))
+            return Data()
+        }
         let limit = operation == AgentClipboardOperation.capture ? (23 << 20) : (1 << 20)
         guard payload.count <= limit else {
             throw AgentError(.refused, "The clipboard payload is too large.")
@@ -61,7 +77,8 @@ public actor ClipboardService {
             case AgentClipboardOperation.capture:
                 let request = try AgentPayload.decode(ClipboardCapture.self, from: payload)
                 let result = try archive.capture(
-                    request, maxItems: maxItems, maxBytes: maxBytes, maxAge: maxAge)
+                    ClipboardPreviewPreparation.prepare(request), maxItems: maxItems,
+                    maxBytes: maxBytes, maxAge: maxAge)
                 if result.changed > 0 { changed() }
                 return try AgentPayload.encode(result)
             case AgentClipboardOperation.mutate:
@@ -94,6 +111,7 @@ public actor ClipboardService {
 
     public func stop() async {
         stopped = true
+        await thumbnails.stop()
         let active = Array(workers.values)
         for worker in active { worker.cancel() }
         for worker in active { _ = try? await worker.value }

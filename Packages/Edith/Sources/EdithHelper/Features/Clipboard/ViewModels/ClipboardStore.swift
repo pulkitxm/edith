@@ -117,7 +117,7 @@ final class ClipboardStore: FeatureModule {
             ?? ClipboardIndex.defaultCheckInterval
         let interval =
             configured.isFinite
-            ? min(60, max(0.25, configured)) : ClipboardIndex.defaultCheckInterval
+            ? min(60, max(0.2, configured)) : ClipboardIndex.defaultCheckInterval
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(200))
         timer.setEventHandler { [weak self] in self?.tick() }

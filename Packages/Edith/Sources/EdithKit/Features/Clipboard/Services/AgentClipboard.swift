@@ -7,7 +7,11 @@ public enum AgentClipboardOperation {
     public static let mutate = "clipboard.mutate"
     public static let blob = "clipboard.blob"
     public static let stats = "clipboard.storageStats"
-    public static let internalOperations = [capture, snapshot, mutate, blob, stats]
+    public static let thumbnail = "clipboard.thumbnail"
+    public static let cancelThumbnail = "clipboard.thumbnail.cancel"
+    public static let internalOperations = [
+        capture, snapshot, mutate, blob, stats, thumbnail, cancelThumbnail,
+    ]
 }
 
 public struct ClipboardCapture: Codable, Sendable {
@@ -57,11 +61,16 @@ public struct ClipboardSnapshotRequest: Codable, Sendable {
     public let offset: Int
     public let limit: Int
     public let revision: String?
+    public let recentlyCreated: Bool
 
-    public init(offset: Int = 0, limit: Int = 256, revision: String? = nil) {
+    public init(
+        offset: Int = 0, limit: Int = 256, revision: String? = nil,
+        recentlyCreated: Bool = false
+    ) {
         self.offset = offset
         self.limit = limit
         self.revision = revision
+        self.recentlyCreated = recentlyCreated
     }
 }
 
@@ -127,6 +136,22 @@ public struct AgentClipboardClient: Sendable {
 
     public func blob(id: String) async throws -> ClipboardStoredPayload {
         try await request(AgentClipboardOperation.blob, id)
+    }
+
+    public func thumbnail(id: String) async throws -> ClipboardThumbnailSnapshot {
+        let query = ClipboardThumbnailRequest(entryID: id)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            let result: ClipboardThumbnailSnapshot = try await request(
+                AgentClipboardOperation.thumbnail, query)
+            try Task.checkCancellation()
+            guard (result.data?.count ?? 0) <= ClipboardThumbnailSnapshot.maximumBytes else {
+                throw AgentError(.failed, "The clipboard preview exceeds its resource limit.")
+            }
+            return result
+        } onCancel: {
+            ClipboardPreviewCancellation.shared.cancel(query.id, send: send)
+        }
     }
 
     public func stats() async throws -> ClipboardActions.Stats {
