@@ -159,6 +159,7 @@ final class CLIWorld: @unchecked Sendable {
     let shared: UserDefaults
     let standard: UserDefaults
     let sandbox: URL
+    private let previousDataRoot: String?
     let pasteboard: NSPasteboard
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
@@ -167,6 +168,7 @@ final class CLIWorld: @unchecked Sendable {
     private let lock = NSLock()
 
     init(_ label: String = UUID().uuidString) {
+        previousDataRoot = ProcessInfo.processInfo.environment[DataRoot.devOverrideVariable]
         suite = "test.cli.\(label)"
         pasteboard = NSPasteboard(name: NSPasteboard.Name(suite))
         pasteboard.clearContents()
@@ -378,7 +380,11 @@ final class CLIWorld: @unchecked Sendable {
     }
 
     func tearDown() {
-        unsetenv(DataRoot.devOverrideVariable)
+        if let previousDataRoot {
+            setenv(DataRoot.devOverrideVariable, previousDataRoot, 1)
+        } else {
+            unsetenv(DataRoot.devOverrideVariable)
+        }
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
