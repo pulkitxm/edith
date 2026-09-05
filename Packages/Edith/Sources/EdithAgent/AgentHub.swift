@@ -95,7 +95,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
             do {
                 reply(try await runtime.snapshot(topic: value), nil)
             } catch {
-                reply(nil, error.localizedDescription)
+                reply(nil, AgentError.response(error))
             }
         }
     }
@@ -137,7 +137,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
             do {
                 reply(try await runtime.perform(operation: operation, payload: payload), nil)
             } catch {
-                reply(nil, error.localizedDescription)
+                reply(nil, AgentError.response(error))
             }
         }
     }
