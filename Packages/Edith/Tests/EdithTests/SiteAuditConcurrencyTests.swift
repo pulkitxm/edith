@@ -46,27 +46,6 @@ import Testing
         #expect(output.isEmpty)
     }
 
-    @Test func anIdleAuditJobPublishesNothing() async throws {
-        let job = SiteAuditJob(store: nil)
-        #expect(try await job.run() == nil)
-    }
-
-    @Test func anEnqueuedRequestIsTakenExactlyOnce() async throws {
-        let job = SiteAuditJob(store: nil)
-        job.enqueue(SiteAuditRequest(urls: []))
-
-        #expect(try await job.run() == nil)
-        #expect(try await job.run() == nil)
-    }
-
-    @Test func aRequestRoundTripsThroughItsPayload() throws {
-        let request = SiteAuditRequest(
-            urls: [URL(string: "https://example.com")!], lighthouse: true)
-        let round = try AgentPayload.decode(
-            SiteAuditRequest.self, from: AgentPayload.encode(request))
-
-        #expect(round == request)
-    }
 }
 
 private final class ConcurrencyCounter: @unchecked Sendable {

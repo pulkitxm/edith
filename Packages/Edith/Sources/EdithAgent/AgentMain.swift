@@ -98,6 +98,7 @@ public enum AgentBoot {
                 await tasks.registerCommand()
                 await AgentMachineOperations.register(on: tasks)
                 await downloads.registerEstimate(on: tasks)
+                try await SEOAuditWorkflow().register(on: tasks, runtime: runtime)
                 await AgentTaskOperations.register(on: runtime, service: tasks)
             } catch {
                 await runtime.record(
