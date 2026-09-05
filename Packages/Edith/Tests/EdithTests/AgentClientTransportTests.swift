@@ -19,15 +19,17 @@ import Testing
         let fixture = TransportFixture()
         let client = fixture.client()
         try await client.verifyHandshakeAsync()
-        fixture.latest.delay = 0.05
-        let ticks = TransportValues<Int>()
-        fixture.latest.producePayload = { Data(ticks.values.isEmpty ? "false".utf8 : "true".utf8) }
+        fixture.latest.asynchronousResponse = true
+        let released = DispatchSemaphore(value: 0)
+        fixture.latest.producePayload = {
+            let yielded = released.wait(timeout: .now() + 2) == .success
+            return Data(yielded ? "true".utf8 : "false".utf8)
+        }
         let heartbeat = Task { @MainActor in
-            try await Task.sleep(for: .milliseconds(5))
-            ticks.append(1)
+            _ = released.signal()
         }
         #expect(try await client.performAsync(Bool.self, operation: operation))
-        try await heartbeat.value
+        await heartbeat.value
     }
 
     @Test func longRequestsUseTheirOwnDeadline() async throws {
@@ -225,6 +227,7 @@ private final class TransportConnection: NSObject, AgentClientConnection, EdithA
     private var performed = 0
     private var unsubscribed = 0
     private var replyDelay: TimeInterval = 0
+    private var defersReply = false
     private var proxyFailure = false
     private var operationError: String?
     private var subscriptionError: String?
@@ -241,6 +244,11 @@ private final class TransportConnection: NSObject, AgentClientConnection, EdithA
     var producePayload: @Sendable () -> Data {
         get { lock.withLock { payload } }
         set { lock.withLock { payload = newValue } }
+    }
+
+    var asynchronousResponse: Bool {
+        get { lock.withLock { defersReply } }
+        set { lock.withLock { defersReply = newValue } }
     }
 
     var topics: Set<String> { lock.withLock { registeredTopics } }
@@ -320,7 +328,7 @@ private final class TransportConnection: NSObject, AgentClientConnection, EdithA
         let failure = operationFailure
         let delay = delay
         let payload = producePayload
-        if delay == 0 {
+        if delay == 0 && !asynchronousResponse {
             reply(failure == nil ? payload() : nil, failure)
         } else {
             DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
