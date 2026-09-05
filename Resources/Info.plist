@@ -30,6 +30,8 @@
 	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Edith connects to the machines, databases, and Companion servers you select on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Edith records voice memories in the Companion capture screen.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
