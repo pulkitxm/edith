@@ -202,6 +202,13 @@ private final class CLIProcessOutputReader: @unchecked Sendable {
     deinit { source.cancel() }
 }
 
+private final class CLICommandCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.withLock { cancelled } }
+    func cancel() { lock.withLock { cancelled = true } }
+}
+
 public enum CLICommandRunner {
     private static let terminationGrace: TimeInterval = 0.25
     private static let lifecyclePoll: TimeInterval = 0.01
@@ -222,14 +229,8 @@ public enum CLICommandRunner {
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
-        let worker = Task.detached(priority: .utility) {
-            try runBlocking(request, onLine: onLine)
-        }
-        return try await withTaskCancellationHandler {
-            try await worker.value
-        } onCancel: {
-            worker.cancel()
-        }
+        try await runLocalSeparated(
+            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
     }
 
     public static func runSeparated(
@@ -252,35 +253,34 @@ public enum CLICommandRunner {
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
-        let worker = Task.detached(priority: .utility) {
-            try runBlockingSeparated(
-                request, streamsWhileRunning: streamsWhileRunning,
-                onStandardOutputLine: onStandardOutputLine,
-                onStandardErrorLine: onStandardErrorLine)
-        }
+        let cancellation = CLICommandCancellation()
         return try await withTaskCancellationHandler {
-            try await worker.value
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    do {
+                        let result = try runBlockingSeparated(
+                            request, streamsWhileRunning: streamsWhileRunning,
+                            onStandardOutputLine: onStandardOutputLine,
+                            onStandardErrorLine: onStandardErrorLine,
+                            cancellationRequested: { cancellation.isCancelled })
+                        continuation.resume(returning: result)
+                    } catch { continuation.resume(throwing: error) }
+                }
+            }
         } onCancel: {
-            worker.cancel()
+            cancellation.cancel()
         }
     }
 
-    private static func runBlocking(
-        _ request: CLICommandRequest,
-        onLine: @escaping @Sendable (String) -> Void
-    ) throws -> CLICommandResult {
-        try runBlockingSeparated(
-            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
-    }
     private static func runBlockingSeparated(
         _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
-        onStandardErrorLine: @escaping @Sendable (String) -> Void
+        onStandardErrorLine: @escaping @Sendable (String) -> Void,
+        cancellationRequested: @escaping @Sendable () -> Bool
     ) throws -> CLICommandResult {
         let deadline = request.timeout.map {
             ProcessInfo.processInfo.systemUptime + max(0, $0)
         }
-        let cancellationRequested: @Sendable () -> Bool = { Task.isCancelled }
         let input = request.standardInputData.map { _ in Pipe() }
 
         let standardOutput = Pipe()
@@ -302,7 +302,7 @@ public enum CLICommandRunner {
         let processFinished = DispatchSemaphore(value: 0)
         let process: CLIChildProcess
         do {
-            try Task.checkCancellation()
+            if cancellationRequested() { throw CancellationError() }
             process = try CLIChildProcess(
                 request: request,
                 input: input?.fileHandleForReading.fileDescriptor
