@@ -8,22 +8,25 @@ final class BackgroundAgentModel {
     var registration: AgentRegistrationState = .current
     var runtime: AgentRuntimeSnapshot?
     var jobs: [AgentJobSnapshot] = []
+    var tasks: [AgentTaskSnapshot] = []
     var failure: String?
     var events: [AgentEvent] = []
     var search = ""
     var errorsOnly = false
     var timelinePaused = false
+    private var copyTask: Task<Void, Never>?
 
     var visibleEvents: [AgentEvent] {
         events.reversed().filter { event in
             (!errorsOnly || event.level != .info)
                 && (search.isEmpty
-                    || [event.category, event.name, event.message]
+                    || [event.category, event.name, event.message, event.taskID?.uuidString ?? ""]
                         .contains { $0.localizedCaseInsensitiveContains(search) })
         }
     }
 
     func observe() async {
+        defer { copyTask?.cancel(); copyTask = nil }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor in
                 for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
@@ -35,6 +38,13 @@ final class BackgroundAgentModel {
                 for await jobs in AgentTopicStream.values([AgentJobSnapshot].self, topic: .jobs) {
                     guard !Task.isCancelled else { return }
                     self.jobs = jobs
+                }
+            }
+            group.addTask { @MainActor in
+                for await tasks in AgentTopicStream.values([AgentTaskSnapshot].self, topic: .tasks)
+                {
+                    guard !Task.isCancelled else { return }
+                    self.tasks = tasks
                 }
             }
             group.addTask { @MainActor in
@@ -66,11 +76,29 @@ final class BackgroundAgentModel {
     }
 
     func copyEvents() {
-        let value = visibleEvents.reversed().map { event in
-            "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.category).\(event.name): \(event.message)"
-        }.joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
+        copyTask?.cancel()
+        let events = Array(visibleEvents.reversed())
+        copyTask = Task { [weak self] in
+            let worker = Task.detached(priority: .userInitiated) { Self.renderEvents(events) }
+            let value = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled, let self else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+            self.copyTask = nil
+        }
+    }
+
+    nonisolated static func renderEvents(_ events: [AgentEvent]) -> String {
+        let lines: [String] = events.map { event in
+            let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
+            let prefix = "\(event.date.ISO8601Format()) [\(event.level.rawValue)]"
+            return "\(prefix) \(event.category).\(event.name)\(task): \(event.message)"
+        }
+        return lines.joined(separator: "\n")
     }
 
     func refresh() async {
@@ -121,6 +149,7 @@ struct BackgroundAgentPane: View {
             statusSection
             behaviourSection
             jobsSection
+            AgentTasksSection(tasks: model.tasks)
             eventsSection
         }
         .formStyle(.grouped)

@@ -171,7 +171,7 @@ public final class AgentClient: NSObject, @unchecked Sendable {
             guard !reply.isFinished else { return }
             body(remote) { value, failure in
                 if let failure {
-                    finish(.failure(AgentError(.failed, failure)))
+                    finish(.failure(AgentError.fromResponse(failure)))
                 } else if let value {
                     finish(.success(value))
                 } else {

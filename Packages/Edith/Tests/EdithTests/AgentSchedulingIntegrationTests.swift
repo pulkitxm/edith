@@ -93,8 +93,10 @@ import Testing
         let store = try AgentStore(
             url: root.appendingPathComponent("edith.sqlite"), build: "fixture")
         let runtime = AgentRuntime(build: "fixture", store: store)
+        let taskID = UUID()
         for index in 0..<(AgentDiagnostics.capacity + 5) {
-            await runtime.record(AgentEvent(category: "fixture", name: "step", message: "\(index)"))
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "step", message: "\(index)", taskID: taskID))
         }
         let restarted = AgentRuntime(build: "fixture", store: store)
         let events = try AgentPayload.decode(
@@ -102,6 +104,7 @@ import Testing
         #expect(events.count == AgentDiagnostics.capacity)
         #expect(events.first?.message == "5")
         #expect(events.last?.message == "504")
+        #expect(events.allSatisfy { $0.taskID == taskID })
         #expect(
             try store.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM agent_event") } == 500)
         try store.close()

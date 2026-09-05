@@ -280,7 +280,7 @@ public actor AgentTaskService {
             entries[id] = entry
             workers[id]?.cancel()
             persistOrReport(entry)
-            notify(entry.status.snapshot, name: "task.cancelled")
+            notify(entry.status.snapshot, name: "task.\(entry.status.snapshot.state.rawValue)")
             startNext()
             return entry.status.snapshot
         }
@@ -355,6 +355,10 @@ public actor AgentTaskService {
                 }
             }
         }
+        if entry.status.snapshot.state == .cancelled {
+            entry.status.snapshot.failure = "Cancelled by request."
+            entry.status.snapshot.failureCode = "cancelled"
+        }
         entries[id] = entry
         persistOrReport(entry)
         notify(entry.status.snapshot, name: "task.\(entry.status.snapshot.state.rawValue)")
@@ -395,7 +399,7 @@ public actor AgentTaskService {
             category: "task", name: name, message: "\(snapshot.title): \(snapshot.state.rawValue)",
             duration: snapshot.finishedAt.flatMap { finished in
                 snapshot.startedAt.map { finished.timeIntervalSince($0) }
-            })
+            }, taskID: snapshot.id)
         Task { [weak self, record] in
             await record(event)
             guard let self else { return }

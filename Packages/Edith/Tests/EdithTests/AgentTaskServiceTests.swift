@@ -77,7 +77,10 @@ import Testing
     }
 
     @Test func runningCancellationKeepsItsWorkerSlotUntilExecutionStops() async throws {
-        let service = try AgentTaskService(directory: nil, limits: AgentTaskLimits(concurrency: 1))
+        let events = TaskTestEvents()
+        let service = try AgentTaskService(
+            directory: nil, limits: AgentTaskLimits(concurrency: 1),
+            record: { await events.append($0) })
         let gate = TaskTestGate()
         await service.register(operation: "fixture") { payload, _ in
             await gate.enter(Int(String(decoding: payload, as: UTF8.self))!)
@@ -90,8 +93,11 @@ import Testing
         try await eventually { await gate.started == [1] }
         #expect(try await service.cancel(first.id).state == .cancelling)
         #expect(try await service.status(second.id).snapshot.state == .queued)
+        try await eventually { await events.contains("task.cancelling", taskID: first.id) }
+        #expect(await !events.contains("task.cancelled", taskID: first.id))
         await gate.release(1)
         #expect(try await finished(first.id, service: service).snapshot.state == .cancelled)
+        try await eventually { await events.contains("task.cancelled", taskID: first.id) }
         try await eventually { await gate.started == [1, 2] }
         await gate.release(2)
         _ = try await finished(second.id, service: service)
@@ -226,7 +232,10 @@ import Testing
             (try? await service.status(task.id).output.contains { $0.text == "started" }) == true
         }
         _ = try await service.cancel(task.id)
-        #expect(try await finished(task.id, service: service).snapshot.state == .cancelled)
+        let cancelled = try await finished(task.id, service: service).snapshot
+        #expect(cancelled.state == .cancelled)
+        #expect(cancelled.failure == "Cancelled by request.")
+        #expect(cancelled.failureCode == "cancelled")
         try await Task.sleep(for: .milliseconds(1_100))
         #expect(
             !FileManager.default.fileExists(
@@ -274,6 +283,14 @@ import Testing
 private actor TaskTestCounter {
     var value = 0
     func increment() { value += 1 }
+}
+
+private actor TaskTestEvents {
+    private var values: [AgentEvent] = []
+    func append(_ event: AgentEvent) { values.append(event) }
+    func contains(_ name: String, taskID: UUID) -> Bool {
+        values.contains { $0.name == name && $0.taskID == taskID }
+    }
 }
 
 private actor TaskTestGate {

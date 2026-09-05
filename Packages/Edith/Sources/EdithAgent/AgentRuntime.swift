@@ -18,10 +18,13 @@ public actor AgentRuntime {
     private var latest: [AgentTopic: Data] = [:]
     private var operations: [String: OperationHandler] = [:]
     private var busSubscribers: [UUID: Set<String>] = [:]
+    private var busDemandObserver: (@Sendable (String, Int) async -> Void)?
     private var events: [AgentEvent] = []
     public private(set) var isShuttingDown = false
     private var shutdownHandlers: [String: @Sendable () async -> Void] = [:]
     private var shutdownTasks: [String: Task<Void, Never>] = [:]
+    private var cpu = AgentCPUUsageSampler()
+    private var machineMetricsActive = false
 
     public init(build: String, store: AgentStore?, startedAt: Date = Date()) {
         self.build = build
@@ -32,6 +35,16 @@ public actor AgentRuntime {
 
     public func attach(scheduler: JobScheduler) {
         self.scheduler = scheduler
+    }
+
+    public func setMachineMetricsActive(_ active: Bool) async {
+        guard machineMetricsActive != active else { return }
+        machineMetricsActive = active
+        if active {
+            await scheduler?.addSubscriber(topic: .machineMetrics)
+        } else {
+            await scheduler?.removeSubscriber(topic: .machineMetrics)
+        }
     }
 
     public func register(operation: String, handler: @escaping OperationHandler) {
@@ -89,7 +102,9 @@ public actor AgentRuntime {
             events.removeFirst(events.count - AgentDiagnostics.capacity)
         }
         AgentEventJournal.append(event, store: store)
-        if let payload = try? AgentPayload.encode(events) {
+        if subscribers.values.contains(where: { $0.topics.contains(.events) }),
+            let payload = try? AgentPayload.encode(events)
+        {
             publish(topic: .events, payload: payload)
         }
         AgentLog.logger.info(
@@ -97,18 +112,39 @@ public actor AgentRuntime {
         )
     }
 
-    public func subscribeBus(peer: UUID, channel: String, subscriber: EdithAgentSubscriberXPC?) {
-        busSubscribers[peer, default: []].insert(channel)
-        if let subscriber, subscribers[peer] == nil {
-            subscribers[peer] = Subscriber(topics: [], proxy: subscriber)
+    public func setBusDemandObserver(
+        _ observer: @escaping @Sendable (String, Int) async -> Void
+    ) async {
+        busDemandObserver = observer
+        for channel in Set(busSubscribers.values.flatMap { $0 }) {
+            await observer(channel, busSubscriberCount(channel: channel))
         }
     }
 
-    public func unsubscribeBus(peer: UUID, channel: String) {
-        busSubscribers[peer]?.remove(channel)
+    public func busSubscriberCount(channel: String) -> Int {
+        busSubscribers.values.filter { $0.contains(channel) }.count
+    }
+
+    public func subscribeBus(
+        peer: UUID, channel: String, subscriber: EdithAgentSubscriberXPC?
+    ) async {
+        let inserted = busSubscribers[peer, default: []].insert(channel).inserted
+        if let subscriber, subscribers[peer] == nil {
+            subscribers[peer] = Subscriber(topics: [], proxy: subscriber)
+        }
+        if inserted {
+            await busDemandObserver?(channel, busSubscriberCount(channel: channel))
+        }
+    }
+
+    public func unsubscribeBus(peer: UUID, channel: String) async {
+        let removed = busSubscribers[peer]?.remove(channel) != nil
         if busSubscribers[peer]?.isEmpty == true { busSubscribers[peer] = nil }
         if busSubscribers[peer] == nil, subscribers[peer]?.topics.isEmpty == true {
             subscribers[peer] = nil
+        }
+        if removed {
+            await busDemandObserver?(channel, busSubscriberCount(channel: channel))
         }
     }
 
@@ -169,10 +205,14 @@ public actor AgentRuntime {
     }
 
     public func forget(peer: UUID) async {
-        busSubscribers[peer] = nil
-        guard let existing = subscribers.removeValue(forKey: peer) else { return }
-        for topic in existing.topics {
-            await scheduler?.removeSubscriber(topic: topic)
+        let channels = busSubscribers.removeValue(forKey: peer) ?? []
+        if let existing = subscribers.removeValue(forKey: peer) {
+            for topic in existing.topics {
+                await scheduler?.removeSubscriber(topic: topic)
+            }
+        }
+        for channel in channels {
+            await busDemandObserver?(channel, busSubscriberCount(channel: channel))
         }
     }
 
@@ -201,7 +241,9 @@ public actor AgentRuntime {
             build: build, startedAt: startedAt,
             processIdentifier: ProcessInfo.processInfo.processIdentifier,
             residentBytes: AgentProcessMetrics.residentBytes(),
-            cpuPercent: AgentProcessMetrics.cpuPercent(since: startedAt),
+            cpuPercent: cpu.sample(
+                cpuSeconds: AgentProcessMetrics.cpuSeconds(),
+                uptime: ProcessInfo.processInfo.systemUptime),
             subscriberCount: subscribers.count,
             storePath: store?.url.path ?? "",
             schemaVersion: store?.schemaVersion ?? 0)
@@ -221,13 +263,34 @@ enum AgentProcessMetrics {
         return result == KERN_SUCCESS ? info.resident_size : 0
     }
 
-    static func cpuPercent(since started: Date) -> Double {
+    static func cpuSeconds() -> Double {
         var usage = rusage()
         guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
-        let seconds =
+        return
             Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1_000_000
             + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1_000_000
-        let elapsed = max(1, Date().timeIntervalSince(started))
-        return min(100, seconds / elapsed * 100)
+    }
+}
+
+struct AgentCPUUsageSampler {
+    private var lastCPU: Double
+    private var lastUptime: TimeInterval
+    private var value = 0.0
+
+    init(
+        cpuSeconds: Double = AgentProcessMetrics.cpuSeconds(),
+        uptime: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) {
+        lastCPU = cpuSeconds
+        lastUptime = uptime
+    }
+
+    mutating func sample(cpuSeconds: Double, uptime: TimeInterval) -> Double {
+        let elapsed = uptime - lastUptime
+        guard elapsed >= 1 else { return value }
+        value = max(0, (cpuSeconds - lastCPU) / elapsed * 100)
+        lastCPU = cpuSeconds
+        lastUptime = uptime
+        return value
     }
 }

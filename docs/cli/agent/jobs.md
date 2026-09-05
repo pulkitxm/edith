@@ -4,6 +4,8 @@ Lists the jobs the background agent schedules.
 
 ```
 ed agent jobs [--json]
+ed agent run <job> [--json]
+ed agent cancel <job> [--json]
 ```
 
 Each row carries the job id, its current phase, its trigger, its cadence and
@@ -17,6 +19,12 @@ JSON adds `ambientSeconds`, `liveSeconds`, `power`, `runCount` and `lastError`.
 Phases are `idle`, `running`, `paused`, `off` and `failed`. `off` means the
 ability that owns the job is disabled. `paused` means a power policy or the
 battery preference is holding it.
+
+`ed agent run` queues an enabled registered job and returns immediately. JSON is
+`{"queued":"usage.refresh"}`. A disabled or unknown job is refused.
+`ed agent cancel` requests cancellation of the running job identified by its
+catalog ID. It returns `{"cancelled":"usage.refresh"}` in JSON mode. Inspect the
+job table or events to confirm its final outcome.
 
 ## Where to go next
 

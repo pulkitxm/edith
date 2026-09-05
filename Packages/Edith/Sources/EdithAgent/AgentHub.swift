@@ -62,6 +62,8 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
     let id = UUID()
     private weak var connection: NSXPCConnection?
     private let runtime: AgentRuntime
+    private let lock = NSLock()
+    private var authenticated = false
 
     init(connection: NSXPCConnection, runtime: AgentRuntime) {
         self.connection = connection
@@ -72,9 +74,11 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
         let verdict = AgentProtocolCompatibility.verdict(
             peer: peerVersion, agent: AgentService.protocolVersion)
         guard verdict == .compatible else {
+            lock.withLock { authenticated = false }
             reply(nil, verdict.hint)
             return
         }
+        lock.withLock { authenticated = true }
         Task { [runtime] in
             let value = await runtime.handshake()
             reply(try? AgentPayload.encode(value), nil)
@@ -82,6 +86,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
     }
 
     func snapshot(topic: String, reply: @escaping (Data?, String?) -> Void) {
+        guard lock.withLock({ authenticated }) else { reply(nil, "Handshake required."); return }
         guard let value = AgentTopic(rawValue: topic) else {
             reply(nil, "Unknown topic \(topic).")
             return
@@ -90,12 +95,13 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
             do {
                 reply(try await runtime.snapshot(topic: value), nil)
             } catch {
-                reply(nil, error.localizedDescription)
+                reply(nil, AgentError.response(error))
             }
         }
     }
 
     func subscribe(topic: String, reply: @escaping (String?) -> Void) {
+        guard lock.withLock({ authenticated }) else { reply("Handshake required."); return }
         guard let value = AgentTopic(rawValue: topic) else {
             reply("Unknown topic \(topic).")
             return
@@ -108,6 +114,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
     }
 
     func unsubscribe(topic: String, reply: @escaping (String?) -> Void) {
+        guard lock.withLock({ authenticated }) else { reply("Handshake required."); return }
         guard let value = AgentTopic(rawValue: topic) else {
             reply("Unknown topic \(topic).")
             return
@@ -119,6 +126,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
     }
 
     func perform(operation: String, payload: Data, reply: @escaping (Data?, String?) -> Void) {
+        guard lock.withLock({ authenticated }) else { reply(nil, "Handshake required."); return }
         if operation == AgentBus.publish || operation == AgentBus.subscribe
             || operation == AgentBus.unsubscribe
         {
@@ -129,7 +137,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
             do {
                 reply(try await runtime.perform(operation: operation, payload: payload), nil)
             } catch {
-                reply(nil, error.localizedDescription)
+                reply(nil, AgentError.response(error))
             }
         }
     }

@@ -18,6 +18,9 @@ struct AgentEventRow: View {
                 Text(event.message).textSelection(.enabled)
                 LabeledContent("Category", value: event.category)
                 LabeledContent("Event", value: event.id.uuidString)
+                if let taskID = event.taskID {
+                    LabeledContent("Task", value: taskID.uuidString).textSelection(.enabled)
+                }
                 if let duration = event.duration {
                     LabeledContent("Duration", value: String(format: "%.3f seconds", duration))
                 }

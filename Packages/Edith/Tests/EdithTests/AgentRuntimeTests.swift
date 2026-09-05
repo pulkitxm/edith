@@ -45,14 +45,10 @@ import Testing
 @Suite struct AgentOperationCatalogTests {
     @Test func theAgentServesEveryOperationItDeclares() async throws {
         let runtime = AgentRuntime(build: "test", store: nil)
-        await AgentOperations.register(on: runtime)
-
-        for id in AgentOperationCatalog.served
-        where id != AgentControlOperation.restart.descriptor.id
-            && id != UsageCollectionOperation.refresh.descriptor.id
-            && id != UsageCollectionOperation.limitsRefresh.descriptor.id
-        {
-            _ = try await runtime.perform(operation: id.rawValue, payload: Data())
+        await AgentOperations.register(on: runtime, scheduler: JobScheduler())
+        let registered = await runtime.registeredOperations
+        for id in AgentOperationCatalog.served {
+            #expect(registered.contains(id.rawValue), "Missing handler for \(id.rawValue)")
         }
     }
 

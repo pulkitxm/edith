@@ -6,6 +6,9 @@ public enum AgentControlOperation: String, CaseIterable, Sendable {
     case jobs
     case restart
     case logs
+    case events
+    case run
+    case cancel
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -18,6 +21,12 @@ public enum AgentControlOperation: String, CaseIterable, Sendable {
                 "agent.restart", "Restart the background agent.", "restart", .write)
         case .logs:
             descriptor("agent.logs", "Read recent background agent log lines.", "logs", .read)
+        case .events:
+            descriptor("agent.events", "Read retained background events.", "events", .read)
+        case .run:
+            descriptor("agent.run", "Run a background job now.", "run", .write)
+        case .cancel:
+            descriptor("agent.cancel", "Cancel a background job.", "cancel", .write)
         }
     }
 
@@ -42,6 +51,17 @@ public enum AgentControlOperation: String, CaseIterable, Sendable {
             .userInterface([
                 UserInterfaceActionPlacement(
                     surface: "Background agent settings", action: "open the agent log")
+            ])
+        case .events:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Background agent settings", action: "read the event timeline")
+            ])
+        case .run, .cancel:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Background agent settings", action: rawValue + " a job",
+                    exampleArguments: ["usage.refresh"])
             ])
         }
     }

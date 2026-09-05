@@ -5,6 +5,30 @@ import Testing
 @testable import EdithKit
 
 @Suite struct AgentTaskTransportTests {
+    @Test func completionPublicationWakesWaitersBeforeTheirPollingDeadline() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let service = try AgentTaskService(
+            directory: nil,
+            publish: { snapshots in
+                if let data = try? AgentPayload.encode(snapshots) {
+                    await runtime.publish(topic: .tasks, payload: data)
+                }
+            })
+        await service.register(operation: "fixture") { _, _ in
+            try await Task.sleep(for: .milliseconds(100))
+            return Data("ready".utf8)
+        }
+        await AgentTaskOperations.register(on: runtime, service: service)
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let client = AgentTaskClient(client: listener.client(), pollInterval: 2)
+        let start = ContinuousClock.now
+        let data = try await client.run(
+            AgentTaskSubmission(operation: "fixture", title: "Push completion", payload: Data()))
+        #expect(data == Data("ready".utf8))
+        #expect(start.duration(to: .now) < .seconds(1))
+    }
+
     @Test func processWorkFinishesAcrossAnXPCClientDisconnect() async throws {
         let service = try AgentTaskService(directory: nil)
         await service.registerCommand()

@@ -131,12 +131,13 @@ public enum AgentCompatibilityVerdict: Equatable, Sendable {
     }
 }
 
-public struct AgentError: LocalizedError, Equatable, Sendable {
+public struct AgentError: Codable, LocalizedError, Equatable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case unavailable
         case incompatible
         case refused
         case failed
+        case cancelled
         case unknownTopic
         case unknownOperation
     }
@@ -150,6 +151,26 @@ public struct AgentError: LocalizedError, Equatable, Sendable {
     }
 
     public var errorDescription: String? { message }
+
+    public static func response(_ error: Error) -> String {
+        let failure: AgentError
+        if let typed = error as? AgentError {
+            failure = AgentError(typed.kind, String(typed.message.prefix(16_384)))
+        } else if error is CancellationError {
+            failure = AgentError(.cancelled, "The background operation was cancelled.")
+        } else {
+            failure = AgentError(.failed, String(error.localizedDescription.prefix(16_384)))
+        }
+        guard let data = try? JSONEncoder().encode(failure) else { return failure.message }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func fromResponse(_ response: String) -> AgentError {
+        guard response.utf8.count <= 131_072,
+            let failure = try? JSONDecoder().decode(AgentError.self, from: Data(response.utf8))
+        else { return AgentError(.failed, String(response.prefix(16_384))) }
+        return AgentError(failure.kind, String(failure.message.prefix(16_384)))
+    }
 
     public static let unavailable = AgentError(
         .unavailable, "The Edith background agent is not running.")

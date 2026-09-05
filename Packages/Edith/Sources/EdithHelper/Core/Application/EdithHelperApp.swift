@@ -114,6 +114,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         defer { PerformanceTrace.end(launchTrace) }
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
+        AgentCommandRouting.enable()
         AgentNotificationPresentationBridge.shared.start()
         AppState.services.start()
     }
