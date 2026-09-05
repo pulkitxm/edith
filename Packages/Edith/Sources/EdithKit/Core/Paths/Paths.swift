@@ -31,11 +31,25 @@ public enum AppData {
         return dir
     }()
 
-    public static let cloudDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Edith")
+    public static let cloudOverrideVariable = "EDITH_CLOUD_ROOT"
+    public static let cloudDir = resolveCloudDirectory()
+
+    public static func resolveCloudDirectory(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        if let path = environment[cloudOverrideVariable], !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return homeDirectory.appendingPathComponent(
+            "Library/Mobile Documents/com~apple~CloudDocs/Edith")
+    }
 
     public static var cloudAvailable: Bool {
-        FileManager.default.fileExists(
+        if let path = ProcessInfo.processInfo.environment[cloudOverrideVariable], !path.isEmpty {
+            return FileManager.default.fileExists(atPath: cloudDir.path)
+        }
+        return FileManager.default.fileExists(
             atPath: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs").path)
     }
