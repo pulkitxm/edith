@@ -191,6 +191,24 @@ public final class ClipboardArchive: @unchecked Sendable {
         }
     }
 
+    public func inspect() throws -> ClipboardInspection {
+        try withLock {
+            let entries = try load()
+            var missing = 0
+            for entry in entries {
+                try Task.checkCancellation()
+                let url = try blobURL(entry)
+                var metadata = stat()
+                if lstat(url.path, &metadata) != 0 || metadata.st_mode & S_IFMT != S_IFREG
+                    || metadata.st_size != entry.size
+                {
+                    missing += 1
+                }
+            }
+            return ClipboardInspection(entries: entries.count, missingPayloads: missing)
+        }
+    }
+
     public func stats() throws -> ClipboardActions.Stats {
         try withLock {
             let entries = try load()

@@ -26,7 +26,13 @@ public enum ClipboardPreviewPreparation {
             }
             value = fileListPreview(values.compactMap(URL.init(string:)).filter(\.isFileURL))
         case "rtf", "rtfd", "html":
-            value = richText(capture.data, ext: capture.ext)
+            if let text = richText(capture.data, ext: capture.ext),
+                ClipboardPayloadExtractor.hasRenderableText(text)
+            {
+                value = ClipboardPayloadExtractor.preview(for: text, fallback: capture.preview)
+            } else {
+                value = nil
+            }
         default: value = nil
         }
         try Task.checkCancellation()
@@ -38,12 +44,59 @@ public enum ClipboardPreviewPreparation {
             id: capture.id, capturedAt: capture.capturedAt)
     }
 
+    public static func copy(_ payload: ClipboardStoredPayload, plainTextOnly: Bool) throws
+        -> ClipboardCopyPayload
+    {
+        try Task.checkCancellation()
+        let entry = payload.entry
+        var text: String?
+        var urls: [URL]?
+        switch entry.ext {
+        case "rtf", "rtfd", "html":
+            guard payload.data.count <= 1 << 20 || !plainTextOnly else {
+                throw AgentError(
+                    .refused, "Rich text larger than one megabyte must be copied with formatting.")
+            }
+            text = richText(payload.data, ext: entry.ext)
+        case "url", "weburl":
+            guard let value = String(data: payload.data, encoding: .utf8),
+                let url = URL(string: value)
+            else {
+                throw AgentError(.failed, "The clipboard URL is invalid.")
+            }
+            urls = [url]
+            if entry.ext == "weburl" { text = value }
+        case "files":
+            let values = try JSONDecoder().decode([String].self, from: payload.data)
+            guard values.count <= 4096 else {
+                throw AgentError(.refused, "The clipboard file list is too large.")
+            }
+            urls = try values.map { value in
+                guard let url = URL(string: value), url.isFileURL else {
+                    throw AgentError(.failed, "A clipboard file URL is invalid.")
+                }
+                return url
+            }
+        default:
+            if entry.isTextual {
+                text =
+                    String(data: payload.data, encoding: .utf8)
+                    ?? String(data: payload.data, encoding: .utf16)
+            }
+        }
+        let onlyText = plainTextOnly && entry.isTextual
+        try Task.checkCancellation()
+        return ClipboardCopyPayload(
+            entry: entry, data: onlyText || urls != nil ? Data() : payload.data,
+            text: text,
+            urls: urls, plainTextOnly: onlyText)
+    }
+
     private static func richText(_ data: Data, ext: String) -> String? {
         guard data.count <= 1 << 20 else { return nil }
-        let text: String?
         switch ext {
-        case "rtf": text = NSAttributedString(rtf: data, documentAttributes: nil)?.string
-        case "rtfd": text = NSAttributedString(rtfd: data, documentAttributes: nil)?.string
+        case "rtf": return NSAttributedString(rtf: data, documentAttributes: nil)?.string
+        case "rtfd": return NSAttributedString(rtfd: data, documentAttributes: nil)?.string
         default:
             guard
                 let document = try? XMLDocument(
@@ -52,10 +105,8 @@ public enum ClipboardPreviewPreparation {
             for node in (try? document.nodes(forXPath: "//script|//style|//head")) ?? [] {
                 node.detach()
             }
-            text = document.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return document.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard ClipboardPayloadExtractor.hasRenderableText(text) else { return nil }
-        return ClipboardPayloadExtractor.preview(for: text, fallback: "Rich text")
     }
 
     static func filePreview(for url: URL) -> String {

@@ -92,6 +92,13 @@ public actor ClipboardService {
             case AgentClipboardOperation.blob:
                 let id = try AgentPayload.decode(String.self, from: payload)
                 return try AgentPayload.encode(archive.payload(id: id))
+            case AgentClipboardOperation.copy:
+                let request = try AgentPayload.decode(ClipboardCopyRequest.self, from: payload)
+                let stored = try archive.payload(id: request.id)
+                return try AgentPayload.encode(
+                    ClipboardPreviewPreparation.copy(stored, plainTextOnly: request.plainTextOnly))
+            case AgentClipboardOperation.inspect:
+                return try AgentPayload.encode(archive.inspect())
             case AgentClipboardOperation.stats:
                 return try AgentPayload.encode(archive.stats())
             default: throw AgentError(.unknownOperation, "Unknown clipboard operation.")

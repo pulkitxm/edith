@@ -7,10 +7,12 @@ public enum AgentClipboardOperation {
     public static let mutate = "clipboard.mutate"
     public static let blob = "clipboard.blob"
     public static let stats = "clipboard.storageStats"
+    public static let copy = "clipboard.copyPayload"
+    public static let inspect = "clipboard.inspect"
     public static let thumbnail = "clipboard.thumbnail"
     public static let cancelThumbnail = "clipboard.thumbnail.cancel"
     public static let internalOperations = [
-        capture, snapshot, mutate, blob, stats, thumbnail, cancelThumbnail,
+        capture, snapshot, mutate, blob, stats, thumbnail, cancelThumbnail, copy, inspect,
     ]
 }
 
@@ -136,6 +138,16 @@ public struct AgentClipboardClient: Sendable {
 
     public func blob(id: String) async throws -> ClipboardStoredPayload {
         try await request(AgentClipboardOperation.blob, id)
+    }
+
+    public func copy(id: String, plainTextOnly: Bool = false) async throws -> ClipboardCopyPayload {
+        try await request(
+            AgentClipboardOperation.copy, ClipboardCopyRequest(id: id, plainTextOnly: plainTextOnly)
+        )
+    }
+
+    public func inspect() async throws -> ClipboardInspection {
+        try await request(AgentClipboardOperation.inspect, false)
     }
 
     public func thumbnail(id: String) async throws -> ClipboardThumbnailSnapshot {

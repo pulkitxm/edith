@@ -198,10 +198,10 @@ final class ClipboardHistoryModel {
     func copy(_ entry: ClipboardEntry) {
         let plain = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
         run { [weak self] client in
-            let payload = try await client.blob(id: entry.id)
+            let payload = try await client.copy(id: entry.id, plainTextOnly: plain)
             try Task.checkCancellation()
             ClipboardRepository.copyToPasteboard(
-                payload.entry, data: payload.data, asPlainText: plain, pasteboard: .general)
+                payload, pasteboard: .general)
             self?.copiedID = entry.id
             _ = try await client.mutate(.init(.copied, ids: [entry.id]))
         }

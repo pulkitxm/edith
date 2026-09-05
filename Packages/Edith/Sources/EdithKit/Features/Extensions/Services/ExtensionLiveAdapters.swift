@@ -109,7 +109,7 @@ public enum ExtensionLiveAdapters {
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
-        case "clipboard": clipboardReadiness()
+        case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
@@ -438,37 +438,20 @@ public enum ExtensionLiveAdapters {
         }
     }
 
-    static func clipboardReadiness(
-        index: URL = ClipboardPaths.indexFile, blobs: URL = ClipboardPaths.blobsDir
-    ) -> ExtensionAdapterReadiness {
-        guard FileManager.default.fileExists(atPath: index.path) else {
-            return ExtensionAdapterFacts(
-                contentCount: 0, readyDetail: "Clipboard storage is readable.",
-                emptyDetail: "Clipboard history is ready and empty."
-            ).readiness
-        }
+    static func clipboardReadiness(client: AgentClipboardClient = .init()) async
+        -> ExtensionAdapterReadiness
+    {
         do {
-            let text = try String(contentsOf: index, encoding: .utf8)
-            let lines = text.split(whereSeparator: \.isNewline)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let entries = try lines.map {
-                try decoder.decode(ClipboardEntry.self, from: Data($0.utf8))
-            }
-            let missing = entries.filter {
-                !FileManager.default.fileExists(
-                    atPath: blobs.appendingPathComponent("\($0.sha256).\($0.ext)").path)
-            }.count
+            let value = try await client.inspect()
             return ExtensionAdapterFacts(
-                contentCount: entries.count,
-                degradedReason: missing > 0
-                    ? "Clipboard entries missing payloads: \(missing)." : nil,
-                readyDetail: "Clipboard history entries: \(entries.count).",
+                contentCount: value.entries,
+                degradedReason: value.missingPayloads > 0
+                    ? "Clipboard entries missing payloads: \(value.missingPayloads)." : nil,
+                readyDetail: "Clipboard history entries: \(value.entries).",
                 emptyDetail: "Clipboard history is ready and empty."
             ).readiness
         } catch {
-            return .failed(
-                "Clipboard storage could not be read: \(error.localizedDescription)")
+            return .failed("Clipboard storage could not be read: \(error.localizedDescription)")
         }
     }
 

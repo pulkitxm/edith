@@ -292,12 +292,12 @@ final class ClipboardStore: FeatureModule {
             }
             do {
                 guard let client = self?.client else { return }
-                let payload = try await client.blob(id: entry.id)
+                let payload = try await client.copy(id: entry.id, plainTextOnly: plain)
                 guard !Task.isCancelled, let self, self.visibility.enabled,
                     self.activationGeneration == activationGeneration
                 else { return }
                 ClipboardRepository.copyToPasteboard(
-                    payload.entry, data: payload.data, asPlainText: plain, pasteboard: .general)
+                    payload, pasteboard: .general)
                 self.lastChangeCount = NSPasteboard.general.changeCount
                 self.mutate(.init(.copied, ids: [entry.id]))
                 let defaults = SharedDefaults.store
