@@ -24,6 +24,10 @@ power policy. `ed agent jobs` prints that table as the agent currently sees it.
 | [`ed agent jobs`](./jobs.md) | The live job table with triggers, cadences and subscribers |
 | [`ed agent restart`](./restart.md) | Stop the agent so launchd starts it again |
 | [`ed agent logs`](./logs.md) | Recent agent log lines from the unified log |
+| [`ed agent events`](./events.md) | Retained structured runtime events and task IDs |
+| [`ed agent run`](./jobs.md) | Queue a registered recurring job immediately |
+| [`ed agent cancel`](./jobs.md) | Request cancellation of a recurring job |
+| [`ed agent tasks`](./tasks.md) | Submit, inspect and cancel durable background tasks |
 
 ## Where to go next
 

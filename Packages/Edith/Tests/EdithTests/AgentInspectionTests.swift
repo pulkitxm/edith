@@ -17,6 +17,25 @@ import ArgumentParser
         #expect(command.timeout == 12)
     }
 
+    @Test func commandHelpSucceedsBeforeTheExecutableSeparator() async {
+        let help = await CLIProbe.run(["agent", "tasks", "exec", "--help"])
+        #expect(help.code == 0)
+        #expect(help.stderr.isEmpty)
+        #expect(help.stdout.contains("--timeout"))
+    }
+
+    @Test func commandArgumentsCannotConsumeDaemonFlagsAfterTheSeparator() throws {
+        let command = try AgentTasksExecCommand.parse([
+            "--detach", "--", "/usr/bin/printf", "--json", "--help", "--timeout", "0",
+        ])
+        #expect(command.command == ["/usr/bin/printf", "--json", "--help", "--timeout", "0"])
+        #expect(!command.json)
+        #expect(command.timeout == 300)
+        #expect(throws: Error.self) {
+            try AgentTasksExecCommand.parse(["--", "relative-command"])
+        }
+    }
+
     @Test func cpuShowsTheRecentIntervalAndSupportsMultipleCores() {
         var sampler = AgentCPUUsageSampler(cpuSeconds: 10, uptime: 100)
         #expect(sampler.sample(cpuSeconds: 11, uptime: 105) == 20)

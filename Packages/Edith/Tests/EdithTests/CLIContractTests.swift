@@ -937,6 +937,14 @@ enum JSONContract {
         JSONCase("ed agent jobs", ["agent", "jobs", "--json"]),
         JSONCase("ed agent restart", ["agent", "restart", "--json"]),
         JSONCase("ed agent logs", ["agent", "logs", "--json"]),
+        JSONCase("ed agent events", ["agent", "events", "--json"]),
+        JSONCase("ed agent run", ["agent", "run", "missing-job", "--json"]),
+        JSONCase("ed agent cancel", ["agent", "cancel", "missing-job", "--json"]),
+        JSONCase("ed agent tasks ls", ["agent", "tasks", "ls", "--json"]),
+        JSONCase("ed agent tasks inspect", ["agent", "tasks", "inspect", "invalid", "--json"]),
+        JSONCase("ed agent tasks cancel", ["agent", "tasks", "cancel", "invalid", "--json"]),
+        JSONCase(
+            "ed agent tasks exec", ["agent", "tasks", "exec", "--json", "--", "/usr/bin/true"]),
     ]
 }
 

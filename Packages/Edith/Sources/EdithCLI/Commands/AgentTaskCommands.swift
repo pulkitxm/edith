@@ -81,10 +81,9 @@ struct AgentTasksExecCommand: AsyncParsableCommand {
     @Flag(name: .long) var json = false
     @Flag(name: .long, help: "Return the task ID immediately.") var detach = false
     @Option(name: .long, help: "Maximum running time in seconds.") var timeout: Double = 300
-    @Argument(parsing: .unconditionalRemaining) var command: [String]
+    @Argument(parsing: .postTerminator) var command: [String]
 
     mutating func validate() throws {
-        if command.first == "--" { command.removeFirst() }
         guard let path = command.first, path.hasPrefix("/") else {
             throw ValidationError("Provide an absolute executable path after --.")
         }
