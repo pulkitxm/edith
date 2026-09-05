@@ -33,11 +33,13 @@ public actor SEOAuditWorkflow {
             context.report("Discovering pages")
             return try await AgentPayload.encode(self.discover(url))
         }
-        await tasks.register(operation: SEOAuditTaskOperation.audit) { payload, context in
+        await tasks.register(operation: SEOAuditTaskOperation.audit, concurrency: 1) {
+            payload, context in
             let request = try AgentPayload.decode(SEOAuditTaskRequest.self, from: payload)
             return try await AgentPayload.encode(self.run(request, context: context))
         }
-        await tasks.register(operation: SEOAuditTaskOperation.lighthouse) { payload, context in
+        await tasks.register(operation: SEOAuditTaskOperation.lighthouse, concurrency: 1) {
+            payload, context in
             let request = try AgentPayload.decode(SEOAuditTaskRequest.self, from: payload)
             return try await AgentPayload.encode(
                 self.run(request, context: context, scoresOnly: true))
@@ -170,7 +172,8 @@ public actor SEOAuditWorkflow {
                         return (index, page)
                     }
                 }
-                let limit = min(SiteAuditConcurrency.limit, request.urls.count)
+                let pageLimit = request.lighthouse || scoresOnly ? 1 : SiteAuditConcurrency.limit
+                let limit = min(pageLimit, request.urls.count)
                 while next < limit { schedule(next); next += 1 }
                 var completed = 0
                 while let (_, page) = try await group.next() {
