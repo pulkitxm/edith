@@ -65,6 +65,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
     case siteAudit
     case backup
     case jobs
+    case events
 
     public var title: String {
         switch self {
@@ -81,6 +82,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
         case .siteAudit: "Site Audit"
         case .backup: "Backup"
         case .jobs: "Jobs"
+        case .events: "Events"
         }
     }
 }

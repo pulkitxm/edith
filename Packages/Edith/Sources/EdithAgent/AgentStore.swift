@@ -35,7 +35,7 @@ public enum AgentStoreLayout {
 }
 
 public enum AgentSchema {
-    public static let version = 2
+    public static let version = 3
 
     public static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -108,6 +108,12 @@ public enum AgentSchema {
                 table.column("payload", .blob).notNull()
             }
         }
+        migrator.registerMigration("0003-agent-events") { database in
+            try database.create(table: "agent_event") { table in
+                table.autoIncrementedPrimaryKey("sequence")
+                table.column("payload", .blob).notNull()
+            }
+        }
         return migrator
     }
 }
@@ -129,7 +135,8 @@ public final class AgentStore: @unchecked Sendable {
         pool = try DatabasePool(path: url.path, configuration: configuration)
         try Self.refuseNewerSchema(pool)
         if preexisting, try Self.needsMigration(pool) {
-            try Self.copyBeforeMigrating(url: url, build: build, fileManager: fileManager)
+            try Self.copyBeforeMigrating(
+                pool: pool, url: url, build: build, fileManager: fileManager)
         }
         try AgentSchema.migrator.migrate(pool)
         try Self.stampVersion(pool)
@@ -175,7 +182,7 @@ public final class AgentStore: @unchecked Sendable {
     }
 
     private static func copyBeforeMigrating(
-        url: URL, build: String, fileManager: FileManager
+        pool: DatabasePool, url: URL, build: String, fileManager: FileManager
     ) throws {
         guard fileManager.fileExists(atPath: url.path) else { return }
         let backup = AgentStoreLayout.backupURL(
@@ -183,7 +190,9 @@ public final class AgentStore: @unchecked Sendable {
         if fileManager.fileExists(atPath: backup.path) {
             try fileManager.removeItem(at: backup)
         }
-        try fileManager.copyItem(at: url, to: backup)
+        let destination = try DatabaseQueue(path: backup.path)
+        try pool.backup(to: destination)
+        try destination.close()
     }
 
     private static func pruneBackups(root: URL, fileManager: FileManager) {

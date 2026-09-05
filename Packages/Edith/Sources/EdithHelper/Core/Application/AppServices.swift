@@ -428,7 +428,6 @@ final class AppServices {
     private func refreshServices() {
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()
-        usage?.notifier.clearStateIfMasterOff()
         notchShelf?.syncAlerts()
         notchShelf?.rebuildPanels()
         system?.syncPreventSleep()

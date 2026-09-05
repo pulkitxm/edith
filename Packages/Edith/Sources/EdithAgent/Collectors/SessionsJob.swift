@@ -22,11 +22,15 @@ public final class SessionsJob: @unchecked Sendable {
     private let collect: @Sendable (HerdrCollectScope) async -> [HerdrHostSnapshot]
     private let isSubscribed: @Sendable () async -> Bool
     private let defaults: UserDefaults
+    private let notify: @Sendable ([HerdrHostSnapshot]) async throws -> Void
 
     public init(
         store: AgentStore?,
         isSubscribed: @escaping @Sendable () async -> Bool,
         defaults: UserDefaults = SharedDefaults.store,
+        notify: @escaping @Sendable ([HerdrHostSnapshot]) async throws -> Void = {
+            try await AgentNotificationService.collectSessions($0)
+        },
         collect: @escaping @Sendable (HerdrCollectScope) async -> [HerdrHostSnapshot] = {
             await HerdrCollector.collect($0)
         }
@@ -34,6 +38,7 @@ public final class SessionsJob: @unchecked Sendable {
         self.store = store
         self.isSubscribed = isSubscribed
         self.defaults = defaults
+        self.notify = notify
         self.collect = collect
     }
 
@@ -45,6 +50,7 @@ public final class SessionsJob: @unchecked Sendable {
         else { return nil }
         let hosts = await collect(scope)
         let snapshot = SessionsTally.snapshot(hosts: hosts)
+        try await notify(hosts)
         SidebarBadgeStore.recordSessions(working: snapshot.working)
         try? record(snapshot)
         return try AgentPayload.encode(snapshot)

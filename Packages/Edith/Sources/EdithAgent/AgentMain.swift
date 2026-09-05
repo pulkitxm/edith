@@ -52,7 +52,8 @@ public enum AgentBoot {
             },
             power: LivePowerSource(),
             pauseAmbientOnBattery: SharedDefaults.store.bool(
-                forKey: AgentSettingsKeys.pauseAmbientOnBattery))
+                forKey: AgentSettingsKeys.pauseAmbientOnBattery),
+            observe: { await runtime.record($0) })
         let hub = AgentHub(runtime: runtime)
         let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
             Task { await scheduler.runNow("usage.refresh") }
@@ -67,6 +68,10 @@ public enum AgentBoot {
                 await scheduler.register(job)
             }
             await scheduler.start()
+            hub.resume()
+            await runtime.record(
+                AgentEvent(
+                    category: "runtime", name: "startup", message: "Background services ready"))
             if let store {
                 let report = try? AttentionEventStore(store: store).importLegacyFiles()
                 if let report, !report.alreadyImported, report.events > 0 {
@@ -75,8 +80,13 @@ public enum AgentBoot {
                 }
             }
         }
-        hub.resume()
-        AgentLog.logger.info("edithd \(build, privacy: .public) listening")
+        _ = IPC.observe(IPC.Name.settingsChanged) {
+            Task {
+                await scheduler.setPauseAmbientOnBattery(
+                    SharedDefaults.store.bool(
+                        forKey: AgentSettingsKeys.pauseAmbientOnBattery))
+            }
+        }
         return AgentServices(runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher])
     }
 }

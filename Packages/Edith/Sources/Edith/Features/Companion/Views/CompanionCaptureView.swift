@@ -34,6 +34,17 @@ final class CompanionCaptureModel {
     private var speechTask: SFSpeechRecognitionTask?
     private var startedAt: Date?
     private var ticker: Timer?
+    @ObservationIgnored private nonisolated(unsafe) var outboxObserver: NSObjectProtocol?
+
+    init() {
+        outboxObserver = IPC.observe(CompanionBackgroundOperation.outboxChanged) { [weak self] in
+            Task { @MainActor in await self?.refreshWaiting() }
+        }
+    }
+
+    deinit {
+        if let outboxObserver { IPC.stopObserving(outboxObserver) }
+    }
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -173,57 +184,41 @@ final class CompanionCaptureModel {
         guard let fileURL, !remembering else { return }
         remembering = true
         defer { remembering = false }
-        do {
-            let data = try await Task.detached {
-                try Data(contentsOf: fileURL)
-            }.value
-            let outcome = try await client.ingestAudio(
-                name: fileURL.lastPathComponent, data: data, mtime: Self.isoNow())
-            self.outcome =
-                outcome.status == "ingested"
-                ? "Remembered as \(outcome.name)"
-                : "Already remembered; the companion knew this one"
-            try? FileManager.default.removeItem(at: fileURL)
-            self.fileURL = nil
-            transcript = ""
-            duration = 0
-            phase = .idle
-            error = nil
-        } catch {
-            guard let kept = CompanionOutbox.keep(fileURL) else {
-                self.error = error.localizedDescription
-                return
-            }
-            self.fileURL = nil
-            transcript = ""
-            duration = 0
-            phase = .idle
-            self.error = nil
-            refreshWaiting()
-            outcome =
-                "Saved. It'll be remembered when the companion is back. "
-                + "\(waiting.count) waiting."
-            _ = kept
+        let kept = await Task.detached(priority: .utility) {
+            CompanionOutbox.keep(fileURL)
+        }.value
+        guard kept != nil else {
+            error = "Could not save the recording for delivery. The preview is still available."
+            return
         }
+        self.fileURL = nil
+        transcript = ""
+        duration = 0
+        phase = .idle
+        error = nil
+        await refreshWaiting()
+        outcome = "Saved for background delivery. \(waiting.count) waiting."
+        await drainOutbox()
     }
 
-    func refreshWaiting() {
-        waiting = CompanionOutbox.waiting()
+    func refreshWaiting() async {
+        waiting = await Task.detached(priority: .utility) {
+            CompanionOutbox.waiting()
+        }.value
     }
 
     func drainOutbox() async {
         guard !draining, !waiting.isEmpty else { return }
         draining = true
         defer { draining = false }
-        let client = client
-        let result = await CompanionOutbox.drain { item, data in
-            try await client.ingestAudio(
-                name: item.name, data: data, mtime: Self.iso(item.recordedAt)
-            ).status
+        do {
+            try await CompanionBackgroundOperation.requestRefresh()
+            error = nil
+            outcome = "Saved recordings will be sent in the background when the companion is ready."
+        } catch {
+            self.error = "Recordings are saved. \(error.localizedDescription)"
         }
-        refreshWaiting()
-        guard !result.isEmpty else { return }
-        outcome = result.summary
+        await refreshWaiting()
     }
 
     func rememberNote() async {
@@ -299,8 +294,7 @@ struct CompanionCaptureScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task(id: isActive ? generation : -1) {
             guard isActive, refreshedGeneration != generation else { return }
-            model.refreshWaiting()
-            if home.reachable { await model.drainOutbox() }
+            await model.refreshWaiting()
             if !Task.isCancelled { refreshedGeneration = generation }
         }
     }
@@ -319,8 +313,7 @@ struct CompanionCaptureScreen: View {
             .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
             CompanionButton(
-                title: "Send now", busy: model.draining, busyTitle: "Sending…",
-                disabled: !home.reachable
+                title: "Send now", busy: model.draining, busyTitle: "Requesting…"
             ) {
                 Task { await model.drainOutbox() }
             }

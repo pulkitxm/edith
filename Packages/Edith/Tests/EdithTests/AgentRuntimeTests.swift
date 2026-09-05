@@ -177,7 +177,8 @@ import Testing
         let payload = await scheduler.runNow("usage.refresh")
 
         #expect(payload == Data("hello".utf8))
-        #expect(box.topics == [.usage])
+        #expect(box.topics.filter { $0 != .jobs } == [.usage])
+        #expect(box.topics.filter { $0 == .jobs }.count == 2)
     }
 
     @Test func aFailingJobRecordsItsErrorWithoutPublishing() async {
@@ -191,7 +192,7 @@ import Testing
         _ = await scheduler.runNow("usage.refresh")
         let snapshot = await scheduler.snapshots.first
 
-        #expect(box.topics.isEmpty)
+        #expect(box.topics.allSatisfy { $0 == .jobs })
         #expect(snapshot?.lastError == "collector fell over")
         #expect(snapshot?.phase == .failed)
     }

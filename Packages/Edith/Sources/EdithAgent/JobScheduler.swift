@@ -34,6 +34,12 @@ public struct StaticPowerSource: AgentPowerSource {
 
 public actor JobScheduler {
     public typealias Publish = @Sendable (AgentTopic, Data) -> Void
+    public typealias Observe = @Sendable (AgentEvent) async -> Void
+
+    private struct Flight {
+        let id: UUID
+        let task: Task<Data?, Error>
+    }
 
     private struct State {
         var job: AgentJob
@@ -42,68 +48,79 @@ public actor JobScheduler {
         var lastDuration: TimeInterval?
         var lastError: String?
         var runCount = 0
-        var running = false
-        var task: Task<Void, Never>?
+        var flight: Flight?
+        var nextRun: Date?
+        var interval: TimeInterval?
     }
 
     private var states: [String: State] = [:]
     private var order: [String] = []
     private let publish: Publish
+    private let observe: Observe
     private let power: AgentPowerSource
     private let clock: @Sendable () -> Date
     private var pauseAmbientOnBattery: Bool
     private var started = false
+    private var timer: Task<Void, Never>?
 
     public init(
         publish: @escaping Publish = { _, _ in },
         power: AgentPowerSource = StaticPowerSource(),
         pauseAmbientOnBattery: Bool = false,
-        clock: @escaping @Sendable () -> Date = { Date() }
+        clock: @escaping @Sendable () -> Date = { Date() },
+        observe: @escaping Observe = { _ in }
     ) {
         self.publish = publish
         self.power = power
         self.pauseAmbientOnBattery = pauseAmbientOnBattery
         self.clock = clock
+        self.observe = observe
     }
 
     public func register(_ job: AgentJob) {
-        if states[job.descriptor.id] == nil { order.append(job.descriptor.id) }
-        states[job.descriptor.id] = State(job: job)
-        if started { schedule(job.descriptor.id) }
+        let id = job.descriptor.id
+        let subscribers = states[id]?.subscribers ?? 0
+        states[id]?.flight?.task.cancel()
+        if states[id] == nil { order.append(id) }
+        states[id] = State(job: job, subscribers: subscribers)
+        refreshSchedule()
     }
 
     public func start() {
+        guard !started else { return }
         started = true
-        for id in order { schedule(id) }
+        refreshSchedule()
     }
 
     public func stop() {
         started = false
+        timer?.cancel()
+        timer = nil
         for id in order {
-            states[id]?.task?.cancel()
-            states[id]?.task = nil
+            states[id]?.flight?.task.cancel()
+            states[id]?.flight = nil
+            states[id]?.nextRun = nil
+            states[id]?.interval = nil
         }
+        publishJobs()
     }
 
     public func setPauseAmbientOnBattery(_ paused: Bool) {
         pauseAmbientOnBattery = paused
-        guard started else { return }
-        for id in order { schedule(id) }
+        refreshSchedule()
     }
 
     public func addSubscriber(topic: AgentTopic) {
-        for id in identifiers(for: topic) {
-            states[id]?.subscribers += 1
-            schedule(id)
-        }
+        for id in identifiers(for: topic) { states[id]?.subscribers += 1 }
+        refreshSchedule()
     }
 
     public func removeSubscriber(topic: AgentTopic) {
         for id in identifiers(for: topic) {
-            let current = states[id]?.subscribers ?? 0
-            states[id]?.subscribers = max(0, current - 1)
-            schedule(id)
+            let count = states[id]?.subscribers ?? 0
+            states[id]?.subscribers = max(0, count - 1)
         }
+        refreshSchedule()
     }
 
     private func identifiers(for topic: AgentTopic) -> [String] {
@@ -111,10 +128,7 @@ public actor JobScheduler {
     }
 
     public func subscriberCount(topic: AgentTopic) -> Int {
-        order.compactMap { id -> Int? in
-            guard let state = states[id], state.job.descriptor.topic == topic else { return nil }
-            return state.subscribers
-        }.max() ?? 0
+        identifiers(for: topic).compactMap { states[$0]?.subscribers }.max() ?? 0
     }
 
     public var snapshots: [AgentJobSnapshot] {
@@ -128,75 +142,121 @@ public actor JobScheduler {
         }
     }
 
-    public func enqueue(_ id: String) {
-        guard let state = states[id], state.job.isEnabled() else { return }
+    @discardableResult
+    public func enqueue(_ id: String) -> Bool {
+        guard let state = states[id], state.job.isEnabled() else { return false }
+        guard state.flight == nil else { return true }
         Task { await runNow(id) }
+        return true
     }
 
     @discardableResult
     public func runNow(_ id: String) async -> Data? {
         guard let state = states[id], state.job.isEnabled() else { return nil }
-        states[id]?.running = true
-        let started = clock()
-        do {
-            let payload = try await state.job.run()
-            states[id]?.running = false
-            states[id]?.lastRun = started
-            states[id]?.lastDuration = clock().timeIntervalSince(started)
+        if let flight = state.flight { return try? await flight.task.value }
+        let token = UUID()
+        let began = clock()
+        let task = Task { try await state.job.run() }
+        states[id]?.flight = Flight(id: token, task: task)
+        publishJobs()
+        await observe(AgentEvent(category: "job", name: id, message: "Started"))
+        let result = await task.result
+        guard states[id]?.flight?.id == token else { return nil }
+        states[id]?.flight = nil
+        states[id]?.lastRun = began
+        let duration = max(0, clock().timeIntervalSince(began))
+        states[id]?.lastDuration = duration
+        var payload: Data?
+        switch result {
+        case .success(let value):
             states[id]?.lastError = nil
             states[id]?.runCount += 1
-            if let payload, let topic = state.job.descriptor.topic {
-                publish(topic, payload)
-            }
-            return payload
-        } catch {
-            states[id]?.running = false
-            states[id]?.lastRun = started
-            states[id]?.lastDuration = clock().timeIntervalSince(started)
-            states[id]?.lastError = error.localizedDescription
-            return nil
+            payload = value
+            if let value, let topic = state.job.descriptor.topic { publish(topic, value) }
+            await observe(
+                AgentEvent(
+                    category: "job", name: id, message: "Completed", duration: duration))
+        case .failure(let error):
+            let cancelled = error is CancellationError
+            states[id]?.lastError = cancelled ? nil : error.localizedDescription
+            await observe(
+                AgentEvent(
+                    level: cancelled ? .info : .error, category: "job", name: id,
+                    message: cancelled ? "Cancelled" : error.localizedDescription,
+                    duration: duration))
         }
+        if let interval = states[id].flatMap(interval(for:)) {
+            states[id]?.nextRun = clock().addingTimeInterval(interval)
+        }
+        publishJobs()
+        refreshSchedule()
+        return payload
+    }
+
+    public func cancel(_ id: String) {
+        states[id]?.flight?.task.cancel()
+    }
+
+    public func refreshSchedule() {
+        timer?.cancel()
+        timer = nil
+        guard started else { return }
+        let now = clock()
+        for id in order {
+            guard let state = states[id] else { continue }
+            let current = interval(for: state)
+            if current != state.interval {
+                states[id]?.interval = current
+                states[id]?.nextRun = current.map { now.addingTimeInterval($0) }
+            }
+            if !state.job.isEnabled() { states[id]?.flight?.task.cancel() }
+        }
+        let next = order.compactMap { states[$0]?.nextRun }.min()
+        let delay = min(30, max(0.05, next?.timeIntervalSince(now) ?? 30))
+        timer = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard !Task.isCancelled else { return }
+            await self?.tick()
+        }
+    }
+
+    public func tick() {
+        guard started else { return }
+        let now = clock()
+        for id in order {
+            guard let state = states[id], interval(for: state) != nil,
+                let next = state.nextRun, next <= now, state.flight == nil
+            else { continue }
+            states[id]?.nextRun = now.addingTimeInterval(interval(for: state) ?? 30)
+            enqueue(id)
+        }
+        refreshSchedule()
     }
 
     private func phase(of state: State) -> AgentJobPhase {
         if !state.job.isEnabled() { return .disabled }
-        if state.running { return .running }
+        if state.flight != nil { return .running }
         if state.lastError != nil { return .failed }
-        let cadence = state.job.descriptor.cadence
-        if cadence.ambient == nil, cadence.live == nil { return .idle }
-        if interval(for: state) == nil { return .paused }
-        return .idle
+        if state.job.descriptor.cadence == .onDemand { return .idle }
+        return interval(for: state) == nil ? .paused : .idle
     }
 
     private func interval(for state: State) -> TimeInterval? {
-        guard state.job.isEnabled(), isPermitted(state.job.descriptor.power) else { return nil }
-        return AgentCadenceMath.interval(
+        guard state.job.isEnabled() else { return nil }
+        switch state.job.descriptor.power {
+        case .pauseOnLock where power.isScreenLocked: return nil
+        case .pauseOnBattery where power.isOnBattery: return nil
+        default: break
+        }
+        let value = AgentCadenceMath.interval(
             for: state.job.descriptor.cadence, subscribers: state.subscribers,
             pauseAmbient: pauseAmbientOnBattery && power.isOnBattery)
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
     }
 
-    private func isPermitted(_ policy: AgentPowerPolicy) -> Bool {
-        switch policy {
-        case .any: true
-        case .pauseOnLock: !power.isScreenLocked
-        case .pauseOnSleep: true
-        case .pauseOnBattery: !power.isOnBattery
-        }
-    }
-
-    private func schedule(_ id: String) {
-        states[id]?.task?.cancel()
-        states[id]?.task = nil
-        guard started, let state = states[id], let interval = interval(for: state) else { return }
-        states[id]?.task = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                let tolerance = AgentCadenceMath.tolerance(for: interval)
-                let jitter = Double.random(in: 0...tolerance)
-                try? await Task.sleep(for: .seconds(interval + jitter))
-                guard !Task.isCancelled else { return }
-                await self.runNow(id)
-            }
-        }
+    private func publishJobs() {
+        guard let payload = try? AgentPayload.encode(snapshots) else { return }
+        publish(.jobs, payload)
     }
 }

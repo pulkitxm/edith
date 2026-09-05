@@ -114,6 +114,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         defer { PerformanceTrace.end(launchTrace) }
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
+        AgentNotificationPresentationBridge.shared.start()
         AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -302,7 +303,7 @@ struct EdithApp {
             })
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             AppRuntimeCenter().perform(.testNotification) {
-                _ = Task<Void, Never> { _ = await services.usage?.notifier.sendTest() }
+                _ = Task<Void, Never> { _ = await LimitNotifier.shared.sendTest() }
             }
         }
         PermissionsModel.shared.startIPCBridge()
