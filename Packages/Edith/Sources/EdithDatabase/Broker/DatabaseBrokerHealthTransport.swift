@@ -294,14 +294,18 @@ struct DatabaseBrokerHealthTransport: Sendable {
         socketDescriptor: Int32,
         stream: DatabaseBrokerFrameStream,
         bytesWritten: Int,
-        absoluteDeadline: UInt64?
+        absoluteDeadline: UInt64?,
+        responseFirstByteDeadline: UInt64? = nil
     ) throws -> DatabaseBrokerEnvelope<Payload> {
         var decoder = DatabaseBrokerIncrementalDecoder<Payload>(stream: stream)
         var frameDeadline: UInt64?
-        let firstByteDeadline = cappedDeadline(
-            budget: Self.firstByteBudgetNanoseconds,
-            startingAt: dependencies.monotonicNanoseconds(),
-            absoluteDeadline: absoluteDeadline)
+        let firstByteDeadline = min(
+            responseFirstByteDeadline
+                ?? cappedDeadline(
+                    budget: Self.firstByteBudgetNanoseconds,
+                    startingAt: dependencies.monotonicNanoseconds(),
+                    absoluteDeadline: absoluteDeadline),
+            absoluteDeadline ?? UInt64.max)
 
         while true {
             let deadline = frameDeadline ?? firstByteDeadline

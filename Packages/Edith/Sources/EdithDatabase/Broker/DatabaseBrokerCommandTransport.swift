@@ -71,7 +71,8 @@ struct DatabaseBrokerCommandTransport: Sendable {
                 socketDescriptor: socketDescriptor,
                 stream: .responses,
                 bytesWritten: writeOutcome.bytesWritten,
-                absoluteDeadline: deadlineNanoseconds)
+                absoluteDeadline: deadlineNanoseconds,
+                responseFirstByteDeadline: deadlineNanoseconds)
         do {
             try DatabaseBrokerCommandEnvelopeValidator.validate(
                 response,

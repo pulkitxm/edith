@@ -5,7 +5,8 @@ import Testing
 
 @testable import EdithDatabase
 
-@Test func databaseBrokerCommandTransportRoundTripsOneBoundedCommand() async throws {
+@Test(arguments: [UInt64(0), 6_000_000_000])
+func databaseBrokerCommandTransportRoundTripsOneBoundedCommand(responseDelay: UInt64) async throws {
     let sockets = try databaseBrokerCommandTransportSocketPair()
     defer {
         Darwin.close(sockets.client)
@@ -19,7 +20,7 @@ import Testing
     let command = DatabaseBrokerCommandRequest.connectionList(
         DatabaseConnectionListRequest(
             search: DatabaseConnectionSearch(limit: 5)))
-    let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+    let deadline = DispatchTime.now().uptimeNanoseconds + 10_000_000_000
     let server = Task.detached {
         let runtimeRequest = try serverTransport.receiveRequest(
             socketDescriptor: sockets.server,
@@ -40,6 +41,7 @@ import Testing
                 count: DatabaseCountMetadata(value: 0, accuracy: .exact)))
         let responsePayload = try request.payload.response(result)
         let response = try responsePayload.envelope(matching: request, sequence: 0)
+        try await Task.sleep(nanoseconds: responseDelay)
         return try serverTransport.sendCommandResponse(
             response,
             matching: runtimeRequest,
