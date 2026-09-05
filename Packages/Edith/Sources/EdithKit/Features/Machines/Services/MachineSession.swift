@@ -1024,7 +1024,7 @@ public final class MachineSession {
         else { return [] }
         var found: [RemoteFileEntry] = []
         for case let url as URL in walker {
-            guard found.count < limit else { break }
+            guard !Task.isCancelled, found.count < limit else { break }
             guard url.lastPathComponent.localizedCaseInsensitiveContains(query) else { continue }
             let values = try? url.resourceValues(forKeys: Set(keys))
             let path = FilePathKey.anchor(url.path, to: root)

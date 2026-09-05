@@ -321,9 +321,9 @@ struct FinderBody: View {
             } else {
                 FinderListView(model: model)
             }
-            if model.loading, model.entries.isEmpty {
+            if model.projectingEntries || (model.loading && model.entries.isEmpty) {
                 FinderSkeleton(mode: model.viewMode, iconSize: model.iconSize, dark: dark)
-            } else if model.visibleEntries.isEmpty, !model.loading {
+            } else if model.visibleEntries.isEmpty, !model.loading, !model.projectingEntries {
                 Text(model.errorMessage ?? "This folder is empty.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))

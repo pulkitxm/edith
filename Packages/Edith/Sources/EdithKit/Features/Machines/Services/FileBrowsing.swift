@@ -40,14 +40,36 @@ public enum FileSorting {
         _ entries: [RemoteFileEntry], by key: FileSortKey, ascending: Bool,
         foldersFirst: Bool = true
     ) -> [RemoteFileEntry] {
-        entries.sorted { lhs, rhs in
-            if foldersFirst, lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-            let ordered = compare(lhs, rhs, key: key)
-            if ordered == .orderedSame {
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-            return ascending ? ordered == .orderedAscending : ordered == .orderedDescending
+        entries.sorted {
+            precedes($0, $1, key: key, ascending: ascending, foldersFirst: foldersFirst)
         }
+    }
+
+    public static func sortCheckingCancellation(
+        _ entries: [RemoteFileEntry], by key: FileSortKey, ascending: Bool,
+        foldersFirst: Bool = true
+    ) throws -> [RemoteFileEntry] {
+        try Task.checkCancellation()
+        var comparisons = 0
+        let result = try entries.sorted { lhs, rhs in
+            if comparisons % 128 == 0 { try Task.checkCancellation() }
+            comparisons += 1
+            return precedes(lhs, rhs, key: key, ascending: ascending, foldersFirst: foldersFirst)
+        }
+        try Task.checkCancellation()
+        return result
+    }
+
+    private static func precedes(
+        _ lhs: RemoteFileEntry, _ rhs: RemoteFileEntry, key: FileSortKey,
+        ascending: Bool, foldersFirst: Bool
+    ) -> Bool {
+        if foldersFirst, lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+        let ordered = compare(lhs, rhs, key: key)
+        if ordered == .orderedSame {
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return ascending ? ordered == .orderedAscending : ordered == .orderedDescending
     }
 
     static func compare(
