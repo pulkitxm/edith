@@ -5,6 +5,7 @@ import SwiftUI
 struct SEOAuditPage: View {
     @State private var model = SEOAuditModel.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
         Group {
@@ -15,6 +16,10 @@ struct SEOAuditPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .task {
+            guard automaticActionsEnabled else { return }
+            await model.refreshProjects()
+        }
         .sheet(isPresented: $model.newProjectPresented) {
             SEOAuditNewProjectSheet(model: model)
         }
@@ -64,7 +69,7 @@ private struct SEOAuditProjectsView: View {
         }
         .sheet(item: $projectBeingRenamed) { project in
             SEOAuditRenameProjectSheet(project: project) { name in
-                model.renameProject(id: project.id, to: name)
+                Task { await model.renameProject(id: project.id, to: name) }
             }
         }
         .alert(
@@ -76,7 +81,7 @@ private struct SEOAuditProjectsView: View {
             Button("Cancel", role: .cancel) { projectBeingDeleted = nil }
             Button("Delete", role: .destructive) {
                 guard let project = projectBeingDeleted else { return }
-                model.deleteProject(id: project.id)
+                Task { await model.deleteProject(id: project.id) }
                 projectBeingDeleted = nil
             }
         } message: {
@@ -123,7 +128,7 @@ private struct SEOAuditProjectsView: View {
                             canViewDetails: !model.isRunning
                                 || model.selectedProject?.id == project.id,
                             actionsEnabled: !model.isRunning,
-                            viewDetails: { model.selectProject(id: project.id) },
+                            viewDetails: { Task { await model.selectProject(id: project.id) } },
                             rename: { projectBeingRenamed = project },
                             delete: { projectBeingDeleted = project })
                     }
@@ -161,7 +166,8 @@ private struct SEOAuditNewProjectSheet: View {
                 fieldLabel("Site URL")
                 EdithTextField(
                     placeholder: "localhost:3000 or example.com", text: $model.input,
-                    icon: "link", clearable: true, onSubmit: model.beginNewProject)
+                    icon: "link", clearable: true,
+                    onSubmit: { Task { await model.beginNewProject() } })
                 fieldLabel("Project name")
                 EdithTextField(
                     placeholder: "Optional", text: $model.projectName, icon: "folder")
@@ -185,7 +191,7 @@ private struct SEOAuditNewProjectSheet: View {
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.secondary)
                 }
-                Button(action: model.beginNewProject) {
+                Button(action: { Task { await model.beginNewProject() } }) {
                     Label("Create and discover", systemImage: "arrow.right")
                 }
                 .buttonStyle(.borderedProminent)

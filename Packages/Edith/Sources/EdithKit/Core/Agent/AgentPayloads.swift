@@ -165,34 +165,6 @@ public struct CompanionHealthSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-public struct SiteAuditSnapshot: Codable, Equatable, Sendable {
-    public let startedAt: Date
-    public let requested: Int
-    public let audited: Int
-    public let concurrency: Int
-    public let failure: String?
-
-    public init(
-        startedAt: Date, requested: Int, audited: Int, concurrency: Int, failure: String?
-    ) {
-        self.startedAt = startedAt
-        self.requested = requested
-        self.audited = audited
-        self.concurrency = concurrency
-        self.failure = failure
-    }
-}
-
-public struct SiteAuditRequest: Codable, Equatable, Sendable {
-    public let urls: [URL]
-    public let lighthouse: Bool
-
-    public init(urls: [URL], lighthouse: Bool = false) {
-        self.urls = urls
-        self.lighthouse = lighthouse
-    }
-}
-
 public struct BackupSnapshotResult: Codable, Equatable, Sendable {
     public let ranAt: Date
     public let classes: [String]

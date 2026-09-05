@@ -33,7 +33,6 @@ public enum AgentJobCatalog {
         let updates = UpdateDiscoveryJob(store: store)
         let cleaner = CleanerEstimateJob(store: store)
         let backup = BackupJob(store: store)
-        let siteAudit = SiteAuditJob(store: store)
         let companion = CompanionHealthJob(store: store)
         let sessions = SessionsJob(store: store) {
             guard let scheduler else { return false }
@@ -66,7 +65,6 @@ public enum AgentJobCatalog {
                 }
                 return try await attention.run()
             },
-            "siteAudit.crawl": { try await siteAudit.run() },
             "companion.health": { try await companion.run() },
         ]
     }

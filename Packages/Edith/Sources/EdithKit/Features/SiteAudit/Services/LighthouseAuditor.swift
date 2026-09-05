@@ -52,8 +52,7 @@ public struct LighthouseAuditor: Sendable {
                     error: message.isEmpty
                         ? "Lighthouse exited with status \(result.terminationStatus)." : message)
             }
-            let data = try Data(contentsOf: output)
-            return LighthouseAuditResult(scores: try Self.scores(from: data), error: nil)
+            return LighthouseAuditResult(scores: try Self.scores(fromReport: output), error: nil)
         } catch CLICommandRunnerError.timedOut {
             return LighthouseAuditResult(
                 scores: .unavailable, error: "Lighthouse timed out after three minutes.")
@@ -63,6 +62,14 @@ public struct LighthouseAuditor: Sendable {
         } catch {
             return LighthouseAuditResult(scores: .unavailable, error: error.localizedDescription)
         }
+    }
+
+    static func scores(fromReport url: URL) throws -> SEOAuditScores {
+        guard
+            let data = try UsageDataFiles.readRegularFile(
+                at: url, maximumBytes: 16 * 1_024 * 1_024)
+        else { throw CocoaError(.fileReadNoSuchFile) }
+        return try scores(from: data)
     }
 
     private static func scores(from data: Data) throws -> SEOAuditScores {
@@ -77,7 +84,7 @@ public struct LighthouseAuditor: Sendable {
 
     private static func score(_ key: String, in categories: [String: Any]?) -> Int? {
         guard let category = categories?[key] as? [String: Any],
-            let value = category["score"] as? Double
+            let value = category["score"] as? Double, value.isFinite, (0...1).contains(value)
         else { return nil }
         return Int((value * 100).rounded())
     }

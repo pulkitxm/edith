@@ -38,9 +38,6 @@ public enum AgentJobPlan {
             topic: .companion, cadence: .every(ambient: 60, live: 20), power: .any,
             abilityID: "companion"),
         AgentJobDescriptor(
-            id: "siteAudit.crawl", title: "Site audit crawl", trigger: .queue,
-            topic: .siteAudit, cadence: .onDemand, power: .any, abilityID: "seoAudit"),
-        AgentJobDescriptor(
             id: "backup.sync", title: "iCloud backup", trigger: .fileSystem, topic: .backup,
             cadence: .every(ambient: 86_400), power: .pauseOnBattery),
     ]
