@@ -12,11 +12,17 @@ def isolated_test_environment(root, service):
         marker in service for marker in ['.test.', '-test.', '.fixture.']
     ):
         raise ValueError('An isolated fixture service name is required.')
+    private_home = root / 'home'
+    if private_home.is_symlink() or (private_home.exists() and not private_home.is_dir()):
+        raise ValueError('The private fixture home must be a regular directory.')
+    private_home.mkdir(exist_ok=True)
     environment = dict(os.environ)
     environment.update(
         EDITH_DATA_ROOT=str(root / 'data'),
         EDITH_CLOUD_ROOT=str(root / 'cloud'),
-        EDITH_DATABASE_HOME=str(root / 'home'),
+        EDITH_DATABASE_HOME=str(private_home),
+        EDITH_USAGE_SOURCE_HOME=str(private_home),
+        EDITH_PROVIDER_KEYCHAIN_SERVICE=service + '.provider-credentials',
         EDITH_DATABASE_KEYCHAIN_SERVICE=service + '.keychain',
         EDITH_AGENT_MACH_SERVICE=service,
         EDITH_SHARED_DEFAULTS_SUITE=service + '.defaults',
