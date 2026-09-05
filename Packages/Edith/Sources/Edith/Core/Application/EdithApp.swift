@@ -4,8 +4,6 @@ import Security
 import ServiceManagement
 import SwiftUI
 
-private let helperBundleIdentifier = MainApp.statusBarBundleIdentifier
-
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
@@ -248,76 +246,6 @@ private final class LidAwakeDaemonRegistrar {
             let data = values[kSecCodeInfoUnique] as? Data
         else { return nil }
         return data.map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-private let retiredHelperBundleIdentifiers = [
-    "com.pulkit.edith.helper", "com.pulkit.edith.statusbar", "com.pulkit.edith.panel",
-    "com.pulkit.edith.bar", "com.pulkit.edith.menubar",
-]
-
-private func launchHelperIfNeeded() async {
-    for identifier in retiredHelperBundleIdentifiers {
-        let retired = SMAppService.loginItem(identifier: identifier)
-        if retired.status == .enabled {
-            try? await retired.unregister()
-        }
-    }
-    let service = SMAppService.loginItem(identifier: helperBundleIdentifier)
-    if service.status != .enabled {
-        try? service.register()
-    }
-    let helperURL = Bundle.main.bundleURL
-        .appendingPathComponent("Contents/Library/LoginItems/Edith.app")
-    if let running = NSRunningApplication.runningApplications(
-        withBundleIdentifier: helperBundleIdentifier
-    ).first {
-        guard
-            shouldRelaunchHelper(
-                runningURL: running.bundleURL,
-                expectedURL: helperURL,
-                launchedAt: running.launchDate,
-                installedAt: helperInstalledDate(helperURL)
-            )
-        else { return }
-        await MainActor.run {
-            running.forceTerminate()
-            relaunchHelper(at: helperURL, after: running)
-        }
-        return
-    }
-    await MainActor.run {
-        NSWorkspace.shared.openApplication(
-            at: helperURL, configuration: NSWorkspace.OpenConfiguration())
-    }
-}
-
-func shouldRelaunchHelper(
-    runningURL: URL?, expectedURL: URL, launchedAt: Date?, installedAt: Date?
-) -> Bool {
-    let expected = expectedURL.standardizedFileURL.resolvingSymlinksInPath()
-    guard runningURL?.standardizedFileURL.resolvingSymlinksInPath() == expected else {
-        return true
-    }
-    guard let launchedAt, let installedAt else { return false }
-    return launchedAt < installedAt
-}
-
-private func helperInstalledDate(_ helperURL: URL) -> Date? {
-    let exec = helperURL.appendingPathComponent("Contents/MacOS/Edith")
-    return (try? FileManager.default.attributesOfItem(atPath: exec.path)[.modificationDate])
-        as? Date
-}
-
-private func relaunchHelper(at url: URL, after proc: NSRunningApplication) {
-    DispatchQueue.global(qos: .userInitiated).async {
-        for _ in 0..<50 where !proc.isTerminated {
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        DispatchQueue.main.async {
-            NSWorkspace.shared.openApplication(
-                at: url, configuration: NSWorkspace.OpenConfiguration())
-        }
     }
 }
 
