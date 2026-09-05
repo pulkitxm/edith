@@ -92,6 +92,16 @@ final class FinderModel {
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
+    private var transferTask: Task<RemoteTransferOutcome, Error>?
+    private var transferCommandTask: Task<Result<String, Error>, Never>?
+    private let transferClient: AgentTaskClient?
+
+    var canCancelTransfer: Bool { transferTask != nil || transferCommandTask != nil }
+
+    func cancelTransfer() {
+        transferTask?.cancel()
+        transferCommandTask?.cancel()
+    }
 
     init(
         session: MachineSession, path: String? = nil,
@@ -100,9 +110,11 @@ final class FinderModel {
             await Task.detached(priority: .userInitiated) {
                 MachineSession.searchLocalFiles(root: root, query: query)
             }.value
-        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil
+        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil,
+        transferClient: AgentTaskClient? = nil
     ) {
         self.session = session
+        self.transferClient = transferClient
         self.localSearch = localSearch
         self.directoryLoader = directoryLoader ?? { await session.listFiles(path: $0) }
         self.freeSpaceLoader =
@@ -812,6 +824,7 @@ final class FinderModel {
     }
 
     func download(to destination: URL) async {
+        guard progress == nil else { return }
         let sources = selectedEntries.filter { !$0.isDirectory }
         guard !sources.isEmpty else { return }
         guard let source = transferEndpoint(for: session) else {
@@ -826,13 +839,8 @@ final class FinderModel {
             let plan = RemoteTransferOperationExecution.plan(
                 paths: sources.map(\.path), destination: destination.path,
                 existing: existing)
-            progress = FileOperationProgress(title: "Downloading", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
-                plan, from: source, to: local, confirmsReplacement: false
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Downloading", processed: processed, total: total)
-            }
+            let outcome = try await executeTransfer(
+                plan, from: source, to: local, title: "Downloading", confirmsReplacement: false)
             finishTransfer(outcome, verb: "Downloaded")
         } catch is CancellationError {
         } catch {
@@ -973,6 +981,7 @@ final class FinderModel {
         intent: DropIntent, destination: String,
         resolutions: [String: NameConflictResolution]
     ) async {
+        guard progress == nil else { return }
         switch intent {
         case .moveWithinMachine, .copyWithinMachine:
             errorMessage = nil
@@ -987,7 +996,14 @@ final class FinderModel {
             else { return }
             progress = FileOperationProgress(
                 title: intent.isMove ? "Moving" : "Copying", total: plan.items.count)
-            let result = await session.runCommand(command, timeout: 120)
+            let task = Task { await session.runCommand(command, timeout: 120) }
+            transferCommandTask = task
+            let result = await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            transferCommandTask = nil
             progress = nil
             let operationError: String?
             switch result {
@@ -1049,28 +1065,10 @@ final class FinderModel {
                 flash("Nothing transferred")
                 return
             }
-            progress = FileOperationProgress(title: "Transferring", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
+            let outcome = try await executeTransfer(
                 plan, from: source, to: target,
-                confirmsReplacement: !plan.replacements.isEmpty
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Transferring", processed: processed, total: total)
-            }
-            if moving, !outcome.completed.isEmpty {
-                let removal = await MachineFileOperationExecution.remove(
-                    MachineFileRemovalPlan(
-                        paths: outcome.completed.map(\.sourcePath), permanently: true),
-                    confirmed: true, platform: sourceSession.remotePlatform ?? .linux
-                ) { command, timeout in
-                    await sourceSession.runCommand(command, timeout: timeout)
-                }
-                if case let .failure(error) = removal {
-                    errorMessage =
-                        "The items were copied, but their originals could not be removed: "
-                        + error.localizedDescription
-                }
-            }
+                title: "Transferring", confirmsReplacement: !plan.replacements.isEmpty,
+                moving: moving)
             if errorMessage == nil {
                 finishTransfer(outcome, verb: moving ? "Moved" : "Transferred")
             }
@@ -1100,6 +1098,33 @@ final class FinderModel {
             title: title, completed: processed, total: total)
     }
 
+    private func executeTransfer(
+        _ plan: RemoteTransferPlan, from source: RemoteTransferEndpoint,
+        to destination: RemoteTransferEndpoint, title: String,
+        confirmsReplacement: Bool, moving: Bool = false
+    ) async throws -> RemoteTransferOutcome {
+        guard transferTask == nil, transferCommandTask == nil else {
+            throw AgentError(.refused, "Another file transfer is already running.")
+        }
+        progress = FileOperationProgress(title: title, total: plan.items.count)
+        let client = transferClient
+        let task = Task { [weak self] in
+            try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: destination, confirmsReplacement: confirmsReplacement,
+                moving: moving, taskClient: client
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(title: title, processed: processed, total: total)
+            }
+        }
+        transferTask = task
+        defer { transferTask = nil; progress = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     private func finishTransfer(_ outcome: RemoteTransferOutcome, verb: String) {
         let completed = outcome.completed.count
         guard let first = outcome.failures.first else {
@@ -1118,7 +1143,7 @@ final class FinderModel {
         _ urls: [URL], into destination: String,
         resolutions: [String: NameConflictResolution]
     ) async {
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty, progress == nil else { return }
         errorMessage = nil
         guard let target = transferEndpoint(for: session) else {
             errorMessage = FinderTransferError.notConnected.localizedDescription
@@ -1135,14 +1160,9 @@ final class FinderModel {
                 flash("Nothing uploaded")
                 return
             }
-            progress = FileOperationProgress(title: "Uploading", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
+            let outcome = try await executeTransfer(
                 plan, from: source, to: target,
-                confirmsReplacement: !plan.replacements.isEmpty
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Uploading", processed: processed, total: total)
-            }
+                title: "Uploading", confirmsReplacement: !plan.replacements.isEmpty)
             finishTransfer(outcome, verb: "Uploaded")
         } catch is CancellationError {
         } catch {

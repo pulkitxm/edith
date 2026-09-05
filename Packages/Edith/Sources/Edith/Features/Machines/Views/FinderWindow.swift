@@ -140,6 +140,8 @@ struct FinderBody: View {
                 model.quickLookPath = nil
             } else if model.renaming != nil {
                 model.renaming = nil
+            } else if model.canCancelTransfer {
+                model.cancelTransfer()
             } else {
                 model.selection = []
             }
@@ -376,7 +378,28 @@ struct FinderBody: View {
 
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            if let message = model.statusMessage ?? model.errorMessage {
+            if let progress = model.progress {
+                if progress.total > 1 {
+                    ProgressView(value: progress.fraction)
+                        .frame(width: UIScale.pt(90))
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Text(progress.description)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(1)
+                if model.canCancelTransfer {
+                    Button {
+                        model.cancelTransfer()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel transfer")
+                    .accessibilityLabel("Cancel transfer")
+                }
+            } else if let message = model.statusMessage ?? model.errorMessage {
                 Text(message)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(

@@ -34,6 +34,12 @@ public enum AgentMachineOperations {
                 !request.remotePath.isEmpty, !request.remotePath.contains("\0"),
                 request.timeout.isFinite, request.timeout > 0
             else { throw AgentError(.refused, "The file transfer request is invalid.") }
+            if (try? request.localURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory)
+                == true
+            {
+                throw AgentError(
+                    .refused, "Choose a file path instead of a directory for this transfer.")
+            }
             let progress = AgentMachineTransferProgress { context.report("bytes:\($0)") }
             let bytes = try await withThrowingTaskGroup(of: Int64.self) { group in
                 group.addTask {
@@ -49,6 +55,7 @@ public enum AgentMachineOperations {
             try Task.checkCancellation()
             return try AgentPayload.encode(AgentMachineTransferResult(bytes: bytes))
         }
+        await AgentFileTransferOperations.register(on: tasks)
     }
 
     private static func executeCommand(
@@ -144,6 +151,9 @@ enum AgentMachineDownload {
     static func write(
         to destination: URL, receive: @Sendable (URL) async throws -> Void
     ) async throws {
+        if (try? destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            throw AgentError(.refused, "A file download cannot replace a directory.")
+        }
         let staged = destination.deletingLastPathComponent()
             .appendingPathComponent(".edith-transfer-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: staged) }

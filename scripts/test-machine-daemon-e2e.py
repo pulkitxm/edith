@@ -312,6 +312,33 @@ try:
     assert protected.read_bytes() == b"original destination"
     assert not list(root.glob(".edith-transfer-*"))
     record("09 cancelled transfer removes staging and preserves the destination")
+
+    source.write_bytes(binary)
+    whole_local = root / "whole local, binary.bin"
+    transfer_plan = dict(plan=dict(destination=str(root), items=[dict(sourcePath=str(source),
+        destinationPath=str(whole_local), replacesExisting=False)], skipped=[]),
+        source={"local": {}}, destination={"local": {}}, confirmsReplacement=False, moving=False)
+    finish(submit("machine.files.transfer", transfer_plan))
+    assert whole_local.read_bytes() == binary
+    record("10 whole local transfer plan completes in one daemon task", bytes=len(binary))
+
+    whole_remote = root / "whole remote, binary.bin"
+    transfer_plan["plan"]["items"][0]["destinationPath"] = str(whole_remote)
+    transfer_plan["destination"] = {"remote": {"_0": machine}}
+    finish(submit("machine.files.transfer", transfer_plan))
+    assert whole_remote.read_bytes() == binary
+    record("11 daemon completes local staging and remote publication after client exit")
+
+    whole_moved = root / "whole moved, binary.bin"
+    transfer_plan["plan"]["items"][0] = dict(sourcePath=str(whole_remote),
+        destinationPath=str(whole_moved), replacesExisting=False)
+    transfer_plan["source"] = {"remote": {"_0": machine}}
+    transfer_plan["destination"] = {"local": {}}
+    transfer_plan["moving"] = True
+    finish(submit("machine.files.transfer", transfer_plan))
+    assert whole_moved.read_bytes() == binary
+    assert not whole_remote.exists()
+    record("12 remote move publishes locally before removing its source")
 finally:
     for identifier in active_tasks:
         try:

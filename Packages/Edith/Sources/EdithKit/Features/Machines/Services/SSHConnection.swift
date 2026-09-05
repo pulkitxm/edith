@@ -286,6 +286,11 @@ public actor SSHConnection {
     public func run(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async throws -> SSHExecResult {
+        if let client = fileTaskClient {
+            return try await client.runMachineCommand(
+                AgentMachineCommandRequest(
+                    machine: machine, command: command, standardInput: stdin, timeout: timeout))
+        }
         let process = execProcess(command: command)
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
