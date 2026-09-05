@@ -24,9 +24,11 @@ public struct AttentionCloudBackup: Sendable {
     @discardableResult
     public func backup(now: Date = Date()) throws -> Date {
         let manager = FileManager.default
-        try manager.createDirectory(at: cloudDirectory, withIntermediateDirectories: true)
-        try AttentionArchiveCopy.copy(from: localDirectory, to: cloudDirectory)
+        let publication = try AttentionArchivePublication(
+            source: localDirectory, destination: cloudDirectory)
+        try publication.publish()
         try manager.setAttributes([.modificationDate: now], ofItemAtPath: cloudDirectory.path)
+        publication.finish()
         return now
     }
 

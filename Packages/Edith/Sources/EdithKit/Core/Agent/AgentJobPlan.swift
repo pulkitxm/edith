@@ -31,7 +31,7 @@ public enum AgentJobPlan {
             topic: .downloads, cadence: .onDemand, power: .any, abilityID: "downloads"),
         AgentJobDescriptor(
             id: "attention.ingest", title: "Attention ingestion", trigger: .timer,
-            topic: .attention, cadence: .every(ambient: 900, live: 900), power: .pauseOnLock,
+            topic: .attention, cadence: .every(ambient: 900, live: 900), power: .any,
             abilityID: "attention"),
         AgentJobDescriptor(
             id: "companion.health", title: "Memory health", trigger: .timer,

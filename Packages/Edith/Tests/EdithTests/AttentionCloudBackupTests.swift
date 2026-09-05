@@ -5,6 +5,74 @@ import Testing
 @testable import EdithKit
 
 @Suite struct AttentionCloudBackupTests {
+    @Test func successfulBackupReplacesTheWholePreviousGeneration() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.createDirectory(
+            at: fixture.localRoot, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: fixture.localRoot.appendingPathComponent("old.jsonl"))
+        let backup = AttentionCloudBackup(
+            localDirectory: fixture.localRoot, cloudDirectory: fixture.cloudRoot)
+        try backup.backup()
+        try FileManager.default.removeItem(
+            at: fixture.localRoot.appendingPathComponent("old.jsonl"))
+        try Data("new".utf8).write(to: fixture.localRoot.appendingPathComponent("new.jsonl"))
+        try backup.backup()
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: fixture.cloudRoot.path) == [
+                "new.jsonl"
+            ])
+        #expect(
+            try String(
+                contentsOf: fixture.cloudRoot.appendingPathComponent("new.jsonl"), encoding: .utf8)
+                == "new")
+    }
+
+    @Test func failedGenerationKeepsThePreviousArchiveIntact() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.createDirectory(
+            at: fixture.localRoot, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: fixture.localRoot.appendingPathComponent("settings.json"))
+        let backup = AttentionCloudBackup(
+            localDirectory: fixture.localRoot, cloudDirectory: fixture.cloudRoot)
+        try backup.backup()
+        try Data("new".utf8).write(to: fixture.localRoot.appendingPathComponent("settings.json"))
+        #expect(mkfifo(fixture.localRoot.appendingPathComponent("pipe").path, 0o600) == 0)
+        #expect(throws: AttentionArchiveError.self) { try backup.backup() }
+        #expect(
+            try String(
+                contentsOf: fixture.cloudRoot.appendingPathComponent("settings.json"),
+                encoding: .utf8) == "old")
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: fixture.cloudRoot.path) == [
+                "settings.json"
+            ])
+    }
+
+    @Test func publishedMetadataCanRollBackBeforeTheDatabaseCommit() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.createDirectory(
+            at: fixture.localRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: fixture.cloudRoot, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: fixture.localRoot.appendingPathComponent("settings.json"))
+        try Data("old".utf8).write(to: fixture.cloudRoot.appendingPathComponent("settings.json"))
+        let publication = try AttentionArchivePublication(
+            source: fixture.localRoot, destination: fixture.cloudRoot)
+        try publication.publish()
+        #expect(
+            try String(
+                contentsOf: fixture.cloudRoot.appendingPathComponent("settings.json"),
+                encoding: .utf8) == "new")
+        try publication.rollback()
+        #expect(
+            try String(
+                contentsOf: fixture.cloudRoot.appendingPathComponent("settings.json"),
+                encoding: .utf8) == "old")
+    }
+
     @Test func oversizedArchiveFilePreservesTheExistingDestination() throws {
         let fixture = fixture()
         defer { fixture.cleanup() }

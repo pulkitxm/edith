@@ -8,7 +8,7 @@ public struct AttentionAnalyzer: Sendable {
     ) -> AttentionSummary {
         let primary = resolvedPrimaryIntervals(events: events, from: from, to: to)
         let categoriesByID = Dictionary(
-            uniqueKeysWithValues: settings.categories.map { ($0.id, $0) })
+            settings.categories.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         let fallback = categoriesByID["unclassified"] ?? AttentionSettings.defaultCategories.last!
         var totals: [String: AttentionEntity] = [:]
         var activeDuration: TimeInterval = 0
