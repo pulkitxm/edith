@@ -1,14 +1,18 @@
+import base64
 import concurrent.futures
+import datetime
 import hashlib
 import json
 import os
 import pathlib
 import plistlib
 import shutil
+import struct
 import subprocess
 import tempfile
 import time
 import uuid
+import zlib
 
 repo = pathlib.Path(__file__).resolve().parents[1]
 build = pathlib.Path(os.environ.get('EDITH_TEST_BUILD_DIR', repo / 'Packages/Edith/.build/debug'))
@@ -39,6 +43,27 @@ def value(*args):
     return json.loads(cli(*args).stdout)
 
 
+def invoke(operation, payload):
+    request = root / ('request-' + uuid.uuid4().hex + '.json')
+    request.write_text(json.dumps(payload))
+    return json.loads(call([str(root / 'client'), label, operation, str(request)]).stdout)
+
+
+def capture(data, ext, preview, types):
+    identifier = str(uuid.uuid4())
+    invoke('clipboard.capture', dict(id=identifier, data=base64.b64encode(data).decode(),
+           types=types, ext=ext, preview=preview,
+           capturedAt=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')))
+    return identifier
+
+
+def png(width, height):
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    raw = (b'\x00' + bytes([34, 108, 220, 255]) * width) * height
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+
 def wait_for(action, predicate):
     deadline = time.monotonic() + 25
     while time.monotonic() < deadline:
@@ -62,6 +87,8 @@ try:
     for binary, identity in [('ed', 'ed'), ('edithd', 'com.pulkit.edith.agent')]:
         shutil.copy2(build / binary, root / binary)
         call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identity, str(root / binary)])
+    call(['/usr/bin/swiftc', str(repo / 'scripts/fixtures/daemon-xpc-client.swift'), '-o', str(root / 'client')], timeout=60)
+    call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', 'ed', str(root / 'client')])
     for key in ['suiteAgentsEnabled', 'suiteMaintenanceEnabled', 'suiteSystemEnabled',
                 'suiteDeskEnabled', 'suiteMediaEnabled', 'suiteDataEnabled', 'icloudBackup']:
         call(['/usr/bin/defaults', 'write', suite, key, '-bool', 'false'])
@@ -114,13 +141,32 @@ try:
     assert stats['diskBytes'] == len(b'third fixture'), stats
     assert len(list(blobs.iterdir())) == 1
     record('04 daemon clear preserves the pinned entry and removes unreferenced payloads')
+    html = capture(b'<p>Hello &amp; welcome</p>', 'html', 'HTML', ['public.html'])
+    image_id = capture(png(1600, 800), 'png', 'PNG image', ['public.png'])
+    rendered = invoke('clipboard.thumbnail', dict(id=str(uuid.uuid4()), entryID=image_id))
+    image = base64.b64decode(rendered['data'])
+    assert struct.unpack('>II', image[16:24]) == (160, 80)
+    assert len(image) <= 128 << 10
+    (root / 'daemon-thumbnail.png').write_bytes(image)
+    again = invoke('clipboard.thumbnail', dict(id=str(uuid.uuid4()), entryID=image_id))
+    assert base64.b64decode(again['data']) == image
+    record('05 daemon renders and caches a bounded 160 by 80 image thumbnail without a GUI')
+    copied = invoke('clipboard.copyPayload', dict(id=html, plainTextOnly=True))
+    assert copied['text'] == 'Hello & welcome', copied
+    inspection = invoke('clipboard.inspect', False)
+    assert inspection['entries'] == 3 and inspection['missingPayloads'] == 0, inspection
+    record('06 daemon prepares plain text copies and inspects archive readiness')
+    html_digest = hashlib.sha256(b'<p>Hello &amp; welcome</p>').hexdigest()
+    (blobs / (html_digest + '.html')).unlink()
+    assert invoke('clipboard.inspect', False)['missingPayloads'] == 1
+    record('07 archive readiness detects an actually missing payload')
     call(['/bin/launchctl', 'bootout', service])
     booted = False
     before = index_file.read_bytes()
     unavailable = cli('clipboard', 'unpin', '1', '--json', check=False)
     assert unavailable.returncode != 0
     assert index_file.read_bytes() == before
-    record('05 disconnected clients report failure and never mutate storage locally')
+    record('08 disconnected clients report failure and never mutate storage locally')
 finally:
     if booted:
         call(['/bin/launchctl', 'bootout', service], check=False)
