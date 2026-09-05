@@ -21,6 +21,8 @@ public enum BackupMerge: String, Codable, Sendable {
     case unionByPrimaryKey
     case unionByHash
     case newestFile
+    case missingFiles
+    case replaceSnapshot
     case notApplicable
 
     public var title: String {
@@ -30,6 +32,8 @@ public enum BackupMerge: String, Codable, Sendable {
         case .unionByPrimaryKey: "Union by primary key"
         case .unionByHash: "Union by content hash"
         case .newestFile: "Newest file wins"
+        case .missingFiles: "Restore missing files"
+        case .replaceSnapshot: "Replace with saved snapshot"
         case .notApplicable: "Not restored"
         }
     }
@@ -84,28 +88,28 @@ public enum BackupCatalog {
             defaultsKey: AppStorageKeys.Backup.settings),
         BackupClass(
             id: "machines", title: "Machines, forwards, snippets", location: "machines/*.json",
-            sync: .always, merge: .unionByID, retention: "Forever", carriesSecrets: true),
+            sync: .never, merge: .notApplicable, retention: "Until deleted"),
         BackupClass(
-            id: "database", title: "Database connections", location: "edith.sqlite",
-            sync: .always, merge: .unionByID, retention: "Forever", carriesSecrets: true),
+            id: "database", title: "Database connections", location: "database/metadata.sqlite3",
+            sync: .never, merge: .notApplicable, retention: "Until deleted"),
         BackupClass(
-            id: "usage", title: "Usage days and sessions", location: "edith.sqlite",
+            id: "usage", title: "Usage days and sessions", location: "data/usage.json",
             sync: .always, merge: .unionByPrimaryKey, retention: "Forever",
             defaultsKey: AppStorageKeys.Backup.usage),
         BackupClass(
-            id: "limits", title: "Provider limits", location: "edith.sqlite",
+            id: "limits", title: "Provider limits", location: "data/limits-history.jsonl",
             sync: .always, merge: .unionByPrimaryKey, retention: "Forever",
             defaultsKey: AppStorageKeys.Backup.limits),
         BackupClass(
-            id: "attention", title: "Attention events", location: "edith.sqlite", sync: .optIn,
-            merge: .unionByPrimaryKey, retention: "365 days"),
+            id: "attention", title: "Attention events", location: "attention/", sync: .optIn,
+            merge: .replaceSnapshot, retention: "365 days"),
         BackupClass(
             id: "clipboard", title: "Clipboard history", location: "clipboard/", sync: .optIn,
-            merge: .newestFile, retention: "200 items or 30 days",
+            merge: .unionByHash, retention: "Configured retention",
             defaultsKey: AppStorageKeys.Clipboard.backup),
         BackupClass(
-            id: "music", title: "Music library and download queue",
-            location: "music/, queue in edith.sqlite", sync: .optIn, merge: .newestFile,
+            id: "music", title: "Music library",
+            location: "Selected music folder", sync: .optIn, merge: .missingFiles,
             retention: "Forever", defaultsKey: AppStorageKeys.Music.backup),
         BackupClass(
             id: "metrics", title: "Machine metrics, cleaner scans, update cache",

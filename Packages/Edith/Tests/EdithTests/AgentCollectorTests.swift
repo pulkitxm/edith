@@ -243,7 +243,9 @@ import Testing
 
         let enabled = Set(BackupCatalog.enabled(in: defaults).map(\.id))
 
-        #expect(enabled.contains("machines"))
+        #expect(enabled.contains("settings"))
+        #expect(!enabled.contains("machines"))
+        #expect(!enabled.contains("database"))
         #expect(!enabled.contains("attention"))
         #expect(!enabled.contains("clipboard"))
         #expect(!enabled.contains("metrics"))
