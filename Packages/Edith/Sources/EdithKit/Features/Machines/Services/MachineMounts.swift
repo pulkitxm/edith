@@ -37,7 +37,7 @@ public struct MountedVolume: Equatable, Sendable {
     public var looksLikeFUSE: Bool { kinds.contains { $0.contains("fuse") } }
 }
 
-public enum MountHealth: String, Equatable, Sendable {
+public enum MountHealth: String, Codable, Equatable, Sendable {
     case mounted
     case stale
     case gone

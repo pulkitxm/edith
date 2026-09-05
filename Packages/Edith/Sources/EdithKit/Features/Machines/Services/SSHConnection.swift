@@ -1,9 +1,15 @@
 import Foundation
 
-public struct SSHExecResult: Sendable {
+public struct SSHExecResult: Codable, Sendable {
     public let status: Int32
     public let stdout: Data
     public let stderr: Data
+
+    public init(status: Int32, stdout: Data, stderr: Data) {
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+    }
 
     public var stdoutText: String { String(decoding: stdout, as: UTF8.self) }
     public var stderrText: String {
@@ -146,9 +152,14 @@ public actor SSHConnection {
     private var masterProcess: Process?
     private let socketPath: String
     private let knownHostsArgument: String
+    private let taskClient: AgentTaskClient?
 
-    public init(machine: Machine, controlSocketMode: SSHControlSocketMode = .isolated) {
+    public init(
+        machine: Machine, controlSocketMode: SSHControlSocketMode = .isolated,
+        taskClient: AgentTaskClient? = nil
+    ) {
         self.machine = machine
+        self.taskClient = taskClient
         let connectionID = controlSocketMode == .isolated ? UUID() : nil
         socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
         let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
@@ -159,9 +170,15 @@ public actor SSHConnection {
 
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
 
+    nonisolated var fileTaskClient: AgentTaskClient? {
+        taskClient ?? (AgentCommandRouting.isEnabled ? AgentTaskClient() : nil)
+    }
+
+    public func acceptPlatform(_ platform: RemoteMachinePlatform) { remotePlatform = platform }
+
     public func connect() async throws {
         if await masterIsAlive() {
-            try await validatePlatform()
+            if remotePlatform == nil { try await validatePlatform() }
             return
         }
         MachinePaths.prepare()
@@ -324,6 +341,13 @@ public actor SSHConnection {
     public func download(
         remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
+        if let client = fileTaskClient {
+            try await client.transferMachineFile(
+                AgentMachineTransferRequest(
+                    machine: machine, direction: .download, localURL: localURL,
+                    remotePath: remotePath), progress: progress)
+            return
+        }
         let command =
             remotePlatform == .windows
             ? PowerShell.command(
@@ -404,6 +428,13 @@ public actor SSHConnection {
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
+        if let client = fileTaskClient {
+            try await client.transferMachineFile(
+                AgentMachineTransferRequest(
+                    machine: machine, direction: .upload, localURL: localURL,
+                    remotePath: remotePath), progress: progress)
+            return
+        }
         guard FileManager.default.isReadableFile(atPath: localURL.path) else {
             throw SSHConnectionError.transferFailed("Could not read the local file.")
         }

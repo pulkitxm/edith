@@ -19,8 +19,7 @@ public enum DataRoot {
     public static var runtime: URL { AppDirectories.current.runtime }
 
     public static var logs: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Edith")
+        AppDirectories.current.logs
     }
 
     public static var machines: URL { support.appendingPathComponent("machines") }

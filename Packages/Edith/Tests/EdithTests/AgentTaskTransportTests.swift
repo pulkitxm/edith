@@ -75,6 +75,28 @@ import Testing
         #expect(errors.values == ["stderr"])
     }
 
+    @Test func nonzeroCommandsRemainFailedInTheInspectorAndReturnTheirExitCodeToCallers()
+        async throws
+    {
+        let service = try AgentTaskService(directory: nil)
+        await service.registerCommand()
+        let listener = TaskTestListener(service: service)
+        defer { listener.stop() }
+        let client = AgentTaskClient(client: listener.client(), pollInterval: 0.01)
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "printf 'failed command\\n' >&2; exit 7"], environment: [:],
+            timeout: 2)
+        let errors = TaskTransportLines()
+        let result = try await client.runCommand(
+            request, onStandardOutputLine: { _ in }, onStandardErrorLine: { errors.append($0) })
+        #expect(result.terminationStatus == 7)
+        #expect(errors.values == ["failed command"])
+        let snapshot = try #require(await service.snapshots().first)
+        #expect(snapshot.state == .failed)
+        #expect(snapshot.failureCode == "commandExit")
+    }
+
     @Test func commandTimeoutCrossesXPCAsItsOriginalErrorType() async throws {
         let service = try AgentTaskService(directory: nil)
         await service.registerCommand()
@@ -127,7 +149,7 @@ private final class TaskTransportLines: @unchecked Sendable {
     func append(_ value: String) { lock.withLock { lines.append(value) } }
 }
 
-private final class TaskTestListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
+final class TaskTestListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
     private let listener = NSXPCListener.anonymous()
     private let service: AgentTaskService
 

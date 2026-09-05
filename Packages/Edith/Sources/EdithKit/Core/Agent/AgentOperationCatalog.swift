@@ -16,7 +16,7 @@ public enum AgentOperationCatalog {
             AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
             AgentDiagnostics.runJob, AgentDiagnostics.cancelJob,
             AgentNotificationOperation.pending, AgentNotificationOperation.acknowledge,
-            CompanionBackgroundOperation.refresh,
+            CompanionBackgroundOperation.refresh, AgentMachineMetricsRefresh.operation,
         ] + AgentTaskOperation.internalOperations + AgentDownloadOperation.internalOperations
 
     public static func serves(_ id: UserOperationID) -> Bool {

@@ -82,7 +82,7 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
+          area swift '^(scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
           area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
@@ -243,6 +243,8 @@ jobs:
             Packages/Edith/.build/repositories
           key: spm-swiftpm-${{ runner.os }}-${{ hashFiles('Packages/Edith/Package.resolved') }}
           restore-keys: spm-swiftpm-${{ runner.os }}-
+      - name: Verify test isolation
+        run: python3 -B scripts/test-swift-test-isolation.py
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith

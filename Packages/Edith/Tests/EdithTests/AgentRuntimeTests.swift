@@ -38,7 +38,7 @@ import Testing
     @Test func everyClientIdentityIsARealBundleOrTool() {
         #expect(AgentPeerIdentity.identifiers.contains(MainApp.bundleIdentifier))
         #expect(AgentPeerIdentity.identifiers.contains(MainApp.statusBarBundleIdentifier))
-        #expect(AgentPeerIdentity.identifiers.contains(AgentService.machServiceName))
+        #expect(AgentPeerIdentity.identifiers.contains(AgentService.label))
     }
 }
 

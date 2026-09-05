@@ -36,6 +36,7 @@ test("every change area covers its repository inputs", () => {
       "Packages/Edith/Sources/Edith/App.swift",
       "Resources/Info.plist",
       "edth.xcodeproj/project.pbxproj",
+      "scripts/test-swift-test-isolation.py",
       "build.sh",
       "Makefile",
       ".swift-format",
@@ -152,7 +153,7 @@ test("main releases skip the redundant debug app build", () => {
 
 test("Swift tests build their CLI fixture in one package graph", () => {
   expect(swiftTestScript).not.toMatch(/^swift build/gm);
-  expect(swiftTestScript.match(/^exec swift test/gm)?.length).toBe(1);
+  expect(swiftTestScript.match(/^swift test/gm)?.length).toBe(1);
   const testTarget = packageManifest.slice(
     packageManifest.indexOf('name: "EdithTests"'),
   );
@@ -165,6 +166,12 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  companion:"),
   );
   expect(swiftTest).toContain("timeout-minutes: 30");
+  expect(swiftTest).toContain(
+    "python3 -B scripts/test-swift-test-isolation.py",
+  );
+  expect(swiftTest.indexOf("Verify test isolation")).toBeLessThan(
+    swiftTest.indexOf("run: ./test.sh"),
+  );
 });
 
 test("targeted publishing workflows watch every deployment input", () => {

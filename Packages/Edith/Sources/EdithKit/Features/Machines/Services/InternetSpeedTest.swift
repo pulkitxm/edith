@@ -1,6 +1,6 @@
 import Foundation
 
-public struct InternetSpeedMeasurement: Equatable, Sendable {
+public struct InternetSpeedMeasurement: Codable, Equatable, Sendable {
     public let downloadBitsPerSecond: Double
     public let uploadBitsPerSecond: Double
     public let measuredAt: Date

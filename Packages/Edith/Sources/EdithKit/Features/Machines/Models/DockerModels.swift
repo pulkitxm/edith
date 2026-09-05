@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DockerContainerState: String, Equatable, Sendable {
+public enum DockerContainerState: String, Codable, Equatable, Sendable {
     case created
     case running
     case paused
@@ -21,14 +21,14 @@ public enum DockerContainerState: String, Equatable, Sendable {
     }
 }
 
-public enum DockerHealth: String, Equatable, Sendable {
+public enum DockerHealth: String, Codable, Equatable, Sendable {
     case none
     case starting
     case healthy
     case unhealthy
 }
 
-public struct DockerPortMapping: Equatable, Hashable, Sendable {
+public struct DockerPortMapping: Codable, Equatable, Hashable, Sendable {
     public var hostIP: String?
     public var hostPort: Int?
     public var containerPort: Int
@@ -51,7 +51,7 @@ public struct DockerPortMapping: Equatable, Hashable, Sendable {
     }
 }
 
-public struct DockerContainer: Identifiable, Equatable, Sendable {
+public struct DockerContainer: Identifiable, Codable, Equatable, Sendable {
     public var id: String
     public var names: [String]
     public var image: String
@@ -99,7 +99,7 @@ public struct DockerContainer: Identifiable, Equatable, Sendable {
     public var shortID: String { String(id.prefix(12)) }
 }
 
-public struct DockerImage: Identifiable, Equatable, Sendable {
+public struct DockerImage: Identifiable, Codable, Equatable, Sendable {
     public var id: String
     public var repository: String
     public var tag: String
@@ -129,7 +129,7 @@ public struct DockerImage: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct DockerVolume: Identifiable, Equatable, Sendable {
+public struct DockerVolume: Identifiable, Codable, Equatable, Sendable {
     public var name: String
     public var driver: String
     public var mountpoint: String
@@ -152,7 +152,7 @@ public struct DockerVolume: Identifiable, Equatable, Sendable {
     public var inUse: Bool { (containerCount ?? 0) > 0 }
 }
 
-public struct DockerNetwork: Identifiable, Equatable, Sendable {
+public struct DockerNetwork: Identifiable, Codable, Equatable, Sendable {
     public var id: String
     public var name: String
     public var driver: String
@@ -166,7 +166,7 @@ public struct DockerNetwork: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct DockerDiskUsage: Equatable, Sendable {
+public struct DockerDiskUsage: Codable, Equatable, Sendable {
     public var type: String
     public var totalCount: Int
     public var active: Int
@@ -184,8 +184,8 @@ public struct DockerDiskUsage: Equatable, Sendable {
     }
 }
 
-public struct DockerAvailability: Equatable, Sendable {
-    public enum Status: Equatable, Sendable {
+public struct DockerAvailability: Codable, Equatable, Sendable {
+    public enum Status: Codable, Equatable, Sendable {
         case unknown
         case available(serverVersion: String, hasCompose: Bool)
         case missing
