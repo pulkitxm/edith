@@ -7,9 +7,11 @@ public enum AgentJobCatalog {
     }
 
     public static func jobs(
-        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil
+        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
+        metrics: AgentMachineMetricsService? = nil
     ) -> [AgentJob] {
-        let bodies = collectors(store: store, scheduler: scheduler, downloads: downloads)
+        let bodies = collectors(
+            store: store, scheduler: scheduler, downloads: downloads, metrics: metrics)
         return descriptors().map { descriptor in
             let empty: @Sendable () async throws -> Data? = { nil }
             let body = bodies[descriptor.id] ?? empty
@@ -21,7 +23,8 @@ public enum AgentJobCatalog {
     }
 
     static func collectors(
-        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil
+        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
+        metrics: AgentMachineMetricsService? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
         let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
@@ -39,6 +42,12 @@ public enum AgentJobCatalog {
             "usage.refresh": { try await usage.run() },
             "usage.limits": { try await limits.run() },
             "machines.health": { try await machines.run() },
+            "machines.metrics": {
+                guard let metrics else {
+                    throw AgentError(.unavailable, "Machine metrics are unavailable.")
+                }
+                return try await metrics.snapshotData()
+            },
             "updates.discover": { try await updates.run() },
             "cleaner.estimate": { try await cleaner.run() },
             "backup.sync": { try await backup.run() },

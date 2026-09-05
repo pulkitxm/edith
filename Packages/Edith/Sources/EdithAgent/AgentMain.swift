@@ -82,6 +82,8 @@ public enum AgentBoot {
         let startup = Task {
             guard !Task.isCancelled else { return }
             await runtime.attach(scheduler: scheduler)
+            let metrics = await AgentMachineMetricsService()
+            await metrics.register(on: runtime)
             await AgentOperations.register(
                 on: runtime, store: store, scheduler: scheduler, downloads: downloads)
             do {
@@ -92,6 +94,7 @@ public enum AgentBoot {
                         }
                     }, record: { await runtime.record($0) })
                 await tasks.registerCommand()
+                await AgentMachineOperations.register(on: tasks)
                 await downloads.registerEstimate(on: tasks)
                 await AgentTaskOperations.register(on: runtime, service: tasks)
             } catch {
