@@ -2,123 +2,133 @@ import Foundation
 
 public enum IPC {
     public enum Name {
-        public static let requestUsageRefresh = Notification.Name(
+        public static let requestUsageRefresh = IPC.scopedName(
             "com.pulkit.edith.requestUsageRefresh")
-        public static let usageRefreshStarted = Notification.Name(
+        public static let usageRefreshStarted = IPC.scopedName(
             "com.pulkit.edith.usageRefreshStarted")
-        public static let usageRefreshFinished = Notification.Name(
+        public static let usageRefreshFinished = IPC.scopedName(
             "com.pulkit.edith.usageRefreshFinished")
-        public static let requestLimitsRefresh = Notification.Name(
+        public static let requestLimitsRefresh = IPC.scopedName(
             "com.pulkit.edith.requestLimitsRefresh")
-        public static let limitsUpdated = Notification.Name("com.pulkit.edith.limitsUpdated")
-        public static let quitMainApp = Notification.Name("com.pulkit.edith.quitMainApp")
-        public static let updateReadyToInstall = Notification.Name(
+        public static let limitsUpdated = IPC.scopedName("com.pulkit.edith.limitsUpdated")
+        public static let quitMainApp = IPC.scopedName("com.pulkit.edith.quitMainApp")
+        public static let updateReadyToInstall = IPC.scopedName(
             "com.pulkit.edith.updateReadyToInstall")
-        public static let settingsChanged = Notification.Name("com.pulkit.edith.settingsChanged")
-        public static let requestPermissionsRefresh = Notification.Name(
+        public static let settingsChanged = IPC.scopedName("com.pulkit.edith.settingsChanged")
+        public static let requestPermissionsRefresh = IPC.scopedName(
             "com.pulkit.edith.requestPermissionsRefresh")
-        public static let permissionsRefreshed = Notification.Name(
+        public static let permissionsRefreshed = IPC.scopedName(
             "com.pulkit.edith.permissionsRefreshed")
-        public static let grantCalendar = Notification.Name("com.pulkit.edith.grantCalendar")
-        public static let grantNotifications = Notification.Name(
+        public static let grantCalendar = IPC.scopedName("com.pulkit.edith.grantCalendar")
+        public static let grantNotifications = IPC.scopedName(
             "com.pulkit.edith.grantNotifications")
-        public static let grantAccessibility = Notification.Name(
+        public static let grantAccessibility = IPC.scopedName(
             "com.pulkit.edith.grantAccessibility")
-        public static let grantInputMonitoring = Notification.Name(
+        public static let grantInputMonitoring = IPC.scopedName(
             "com.pulkit.edith.grantInputMonitoring")
-        public static let grantFullDisk = Notification.Name("com.pulkit.edith.grantFullDisk")
-        public static let grantScreenRecording = Notification.Name(
+        public static let grantFullDisk = IPC.scopedName("com.pulkit.edith.grantFullDisk")
+        public static let grantScreenRecording = IPC.scopedName(
             "com.pulkit.edith.grantScreenRecording")
-        public static let grantCamera = Notification.Name("com.pulkit.edith.grantCamera")
-        public static let requestTestNotification = Notification.Name(
+        public static let grantCamera = IPC.scopedName("com.pulkit.edith.grantCamera")
+        public static let requestTestNotification = IPC.scopedName(
             "com.pulkit.edith.requestTestNotification")
-        public static let clipboardChanged = Notification.Name("com.pulkit.edith.clipboardChanged")
-        public static let requestColorPick = Notification.Name(
+        public static let clipboardChanged = IPC.scopedName("com.pulkit.edith.clipboardChanged")
+        public static let requestColorPick = IPC.scopedName(
             "com.pulkit.edith.requestColorPick")
-        public static let requestEmojiPanel = Notification.Name(
+        public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
-        public static let requestEmojiInsert = Notification.Name(
+        public static let requestEmojiInsert = IPC.scopedName(
             "com.pulkit.edith.requestEmojiInsert")
-        public static let emojiInsertResult = Notification.Name(
+        public static let emojiInsertResult = IPC.scopedName(
             "com.pulkit.edith.emojiInsertResult")
-        public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
-        public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
-        public static let shelfOperationResult = Notification.Name(
+        public static let shelfChanged = IPC.scopedName("com.pulkit.edith.shelfChanged")
+        public static let shelfOperation = IPC.scopedName("com.pulkit.edith.shelfOperation")
+        public static let shelfOperationResult = IPC.scopedName(
             "com.pulkit.edith.shelfOperationResult")
-        public static let machinesChanged = Notification.Name("com.pulkit.edith.machinesChanged")
-        public static let requestMachineTerminalBroadcast = Notification.Name(
+        public static let machinesChanged = IPC.scopedName("com.pulkit.edith.machinesChanged")
+        public static let requestMachineTerminalBroadcast = IPC.scopedName(
             "com.pulkit.edith.requestMachineTerminalBroadcast")
-        public static let machineTerminalBroadcastResult = Notification.Name(
+        public static let machineTerminalBroadcastResult = IPC.scopedName(
             "com.pulkit.edith.machineTerminalBroadcastResult")
-        public static let downloadQueueChanged = Notification.Name(
+        public static let downloadQueueChanged = IPC.scopedName(
             "com.pulkit.edith.downloadQueueChanged")
-        public static let requestQuitApps = Notification.Name(
+        public static let requestQuitApps = IPC.scopedName(
             "com.pulkit.edith.requestQuitApps")
-        public static let quitAppsResult = Notification.Name(
+        public static let quitAppsResult = IPC.scopedName(
             "com.pulkit.edith.quitAppsResult")
-        public static let requestFinderUndo = Notification.Name(
+        public static let requestFinderUndo = IPC.scopedName(
             "com.pulkit.edith.requestFinderUndo")
-        public static let requestDownloadCancel = Notification.Name(
+        public static let requestDownloadCancel = IPC.scopedName(
             "com.pulkit.edith.requestDownloadCancel")
-        public static let finderUndoResult = Notification.Name(
+        public static let finderUndoResult = IPC.scopedName(
             "com.pulkit.edith.finderUndoResult")
-        public static let presenterAutoActiveChanged = Notification.Name(
+        public static let presenterAutoActiveChanged = IPC.scopedName(
             "com.pulkit.edith.presenterAutoActiveChanged")
-        public static let musicCommand = Notification.Name("com.pulkit.edith.musicCommand")
-        public static let nowPlayingCommand = Notification.Name(
+        public static let musicCommand = IPC.scopedName("com.pulkit.edith.musicCommand")
+        public static let nowPlayingCommand = IPC.scopedName(
             "com.pulkit.edith.nowPlayingCommand")
-        public static let nowPlayingState = Notification.Name("com.pulkit.edith.nowPlayingState")
-        public static let requestNowPlayingState = Notification.Name(
+        public static let nowPlayingState = IPC.scopedName("com.pulkit.edith.nowPlayingState")
+        public static let requestNowPlayingState = IPC.scopedName(
             "com.pulkit.edith.requestNowPlayingState")
-        public static let musicState = Notification.Name("com.pulkit.edith.musicState")
-        public static let requestMusicState = Notification.Name(
+        public static let musicState = IPC.scopedName("com.pulkit.edith.musicState")
+        public static let requestMusicState = IPC.scopedName(
             "com.pulkit.edith.requestMusicState")
-        public static let musicLevel = Notification.Name("com.pulkit.edith.musicLevel")
-        public static let requestMusicLevels = Notification.Name(
+        public static let musicLevel = IPC.scopedName("com.pulkit.edith.musicLevel")
+        public static let requestMusicLevels = IPC.scopedName(
             "com.pulkit.edith.requestMusicLevels")
-        public static let requestKeyboardClean = Notification.Name(
+        public static let requestKeyboardClean = IPC.scopedName(
             "com.pulkit.edith.requestKeyboardClean")
-        public static let keyboardCleanResult = Notification.Name(
+        public static let keyboardCleanResult = IPC.scopedName(
             "com.pulkit.edith.keyboardCleanResult")
-        public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
-        public static let permissionHintDue = Notification.Name(
+        public static let openPanel = IPC.scopedName("com.pulkit.edith.openPanel")
+        public static let permissionHintDue = IPC.scopedName(
             "com.pulkit.edith.permissionHintDue")
-        public static let presentNotification = Notification.Name(
+        public static let presentNotification = IPC.scopedName(
             "com.pulkit.edith.presentNotification")
-        public static let musicFolderChanged = Notification.Name(
+        public static let musicFolderChanged = IPC.scopedName(
             "com.pulkit.edith.musicFolderChanged")
-        public static let musicFavouritesChanged = Notification.Name(
+        public static let musicFavouritesChanged = IPC.scopedName(
             "com.pulkit.edith.musicFavouritesChanged")
-        public static let musicRevealFolder = Notification.Name(
+        public static let musicRevealFolder = IPC.scopedName(
             "com.pulkit.edith.musicRevealFolder")
-        public static let presenterPauseAuto = Notification.Name(
+        public static let presenterPauseAuto = IPC.scopedName(
             "com.pulkit.edith.presenterPauseAuto")
-        public static let requestLidAwakeAction = Notification.Name(
+        public static let requestLidAwakeAction = IPC.scopedName(
             "com.pulkit.edith.requestLidAwakeAction")
-        public static let lidAwakeActionResult = Notification.Name(
+        public static let lidAwakeActionResult = IPC.scopedName(
             "com.pulkit.edith.lidAwakeActionResult")
-        public static let lidAwakeChanged = Notification.Name("com.pulkit.edith.lidAwakeChanged")
-        public static let requestUpdateCheck = Notification.Name(
+        public static let lidAwakeChanged = IPC.scopedName("com.pulkit.edith.lidAwakeChanged")
+        public static let requestUpdateCheck = IPC.scopedName(
             "com.pulkit.edith.requestUpdateCheck")
-        public static let updateCheckFinished = Notification.Name(
+        public static let updateCheckFinished = IPC.scopedName(
             "com.pulkit.edith.updateCheckFinished")
-        public static let requestCalendarEvents = Notification.Name(
+        public static let requestCalendarEvents = IPC.scopedName(
             "com.pulkit.edith.requestCalendarEvents")
-        public static let calendarEvents = Notification.Name("com.pulkit.edith.calendarEvents")
-        public static let requestReveal = Notification.Name("com.pulkit.edith.requestReveal")
-        public static let revealResult = Notification.Name("com.pulkit.edith.revealResult")
-        public static let requestWindowSnapshot = Notification.Name(
+        public static let calendarEvents = IPC.scopedName("com.pulkit.edith.calendarEvents")
+        public static let requestReveal = IPC.scopedName("com.pulkit.edith.requestReveal")
+        public static let revealResult = IPC.scopedName("com.pulkit.edith.revealResult")
+        public static let requestWindowSnapshot = IPC.scopedName(
             "com.pulkit.edith.requestWindowSnapshot")
-        public static let windowSnapshotResult = Notification.Name(
+        public static let windowSnapshotResult = IPC.scopedName(
             "com.pulkit.edith.windowSnapshotResult")
-        public static let requestAppDiagnostics = Notification.Name(
+        public static let requestAppDiagnostics = IPC.scopedName(
             "com.pulkit.edith.requestAppDiagnostics")
-        public static let appDiagnostics = Notification.Name(
+        public static let appDiagnostics = IPC.scopedName(
             "com.pulkit.edith.appDiagnostics")
-        public static let requestQuinjetSessionOperation = Notification.Name(
+        public static let requestQuinjetSessionOperation = IPC.scopedName(
             "com.pulkit.edith.requestQuinjetSessionOperation")
-        public static let quinjetSessionOperationResult = Notification.Name(
+        public static let quinjetSessionOperationResult = IPC.scopedName(
             "com.pulkit.edith.quinjetSessionOperationResult")
+    }
+
+    public static func scopedName(
+        _ rawValue: String, environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Notification.Name {
+        guard
+            let namespace = environment["EDITH_AGENT_MACH_SERVICE"]
+                ?? environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return Notification.Name(rawValue) }
+        return Notification.Name(rawValue + ".runtime." + namespace)
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {

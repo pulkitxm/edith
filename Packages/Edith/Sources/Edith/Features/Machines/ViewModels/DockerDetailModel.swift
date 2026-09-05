@@ -45,10 +45,38 @@ final class DockerDetailModel {
     private var detailContainerID: String?
     private var inspectRequest = 0
     private var processesRequest = 0
+    private var logsSuspended = false
+    private let logProcess: @MainActor (MachineSession, DockerContainer) -> Process?
 
-    func activate(session: MachineSession, container: DockerContainer) -> Bool {
-        guard detailContainerID != container.id else { return false }
-        startLogs(session: session, container: container)
+    init(
+        logProcess: @escaping @MainActor (MachineSession, DockerContainer) -> Process? = {
+            session, container in
+            session.connectionRef?.streamProcess(
+                command: DockerCommands.logs(
+                    container.id, tail: 400, follow: true,
+                    platform: session.remotePlatform ?? .linux))
+        }
+    ) {
+        self.logProcess = logProcess
+    }
+
+    func activate(session: MachineSession, container: DockerContainer, streamLogs: Bool = true)
+        -> Bool
+    {
+        guard detailContainerID != container.id else {
+            if streamLogs, logsSuspended {
+                logsSuspended = false
+                logs = []
+                nextLogID = 0
+                reattempts = 0
+                attachLogs(session: session, container: container, generation: logGeneration)
+            } else if !streamLogs, !logsSuspended {
+                stopLogs()
+                logsSuspended = true
+            }
+            return false
+        }
+        startLogs(session: session, container: container, streamLogs: streamLogs)
         return true
     }
 
@@ -65,7 +93,7 @@ final class DockerDetailModel {
         return logs.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
     }
 
-    func startLogs(session: MachineSession, container: DockerContainer) {
+    func startLogs(session: MachineSession, container: DockerContainer, streamLogs: Bool = true) {
         stopLogs()
         logs = []
         nextLogID = 0
@@ -90,17 +118,16 @@ final class DockerDetailModel {
         streamEnded = false
         reattempts = 0
         logGeneration += 1
-        attachLogs(session: session, container: container, generation: logGeneration)
+        logsSuspended = !streamLogs
+        if streamLogs {
+            attachLogs(session: session, container: container, generation: logGeneration)
+        }
     }
 
     private func attachLogs(
         session: MachineSession, container: DockerContainer, generation: Int
     ) {
-        guard let connection = session.connectionRef else { return }
-        let process = connection.streamProcess(
-            command: DockerCommands.logs(
-                container.id, tail: 400, follow: true,
-                platform: session.remotePlatform ?? .linux))
+        guard let process = logProcess(session, container) else { return }
         let stream = SSHLineStream(
             process: process,
             onLine: { [weak self] text, isStderr in
@@ -143,8 +170,13 @@ final class DockerDetailModel {
     }
 
     func stop() {
-        stopLogs()
+        suspend()
         detailContainerID = nil
+    }
+
+    func suspend() {
+        stopLogs()
+        logsSuspended = true
         inspectRequest &+= 1
         processesRequest &+= 1
         fileToken &+= 1
@@ -324,9 +356,11 @@ private struct DockerDetailLoadRequest: Equatable {
     let tab: DockerDetailTab
     let filePath: String
     let generation: Int
+    let presented: Bool
 }
 
 struct DockerContainerDetail: View {
+    @Environment(\.machineViewPresented) private var presented
     let session: MachineSession
     let container: DockerContainer
     let dark: Bool
@@ -354,7 +388,7 @@ struct DockerContainerDetail: View {
     private var loadRequest: DockerDetailLoadRequest {
         DockerDetailLoadRequest(
             containerID: container.id, tab: tab, filePath: requestedFilePath,
-            generation: loadGeneration)
+            generation: loadGeneration, presented: presented)
     }
 
     private var browserPorts: [DockerPortMapping] {
@@ -371,7 +405,12 @@ struct DockerContainerDetail: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: loadRequest) {
-            let switched = model.activate(session: session, container: container)
+            guard presented else {
+                model.suspend()
+                return
+            }
+            let switched = model.activate(
+                session: session, container: container, streamLogs: tab == .logs)
             if switched, requestedFilePath != "/" {
                 requestedFilePath = "/"
                 return
@@ -380,7 +419,9 @@ struct DockerContainerDetail: View {
                 session: session, container: container, tab: tab, filePath: requestedFilePath)
         }
         .onDisappear { model.stop() }
-        .onChange(of: session.containers) { _, _ in model.record(container: live) }
+        .onChange(of: session.containers) { _, _ in
+            if presented { model.record(container: live) }
+        }
     }
 
     private var header: some View {

@@ -135,6 +135,7 @@ enum DockerObjectRemovalPlan: Identifiable, Equatable {
 
 struct DockerConsoleView: View {
     let session: MachineSession
+    @Environment(\.machineViewPresented) private var presented
     @Environment(\.colorScheme) private var scheme
     @State private var screen = DockerScreen.containers
     @State private var query = ""
@@ -215,11 +216,12 @@ struct DockerConsoleView: View {
         } message: {
             Text(pendingPrune?.detail ?? "")
         }
-        .task {
+        .task(id: presented) {
+            guard presented else { return }
             await session.refreshImagesAndVolumes()
         }
-        .onAppear { session.beginDockerObservation() }
-        .onDisappear { session.endDockerObservation() }
+        .machineActivity(session, kind: .docker)
+        .machineActivity(session)
     }
 
     private var sidebar: some View {

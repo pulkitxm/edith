@@ -151,6 +151,8 @@ struct WorkspacePaneView: View {
                         presented: live, wantsFocus: live && focused,
                         onFocus: { model.apply { $0.focused = pane.id } }
                     )
+                    .machineActivity(machines.session(for: tab.target.machineID))
+                    .environment(\.machineViewPresented, live)
                     .id(PaneContentIdentity(tab: tab.id, target: tab.target))
                     .opacity(live ? 1 : 0)
                     .allowsHitTesting(live)

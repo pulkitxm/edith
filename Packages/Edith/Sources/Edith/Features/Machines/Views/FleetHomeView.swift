@@ -30,6 +30,7 @@ struct FleetHomeView: View {
             }
             .pageContent(compact)
         }
+        .machineActivity(model.allMachines.map { model.session(for: $0.id) })
         .task {
             while !Task.isCancelled {
                 let fleet = model.fleet

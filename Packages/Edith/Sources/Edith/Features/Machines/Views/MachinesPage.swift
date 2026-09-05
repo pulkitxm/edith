@@ -64,7 +64,6 @@ struct MachinesPage: View {
         }
         .onAppear {
             guard connectionsEnabled else { return }
-            model.connectAll()
             model.reconcileSSHClipboards()
             model.restoreSelection(storedSelection)
             model.startSelected()
