@@ -379,12 +379,8 @@ struct FinderBody: View {
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             if let progress = model.progress {
-                if progress.total > 1 {
-                    ProgressView(value: progress.fraction)
-                        .frame(width: UIScale.pt(90))
-                } else {
-                    ProgressView().controlSize(.small)
-                }
+                ProgressView(value: progress.fraction)
+                    .frame(width: UIScale.pt(90))
                 Text(progress.description)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.ink(dark))
