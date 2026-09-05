@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -109,6 +110,7 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
@@ -184,8 +186,28 @@ function runCollectorFixture({
       );
     }
   }
-  const existing = existingUsage ?? '{"sentinel":"preserved"}\n';
-  writeFileSync(join(output, "usage.json"), existing);
+  const existing =
+    existingUsage ??
+    `${JSON.stringify({
+      schemaVersion: 8,
+      generatedAt: "2026-09-05T00:00:00Z",
+      sources: [],
+      defaultSources: [],
+      sourceMeta: {},
+      daily: [],
+      sessions: [],
+      totals: {
+        tokens: 0,
+        cost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        bySource: {},
+      },
+    })}\n`;
+  if (!missingExistingUsage)
+    writeFileSync(join(output, "usage.json"), existing);
   const originalMachine = join(
     output,
     "machines",
@@ -197,7 +219,15 @@ function runCollectorFixture({
     writeFileSync(originalMachine, machineJSON);
   }
   const bunPath = join(bin, "bun");
-  writeFileSync(bunPath, '#!/bin/sh\nexec "$@"\n');
+  writeFileSync(
+    bunPath,
+    `#!/bin/sh
+case "\${1:-}" in
+  */usage-billing-archive.mjs) exec "$REAL_BUN" "$@" ;;
+  *) exec "$@" ;;
+esac
+`,
+  );
   chmodSync(bunPath, 0o755);
   const ccusagePath = join(ccusage, "ccusage");
   writeFileSync(
@@ -261,6 +291,7 @@ exec "$REAL_JQ" "$@"
       MUTATE_MACHINE_BEFORE_FLEET: mutateMachineBeforeFleet ? "1" : "0",
       ORIGINAL_MACHINE: originalMachine,
       REAL_JQ: Bun.which("jq") ?? "jq",
+      REAL_BUN: globalThis.process.execPath,
     },
   });
   const result = {
@@ -270,6 +301,9 @@ exec "$REAL_JQ" "$@"
     output: readFileSync(join(output, "usage.json"), "utf8"),
     existing,
     deletedCwd,
+    archiveCreated: existsSync(
+      join(output, "billing-history", "cli", "billing.sqlite"),
+    ),
   };
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -2494,6 +2528,33 @@ describe("FLEET", () => {
 });
 
 describe("collector failure handling", () => {
+  for (const [name, contents] of [
+    ["empty", ""],
+    ["whitespace", " \n"],
+    ["undecodable", '{"daily":'],
+  ]) {
+    test(`published ${name} baseline is refused before archive bootstrap`, () => {
+      const result = runCollectorFixture({
+        hasLocalUsage: true,
+        existingUsage: contents,
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("published billing baseline is invalid");
+      expect(result.output).toBe(contents);
+      expect(result.archiveCreated).toBe(false);
+    }, 15_000);
+  }
+
+  test("missing published baseline permits first archive bootstrap", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      missingExistingUsage: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.archiveCreated).toBe(true);
+    expect(JSON.parse(result.output).totals.tokens).toBe(1);
+  }, 15_000);
+
   test("nonzero Claude daily collection preserves the existing report", () => {
     const result = runCollectorFixture({
       hasLocalUsage: true,
@@ -2572,10 +2633,11 @@ describe("collector configuration", () => {
     expect(script).not.toContain('stat -f %z "$staged" 2>/dev/null || stat -c');
   });
 
-  test("uses one pinned ccusage version for bun and npx", () => {
+  test("uses one pinned ccusage version for bun and durable history", () => {
     expect(script).toContain('CCUSAGE_VERSION="20.0.19"');
     expect(script).toContain('bun add --exact "ccusage@$CCUSAGE_VERSION"');
-    expect(script).toContain('npx -y "ccusage@$CCUSAGE_VERSION"');
+    expect(script).not.toContain("npx -y");
+    expect(script).toContain(".collectorVersion == $version");
   });
 
   test("limits Codex discovery to sessions and archived sessions", () => {

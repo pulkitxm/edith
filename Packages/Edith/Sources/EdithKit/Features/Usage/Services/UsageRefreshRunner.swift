@@ -42,7 +42,8 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
             return "check that /bin/bash is available"
         case .timedOut, .outputLimitExceeded:
             return "the pipeline output is in data/refresh.log"
-        case .reported(let message) where message.contains("bun or npx"):
+        case .reported(let message)
+        where message.contains("bun is required for durable billing history"):
             return "install bun (`brew install oven-sh/bun/bun`) and retry"
         case .reported, .exited:
             return "the pipeline output is in data/refresh.log"
