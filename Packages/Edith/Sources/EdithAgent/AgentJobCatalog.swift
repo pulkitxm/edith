@@ -8,10 +8,11 @@ public enum AgentJobCatalog {
 
     public static func jobs(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil
     ) -> [AgentJob] {
         let bodies = collectors(
-            store: store, scheduler: scheduler, downloads: downloads, metrics: metrics)
+            store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
+            attention: attention)
         return descriptors().map { descriptor in
             let empty: @Sendable () async throws -> Data? = { nil }
             let body = bodies[descriptor.id] ?? empty
@@ -24,7 +25,7 @@ public enum AgentJobCatalog {
 
     static func collectors(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
         let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
@@ -59,6 +60,12 @@ public enum AgentJobCatalog {
                 return try await AgentPayload.encode(downloads.snapshot())
             },
             "sessions.discover": { try await sessions.run() },
+            "attention.ingest": {
+                guard let attention else {
+                    throw AgentError(.unavailable, "Attention storage is unavailable.")
+                }
+                return try await attention.run()
+            },
             "siteAudit.crawl": { try await siteAudit.run() },
             "companion.health": { try await companion.run() },
         ]

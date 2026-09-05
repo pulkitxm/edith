@@ -513,7 +513,7 @@ import Testing
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
-        let events = AttentionEventStore(store: store, defaults: defaults)
+        let events = AttentionEventStore(store: store)
         let start = Date().addingTimeInterval(-600)
 
         try events.record(AttentionBatch(events: [event(startedAt: start, duration: 120)]))
@@ -532,7 +532,7 @@ import Testing
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
-        let events = AttentionEventStore(store: store, defaults: defaults)
+        let events = AttentionEventStore(store: store)
         let one = event(id: "stable", startedAt: Date().addingTimeInterval(-300))
 
         try events.record(AttentionBatch(events: [one]))
@@ -544,7 +544,7 @@ import Testing
         #expect(rows == 1)
     }
 
-    @Test func theLegacyImportRunsOnceAndIsMarked() throws {
+    @Test func importedSpoolFilesAreDrainedOnce() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AttentionImport.\(UUID().uuidString)")
         let events = root.appendingPathComponent("events")
@@ -557,7 +557,7 @@ import Testing
             to: events.appendingPathComponent("2026-09-01.jsonl"), atomically: true,
             encoding: .utf8)
         let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
-        let sut = AttentionEventStore(store: store, defaults: defaults)
+        let sut = AttentionEventStore(store: store)
 
         let first = try sut.importLegacyFiles(directory: events)
         let second = try sut.importLegacyFiles(directory: events)

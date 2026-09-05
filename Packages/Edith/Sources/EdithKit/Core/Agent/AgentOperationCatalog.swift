@@ -12,6 +12,8 @@ public enum AgentOperationCatalog {
 
     public static let internalOperations: [String] =
         [
+            AgentFaviconClient.operation, AttentionOperation.hasEvents, AttentionOperation.summary,
+            AttentionOperation.backup, AttentionOperation.restore,
             AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
             AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
             AgentDiagnostics.runJob, AgentDiagnostics.cancelJob,

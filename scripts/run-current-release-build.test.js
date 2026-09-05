@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, test as processTest } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -33,20 +33,34 @@ const inheritedGitVariables = [
   "GIT_WORK_TREE",
 ];
 
-afterEach(() => {
+afterEach(async () => {
   for (const pid of spawnedPids.splice(0)) {
     Bun.spawnSync(["kill", "-KILL", String(pid)], {
       stderr: "ignore",
       stdout: "ignore",
     });
   }
-  for (const process of processes.splice(0)) {
-    process.kill();
+  const children = processes.splice(0);
+  for (const child of children) {
+    if (child.exitCode === null) child.kill();
   }
+  await Promise.all(
+    children.map(async (child) => {
+      await Promise.race([child.exited, Bun.sleep(2_000)]);
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await Promise.race([child.exited, Bun.sleep(1_000)]);
+      if (child.exitCode === null)
+        throw new Error("release fixture process did not exit during cleanup");
+    }),
+  );
   for (const root of roots.splice(0)) {
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+function test(name, body) {
+  processTest(name, body, 20_000);
+}
 
 function environment(values = {}) {
   const result = { ...process.env, ...values };
@@ -145,6 +159,9 @@ if [[ "\${1:-}" == "ls-remote" ]]; then
       wait
       ;;
   esac
+  "$RELEASE_TEST_REAL_GIT" "$@"
+  printf '%s\n' complete > "$RELEASE_TEST_GIT_STATE.succeeded.$calls"
+  exit 0
 fi
 exec "$RELEASE_TEST_REAL_GIT" "$@"
 `,
@@ -170,7 +187,7 @@ function run(fixture, args, values = {}) {
       RELEASE_REMOTE_RETRY_ATTEMPTS: "3",
       RELEASE_REMOTE_RETRY_DELAY_SECONDS: "0",
       RELEASE_REMOTE_TERMINATION_GRACE_TICKS: "2",
-      RELEASE_REMOTE_TIMEOUT_SECONDS: "1",
+      RELEASE_REMOTE_TIMEOUT_SECONDS: "5",
       RELEASE_SUPERSEDED_FILE: join(fixture.root, "superseded"),
       RELEASE_TERMINATION_GRACE_TICKS: "2",
       ...values,
@@ -181,20 +198,34 @@ function run(fixture, args, values = {}) {
 }
 
 async function waitForFile(path) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (existsSync(path)) return;
+  const deadline = performance.now() + 10_000;
+  while (performance.now() < deadline) {
+    if (existsSync(path) && readFileSync(path, "utf8").trim().length > 0)
+      return;
     await Bun.sleep(10);
   }
-  throw new Error(`timed out waiting for ${path}`);
+  throw new Error(`timed out waiting for nonempty fixture signal ${path}`);
+}
+
+function readPid(path) {
+  const pid = Number(readFileSync(path, "utf8"));
+  if (!Number.isSafeInteger(pid) || pid <= 1)
+    throw new Error(`invalid fixture process identity in ${path}`);
+  return pid;
 }
 
 async function waitForExit(pid) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const deadline = performance.now() + 10_000;
+  while (performance.now() < deadline) {
     const result = Bun.spawnSync(["kill", "-0", String(pid)], {
       stderr: "ignore",
       stdout: "ignore",
     });
-    if (result.exitCode !== 0) return;
+    if (result.exitCode !== 0) {
+      const index = spawnedPids.indexOf(pid);
+      if (index >= 0) spawnedPids.splice(index, 1);
+      return;
+    }
     await Bun.sleep(10);
   }
   throw new Error(`timed out waiting for process ${pid}`);
@@ -271,16 +302,14 @@ test("a stalled remote attempt is killed with its descendants and retried", asyn
   const child = run(
     fixture,
     ["bash", "-c", 'printf complete > "$1"', "--", marker],
-    shim,
+    { ...shim, RELEASE_REMOTE_TIMEOUT_SECONDS: "1" },
   );
   processes.push(child);
 
   expect(await child.exited).toBe(0);
   expect(readFileSync(marker, "utf8")).toBe("complete");
-  const parentPid = Number(readFileSync(`${shim.state}.parent.1`, "utf8"));
-  const descendantPid = Number(
-    readFileSync(`${shim.state}.descendant.1`, "utf8"),
-  );
+  const parentPid = readPid(`${shim.state}.parent.1`);
+  const descendantPid = readPid(`${shim.state}.descendant.1`);
   spawnedPids.push(parentPid, descendantPid);
   await waitForExit(parentPid);
   await waitForExit(descendantPid);
@@ -357,22 +386,28 @@ test("a transient monitoring outage does not interrupt a current build", async (
   const fixture = createFixture();
   const started = join(fixture.root, "started");
   const completed = join(fixture.root, "completed");
+  const release = join(fixture.root, "release-build");
   const shim = unreliableGit(fixture, [2, 3]);
   const child = run(
     fixture,
     [
       "bash",
       "-c",
-      'printf started > "$1"; sleep 3; printf complete > "$2"',
+      'printf started > "$1"; for ((attempt = 0; attempt < 1000; attempt += 1)); do [[ ! -f "$3" ]] || break; sleep 0.01; done; [[ -f "$3" ]] || exit 97; printf complete > "$2"',
       "--",
       started,
       completed,
+      release,
     ],
     shim,
   );
   processes.push(child);
 
   await waitForFile(started);
+  await waitForFile(`${shim.state}.succeeded.4`);
+  expect(child.exitCode).toBeNull();
+  expect(existsSync(completed)).toBe(false);
+  writeFileSync(release, "complete");
   expect(await child.exited).toBe(0);
   expect(readFileSync(completed, "utf8")).toBe("complete");
   expect(Number(readFileSync(shim.state, "utf8"))).toBeGreaterThanOrEqual(5);
@@ -420,8 +455,8 @@ test("stopping a stale build terminates its parent and grandchild", async () => 
   processes.push(child);
   await waitForFile(parentFile);
   await waitForFile(grandchildFile);
-  const parentPid = Number(readFileSync(parentFile, "utf8"));
-  const grandchildPid = Number(readFileSync(grandchildFile, "utf8"));
+  const parentPid = readPid(parentFile);
+  const grandchildPid = readPid(grandchildFile);
   spawnedPids.push(parentPid, grandchildPid);
   advanceMain(fixture);
 
@@ -443,7 +478,7 @@ test("a successful leader cannot leave its process group running", async () => {
   processes.push(child);
 
   expect(await child.exited).toBe(0);
-  const descendantPid = Number(readFileSync(descendantFile, "utf8"));
+  const descendantPid = readPid(descendantFile);
   spawnedPids.push(descendantPid);
   await waitForExit(descendantPid);
 });
@@ -490,6 +525,7 @@ test("a stalled final remote check fails closed without live transport processes
     {
       ...shim,
       RELEASE_REMOTE_RETRY_ATTEMPTS: "2",
+      RELEASE_REMOTE_TIMEOUT_SECONDS: "1",
     },
   );
   processes.push(child);
@@ -497,12 +533,8 @@ test("a stalled final remote check fails closed without live transport processes
   expect(await child.exited).toBe(1);
   expect(readFileSync(artifact, "utf8")).toBe("built");
   for (const call of [2, 3]) {
-    const parentPid = Number(
-      readFileSync(`${shim.state}.parent.${call}`, "utf8"),
-    );
-    const descendantPid = Number(
-      readFileSync(`${shim.state}.descendant.${call}`, "utf8"),
-    );
+    const parentPid = readPid(`${shim.state}.parent.${call}`);
+    const descendantPid = readPid(`${shim.state}.descendant.${call}`);
     spawnedPids.push(parentPid, descendantPid);
     await waitForExit(parentPid);
     await waitForExit(descendantPid);

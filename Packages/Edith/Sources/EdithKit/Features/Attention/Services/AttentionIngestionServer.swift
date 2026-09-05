@@ -38,6 +38,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             throw AttentionIngestionError.invalidPort
         }
         let parameters = NWParameters.tcp
+        parameters.allowLocalEndpointReuse = true
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
         let listener = try NWListener(using: parameters)
         setState(.starting)
@@ -90,6 +91,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
 
     private func accept(_ connection: NWConnection) {
         connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 15) { [weak connection] in connection?.cancel() }
         receive(connection, data: Data())
     }
 
@@ -102,6 +104,10 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             }
             var accumulated = data
             if let content { accumulated.append(content) }
+            guard accumulated.count <= 1_048_576 else {
+                send(.init(status: 400, body: ["error": "request too large"]), over: connection)
+                return
+            }
             if let request = AttentionHTTPRequest.parse(accumulated) {
                 send(response(for: request), over: connection)
                 return
@@ -182,7 +188,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         for media in heartbeat.media where media.playing {
             try repository.append(
                 AttentionEvent(
-                    startedAt: heartbeat.timestamp, duration: heartbeat.duration, source: .media,
+                    startedAt: event.startedAt, duration: event.duration, source: .media,
                     presence: heartbeat.presence, appName: heartbeat.appName,
                     bundleID: heartbeat.bundleID, domain: event.domain,
                     browserProfile: heartbeat.browserProfile, media: media))
@@ -249,7 +255,10 @@ public struct AttentionHTTPRequest: Equatable, Sendable {
             headers[name] = value
         }
         let bodyStart = headerRange.upperBound
-        let length = Int(headers["content-length"] ?? "0") ?? 0
+        guard data.count <= 1_048_576,
+            let length = Int(headers["content-length"] ?? "0"), length >= 0,
+            length <= 1_048_576 - bodyStart
+        else { return nil }
         guard data.count >= bodyStart + length else { return nil }
         return AttentionHTTPRequest(
             method: String(requestParts[0]), path: String(requestParts[1]), headers: headers,

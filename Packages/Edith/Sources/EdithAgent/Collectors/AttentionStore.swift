@@ -14,26 +14,51 @@ public struct AttentionImportReport: Codable, Equatable, Sendable {
     }
 }
 
-public struct AttentionEventStore: Sendable {
-    public static let importMarkerKey = "attentionEventsImported"
-
+public struct AttentionEventStore: Sendable, AttentionEventSink {
     private let store: AgentStore
-    private let defaults: UserDefaults
 
-    public init(store: AgentStore, defaults: UserDefaults = SharedDefaults.store) {
+    public init(store: AgentStore) {
         self.store = store
-        self.defaults = defaults
     }
 
-    public func record(_ batch: AttentionBatch, now: Date = Date()) throws {
+    public func record(_ batch: AttentionBatch) throws {
+        try record(batch, now: Date())
+    }
+
+    public func record(_ batch: AttentionBatch, now: Date) throws {
         guard !batch.events.isEmpty else { return }
         try store.write { database in
             for event in batch.events where !AttentionRetention.isExpired(event, now: now) {
-                try insert(event, into: database)
+                guard event.duration.isFinite, event.duration > 0, event.duration <= 172_800 else {
+                    continue
+                }
+                let last = try Data.fetchOne(
+                    database,
+                    sql:
+                        "SELECT payload FROM attention_event WHERE kind = ? ORDER BY startedAt DESC LIMIT 1",
+                    arguments: [event.source.rawValue]
+                )
+                .flatMap { try? AgentPayload.decode(AttentionEvent.self, from: $0) }
+                if let last, event.startedAt >= last.startedAt,
+                    AttentionPaths.utcCalendar.isDate(last.startedAt, inSameDayAs: event.startedAt),
+                    last.canMerge(with: event, pulseTime: batch.pulseTime)
+                        || (last.id == event.id && last.endedAt >= event.endedAt)
+                {
+                    try insert(last.merged(with: event), into: database)
+                } else {
+                    try insert(event, into: database)
+                }
             }
             try database.execute(
                 sql: "DELETE FROM attention_event WHERE startedAt < ?",
                 arguments: [AttentionRetention.cutoff(now: now)])
+        }
+    }
+
+    public func hasEvents() throws -> Bool {
+        try store.read { database in
+            try Bool.fetchOne(database, sql: "SELECT EXISTS(SELECT 1 FROM attention_event)")
+                ?? false
         }
     }
 
@@ -59,31 +84,93 @@ public struct AttentionEventStore: Sendable {
 
     @discardableResult
     public func importLegacyFiles(
-        directory: URL = AttentionPaths.eventsDirectory, fileManager: FileManager = .default
+        directory: URL = AttentionPaths.eventsDirectory, now: Date = Date()
     ) throws -> AttentionImportReport {
-        guard !defaults.bool(forKey: Self.importMarkerKey) else {
-            return AttentionImportReport(files: 0, events: 0, alreadyImported: true)
-        }
-        let files =
-            ((try? fileManager.contentsOfDirectory(
-                at: directory, includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.pathExtension == "jsonl" }
         var imported = 0
-        for file in files {
-            guard let data = try? Data(contentsOf: file) else { continue }
-            let events = AttentionLegacyReader.events(in: data)
-            guard !events.isEmpty else { continue }
+        let files = try AttentionFileSpool.drain(directory: directory) { data in
+            let decoded = AttentionLegacyReader.events(in: data)
+            let events = decoded.filter { !AttentionRetention.isExpired($0, now: now) }
             try store.write { database in
-                for event in events { try insert(event, into: database) }
+                for event in events { try insert(event, into: database, preservingExisting: true) }
             }
             imported += events.count
+            return String(data: data, encoding: .utf8)?.split(separator: "\n").count
+                == decoded.count
         }
-        defaults.set(true, forKey: Self.importMarkerKey)
         return AttentionImportReport(
-            files: files.count, events: imported, alreadyImported: false)
+            files: files, events: imported, alreadyImported: files == 0)
     }
 
-    private func insert(_ event: AttentionEvent, into database: Database) throws {
+    public func restoreEvents(from directory: URL, now: Date = Date()) throws {
+        let files = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "jsonl" }.sorted { $0.path < $1.path }
+        try store.write { database in
+            guard
+                try Bool.fetchOne(database, sql: "SELECT EXISTS(SELECT 1 FROM attention_event)")
+                    != true
+            else {
+                throw AttentionCloudBackupError.localStoreNotEmpty
+            }
+            for file in files {
+                guard
+                    let data = try UsageDataFiles.readRegularFile(
+                        at: file, maximumBytes: 67_108_864),
+                    let text = String(data: data, encoding: .utf8)
+                else {
+                    throw AgentStoreError("The Attention backup contains an unreadable event file.")
+                }
+                for line in text.split(separator: "\n") {
+                    let event = try AgentPayload.decode(AttentionEvent.self, from: Data(line.utf8))
+                    if !AttentionRetention.isExpired(event, now: now) {
+                        try insert(event, into: database, preservingExisting: true)
+                    }
+                }
+            }
+        }
+    }
+
+    public func exportEvents(to directory: URL, now: Date = Date()) throws {
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try store.read { database in
+            let rows = try Row.fetchCursor(
+                database,
+                sql:
+                    "SELECT startedAt, payload FROM attention_event WHERE startedAt >= ? ORDER BY startedAt",
+                arguments: [AttentionRetention.cutoff(now: now)])
+            var openName: String?
+            var handle: FileHandle?
+            defer { try? handle?.close() }
+            while let row = try rows.next() {
+                let startedAt: Date = row["startedAt"]
+                let payload: Data = row["payload"]
+                let name = AttentionPaths.eventFile(for: startedAt).lastPathComponent
+                if name != openName {
+                    try handle?.close()
+                    let file = directory.appendingPathComponent(name)
+                    try Data().write(to: file)
+                    handle = try FileHandle(forWritingTo: file)
+                    openName = name
+                }
+                try handle?.write(contentsOf: payload + Data([0x0A]))
+            }
+        }
+    }
+
+    private func insert(
+        _ event: AttentionEvent, into database: Database, preservingExisting: Bool = false
+    ) throws {
+        if preservingExisting,
+            let data = try Data.fetchOne(
+                database, sql: "SELECT payload FROM attention_event WHERE id = ?",
+                arguments: [event.id]),
+            let existing = try? AgentPayload.decode(AttentionEvent.self, from: data),
+            existing.startedAt == event.startedAt, existing.endedAt >= event.endedAt
+        {
+            return
+        }
         let payload = try AgentPayload.encode(event)
         try database.execute(
             sql: """

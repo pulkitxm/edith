@@ -48,12 +48,16 @@ public struct AttentionCloudBackup: Sendable {
         guard manager.fileExists(atPath: source.path) else { return }
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
         let items = try manager.contentsOfDirectory(
-            at: source, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+            at: source,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles])
         for item in items {
             if skippingLock, item.lastPathComponent == ".lock" { continue }
             let target = destination.appendingPathComponent(item.lastPathComponent)
-            let values = try item.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+            let values = try item.resourceValues(forKeys: [
+                .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey,
+            ])
+            guard values.isSymbolicLink != true else { continue }
             if values.isDirectory == true {
                 try copyTree(from: item, to: target, skippingLock: skippingLock)
             } else if values.isRegularFile == true {

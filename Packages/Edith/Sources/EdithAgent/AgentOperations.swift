@@ -4,24 +4,11 @@ import Foundation
 public enum AgentOperations {
     public static func register(
         on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
-        downloads: DownloadWorker? = nil
+        downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil
     ) async {
-        if let store {
-            let attention = AttentionEventStore(store: store)
-            await runtime.register(operation: AttentionOperation.record) { payload in
-                let batch = try AgentPayload.decode(AttentionBatch.self, from: payload)
-                try attention.record(batch)
-                return try AgentPayload.encode(["recorded": batch.events.count])
-            }
-            await runtime.register(operation: AttentionOperation.range) { payload in
-                let request = try AgentPayload.decode(
-                    AttentionRangeRequest.self, from: payload)
-                let events = try attention.events(from: request.from, to: request.to)
-                return try AgentPayload.encode(AttentionRangeResponse(events: events))
-            }
-            await runtime.register(operation: AttentionOperation.importLegacy) { _ in
-                try AgentPayload.encode(try attention.importLegacyFiles())
-            }
+        await FaviconService().register(on: runtime)
+        if let attention {
+            await AttentionBackgroundOperations.register(on: runtime, service: attention)
         }
         if let downloads {
             await runtime.registerShutdown(id: "downloads") { await downloads.stop() }

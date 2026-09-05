@@ -57,6 +57,7 @@ public enum AgentBoot {
         let build = build()
         let store = makeStore(build: build)
         let runtime = AgentRuntime(build: build, store: store)
+        let attention = store.map { AttentionBackgroundService(store: $0) }
         let downloads = DownloadWorker(
             publish: { snapshot in
                 if let payload = try? AgentPayload.encode(snapshot) {
@@ -85,7 +86,8 @@ public enum AgentBoot {
             let metrics = await AgentMachineMetricsService()
             await metrics.register(on: runtime)
             await AgentOperations.register(
-                on: runtime, store: store, scheduler: scheduler, downloads: downloads)
+                on: runtime, store: store, scheduler: scheduler, downloads: downloads,
+                attention: attention)
             do {
                 let tasks = try AgentTaskService(
                     publish: { snapshots in
@@ -111,7 +113,8 @@ public enum AgentBoot {
                         message: error.localizedDescription))
             }
             for job in AgentJobCatalog.jobs(
-                store: store, scheduler: scheduler, downloads: downloads, metrics: metrics)
+                store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
+                attention: attention)
             {
                 await scheduler.register(job)
             }

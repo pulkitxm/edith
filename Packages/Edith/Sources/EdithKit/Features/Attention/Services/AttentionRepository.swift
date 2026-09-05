@@ -5,12 +5,14 @@ public struct AttentionRepository: Sendable {
     nonisolated(unsafe) public static var sink: AttentionEventSink?
 
     public let root: URL
+    private let eventSink: AttentionEventSink?
 
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    public init(root: URL = AttentionPaths.root) {
+    public init(root: URL = AttentionPaths.root, eventSink: AttentionEventSink? = nil) {
         self.root = root
+        self.eventSink = eventSink
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
@@ -27,6 +29,10 @@ public struct AttentionRepository: Sendable {
     public var focusHistoryFile: URL { directory.appendingPathComponent("focus.jsonl") }
     public var browserHistoryFile: URL { directory.appendingPathComponent("browser-history.json") }
     public var lockFile: URL { directory.appendingPathComponent(".lock") }
+
+    public var resolvedEventSink: AttentionEventSink? {
+        eventSink ?? (root == AttentionPaths.root ? Self.sink : nil)
+    }
 
     public func eventFile(for date: Date) -> URL {
         let parts = AttentionPaths.utcCalendar.dateComponents([.year, .month, .day], from: date)
@@ -53,7 +59,7 @@ public struct AttentionRepository: Sendable {
 
     public func append(_ event: AttentionEvent, pulseTime: TimeInterval = 30) throws {
         guard event.duration > 0 else { return }
-        if let sink = Self.sink {
+        if let sink = resolvedEventSink {
             do {
                 try sink.record(AttentionBatch(events: [event], pulseTime: pulseTime))
                 return
@@ -89,7 +95,7 @@ public struct AttentionRepository: Sendable {
 
     public func events(from: Date, to: Date) -> [AttentionEvent] {
         guard to > from else { return [] }
-        if let sink = Self.sink, let events = try? sink.events(from: from, to: to) {
+        if let sink = resolvedEventSink, let events = try? sink.events(from: from, to: to) {
             return events
         }
         return eventsFromFiles(from: from, to: to)
@@ -180,7 +186,8 @@ public struct AttentionRepository: Sendable {
     }
 
     public func hasEvents() -> Bool {
-        withLock {
+        if let sink = resolvedEventSink, let present = try? sink.hasEvents() { return present }
+        return withLock {
             guard
                 let files = try? FileManager.default.contentsOfDirectory(
                     atPath: eventsDirectory.path)
