@@ -440,9 +440,10 @@ public enum UsageHistory {
 
     public static func mergeRefresh(fresh: Data, previous: Data?) -> Data? {
         guard var incoming = decode(fresh), retainedBlocks([:], incoming) != nil else { return nil }
-        guard let old = previous.flatMap(decode) else {
-            return merge(local: fresh, cloud: previous)
+        guard let previous else {
+            return merge(local: fresh, cloud: nil)
         }
+        guard let old = decode(previous) else { return nil }
         guard var retained = retainedBlocks(old, incoming) else { return nil }
         let incomingDays = Dictionary(
             daily(incoming).compactMap { day in

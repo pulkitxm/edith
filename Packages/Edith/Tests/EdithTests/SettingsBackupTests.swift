@@ -486,7 +486,12 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
                 atPath: data.appendingPathComponent("limits-history.jsonl").path))
     }
 
-    @Test func validCloudUsageRepairsMalformedLocalUsage() throws {
+    @Test(
+        arguments: [
+            "malformed-local", "empty-local", "unsupported-retention-local",
+            "malformed-cloud", "empty-cloud", "unsupported-retention-cloud",
+        ], [false, true])
+    func invalidUsageTransferPreservesBothFiles(kind: String, shouldRestore: Bool) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-settings-backup-\(UUID().uuidString)")
         let data = root.appendingPathComponent("data")
@@ -496,13 +501,47 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(
             at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(#"{"daily":[]}"#.utf8).write(to: local)
-        try usage(period: "2026-08-20", source: "cloud").write(to: cloud)
+        let valid = try usage(period: "2026-08-20", source: "history")
+        var document = try #require(
+            JSONSerialization.jsonObject(with: valid) as? [String: Any])
+        document["historyRetention"] = ["version": 99, "blocks": []]
+        let invalid: Data
+        if kind.hasPrefix("unsupported-retention") {
+            invalid = try JSONSerialization.data(withJSONObject: document)
+        } else {
+            invalid = Data((kind.hasPrefix("empty") ? "" : "{\"daily\":").utf8)
+        }
+        let localBytes = kind.hasSuffix("local") ? invalid : valid
+        let cloudBytes = kind.hasSuffix("cloud") ? invalid : valid
+        try localBytes.write(to: local)
+        try cloudBytes.write(to: cloud)
+
+        #expect(
+            !settingsBackupTransferUsage(
+                localURL: local, cloudURL: cloud,
+                shouldRestore: shouldRestore, shouldExport: true))
+        #expect(try Data(contentsOf: local) == localBytes)
+        #expect(try Data(contentsOf: cloud) == cloudBytes)
+    }
+
+    @Test func missingLocalUsageCanRestoreFromCloud() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let cloudBytes = try usage(period: "2026-08-20", source: "cloud")
+        try cloudBytes.write(to: cloud)
 
         #expect(
             settingsBackupTransferUsage(
                 localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false))
         #expect(UsageHistory.isValidDocument(try Data(contentsOf: local)))
+        #expect(try Data(contentsOf: cloud) == cloudBytes)
     }
 
     @Test func cloudTransferRereadsTheCoordinatedRevisionAfterWaitingForLocalData() async throws {

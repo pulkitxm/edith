@@ -281,6 +281,9 @@ public enum UsageRefreshRunner {
             let usage = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
                 maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+            if let usage, !UsageHistory.isValidDocument(usage) {
+                throw UsageDataFileError.unsafe(dataDir.appendingPathComponent("usage.json").path)
+            }
             let machines = try MachineUsageStore.generation(
                 in: dataDir.appendingPathComponent("machines"))
             return UsageRefreshBaseline(usage: usage, machines: machines)

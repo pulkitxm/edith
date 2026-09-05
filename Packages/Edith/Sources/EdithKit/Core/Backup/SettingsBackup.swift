@@ -352,16 +352,14 @@ func settingsBackupTransferUsage(
                 cloudData = try UsageDataFiles.readRegularFile(
                     at: coordinatedCloudURL,
                     maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
-                if shouldRestore, let cloudData, !cloudData.isEmpty,
-                    !UsageHistory.isValidDocument(cloudData)
-                {
+                if let localData, !UsageHistory.isValidDocument(localData) {
                     return false
                 }
-                let mergeLocal = localData.flatMap {
-                    UsageHistory.isValidDocument($0) ? $0 : nil
+                if let cloudData, !UsageHistory.isValidDocument(cloudData) {
+                    return false
                 }
-                guard let merged = UsageHistory.merge(local: mergeLocal, cloud: cloudData) else {
-                    return mergeLocal == nil && cloudData == nil
+                guard let merged = UsageHistory.merge(local: localData, cloud: cloudData) else {
+                    return localData == nil && cloudData == nil
                 }
                 guard merged.count <= UsageDataFiles.maximumUsageDocumentBytes,
                     UsageHistory.isValidDocument(merged)
