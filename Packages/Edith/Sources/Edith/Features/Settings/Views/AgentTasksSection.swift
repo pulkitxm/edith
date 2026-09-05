@@ -66,6 +66,7 @@ struct AgentTasksSection: View {
     @ViewBuilder
     private func taskDetails(_ task: AgentTaskSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            LabeledContent("Task", value: task.id.uuidString).textSelection(.enabled)
             LabeledContent("Operation", value: task.operation)
             LabeledContent("Submitted", value: task.submittedAt.formatted())
             if let started = task.startedAt {

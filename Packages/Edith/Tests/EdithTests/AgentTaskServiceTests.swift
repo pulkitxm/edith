@@ -77,7 +77,10 @@ import Testing
     }
 
     @Test func runningCancellationKeepsItsWorkerSlotUntilExecutionStops() async throws {
-        let service = try AgentTaskService(directory: nil, limits: AgentTaskLimits(concurrency: 1))
+        let events = TaskTestEvents()
+        let service = try AgentTaskService(
+            directory: nil, limits: AgentTaskLimits(concurrency: 1),
+            record: { await events.append($0) })
         let gate = TaskTestGate()
         await service.register(operation: "fixture") { payload, _ in
             await gate.enter(Int(String(decoding: payload, as: UTF8.self))!)
@@ -90,8 +93,11 @@ import Testing
         try await eventually { await gate.started == [1] }
         #expect(try await service.cancel(first.id).state == .cancelling)
         #expect(try await service.status(second.id).snapshot.state == .queued)
+        try await eventually { await events.contains("task.cancelling", taskID: first.id) }
+        #expect(await !events.contains("task.cancelled", taskID: first.id))
         await gate.release(1)
         #expect(try await finished(first.id, service: service).snapshot.state == .cancelled)
+        try await eventually { await events.contains("task.cancelled", taskID: first.id) }
         try await eventually { await gate.started == [1, 2] }
         await gate.release(2)
         _ = try await finished(second.id, service: service)
@@ -277,6 +283,14 @@ import Testing
 private actor TaskTestCounter {
     var value = 0
     func increment() { value += 1 }
+}
+
+private actor TaskTestEvents {
+    private var values: [AgentEvent] = []
+    func append(_ event: AgentEvent) { values.append(event) }
+    func contains(_ name: String, taskID: UUID) -> Bool {
+        values.contains { $0.name == name && $0.taskID == taskID }
+    }
 }
 
 private actor TaskTestGate {

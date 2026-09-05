@@ -14,17 +14,19 @@ final class BackgroundAgentModel {
     var search = ""
     var errorsOnly = false
     var timelinePaused = false
+    private var copyTask: Task<Void, Never>?
 
     var visibleEvents: [AgentEvent] {
         events.reversed().filter { event in
             (!errorsOnly || event.level != .info)
                 && (search.isEmpty
-                    || [event.category, event.name, event.message]
+                    || [event.category, event.name, event.message, event.taskID?.uuidString ?? ""]
                         .contains { $0.localizedCaseInsensitiveContains(search) })
         }
     }
 
     func observe() async {
+        defer { copyTask?.cancel(); copyTask = nil }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor in
                 for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
@@ -74,11 +76,28 @@ final class BackgroundAgentModel {
     }
 
     func copyEvents() {
-        let value = visibleEvents.reversed().map { event in
-            "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.category).\(event.name): \(event.message)"
-        }.joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
+        copyTask?.cancel()
+        let events = Array(visibleEvents.reversed())
+        copyTask = Task { [weak self] in
+            let worker = Task.detached(priority: .userInitiated) { Self.renderEvents(events) }
+            let value = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled, let self else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+            self.copyTask = nil
+        }
+    }
+
+    nonisolated static func renderEvents(_ events: [AgentEvent]) -> String {
+        let lines: [String] = events.map { event in
+            let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
+            return "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.category).\(event.name)\(task): \(event.message)"
+        }
+        return lines.joined(separator: "\n")
     }
 
     func refresh() async {

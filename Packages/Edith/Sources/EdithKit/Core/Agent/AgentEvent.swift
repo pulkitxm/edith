@@ -14,10 +14,12 @@ public struct AgentEvent: Codable, Equatable, Sendable, Identifiable {
     public let name: String
     public let message: String
     public let duration: TimeInterval?
+    public let taskID: UUID?
 
     public init(
         id: UUID = UUID(), date: Date = Date(), level: Level = .info,
-        category: String, name: String, message: String, duration: TimeInterval? = nil
+        category: String, name: String, message: String, duration: TimeInterval? = nil,
+        taskID: UUID? = nil
     ) {
         self.id = id
         self.date = date
@@ -26,6 +28,7 @@ public struct AgentEvent: Codable, Equatable, Sendable, Identifiable {
         self.name = String(name.prefix(160))
         self.message = String(message.prefix(2_000))
         self.duration = duration
+        self.taskID = taskID
     }
 }
 

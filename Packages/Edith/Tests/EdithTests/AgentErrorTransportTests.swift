@@ -10,11 +10,11 @@ import Testing
         async throws
     {
         let runtime = AgentRuntime(build: "error-transport-fixture", store: nil)
-        await runtime.register(operation: AgentSystemStatsOperation.sample) { _ in
+        await runtime.register(operation: AgentDiagnostics.runJob) { _ in
             if kind == .cancelled { throw CancellationError() }
             throw AgentError(kind, "Fixture \(kind.rawValue) response.")
         }
-        await runtime.register(operation: AgentSystemStatsOperation.disks) { _ in
+        await runtime.register(operation: AgentDiagnostics.cancelJob) { _ in
             try AgentPayload.encode(true)
         }
         let listener = AgentRuntimeTestListener(runtime: runtime)
@@ -24,11 +24,11 @@ import Testing
             kind == .cancelled
             ? "The background operation was cancelled." : "Fixture \(kind.rawValue) response."
         await #expect(throws: AgentError(kind, message)) {
-            try await client.performInternalAsync(AgentSystemStatsOperation.sample)
+            try await client.performInternalAsync(AgentDiagnostics.runJob)
         }
         #expect(
             try AgentPayload.decode(
-                Bool.self, from: await client.performInternalAsync(AgentSystemStatsOperation.disks))
+                Bool.self, from: await client.performInternalAsync(AgentDiagnostics.cancelJob))
         )
         await runtime.shutdown()
     }
