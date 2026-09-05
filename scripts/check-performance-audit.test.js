@@ -411,17 +411,37 @@ test("single-flight tasks reject replacement while retaining publication guards"
   `;
   const replacementGuard = "guard actionTask == nil else { return }";
   const publicationGuard = "guard !Task.isCancelled else { return }";
-  expect(findPerformanceViolations(createSource(replacementGuard, publicationGuard))
-    .map(({ rule }) => rule)).not.toContain("stale-task-publication");
-  expect(findPerformanceViolations(createSource(replacementGuard, ""))
-    .map(({ rule }) => rule)).toContain("stale-task-publication");
-  expect(findPerformanceViolations(createSource(
-    "guard actionTask == nil else { pending = true; return }", publicationGuard))
-    .map(({ rule }) => rule)).not.toContain("stale-task-publication");
-  expect(findPerformanceViolations(createSource(replacementGuard + "\nawait service.prepare()", publicationGuard))
-    .map(({ rule }) => rule)).toContain("stale-task-publication");
-  expect(findPerformanceViolations(createSource("", publicationGuard))
-    .map(({ rule }) => rule)).toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      createSource(replacementGuard, publicationGuard),
+    ).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(createSource(replacementGuard, "")).map(
+      ({ rule }) => rule,
+    ),
+  ).toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      createSource(
+        "guard actionTask == nil else { pending = true; return }",
+        publicationGuard,
+      ),
+    ).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      createSource(
+        replacementGuard + "\nawait service.prepare()",
+        publicationGuard,
+      ),
+    ).map(({ rule }) => rule),
+  ).toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(createSource("", publicationGuard)).map(
+      ({ rule }) => rule,
+    ),
+  ).toContain("stale-task-publication");
 });
 
 test("loop comparisons after suspension are not treated as state assignments", () => {
@@ -439,8 +459,9 @@ test("loop comparisons after suspension are not treated as state assignments", (
       }
     }
   `;
-  expect(findPerformanceViolations(source).map(({ rule }) => rule))
-    .not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(source).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
 });
 
 test("default callback bodies do not hide a guarded task owner", () => {
@@ -456,8 +477,9 @@ test("default callback bodies do not hide a guarded task owner", () => {
   `;
   expect(findPerformanceViolations(source)).toEqual([]);
   const unsafe = source.replace("guard !Task.isCancelled else { return }", "");
-  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule))
-    .toContain("stale-task-publication");
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
+    "stale-task-publication",
+  );
 });
 
 test("qualified task guards only protect the same receiver", () => {
@@ -472,7 +494,11 @@ test("qualified task guards only protect the same receiver", () => {
     }
   `;
   expect(findPerformanceViolations(source)).toEqual([]);
-  const unsafe = source.replace("guard entry.inventoryTask", "guard other.inventoryTask");
-  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule))
-    .toContain("stale-task-publication");
+  const unsafe = source.replace(
+    "guard entry.inventoryTask",
+    "guard other.inventoryTask",
+  );
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
+    "stale-task-publication",
+  );
 });

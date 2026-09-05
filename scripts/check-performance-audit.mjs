@@ -138,7 +138,11 @@ const callableRanges = (masked) => {
     let parentheses = 0;
     let brackets = 0;
     const limit = Math.min(masked.length, match.index + 1_000);
-    for (let cursor = match.index + match[0].length; cursor < limit; cursor += 1) {
+    for (
+      let cursor = match.index + match[0].length;
+      cursor < limit;
+      cursor += 1
+    ) {
       const character = masked[cursor];
       if (character === "(") parentheses += 1;
       else if (character === ")") parentheses -= 1;
@@ -376,7 +380,10 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const owner = ownerRange
       ? masked.slice(ownerRange[0], match.index)
       : masked.slice(Math.max(0, match.index - 2_000), match.index);
-    const receiver = match[1].replaceAll(/\s+/g, "").split(".").join("\\s*\\.\\s*");
+    const receiver = match[1]
+      .replaceAll(/\s+/g, "")
+      .split(".")
+      .join("\\s*\\.\\s*");
     const cancellation = new RegExp(
       `\\b${receiver}\\s*\\??\\.cancel\\s*\\(`,
     ).test(owner);
@@ -391,11 +398,16 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
           publication ? lastAwait + publication.index : body.length,
         ),
       );
-    const replacementGuard = owner.match(new RegExp(
-      `\\bguard\\s+${receiver}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,
-    ));
-    const refusesReplacement = replacementGuard !== null
-      && !/\bawait\b/.test(owner.slice(replacementGuard.index + replacementGuard[0].length));
+    const replacementGuard = owner.match(
+      new RegExp(
+        `\\bguard\\s+${receiver}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,
+      ),
+    );
+    const refusesReplacement =
+      replacementGuard !== null &&
+      !/\bawait\b/.test(
+        owner.slice(replacementGuard.index + replacementGuard[0].length),
+      );
     if (publication && ((!cancellation && !refusesReplacement) || !guarded)) {
       addViolation(
         violations,
