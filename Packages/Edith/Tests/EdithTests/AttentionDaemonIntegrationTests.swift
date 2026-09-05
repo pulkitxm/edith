@@ -41,6 +41,28 @@ private struct AttentionDaemonFixture {
 }
 
 @Suite struct AttentionDaemonIntegrationTests {
+    @Test func shutdownRejectsNewWorkAndCannotRestartTheListener() async throws {
+        let fixture = try AttentionDaemonFixture()
+        await fixture.service.start()
+        await fixture.service.stop()
+        await fixture.service.start()
+        await #expect(throws: CancellationError.self) { try await fixture.service.run() }
+        await #expect(throws: CancellationError.self) { try await fixture.service.backup() }
+        await #expect(throws: CancellationError.self) {
+            try await fixture.service.summary(
+                AttentionSummaryRequest(from: Date().addingTimeInterval(-60), to: Date()))
+        }
+        await #expect(throws: CancellationError.self) { try await fixture.service.hasEvents() }
+        await fixture.close()
+    }
+
+    @Test func backgroundIngestionHasAnAmbientBackupCadence() throws {
+        let descriptor = try #require(
+            AgentJobPlan.descriptors.first { $0.id == "attention.ingest" })
+        #expect(descriptor.trigger == .timer)
+        #expect(descriptor.cadence == .every(ambient: 900, live: 900))
+    }
+
     @Test func continuousApplicationSamplesUseOneRowPerDay() async throws {
         let fixture = try AttentionDaemonFixture()
         defer { Task { await fixture.close() } }

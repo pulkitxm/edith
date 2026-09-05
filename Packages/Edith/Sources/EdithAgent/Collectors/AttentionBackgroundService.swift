@@ -19,6 +19,8 @@ public actor AttentionBackgroundService {
     private var observation: NSObjectProtocol?
     private var lastBackupAt: Date?
     private var backupTask: Task<Void, Error>?
+    private var refreshTask: Task<Void, Never>?
+    private var summaryTasks: [UUID: Task<AttentionPageSnapshot, Error>] = [:]
     private var stopped = false
 
     public init(
@@ -37,23 +39,33 @@ public actor AttentionBackgroundService {
 
     deinit {
         backupTask?.cancel()
+        refreshTask?.cancel()
+        for task in summaryTasks.values { task.cancel() }
         server?.stop()
         if let observation { IPC.stopObserving(observation) }
     }
 
-    public func run(now: Date = Date()) async throws -> Data? {
-        guard !stopped else { throw CancellationError() }
-        if observation == nil {
-            observation = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                Task {
-                    do { _ = try await self?.run() } catch {
-                        AgentLog.logger.error(
-                            "attention refresh failed: \(error.localizedDescription, privacy: .public)"
-                        )
-                    }
+    public func start() {
+        guard !stopped, refreshTask == nil else { return }
+        let (stream, continuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1))
+        observation = IPC.observe(IPC.Name.settingsChanged) { continuation.yield() }
+        refreshTask = Task { [weak self] in
+            for await _ in stream {
+                guard !Task.isCancelled else { return }
+                do { _ = try await self?.run() } catch is CancellationError {
+                    return
+                } catch {
+                    AgentLog.logger.error(
+                        "attention refresh failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }
+        continuation.yield()
+    }
+
+    public func run(now: Date = Date()) async throws -> Data? {
+        guard !stopped else { throw CancellationError() }
         let report = try events.importLegacyFiles(directory: repository.eventsDirectory, now: now)
         let settings = repository.loadSettings()
         let enabled = defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled)
@@ -88,14 +100,22 @@ public actor AttentionBackgroundService {
     public func stop() async {
         stopped = true
         let backup = backupTask
+        let refresh = refreshTask
+        let summaries = Array(summaryTasks.values)
         backupTask = nil
+        refreshTask = nil
+        summaryTasks.removeAll()
         backup?.cancel()
+        refresh?.cancel()
+        for task in summaries { task.cancel() }
         server?.stop()
         server = nil
         serverSettings = nil
         if let observation { IPC.stopObserving(observation) }
         observation = nil
         _ = try? await backup?.value
+        await refresh?.value
+        for task in summaries { _ = await task.result }
     }
 
     public func record(_ batch: AttentionBatch) throws {
@@ -114,20 +134,37 @@ public actor AttentionBackgroundService {
     }
 
     public func summary(_ request: AttentionSummaryRequest) async throws -> AttentionPageSnapshot {
+        guard !stopped else { throw CancellationError() }
+        guard summaryTasks.count < 2 else {
+            throw AgentError(
+                .unavailable, "Attention is processing two summaries. Try again shortly.")
+        }
         try importSpool()
         let events = events
         let repository = repository
-        return try await Task.detached(priority: .userInitiated) {
-            try AttentionPageSnapshot(
+        let id = UUID()
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let result = try AttentionPageSnapshot(
                 request: request, repository: repository,
                 all: events.events(from: request.from, to: request.to),
                 hasStoredEvents: events.hasEvents())
-        }.value
+            try Task.checkCancellation()
+            return result
+        }
+        summaryTasks[id] = task
+        defer { summaryTasks[id] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     @discardableResult
     public func importSpool() throws -> AttentionImportReport {
-        try events.importLegacyFiles(directory: repository.eventsDirectory)
+        guard !stopped else { throw CancellationError() }
+        return try events.importLegacyFiles(directory: repository.eventsDirectory)
     }
 
     public func backup(now: Date = Date()) async throws {
@@ -189,6 +226,7 @@ public enum AttentionBackgroundOperations {
     public static func register(on runtime: AgentRuntime, service: AttentionBackgroundService) async
     {
         await runtime.registerShutdown(id: "attention") { await service.stop() }
+        await service.start()
         await runtime.register(operation: AttentionOperation.record) { payload in
             let batch = try AgentPayload.decode(AttentionBatch.self, from: payload)
             try await service.record(batch)
