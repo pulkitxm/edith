@@ -144,7 +144,10 @@ struct DataBackupPane: View {
                 }
             }
             if model.isRefreshing {
-                ProgressView("Inspecting storage in the background")
+                SkeletonGroup {
+                    SkeletonBlock(width: 180, height: 9, corner: 4)
+                }
+                .accessibilityLabel("Inspecting storage in the background")
             }
             if let collectedAt = model.collectedAt {
                 Text("Measured \(collectedAt.formatted(date: .omitted, time: .shortened))")
