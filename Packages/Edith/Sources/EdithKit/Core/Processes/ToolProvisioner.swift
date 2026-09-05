@@ -337,7 +337,7 @@ public enum CLICommandRunner {
         }
 
         var stop: StopReason?
-        while true {
+        polling: while true {
             if cancellationRequested() {
                 stop = .cancelled
                 break
@@ -346,11 +346,11 @@ public enum CLICommandRunner {
                 stop = .outputLimitExceeded
                 break
             }
-            if let deadline, ProcessInfo.processInfo.systemUptime >= deadline {
-                stop = .timedOut
-                break
+            switch pollForExit(processFinished, deadline: deadline) {
+            case .finished: break polling
+            case .timedOut: stop = .timedOut; break polling
+            case .running: continue
             }
-            if processFinished.wait(timeout: .now() + lifecyclePoll) == .success { break }
         }
 
         if let stop {
@@ -403,6 +403,16 @@ public enum CLICommandRunner {
             terminationStatus: process.terminationStatus,
             standardOutputData: finishedOutput.output,
             standardErrorData: finishedError.output)
+    }
+
+    enum ExitPollResult: Equatable { case finished, timedOut, running }
+
+    static func pollForExit(_ finished: DispatchSemaphore, deadline: TimeInterval?)
+        -> ExitPollResult
+    {
+        if finished.wait(timeout: .now()) == .success { return .finished }
+        if let deadline, ProcessInfo.processInfo.systemUptime >= deadline { return .timedOut }
+        return finished.wait(timeout: .now() + lifecyclePoll) == .success ? .finished : .running
     }
 
     private enum StopReason {

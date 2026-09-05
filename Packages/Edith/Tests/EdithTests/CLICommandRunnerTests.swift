@@ -32,6 +32,28 @@ private final class CommandLineRecorder: @unchecked Sendable {
         }
     }
 
+    @Test func nativeCompletionWinsWhenTheObserverResumesAfterItsDeadline() async throws {
+        let observed = DispatchSemaphore(value: 0)
+        let completion = DispatchSemaphore(value: 0)
+        let process = try CLIChildProcess(
+            request: CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+                environment: [:],
+                terminatesProcessGroup: true),
+            input: -1, output: -1, error: -1,
+            onExit: {
+                completion.signal(); observed.signal()
+            })
+        #expect(await waitForSignal(observed))
+        #expect(!process.isRunning)
+        let deadline = ProcessInfo.processInfo.systemUptime
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(CLICommandRunner.pollForExit(completion, deadline: deadline) == .finished)
+        #expect(
+            CLICommandRunner.pollForExit(DispatchSemaphore(value: 0), deadline: deadline)
+                == .timedOut)
+    }
+
     @Test func separatedStreamsKeepPartialFinalLinesOnTheirOwnChannels() async throws {
         let standardOutput = CommandLineRecorder()
         let standardError = CommandLineRecorder()
