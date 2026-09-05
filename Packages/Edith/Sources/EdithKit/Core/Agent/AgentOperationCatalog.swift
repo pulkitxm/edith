@@ -10,13 +10,14 @@ public enum AgentOperationCatalog {
     public static let served: [UserOperationID] =
         AgentControlOperation.allCases.map { $0.descriptor.id } + usageOperations
 
-    public static let internalOperations: [String] = [
-        AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
-        AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
-        AgentDiagnostics.runJob, AgentDiagnostics.cancelJob,
-        AgentNotificationOperation.pending, AgentNotificationOperation.acknowledge,
-        CompanionBackgroundOperation.refresh,
-    ]
+    public static let internalOperations: [String] =
+        [
+            AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
+            AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
+            AgentDiagnostics.runJob, AgentDiagnostics.cancelJob,
+            AgentNotificationOperation.pending, AgentNotificationOperation.acknowledge,
+            CompanionBackgroundOperation.refresh,
+        ] + AgentTaskOperation.internalOperations
 
     public static func serves(_ id: UserOperationID) -> Bool {
         served.contains(id)

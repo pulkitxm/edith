@@ -14,15 +14,26 @@ public struct AgentServices {
     public let hub: AgentHub
     public let scheduler: JobScheduler
     public let watchers: [FileSystemWatcher]
+    private let startup: Task<Void, Never>?
 
     public init(
         runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler,
-        watchers: [FileSystemWatcher]
+        watchers: [FileSystemWatcher], startup: Task<Void, Never>? = nil
     ) {
         self.runtime = runtime
         self.hub = hub
         self.scheduler = scheduler
         self.watchers = watchers
+        self.startup = startup
+    }
+
+    public func stop() async {
+        startup?.cancel()
+        watchers.forEach { $0.stop() }
+        async let runtimeStopped: Void = runtime.shutdown()
+        async let schedulerStopped: Void = scheduler.shutdown()
+        await startup?.value
+        _ = await (runtimeStopped, schedulerStopped)
     }
 }
 
@@ -61,13 +72,31 @@ public enum AgentBoot {
         watcher.start()
         AgentLog.logger.info(
             "watching \(watcher.watchedPaths.count, privacy: .public) usage paths")
-        Task {
+        let startup = Task {
+            guard !Task.isCancelled else { return }
             await runtime.attach(scheduler: scheduler)
             await AgentOperations.register(on: runtime, store: store, scheduler: scheduler)
+            do {
+                let tasks = try AgentTaskService(
+                    publish: { snapshots in
+                        if let payload = try? AgentPayload.encode(snapshots) {
+                            await runtime.publish(topic: .tasks, payload: payload)
+                        }
+                    }, record: { await runtime.record($0) })
+                await tasks.registerCommand()
+                await AgentTaskOperations.register(on: runtime, service: tasks)
+            } catch {
+                await runtime.record(
+                    AgentEvent(
+                        level: .error, category: "runtime", name: "tasks",
+                        message: error.localizedDescription))
+            }
+            guard !Task.isCancelled, await !runtime.isShuttingDown else { return }
             for job in AgentJobCatalog.jobs(store: store, scheduler: scheduler) {
                 await scheduler.register(job)
             }
             await scheduler.start()
+            guard !Task.isCancelled, await !runtime.isShuttingDown else { return }
             hub.resume()
             await runtime.record(
                 AgentEvent(
@@ -87,7 +116,8 @@ public enum AgentBoot {
                         forKey: AgentSettingsKeys.pauseAmbientOnBattery))
             }
         }
-        return AgentServices(runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher])
+        return AgentServices(
+            runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher], startup: startup)
     }
 }
 

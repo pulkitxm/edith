@@ -19,6 +19,9 @@ public actor AgentRuntime {
     private var operations: [String: OperationHandler] = [:]
     private var busSubscribers: [UUID: Set<String>] = [:]
     private var events: [AgentEvent] = []
+    public private(set) var isShuttingDown = false
+    private var shutdownHandlers: [String: @Sendable () async -> Void] = [:]
+    private var shutdownTasks: [String: Task<Void, Never>] = [:]
 
     public init(build: String, store: AgentStore?, startedAt: Date = Date()) {
         self.build = build
@@ -32,8 +35,40 @@ public actor AgentRuntime {
     }
 
     public func register(operation: String, handler: @escaping OperationHandler) {
+        guard !isShuttingDown else { return }
         operations[operation] = handler
     }
+
+    public func registerShutdown(id: String, handler: @escaping @Sendable () async -> Void) async {
+        guard isShuttingDown else {
+            shutdownHandlers[id] = handler
+            return
+        }
+        if let existing = shutdownTasks[id] {
+            await existing.value
+            return
+        }
+        let task = Task { await handler() }
+        shutdownTasks[id] = task
+        await task.value
+    }
+
+    public func shutdown() async {
+        if !isShuttingDown {
+            isShuttingDown = true
+            for (id, handler) in shutdownHandlers {
+                shutdownTasks[id] = Task { await handler() }
+            }
+            shutdownHandlers.removeAll()
+        }
+        var completed = Set<String>()
+        while let (id, task) = shutdownTasks.first(where: { !completed.contains($0.key) }) {
+            await task.value
+            completed.insert(id)
+        }
+    }
+
+    public var registeredOperations: Set<String> { Set(operations.keys) }
 
     public func handshake() -> AgentHandshake {
         AgentHandshake(
@@ -142,6 +177,7 @@ public actor AgentRuntime {
     }
 
     public func perform(operation: String, payload: Data) async throws -> Data {
+        guard !isShuttingDown else { throw AgentError.unavailable }
         guard let handler = operations[operation] else {
             throw AgentError(.unknownOperation, "The agent does not serve \(operation).")
         }

@@ -85,7 +85,7 @@ public enum AgentOperations {
             Task {
                 try? await Task.sleep(for: .milliseconds(200))
                 AgentLog.logger.info("restart requested")
-                exit(0)
+                raise(SIGTERM)
             }
             return try AgentPayload.encode(["restarted": true])
         }

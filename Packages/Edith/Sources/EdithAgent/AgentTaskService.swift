@@ -79,6 +79,7 @@ public actor AgentTaskService {
     private var output: [UUID: AgentTaskOutputBuffer] = [:]
     private var publishedSequence: [UUID: Int] = [:]
     private var progressTask: Task<Void, Never>?
+    private var stopping = false
 
     public init(
         directory: URL? = AppData.supportDir.appendingPathComponent("Tasks", isDirectory: true),
@@ -144,6 +145,28 @@ public actor AgentTaskService {
         progressTask?.cancel()
     }
 
+    public func shutdown() async {
+        stopping = true
+        order.removeAll()
+        payloads.removeAll()
+        for id in Array(entries.keys) {
+            guard var entry = entries[id], !entry.status.snapshot.state.isTerminal else { continue }
+            entry.status.snapshot.state = .interrupted
+            entry.status.snapshot.finishedAt = Date()
+            entry.status.snapshot.failure =
+                "The background agent stopped before this task finished."
+            entry.status.snapshot.failureCode = "interrupted"
+            entries[id] = entry
+            persistOrReport(entry)
+        }
+        let active = Array(workers.values)
+        for worker in active { worker.cancel() }
+        progressTask?.cancel()
+        progressTask = nil
+        for worker in active { await worker.value }
+        await publish(snapshots())
+    }
+
     public func register(operation: String, handler: @escaping Handler) {
         handlers[operation] = handler
     }
@@ -180,6 +203,7 @@ public actor AgentTaskService {
     }
 
     public func submit(_ request: AgentTaskSubmission) throws -> AgentTaskSnapshot {
+        guard !stopping else { throw AgentError(.unavailable, "The agent is shutting down.") }
         prune()
         guard request.payload.count <= limits.payloadBytes else {
             throw AgentError(.refused, "The background task request is too large.")
@@ -272,6 +296,7 @@ public actor AgentTaskService {
     }
 
     private func startNext() {
+        guard !stopping else { return }
         while workers.count < limits.concurrency, !order.isEmpty {
             let id = order.removeFirst()
             guard var entry = entries[id], let payload = payloads.removeValue(forKey: id),
@@ -306,26 +331,28 @@ public actor AgentTaskService {
         entry.status.snapshot.lastActivity = entry.status.output.last?.text
         publishedSequence[id] = nil
         entry.status.snapshot.finishedAt = Date()
-        switch result {
-        case .success(let data) where !wasCancelled && data.count <= limits.resultBytes:
-            entry.status.snapshot.state = .succeeded
-            entry.status.result = data
-        case .success where wasCancelled:
-            entry.status.snapshot.state = .cancelled
-        case .success:
-            entry.status.snapshot.state = .failed
-            entry.status.snapshot.failure =
-                "The background task result exceeded its retained output limit."
-            entry.status.snapshot.failureCode = "outputLimitExceeded"
-        case .failure(let error):
-            entry.status.snapshot.state =
-                wasCancelled || error is CancellationError ? .cancelled : .failed
-            entry.status.snapshot.failure = String(error.localizedDescription.prefix(2_000))
-            entry.status.snapshot.failureCode = Self.failureCode(error)
-            if !wasCancelled, let failure = error as? AgentTaskExecutionError,
-                let result = failure.result, result.count <= limits.resultBytes
-            {
-                entry.status.result = result
+        if entry.status.snapshot.state != .interrupted {
+            switch result {
+            case .success(let data) where !wasCancelled && data.count <= limits.resultBytes:
+                entry.status.snapshot.state = .succeeded
+                entry.status.result = data
+            case .success where wasCancelled:
+                entry.status.snapshot.state = .cancelled
+            case .success:
+                entry.status.snapshot.state = .failed
+                entry.status.snapshot.failure =
+                    "The background task result exceeded its retained output limit."
+                entry.status.snapshot.failureCode = "outputLimitExceeded"
+            case .failure(let error):
+                entry.status.snapshot.state =
+                    wasCancelled || error is CancellationError ? .cancelled : .failed
+                entry.status.snapshot.failure = String(error.localizedDescription.prefix(2_000))
+                entry.status.snapshot.failureCode = Self.failureCode(error)
+                if !wasCancelled, let failure = error as? AgentTaskExecutionError,
+                    let result = failure.result, result.count <= limits.resultBytes
+                {
+                    entry.status.result = result
+                }
             }
         }
         entries[id] = entry
