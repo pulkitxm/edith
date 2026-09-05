@@ -95,7 +95,8 @@ final class BackgroundAgentModel {
     nonisolated static func renderEvents(_ events: [AgentEvent]) -> String {
         let lines: [String] = events.map { event in
             let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
-            return "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.category).\(event.name)\(task): \(event.message)"
+            let prefix = "\(event.date.ISO8601Format()) [\(event.level.rawValue)]"
+            return "\(prefix) \(event.category).\(event.name)\(task): \(event.message)"
         }
         return lines.joined(separator: "\n")
     }
