@@ -183,7 +183,10 @@ private final class CLIProcessOutputReader: @unchecked Sendable {
             }
             if count > 0 {
                 output.receive(Data(buffer.prefix(count)))
-                if output.hasExceededLimit { source.cancel(); return }
+                if output.hasExceededLimit {
+                    source.cancel()
+                    return
+                }
             } else if count < 0, errno == EINTR {
                 continue
             } else if count < 0, errno == EAGAIN || errno == EWOULDBLOCK {
@@ -202,36 +205,6 @@ private final class CLIProcessOutputReader: @unchecked Sendable {
 public enum CLICommandRunner {
     private static let terminationGrace: TimeInterval = 0.25
     private static let lifecyclePoll: TimeInterval = 0.01
-    private static let processGroupScript = """
-        group_file=$1
-        shift
-        child=
-        stop_requested=0
-        terminate_group() {
-            trap - TERM INT
-            [ -n "$child" ] || return
-            kill -TERM -"$child" 2>/dev/null || :
-            sleep 0.1
-            kill -KILL -"$child" 2>/dev/null || :
-        }
-        request_stop() {
-            stop_requested=1
-            [ -n "$child" ] || return
-            terminate_group
-            exit 124
-        }
-        trap 'request_stop' TERM INT
-        set -m
-        "$@" &
-        child=$!
-        set +m
-        printf '%s\n' "$child" > "$group_file"
-        [ "$stop_requested" -eq 0 ] || { terminate_group; exit 124; }
-        wait "$child"
-        status=$?
-        terminate_group
-        exit "$status"
-        """
 
     public static func run(
         _ request: CLICommandRequest,
@@ -304,36 +277,14 @@ public enum CLICommandRunner {
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) throws -> CLICommandResult {
-        let process = Process()
         let deadline = request.timeout.map {
             ProcessInfo.processInfo.systemUptime + max(0, $0)
         }
         let cancellationRequested: @Sendable () -> Bool = { Task.isCancelled }
-        let processGroupEscalationSignal = SIGKILL
-        let groupFile = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "edith-process-\(UUID().uuidString).pid")
-        defer { try? FileManager.default.removeItem(at: groupFile) }
-        if request.terminatesProcessGroup {
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments =
-                [
-                    "-c", processGroupScript, "edith-process", groupFile.path,
-                    request.executableURL.path,
-                ] + request.arguments
-        } else {
-            process.executableURL = request.executableURL
-            process.arguments = request.arguments
-        }
-        process.environment = request.environment
-        process.currentDirectoryURL = request.currentDirectoryURL
         let input = request.standardInputData.map { _ in Pipe() }
-        process.standardInput = input ?? FileHandle.nullDevice
 
         let standardOutput = Pipe()
         let standardError = Pipe()
-        process.standardOutput = standardOutput
-        process.standardError =
-            request.discardsStandardError ? FileHandle.nullDevice : standardError
         let output = CLIStreamingOutput(
             maximumBytes: request.maximumOutputBytes,
             onLine: streamsWhileRunning ? onStandardOutputLine : nil)
@@ -349,9 +300,18 @@ public enum CLICommandRunner {
                 handle: standardError.fileHandleForReading, output: error)
 
         let processFinished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in processFinished.signal() }
+        let process: CLIChildProcess
         do {
-            try process.run()
+            try Task.checkCancellation()
+            process = try CLIChildProcess(
+                request: request,
+                input: input?.fileHandleForReading.fileDescriptor
+                    ?? FileHandle.nullDevice.fileDescriptor,
+                output: standardOutput.fileHandleForWriting.fileDescriptor,
+                error: request.discardsStandardError
+                    ? FileHandle.nullDevice.fileDescriptor
+                    : standardError.fileHandleForWriting.fileDescriptor,
+                onExit: { processFinished.signal() })
             try? standardOutput.fileHandleForWriting.close()
             try? standardError.fileHandleForWriting.close()
             try? input?.fileHandleForReading.close()
@@ -362,6 +322,7 @@ public enum CLICommandRunner {
             try? input?.fileHandleForWriting.close()
             _ = drain(outputReader)
             _ = drain(errorReader)
+            if error is CancellationError { throw error }
             throw CLICommandRunnerError.launchFailed
         }
         let inputFinished = DispatchSemaphore(value: 0)
@@ -394,10 +355,7 @@ public enum CLICommandRunner {
 
         if let stop {
             try? input?.fileHandleForWriting.close()
-            terminateProcessGroup(
-                process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
-                processFinished: processFinished,
-                escalationSignal: processGroupEscalationSignal)
+            terminateProcessGroup(process, processFinished: processFinished)
             _ = drain(outputReader)
             _ = drain(errorReader)
             _ = inputFinished.wait(timeout: .now() + terminationGrace)
@@ -411,6 +369,9 @@ public enum CLICommandRunner {
             }
         }
 
+        if process.ownsProcessGroup, process.groupIsAlive {
+            terminateProcessGroup(process, processFinished: processFinished)
+        }
         guard drain(outputReader),
             drain(errorReader)
         else { throw CLICommandRunnerError.streamFailed }
@@ -451,39 +412,15 @@ public enum CLICommandRunner {
     }
 
     private static func terminateProcessGroup(
-        _ process: Process, groupFile: URL?, processFinished: DispatchSemaphore,
-        escalationSignal: Int32
+        _ process: CLIChildProcess, processFinished: DispatchSemaphore
     ) {
-        var group = groupFile.flatMap {
-            groupIdentifier(at: $0, waitingUntil: ProcessInfo.processInfo.systemUptime + 0.05)
+        process.signal(SIGTERM)
+        let deadline = ProcessInfo.processInfo.systemUptime + terminationGrace
+        while process.groupIsAlive, ProcessInfo.processInfo.systemUptime < deadline {
+            _ = processFinished.wait(timeout: .now() + lifecyclePoll)
         }
-        if let group {
-            _ = kill(-group, SIGTERM)
-        } else if process.isRunning {
-            process.terminate()
-        }
-        _ = processFinished.wait(timeout: .now() + terminationGrace)
-        if group == nil, let groupFile {
-            group = groupIdentifier(at: groupFile, waitingUntil: nil)
-        }
-        if let group { _ = kill(-group, escalationSignal) }
-        if process.isRunning { _ = kill(process.processIdentifier, escalationSignal) }
-        _ = processFinished.wait(timeout: .now() + terminationGrace)
-    }
-
-    private static func groupIdentifier(at url: URL, waitingUntil deadline: TimeInterval?) -> Int32?
-    {
-        repeat {
-            if let data = try? Data(contentsOf: url),
-                let text = String(data: data, encoding: .utf8)?.trimmingCharacters(
-                    in: .whitespacesAndNewlines),
-                let value = Int32(text), value > 1
-            {
-                return value
-            }
-            guard let deadline, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
-            usleep(5_000)
-        } while true
+        if process.groupIsAlive { process.signal(SIGKILL) }
+        if process.isRunning { _ = processFinished.wait(timeout: .now() + terminationGrace) }
     }
 
     @discardableResult
