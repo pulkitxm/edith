@@ -238,44 +238,8 @@ sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$APP"
 
-process_is_running() {
-  pgrep -f -x "$1" >/dev/null 2>&1
-}
-
-wait_for_process_exit() {
-  local executable="$1"
-  local attempt
-  for attempt in {1..50}; do
-    process_is_running "$executable" || return 0
-    sleep 0.1
-  done
-  return 1
-}
-
-stop_process() {
-  local executable="$1"
-  process_is_running "$executable" || return 0
-  pkill -TERM -f -x "$executable" 2>/dev/null || true
-  wait_for_process_exit "$executable" || pkill -KILL -f -x "$executable" 2>/dev/null || true
-}
-
-stop_installed_app() {
-  local installed_main="/Applications/Edith.app/Contents/MacOS/Edith"
-  local installed_helper="/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith"
-  if process_is_running "$installed_main"; then
-    osascript -e 'tell application id "com.pulkit.edith" to quit' >/dev/null 2>&1 || true
-    wait_for_process_exit "$installed_main" || stop_process "$installed_main"
-  fi
-  stop_process "$installed_helper"
-  stop_process "com.pulkit.edith.helper"
-  stop_process "com.pulkit.edith.helper.v2"
-  pkill -x edithd 2>/dev/null || true
-}
-
 if [ "$INSTALL" = 1 ]; then
-  stop_installed_app
-  rm -rf "/Applications/Edith.app"
-  cp -R "$APP" /Applications/
+  python3 scripts/install_app.py "$APP" "/Applications/Edith.app"
   [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
 else
   [ "$NO_OPEN" = 1 ] || open "$APP"

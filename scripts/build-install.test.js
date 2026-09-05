@@ -50,26 +50,23 @@ describe("build install lifecycle", () => {
     );
   });
 
-  test("requests a normal application quit before replacing the bundle", () => {
-    const stop = script.indexOf("stop_installed_app");
-    const replace = script.indexOf('rm -rf "/Applications/Edith.app"');
-
-    expect(script).toContain('tell application id "com.pulkit.edith" to quit');
-    expect(stop).toBeGreaterThan(-1);
-    expect(replace).toBeGreaterThan(stop);
-  });
-
-  test("targets the app and helper by exact runtime identities", () => {
-    expect(script).toContain('pgrep -f -x "$1"');
-    expect(script).toContain('pkill -TERM -f -x "$executable"');
-    expect(script).toContain("/Applications/Edith.app/Contents/MacOS/Edith");
-    expect(script).toContain(
-      "/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith",
-    );
-    expect(script).toContain('stop_process "com.pulkit.edith.helper"');
-    expect(script).toContain('stop_process "com.pulkit.edith.helper.v2"');
-    expect(script).not.toContain("killall Edith");
-  });
+  test.skipIf(process.platform !== "darwin")(
+    "installs atomically and stops only retired native processes",
+    () => {
+      expect(script).toContain(
+        'python3 scripts/install_app.py "$APP" "/Applications/Edith.app"',
+      );
+      const result = Bun.spawnSync(
+        ["python3", resolve("scripts/install_app_test.py")],
+        { stdout: "pipe", stderr: "pipe", timeout: 30000 },
+      );
+      const output = new TextDecoder().decode(result.stderr);
+      expect(output).toContain("Ran 10 tests");
+      expect(output).toContain("OK");
+      expect(result.exitCode).toBe(0);
+    },
+    35000,
+  );
 
   test("launches the installed bundle as a new application instance", () => {
     expect(script).toContain('open -n "/Applications/Edith.app"');

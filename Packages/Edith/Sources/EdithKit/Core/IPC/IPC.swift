@@ -200,6 +200,13 @@ public final class IPCObservationRegistry: @unchecked Sendable {
         lock.unlock()
     }
 
+    func activate() {
+        lock.lock()
+        let pending = Array(observations.values)
+        lock.unlock()
+        for observation in pending { observation.activate() }
+    }
+
     public func release(_ observation: IPCObservation) {
         lock.lock()
         observations.removeValue(forKey: ObjectIdentifier(observation))
@@ -213,17 +220,32 @@ public final class IPCObservation: NSObject, @unchecked Sendable {
     private var busSubscription: AgentBusSubscription?
     private var fallback: NSObjectProtocol?
     private var cancelled = false
+    private var subscribing = false
+    private var subscribe: (@Sendable () -> AgentBusSubscription?)?
 
-    init(fallback: NSObjectProtocol?) {
+    init(
+        fallback: NSObjectProtocol?,
+        subscribe: @escaping @Sendable () -> AgentBusSubscription?
+    ) {
         self.fallback = fallback
+        self.subscribe = subscribe
     }
 
-    func attach(busSubscription: AgentBusSubscription?) {
+    func activate() {
         lock.lock()
-        let discard = cancelled
-        if !discard { self.busSubscription = busSubscription }
+        guard !cancelled, !subscribing, busSubscription == nil, let subscribe else {
+            lock.unlock()
+            return
+        }
+        subscribing = true
         lock.unlock()
-        if discard { busSubscription?.cancel() }
+        let subscription = subscribe()
+        lock.lock()
+        subscribing = false
+        let discard = cancelled
+        if !discard { busSubscription = subscription }
+        lock.unlock()
+        if discard { subscription?.cancel() }
     }
 
     func cancel() {
@@ -231,6 +253,7 @@ public final class IPCObservation: NSObject, @unchecked Sendable {
         cancelled = true
         let subscription = busSubscription
         let observer = fallback
+        subscribe = nil
         busSubscription = nil
         fallback = nil
         lock.unlock()
@@ -249,9 +272,16 @@ public enum IPCTransport {
     public static var isEnabled: Bool { state.isEnabled }
 
     public static func enable() {
+        enable(client: .shared, registry: .shared, state: state)
+    }
+
+    static func enable(
+        client: AgentClient, registry: IPCObservationRegistry, state: IPCTransportState
+    ) {
         work.async {
-            guard (try? AgentClient.shared.verifyHandshake()) != nil else { return }
+            guard (try? client.verifyHandshake()) != nil else { return }
             state.enable()
+            registry.activate()
         }
     }
 
@@ -290,17 +320,17 @@ public enum IPCTransport {
         let fallback = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { note in deliver(note.userInfo ?? [:]) }
-        let observation = IPCObservation(fallback: fallback)
-        IPCObservationRegistry.shared.retain(observation)
-        guard state.shouldAttempt() else { return observation }
-        work.async {
-            guard state.shouldAttempt() else { return }
+        let observation = IPCObservation(fallback: fallback) {
+            guard state.shouldAttempt() else { return nil }
             let subscription = try? AgentClient.shared.subscribeBus(channel: channel) { userInfo in
                 DispatchQueue.main.async { deliver(userInfo) }
             }
             if subscription == nil { state.recordFailure() }
-            observation.attach(busSubscription: subscription)
+            return subscription
         }
+        IPCObservationRegistry.shared.retain(observation)
+        guard state.shouldAttempt() else { return observation }
+        work.async { observation.activate() }
         return observation
     }
 }
