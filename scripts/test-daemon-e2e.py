@@ -144,8 +144,10 @@ try:
     wait_for(lambda: call(['/bin/ps', '-p', download_child, '-o', 'stat='], check=False),
              lambda result: result.returncode != 0 or result.stdout.strip().startswith('Z'))
     recovered_downloads = json.loads(call([str(root / 'ed'), 'download', 'ls', '--json']).stdout)
-    assert any(item['id'] == download['id'] and item['state'] == 'interrupted' for item in recovered_downloads)
-    record('07 daemon restart stops the running download child and preserves retryable history')
+    interrupted = next(item for item in recovered_downloads if item['id'] == download['id'])
+    assert interrupted['state'] == 'interrupted'
+    record('07 daemon restart stops the running download child and preserves retryable history',
+           downloadID=interrupted['id'], state=interrupted['state'], childStopped=True)
 finally:
     if booted:
         call(['/bin/launchctl', 'bootout', target], check=False)
