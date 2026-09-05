@@ -23,6 +23,8 @@ public final class BackupJob: @unchecked Sendable {
     private let defaults: UserDefaults
     private let cloudAvailable: @Sendable () -> Bool
     private let attentionBackupEnabled: @Sendable () -> Bool
+    private let maximumSnapshotBytes: Int
+    private let snapshotTimeout: Duration
 
     public init(
         store: AgentStore?, cloudDirectory: URL = AppData.cloudDir,
@@ -30,7 +32,8 @@ public final class BackupJob: @unchecked Sendable {
         cloudAvailable: @escaping @Sendable () -> Bool = { AppData.cloudAvailable },
         attentionBackupEnabled: @escaping @Sendable () -> Bool = {
             AttentionRepository().loadSettings().iCloudBackupEnabled
-        }
+        }, maximumSnapshotBytes: Int = 512 * 1_024 * 1_024,
+        snapshotTimeout: Duration = .seconds(60)
     ) {
         self.store = store
         self.cloudDirectory = cloudDirectory
@@ -38,6 +41,8 @@ public final class BackupJob: @unchecked Sendable {
         self.defaults = defaults
         self.cloudAvailable = cloudAvailable
         self.attentionBackupEnabled = attentionBackupEnabled
+        self.maximumSnapshotBytes = max(0, maximumSnapshotBytes)
+        self.snapshotTimeout = max(.zero, snapshotTimeout)
     }
 
     public func run(now: Date = Date()) async throws -> Data? {
@@ -78,8 +83,13 @@ public final class BackupJob: @unchecked Sendable {
         guard let store else { throw AgentStoreError("The backup store is unavailable.") }
         let directory = cloudDirectory.appendingPathComponent("snapshots")
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let deadline = ContinuousClock.now.advanced(by: snapshotTimeout)
+        var writtenBytes = 0
         for table in tables {
             try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else {
+                throw AgentStoreError("The backup snapshot exceeded its time limit.")
+            }
             let target = directory.appendingPathComponent(
                 BackupSnapshotTables.fileName(table: table, day: now))
             let temporary = directory.appendingPathComponent(".\(UUID().uuidString).jsonl")
@@ -93,14 +103,25 @@ public final class BackupJob: @unchecked Sendable {
                 let rows = try Row.fetchCursor(database, sql: "SELECT * FROM \(table)")
                 while let row = try rows.next() {
                     try Task.checkCancellation()
+                    guard ContinuousClock.now < deadline else {
+                        throw AgentStoreError("The backup snapshot exceeded its time limit.")
+                    }
                     let data = try JSONSerialization.data(
                         withJSONObject: BackupRowEncoder.object(from: row), options: [.sortedKeys])
+                    guard data.count < maximumSnapshotBytes - writtenBytes else {
+                        throw AgentStoreError("The backup snapshot exceeded its size limit.")
+                    }
+                    writtenBytes += data.count + 1
                     try handle.write(contentsOf: data)
                     try handle.write(contentsOf: Data([0x0A]))
                 }
             }
             try handle.synchronize()
             try handle.close()
+            try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else {
+                throw AgentStoreError("The backup snapshot exceeded its time limit.")
+            }
             guard rename(temporary.path, target.path) == 0 else {
                 throw AgentStoreError("The backup snapshot could not be published.")
             }
