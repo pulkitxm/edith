@@ -141,6 +141,38 @@ private struct BackupDaemonFixture {
         #expect(fixture.defaults.object(forKey: BackupSnapshotTables.timestampKey) == nil)
     }
 
+    @Test func snapshotLimitsPreserveTheArchiveAndAllowRetry() async throws {
+        let fixture = try BackupDaemonFixture()
+        defer { fixture.close() }
+        fixture.defaults.set(false, forKey: AppStorageKeys.Backup.usage)
+        fixture.defaults.set(false, forKey: AppStorageKeys.Backup.limits)
+        let now = Date()
+        try AttentionEventStore(store: fixture.store).record(
+            AttentionBatch(events: [
+                AttentionEvent(
+                    startedAt: now, duration: 30, source: .application, appName: "Writing")
+            ]))
+        let directory = fixture.cloud.appendingPathComponent("snapshots")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(
+            BackupSnapshotTables.fileName(table: "attention_event", day: now))
+        let original = Data("previous complete archive".utf8)
+        try original.write(to: file)
+        for (bytes, timeout) in [(1, Duration.seconds(60)), (1_048_576, .zero)] {
+            let limited = BackupJob(
+                store: fixture.store, cloudDirectory: fixture.cloud, defaults: fixture.defaults,
+                cloudAvailable: { true }, attentionBackupEnabled: { true },
+                maximumSnapshotBytes: bytes, snapshotTimeout: timeout)
+            await #expect(throws: AgentStoreError.self) { try await limited.run(now: now) }
+            #expect(try Data(contentsOf: file) == original)
+            #expect(fixture.defaults.object(forKey: BackupSnapshotTables.timestampKey) == nil)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).count == 1)
+        }
+        let retry = try await fixture.run(fixture.job(attention: true), now: now)
+        #expect(retry.snapshotTables == ["attention_event"])
+        #expect(try Data(contentsOf: file) != original)
+    }
+
     @Test func cloudPathCanBeIsolatedWithoutChangingTheHomeDirectory() {
         let local = URL(fileURLWithPath: "/tmp/backup-fixture")
         #expect(

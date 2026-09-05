@@ -18,41 +18,22 @@ public enum BackgroundBackupClient {
 public enum BackgroundBackupRuntime {
     private static var observations: [NSObjectProtocol] = []
     private static var started = false
+    private static var mailbox: BackupRequestMailbox?
+    private static var worker: Task<Void, Never>?
 
     public static func start() {
         guard !started else { return }
         started = true
+        let requests = BackupRequestMailbox()
+        mailbox = requests
         observations = [
-            IPC.observe(IPC.Name.settingsChanged) {
-                Task { @MainActor in
-                    guard started else { return }
-                    SettingsBackup.shared.settingsDidChange()
-                }
-            },
-            IPC.observe(IPC.Name.usageRefreshFinished) {
-                Task { @MainActor in
-                    guard started else { return }
-                    SettingsBackup.shared.queuePersistence(
-                        limitsRestore: false, limitsExport: false, usageRestore: true,
-                        usageExport: true)
-                }
-            },
-            IPC.observe(IPC.Name.limitsUpdated) {
-                Task { @MainActor in
-                    guard started else { return }
-                    SettingsBackup.shared.queuePersistence(
-                        limitsRestore: true, limitsExport: true, usageRestore: false,
-                        usageExport: false)
-                }
-            },
+            IPC.observe(IPC.Name.settingsChanged) { requests.send(.settings) },
+            IPC.observe(IPC.Name.usageRefreshFinished) { requests.send(.usage) },
+            IPC.observe(IPC.Name.limitsUpdated) { requests.send(.limits) },
             IPC.observe(
                 IPC.Name.clipboardChanged,
                 info: { info in
-                    guard info["backup"] as? Bool != false else { return }
-                    Task { @MainActor in
-                        guard started else { return }
-                        SettingsBackup.shared.scheduleClipboardBackup()
-                    }
+                    if info["backup"] as? Bool != false { requests.send(.clipboard) }
                 }),
             IPC.observe(
                 BackgroundBackupSignal.restoreRequested,
@@ -60,12 +41,15 @@ public enum BackgroundBackupRuntime {
                     guard let name = info["dataClass"] as? String,
                         let dataClass = SettingsBackupDataClass(rawValue: name)
                     else { return }
-                    Task { @MainActor in
-                        guard started else { return }
-                        SettingsBackup.shared.restoreDataOnEnable(for: dataClass)
-                    }
+                    requests.send(.restore(dataClass))
                 }),
         ]
+        worker = Task {
+            for await _ in requests.stream {
+                guard started, !Task.isCancelled else { break }
+                apply(requests.take())
+            }
+        }
         SettingsBackup.shared.start()
         for dataClass in SettingsBackupDataClass.allCases where enabled(dataClass) {
             SettingsBackup.shared.restoreDataOnEnable(for: dataClass)
@@ -77,8 +61,27 @@ public enum BackgroundBackupRuntime {
         started = false
         observations.forEach(IPC.stopObserving)
         observations.removeAll()
+        mailbox?.close()
+        mailbox = nil
+        let stoppedWorker = worker
+        worker = nil
+        stoppedWorker?.cancel()
+        await stoppedWorker?.value
         await SettingsBackup.shared.flushForTermination()
         await SettingsBackup.shared.shutdown()
+    }
+
+    private static func apply(_ requests: BackupRequests) {
+        if requests.settings { SettingsBackup.shared.settingsDidChange() }
+        if requests.usage || requests.limits {
+            SettingsBackup.shared.queuePersistence(
+                limitsRestore: requests.limits, limitsExport: requests.limits,
+                usageRestore: requests.usage, usageExport: requests.usage)
+        }
+        if requests.clipboard { SettingsBackup.shared.scheduleClipboardBackup() }
+        for dataClass in requests.restores {
+            SettingsBackup.shared.restoreDataOnEnable(for: dataClass)
+        }
     }
 
     private static func enabled(_ dataClass: SettingsBackupDataClass) -> Bool {
