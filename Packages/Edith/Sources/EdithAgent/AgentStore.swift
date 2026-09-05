@@ -35,7 +35,7 @@ public enum AgentStoreLayout {
 }
 
 public enum AgentSchema {
-    public static let version = 3
+    public static let version = 4
 
     public static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -112,6 +112,13 @@ public enum AgentSchema {
             try database.create(table: "agent_event") { table in
                 table.autoIncrementedPrimaryKey("sequence")
                 table.column("payload", .blob).notNull()
+            }
+        }
+        migrator.registerMigration("0004-attention-delivery-receipts") { database in
+            try database.create(table: "attention_delivery_receipt") { table in
+                table.primaryKey("producerID", .text)
+                table.column("lastSequence", .integer).notNull()
+                table.column("updatedAt", .datetime).notNull()
             }
         }
         return migrator

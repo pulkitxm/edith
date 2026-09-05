@@ -24,6 +24,7 @@ final class AppServices {
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
     private var terminating = false
+    private var attentionStopTask: Task<Void, Never>?
 
     init(
         lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
@@ -102,6 +103,8 @@ final class AppServices {
         startup.cancel()
         terminating = true
         PermissionsModel.shared.shutdown()
+        stopAttentionService()
+        await attentionStopTask?.value
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
@@ -415,15 +418,29 @@ final class AppServices {
     }
 
     private func reconcileAttentionService() {
+        guard !terminating else { return }
         let attentionSettings = AttentionRepository().loadSettings()
         let attentionOn = Self.attentionEnabled(
             extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
             settings: attentionSettings)
-        if attentionOn, attention == nil { attention = AttentionTrackingService() }
+        if attentionOn, attention == nil, attentionStopTask == nil {
+            attention = AttentionTrackingService()
+        }
         if attentionOn { attention?.sync(attentionSettings) }
-        if !attentionOn, let service = attention {
-            service.shutdown()
-            attention = nil
+        if !attentionOn { stopAttentionService() }
+    }
+
+    private func stopAttentionService() {
+        guard attentionStopTask == nil else { return }
+        guard let service = attention else { return }
+        attention = nil
+        service.shutdown()
+        attentionStopTask = Task { [weak self] in
+            await service.shutdown().value
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            attentionStopTask = nil
+            reconcileAttentionService()
         }
     }
 
