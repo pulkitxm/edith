@@ -12,6 +12,7 @@ struct AgentRemoteCommandScope: Sendable {
             sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", row)
             if (index(row, prefix) == 1) print $1
         }')
+        for group in $groups; do printf 'matched:%s\\n' "$group"; done
         for group in $groups; do kill -TERM -- -"$group" 2>/dev/null || :; done
         sleep 0.1
         for group in $groups; do kill -KILL -- -"$group" 2>/dev/null || :; done

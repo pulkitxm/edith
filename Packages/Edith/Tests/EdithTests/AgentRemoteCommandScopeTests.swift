@@ -24,17 +24,72 @@ import Testing
         let firstWorker = Task { try await run(first.command, receive: firstPID.receive) }
         let secondWorker = Task { try await run(second.command, receive: secondPID.receive) }
         defer { firstWorker.cancel(); secondWorker.cancel() }
-        let firstChild = try await waitForPID(firstPID)
-        let secondChild = try await waitForPID(secondPID)
-        #expect(kill(firstChild, 0) == 0)
-        #expect(kill(secondChild, 0) == 0)
-        #expect(try await run(first.cleanupCommand).terminationStatus == 0)
-        _ = try await firstWorker.value
-        #expect(kill(firstChild, 0) != 0)
-        #expect(kill(secondChild, 0) == 0)
-        #expect(try await run(second.cleanupCommand).terminationStatus == 0)
-        _ = try await secondWorker.value
-        #expect(kill(secondChild, 0) != 0)
+        var phase = "waiting for child processes"
+        var cleanupOutput = ""
+        var knownProcesses: [Int32] = []
+        do {
+            let firstChild = try await waitForPID(firstPID)
+            let secondChild = try await waitForPID(secondPID)
+            let firstGroup = getpgid(firstChild)
+            let secondGroup = getpgid(secondChild)
+            knownProcesses = [firstChild, secondChild, firstGroup, secondGroup]
+            #expect(firstGroup > 0 && secondGroup > 0 && firstGroup != secondGroup)
+            #expect(kill(firstChild, 0) == 0)
+            #expect(kill(secondChild, 0) == 0)
+            phase = "cleaning the first session"
+            let firstCleanup = try await run(first.cleanupCommand)
+            cleanupOutput = firstCleanup.standardOutput + firstCleanup.standardError
+            #expect(firstCleanup.terminationStatus == 0)
+            try #require(firstCleanup.standardOutput == "matched:\(firstGroup)\n")
+            phase = "waiting for the first session to exit"
+            _ = try await firstWorker.value
+            #expect(kill(firstChild, 0) != 0)
+            #expect(kill(secondChild, 0) == 0)
+            phase = "cleaning the second session"
+            let secondCleanup = try await run(second.cleanupCommand)
+            cleanupOutput = secondCleanup.standardOutput + secondCleanup.standardError
+            #expect(secondCleanup.terminationStatus == 0)
+            try #require(secondCleanup.standardOutput == "matched:\(secondGroup)\n")
+            phase = "waiting for the second session to exit"
+            _ = try await secondWorker.value
+            #expect(kill(secondChild, 0) != 0)
+        } catch {
+            let rows = await diagnostics(processes: knownProcesses)
+            Issue.record(
+                "Remote cleanup failed while \(phase): \(error). Cleanup: \(cleanupOutput). Processes: \(rows)"
+            )
+            firstWorker.cancel()
+            secondWorker.cancel()
+            _ = try? await firstWorker.value
+            _ = try? await secondWorker.value
+            throw error
+        }
+    }
+
+    @Test func cleanupOfAnAbsentSessionReturnsNoMatchedGroups() async throws {
+        let scope = AgentRemoteCommandScope(command: "true")
+        let result = try await run(scope.cleanupCommand)
+        #expect(result.terminationStatus == 0)
+        #expect(result.standardOutput.isEmpty)
+    }
+
+    private func diagnostics(processes: [Int32]) async -> String {
+        let pids = Set(processes.filter { $0 > 0 }).sorted().map(String.init)
+        guard !pids.isEmpty else { return "No child process was reported." }
+        do {
+            let result = try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/ps"),
+                    arguments: [
+                        "-ww", "-p", pids.joined(separator: ","), "-o",
+                        "pid=,ppid=,pgid=,stat=,args=",
+                    ],
+                    environment: ["PATH": "/usr/bin:/bin"],
+                    timeout: 2, maximumOutputBytes: 4096, terminatesProcessGroup: true),
+                streamsWhileRunning: false, onStandardOutputLine: { _ in },
+                onStandardErrorLine: { _ in })
+            return result.standardOutput + result.standardError
+        } catch { return error.localizedDescription }
     }
 
     private func run(
