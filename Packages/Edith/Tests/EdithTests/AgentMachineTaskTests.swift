@@ -5,6 +5,62 @@ import Testing
 @testable import EdithKit
 
 @Suite struct AgentMachineTaskTests {
+    @Test func directSSHEntryPointsUseDaemonTasksBeforeOpeningAConnection() async throws {
+        let service = try AgentTaskService(directory: nil)
+        await AgentMachineOperations.register(
+            on: service,
+            command: { request, _ in
+                #expect(request.command == "cat")
+                #expect(request.timeout == 3)
+                return SSHExecResult(
+                    status: 19, stdout: request.standardInput ?? Data(),
+                    stderr: Data("diagnostic".utf8))
+            })
+        let listener = TaskTestListener(service: service)
+        defer { listener.stop() }
+        let connection = SSHConnection(
+            machine: Machine(name: "Direct SSH fixture", host: "fixture.invalid"),
+            taskClient: AgentTaskClient(client: listener.client(), pollInterval: 0.01))
+        let input = Data([0, 255, 1, 128])
+        let result = try await connection.run("cat", stdin: input, timeout: 3)
+        #expect(result.stdout == input)
+        #expect(result.stderrText == "diagnostic")
+        #expect(result.status == 19)
+        #expect(await connection.remotePlatform == nil)
+        #expect(await service.snapshots().map(\.operation) == [AgentMachineTaskOperation.command])
+    }
+
+    @Test(arguments: [AgentMachineTransferDirection.upload, .download])
+    func directoryTransferPathsAreRejectedAfterCrossingXPC(
+        direction: AgentMachineTransferDirection
+    ) async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let folder = directory.appendingPathComponent("folder", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let contents = folder.appendingPathComponent("keep")
+        try Data("original".utf8).write(to: contents)
+        let calls = MachineTransferTestProgress()
+        let service = try AgentTaskService(directory: nil)
+        await AgentMachineOperations.register(
+            on: service,
+            transfer: { _, _ in
+                calls.append(1)
+                return 0
+            })
+        let listener = TaskTestListener(service: service)
+        defer { listener.stop() }
+        let client = AgentTaskClient(client: listener.client(), pollInterval: 0.01)
+        await #expect(throws: AgentTaskFailure.self) {
+            try await client.transferMachineFile(
+                AgentMachineTransferRequest(
+                    machine: Machine(name: "Directory fixture", host: "fixture.invalid"),
+                    direction: direction, localURL: folder, remotePath: "/remote-file"))
+        }
+        #expect(calls.values.isEmpty)
+        #expect(try String(contentsOf: contents, encoding: .utf8) == "original")
+    }
+
     @Test func binaryCommandOutputAndExitStatusCrossXPC() async throws {
         let service = try AgentTaskService(directory: nil)
         await AgentMachineOperations.register(on: service)
