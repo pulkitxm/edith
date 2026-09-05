@@ -124,11 +124,9 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         guard !termination.started else { return .terminateLater }
         AppState.services.cancelStartup()
         AppState.services.usage?.prepareForTermination()
-        SettingsBackup.shared.prepareForTermination()
         termination.begin {
             await AppState.services.prepareForTermination()
         } persistence: {
-            await SettingsBackup.shared.flushForTermination()
         } finish: {
             sender.reply(toApplicationShouldTerminate: true)
         }
@@ -161,9 +159,6 @@ struct EdithApp {
     private static func configure() {
         _ = AppProcessUptime.launchedAt
         HotKey.register()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            SettingsBackup.shared.start()
-        }
         DispatchQueue.global(qos: .utility).async {
             CLIInstaller.installIfNeeded()
         }
@@ -172,7 +167,6 @@ struct EdithApp {
         let services = AppState.services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
-            SettingsBackup.shared.settingsDidChange()
             applyAppearance(
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()

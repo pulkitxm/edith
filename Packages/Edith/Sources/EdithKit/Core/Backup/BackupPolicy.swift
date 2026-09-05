@@ -59,12 +59,16 @@ public struct BackupClass: Identifiable, Equatable, Sendable {
         self.carriesSecrets = carriesSecrets
     }
 
-    public func isEnabled(in defaults: UserDefaults) -> Bool {
+    public func isEnabled(in defaults: UserDefaults, attentionBackupEnabled: Bool = false) -> Bool {
         switch sync {
         case .never: return false
-        case .always: return defaults.bool(forKey: AppStorageKeys.Backup.icloud)
+        case .always:
+            guard defaults.bool(forKey: AppStorageKeys.Backup.icloud) else { return false }
+            guard let defaultsKey else { return true }
+            return defaults.object(forKey: defaultsKey) as? Bool ?? true
         case .optIn:
             guard defaults.bool(forKey: AppStorageKeys.Backup.icloud) else { return false }
+            if id == "attention" { return attentionBackupEnabled }
             guard let defaultsKey else { return false }
             return defaults.bool(forKey: defaultsKey)
         }
@@ -76,7 +80,7 @@ public enum BackupCatalog {
         BackupClass(
             id: "settings", title: "Settings and suite selection",
             location: "defaults suite, exported to settings.json", sync: .always,
-            merge: .newestPerKey, retention: "Forever",
+            merge: .newestFile, retention: "Forever",
             defaultsKey: AppStorageKeys.Backup.settings),
         BackupClass(
             id: "machines", title: "Machines, forwards, snippets", location: "machines/*.json",
@@ -85,15 +89,19 @@ public enum BackupCatalog {
             id: "database", title: "Database connections", location: "edith.sqlite",
             sync: .always, merge: .unionByID, retention: "Forever", carriesSecrets: true),
         BackupClass(
-            id: "usage", title: "Usage days, sessions, limits", location: "edith.sqlite",
+            id: "usage", title: "Usage days and sessions", location: "edith.sqlite",
             sync: .always, merge: .unionByPrimaryKey, retention: "Forever",
             defaultsKey: AppStorageKeys.Backup.usage),
         BackupClass(
-            id: "attention", title: "Attention events", location: "edith.sqlite", sync: .always,
+            id: "limits", title: "Provider limits", location: "edith.sqlite",
+            sync: .always, merge: .unionByPrimaryKey, retention: "Forever",
+            defaultsKey: AppStorageKeys.Backup.limits),
+        BackupClass(
+            id: "attention", title: "Attention events", location: "edith.sqlite", sync: .optIn,
             merge: .unionByPrimaryKey, retention: "365 days"),
         BackupClass(
             id: "clipboard", title: "Clipboard history", location: "clipboard/", sync: .optIn,
-            merge: .unionByHash, retention: "200 items or 30 days",
+            merge: .newestFile, retention: "200 items or 30 days",
             defaultsKey: AppStorageKeys.Clipboard.backup),
         BackupClass(
             id: "music", title: "Music library and download queue",
@@ -112,8 +120,12 @@ public enum BackupCatalog {
         classes
     }
 
-    public static func enabled(in defaults: UserDefaults = SharedDefaults.store) -> [BackupClass] {
-        classes.filter { $0.isEnabled(in: defaults) }
+    public static func enabled(
+        in defaults: UserDefaults = SharedDefaults.store, attentionBackupEnabled: Bool = false
+    ) -> [BackupClass] {
+        classes.filter {
+            $0.isEnabled(in: defaults, attentionBackupEnabled: attentionBackupEnabled)
+        }
     }
 
     public static func byID(_ id: String) -> BackupClass? {

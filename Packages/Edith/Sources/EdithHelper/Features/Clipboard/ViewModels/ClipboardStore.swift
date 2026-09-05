@@ -190,14 +190,15 @@ final class ClipboardStore: FeatureModule {
             pinned: existing?.pinned ?? false)
         adopt(ClipboardActions.arrange(entries + [entry]))
         persistAndTrim(appending: existing == nil ? entry : nil)
-        SettingsBackup.shared.scheduleClipboardBackup()
     }
 
     private static let senderID =
         "clipboardStore-\(ProcessInfo.processInfo.processIdentifier)"
 
-    private func postChanged() {
-        IPC.post(IPC.Name.clipboardChanged, userInfo: ["sender": Self.senderID])
+    private func postChanged(scheduleBackup: Bool = true) {
+        IPC.post(
+            IPC.Name.clipboardChanged,
+            userInfo: ["sender": Self.senderID, "backup": scheduleBackup])
     }
 
     private func adopt(_ updated: [ClipboardEntry]) {
@@ -217,7 +218,7 @@ final class ClipboardStore: FeatureModule {
         revision += 1
         let removedAny = entries.count != beforeRetention
         let snapshot = entries
-        Self.diskQueue.async {
+        Self.diskQueue.async { [weak self] in
             ClipboardRepository.withIndexLock {
                 let appendedFastPath =
                     appended != nil && !removedAny
@@ -229,8 +230,8 @@ final class ClipboardStore: FeatureModule {
             if removedAny {
                 ClipboardRepository.pruneOrphanBlobs(keeping: snapshot)
             }
+            Task { @MainActor in self?.postChanged() }
         }
-        postChanged()
     }
 
     func togglePin(_ id: String) {
@@ -274,8 +275,7 @@ final class ClipboardStore: FeatureModule {
                 guard let self else { return }
                 self.mutationError = nil
                 self.adopt(outcome.entries)
-                if scheduleBackup { SettingsBackup.shared.scheduleClipboardBackup() }
-                self.postChanged()
+                self.postChanged(scheduleBackup: scheduleBackup)
             }
         }
     }
@@ -296,9 +296,10 @@ final class ClipboardStore: FeatureModule {
         lastChangeCount = NSPasteboard.general.changeCount
         adopt(outcome.entries)
         let id = entry.id
-        Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id, at: copiedAt) }
-        SettingsBackup.shared.scheduleClipboardBackup()
-        postChanged()
+        Self.diskQueue.async { [weak self] in
+            _ = try? ClipboardActions.markCopied(id: id, at: copiedAt)
+            Task { @MainActor in self?.postChanged() }
+        }
 
         let autoPaste =
             SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)

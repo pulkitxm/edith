@@ -221,7 +221,8 @@ import Testing
         let ids = BackupCatalog.classes.map(\.id)
         #expect(
             ids == [
-                "settings", "machines", "database", "usage", "attention", "clipboard", "music",
+                "settings", "machines", "database", "usage", "limits", "attention", "clipboard",
+                "music",
                 "metrics", "memories",
             ])
         #expect(Set(ids).count == ids.count)
@@ -243,7 +244,7 @@ import Testing
         let enabled = Set(BackupCatalog.enabled(in: defaults).map(\.id))
 
         #expect(enabled.contains("machines"))
-        #expect(enabled.contains("attention"))
+        #expect(!enabled.contains("attention"))
         #expect(!enabled.contains("clipboard"))
         #expect(!enabled.contains("metrics"))
         #expect(!enabled.contains("memories"))

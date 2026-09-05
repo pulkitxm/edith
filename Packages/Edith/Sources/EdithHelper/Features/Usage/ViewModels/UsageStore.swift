@@ -202,19 +202,11 @@ final class UsageStore: FeatureModule {
             Task { @MainActor in await self?.reloadLimitsFromHistory() }
         }
 
-        usageRestoreObserver = NotificationCenter.default.addObserver(
-            forName: .usageBackupRestored, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.scheduleRestoredUsageReload()
-            }
+        usageRestoreObserver = IPC.observe(BackgroundBackupSignal.usageRestored) { [weak self] in
+            Task { @MainActor in self?.scheduleRestoredUsageReload() }
         }
-        limitsRestoreObserver = NotificationCenter.default.addObserver(
-            forName: .limitsBackupRestored, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.scheduleRestoredLimitsReload()
-            }
+        limitsRestoreObserver = IPC.observe(BackgroundBackupSignal.limitsRestored) { [weak self] in
+            Task { @MainActor in self?.scheduleRestoredLimitsReload() }
         }
     }
 
@@ -274,11 +266,11 @@ final class UsageStore: FeatureModule {
             self.limitsUpdatedObserver = nil
         }
         if let usageRestoreObserver {
-            NotificationCenter.default.removeObserver(usageRestoreObserver)
+            IPC.stopObserving(usageRestoreObserver)
             self.usageRestoreObserver = nil
         }
         if let limitsRestoreObserver {
-            NotificationCenter.default.removeObserver(limitsRestoreObserver)
+            IPC.stopObserving(limitsRestoreObserver)
             self.limitsRestoreObserver = nil
         }
     }
@@ -317,7 +309,6 @@ final class UsageStore: FeatureModule {
         await loadLimitHistory(provider: limitHistoryProvider)
         limitsError = nil
         updateStatusItem()
-        _ = await SettingsBackup.shared.syncLimits()
         refreshingLimits = false
     }
 
@@ -556,7 +547,6 @@ final class UsageStore: FeatureModule {
 
     private func finishRefresh(generation: Int) async {
         guard !Task.isCancelled, refreshGeneration == generation else { return }
-        _ = await SettingsBackup.shared.syncUsage()
         guard !Task.isCancelled, refreshGeneration == generation else { return }
         await loadStats()
         guard !Task.isCancelled, refreshGeneration == generation else { return }

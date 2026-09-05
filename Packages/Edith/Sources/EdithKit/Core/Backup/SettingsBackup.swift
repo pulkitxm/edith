@@ -1,9 +1,7 @@
-import AppKit
-import EdithKit
+import Darwin
 import Foundation
-import Observation
 
-enum SettingsBackupDataClass: String, CaseIterable, Hashable, Sendable {
+public enum SettingsBackupDataClass: String, CaseIterable, Hashable, Sendable {
     case settings
     case usage
     case limits
@@ -494,7 +492,9 @@ actor SettingsBackupUsageWorker {
         requireCloudAvailability: Bool = true,
         restoreToken: SettingsBackupRestoreToken? = nil
     ) -> SettingsBackupTransferOutcome {
-        guard backupEnabled, !requireCloudAvailability || AppData.cloudAvailable else {
+        guard !Task.isCancelled, backupEnabled,
+            !requireCloudAvailability || AppData.cloudAvailable
+        else {
             return .unavailable
         }
         guard settingsBackupCloudFileIsCurrent(cloudURL) else {
@@ -528,7 +528,9 @@ actor SettingsBackupUsageWorker {
         willAcquireDataLock: (() -> Void)? = nil,
         restoreToken: SettingsBackupRestoreToken? = nil
     ) -> SettingsBackupTransferOutcome {
-        guard backupEnabled, !requireCloudAvailability || AppData.cloudAvailable else {
+        guard !Task.isCancelled, backupEnabled,
+            !requireCloudAvailability || AppData.cloudAvailable
+        else {
             return .unavailable
         }
         guard settingsBackupCloudFileIsCurrent(cloudURL) else {
@@ -659,7 +661,6 @@ actor SettingsBackupFileWorker {
 }
 
 @MainActor
-@Observable
 final class SettingsBackup {
     static let shared = SettingsBackup()
 
@@ -954,9 +955,16 @@ final class SettingsBackup {
     ]
 
     private func store(for key: String) -> UserDefaults {
-        Self.sharedKeys.contains(key) ? SharedDefaults.store : .standard
+        Self.sharedKeys.contains(key) ? SharedDefaults.store : Self.helperDefaults
     }
 
+    private static let helperDefaults = UserDefaults(
+        suiteName: ProcessInfo.processInfo.environment["EDITH_HELPER_DEFAULTS_SUITE"]
+            ?? MainApp.statusBarBundleIdentifier)!
+    private var started = false
+    private var defaultsObserver: NSObjectProtocol?
+    private var musicBackupTask: Task<Void, Never>?
+    private var clipboardBackupTask: Task<Void, Never>?
     private var debounce: Timer?
     private var sweep: Timer?
     nonisolated static let sweepInterval: TimeInterval = 30
@@ -1362,10 +1370,10 @@ final class SettingsBackup {
         case .settings:
             return
         case .usage:
-            NotificationCenter.default.post(name: .usageBackupRestored, object: nil)
+            IPC.post(BackgroundBackupSignal.usageRestored)
             IPC.post(IPC.Name.usageRefreshFinished)
         case .limits:
-            NotificationCenter.default.post(name: .limitsBackupRestored, object: nil)
+            IPC.post(BackgroundBackupSignal.limitsRestored)
             IPC.post(IPC.Name.limitsUpdated)
         case .music:
             NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
@@ -1433,6 +1441,8 @@ final class SettingsBackup {
     }
 
     func start() {
+        guard !started else { return }
+        started = true
         for dataClass in SettingsBackupDataClass.allCases
         where dataClass != .settings && restoreTasks[dataClass] == nil {
             clearRestoreState(for: dataClass)
@@ -1443,7 +1453,7 @@ final class SettingsBackup {
         export()
         queuePersistence(
             limitsRestore: false, limitsExport: true, usageRestore: false, usageExport: true)
-        NotificationCenter.default.addObserver(
+        defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleExport() }
@@ -1452,7 +1462,7 @@ final class SettingsBackup {
         sweep = Timer.scheduledTimer(
             withTimeInterval: Self.sweepInterval, repeats: true
         ) { _ in
-            Task { @MainActor in SettingsBackup.shared.export() }
+            Task { @MainActor in SettingsBackup.shared.maintenance() }
         }
         if !restored.music {
             backupMusic()
@@ -1463,12 +1473,15 @@ final class SettingsBackup {
         musicFolderObserver = IPC.observe(IPC.Name.musicFolderChanged) {
             Task { @MainActor in SettingsBackup.shared.scheduleMusicBackup() }
         }
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.shutdown()
-            }
+
+    }
+
+    private func maintenance() {
+        guard started else { return }
+        export()
+        if !pendingPersistence.isEmpty {
+            queuePersistence(
+                limitsRestore: false, limitsExport: false, usageRestore: false, usageExport: false)
         }
     }
 
@@ -1523,7 +1536,24 @@ final class SettingsBackup {
         return (music, clipboard)
     }
 
-    private func shutdown() {
+    func shutdown() async {
+        started = false
+        let musicTransfer = musicBackupTask
+        let clipboardTransfer = clipboardBackupTask
+        if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
+        defaultsObserver = nil
+        if let musicFolderObserver { IPC.stopObserving(musicFolderObserver) }
+        musicFolderObserver = nil
+        debounce?.invalidate()
+        musicDebounce?.invalidate()
+        clipboardDebounce?.invalidate()
+        settingsRestoreRetry?.invalidate()
+        musicBackupTask?.cancel()
+        clipboardBackupTask?.cancel()
+        musicBackupTask = nil
+        clipboardBackupTask = nil
+        musicBackupRunning = false
+        clipboardBackupRunning = false
         sweep?.invalidate()
         sweep = nil
         for task in restoreTasks.values {
@@ -1552,6 +1582,8 @@ final class SettingsBackup {
         for dataClass in SettingsBackupDataClass.allCases where dataClass != .settings {
             setRestorePending(0, for: dataClass)
         }
+        await musicTransfer?.value
+        await clipboardTransfer?.value
     }
 
     func debounceFlush() {
@@ -1572,32 +1604,42 @@ final class SettingsBackup {
     }
 
     func backupMusic() {
-        guard !musicBackupRunning, cloudEnabled,
+        guard started, !musicBackupRunning, cloudEnabled,
             pendingRestoreStates[.music] == nil,
             transferDecision(for: .music).shouldExport,
             FileManager.default.fileExists(atPath: Repo.musicDir.path)
         else { return }
         musicBackupRunning = true
         let destination = AppData.cloudDir.appendingPathComponent("music")
-        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        p.arguments = ["-a", "--delete", Repo.musicDir.path + "/", destination.path + "/"]
-        p.qualityOfService = .utility
-        p.terminationHandler = { process in
-            Task { @MainActor in
-                self.musicBackupRunning = false
-                if process.terminationStatus == 0 {
-                    SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Music.lastBackupAt)
-                }
+        let source = Repo.musicDir
+        musicBackupTask?.cancel()
+        musicBackupTask = Task { [weak self] in
+            let succeeded = await Self.synchronizeFiles(
+                arguments: ["-a", "--delete", source.path + "/", destination.path + "/"],
+                destination: destination)
+            guard let self, !Task.isCancelled else { return }
+            self.musicBackupRunning = false
+            self.musicBackupTask = nil
+            if succeeded {
+                SharedDefaults.store.set(
+                    Date().timeIntervalSince1970, forKey: AppStorageKeys.Music.lastBackupAt)
             }
         }
+    }
+
+    private nonisolated static func synchronizeFiles(arguments: [String], destination: URL) async
+        -> Bool
+    {
         do {
-            try p.run()
-        } catch {
-            musicBackupRunning = false
-        }
+            try FileManager.default.createDirectory(
+                at: destination, withIntermediateDirectories: true)
+            let result = try await CLICommandRunner.run(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/rsync"), arguments: arguments,
+                    environment: CLIToolEnvironment.sanitized(), timeout: 600,
+                    maximumOutputBytes: 32_768, terminatesProcessGroup: true), onLine: { _ in })
+            return result.terminationStatus == 0
+        } catch { return false }
     }
 
     @discardableResult
@@ -1623,7 +1665,7 @@ final class SettingsBackup {
     private var clipboardDebounce: Timer?
 
     func scheduleClipboardBackup() {
-        guard cloudEnabled, transferDecision(for: .clipboard).shouldExport else {
+        guard started, cloudEnabled, transferDecision(for: .clipboard).shouldExport else {
             clipboardDebounce?.invalidate()
             clipboardDebounce = nil
             return
@@ -1635,37 +1677,31 @@ final class SettingsBackup {
     }
 
     func backupClipboard() {
-        guard !clipboardBackupRunning, cloudEnabled,
+        guard started, !clipboardBackupRunning, cloudEnabled,
+            pendingRestoreStates[.clipboard] == nil,
             transferDecision(for: .clipboard).shouldExport,
             FileManager.default.fileExists(atPath: localClipboardDir.path)
         else { return }
         clipboardBackupRunning = true
-        try? FileManager.default.createDirectory(
-            at: cloudClipboardDir, withIntermediateDirectories: true)
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        p.arguments = [
-            "-a", "--delete", "--max-size=1m",
-            "--include", "*/", "--include", "index.jsonl",
-            "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
-            "--include", "*.url", "--include", "*.png", "--include", "*.tiff",
-            "--exclude", "*",
-            localClipboardDir.path + "/", cloudClipboardDir.path + "/",
-        ]
-        p.qualityOfService = .utility
-        p.terminationHandler = { process in
-            Task { @MainActor in
-                self.clipboardBackupRunning = false
-                if process.terminationStatus == 0 {
-                    SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Clipboard.lastBackupAt)
-                }
+        let source = localClipboardDir
+        let destination = cloudClipboardDir
+        clipboardBackupTask?.cancel()
+        clipboardBackupTask = Task { [weak self] in
+            let succeeded = await Self.synchronizeFiles(
+                arguments: [
+                    "-a", "--delete", "--max-size=1m",
+                    "--include", "*/", "--include", "index.jsonl",
+                    "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
+                    "--include", "*.url", "--include", "*.png", "--include", "*.tiff",
+                    "--exclude", "*", source.path + "/", destination.path + "/",
+                ], destination: destination)
+            guard let self, !Task.isCancelled else { return }
+            self.clipboardBackupRunning = false
+            self.clipboardBackupTask = nil
+            if succeeded {
+                SharedDefaults.store.set(
+                    Date().timeIntervalSince1970, forKey: AppStorageKeys.Clipboard.lastBackupAt)
             }
-        }
-        do {
-            try p.run()
-        } catch {
-            clipboardBackupRunning = false
         }
     }
 
@@ -1683,6 +1719,7 @@ final class SettingsBackup {
     }
 
     func scheduleExport() {
+        guard started else { return }
         debounce?.invalidate()
         debounce = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
             Task { @MainActor in SettingsBackup.shared.export() }
@@ -1841,7 +1878,7 @@ final class SettingsBackup {
         }
     }
 
-    private func queuePersistence(
+    func queuePersistence(
         limitsRestore: Bool, limitsExport: Bool, usageRestore: Bool, usageExport: Bool
     ) {
         pendingPersistence.formUnion(
@@ -1874,7 +1911,8 @@ final class SettingsBackup {
                     let outcome = await self.transferLimits(
                         decision: self.transferDecision(for: .limits), restore: restore,
                         export: export, requireApplicationSupportRestore: false,
-                        attemptTimeout: terminationAttemptTimeout)
+                        attemptTimeout: terminationAttemptTimeout
+                            ?? Self.persistenceMaintenanceTimeout)
                     return terminationAttemptTimeout == nil
                         ? outcome == .done : outcome != .retryable
                 },
@@ -1883,7 +1921,8 @@ final class SettingsBackup {
                     let outcome = await self.transferUsage(
                         decision: self.transferDecision(for: .usage), restore: restore,
                         export: export, requireApplicationSupportRestore: false,
-                        attemptTimeout: terminationAttemptTimeout)
+                        attemptTimeout: terminationAttemptTimeout
+                            ?? Self.persistenceMaintenanceTimeout)
                     return terminationAttemptTimeout == nil
                         ? outcome == .done : outcome != .retryable
                 })
@@ -2023,7 +2062,6 @@ final class SettingsBackup {
         }
         Repo.prepareStoredPaths()
         try? data.write(to: localFile)
-        HotKey.register()
         IPC.post(IPC.Name.settingsChanged)
         finishSettingsRestore()
     }
@@ -2089,9 +2127,4 @@ final class SettingsBackup {
             Task { @MainActor in SettingsBackup.shared.backupMusic() }
         }
     }
-}
-
-extension Notification.Name {
-    static let usageBackupRestored = Notification.Name("usageBackupRestored")
-    static let limitsBackupRestored = Notification.Name("limitsBackupRestored")
 }

@@ -206,8 +206,8 @@ final class AppServices {
         let musicOn = Self.extensionEnabled(AppStorageKeys.Tabs.musicEnabled)
 
         if usageOn, usage == nil {
-            SettingsBackup.shared.restoreDataOnEnable(for: .limits)
-            SettingsBackup.shared.restoreDataOnEnable(for: .usage)
+            BackgroundBackupClient.restoreDataOnEnable(for: .limits)
+            BackgroundBackupClient.restoreDataOnEnable(for: .usage)
             usage = UsageStore()
         }
         if !usageOn, let store = usage {
@@ -215,7 +215,7 @@ final class AppServices {
             usage = nil
         }
         if musicOn, music == nil {
-            SettingsBackup.shared.restoreDataOnEnable(for: .music)
+            BackgroundBackupClient.restoreDataOnEnable(for: .music)
             music = MusicPlayer()
         }
         if !musicOn, let player = music {
@@ -277,7 +277,7 @@ final class AppServices {
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         if clipboardOn {
             if clipboard == nil {
-                SettingsBackup.shared.restoreDataOnEnable(for: .clipboard)
+                BackgroundBackupClient.restoreDataOnEnable(for: .clipboard)
                 clipboard = ClipboardStore()
             }
             ClipboardHotKey.register()
