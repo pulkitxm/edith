@@ -153,11 +153,9 @@ public final class AgentClient: NSObject, @unchecked Sendable {
                 return (connection, connectionID)
             }
             let finish: @Sendable (Result<Value, Error>) -> Void = { reply.finish($0) }
-            reply.deadline(after: timeout) {
-                finish(
-                    .failure(
-                        AgentError(.unavailable, "The background agent did not answer in time.")))
-            }
+            reply.deadline(
+                after: timeout,
+                error: AgentError(.unavailable, "The background agent did not answer in time."))
             let remote: EdithAgentXPC
             do {
                 remote = try transport.0.remote { [weak self] error in

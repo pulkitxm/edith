@@ -15,6 +15,30 @@ import Testing
         #expect(reply.completedValue == observed.values.first)
     }
 
+    @Test func elapsedDeadlineRejectsAReplyBeforeTheTimerRuns() throws {
+        let clock = TransportClock()
+        let reply = AgentReply<Int>(now: { clock.now })
+        let observed = TransportValues<Bool>()
+        reply.observe { observed.append((try? $0.get()) == nil) }
+        reply.deadline(after: 60, error: AgentError.unavailable)
+        clock.advance(by: .seconds(60))
+        #expect(reply.finish(.success(42)))
+        #expect(throws: AgentError.self) { try reply.completedResult?.get() }
+        #expect(observed.values == [true])
+        #expect(!reply.finish(.success(99)))
+    }
+
+    @Test func timelyReplySurvivesAFutureDeadline() throws {
+        let clock = TransportClock()
+        let reply = AgentReply<Int>(now: { clock.now })
+        reply.deadline(after: 60, error: AgentError.unavailable)
+        clock.advance(by: .seconds(59))
+        #expect(reply.finish(.success(42)))
+        clock.advance(by: .seconds(2))
+        #expect(!reply.finish(.failure(AgentError.unavailable)))
+        #expect(try reply.completedResult?.get() == 42)
+    }
+
     @Test @MainActor func asynchronousRequestsYieldTheMainActor() async throws {
         let fixture = TransportFixture()
         let client = fixture.client()
@@ -186,6 +210,17 @@ import Testing
             try await Task.sleep(for: .milliseconds(2))
         }
         #expect(ready())
+    }
+}
+
+private final class TransportClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant = ContinuousClock.now
+
+    var now: ContinuousClock.Instant { lock.withLock { instant } }
+
+    func advance(by duration: Duration) {
+        lock.withLock { instant = instant.advanced(by: duration) }
     }
 }
 

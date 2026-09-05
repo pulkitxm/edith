@@ -35,6 +35,13 @@ final class AgentReply<Value>: @unchecked Sendable {
     private var result: Result<Value, Error>?
     private var completions: [(Result<Value, Error>) -> Void] = []
     private var timer: DispatchWorkItem?
+    private let now: @Sendable () -> ContinuousClock.Instant
+    private var expiresAt: ContinuousClock.Instant?
+    private var timeoutError: Error?
+
+    init(now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
+        self.now = now
+    }
 
     var isFinished: Bool { lock.withLock { result != nil } }
     var completedValue: Value? { lock.withLock { try? result?.get() } }
@@ -42,17 +49,27 @@ final class AgentReply<Value>: @unchecked Sendable {
 
     @discardableResult
     func finish(_ value: Result<Value, Error>) -> Bool {
-        let resolved = lock.withLock { () -> (Bool, [(Result<Value, Error>) -> Void]) in
-            guard result == nil else { return (false, []) }
-            result = value
+        let resolved = lock.withLock {
+            () -> (Result<Value, Error>?, [(Result<Value, Error>) -> Void]) in
+            guard result == nil else { return (nil, []) }
+            let accepted: Result<Value, Error>
+            if let expiresAt, now() >= expiresAt, let timeoutError {
+                accepted = .failure(timeoutError)
+            } else {
+                accepted = value
+            }
+            result = accepted
             timer?.cancel()
             timer = nil
+            expiresAt = nil
+            timeoutError = nil
             let callbacks = completions
             completions.removeAll()
-            return (true, callbacks)
+            return (accepted, callbacks)
         }
-        for callback in resolved.1 { callback(value) }
-        return resolved.0
+        guard let accepted = resolved.0 else { return false }
+        for callback in resolved.1 { callback(accepted) }
+        return true
     }
 
     func observe(_ callback: @escaping (Result<Value, Error>) -> Void) {
@@ -64,11 +81,14 @@ final class AgentReply<Value>: @unchecked Sendable {
         if let completed { callback(completed) }
     }
 
-    func deadline(after timeout: TimeInterval, expired: @escaping @Sendable () -> Void) {
-        let timer = DispatchWorkItem(block: expired)
+    func deadline(after timeout: TimeInterval, error: Error) {
+        let timer = DispatchWorkItem { [weak self] in self?.finish(.failure(error)) }
         let scheduled = lock.withLock {
             guard result == nil else { return false }
+            self.timer?.cancel()
             self.timer = timer
+            expiresAt = now().advanced(by: .seconds(max(0, timeout)))
+            timeoutError = error
             return true
         }
         if scheduled {
