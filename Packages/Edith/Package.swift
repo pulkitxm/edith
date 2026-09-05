@@ -16,8 +16,8 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
-    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.5"),
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.18.0"),
+    .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
     .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.5.1"),
     .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
@@ -29,7 +29,9 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.28.0"),
     .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.1"),
     .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
-    .package(url: "https://github.com/vapor/mysql-nio.git", exact: "1.9.1"),
+    .package(
+        url: "https://github.com/vapor/mysql-nio.git",
+        revision: "a9378d6ed22899b7df72894719cc3df51a37fb18"),
 ]
 
 let targets: [Target] = [

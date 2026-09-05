@@ -4,6 +4,7 @@ import MySQLNIO
 import NIOCore
 import NIOPosix
 import NIOSSL
+import os
 
 enum MySQLDatabaseDriverFailure: Error, Equatable, Sendable {
     case authentication
@@ -770,12 +771,19 @@ final class MySQLDatabaseInboundResponseGuard: ChannelInboundHandler, @unchecked
 }
 
 enum MySQLDatabaseDriverErrorClassifier {
+    private static let log = os.Logger(
+        subsystem: "com.pulkit.edith", category: "database.mysql")
+
     static func classify(
         _ error: Error
     ) throws(CancellationError) -> MySQLDatabaseDriverFailure {
         if error is CancellationError || Task.isCancelled {
             throw CancellationError()
         }
+        let code = (error as? IOError).map { Int($0.errnoCode) } ?? (error as NSError).code
+        log.error(
+            "Database driver failed: \(String(reflecting: type(of: error)), privacy: .public), code \(code)"
+        )
         if let failure = error as? MySQLDatabaseDriverFailure {
             return failure
         }
