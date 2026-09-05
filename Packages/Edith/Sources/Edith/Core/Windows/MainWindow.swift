@@ -18,7 +18,7 @@ struct ZoomableRoot<Content: View>: View {
 @MainActor
 enum MainWindow {
     private static var window: NSWindow?
-    private static let updater = UpdaterModel(startingUpdater: true)
+    private static let updater = UpdaterModel(startingUpdater: !AgentService.usesCustomService)
 
     #if DEBUG
     private static var snapshotObserver: NSObjectProtocol?
@@ -26,7 +26,7 @@ enum MainWindow {
     private static func installSnapshotHook() {
         guard snapshotObserver == nil else { return }
         snapshotObserver = DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("com.pulkit.edith.debugSnapshot"), object: nil,
+            forName: IPC.scopedName("com.pulkit.edith.debugSnapshot"), object: nil,
             queue: .main
         ) { _ in
             MainActor.assumeIsolated { snapshot() }

@@ -1,7 +1,13 @@
 import Foundation
 
 public enum AgentService {
-    public static let machServiceName = "com.pulkit.edith.agent"
+    public static var usesCustomService: Bool {
+        ProcessInfo.processInfo.environment["EDITH_AGENT_MACH_SERVICE"] != nil
+    }
+
+    public static var machServiceName: String {
+        ProcessInfo.processInfo.environment["EDITH_AGENT_MACH_SERVICE"] ?? "com.pulkit.edith.agent"
+    }
     public static let plistName = "com.pulkit.edith.agent.plist"
     public static let label = "com.pulkit.edith.agent"
     public static let executableName = "edithd"

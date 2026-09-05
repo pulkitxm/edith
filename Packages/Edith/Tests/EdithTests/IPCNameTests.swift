@@ -35,6 +35,18 @@ import Testing
         IPC.Name.lidAwakeChanged,
     ]
 
+    @Test func runtimeNamespacesSeparateInternalEvents() {
+        let raw = "com.pulkit.edith.musicCommand"
+        let production = IPC.scopedName(raw, environment: [:])
+        let first = IPC.scopedName(raw, environment: ["EDITH_AGENT_MACH_SERVICE": "fixture.one"])
+        let second = IPC.scopedName(raw, environment: ["EDITH_AGENT_MACH_SERVICE": "fixture.two"])
+        let tests = IPC.scopedName(
+            raw, environment: ["EDITH_SHARED_DEFAULTS_SUITE": "fixture.tests"])
+        #expect(production.rawValue == raw)
+        #expect(Set([production, first, second, tests]).count == 4)
+        #expect(IPC.Name.musicCommand == IPC.scopedName(raw))
+    }
+
     @Test func namesAreUnique() {
         #expect(Set(names.map(\.rawValue)).count == names.count)
     }

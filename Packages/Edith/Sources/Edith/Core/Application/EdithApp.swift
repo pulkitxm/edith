@@ -39,8 +39,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
-        lidAwakeDaemonRegistrar.register()
-        agentRegistrar.registerAndRestartIfStale()
+        if !AgentService.usesCustomService {
+            lidAwakeDaemonRegistrar.register()
+            agentRegistrar.registerAndRestartIfStale()
+        }
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
@@ -60,7 +62,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         postLaunch.start([
             StartupPhase(name: "main.launchCleanup") { [weak self] in
-                guard let self else { return }
+                guard !AgentService.usesCustomService, let self else { return }
                 self.launchCleanupTask?.cancel()
                 self.launchCleanupTask = Task.detached(priority: .utility) {
                     DataRoot.prepare()
@@ -70,7 +72,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             StartupPhase(name: "main.helper") { [weak self] in
-                guard let self else { return }
+                guard !AgentService.usesCustomService, let self else { return }
                 self.helperMaintenanceTask?.cancel()
                 self.helperMaintenanceTask = Task.detached(priority: .utility) {
                     await launchHelperIfNeeded()
