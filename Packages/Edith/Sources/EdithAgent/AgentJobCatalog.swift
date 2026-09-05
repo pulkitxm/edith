@@ -6,8 +6,10 @@ public enum AgentJobCatalog {
         AgentJobPlan.descriptors
     }
 
-    public static func jobs(store: AgentStore?, scheduler: JobScheduler? = nil) -> [AgentJob] {
-        let bodies = collectors(store: store, scheduler: scheduler)
+    public static func jobs(
+        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil
+    ) -> [AgentJob] {
+        let bodies = collectors(store: store, scheduler: scheduler, downloads: downloads)
         return descriptors().map { descriptor in
             let empty: @Sendable () async throws -> Data? = { nil }
             let body = bodies[descriptor.id] ?? empty
@@ -19,7 +21,7 @@ public enum AgentJobCatalog {
     }
 
     static func collectors(
-        store: AgentStore?, scheduler: JobScheduler? = nil
+        store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
         let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
@@ -27,7 +29,6 @@ public enum AgentJobCatalog {
         let updates = UpdateDiscoveryJob(store: store)
         let cleaner = CleanerEstimateJob(store: store)
         let backup = BackupJob(store: store)
-        let downloads = DownloadQueueJob(store: store)
         let siteAudit = SiteAuditJob(store: store)
         let companion = CompanionHealthJob(store: store)
         let sessions = SessionsJob(store: store) {
@@ -41,7 +42,13 @@ public enum AgentJobCatalog {
             "updates.discover": { try await updates.run() },
             "cleaner.estimate": { try await cleaner.run() },
             "backup.sync": { try await backup.run() },
-            "downloads.queue": { try await downloads.run() },
+            "downloads.queue": {
+                guard let downloads else {
+                    throw AgentError(.unavailable, "The download worker is unavailable.")
+                }
+                await downloads.refresh()
+                return try await AgentPayload.encode(downloads.snapshot())
+            },
             "sessions.discover": { try await sessions.run() },
             "siteAudit.crawl": { try await siteAudit.run() },
             "companion.health": { try await companion.run() },

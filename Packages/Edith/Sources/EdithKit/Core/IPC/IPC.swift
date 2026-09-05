@@ -50,16 +50,12 @@ public enum IPC {
             "com.pulkit.edith.requestMachineTerminalBroadcast")
         public static let machineTerminalBroadcastResult = IPC.scopedName(
             "com.pulkit.edith.machineTerminalBroadcastResult")
-        public static let downloadQueueChanged = IPC.scopedName(
-            "com.pulkit.edith.downloadQueueChanged")
         public static let requestQuitApps = IPC.scopedName(
             "com.pulkit.edith.requestQuitApps")
         public static let quitAppsResult = IPC.scopedName(
             "com.pulkit.edith.quitAppsResult")
         public static let requestFinderUndo = IPC.scopedName(
             "com.pulkit.edith.requestFinderUndo")
-        public static let requestDownloadCancel = IPC.scopedName(
-            "com.pulkit.edith.requestDownloadCancel")
         public static let finderUndoResult = IPC.scopedName(
             "com.pulkit.edith.finderUndoResult")
         public static let presenterAutoActiveChanged = IPC.scopedName(

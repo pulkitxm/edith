@@ -119,6 +119,35 @@ try:
            medianStatusMilliseconds=round(statistics.median(timings) * 1000, 2),
            residentMiB=round(resources['residentBytes'] / 1048576, 2),
            recentCPUPercent=round(resources['cpuPercent'], 3))
+    tool_directory = root / 'data' / 'bin'
+    tool_directory.mkdir(parents=True, exist_ok=True)
+    child_file = root / 'download-child.pid'
+    tool = tool_directory / 'yt-dlp'
+    tool.write_text("#!/bin/sh\nsleep 30 &\nprintf '%s\\n' \"$!\" > " + str(child_file) +
+                    "\nprintf '[download] 10.0%% of\\n'\nwait\n")
+    tool.chmod(0o755)
+    for key in ['suiteMediaEnabled', 'tabMusicEnabled', 'downloadsEnabled']:
+        call(['/usr/bin/defaults', 'write', suite, key, '-bool', 'true'])
+    download_before = value('status', '--json')['pid']
+    cli('restart', '--json')
+    wait_for(lambda: value('status', '--json'), lambda item: item['pid'] != download_before, timeout=25)
+    download = json.loads(call([str(root / 'ed'), 'download', 'add',
+                               'https://youtu.be/fixture0001', '--json']).stdout)[0]
+    download_child = wait_for(lambda: child_file.read_text().strip() if child_file.exists() else '',
+                              lambda item: item.isdigit())
+    active_download = wait_for(
+        lambda: json.loads(call([str(root / 'ed'), 'download', 'ls', '--json']).stdout),
+        lambda items: any(item['id'] == download['id'] and item['state'] == 'downloading' for item in items))
+    download_before = value('status', '--json')['pid']
+    cli('restart', '--json')
+    wait_for(lambda: value('status', '--json'), lambda item: item['pid'] != download_before, timeout=25)
+    wait_for(lambda: call(['/bin/ps', '-p', download_child, '-o', 'stat='], check=False),
+             lambda result: result.returncode != 0 or result.stdout.strip().startswith('Z'))
+    recovered_downloads = json.loads(call([str(root / 'ed'), 'download', 'ls', '--json']).stdout)
+    interrupted = next(item for item in recovered_downloads if item['id'] == download['id'])
+    assert interrupted['state'] == 'interrupted'
+    record('07 daemon restart stops the running download child and preserves retryable history',
+           downloadID=interrupted['id'], state=interrupted['state'], childStopped=True)
 finally:
     if booted:
         call(['/bin/launchctl', 'bootout', target], check=False)

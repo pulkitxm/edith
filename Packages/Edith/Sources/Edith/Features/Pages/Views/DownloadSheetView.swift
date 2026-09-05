@@ -92,6 +92,17 @@ struct DownloadSheet: View {
         }
         .frame(width: UIScale.pt(560), height: UIScale.pt(580))
         .background(DashSkin.paper(dark))
+        .alert(
+            "Download request failed",
+            isPresented: Binding(
+                get: { downloader.errorMessage != nil },
+                set: { if !$0 { downloader.errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { downloader.errorMessage = nil }
+        } message: {
+            Text(downloader.errorMessage ?? "")
+        }
     }
 
     private var header: some View {
@@ -136,7 +147,6 @@ struct DownloadSheet: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.toolbar))
-            .disabled(downloader.isRunning)
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
@@ -310,11 +320,12 @@ struct DownloadSheet: View {
             return
         }
         estimating = true
-        defer { estimating = false }
+        defer { if !Task.isCancelled { estimating = false } }
         var total: DownloadEstimate?
         for url in urls.prefix(5) {
             guard !Task.isCancelled else { return }
             guard let one = await downloader.estimate(for: url) else { continue }
+            guard !Task.isCancelled else { return }
             total = total.map { $0 + one } ?? one
             estimate = total
         }

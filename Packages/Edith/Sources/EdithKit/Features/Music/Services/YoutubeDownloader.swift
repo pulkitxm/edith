@@ -81,7 +81,7 @@ public enum DownloadKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-public struct DownloadEstimate: Equatable, Sendable {
+public struct DownloadEstimate: Codable, Equatable, Sendable {
     public let audioBytes: Int64?
     public let videoBytes: Int64?
     public let approximate: Bool
@@ -185,12 +185,16 @@ public final class YoutubeDownloader {
     public private(set) var updateResult: Result<String, Error>? = nil
     public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
-    private var currentProcess: Process?
-    private var currentItemID: UUID?
-    private var ytdlpExecutableCache: (url: URL, prefix: [String])?
-    private var provisioningObserver: NSObjectProtocol?
-    private var queueObserver: NSObjectProtocol?
-    private var cancelObserver: NSObjectProtocol?
+    public var errorMessage: String?
+    @ObservationIgnored private let client: AgentDownloadClient
+    @ObservationIgnored private var streamTask: Task<Void, Never>?
+    @ObservationIgnored private var availabilityTask: Task<Void, Never>?
+    @ObservationIgnored private var provisioningObserver: NSObjectProtocol?
+    @ObservationIgnored private var activeGeneration: UUID?
+    @ObservationIgnored private var revision = -1
+    @ObservationIgnored private var availabilityGeneration = UUID()
+    @ObservationIgnored private var downloadsEnabled = false
+    @ObservationIgnored private let observesAgent: Bool
 
     public struct DownloadItem: Identifiable, Equatable {
         public let id: UUID
@@ -200,6 +204,7 @@ public final class YoutubeDownloader {
         public let createdAt: Date
         public var kind: DownloadKind = .audio
         public var logs: String = ""
+        public var resultPaths: [String]?
 
         public init(record: DownloadRecord, logs: String = "") {
             id = record.id
@@ -209,12 +214,13 @@ public final class YoutubeDownloader {
             createdAt = record.createdAt
             kind = record.kind ?? .audio
             self.logs = logs
+            resultPaths = record.resultPaths
         }
 
         public var record: DownloadRecord {
             DownloadRecord(
                 id: id, url: url, status: status, outputFilename: outputFilename,
-                createdAt: createdAt, kind: kind)
+                createdAt: createdAt, kind: kind, resultPaths: resultPaths)
         }
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
@@ -265,22 +271,19 @@ public final class YoutubeDownloader {
         return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
 
-    private init() {
+    init(client: AgentDownloadClient = AgentDownloadClient(), start: Bool = true) {
+        self.client = client
+        observesAgent = start
+        guard start else { return }
         checkAvailability()
-        load()
-        if (try? DownloadOperationExecution.cancel(
-            includeQueued: false, reason: "Interrupted"
-        ).changed) ?? 0 > 0 {
-            load()
-            NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
-            IPC.post(IPC.Name.musicFolderChanged)
-        }
-        queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
-            Task { @MainActor in self?.adoptQueueFromDisk() }
-        }
-        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] info in
-            let targetID = (info["id"] as? String).flatMap(UUID.init(uuidString:))
-            Task { @MainActor in self?.cancel(targetID: targetID) }
+        streamTask = Task { [weak self, client] in
+            if let snapshot = try? await client.snapshot() { self?.apply(snapshot) }
+            for await snapshot in AgentTopicStream.values(
+                DownloadWorkerSnapshot.self, topic: .downloads, client: client.client)
+            {
+                guard !Task.isCancelled else { return }
+                self?.apply(snapshot)
+            }
         }
         provisioningObserver = NotificationCenter.default.addObserver(
             forName: .cliToolProvisioned, object: nil, queue: .main
@@ -291,32 +294,70 @@ public final class YoutubeDownloader {
         }
     }
 
-    private func save() {
-        try? DownloadQueue.save(items.map(\.record))
-    }
-
-    private func load() {
-        let logs = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.logs) })
-        items = DownloadOperationExecution.list(limit: 0).map {
-            DownloadItem(record: $0, logs: logs[$0.id] ?? "")
+    func apply(_ snapshot: DownloadWorkerSnapshot) {
+        let generationChanged = activeGeneration != snapshot.generation
+        if generationChanged {
+            activeGeneration = snapshot.generation
+            revision = -1
         }
-    }
-
-    private func adoptQueueFromDisk() {
-        load()
-        if !isRunning { processNext() }
+        guard snapshot.revision >= revision else { return }
+        revision = snapshot.revision
+        items = snapshot.records.map {
+            DownloadItem(record: $0, logs: snapshot.logs[$0.id.uuidString] ?? "")
+        }
+        isRunning = snapshot.running > 0
+        downloadsEnabled = snapshot.enabled
+        if let problem = snapshot.problem {
+            unavailableReason = problem
+        } else if !snapshot.enabled {
+            unavailableReason =
+                "Downloads are disabled. Enable the Downloads extension to continue."
+        } else if snapshot.executable == nil {
+            unavailableReason =
+                "yt-dlp is not installed. Open Music extension settings to install it."
+        } else if ytdlpVersion != nil {
+            unavailableReason = nil
+        }
+        if observesAgent, generationChanged, availabilityTask == nil { checkAvailability() }
     }
 
     public func checkAvailability() {
-        ytdlpExecutableCache = nil
+        availabilityTask?.cancel()
+        let generation = UUID()
+        availabilityGeneration = generation
+        availabilityTask = Task {
+            defer { if generation == availabilityGeneration { availabilityTask = nil } }
+            do {
+                let snapshot = try await client.snapshot()
+                try Task.checkCancellation()
+                apply(snapshot)
+                guard snapshot.enabled, snapshot.problem == nil else { return }
+                let status = await DownloadToolOperationExecution.status(
+                    executable: snapshot.executable)
+                try Task.checkCancellation()
+                guard downloadsEnabled else { return }
+                unavailableReason =
+                    status.installed
+                    ? nil : "yt-dlp is not installed. Open Music extension settings to install it."
+                ytdlpVersion = status.version
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                unavailableReason = error.localizedDescription
+            }
+        }
+    }
+
+    private func mutate(_ request: AgentDownloadMutation) {
+        errorMessage = nil
         Task {
-            let status = await DownloadToolOperationExecution.status(
-                executable: CLIToolEnvironment.executable(named: "yt-dlp"))
-            unavailableReason =
-                status.installed
-                ? nil
-                : "yt-dlp is not installed. Open Music extension settings to install it."
-            ytdlpVersion = status.version
+            do {
+                _ = try await client.mutateAsync(request)
+                apply(try await client.snapshot())
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -338,7 +379,6 @@ public final class YoutubeDownloader {
                 ytdlpUpdateMessage = error.localizedDescription
             }
             isUpdatingYTDLP = false
-            ytdlpExecutableCache = nil
             completion?(updateResult!)
         }
     }
@@ -358,37 +398,21 @@ public final class YoutubeDownloader {
     }
 
     public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
-        guard
-            (try? DownloadOperationExecution.enqueue(urls: urls, prefix: prefix, kind: kind)) != nil
-        else { return }
-        adoptQueueFromDisk()
+        mutate(.enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: Repo.musicDir))
     }
 
     public func estimate(for url: URL) async -> DownloadEstimate? {
         if let cached = estimates[url] { return cached }
-        let (exe, prefix) = ytdlpExecutable()
-        let value = await Task.detached {
-            Self.runEstimate(executable: exe, prefix: prefix, url: url)
-        }.value
-        if let value { estimates[url] = value }
-        return value
-    }
-
-    nonisolated private static func runEstimate(
-        executable: URL, prefix: [String], url: URL
-    ) -> DownloadEstimate? {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments =
-            prefix + ["--no-update", "--no-playlist", "--skip-download", "-J", url.absoluteString]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return DownloadSizeParser.estimate(fromJSON: data)
+        do {
+            let value = try await client.estimate(url)
+            if let value {
+                if estimates.count >= 100 { estimates.removeAll(keepingCapacity: true) }
+                estimates[url] = value
+            }
+            return value
+        } catch {
+            return nil
+        }
     }
 
     public func sourceURL(forFileNamed name: String) -> URL? {
@@ -399,34 +423,12 @@ public final class YoutubeDownloader {
         return nil
     }
 
-    public func retry(_ item: DownloadItem) {
-        guard (try? DownloadOperationExecution.retry(id: item.id).changed) ?? 0 > 0 else { return }
-        adoptQueueFromDisk()
-    }
-
-    public func retryAll() {
-        guard (try? DownloadOperationExecution.retry(all: true).changed) ?? 0 > 0 else { return }
-        adoptQueueFromDisk()
-    }
-
-    public func clearHistory() {
-        currentProcess?.terminate()
-        currentProcess = nil
-        isRunning = false
-        currentItemID = nil
-        guard (try? DownloadOperationExecution.clear(includeActive: true).changed) ?? 0 > 0 else {
-            return
-        }
-        load()
-    }
-
-    public func remove(_ item: DownloadItem) {
-        guard (try? DownloadOperationExecution.remove(id: item.id).changed) ?? 0 > 0 else { return }
-        load()
-    }
-
+    public func retry(_ item: DownloadItem) { mutate(.retry(id: item.id, all: false)) }
+    public func retryAll() { mutate(.retry(id: nil, all: true)) }
+    public func clearHistory() { mutate(.clear(includeActive: true)) }
+    public func remove(_ item: DownloadItem) { mutate(.remove(id: item.id)) }
     public func cancel(_ item: DownloadItem) {
-        cancel(targetID: item.id)
+        mutate(.cancel(id: item.id, includeQueued: true, reason: "Cancelled"))
     }
 
     @discardableResult
@@ -439,135 +441,10 @@ public final class YoutubeDownloader {
         (try? DownloadOperationExecution.reveal(id: item.id)) != nil
     }
 
-    private func processNext() {
-        guard let index = items.firstIndex(where: { $0.status == .queued }) else {
-            isRunning = false
-            currentItemID = nil
-            currentProcess = nil
-            return
-        }
-        isRunning = true
-        let item = items[index]
-        let itemID = item.id
-        currentItemID = itemID
-        items[index].status = .resolving
-        save()
-
-        let (exe, prefix) = ytdlpExecutable()
-        let p = Process()
-        p.executableURL = exe
-        let formatArguments: [String] =
-            switch item.kind {
-            case .audio: ["-x", "--audio-format", "m4a"]
-            case .video: ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
-            }
-        p.arguments =
-            prefix + [
-                "--no-update",
-                "--no-playlist",
-                "--no-quiet",
-            ] + formatArguments + [
-                "--embed-thumbnail", "--convert-thumbnails", "jpg",
-                "--progress", "--newline",
-                "-o", item.outputFilename ?? "%(title)s.%(ext)s",
-                "--print", "after_move:filepath",
-                item.url.absoluteString,
-            ]
-
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-
-        let stream: @Sendable (FileHandle) -> Void = { [weak self] handle in
-            PipeReading.consume(handle) { data in
-                guard let text = String(data: data, encoding: .utf8) else { return }
-                Task { @MainActor in
-                    guard let self, let index = self.indexOfItem(with: itemID) else { return }
-                    if case .interrupted = self.items[index].status { return }
-                    self.items[index].logs += text
-                    let (progress, videoIndex, videoCount) = YoutubeDownloader.parseProgress(
-                        from: text)
-                    self.items[index].status = .downloading(
-                        progress: progress, videoIndex: videoIndex, videoCount: videoCount)
-                }
-            }
-        }
-        outPipe.fileHandleForReading.readabilityHandler = stream
-        errPipe.fileHandleForReading.readabilityHandler = stream
-
-        p.terminationHandler = { [weak self] proc in
-            outPipe.fileHandleForReading.readabilityHandler = nil
-            errPipe.fileHandleForReading.readabilityHandler = nil
-            let tail = Self.readTail(outPipe: outPipe, errPipe: errPipe)
-
-            Task { @MainActor in
-                guard let self else { return }
-                defer {
-                    self.currentProcess = nil
-                    self.currentItemID = nil
-                    self.processNext()
-                }
-                guard let index = self.indexOfItem(with: itemID) else { return }
-                if case .interrupted = self.items[index].status {
-                    return
-                }
-                if !tail.isEmpty {
-                    self.items[index].logs += tail
-                }
-                let producedPaths =
-                    self.items[index].logs
-                    .components(separatedBy: .newlines)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
-                if proc.terminationStatus == 0 || !producedPaths.isEmpty {
-                    YoutubeDownloader.cleanupIntermediates(for: producedPaths)
-                    let files = producedPaths.map { ($0 as NSString).lastPathComponent }
-                    let label = files.isEmpty ? "done" : files.joined(separator: ", ")
-                    self.items[index].status = .done(label)
-                    self.save()
-                    NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
-                    IPC.post(IPC.Name.musicFolderChanged)
-                } else {
-                    let msg = self.items[index].logs.trimmingCharacters(
-                        in: .whitespacesAndNewlines)
-                    self.items[index].status = .error(msg.isEmpty ? "Unknown error" : msg)
-                    self.save()
-                }
-            }
-        }
-
-        p.environment = CLIToolEnvironment.sanitized()
-        currentProcess = p
-        do {
-            try p.run()
-        } catch {
-            currentProcess = nil
-            currentItemID = nil
-            guard let index = indexOfItem(with: itemID) else {
-                processNext()
-                return
-            }
-            items[index].status = .error(error.localizedDescription)
-            save()
-            processNext()
-        }
-    }
-
-    nonisolated private static func readTail(outPipe: Pipe, errPipe: Pipe) -> String {
-        (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")
-            + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? "")
-    }
-
-    private func indexOfItem(with id: UUID) -> Int? {
-        items.firstIndex(where: { $0.id == id })
-    }
-
     nonisolated static let intermediateExtensions: Set<String> =
         ["webm", "mkv", "opus", "ogg", "part", "ytdl", "temp"]
 
-    nonisolated static func cleanupIntermediates(for producedPaths: [String]) {
+    nonisolated public static func cleanupIntermediates(for producedPaths: [String]) {
         let fm = FileManager.default
         for path in producedPaths {
             let produced = URL(fileURLWithPath: path)
@@ -585,32 +462,17 @@ public final class YoutubeDownloader {
         }
     }
 
-    private func ytdlpExecutable() -> (url: URL, prefix: [String]) {
-        if let cached = ytdlpExecutableCache { return cached }
-        if let executable = CLIToolEnvironment.executable(named: "yt-dlp") {
-            let result = (executable, [String]())
-            ytdlpExecutableCache = result
-            return result
+    public func cancelAll() { mutate(.cancel(id: nil, includeQueued: true, reason: "Cancelled")) }
+
+    deinit {
+        streamTask?.cancel()
+        availabilityTask?.cancel()
+        if let provisioningObserver {
+            NotificationCenter.default.removeObserver(provisioningObserver)
         }
-        let result = (URL(fileURLWithPath: "/usr/bin/env"), ["yt-dlp"])
-        ytdlpExecutableCache = result
-        return result
     }
 
-    public func cancelAll() {
-        cancel(targetID: nil)
-    }
-
-    private func cancel(targetID: UUID?) {
-        _ = try? DownloadOperationExecution.cancel(id: targetID)
-        load()
-        let stopped = DownloadProcessControl.cancel(
-            currentID: currentItemID, targetID: targetID,
-            terminate: { currentProcess?.terminate() })
-        if !stopped, !isRunning { processNext() }
-    }
-
-    nonisolated static func parseProgress(from text: String) -> (
+    nonisolated public static func parseProgress(from text: String) -> (
         progress: String, videoIndex: Int, videoCount: Int
     ) {
         if let range = text.range(
