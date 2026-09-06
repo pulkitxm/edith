@@ -417,8 +417,8 @@ public enum UsageHistory {
                     (day["bySource"] as? [String: Any])?[source] != nil
                 else { continue }
                 let candidate = historyBlock(day, source: source)
-                if encoded(candidate) != encoded(baseline),
-                    !candidates.contains(where: { encoded($0) == encoded(candidate) })
+                if !sameHistory(candidate, baseline, source: source),
+                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
                 {
                     candidates.append(candidate)
                 }
@@ -471,11 +471,11 @@ public enum UsageHistory {
                         "baseline": baseline, "candidates": [[String: Any]](),
                     ]
                 guard let recordedBaseline = block["baseline"] as? [String: Any],
-                    encoded(recordedBaseline) == encoded(baseline)
+                    sameHistory(recordedBaseline, baseline, source: source)
                 else { return nil }
                 var candidates = block["candidates"] as? [[String: Any]] ?? []
-                if encoded(candidate) != encoded(baseline),
-                    !candidates.contains(where: { encoded($0) == encoded(candidate) })
+                if !sameHistory(candidate, baseline, source: source),
+                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
                 {
                     candidates.append(candidate)
                 }
@@ -513,6 +513,40 @@ public enum UsageHistory {
         ]
     }
 
+    private static func sameHistory(
+        _ lhs: [String: Any], _ rhs: [String: Any], source: String
+    ) -> Bool {
+        func identity(_ day: [String: Any]) -> Data? {
+            guard let ordered = orderedHistory(day) as? [String: Any],
+                let projected = orderedHistory(historyBlock(ordered, source: source))
+                    as? [String: Any]
+            else { return nil }
+            return encoded(projected)
+        }
+        guard let left = identity(lhs), let right = identity(rhs) else { return false }
+        return left == right
+    }
+
+    private static func orderedHistory(_ value: Any, field: String = "") -> Any {
+        if let object = value as? [String: Any] {
+            return object.reduce(into: [String: Any]()) { result, entry in
+                result[entry.key] = orderedHistory(entry.value, field: entry.key)
+            }
+        }
+        if field == "cost", let number = value as? NSNumber {
+            return (number.doubleValue * 1_000_000_000).rounded() / 1_000_000_000
+        }
+        guard let array = value as? [Any] else { return value }
+        let ordered = array.map { orderedHistory($0) }
+        guard field != "hours" else { return ordered }
+        return ordered.map { item in
+            (
+                try? JSONSerialization.data(
+                    withJSONObject: item, options: [.sortedKeys, .fragmentsAllowed]), item
+            )
+        }.sorted { ($0.0 ?? Data()).lexicographicallyPrecedes($1.0 ?? Data()) }.map(\.1)
+    }
+
     private static func coverageRegressed(old: Any, fresh: Any?) -> Bool {
         let oldRows = old as? [[String: Any]] ?? []
         let newRows = fresh as? [[String: Any]] ?? []
@@ -547,11 +581,12 @@ public enum UsageHistory {
                 if var current = retained[key] {
                     guard let baseline = block["baseline"] as? [String: Any],
                         let existing = current["baseline"] as? [String: Any],
-                        encoded(baseline) == encoded(existing)
+                        sameHistory(baseline, existing, source: source)
                     else { return nil }
                     var candidates = current["candidates"] as? [[String: Any]] ?? []
                     for candidate in block["candidates"] as? [[String: Any]] ?? []
-                    where !candidates.contains(where: { encoded($0) == encoded(candidate) }) {
+                    where !candidates.contains(where: { sameHistory($0, candidate, source: source) }
+                    ) {
                         candidates.append(candidate)
                     }
                     current["candidates"] = candidates

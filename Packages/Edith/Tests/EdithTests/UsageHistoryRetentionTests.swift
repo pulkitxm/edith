@@ -104,6 +104,159 @@ import Testing
         #expect(roundTrip == merged)
     }
 
+    @Test func derivedCostsAndUnorderedCollectionsSurviveRefreshAndCloudWithoutExtraCandidates()
+        throws
+    {
+        let previous = try retainedCostFixture()
+        let fresh = try changingBaseline(previous) { baseline in
+            var rows = baseline["bySource"] as! [String: [[String: Any]]]
+            rows["cli"]!.reverse()
+            baseline["bySource"] = rows
+            var projects = baseline["projects"] as! [[String: Any]]
+            var worktrees = projects[0]["worktrees"] as! [[String: Any]]
+            var chats = worktrees[0]["chats"] as! [[String: Any]]
+            chats.reverse()
+            worktrees[0]["chats"] = chats
+            worktrees[0]["cost"] = 0.3 + 0.2 + 0.1
+            projects[0]["worktrees"] = worktrees
+            baseline["projects"] = projects
+        }
+        #expect(UsageHistory.isValidDocument(previous))
+        #expect(UsageHistory.isValidDocument(fresh))
+        let results = [
+            UsageHistory.mergeRefresh(fresh: fresh, previous: previous),
+            UsageHistory.mergeRefresh(fresh: fresh, previous: fresh),
+            UsageHistory.merge(local: previous, cloud: fresh),
+            UsageHistory.merge(local: fresh, cloud: previous),
+        ]
+        for value in results {
+            let result = try #require(value)
+            #expect(UsageHistory.isValidDocument(result))
+            #expect(tokens(try object(result)) == 100)
+            let retained = try #require(blocks(try object(result)).first)
+            let candidates = try #require(retained["candidates"] as? [[String: Any]])
+            #expect(candidates.count == 1)
+            #expect(sourceTokens(candidates[0], "cli") == 10)
+        }
+    }
+
+    @Test func adjacentBinaryCostsPreserveRetainedBaselines() throws {
+        let previous = try retainedCostFixture()
+        let fresh = try changingBaseline(previous) { baseline in
+            var rows = baseline["bySource"] as! [String: [[String: Any]]]
+            rows["cli"]![0]["cost"] = (rows["cli"]![0]["cost"] as! Double).nextUp
+            baseline["bySource"] = rows
+        }
+        #expect(UsageHistory.isValidDocument(previous))
+        #expect(UsageHistory.isValidDocument(fresh))
+        let results = [
+            UsageHistory.mergeRefresh(fresh: fresh, previous: previous),
+            UsageHistory.mergeRefresh(fresh: previous, previous: fresh),
+            UsageHistory.merge(local: previous, cloud: fresh),
+            UsageHistory.merge(local: fresh, cloud: previous),
+        ]
+        for value in results {
+            let result = try #require(value)
+            #expect(UsageHistory.isValidDocument(result))
+            let retained = try #require(blocks(try object(result)).first)
+            let candidates = try #require(retained["candidates"] as? [[String: Any]])
+            #expect(candidates.count == 1)
+        }
+    }
+
+    @Test(arguments: [
+        "inputTokens", "cost", "chatCost", "modelCost", "hours", "duplicateChat", "duplicateRow",
+    ])
+    func retainedIdentityRefusesAuthoritativeChangesAndPreservesMultiplicity(_ mutation: String)
+        throws
+    {
+        let previous = try retainedCostFixture()
+        let changed = try changingBaseline(previous) { baseline in
+            switch mutation {
+            case "inputTokens", "cost":
+                var sources = baseline["bySource"] as! [String: [[String: Any]]]
+                let value = sources["cli"]![0][mutation] as! Double
+                sources["cli"]![0][mutation] = mutation == "cost" ? value + 0.01 : value + 1
+                baseline["bySource"] = sources
+            case "hours":
+                var hours = baseline["hours"] as! [[String: Any]]
+                hours.swapAt(0, 1)
+                baseline["hours"] = hours
+            case "duplicateRow":
+                var sources = baseline["bySource"] as! [String: [[String: Any]]]
+                sources["cli"]!.append(sources["cli"]![0])
+                baseline["bySource"] = sources
+            case "modelCost":
+                var hours = baseline["hours"] as! [[String: Any]]
+                var sources = hours[0]["bySource"] as! [String: [String: Any]]
+                var models = sources["cli"]!["byModel"] as! [String: [String: Any]]
+                models["one"]!["cost"] = (models["one"]!["cost"] as! Double) - 0.01
+                sources["cli"]!["cost"] = (sources["cli"]!["cost"] as! Double) - 0.01
+                sources["cli"]!["byModel"] = models
+                hours[0]["cost"] = (hours[0]["cost"] as! Double) - 0.01
+                hours[0]["bySource"] = sources
+                baseline["hours"] = hours
+            default:
+                var projects = baseline["projects"] as! [[String: Any]]
+                var worktrees = projects[0]["worktrees"] as! [[String: Any]]
+                var chats = worktrees[0]["chats"] as! [[String: Any]]
+                if mutation == "chatCost" {
+                    chats[0]["cost"] = (chats[0]["cost"] as! Double) + 0.01
+                } else {
+                    chats.append(chats[0])
+                }
+                worktrees[0]["chats"] = chats
+                projects[0]["worktrees"] = worktrees
+                baseline["projects"] = projects
+            }
+        }
+        #expect(UsageHistory.isValidDocument(changed))
+        #expect(UsageHistory.mergeRefresh(fresh: changed, previous: previous) == nil)
+        #expect(UsageHistory.mergeRefresh(fresh: changed, previous: changed) == nil)
+        #expect(UsageHistory.merge(local: previous, cloud: changed) == nil)
+        #expect(UsageHistory.merge(local: changed, cloud: previous) == nil)
+    }
+
+    private func retainedCostFixture() throws -> Data {
+        var historical = day("2026-08-02", ["cli": [row("one", 60), row("two", 40)]])
+        var projects = historical["projects"] as! [[String: Any]]
+        projects[0]["chats"] = []
+        projects[0]["worktrees"] =
+            [
+                [
+                    "name": "fixture", "tokens": 60, "cost": 0.1 + 0.2 + 0.3,
+                    "chats": [
+                        ["id": "first", "source": "cli", "tokens": 10, "cost": 0.1],
+                        ["id": "second", "source": "cli", "tokens": 20, "cost": 0.2],
+                        ["id": "third", "source": "cli", "tokens": 30, "cost": 0.3],
+                    ],
+                ]
+            ] as [[String: Any]]
+        historical["projects"] = projects
+        let previous = try document([historical])
+        let fresh = try document([day("2026-08-02", ["cli": [row("one", 10)]])])
+        let retained = try #require(UsageHistory.mergeRefresh(fresh: fresh, previous: previous))
+        return try changingBaseline(retained) { baseline in
+            var projects = baseline["projects"] as! [[String: Any]]
+            var worktrees = projects[0]["worktrees"] as! [[String: Any]]
+            worktrees[0]["cost"] = 0.6
+            projects[0]["worktrees"] = worktrees
+            baseline["projects"] = projects
+        }
+    }
+
+    private func changingBaseline(
+        _ data: Data, change: (inout [String: Any]) -> Void
+    ) throws -> Data {
+        var document = try object(data)
+        var retained = try blocks(document)
+        var baseline = try #require(retained[0]["baseline"] as? [String: Any])
+        change(&baseline)
+        retained[0]["baseline"] = baseline
+        document["historyRetention"] = ["version": 1, "blocks": retained]
+        return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+    }
+
     private func document(_ days: [[String: Any]]) throws -> Data {
         let sources = Array(Set(days.flatMap { ($0["bySource"] as? [String: Any] ?? [:]).keys }))
             .sorted()

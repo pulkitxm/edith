@@ -353,10 +353,7 @@ function inputFiles(root, limits) {
         "Billing source entry limit reached.",
       );
       const path = join(directory, entry.name);
-      limit(
-        !entry.isSymbolicLink(),
-        "Billing source traversal refuses symbolic links.",
-      );
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) stack.push(path);
       else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
         paths.push(path);

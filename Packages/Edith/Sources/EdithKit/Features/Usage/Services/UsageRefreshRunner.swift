@@ -261,18 +261,28 @@ public enum UsageRefreshRunner {
             merged.count <= UsageDataFiles.maximumUsageDocumentBytes,
             UsageHistory.isValidDocument(merged)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+        var published = merged
         try UsageDataLock.withLock(dataDirectory: dataDir) {
             let current = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
                 maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
             let machines = try MachineUsageStore.generation(
                 in: dataDir.appendingPathComponent("machines"))
-            guard current == baseline.usage, machines == baseline.machines else {
+            guard machines == baseline.machines else {
                 throw UsageDataFileError.unsafe(stagedUsage.path)
             }
-            try UsageDataFiles.write(merged, to: dataDir.appendingPathComponent("usage.json"))
+            if current != baseline.usage {
+                guard current != nil,
+                    let rebased = UsageHistory.mergeRefresh(fresh: merged, previous: current),
+                    rebased.count <= UsageDataFiles.maximumUsageDocumentBytes,
+                    UsageHistory.isValidDocument(rebased)
+                else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+                published = rebased
+            }
+            try UsageDataFiles.write(
+                published, to: dataDir.appendingPathComponent("usage.json"))
         }
-        return UsageHistory.retainedHistoryBlockCount(in: merged)
+        return UsageHistory.retainedHistoryBlockCount(in: published)
     }
 
     static func stageCurrentUsage(

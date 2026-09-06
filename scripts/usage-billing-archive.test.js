@@ -229,16 +229,22 @@ test("incomplete final lines are admitted once after completion", () =>
     archive.close();
   }));
 
-test("source identity and path safety refuse admission without changing retained records", () =>
+test("source identity and path safety skip links without changing retained records", () =>
   fixture(({ root, config, history }) => {
     put(config, "project/session.jsonl", line("old"));
+    const outside = join(root, "outside");
+    put(outside, "private/session.jsonl", line("outside", 90));
     const archive = openArchive(history);
     archive.ingest(config);
     expect(() => archive.ingest(join(root, "other"))).toThrow(
       "source identity changed",
     );
-    symlinkSync(join(root, "outside"), join(config, "projects/link"));
-    expect(() => archive.ingest(config)).toThrow("symbolic links");
+    symlinkSync(join(outside, "projects"), join(config, "projects/link"));
+    symlinkSync(
+      join(outside, "projects/private/session.jsonl"),
+      join(config, "projects/outside.jsonl"),
+    );
+    expect(archive.ingest(config).rawFilesRead).toBe(0);
     expect(
       archive.database.query("SELECT records FROM capacity").get().records,
     ).toBe(1);

@@ -370,6 +370,15 @@ HISTORY='
         | trimProject(.; $allowed)
         | select((.bySource | length) > 0) ]
     };
+  def historyIdentity($field):
+    if type == "array" then
+      map(historyIdentity("")) | if $field == "hours" then . else sort end
+    elif type == "object" then
+      with_entries(.key as $key | .value |= historyIdentity($key))
+    elif $field == "cost" and type == "number" then(.*1e9|round)/1e9
+    else . end;
+  def baselineIdentity($source):
+    historyIdentity("") | trimDay(.; [$source]) | historyIdentity("");
   def historyKey($block): [$block.period, $block.source] | tojson;
   def validRetention($blocks):
     ($blocks | type) == "array"
@@ -404,8 +413,9 @@ HISTORY='
     (reduce ((retainedBlocks($old) + retainedBlocks($fresh))[]) as $block ({};
       historyKey($block) as $key
       | if .[$key] == null then .[$key] = $block
-        elif .[$key].baseline == $block.baseline then
-          .[$key].candidates = ((.[$key].candidates + $block.candidates) | unique)
+        elif (.[$key].baseline | baselineIdentity($block.source)) == ($block.baseline | baselineIdentity($block.source)) then
+          .[$key].candidates = ((.[$key].candidates + $block.candidates)
+            | unique_by(baselineIdentity($block.source)))
         else error("usage retained history baseline conflicts") end)) as $retained
     | (reduce (($old.daily // [])[]) as $oldDay ({blocks: $retained, excluded: {}};
         ([($fresh.daily // [])[] | select(.period == $oldDay.period)][0]
@@ -422,11 +432,12 @@ HISTORY='
                       state: "partial-overlap", baseline: $baseline, candidates: [],
                       provenance: {kind: "published-aggregate", generatedAt: ($old.generatedAt // "")}
                     })
-                  elif .blocks[$key].baseline != $baseline then
+                  elif (.blocks[$key].baseline | baselineIdentity($source)) != ($baseline | baselineIdentity($source)) then
                     error("usage retained history baseline changed")
                   else . end
-                | if $candidate != $baseline then
-                    .blocks[$key].candidates = ((.blocks[$key].candidates + [$candidate]) | unique)
+                | if ($candidate | baselineIdentity($source)) != ($baseline | baselineIdentity($source)) then
+                    .blocks[$key].candidates = ((.blocks[$key].candidates + [$candidate])
+                      | unique_by(baselineIdentity($source)))
                   else . end
                 | .excluded[$oldDay.period] = ((.excluded[$oldDay.period] // []) + [$source] | unique)
               else . end))) as $retention

@@ -203,7 +203,7 @@ import Testing
         #expect((published["totals"] as? [String: Any])?["tokens"] as? Double == 2)
     }
 
-    @Test func publicationRejectsAConcurrentLiveReplacement() async throws {
+    @Test func publicationRebasesAConcurrentLiveReplacement() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let live = dir.appendingPathComponent("usage.json")
@@ -222,10 +222,37 @@ import Testing
         try UsageDataFiles.write(concurrent, to: live)
 
         held.release()
+        _ = try await publication.value
+        let published = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: live)) as? [String: Any])
+        #expect(Set(published["sources"] as? [String] ?? []) == ["old", "during", "fresh"])
+        #expect((published["daily"] as? [[String: Any]])?.count == 3)
+        #expect((published["totals"] as? [String: Any])?["tokens"] as? Double == 3)
+    }
+
+    @Test func publicationRejectsAnInvalidConcurrentLiveReplacement() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let baseline = try usage(period: "2026-08-20", source: "old")
+        let invalid = Data("{\"daily\":".utf8)
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+        try baseline.write(to: live)
+        let held = try UsageDataLock.acquire(dataDirectory: dir)
+        let publication = Task.detached {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged,
+                baseline: UsageRefreshBaseline(usage: baseline, machines: nil), dataDir: dir)
+        }
+        await Task.yield()
+        try invalid.write(to: live)
+
+        held.release()
         await #expect(throws: UsageDataFileError.self) {
             try await publication.value
         }
-        #expect(try Data(contentsOf: live) == concurrent)
+        #expect(try Data(contentsOf: live) == invalid)
     }
 
     @Test func publicationRejectsMachineHistoryChangedDuringRefresh() throws {
