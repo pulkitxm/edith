@@ -2982,6 +2982,106 @@ describe("retained history coverage", () => {
     expect(result.daily).toEqual(previous.daily);
   });
 
+  test("native and archive cost spellings preserve retained baselines and candidates", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const archive = JSON.stringify([retained]);
+    const native = archive.replaceAll(
+      /"cost":(0\.1|0\.2|0\.3|0\.6)(?=[,}])/g,
+      (_, cost) =>
+        `"cost":${
+          {
+            0.1: "0.10000000000000001",
+            0.2: "0.20000000000000001",
+            0.3: "0.29999999999999999",
+            0.6: "0.59999999999999998",
+          }[cost]
+        }`,
+    );
+    const result = Bun.spawnSync([
+      "jq",
+      "-cn",
+      "--argjson",
+      "previous",
+      native,
+      "--argjson",
+      "fresh",
+      archive,
+      HISTORY,
+    ]);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    const merged = JSON.parse(result.stdout.toString());
+    expect(merged.totals.tokens).toBe(100);
+    expect(merged.historyRetention.blocks).toHaveLength(1);
+    expect(merged.historyRetention.blocks[0].candidates).toHaveLength(1);
+    expect(merged.historyRetention.blocks[0].baseline).toEqual(
+      retained.historyRetention.blocks[0].baseline,
+    );
+    expect(result.stdout.toString()).toContain('"cost":0.20000000000000001');
+    const repeated = jq(HISTORY, "null", [
+      "--argjson",
+      "previous",
+      `[${result.stdout.toString().trim()}]`,
+      "--argjson",
+      "fresh",
+      archive,
+    ])[0];
+    expect(repeated.historyRetention.blocks[0].candidates).toHaveLength(1);
+  });
+
+  test("raw retained cost comparisons reject the next binary64 value", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    fresh.historyRetention.blocks[0].baseline.projects[0].worktrees[0].chats[1].cost =
+      "next-cost";
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]).replaceAll(
+        '"cost":0.2',
+        '"cost":0.20000000000000001',
+      ),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh]).replace('"next-cost"', "0.20000000000000004"),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "usage retained history baseline conflicts",
+    );
+    expect(result.stdout.length).toBe(0);
+  });
+
+  test("raw retained token comparisons preserve integer precision above two to the fifty third", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    fresh.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens =
+      "next-token";
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]).replaceAll(
+        '"inputTokens":100',
+        '"inputTokens":9007199254740992',
+      ),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh])
+        .replaceAll('"inputTokens":100', '"inputTokens":9007199254740992')
+        .replace('"next-token"', "9007199254740993"),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "usage retained history baseline conflicts",
+    );
+    expect(result.stdout.length).toBe(0);
+  });
+
   test("three reordered costs preserve identity without appending equivalent candidates", () => {
     const previous = retainedWithDerivedCostRoundTrip();
     const baseline = previous.historyRetention.blocks[0].baseline;
