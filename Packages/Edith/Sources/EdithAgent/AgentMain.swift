@@ -76,7 +76,7 @@ public enum AgentBoot {
             observe: { await runtime.record($0) })
         let hub = AgentHub(runtime: runtime)
         let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
-            Task { await scheduler.runNow("usage.refresh") }
+            Task { await scheduler.enqueueIfDue("usage.refresh") }
         }
         watcher.start()
         AgentLog.logger.info(

@@ -164,6 +164,15 @@ public actor JobScheduler {
     }
 
     @discardableResult
+    public func enqueueIfDue(_ id: String) -> Bool {
+        guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return false }
+        guard state.flight == nil else { return true }
+        guard state.lastRun != nil else { return enqueue(id) }
+        guard state.nextRun.map({ $0 <= clock() }) ?? true else { return false }
+        return enqueue(id)
+    }
+
+    @discardableResult
     public func runNow(_ id: String) async -> Data? {
         guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return nil }
         if let flight = state.flight { return try? await flight.task.value }

@@ -74,6 +74,27 @@ import Testing
         await scheduler.stop()
     }
 
+    @Test func filesystemEnqueueHonorsTheAmbientCadenceAfterACompletedRun() async {
+        let policy = SchedulerPolicy()
+        let scheduler = JobScheduler(clock: { policy.date })
+        await scheduler.register(
+            AgentJob(descriptor: descriptor(cadence: .every(ambient: 900))) {
+                Data("done".utf8)
+            })
+        await scheduler.start()
+        _ = await scheduler.runNow("fixture.refresh")
+
+        #expect(await !scheduler.enqueueIfDue("fixture.refresh"))
+        policy.advance(899)
+        #expect(await !scheduler.enqueueIfDue("fixture.refresh"))
+        policy.advance(2)
+        #expect(await scheduler.enqueueIfDue("fixture.refresh"))
+        _ = await scheduler.runNow("fixture.refresh")
+
+        #expect(await scheduler.snapshots.first?.runCount == 2)
+        await scheduler.stop()
+    }
+
     @Test func mixedBusAndTopicSubscriptionsKeepTheirRelayUntilBothAreRemoved() async {
         let runtime = AgentRuntime(build: "fixture", store: nil)
         let peer = UUID()
