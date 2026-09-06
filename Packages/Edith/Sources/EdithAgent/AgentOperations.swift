@@ -51,10 +51,25 @@ public enum AgentOperations {
         await runtime.register(
             operation: UsageCollectionOperation.refresh.descriptor.id.rawValue
         ) { _ in
+            let previous = await scheduler.snapshots.first {
+                $0.descriptor.id == "usage.refresh"
+            }
             guard await scheduler.enqueue("usage.refresh") else {
                 throw AgentError(.refused, "Usage collection is disabled.")
             }
-            return Data()
+            for _ in 0..<100 {
+                if UsageRefreshRunner.isRunning { return Data() }
+                let current = await scheduler.snapshots.first {
+                    $0.descriptor.id == "usage.refresh"
+                }
+                if current?.runCount != previous?.runCount
+                    || current?.lastRun != previous?.lastRun
+                {
+                    return Data()
+                }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            throw AgentError(.unavailable, "Usage collection did not start in time.")
         }
         await runtime.register(
             operation: UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
