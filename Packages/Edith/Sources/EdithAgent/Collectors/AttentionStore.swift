@@ -15,7 +15,7 @@ public struct AttentionImportReport: Codable, Equatable, Sendable {
 }
 
 public struct AttentionEventStore: Sendable, AttentionEventSink {
-    private let store: AgentStore
+    let store: AgentStore
 
     public init(store: AgentStore) {
         self.store = store
@@ -28,31 +28,35 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
     public func record(_ batch: AttentionBatch, now: Date) throws {
         guard !batch.events.isEmpty else { return }
         try store.write { database in
-            for event in batch.events where !AttentionRetention.isExpired(event, now: now) {
-                guard event.duration.isFinite, event.duration > 0, event.duration <= 172_800 else {
-                    continue
-                }
-                let last = try Data.fetchOne(
-                    database,
-                    sql:
-                        "SELECT payload FROM attention_event WHERE kind = ? ORDER BY startedAt DESC LIMIT 1",
-                    arguments: [event.source.rawValue]
-                )
-                .flatMap { try? AgentPayload.decode(AttentionEvent.self, from: $0) }
-                if let last, event.startedAt >= last.startedAt,
-                    AttentionPaths.utcCalendar.isDate(last.startedAt, inSameDayAs: event.startedAt),
-                    last.canMerge(with: event, pulseTime: batch.pulseTime)
-                        || (last.id == event.id && last.endedAt >= event.endedAt)
-                {
-                    try insert(last.merged(with: event), into: database)
-                } else {
-                    try insert(event, into: database)
-                }
-            }
-            try database.execute(
-                sql: "DELETE FROM attention_event WHERE startedAt < ?",
-                arguments: [AttentionRetention.cutoff(now: now)])
+            try record(batch, in: database, now: now)
         }
+    }
+
+    func record(_ batch: AttentionBatch, in database: Database, now: Date) throws {
+        for event in batch.events where !AttentionRetention.isExpired(event, now: now) {
+            guard event.duration.isFinite, event.duration > 0, event.duration <= 172_800 else {
+                continue
+            }
+            let last = try Data.fetchOne(
+                database,
+                sql:
+                    "SELECT payload FROM attention_event WHERE kind = ? ORDER BY startedAt DESC LIMIT 1",
+                arguments: [event.source.rawValue]
+            )
+            .flatMap { try? AgentPayload.decode(AttentionEvent.self, from: $0) }
+            if let last, event.startedAt >= last.startedAt,
+                AttentionPaths.utcCalendar.isDate(last.startedAt, inSameDayAs: event.startedAt),
+                last.canMerge(with: event, pulseTime: batch.pulseTime)
+                    || (last.id == event.id && last.endedAt >= event.endedAt)
+            {
+                try insert(last.merged(with: event), into: database)
+            } else {
+                try insert(event, into: database)
+            }
+        }
+        try database.execute(
+            sql: "DELETE FROM attention_event WHERE startedAt < ?",
+            arguments: [AttentionRetention.cutoff(now: now)])
     }
 
     public func hasEvents() throws -> Bool {

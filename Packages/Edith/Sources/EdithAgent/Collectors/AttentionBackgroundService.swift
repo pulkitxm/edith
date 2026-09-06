@@ -125,6 +125,18 @@ public actor AttentionBackgroundService {
         for task in summaries { _ = await task.result }
     }
 
+    public func deliver(_ request: AttentionDeliveryRequest) throws {
+        guard !stopped else { throw CancellationError() }
+        try events.deliver(request)
+    }
+
+    public func deliveryHealth() async throws -> AttentionDeliveryHealth {
+        guard !stopped else { throw CancellationError() }
+        let spool = AttentionDeliverySpool(
+            file: repository.directory.appendingPathComponent("delivery-spool.json"))
+        return try await spool.health()
+    }
+
     public func record(_ batch: AttentionBatch) throws {
         try importSpool()
         try events.record(batch)
@@ -270,6 +282,17 @@ public enum AttentionBackgroundOperations {
     {
         await runtime.registerShutdown(id: "attention") { await service.stop() }
         await service.start()
+        await runtime.register(operation: AttentionDeliveryClient.operation) { payload in
+            guard payload.count <= 16_384 else {
+                throw AgentError(.refused, "Attention delivery exceeds its size limit.")
+            }
+            let request = try AgentPayload.decode(AttentionDeliveryRequest.self, from: payload)
+            try await service.deliver(request)
+            return try AgentPayload.encode(["sequence": request.sequence])
+        }
+        await runtime.register(operation: AttentionDeliveryClient.statusOperation) { _ in
+            try await AgentPayload.encode(service.deliveryHealth())
+        }
         await runtime.register(operation: AttentionOperation.record) { payload in
             let batch = try AgentPayload.decode(AttentionBatch.self, from: payload)
             try await service.record(batch)

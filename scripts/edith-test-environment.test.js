@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory() as folder:
     print(json.dumps({key: values[key] for key in [
         'EDITH_DATA_ROOT', 'EDITH_CLOUD_ROOT', 'EDITH_DATABASE_HOME',
         'EDITH_DATABASE_KEYCHAIN_SERVICE', 'EDITH_AGENT_MACH_SERVICE',
+        'EDITH_USAGE_SOURCE_HOME', 'EDITH_PROVIDER_KEYCHAIN_SERVICE',
         'EDITH_SHARED_DEFAULTS_SUITE', 'EDITH_HELPER_DEFAULTS_SUITE'
     ]}))`,
     {
@@ -28,6 +29,8 @@ with tempfile.TemporaryDirectory() as folder:
       EDITH_CLOUD_ROOT: "/production/cloud",
       EDITH_DATABASE_HOME: "/production/home",
       EDITH_DATABASE_KEYCHAIN_SERVICE: "com.pulkit.edith.database",
+      EDITH_USAGE_SOURCE_HOME: "/production/source-home",
+      EDITH_PROVIDER_KEYCHAIN_SERVICE: "production-provider-credentials",
       EDITH_AGENT_MACH_SERVICE: "com.pulkit.edith.agent",
       EDITH_SHARED_DEFAULTS_SUITE: "com.pulkit.edith.shared",
       EDITH_HELPER_DEFAULTS_SUITE: "com.pulkit.edith.helper",
@@ -37,11 +40,13 @@ with tempfile.TemporaryDirectory() as folder:
     "EDITH_DATA_ROOT",
     "EDITH_CLOUD_ROOT",
     "EDITH_DATABASE_HOME",
+    "EDITH_USAGE_SOURCE_HOME",
   ]) {
     expect(values[key]).not.toContain("/production/");
   }
   for (const key of [
     "EDITH_DATABASE_KEYCHAIN_SERVICE",
+    "EDITH_PROVIDER_KEYCHAIN_SERVICE",
     "EDITH_AGENT_MACH_SERVICE",
     "EDITH_SHARED_DEFAULTS_SUITE",
     "EDITH_HELPER_DEFAULTS_SUITE",
