@@ -80,9 +80,9 @@ pipeline EdithKit uses, so the CLI and dashboard stay aligned without the menu
 bar app doing the work in-process.
 
 The dashboard refresh button and this command both call the `usage.refresh`
-agent operation. The background agent enqueues the collector job and returns
-immediately; progress streams through the same lock, transcript, and completion
-semantics as before.
+agent operation. The background agent acknowledges the request when the collector owns
+its refresh lock or when a very fast run has already completed. Progress streams through
+the same lock, transcript, and completion semantics as before.
 
 Progress goes to stderr and stdout stays clean: one `usage refreshed` line at
 the end, or the JSON object. Each phase is printed as it lands, with a spinner on

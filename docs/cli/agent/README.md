@@ -16,6 +16,9 @@ Every job declares a trigger, an ambient cadence that runs with no window open,
 a live cadence that applies while something is subscribed to its topic, and a
 power policy. `ed agent jobs` prints that table as the agent currently sees it.
 
+The complete ownership map, resource policy, diagnostics UI, and ordered verification
+runbook are in `docs/background-agent.md`.
+
 ## At a glance
 
 | Command | What it does |
