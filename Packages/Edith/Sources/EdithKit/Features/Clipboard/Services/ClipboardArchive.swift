@@ -4,7 +4,8 @@ import Foundation
 public final class ClipboardArchive: @unchecked Sendable {
     public static let maximumBlobBytes = 16 << 20
     public static let maximumIndexBytes = 8 << 20
-    public static let maximumEntries = 4096
+    public static let maximumMutationIDs = 4096
+    private static let maximumInspectedFiles = 8192
     public let root: URL
     private let writeBlob: @Sendable (Data, URL) throws -> Void
     private var cachedIndex: CachedIndex?
@@ -84,10 +85,7 @@ public final class ClipboardArchive: @unchecked Sendable {
             entries.removeAll { $0.sha256 == sha && $0.ext == capture.ext }
             entries.append(entry)
             entries = ClipboardIndex.applyRetention(
-                entries, maxItems: max(0, min(Self.maximumEntries, maxItems)), maxAge: maxAge)
-            guard entries.count <= Self.maximumEntries else {
-                throw AgentError(.refused, "Clipboard history has reached its pinned item limit.")
-            }
+                entries, maxItems: max(0, maxItems), maxAge: maxAge)
             try ensureDirectory(blobs)
             let destination = try blobURL(entry)
             let stored = try read(destination, maximum: Self.maximumBlobBytes)
@@ -108,7 +106,7 @@ public final class ClipboardArchive: @unchecked Sendable {
     }
 
     public func mutate(_ mutation: ClipboardMutation) throws -> ClipboardMutationResult {
-        guard mutation.ids.count <= Self.maximumEntries,
+        guard mutation.ids.count <= Self.maximumMutationIDs,
             mutation.ids.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }),
             mutation.copiedAt.timeIntervalSince1970.isFinite,
             mutation.copiedAt <= Date().addingTimeInterval(60)
@@ -144,8 +142,26 @@ public final class ClipboardArchive: @unchecked Sendable {
         }
     }
 
+    public func applyRetention(maxItems: Int, maxAge: TimeInterval?, now: Date = Date()) throws
+        -> ClipboardMutationResult
+    {
+        try withLock {
+            let previous = try load()
+            let entries = ClipboardIndex.applyRetention(
+                previous,
+                maxItems: max(0, maxItems), maxAge: maxAge, now: now)
+            let removed = previous.count - entries.count
+            if removed > 0 {
+                try Task.checkCancellation()
+                try save(entries)
+                pruneRemoved(previous, keeping: entries)
+            }
+            return ClipboardMutationResult(changed: removed, total: entries.count)
+        }
+    }
+
     public func snapshot(_ request: ClipboardSnapshotRequest) throws -> ClipboardSnapshot {
-        guard request.offset >= 0, request.offset <= Self.maximumEntries,
+        guard request.offset >= 0,
             request.limit > 0, request.limit <= 512
         else { throw AgentError(.refused, "The clipboard page is outside the supported limits.") }
         return try withLock {
@@ -153,6 +169,9 @@ public final class ClipboardArchive: @unchecked Sendable {
             let revision = cachedIndex?.revision ?? ClipboardRepository.sha256Hex(Data())
             if let expected = request.revision, expected != revision {
                 throw AgentError(.unavailable, AgentClipboardOperation.changedDuringRead)
+            }
+            guard request.offset <= entries.count else {
+                throw AgentError(.refused, "The clipboard page is outside the supported limits.")
             }
             let ordered =
                 request.recentlyCreated
@@ -217,7 +236,7 @@ public final class ClipboardArchive: @unchecked Sendable {
             let files = try FileManager.default.contentsOfDirectory(
                 at: blobs,
                 includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
-            guard files.count <= Self.maximumEntries * 2 else {
+            guard files.count <= Self.maximumInspectedFiles else {
                 throw AgentError(.refused, "Clipboard storage contains too many files to inspect.")
             }
             for file in files {
@@ -225,7 +244,12 @@ public final class ClipboardArchive: @unchecked Sendable {
                     .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
                 ])
                 if values.isRegularFile == true, values.isSymbolicLink != true {
-                    diskBytes += values.fileSize ?? 0
+                    let (total, overflow) = diskBytes.addingReportingOverflow(values.fileSize ?? 0)
+                    guard !overflow else {
+                        throw AgentError(
+                            .refused, "Clipboard storage size exceeds the supported range.")
+                    }
+                    diskBytes = total
                 }
             }
             let kinds = ClipboardEntry.Kind.allCases.compactMap {
@@ -258,9 +282,6 @@ public final class ClipboardArchive: @unchecked Sendable {
                 entries.append(entry)
                 ids.insert(entry.id)
                 hashes.insert(entry.sha256 + "." + entry.ext)
-            }
-            guard entries.count <= Self.maximumEntries else {
-                throw AgentError(.refused, "The cloud clipboard exceeds the history limit.")
             }
             try save(entries)
         }
@@ -356,30 +377,43 @@ public final class ClipboardArchive: @unchecked Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let lines = data.split(separator: 10)
-        guard lines.count <= Self.maximumEntries else {
-            throw AgentError(.refused, "Clipboard history exceeds the supported item limit.")
-        }
         var ids = Set<String>()
-        return try lines.map { line in
+        let entries = try lines.map { line in
+            try Task.checkCancellation()
             let entry = try decoder.decode(ClipboardEntry.self, from: Data(line))
             guard !entry.id.isEmpty, entry.id.utf8.count <= 128, ids.insert(entry.id).inserted,
                 validHash(entry.sha256), validExtension(entry.ext), entry.size >= 0,
-                entry.size <= Self.maximumBlobBytes, entry.types.count <= 32,
+                entry.types.count <= 32,
                 entry.types.allSatisfy({ $0.utf8.count <= 256 }),
                 (entry.sourceApp?.utf8.count ?? 0) <= 256,
                 (entry.sourceBundleID?.utf8.count ?? 0) <= 256
             else { throw AgentError(.failed, "A clipboard history entry is invalid.") }
             return entry
         }
+        try validateTotalSize(entries)
+        return entries
     }
 
     private func save(_ entries: [ClipboardEntry]) throws {
+        try validateTotalSize(entries)
         let data = Data(ClipboardIndex.encode(entries).utf8)
         guard data.count <= Self.maximumIndexBytes else {
             throw AgentError(.refused, "The clipboard index exceeds the supported size.")
         }
         try UsageDataFiles.write(data, to: index)
         cachedIndex = nil
+    }
+
+    private func validateTotalSize(_ entries: [ClipboardEntry]) throws {
+        var total = 0
+        for entry in entries {
+            try Task.checkCancellation()
+            let (next, overflow) = total.addingReportingOverflow(entry.size)
+            guard entry.size >= 0, !overflow else {
+                throw AgentError(.failed, "Clipboard history size exceeds the supported range.")
+            }
+            total = next
+        }
     }
 
     private func pruneRemoved(_ previous: [ClipboardEntry], keeping entries: [ClipboardEntry]) {
