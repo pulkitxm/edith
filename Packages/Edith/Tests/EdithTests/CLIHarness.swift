@@ -333,7 +333,7 @@ final class CLIWorld: @unchecked Sendable {
             AgentHandshake(
                 protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
         }
-        let refreshID = UsageCollectionOperation.refresh.descriptor.id.rawValue
+        let refreshID = UsageCollectionOperation.refresh.descriptor.id
         CLIEnvironment.performAgentOperation = { operation in
             guard operation == refreshID else { return Data() }
             if busy {
@@ -358,7 +358,7 @@ final class CLIWorld: @unchecked Sendable {
             AgentHandshake(
                 protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
         }
-        let limitsID = UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
+        let limitsID = UsageCollectionOperation.limitsRefresh.descriptor.id
         CLIEnvironment.performAgentOperation = { operation in
             guard operation == limitsID else { return Data() }
             CLIEnvironment.deliver(IPC.Name.limitsUpdated, nil)

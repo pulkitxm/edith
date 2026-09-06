@@ -60,6 +60,8 @@ import Testing
         ]
         #expect(AgentOperationCatalog.served == control + usage)
         #expect(AgentOperationCatalog.serves(AgentControlOperation.jobs.descriptor.id))
+        #expect(AgentOperationCatalog.serves(UsageCollectionOperation.refresh.descriptor.id))
+        #expect(!AgentOperationCatalog.servesInternal("usage.refresh"))
     }
 
     @Test func everyPlanJobHasACollectorBody() {

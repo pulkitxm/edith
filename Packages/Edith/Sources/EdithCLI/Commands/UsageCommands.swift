@@ -94,8 +94,8 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 let answered = await AppBridge.awaitReply(
                     IPC.Name.limitsUpdated, timeout: 20
                 ) {
-                    try? CLIEnvironment.performAgentOperation(
-                        UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue)
+                    _ = try? CLIEnvironment.performAgentOperation(
+                        UsageCollectionOperation.limitsRefresh.descriptor.id)
                 }
                 guard answered != nil else {
                     throw CLIFailure.unavailable(
@@ -635,8 +635,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                     refresh = try await UsageRefreshFollower.follow(onEvent: sink)
                 } else {
                     progress.begin("starting")
-                    try CLIEnvironment.performAgentOperation(
-                        UsageCollectionOperation.refresh.descriptor.id.rawValue)
+                    _ = try CLIEnvironment.performAgentOperation(
+                        UsageCollectionOperation.refresh.descriptor.id)
                     if UsageRefreshRunner.isRunning {
                         attached = true
                         progress.note("a refresh is already running, attaching to it")

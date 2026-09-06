@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -79,9 +80,9 @@ public enum CLIEnvironment {
             try AgentClient.shared.verifyHandshake()
         }
 
-    nonisolated(unsafe) public static var performAgentOperation: @Sendable (String) throws -> Data =
-        {
-            try AgentClient.shared.performInternal($0)
+    nonisolated(unsafe) public static var performAgentOperation:
+        @Sendable (UserOperationID) throws -> Data = {
+            try AgentClient.shared.perform($0)
         }
 
     nonisolated(unsafe) public static var installTool:
@@ -234,7 +235,7 @@ public enum CLIEnvironment {
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
         verifyAgentHandshake = { try AgentClient.shared.verifyHandshake() }
-        performAgentOperation = { try AgentClient.shared.performInternal($0) }
+        performAgentOperation = { try AgentClient.shared.perform($0) }
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         homebrewClient = { HomebrewClient() }
