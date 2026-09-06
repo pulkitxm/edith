@@ -48,6 +48,7 @@ public actor JobScheduler {
         var lastDuration: TimeInterval?
         var lastError: String?
         var runCount = 0
+        var enqueued = false
         var flight: Flight?
         var nextRun: Date?
         var interval: TimeInterval?
@@ -100,6 +101,7 @@ public actor JobScheduler {
         timer?.cancel()
         timer = nil
         for id in order {
+            states[id]?.enqueued = false
             states[id]?.flight?.task.cancel()
             states[id]?.flight = nil
             states[id]?.nextRun = nil
@@ -159,8 +161,16 @@ public actor JobScheduler {
     public func enqueue(_ id: String) -> Bool {
         guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return false }
         guard state.flight == nil else { return true }
-        Task { await runNow(id) }
+        guard !state.enqueued else { return true }
+        states[id]?.enqueued = true
+        Task { await runEnqueued(id) }
         return true
+    }
+
+    private func runEnqueued(_ id: String) async {
+        guard states[id]?.enqueued == true else { return }
+        states[id]?.enqueued = false
+        await runNow(id)
     }
 
     @discardableResult

@@ -89,7 +89,13 @@ import Testing
         #expect(await !scheduler.enqueueIfDue("fixture.refresh"))
         policy.advance(2)
         #expect(await scheduler.enqueueIfDue("fixture.refresh"))
-        _ = await scheduler.runNow("fixture.refresh")
+        _ = await scheduler.enqueueIfDue("fixture.refresh")
+        _ = await scheduler.enqueueIfDue("fixture.refresh")
+        for _ in 0..<1_000 {
+            let snapshot = await scheduler.snapshots.first
+            if snapshot?.runCount == 2, snapshot?.phase == .idle { break }
+            await Task.yield()
+        }
 
         #expect(await scheduler.snapshots.first?.runCount == 2)
         await scheduler.stop()
