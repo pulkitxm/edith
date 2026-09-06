@@ -140,6 +140,30 @@ import Testing
         }
     }
 
+    @Test func adjacentBinaryCostsPreserveRetainedBaselines() throws {
+        let previous = try retainedCostFixture()
+        let fresh = try changingBaseline(previous) { baseline in
+            var rows = baseline["bySource"] as! [String: [[String: Any]]]
+            rows["cli"]![0]["cost"] = (rows["cli"]![0]["cost"] as! Double).nextUp
+            baseline["bySource"] = rows
+        }
+        #expect(UsageHistory.isValidDocument(previous))
+        #expect(UsageHistory.isValidDocument(fresh))
+        let results = [
+            UsageHistory.mergeRefresh(fresh: fresh, previous: previous),
+            UsageHistory.mergeRefresh(fresh: previous, previous: fresh),
+            UsageHistory.merge(local: previous, cloud: fresh),
+            UsageHistory.merge(local: fresh, cloud: previous),
+        ]
+        for value in results {
+            let result = try #require(value)
+            #expect(UsageHistory.isValidDocument(result))
+            let retained = try #require(blocks(try object(result)).first)
+            let candidates = try #require(retained["candidates"] as? [[String: Any]])
+            #expect(candidates.count == 1)
+        }
+    }
+
     @Test(arguments: [
         "inputTokens", "cost", "chatCost", "modelCost", "hours", "duplicateChat", "duplicateRow",
     ])
@@ -152,7 +176,7 @@ import Testing
             case "inputTokens", "cost":
                 var sources = baseline["bySource"] as! [String: [[String: Any]]]
                 let value = sources["cli"]![0][mutation] as! Double
-                sources["cli"]![0][mutation] = mutation == "cost" ? value.nextUp : value + 1
+                sources["cli"]![0][mutation] = mutation == "cost" ? value + 0.01 : value + 1
                 baseline["bySource"] = sources
             case "hours":
                 var hours = baseline["hours"] as! [[String: Any]]
@@ -166,8 +190,10 @@ import Testing
                 var hours = baseline["hours"] as! [[String: Any]]
                 var sources = hours[0]["bySource"] as! [String: [String: Any]]
                 var models = sources["cli"]!["byModel"] as! [String: [String: Any]]
-                models["one"]!["cost"] = (models["one"]!["cost"] as! Double).nextUp
+                models["one"]!["cost"] = (models["one"]!["cost"] as! Double) - 0.01
+                sources["cli"]!["cost"] = (sources["cli"]!["cost"] as! Double) - 0.01
                 sources["cli"]!["byModel"] = models
+                hours[0]["cost"] = (hours[0]["cost"] as! Double) - 0.01
                 hours[0]["bySource"] = sources
                 baseline["hours"] = hours
             default:
@@ -175,7 +201,7 @@ import Testing
                 var worktrees = projects[0]["worktrees"] as! [[String: Any]]
                 var chats = worktrees[0]["chats"] as! [[String: Any]]
                 if mutation == "chatCost" {
-                    chats[0]["cost"] = (chats[0]["cost"] as! Double).nextUp
+                    chats[0]["cost"] = (chats[0]["cost"] as! Double) + 0.01
                 } else {
                     chats.append(chats[0])
                 }

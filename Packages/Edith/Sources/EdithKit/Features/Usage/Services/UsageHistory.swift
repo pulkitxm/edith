@@ -533,6 +533,9 @@ public enum UsageHistory {
                 result[entry.key] = orderedHistory(entry.value, field: entry.key)
             }
         }
+        if field == "cost", let number = value as? NSNumber {
+            return (number.doubleValue * 1_000_000_000).rounded() / 1_000_000_000
+        }
         guard let array = value as? [Any] else { return value }
         let ordered = array.map { orderedHistory($0) }
         guard field != "hours" else { return ordered }

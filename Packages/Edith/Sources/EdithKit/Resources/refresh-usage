@@ -375,7 +375,7 @@ HISTORY='
       map(historyIdentity("")) | if $field == "hours" then . else sort end
     elif type == "object" then
       with_entries(.key as $key | .value |= historyIdentity($key))
-    elif $field == "cost" and type == "number" then . + 0
+    elif $field == "cost" and type == "number" then(.*1e9|round)/1e9
     else . end;
   def baselineIdentity($source):
     historyIdentity("") | trimDay(.; [$source]) | historyIdentity("");

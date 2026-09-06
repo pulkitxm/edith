@@ -3028,7 +3028,7 @@ describe("retained history coverage", () => {
     expect(repeated.historyRetention.blocks[0].candidates).toHaveLength(1);
   });
 
-  test("raw retained cost comparisons reject the next binary64 value", () => {
+  test("raw retained cost comparisons reject meaningful changes", () => {
     const previous = retainedWithDerivedCostRoundTrip();
     const fresh = structuredClone(previous);
     fresh.historyRetention.blocks[0].baseline.projects[0].worktrees[0].chats[1].cost =
@@ -3044,7 +3044,7 @@ describe("retained history coverage", () => {
       ),
       "--argjson",
       "fresh",
-      JSON.stringify([fresh]).replace('"next-cost"', "0.20000000000000004"),
+      JSON.stringify([fresh]).replace('"next-cost"', "0.20000001"),
       HISTORY,
     ]);
     expect(result.exitCode).not.toBe(0);
@@ -3180,7 +3180,7 @@ describe("retained history coverage", () => {
     test(`retained baseline comparison still refuses changed source ${field}`, () => {
       const retained = retainedWithDerivedCostRoundTrip();
       retained.historyRetention.blocks[0].baseline.bySource.cli[0][field] +=
-        field === "cost" ? Number.EPSILON : 1;
+        field === "cost" ? 0.01 : 1;
       const result = Bun.spawnSync([
         "jq",
         "-n",
