@@ -30,12 +30,7 @@ public enum CaptureLibraryStore {
     public static let maximumBytes: Int64 = 256 * 1024 * 1024
 
     public static func defaultDirectory() throws -> URL {
-        guard
-            let support = FileManager.default.urls(
-                for: .applicationSupportDirectory, in: .userDomainMask
-            ).first
-        else { throw CaptureScreenshotError.saveFailed }
-        return support.appendingPathComponent("Edith/Capture Studio", isDirectory: true)
+        DataRoot.captures
     }
 
     public static func load(from directory: URL? = nil) -> [CaptureLibraryItem] {

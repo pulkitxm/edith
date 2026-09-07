@@ -26,6 +26,8 @@ public enum DataRoot {
 
     public static var clipboard: URL { support.appendingPathComponent("clipboard") }
 
+    public static var captures: URL { support.appendingPathComponent("Capture Studio") }
+
     public static var siteAudit: URL { support.appendingPathComponent("seo") }
 
     public static var settingsExport: URL { support.appendingPathComponent("settings.json") }
