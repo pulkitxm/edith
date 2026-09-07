@@ -6,7 +6,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
 
-  --install      copy to /Applications and launch from there
+  --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
   --release      Release configuration, Developer ID signing required
   --pr N         build PR N's branch from its worktree, creating one if needed
@@ -60,6 +60,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+if [ "$INSTALL" = 1 ] && [ "$RELEASE" != 1 ]; then
+  echo "Development builds cannot replace /Applications/Edith.app. Use --release --install, or launch dist/Edith.app." >&2
+  exit 1
+fi
+
 SIGN_FLAGS=""
 if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
@@ -97,7 +102,6 @@ if [ -n "$PR" ]; then
 fi
 
 if [ -n "$BRANCH" ]; then
-  INSTALL=1
   if [ "$BRANCH" != "$(git branch --show-current)" ]; then
     ROOT="$(git worktree list --porcelain \
       | awk -v b="branch refs/heads/$BRANCH" '/^worktree /{w=substr($0,10)} $0==b{print w; exit}')"
@@ -111,7 +115,11 @@ if [ -n "$BRANCH" ]; then
       git worktree add "$ROOT" "$BRANCH"
     fi
     echo "building from $ROOT"
-    exec "$ROOT/build.sh" --install
+    BUILD_ARGUMENTS=()
+    [ "$INSTALL" = 0 ] || BUILD_ARGUMENTS+=(--install)
+    [ "$NO_OPEN" = 0 ] || BUILD_ARGUMENTS+=(--no-open)
+    [ "$RELEASE" = 0 ] || BUILD_ARGUMENTS+=(--release)
+    exec "$ROOT/build.sh" "${BUILD_ARGUMENTS[@]}"
   fi
 fi
 
@@ -183,6 +191,25 @@ cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
 cp "$AGENT_BUILD" "$AGENT"
 cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
+AGENT_IDENTIFIER=com.pulkit.edith.agent
+if [ "$CONFIG" = Debug ]; then
+  AGENT_IDENTIFIER=com.pulkit.edith.development.agent
+  python3 - "$LAUNCH_AGENTS" <<'PY'
+import pathlib
+import plistlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+original = root / 'com.pulkit.edith.agent.plist'
+value = plistlib.loads(original.read_bytes())
+value['Label'] = 'com.pulkit.edith.development.agent'
+value['MachServices'] = {'com.pulkit.edith.development.agent': True}
+value['AssociatedBundleIdentifiers'] = ['com.pulkit.edith.development']
+destination = root / 'com.pulkit.edith.development.agent.plist'
+destination.write_bytes(plistlib.dumps(value))
+original.unlink()
+PY
+fi
 
 find "$APP" -type f -perm -u+x -print0 \
   | while IFS= read -r -d '' binary; do
@@ -229,7 +256,7 @@ sign_tool() {
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier com.pulkit.edith.agent "$AGENT"
+  --identifier "$AGENT_IDENTIFIER" "$AGENT"
 for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do
   [ -e "$library" ] || continue
   sign_tool "$library"

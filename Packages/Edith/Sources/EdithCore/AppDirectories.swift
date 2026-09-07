@@ -8,14 +8,14 @@ public struct AppDirectories: Equatable, Sendable {
     public let logs: URL
 
     public init(
-        homeDirectory: URL
+        homeDirectory: URL, directoryName: String = "Edith"
     ) {
         configuration = homeDirectory.appendingPathComponent(
-            "Library/Application Support/Edith")
+            "Library/Application Support/\(directoryName)")
         data = configuration
-        cache = homeDirectory.appendingPathComponent("Library/Caches/Edith")
+        cache = homeDirectory.appendingPathComponent("Library/Caches/\(directoryName)")
         runtime = cache.appendingPathComponent("Runtime")
-        logs = homeDirectory.appendingPathComponent("Library/Logs/Edith")
+        logs = homeDirectory.appendingPathComponent("Library/Logs/\(directoryName)")
     }
 
     public static var current: AppDirectories {
@@ -23,7 +23,8 @@ public struct AppDirectories: Equatable, Sendable {
             ProcessInfo.processInfo.environment["EDITH_DATABASE_HOME"].map {
                 URL(fileURLWithPath: $0, isDirectory: true)
             } ?? FileManager.default.homeDirectoryForCurrentUser
-        return AppDirectories(homeDirectory: directory)
+        return AppDirectories(
+            homeDirectory: directory, directoryName: AppBuildIdentity.directoryName)
     }
 
     public func prepare(fileManager: FileManager = .default) throws {

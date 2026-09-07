@@ -167,22 +167,16 @@ verify-bundle: verify-release-build-settings
 	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle)" = ../../../../../Resources/Edith_EdithKit.bundle
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx com.pulkit.edith.helper.v2
+	python3 scripts/verify-app-identity.py dist/Edith.app
 	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist
 	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test "$$(stat -f %z dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake)" -le 500000
 	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
 	test -x dist/Edith.app/Contents/MacOS/edithd
-	test -f dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist
-	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx Contents/MacOS/edithd
-	/usr/libexec/PlistBuddy -c 'Print :Label' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx com.pulkit.edith.agent
-	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchAgents/com.pulkit.edith.agent.plist | grep -qx com.pulkit.edith
-	codesign -dvv dist/Edith.app/Contents/MacOS/edithd 2>&1 | grep -qx Identifier=com.pulkit.edith.agent
 	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
 	codesign -dvv dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake 2>&1 | grep -qx Identifier=com.pulkit.edith.lidawake
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx Edith
 	@for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do \
 	  for field in CFBundleName CFBundleDisplayName; do \
 	    /usr/libexec/PlistBuddy -c "Print :$$field" "$$plist" | grep -q Helper \
@@ -200,13 +194,13 @@ build:
 	./build.sh $(FLAGS)
 
 install:
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 reset:
 	./reset.sh
 
 reinstall: reset
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 loc:
 	cloc --vcs=git
