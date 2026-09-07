@@ -18,8 +18,10 @@ final class TextUtilitiesEngine: FeatureModule {
     func syncSettings() {
         snippets = TextUtilitiesSupport.decode(
             SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.snippets))
-        let enabled = SharedDefaults.store.bool(
-            forKey: AppStorageKeys.TextUtilities.snippetsEnabled)
+        let enabled =
+            SharedDefaults.store.bool(
+                forKey: AppStorageKeys.TextUtilities.snippetsEnabled)
+            && snippets.contains(where: \.enabled)
         if enabled, keyboardMonitor == nil {
             keyboardMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) {
                 [weak self] event in
