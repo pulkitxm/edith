@@ -274,6 +274,7 @@ import Testing
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
+            ("textUtilities", "TextUtilitiesRows", "enabled", "TextUtilitiesRows.swift"),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
             ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
