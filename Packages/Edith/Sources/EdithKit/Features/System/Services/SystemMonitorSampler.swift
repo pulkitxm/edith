@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import IOKit
 
-public struct SystemMonitorThroughput: Equatable, Sendable {
+public struct SystemMonitorThroughput: Codable, Equatable, Sendable {
     public var inboundBytesPerSecond: Double
     public var outboundBytesPerSecond: Double
 
@@ -12,7 +12,7 @@ public struct SystemMonitorThroughput: Equatable, Sendable {
     }
 }
 
-public struct SystemMonitorBattery: Equatable, Sendable {
+public struct SystemMonitorBattery: Codable, Equatable, Sendable {
     public var percent: Int
     public var isCharging: Bool
     public var externalPower: Bool
@@ -31,7 +31,7 @@ public struct SystemMonitorBattery: Equatable, Sendable {
     }
 }
 
-public struct SystemMonitorSnapshot: Equatable, Sendable {
+public struct SystemMonitorSnapshot: Codable, Equatable, Sendable {
     public var sampledAt: TimeInterval
     public var cpuPercent: Double
     public var memoryPercent: Double
@@ -91,7 +91,7 @@ enum SystemMonitorSamplingPolicy {
     }
 }
 
-public struct SustainedThresholdGate: Equatable, Sendable {
+public struct SustainedThresholdGate: Codable, Equatable, Sendable {
     private var heldSince: TimeInterval?
     private var lastReadAt: TimeInterval?
     private var delivered = false

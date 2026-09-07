@@ -9,6 +9,7 @@ struct MachineDetailView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var visited: Set<MachineTab> = []
+    @Environment(\.machineViewPresented) private var presented
 
     private var dark: Bool { scheme == .dark }
 
@@ -19,6 +20,7 @@ struct MachineDetailView: View {
             detail
                 .padding(.top, UIScale.pt(6))
         }
+        .machineActivity(session)
     }
 
     private var tabBar: some View {
@@ -57,23 +59,6 @@ struct MachineDetailView: View {
                 .buttonStyle(.edith(.borderless))
                 .help("\(item.title) (⌘-click to open it in its own window)")
             }
-            Button {
-                FinderWindow.open(session: session)
-            } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "folder")
-                        .font(.system(size: UIScale.pt(11), weight: .medium))
-                    Text("Files")
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                }
-                .padding(.horizontal, UIScale.pt(11))
-                .padding(.vertical, UIScale.pt(6))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Browse files in their own window")
-
             Spacer(minLength: 0)
             ConnectionPill(session: session, dark: dark)
             MachineControlCenterButton(session: session, dark: dark)
@@ -90,6 +75,7 @@ struct MachineDetailView: View {
         switch item {
         case .docker: DockerWindow.open(session: session)
         case .terminal: TerminalWindow.open(session: session)
+        case .files: FinderWindow.open(session: session)
         default: MachineWindow.open(machineID: session.id, title: session.machine.name)
         }
     }
@@ -101,6 +87,7 @@ struct MachineDetailView: View {
             ForEach(MachineTab.tabs(isLocal: session.isLocal, hasDocker: true)) { item in
                 if mounted.contains(item) {
                     screen(item, presented: item == tab)
+                        .environment(\.machineViewPresented, item == tab && presented)
                         .opacity(item == tab ? 1 : 0)
                         .allowsHitTesting(item == tab)
                         .accessibilityHidden(item != tab)
@@ -120,6 +107,7 @@ struct MachineDetailView: View {
         case .processes: MachineProcessesTab(session: session)
         case .docker: DockerConsoleView(session: session)
         case .terminal: TerminalTabsView(session: session, presented: presented)
+        case .files: FinderWindowView(session: session)
         case .tools: MachineToolsTab(session: session, model: model)
         }
     }
@@ -132,18 +120,24 @@ struct ConnectionPill: View {
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if session.state.isBusy {
-                ProgressView().controlSize(.small).scaleEffect(0.7)
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(6)) {
+                        SkeletonBlock(width: 7, height: 7, corner: 3.5)
+                        SkeletonBlock(width: 74, height: 9, corner: 2)
+                    }
+                }
+                .accessibilityLabel(MachineStatusStyle.detail(session.state))
             } else {
                 Circle()
                     .fill(MachineStatusStyle.color(session.state, dark: dark))
                     .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                Text(MachineStatusStyle.label(session.state))
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(MachineStatusStyle.detail(session.state))
             }
-            Text(MachineStatusStyle.label(session.state))
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(MachineStatusStyle.detail(session.state))
             if session.state.isRetryable {
                 Button("Retry") { session.retry() }
                     .buttonStyle(.edith(.borderless))

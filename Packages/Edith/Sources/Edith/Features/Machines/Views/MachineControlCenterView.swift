@@ -22,6 +22,7 @@ final class MachineControlCenterModel {
     var bluetoothEnabled = false
     var airplaneMode = false
     var doNotDisturb = false
+    var caffeinateEnabled = false
     var isRefreshing = false
     var hasLoaded = false
     var requiresConnection = false
@@ -108,7 +109,8 @@ final class MachineControlCenterModel {
                 }
             }
         }
-        let result = await MachineControlOperationExecution.status {
+        let platform = MachineControlPlatform(session.remotePlatform ?? .darwin)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
             [session] command, stdin, timeout in
             await session.runCommand(command, stdin: stdin, timeout: timeout)
         }
@@ -209,6 +211,7 @@ final class MachineControlCenterModel {
         if let value = next.bluetoothEnabled { bluetoothEnabled = value }
         if let value = next.airplaneMode { airplaneMode = value }
         if let value = next.doNotDisturb { doNotDisturb = value }
+        if let value = next.caffeinateEnabled { caffeinateEnabled = value }
     }
 
     private func canDisconnect(_ action: MachineControlAction) -> Bool {
@@ -390,6 +393,7 @@ struct MachineControlCenterView: View {
         if snapshot?.bluetoothEnabled != nil { height += 44 }
         if snapshot?.airplaneMode != nil { height += 44 }
         if snapshot?.doNotDisturb != nil { height += 44 }
+        if snapshot?.caffeinateEnabled != nil { height += 44 }
         if snapshot?.keyboardBacklight != nil { height += 66 }
         if hasControls, hasCooling { height += 15 }
         if hasCooling {
@@ -453,14 +457,13 @@ struct MachineControlCenterView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             if isBusy {
-                HStack(spacing: UIScale.pt(4)) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.72)
-                    Text(busyLabel)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 8, height: 8, corner: 4)
+                        SkeletonBlock(width: 72, height: 9, corner: 2)
+                    }
                 }
+                .accessibilityLabel(busyLabel)
             }
             Button {
                 Task { await model.refresh(reportFailure: true, clearsMessage: true) }
@@ -535,8 +538,21 @@ struct MachineControlCenterView: View {
             .foregroundStyle(DashSkin.inkFaint(dark))
             .fixedSize(horizontal: false, vertical: true)
             if model.requiresConnection {
-                Button(session.state.isBusy ? "Connecting…" : "Connect") {
+                Button {
                     session.retry()
+                } label: {
+                    ZStack {
+                        Text(session.state.isBusy ? "Connecting…" : "Connect")
+                            .hidden()
+                        if session.state.isBusy {
+                            SkeletonGroup {
+                                SkeletonBlock(width: 54, height: 8, corner: 2)
+                            }
+                            .accessibilityLabel("Connecting")
+                        } else {
+                            Text("Connect")
+                        }
+                    }
                 }
                 .controlSize(.small)
                 .disabled(session.state.isBusy)
@@ -619,8 +635,21 @@ struct MachineControlCenterView: View {
                     success: $0 ? "Do Not Disturb turned on" : "Do Not Disturb turned off")
             }
         }
-        if snapshot?.keyboardBacklight != nil {
+        if snapshot?.caffeinateEnabled != nil {
             if hasControl(before: 7) { controlDivider }
+            toggleRow(
+                "Caffeinate",
+                symbol: model.caffeinateEnabled ? "cup.and.saucer.fill" : "cup.and.saucer",
+                value: model.caffeinateEnabled
+            ) {
+                model.caffeinateEnabled = $0
+                model.perform(
+                    .setCaffeinateEnabled($0),
+                    success: $0 ? "Caffeinate turned on" : "Caffeinate turned off")
+            }
+        }
+        if snapshot?.keyboardBacklight != nil {
+            if hasControl(before: 8) { controlDivider }
             sliderRow(
                 "Keyboard lighting", symbol: "keyboard", value: $model.keyboardBacklight,
                 onCommit: {
@@ -867,6 +896,7 @@ struct MachineControlCenterView: View {
             snapshot?.bluetoothEnabled != nil,
             snapshot?.airplaneMode != nil,
             snapshot?.doNotDisturb != nil,
+            snapshot?.caffeinateEnabled != nil,
             snapshot?.keyboardBacklight != nil,
         ]
         return available.prefix(index).contains(true)

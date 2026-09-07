@@ -1,27 +1,36 @@
 import AppKit
 import EdithKit
 import UserNotifications
+import SwiftUI
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
-    private let item: NSStatusItem
+    private let panel = StatusItemPanel()
+    private let snapshot = SystemMenuSnapshot()
+    private var item: NSStatusItem!
     private var timer: Timer?
-    private let sampler = SystemMonitorSampler()
+    private var latest: SystemMonitorSnapshot?
+    private var subscription: AgentSubscription?
+    private var refreshTask: Task<Void, Never>?
     private var cpuAlert = SustainedThresholdGate()
     private var memoryAlert = SustainedThresholdGate()
     private var diskAlert = SustainedThresholdGate()
     private var batteryAlert = SustainedThresholdGate()
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
-    private var cachedTintHex: String?
+    private var cachedTintKey: String?
     private var cachedGlyphs: [String: NSAttributedString] = [:]
     private var numberAttributes: [NSAttributedString.Key: Any] = [:]
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
     override init() {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        ensureStyleCache()
+        let initialTitle = title(cpu: 0, memory: 0)
+        item = NSStatusBar.system.statusItem(
+            withLength: StatusItemSizing.titleLength(initialTitle))
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
+        item.button?.attributedTitle = initialTitle
         startTimer()
         let workspace = NSWorkspace.shared.notificationCenter
         sleepObservers = [
@@ -51,7 +60,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     private func startTimer() {
         guard timer == nil else { return }
-        sampler.reset()
+        latest = nil
         update()
         let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
@@ -64,11 +73,16 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
-        sampler.reset()
+        refreshTask?.cancel()
+        refreshTask = nil
+        subscription?.cancel()
+        subscription = nil
+        latest = nil
         resetAlerts()
     }
 
     func shutdown() {
+        panel.close()
         stopTimer()
         for observer in sleepObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -82,26 +96,61 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     @objc private func clicked() {
-        StatusItemMenu.handleClick(on: item) { MainApp.open(section: "system") }
+        StatusItemMenu.handleClick(on: item) {
+            let snapshot = snapshot
+            panel.show(
+                from: item, title: "System",
+                actions: [
+                    .init(title: "Open System…") { MainApp.open(section: "systemMonitor") }
+                ]
+            ) {
+                SystemMenuReadings(snapshot: snapshot)
+            }
+        }
     }
 
     private func update() {
-        let snapshot = sampler.sample()
+        if refreshTask == nil, subscription == nil {
+            refreshTask = Task { [weak self] in
+                defer { self?.refreshTask = nil }
+                self?.latest = try? await SystemMonitorClient.snapshot()
+                guard !Task.isCancelled else { return }
+                let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) { [weak self] data in
+                    guard let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data) else { return }
+                    Task { @MainActor in self?.latest = value }
+                }
+                guard !Task.isCancelled else { subscription?.cancel(); return }
+                self?.subscription = subscription
+            }
+        }
+        guard let monitor = latest else { return }
+        snapshot.cpu = monitor.cpuPercent
+        snapshot.memory = monitor.memoryPercent
         ensureStyleCache()
-        let title = NSMutableAttributedString()
-        appendStat(symbol: "cpu", value: snapshot.cpuPercent, into: title)
-        title.append(NSAttributedString(string: "  "))
-        appendStat(symbol: "memorychip", value: snapshot.memoryPercent, into: title)
+        let title = title(cpu: monitor.cpuPercent, memory: monitor.memoryPercent)
+        item.length = StatusItemSizing.titleLength(title)
         item.button?.attributedTitle = title
-        item.button?.toolTip = details(snapshot)
-        evaluateAlerts(snapshot)
+        item.button?.toolTip = details(monitor)
+        evaluateAlerts(monitor)
+    }
+
+    private func title(cpu: Double, memory: Double) -> NSAttributedString {
+        let title = NSMutableAttributedString()
+        appendStat(symbol: "cpu", value: cpu, into: title)
+        title.append(NSAttributedString(string: " "))
+        appendStat(symbol: "memorychip", value: memory, into: title)
+        return title
     }
 
     private func ensureStyleCache() {
-        let hex = SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
-        guard cachedTintHex != hex || cachedGlyphs.isEmpty else { return }
-        cachedTintHex = hex
-        let color = LimitsStatusItem.nsColor(hex: hex) ?? .white
+        let defaults = SharedDefaults.store
+        let mode = MenuBarTintMode(
+            preference: defaults.string(forKey: AppStorageKeys.MenuBar.statsColorMode))
+        let hex = defaults.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
+        let key = "\(mode):\(hex ?? "")"
+        guard cachedTintKey != key || cachedGlyphs.isEmpty else { return }
+        cachedTintKey = key
+        let color = mode.color(custom: LimitsStatusItem.nsColor(hex: hex))
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
         var glyphs: [String: NSAttributedString] = [:]
         for symbol in ["cpu", "memorychip"] {
@@ -281,6 +330,23 @@ private enum SystemMonitorNotifier {
                     "Edith System Monitor notification failed (%@): %@", alert.identifier,
                     error.localizedDescription)
             }
+        }
+    }
+}
+
+@MainActor
+final class SystemMenuSnapshot {
+    var cpu = 0.0
+    var memory = 0.0
+}
+
+struct SystemMenuReadings: View {
+    let snapshot: SystemMenuSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StatusProgressRow(title: "CPU", percent: snapshot.cpu)
+            StatusProgressRow(title: "Memory", percent: snapshot.memory)
         }
     }
 }

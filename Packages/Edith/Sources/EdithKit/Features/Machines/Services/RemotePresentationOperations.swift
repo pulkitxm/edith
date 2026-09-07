@@ -109,8 +109,13 @@ public enum RemoteFileOperationExecution {
         return .downloadOnly
     }
 
-    public static func previewCommand(path: String, limit: Int = previewLimit) -> String {
-        "head -c \(max(1, limit + 1)) \(ShellQuote.quote(path))"
+    public static func previewCommand(
+        path: String, limit: Int = previewLimit,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        platform == .windows
+            ? WindowsFileCommands.preview(path: path, limit: max(1, limit + 1))
+            : "head -c \(max(1, limit + 1)) \(ShellQuote.quote(path))"
     }
 
     public static func textPreview(_ data: Data, limit: Int = previewLimit) -> (

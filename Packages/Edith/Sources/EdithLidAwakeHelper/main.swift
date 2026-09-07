@@ -1,4 +1,4 @@
-import EdithKit
+import EdithLidAwakeSupport
 import Foundation
 import Security
 

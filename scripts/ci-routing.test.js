@@ -36,12 +36,16 @@ test("every change area covers its repository inputs", () => {
       "Packages/Edith/Sources/Edith/App.swift",
       "Resources/Info.plist",
       "edth.xcodeproj/project.pbxproj",
+      "scripts/test-swift-test-isolation.py",
       "build.sh",
       "Makefile",
       ".swift-format",
     ],
     docs: ["docs/cli/README.md"],
-    workflows: [".github/workflows/ci.yml"],
+    workflows: [
+      ".github/workflows/ci.yml",
+      ".github/actions/cache-swift/action.yml",
+    ],
     promo: ["apps/promo-video/src/Promo.tsx"],
     site: ["apps/site/index.html"],
     scripts: [
@@ -87,9 +91,7 @@ test("every change area covers its repository inputs", () => {
 });
 
 test("a main push releases when the Swift area changed", () => {
-  const releaseBuildJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
-  );
+  const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
   expect(releaseBuildJob).toContain(
     "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
@@ -144,7 +146,8 @@ test("main releases skip the redundant debug app build", () => {
   );
   expect(swiftBuild).toContain("github.event_name != 'push'");
   const releaseBuild = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
+    ciWorkflow.indexOf("\n  dmg:"),
   );
   expect(releaseBuild).toContain("&& ((github.event_name == 'push'");
   expect(releaseBuild).not.toContain("needs.swift-build");
@@ -152,7 +155,7 @@ test("main releases skip the redundant debug app build", () => {
 
 test("Swift tests build their CLI fixture in one package graph", () => {
   expect(swiftTestScript).not.toMatch(/^swift build/gm);
-  expect(swiftTestScript.match(/^exec swift test/gm)?.length).toBe(1);
+  expect(swiftTestScript.match(/^swift test/gm)?.length).toBe(1);
   const testTarget = packageManifest.slice(
     packageManifest.indexOf('name: "EdithTests"'),
   );
@@ -164,7 +167,13 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain("timeout-minutes: 30");
+  expect(swiftTest).toContain("timeout-minutes: 45");
+  expect(swiftTest).toContain(
+    "python3 -B scripts/test-swift-test-isolation.py",
+  );
+  expect(swiftTest.indexOf("Verify test isolation")).toBeLessThan(
+    swiftTest.indexOf("run: ./test.sh"),
+  );
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
@@ -180,7 +189,9 @@ test("targeted publishing workflows watch every deployment input", () => {
 });
 
 test("every workflow change runs the runtime guard", () => {
-  expect(ciWorkflow).toContain("area workflows '^\\.github/workflows/'");
+  expect(ciWorkflow).toContain(
+    "area workflows '^\\.github/(workflows|actions)/'",
+  );
   expect(ciWorkflow).toContain(
     "needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'",
   );
@@ -192,7 +203,7 @@ test("every workflow change runs the runtime guard", () => {
   );
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
   );
   expect(swiftTest).toContain("needs.changes.outputs.workflows == 'true'");
   expect(ciWorkflow).toContain(

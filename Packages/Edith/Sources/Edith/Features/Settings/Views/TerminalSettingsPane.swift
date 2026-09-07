@@ -192,13 +192,13 @@ struct TerminalSettingsPane: View {
     }
 
     private var toolsHelp: String {
-        if !loaded { return "ed, edh and edith are the same tool under three names." }
+        if !loaded { return "ed and edith are the same tool under two names." }
         if !tools.bundled { return "This build does not carry the ed binary." }
         if !tools.onPath, !tools.directory.isEmpty {
             return
                 "\(abbreviate(tools.directory)) is not on your PATH, so the shell cannot find ed yet."
         }
-        return "ed, edh and edith are the same tool under three names."
+        return "ed and edith are the same tool under two names."
     }
 
     private var toolSummary: String {
@@ -328,10 +328,10 @@ private struct CheckingLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            ProgressView().controlSize(.mini)
-            Text(text).foregroundStyle(.secondary)
+        SkeletonGroup {
+            SkeletonBlock(width: 96, height: 9, corner: 4)
         }
+        .accessibilityLabel(text)
     }
 }
 
@@ -357,7 +357,9 @@ private struct ActionButton: View {
     @ViewBuilder private var marker: some View {
         switch phase {
         case .running:
-            ProgressView().controlSize(.mini)
+            SkeletonGroup {
+                SkeletonBlock(width: 12, height: 12, corner: 6)
+            }
         case .done:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         case .failed:

@@ -478,7 +478,7 @@ final class DashboardModel {
     private var computeGeneration = 0
     private var computeTask: Task<Void, Never>?
 
-    private static let inlineComputeDayLimit = 32
+    private var allowsInlineComputation = false
 
     private let cal = Calendar.current
     private let preferences: UserDefaults
@@ -621,6 +621,7 @@ final class DashboardModel {
     }
 
     private func apply(_ digest: DashboardIngestDigest, parsed: DashUsage) {
+        allowsInlineComputation = digest.allowsInlineComputation
         data = parsed
         sortedPeriods = digest.sortedPeriods
         allSources = digest.allSources
@@ -906,17 +907,22 @@ final class DashboardModel {
         computeGeneration &+= 1
         let generation = computeGeneration
         let request = computeRequest(data)
-        if data.daily.count <= Self.inlineComputeDayLimit {
+        if allowsInlineComputation {
             if let snapshot = DashboardComputation.snapshot(request) {
                 publish(snapshot)
             }
             return
         }
         computeTask = Task { [weak self] in
-            let snapshot = await Task.detached(
-                priority: .userInitiated,
-                operation: { DashboardComputation.snapshot(request) }
-            ).value
+            guard !Task.isCancelled else { return }
+            let worker = Task.detached(priority: .userInitiated) {
+                DashboardComputation.snapshot(request)
+            }
+            let snapshot = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
             guard let self, !Task.isCancelled else { return }
             if generation != self.computeGeneration { return }
             if let snapshot { self.publish(snapshot) }

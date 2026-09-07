@@ -30,18 +30,17 @@ struct SystemStatsCommand: AsyncParsableCommand {
         try await execute {
             let interval = try ArgumentChecks.positive(self.interval, "--interval")
             let processes = try ArgumentChecks.nonNegative(self.processes, "--processes")
+            let subscription = follow ? try await AgentClient.shared.subscribeAsync(.systemMonitor) { _ in } : nil
+            defer { subscription?.cancel() }
             let sampler = LocalMachineSampler()
-            let monitor = SystemMonitorSampler()
-            defer { monitor.reset() }
             let hello = sampler.hello()
             _ = await sampler.sample()
-            _ = monitor.sample()
             try await Task.sleep(for: .milliseconds(500))
             var first = true
             repeat {
                 if !first { try await Task.sleep(for: .seconds(max(0.5, interval))) }
                 let sample = await sampler.sample()
-                let monitorSample = monitor.sample()
+                let monitorSample = try await SystemMonitorClient.snapshot()
                 let payload = JSONValue.object([
                     "host": MachineReports.hello(hello),
                     "sample": MachineReports.sample(sample, processes: processes),

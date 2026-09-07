@@ -82,8 +82,7 @@ posts `downloadQueueChanged`, which a running Edith takes as a cue to re-read
 the file and start on the next queued item. Duplicates are not detected: adding
 a URL that is already queued or already downloaded queues it again. The saved
 file goes to your music folder, which is `musicFolderPath` when you have set
-one, `<repoPath>/local/music` when only `repoPath` is set, and
-`~/Library/Application Support/Edith/music` otherwise. The note about
+one and `~/Library/Application Support/Edith/music` otherwise. The note about
 Edith not running goes to stderr, only when the menu bar app is absent, and
 only on the human path; `--json` never prints it, and either way the exit code
 is 0 because the queue write succeeded.

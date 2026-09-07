@@ -67,6 +67,7 @@ final class AttentionPageModel {
     var errorMessage: String?
     private(set) var loaded = false
     private(set) var hasStoredEvents = false
+    private(set) var transferringBackup = false
 
     private let repository: AttentionRepository
     private var reloadTask: Task<Void, Never>?
@@ -97,10 +98,15 @@ final class AttentionPageModel {
         let range = range
         let knownSettings = settings
         reloadTask = Task.detached { [weak self] in
-            let state = AttentionPageModel.loadState(
-                repository: repository, range: range,
-                settings: preserveSettings ? knownSettings : nil)
-            await self?.publish(state, preserveSettings: preserveSettings, generation: generation)
+            do {
+                let state = try await AttentionPageModel.loadState(
+                    repository: repository, range: range,
+                    settings: preserveSettings ? knownSettings : nil)
+                await self?.publish(
+                    state, preserveSettings: preserveSettings, generation: generation)
+            } catch {
+                await self?.publishFailure(error.localizedDescription, generation: generation)
+            }
         }
     }
 
@@ -119,23 +125,32 @@ final class AttentionPageModel {
         hasStoredEvents = state.hasStoredEvents
         extensionInstalled = state.extensionInstalled
         loaded = true
+        errorMessage = nil
+    }
+
+    private func publishFailure(_ message: String, generation: Int) {
+        guard !Task.isCancelled, reloadGeneration == generation else { return }
+        reloadTask = nil
+        errorMessage = message
+        loaded = true
     }
 
     nonisolated private static func loadState(
         repository: AttentionRepository, range: AttentionViewRange, settings: AttentionSettings?
-    ) -> AttentionPageState {
-        let resolvedSettings = settings ?? repository.loadSettings()
+    ) async throws -> AttentionPageState {
         let interval = range.interval()
-        let all = repository.events(from: interval.start, to: interval.end)
-        let summary = AttentionAnalyzer().summary(
-            events: all, settings: resolvedSettings, from: interval.start, to: interval.end)
-        let events = Array(all.sorted { $0.startedAt > $1.startedAt }.prefix(500))
-        let focusSessions = Array(
-            repository.focusSessions(from: interval.start, to: interval.end).reversed())
+        let request = AttentionSummaryRequest(
+            from: interval.start, to: interval.end, settings: settings)
+        let snapshot: AttentionPageSnapshot
+        if repository.resolvedEventSink is AgentAttentionSink {
+            snapshot = try await AttentionBackgroundClient.summary(request)
+        } else {
+            snapshot = AttentionPageSnapshot(request: request, repository: repository)
+        }
         return AttentionPageState(
-            settings: resolvedSettings, summary: summary, events: events,
-            activeFocus: repository.activeFocus(), focusSessions: focusSessions,
-            hasStoredEvents: repository.hasEvents(),
+            settings: snapshot.settings, summary: snapshot.summary, events: snapshot.events,
+            activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
+            hasStoredEvents: snapshot.hasStoredEvents,
             extensionInstalled: FileManager.default.fileExists(
                 atPath: AttentionExtensionInstaller.installedDirectory.path))
     }
@@ -269,23 +284,33 @@ final class AttentionPageModel {
     }
 
     func backupNow() {
-        do {
-            _ = try cloudBackup.backup()
-            message = "Attention data backed up to iCloud Drive"
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        guard !transferringBackup else { return }
+        transferringBackup = true
+        Task { [weak self] in
+            defer { self?.transferringBackup = false }
+            do {
+                try await AttentionBackgroundClient.backup()
+                self?.message = "Attention data backed up to iCloud Drive"
+                self?.errorMessage = nil
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
         }
     }
 
     func restoreBackup() {
-        do {
-            try cloudBackup.restoreWhenLocalStoreIsEmpty()
-            message = "Attention backup restored"
-            errorMessage = nil
-            reload()
-        } catch {
-            errorMessage = error.localizedDescription
+        guard !transferringBackup else { return }
+        transferringBackup = true
+        Task { [weak self] in
+            defer { self?.transferringBackup = false }
+            do {
+                try await AttentionBackgroundClient.restore()
+                self?.message = "Attention backup restored"
+                self?.errorMessage = nil
+                self?.reload()
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
         }
     }
 
