@@ -47,6 +47,7 @@ final class AgentEventsModel {
 
     func observe() async {
         guard !paused else { return }
+        if events.isEmpty { loading = true }
         do {
             let value = try await AgentClient.shared.snapshotAsync(
                 [AgentEvent].self, topic: .events)
@@ -59,7 +60,7 @@ final class AgentEventsModel {
             failure = error.localizedDescription
         }
         for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !paused else { return }
             receive(events)
         }
     }
@@ -83,6 +84,7 @@ struct AgentEventsScreen: View {
     @State var model = AgentEventsModel()
     @State private var search = ""
     @State private var errorsOnly = false
+    @State private var retryID = 0
     @State private var copyTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -128,7 +130,7 @@ struct AgentEventsScreen: View {
             .font(.caption).foregroundStyle(.secondary).padding(16)
         }
         .frame(minWidth: 680, idealWidth: 840, minHeight: 460, idealHeight: 620)
-        .task(id: model.paused) {
+        .task(id: "\(model.paused)-\(retryID)") {
             guard automaticActionsEnabled else { return }
             await model.observe()
         }
@@ -146,10 +148,16 @@ struct AgentEventsScreen: View {
             List { AgentRowsSkeleton(count: 9, timeline: true) }
                 .listStyle(.plain)
         } else if let failure = model.failure, model.events.isEmpty {
-            ContentUnavailableView(
-                "Agent unavailable", systemImage: "exclamationmark.circle",
-                description: Text(failure)
-            )
+            ContentUnavailableView {
+                Label("Agent unavailable", systemImage: "exclamationmark.circle")
+            } description: {
+                Text(failure)
+            } actions: {
+                Button("Retry") {
+                    model.paused = false
+                    retryID += 1
+                }
+            }
             .frame(maxHeight: .infinity)
         } else if model.matches.isEmpty {
             ContentUnavailableView(
@@ -182,8 +190,8 @@ struct AgentRowsSkeleton: View {
     var timeline = false
 
     var body: some View {
-        ForEach(0..<count, id: \.self) { _ in
-            SkeletonGroup {
+        SkeletonGroup {
+            ForEach(0..<count, id: \.self) { _ in
                 HStack(spacing: 12) {
                     if timeline {
                         SkeletonBlock(width: 12, height: 12, corner: 6)
