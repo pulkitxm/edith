@@ -25,17 +25,27 @@ struct PluginsPage: View {
                         Text("Edith skills")
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
                         Spacer()
-                        Text("\(model.agents.count) agents found on this Mac")
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
+                        if model.agentsLoaded {
+                            Text("\(model.agents.count) agents found on this Mac")
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            SkeletonGroup {
+                                SkeletonBlock(width: 164, height: 11)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Discovering installed agents")
+                        }
                     }
                     ForEach(model.skills) { skill in
                         SkillCatalogRow(
                             skill: skill, agents: model.agents,
                             installed: model.installedAgents[skill.id]?.isEmpty == false,
-                            disabled: model.isInstalling,
+                            disabled: model.isInstalling || !model.agentsLoaded,
                             preview: { previewSkill = skill },
-                            install: { agent in model.present(skill, agentID: agent) })
+                            install: { agent in
+                                Task { await model.present(skill, agentID: agent) }
+                            })
                     }
                     Text(
                         "Install once for all your projects. Choose your agents at each install, with your preferences remembered."
@@ -50,7 +60,7 @@ struct PluginsPage: View {
         .background(DashSkin.paper(dark))
         .task {
             guard automaticActionsEnabled else { return }
-            model.discoverAgents()
+            await model.discoverAgents()
         }
         .sheet(item: $previewSkill) { skill in
             SkillPreviewSheet(skill: skill)

@@ -5,6 +5,8 @@ import Observation
     public static let shared = SkillsModel()
     public let skills = EdithSkillLibrary.skills
     public private(set) var agents: [SkillAgent] = []
+    public private(set) var agentsLoaded = false
+    public private(set) var isDiscovering = false
     public var presentedSkill: EdithSkill?
     public private(set) var selectedAgentIDs: Set<String> = []
     public private(set) var isInstalling = false
@@ -16,42 +18,64 @@ import Observation
     public private(set) var singleAgentOverride = false
     private var installationID = UUID()
     private let defaults: UserDefaults
-    private let detectAgents: () -> [SkillAgent]
+    private let detectAgents: @Sendable () -> [SkillAgent]
+    private var discoveryTask: Task<([SkillAgent], Bool), Never>?
+    private var discoveryID = UUID()
     private let installer: SkillInstaller
 
     public init(
         defaults: UserDefaults = SharedDefaults.store,
         installer: SkillInstaller = SkillInstaller(),
-        detectAgents: @escaping () -> [SkillAgent] = { SkillAgentCatalog.detected() }
+        detectAgents: @escaping @Sendable () -> [SkillAgent] = { SkillAgentCatalog.detected() }
     ) {
         self.defaults = defaults
         self.installer = installer
         self.detectAgents = detectAgents
     }
 
-    public func discoverAgents() {
-        agents = detectAgents()
-        installerAvailable = CLIToolEnvironment.executable(named: "npx") != nil
+    public func discoverAgents() async {
+        let task: Task<([SkillAgent], Bool), Never>
+        if let existing = discoveryTask {
+            task = existing
+        } else {
+            let detect = detectAgents
+            task = Task.detached(priority: .userInitiated) {
+                (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
+            }
+            discoveryID = UUID()
+            discoveryTask = task
+            isDiscovering = true
+        }
+        let token = discoveryID
+        let result = await task.value
+        guard token == discoveryID else { return }
+        agents = result.0
+        installerAvailable = result.1
+        agentsLoaded = true
+        isDiscovering = false
+        discoveryTask = nil
     }
 
-    public func present(_ skill: EdithSkill, agentID: String? = nil) {
+    public func present(_ skill: EdithSkill, agentID: String? = nil) async {
         guard !isInstalling else { return }
-        installationID = UUID()
-        discoverAgents()
-        let preferences =
-            defaults.dictionary(forKey: AppStorageKeys.Skills.agentSelections) as? [String: Bool]
-            ?? [:]
-        selectedAgentIDs = Set(agents.compactMap { (preferences[$0.id] ?? true) ? $0.id : nil })
-        if let agentID { selectedAgentIDs = agents.contains { $0.id == agentID } ? [agentID] : [] }
+        let token = UUID()
+        installationID = token
         singleAgentOverride = agentID != nil
         installationSucceeded = false
         installationError = nil
         installationLog = ""
         presentedSkill = skill
+        await discoverAgents()
+        guard installationID == token else { return }
+        let preferences =
+            defaults.dictionary(forKey: AppStorageKeys.Skills.agentSelections) as? [String: Bool]
+            ?? [:]
+        selectedAgentIDs = Set(agents.compactMap { (preferences[$0.id] ?? true) ? $0.id : nil })
+        if let agentID { selectedAgentIDs = agents.contains { $0.id == agentID } ? [agentID] : [] }
     }
 
     public func setSelected(_ id: String, enabled: Bool) {
-        guard !isInstalling, agents.contains(where: { $0.id == id }) else { return }
+        guard !isInstalling, !isDiscovering, agents.contains(where: { $0.id == id }) else { return }
         if enabled { selectedAgentIDs.insert(id) } else { selectedAgentIDs.remove(id) }
         singleAgentOverride = false
         var preferences =
@@ -62,7 +86,8 @@ import Observation
     }
 
     public func install() async {
-        guard let skill = presentedSkill, !isInstalling, !selectedAgentIDs.isEmpty else { return }
+        guard let skill = presentedSkill, !isInstalling, !isDiscovering, !selectedAgentIDs.isEmpty
+        else { return }
         let targets = selectedAgentIDs
         let token = UUID()
         installationID = token
