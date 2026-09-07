@@ -7,7 +7,7 @@ import SwiftUI
 
 @MainActor
 @Observable
-private final class ScreenRecordingEditorModel {
+final class ScreenRecordingEditorModel {
     let take: ScreenRecordingTake
     let player: AVPlayer
     var document: ScreenRecordingEditDocument
@@ -209,7 +209,7 @@ final class ScreenRecordingEditorController: NSObject, NSWindowDelegate {
     }
 }
 
-private enum ScreenRecordingCrop: String, CaseIterable {
+enum ScreenRecordingCrop: String, CaseIterable {
     case original
     case widescreen
     case square
@@ -234,7 +234,7 @@ private enum ScreenRecordingCrop: String, CaseIterable {
     }
 }
 
-private struct ScreenRecordingEditorView: View {
+struct ScreenRecordingEditorView: View {
     @Bindable var model: ScreenRecordingEditorModel
     @State private var crop: ScreenRecordingCrop = .original
     @State private var background = Color(red: 0.067, green: 0.094, blue: 0.153)

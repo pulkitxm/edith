@@ -1,10 +1,13 @@
 import AVFoundation
+import AppKit
+import SwiftUI
 import CoreGraphics
 import Foundation
 import Testing
 
 @testable import EdithAgent
 @testable import EdithKit
+@testable import EdithHelper
 
 @Suite(.serialized) struct RecordingExportWorkflowTests {
     @Test func syntheticTakeExportsThroughTheDaemon() async throws {
@@ -93,7 +96,33 @@ import Testing
                 "screen-recorder.mp4")
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.copyItem(at: result, to: destination)
+            try await renderEditor(
+                take: take, document: document, output: result, directory: directory)
         }
         await service.shutdown()
+    }
+
+    @MainActor private func renderEditor(
+        take: ScreenRecordingTake, document: ScreenRecordingEditDocument, output: URL,
+        directory: String
+    ) async throws {
+        let model = ScreenRecordingEditorModel(take: take)
+        model.document = document
+        model.finishedURL = output
+        let hosting = NSHostingView(rootView: ScreenRecordingEditorView(model: model))
+        let window = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760))
+        defer { window.close() }
+        window.contentView = hosting
+        hosting.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
+        window.orderFront(nil)
+        await model.player.seek(to: CMTime(seconds: 0.6, preferredTimescale: 600))
+        try await Task.sleep(for: .milliseconds(300))
+        hosting.layoutSubtreeIfNeeded()
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        try data.write(
+            to: URL(fileURLWithPath: directory).appendingPathComponent("recording-editor.png"))
     }
 }
