@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,6 +11,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { BillingArchive } from "../Packages/Edith/Sources/EdithKit/Resources/usage-billing-archive.mjs";
 
 const inheritedGitVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -84,7 +87,7 @@ function jq(program, input, args = []) {
   const proc = Bun.spawnSync(["jq", "-c", ...args, program], {
     stdin: Buffer.from(input),
   });
-  expect(proc.exitCode).toBe(0);
+  expect(proc.exitCode, proc.stderr.toString()).toBe(0);
   return proc.stdout
     .toString()
     .trim()
@@ -109,6 +112,8 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  archivedBaseline,
+  missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
@@ -184,8 +189,28 @@ function runCollectorFixture({
       );
     }
   }
-  const existing = existingUsage ?? '{"sentinel":"preserved"}\n';
-  writeFileSync(join(output, "usage.json"), existing);
+  const existing =
+    existingUsage ??
+    `${JSON.stringify({
+      schemaVersion: 8,
+      generatedAt: "2026-09-05T00:00:00Z",
+      sources: [],
+      defaultSources: [],
+      sourceMeta: {},
+      daily: [],
+      sessions: [],
+      totals: {
+        tokens: 0,
+        cost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        bySource: {},
+      },
+    })}\n`;
+  if (!missingExistingUsage)
+    writeFileSync(join(output, "usage.json"), existing);
   const originalMachine = join(
     output,
     "machines",
@@ -197,7 +222,15 @@ function runCollectorFixture({
     writeFileSync(originalMachine, machineJSON);
   }
   const bunPath = join(bin, "bun");
-  writeFileSync(bunPath, '#!/bin/sh\nexec "$@"\n');
+  writeFileSync(
+    bunPath,
+    `#!/bin/sh
+case "\${1:-}" in
+  */usage-billing-archive.mjs) exec "$REAL_BUN" "$@" ;;
+  *) exec "$@" ;;
+esac
+`,
+  );
   chmodSync(bunPath, 0o755);
   const ccusagePath = join(ccusage, "ccusage");
   writeFileSync(
@@ -249,6 +282,14 @@ exec "$REAL_JQ" "$@"
     );
     chmodSync(jqPath, 0o755);
   }
+  if (archivedBaseline) {
+    const archive = new BillingArchive(join(output, "billing-history", "cli"));
+    archive.bootstrap({
+      generatedAt: "2026-09-01T00:00:00Z",
+      blocks: [archivedBaseline],
+    });
+    archive.close();
+  }
   const process = Bun.spawnSync(["bash", scriptPath, output], {
     env: {
       ...isolatedGitEnvironment,
@@ -261,6 +302,7 @@ exec "$REAL_JQ" "$@"
       MUTATE_MACHINE_BEFORE_FLEET: mutateMachineBeforeFleet ? "1" : "0",
       ORIGINAL_MACHINE: originalMachine,
       REAL_JQ: Bun.which("jq") ?? "jq",
+      REAL_BUN: globalThis.process.execPath,
     },
   });
   const result = {
@@ -270,6 +312,9 @@ exec "$REAL_JQ" "$@"
     output: readFileSync(join(output, "usage.json"), "utf8"),
     existing,
     deletedCwd,
+    archiveCreated: existsSync(
+      join(output, "billing-history", "cli", "billing.sqlite"),
+    ),
   };
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -1380,7 +1425,7 @@ describe("usage pipeline", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 
-  test("keeps old source days while fresh overlapping rows stay authoritative", () => {
+  test("keeps previous source blocks when fresh overlapping coverage regresses", () => {
     const breakdown = (modelName, inputTokens) => ({
       modelName,
       inputTokens,
@@ -1466,10 +1511,10 @@ describe("usage pipeline", () => {
     expect(out.sources).toEqual(["cli", "cowork", "cursor"]);
     expect(out.daily[0].bySource.cli[0].inputTokens).toBe(100);
     expect(out.daily[0].bySource).not.toHaveProperty("machine:machine-id:cli");
-    expect(out.daily[1].bySource.cli[0].inputTokens).toBe(20);
+    expect(out.daily[1].bySource.cli[0].inputTokens).toBe(200);
     expect(out.daily[1].bySource.cowork[0].inputTokens).toBe(30);
     expect(out.daily[2].bySource.cursor[0].inputTokens).toBe(40);
-    expect(out.totals.tokens).toBe(190);
+    expect(out.totals.tokens).toBe(370);
     expect(out.sessions).toEqual([
       { id: "new-cli", source: "cli" },
       { id: "old-cli", source: "cli" },
@@ -2494,6 +2539,33 @@ describe("FLEET", () => {
 });
 
 describe("collector failure handling", () => {
+  for (const [name, contents] of [
+    ["empty", ""],
+    ["whitespace", " \n"],
+    ["undecodable", '{"daily":'],
+  ]) {
+    test(`published ${name} baseline is refused before archive bootstrap`, () => {
+      const result = runCollectorFixture({
+        hasLocalUsage: true,
+        existingUsage: contents,
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("published billing baseline is invalid");
+      expect(result.output).toBe(contents);
+      expect(result.archiveCreated).toBe(false);
+    }, 15_000);
+  }
+
+  test("missing published baseline permits first archive bootstrap", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      missingExistingUsage: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.archiveCreated).toBe(true);
+    expect(JSON.parse(result.output).totals.tokens).toBe(1);
+  }, 15_000);
+
   test("nonzero Claude daily collection preserves the existing report", () => {
     const result = runCollectorFixture({
       hasLocalUsage: true,
@@ -2572,10 +2644,11 @@ describe("collector configuration", () => {
     expect(script).not.toContain('stat -f %z "$staged" 2>/dev/null || stat -c');
   });
 
-  test("uses one pinned ccusage version for bun and npx", () => {
+  test("uses one pinned ccusage version for bun and durable history", () => {
     expect(script).toContain('CCUSAGE_VERSION="20.0.19"');
     expect(script).toContain('bun add --exact "ccusage@$CCUSAGE_VERSION"');
-    expect(script).toContain('npx -y "ccusage@$CCUSAGE_VERSION"');
+    expect(script).not.toContain("npx -y");
+    expect(script).toContain(".collectorVersion == $version");
   });
 
   test("limits Codex discovery to sessions and archived sessions", () => {
@@ -2801,5 +2874,583 @@ describe("Cursor Agent collector", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("retained history coverage", () => {
+  const row = (modelName, inputTokens) => ({
+    modelName,
+    inputTokens,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    cost: inputTokens / 100,
+  });
+  const day = (period, bySource) => ({
+    period,
+    bySource,
+    projects: [],
+    hours: Array.from({ length: 24 }, () => ({
+      tokens: 0,
+      cost: 0,
+      bySource: {},
+      byPath: {},
+    })),
+  });
+  const doc = (daily) => ({
+    schemaVersion: 8,
+    generatedAt: "2026-09-05T12:00:00Z",
+    daily,
+    sources: [
+      ...new Set(daily.flatMap((value) => Object.keys(value.bySource))),
+    ],
+    defaultSources: [],
+    sourceMeta: {},
+    sessions: [],
+  });
+  const merge = (previous, fresh) =>
+    jq(HISTORY, "null", [
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh]),
+    ])[0];
+
+  test("resolved archive baselines do not freeze newer published usage", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = doc([day("2026-09-05", { cli: [row("one", 150)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [day(baseline.period, { cli: [row("one", 150)] })],
+        },
+      ],
+    };
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.historyRetention.blocks).toEqual([]);
+    expect(merge(result, fresh).totals.tokens).toBe(200);
+
+    fresh.daily[0] = day(baseline.period, { cli: [row("one", 125)] });
+    const regressed = merge(previous, fresh);
+    expect(regressed.totals.tokens).toBe(150);
+    expect(regressed.historyRetention.blocks).toHaveLength(1);
+    expect(
+      regressed.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      regressed.historyRetention.blocks[0].candidates[0].bySource.cli[0]
+        .inputTokens,
+    ).toBe(125);
+  });
+
+  test("full collection publishes new usage after an archived baseline was resolved", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = merge(
+      doc([]),
+      doc([day(baseline.period, { cli: [row("one", 150)] })]),
+    );
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      archivedBaseline: baseline,
+      existingUsage: JSON.stringify(previous),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const saved = JSON.parse(result.output);
+    expect(saved.totals.tokens).toBe(151);
+    expect(
+      saved.daily.find((value) => value.period === baseline.period).bySource
+        .cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      saved.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(result.stdout).toContain("summary");
+  }, 15_000);
+
+  test("an uncovered incoming archive baseline still refuses publication", () => {
+    const previous = doc([day("2026-09-05", { cli: [row("one", 100)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: "2026-09-05",
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline: day("2026-09-05", { cli: [row("one", 150)] }),
+          candidates: [],
+        },
+      ],
+    };
+    expect(
+      jqExit(HISTORY, "null", [
+        "--argjson",
+        "previous",
+        JSON.stringify([previous]),
+        "--argjson",
+        "fresh",
+        JSON.stringify([fresh]),
+      ]),
+    ).not.toBe(0);
+  });
+
+  test("moving model costs into an aggregate does not freeze growing token totals", () => {
+    const previous = doc([day("2026-09-07", { codex: [row("one", 100)] })]);
+    const fresh = doc([
+      day("2026-09-07", {
+        codex: [
+          { ...row("one", 150), cost: 0 },
+          { ...row("two", 50), cost: 0 },
+          { ...row("unattributed-cost", 0), cost: 2 },
+        ],
+      }),
+    ]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.totals.cost).toBe(2);
+    expect(result.historyRetention.blocks).toEqual([]);
+  });
+
+  test("previous cost-attribution freezes recover without losing other historical days", () => {
+    const baseline = day("2026-09-07", { codex: [row("one", 100)] });
+    const candidate = day("2026-09-07", {
+      codex: [
+        { ...row("one", 150), cost: 0 },
+        { ...row("unattributed-cost", 0), cost: 1.5 },
+      ],
+    });
+    const previous = doc([
+      day("2026-08-01", { cli: [row("old", 500)] }),
+      baseline,
+    ]);
+    previous.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "codex",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [candidate],
+        },
+      ],
+    };
+    const fresh = doc([candidate]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(650);
+    expect(result.daily[0]).toEqual(previous.daily[0]);
+    expect(result.historyRetention.blocks.map((block) => block.source)).toEqual(
+      ["cli"],
+    );
+    expect(merge(result, fresh).totals.tokens).toBe(650);
+    const reduced = structuredClone(candidate);
+    reduced.bySource.codex[0].inputTokens = 90;
+    previous.historyRetention.blocks[0].candidates.unshift(reduced);
+    expect(merge(previous, fresh).totals.tokens).toBe(600);
+  });
+
+  const retainedWithDerivedCostRoundTrip = () => {
+    const source = (tokens, cost) => ({
+      tokens,
+      cost,
+      byModel: { one: { tokens, cost } },
+    });
+    const historical = day("2026-08-02", { cli: [row("one", 100)] });
+    historical.hours[0] = {
+      tokens: 100,
+      cost: 1,
+      bySource: { cli: source(100, 1) },
+      byPath: {
+        "/fixture": {
+          tokens: 40,
+          cost: 0.1 + 0.2,
+          bySource: { cli: source(40, 0.1 + 0.2) },
+        },
+      },
+    };
+    historical.projects = [
+      {
+        projectName: "fixture",
+        repositoryID: "folder:/fixture",
+        repositoryName: "fixture",
+        folderName: "fixture",
+        path: "/fixture",
+        tokens: 40,
+        cost: 0.1 + 0.2,
+        bySource: { cli: source(40, 0.1 + 0.2) },
+        chats: [],
+        worktrees: [
+          {
+            name: "fixture",
+            tokens: 40,
+            cost: 0.1 + 0.2,
+            chats: [
+              { id: "first", source: "cli", tokens: 10, cost: 0.1 },
+              { id: "second", source: "cli", tokens: 30, cost: 0.2 },
+            ],
+          },
+        ],
+      },
+    ];
+    const retained = merge(
+      doc([historical]),
+      doc([day("2026-08-02", { cli: [row("one", 60)] })]),
+    );
+    const baseline = retained.historyRetention.blocks[0].baseline;
+    baseline.hours[0].byPath["/fixture"].cost = 0.3;
+    baseline.projects[0].worktrees[0].cost = 0.3;
+    return retained;
+  };
+
+  test("retained baseline comparison projects derived cost totals on both sides", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const result = merge(retained, retained);
+    expect(result.totals.tokens).toBe(100);
+    expect(result.historyRetention).toEqual(retained.historyRetention);
+    expect(result.daily).toEqual(retained.daily);
+    expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
+  });
+
+  test("old and fresh retained baselines merge across derived costs and collection order", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    const baseline = fresh.historyRetention.blocks[0].baseline;
+    baseline.hours[0].byPath["/fixture"].cost = 0.1 + 0.2;
+    baseline.projects[0].worktrees[0].cost = 0.1 + 0.2;
+    baseline.projects[0].worktrees[0].chats.reverse();
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(100);
+    expect(result.historyRetention).toEqual(previous.historyRetention);
+    expect(result.daily).toEqual(previous.daily);
+  });
+
+  test("native and archive cost spellings preserve retained baselines and candidates", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const archive = JSON.stringify([retained]);
+    const native = archive.replaceAll(
+      /"cost":(0\.1|0\.2|0\.3|0\.6)(?=[,}])/g,
+      (_, cost) =>
+        `"cost":${
+          {
+            0.1: "0.10000000000000001",
+            0.2: "0.20000000000000001",
+            0.3: "0.29999999999999999",
+            0.6: "0.59999999999999998",
+          }[cost]
+        }`,
+    );
+    const result = Bun.spawnSync([
+      "jq",
+      "-cn",
+      "--argjson",
+      "previous",
+      native,
+      "--argjson",
+      "fresh",
+      archive,
+      HISTORY,
+    ]);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    const merged = JSON.parse(result.stdout.toString());
+    expect(merged.totals.tokens).toBe(100);
+    expect(merged.historyRetention.blocks).toHaveLength(1);
+    expect(merged.historyRetention.blocks[0].candidates).toHaveLength(1);
+    expect(merged.historyRetention.blocks[0].baseline).toEqual(
+      retained.historyRetention.blocks[0].baseline,
+    );
+    expect(result.stdout.toString()).toContain('"cost":0.20000000000000001');
+    const repeated = jq(HISTORY, "null", [
+      "--argjson",
+      "previous",
+      `[${result.stdout.toString().trim()}]`,
+      "--argjson",
+      "fresh",
+      archive,
+    ])[0];
+    expect(repeated.historyRetention.blocks[0].candidates).toHaveLength(1);
+  });
+
+  test("raw retained cost comparisons reject meaningful changes", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    fresh.historyRetention.blocks[0].baseline.projects[0].worktrees[0].chats[1].cost =
+      "next-cost";
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]).replaceAll(
+        '"cost":0.2',
+        '"cost":0.20000000000000001',
+      ),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh]).replace('"next-cost"', "0.20000001"),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "usage retained history baseline conflicts",
+    );
+    expect(result.stdout.length).toBe(0);
+  });
+
+  test("raw retained token comparisons preserve integer precision above two to the fifty third", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    fresh.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens =
+      "next-token";
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]).replaceAll(
+        '"inputTokens":100',
+        '"inputTokens":9007199254740992',
+      ),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh])
+        .replaceAll('"inputTokens":100', '"inputTokens":9007199254740992')
+        .replace('"next-token"', "9007199254740993"),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "usage retained history baseline conflicts",
+    );
+    expect(result.stdout.length).toBe(0);
+  });
+
+  test("three reordered costs preserve identity without appending equivalent candidates", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const baseline = previous.historyRetention.blocks[0].baseline;
+    const worktree = baseline.projects[0].worktrees[0];
+    worktree.chats = [
+      { id: "first", source: "cli", tokens: 10, cost: 0.1 },
+      { id: "second", source: "cli", tokens: 10, cost: 0.2 },
+      { id: "third", source: "cli", tokens: 20, cost: 0.3 },
+    ];
+    worktree.cost = 0.1 + 0.2 + 0.3;
+    baseline.projects[0].cost = worktree.cost;
+    baseline.projects[0].bySource.cli.cost = worktree.cost;
+    baseline.projects[0].bySource.cli.byModel.one.cost = worktree.cost;
+    previous.daily[0] = structuredClone(baseline);
+    const fresh = structuredClone(previous);
+    fresh.daily[0].projects[0].worktrees[0].chats.reverse();
+    fresh.daily[0].projects[0].worktrees[0].cost = 0.3 + 0.2 + 0.1;
+    let result = previous;
+    for (let index = 0; index < 3; index += 1) {
+      result = merge(result, fresh);
+      expect(result.historyRetention.blocks[0].candidates).toHaveLength(1);
+      expect(result.historyRetention.blocks[0].baseline).toEqual(baseline);
+      expect(result.totals.tokens).toBe(100);
+    }
+    const reordered = structuredClone(result);
+    const candidate = reordered.historyRetention.blocks[0].candidates[0];
+    candidate.bySource.cli.push(row("second", 5));
+    result.historyRetention.blocks[0].candidates[0] =
+      structuredClone(candidate);
+    candidate.bySource.cli.reverse();
+    const merged = merge(result, reordered);
+    expect(merged.historyRetention.blocks[0].candidates).toHaveLength(1);
+    expect(merged.historyRetention.blocks[0].candidates[0]).toEqual(
+      result.historyRetention.blocks[0].candidates[0],
+    );
+  });
+
+  test("retained baseline comparison preserves hour positions", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const baseline = retained.historyRetention.blocks[0].baseline;
+    [baseline.hours[0], baseline.hours[1]] = [
+      baseline.hours[1],
+      baseline.hours[0],
+    ];
+    expect(
+      jqExit(HISTORY, "null", [
+        "--argjson",
+        "previous",
+        JSON.stringify([retained]),
+        "--argjson",
+        "fresh",
+        JSON.stringify([retained]),
+      ]),
+    ).not.toBe(0);
+  });
+
+  test("old and fresh retained baselines refuse a real underlying conflict", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    const fresh = structuredClone(previous);
+    fresh.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens += 1;
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh]),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "usage retained history baseline conflicts",
+    );
+    expect(result.stdout.length).toBe(0);
+  });
+
+  test("published retained baseline with derived cost round trips bootstraps the archive", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      existingUsage: JSON.stringify(retained),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(result.archiveCreated).toBe(true);
+    const saved = JSON.parse(result.output);
+    expect(saved.totals.tokens).toBe(101);
+    expect(saved.daily[0]).toEqual(retained.daily[0]);
+    expect(saved.historyRetention.blocks[0].baseline).toEqual(
+      retained.historyRetention.blocks[0].baseline,
+    );
+  }, 15_000);
+
+  for (const field of ["inputTokens", "cost"]) {
+    test(`retained baseline comparison still refuses changed source ${field}`, () => {
+      const retained = retainedWithDerivedCostRoundTrip();
+      retained.historyRetention.blocks[0].baseline.bySource.cli[0][field] +=
+        field === "cost" ? 0.01 : 1;
+      const result = Bun.spawnSync([
+        "jq",
+        "-n",
+        "--argjson",
+        "previous",
+        JSON.stringify([retained]),
+        "--argjson",
+        "fresh",
+        JSON.stringify([retained]),
+        HISTORY,
+      ]);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain(
+        "usage retained history baseline changed",
+      );
+      expect(result.stdout.length).toBe(0);
+    });
+  }
+
+  test("missing historical model preserves its whole source despite a larger partial total", () => {
+    const previous = doc([
+      day("2026-08-02", {
+        cli: [row("large", 60), row("small", 40)],
+        cursor: [row("one", 5)],
+      }),
+    ]);
+    const fresh = doc([
+      day("2026-08-02", {
+        cli: [row("large", 60), row("new", 50)],
+        cursor: [row("one", 9)],
+      }),
+      day("2026-09-05", { cli: [row("large", 7)] }),
+    ]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(116);
+    expect(result.daily[0].bySource.cli).toEqual(
+      previous.daily[0].bySource.cli,
+    );
+    expect(result.daily[0].bySource.cursor).toEqual(
+      fresh.daily[0].bySource.cursor,
+    );
+    expect(result.historyRetention.blocks).toHaveLength(1);
+    expect(
+      result.historyRetention.blocks[0].candidates[0].bySource.cli,
+    ).toEqual(fresh.daily[0].bySource.cli);
+    expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
+    const folded = jq(FLEET, JSON.stringify([result]))[0];
+    expect(folded.historyRetention).toEqual(result.historyRetention);
+  });
+
+  test("disappearance return and retries keep every distinct unresolved candidate", () => {
+    let result = doc([day("2026-08-02", { cli: [row("one", 100)] })]);
+    for (const value of [60, 90, 90, 100, 150]) {
+      result = merge(
+        result,
+        doc([
+          day("2026-08-02", { cli: [row("one", value)] }),
+          day("2026-09-05", { cli: [row("one", 12)] }),
+        ]),
+      );
+      expect(result.totals.tokens).toBe(112);
+      expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
+    }
+    const block = result.historyRetention.blocks[0];
+    expect(
+      block.candidates
+        .map((candidate) => candidate.bySource.cli[0].inputTokens)
+        .sort((a, b) => a - b),
+    ).toEqual([60, 90, 150]);
+    const absent = merge(
+      result,
+      doc([day("2026-09-06", { cli: [row("one", 8)] })]),
+    );
+    expect(absent.totals.tokens).toBe(120);
+    expect(absent.historyRetention.blocks[0].candidates).toContainEqual(
+      day("2026-08-02", {}),
+    );
+  });
+
+  test("invalid retention refuses instead of silently resetting history", () => {
+    const previous = doc([day("2026-08-02", { cli: [row("one", 100)] })]);
+    previous.historyRetention = { version: 99, blocks: [] };
+    const process = Bun.spawnSync([
+      Bun.which("jq") ?? "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([doc([])]),
+      HISTORY,
+    ]);
+    expect(process.exitCode).not.toBe(0);
+    expect(process.stdout.length).toBe(0);
+  });
+
+  test("an empty protected baseline is invalid while an empty candidate is retained", () => {
+    const previous = doc([day("2026-08-02", { cli: [row("one", 100)] })]);
+    const retained = merge(previous, doc([]));
+    expect(retained.historyRetention.blocks[0].candidates).toEqual([
+      day("2026-08-02", {}),
+    ]);
+    retained.historyRetention.blocks[0].baseline.bySource = {};
+    const result = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([retained]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([doc([])]),
+      HISTORY,
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout.length).toBe(0);
   });
 });

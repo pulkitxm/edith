@@ -30,8 +30,7 @@ struct WorkspaceRestorerCommand: AsyncParsableCommand {
 private enum WorkspaceCLI {
     static func requireEnabled() throws {
         guard
-            CLIEnvironment.sharedDefaults.object(
-                forKey: AppStorageKeys.WorkspaceRestorer.enabled) as? Bool == true
+            ExtensionRegistry.entry("workspaceRestorer")?.isEnabled(in: CLIEnvironment.sharedDefaults) == true
         else {
             throw CLIFailure.unavailable(
                 "the Workspace Restorer extension is off",
@@ -369,8 +368,7 @@ struct WindowStatusCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let enabled =
-                CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.WindowTools.enabled)
-                as? Bool ?? false
+                ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults) ?? false
             let greenButton =
                 CLIEnvironment.sharedDefaults.object(
                     forKey: AppStorageKeys.WindowTools.greenButtonMaximizes) as? Bool ?? true
@@ -407,8 +405,7 @@ struct WindowStatusCommand: AsyncParsableCommand {
 private func requestWindowLayout(_ action: WindowLayoutAction, json: Bool) async throws {
     try await execute {
         guard
-            CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.WindowTools.enabled)
-                as? Bool == true
+            ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults) == true
         else {
             throw CLIFailure.unavailable(
                 "the Window Tools extension is off",

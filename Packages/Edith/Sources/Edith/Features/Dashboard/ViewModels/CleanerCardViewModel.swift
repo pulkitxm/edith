@@ -13,7 +13,12 @@ final class CleanerModel {
     static let shared = CleanerModel()
     private static let confirmedExternalPathsKey = "cleanerConfirmedExternalPaths"
 
-    private(set) var categories: [JunkCategory] = []
+    private(set) var categories: [JunkCategory] = [] {
+        didSet {
+            SidebarBadgeStore.recordReclaimable(
+                bytes: categories.flatMap(\.items).reduce(0) { $0 + $1.sizeBytes })
+        }
+    }
     private(set) var scanning = false
     private(set) var scanned = false
     private(set) var logs: [String] = []
@@ -21,6 +26,7 @@ final class CleanerModel {
     private(set) var lastReclaimed: Int64 = 0
     private(set) var drives: [DriveInfo] = []
     private(set) var driveOptions: [DriveInfo] = []
+    private(set) var loadingDriveOptions = false
     private(set) var customFolders: [String] = []
     var search = ""
     private(set) var expanded: Set<String> = []
@@ -104,9 +110,11 @@ final class CleanerModel {
     }
 
     func loadDriveOptions() {
+        loadingDriveOptions = true
         Task {
             let all = await Task.detached { JunkScanner.drives() }.value
             driveOptions = all
+            loadingDriveOptions = false
         }
     }
 
@@ -307,39 +315,18 @@ final class CleanerModel {
 
 struct CleanerCard: View {
     let dark: Bool
+    var framed = true
     @State private var model = CleanerModel.shared
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
 
     var body: some View {
-        SkinCard(title: "Reclaim developer space", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                if !model.scanned && !model.scanning {
-                    intro
-                } else {
-                    header
-                    if model.logsExpanded { logView }
-                    if model.scanned {
-                        drivesView
-                        if !model.categories.isEmpty {
-                            searchBar
-                            selectAllRow
-                            ForEach(model.filteredCategories) { category in
-                                CleanerCategoryRow(model: model, category: category, dark: dark)
-                            }
-                            footer
-                        } else {
-                            Text("Nothing to clean. You're already tidy.")
-                                .font(.system(size: UIScale.pt(12))).foregroundStyle(
-                                    DashSkin.inkFaint(dark))
-                        }
-                    }
-                }
-                if model.lastReclaimed > 0 {
-                    Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
-                }
+        Group {
+            if framed {
+                SkinCard(title: "Reclaim developer space", dark: dark) { content }
+            } else {
+                content
             }
         }
         .sheet(isPresented: $showDrivePicker) {
@@ -362,6 +349,36 @@ struct CleanerCard: View {
         }
     }
 
+    private var content: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            if !model.scanned && !model.scanning {
+                intro
+            } else {
+                header
+                if model.logsExpanded { logView }
+                if model.scanned {
+                    drivesView
+                    if !model.categories.isEmpty {
+                        searchBar
+                        selectAllRow
+                        ForEach(model.filteredCategories) { category in
+                            CleanerCategoryRow(model: model, category: category, dark: dark)
+                        }
+                        footer
+                    } else {
+                        Text("Nothing to clean. You're already tidy.")
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                }
+            }
+            if model.lastReclaimed > 0 {
+                Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
+            }
+        }
+    }
+
     private var intro: some View {
         HStack {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
@@ -374,7 +391,9 @@ struct CleanerCard: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             if model.scanning {
-                ProgressView().controlSize(.small)
+                SkeletonGroup {
+                    SkeletonBlock(width: 52, height: 22, corner: 11)
+                }
                 Text("Scanning…").font(.system(size: UIScale.pt(12))).foregroundStyle(
                     DashSkin.inkSoft(dark))
                 Button("Cancel") { model.cancelScan() }
@@ -528,8 +547,16 @@ private struct DrivePickerSheet: View {
 
             ScrollView {
                 VStack(spacing: UIScale.pt(6)) {
-                    if model.driveOptions.isEmpty {
-                        ProgressView().controlSize(.small).padding(.vertical, UIScale.pt(20))
+                    if model.loadingDriveOptions {
+                        ForEach(0..<3, id: \.self) { index in
+                            DrivePickerRowSkeleton(index: index, dark: dark)
+                        }
+                    } else if model.driveOptions.isEmpty {
+                        Text("No drives are available.")
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, UIScale.pt(20))
                     }
                     ForEach(model.driveOptions) { drive in
                         Button {
@@ -851,12 +878,39 @@ private struct DriveSkeleton: View {
 
     var body: some View {
         SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            HStack(spacing: UIScale.pt(6)) {
+                SkeletonBlock(width: 11, height: 13, corner: 3)
                 SkeletonBlock(width: 120, height: 10, corner: 4)
-                SkeletonBlock(height: 5, corner: 3)
+                SkeletonBlock(width: 54, height: 14, corner: 7)
+                Spacer()
+                SkeletonBlock(width: 112, height: 9, corner: 4)
             }
             .padding(UIScale.pt(10))
             .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark))
+        }
+    }
+}
+
+private struct DrivePickerRowSkeleton: View {
+    let index: Int
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            HStack(spacing: UIScale.pt(10)) {
+                SkeletonBlock(width: 14, height: 14, corner: 3)
+                SkeletonBlock(width: 14, height: 16, corner: 3)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    SkeletonBlock(
+                        width: index.isMultiple(of: 2) ? 118 : 156,
+                        height: 10)
+                    SkeletonBlock(width: 104, height: 8)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, UIScale.pt(12))
+            .padding(.vertical, UIScale.pt(8))
+            .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark))
         }
     }
 }

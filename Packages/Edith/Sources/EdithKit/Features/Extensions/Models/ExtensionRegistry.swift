@@ -1,7 +1,10 @@
 import EdithCore
 import Foundation
 
-public typealias ExtensionGroup = EdithCore.ExtensionGroup
+public typealias SuiteID = EdithCore.SuiteID
+public typealias SuiteDescriptor = EdithCore.SuiteDescriptor
+public typealias SuiteRegistry = EdithCore.SuiteRegistry
+public typealias AbilityHost = EdithCore.AbilityHost
 public typealias ExtensionMarketplaceCategory = EdithCore.ExtensionMarketplaceCategory
 public typealias ExtensionMarketplaceFilter = EdithCore.ExtensionMarketplaceFilter
 public typealias ExtensionRegistryEntry = EdithCore.ExtensionRegistryEntry
@@ -51,7 +54,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .calendar: "Required to read and show your schedule in Calendar."
         case .notifications: "Asked when you enable usage limit, pacing, or reset alerts."
         case .accessibility:
-            "Asked when you first use window controls, Clean keys, or clipboard instant paste."
+            "Asked when you first use Clean keys, clipboard instant paste, or emoji insertion."
         case .inputMonitoring:
             "Asked when you first use Clean keys to block key presses during cleaning."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
@@ -129,16 +132,18 @@ public extension ExtensionRegistryEntry {
         case "calendar": [.calendar]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         case "windowTools", "workspaceRestorer": [.accessibility]
+        case "keystrokeHighlight": [.inputMonitoring]
         default: []
         }
     }
 
     var optionalPermissions: [ExtensionPermission] {
         switch id {
-        case "usage", "machines": [.notifications]
+        case "usage", "appMaintenance": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
-        case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
-        case "clipboard": [.accessibility]
+        case "notchShelf": [.bluetooth, .camera, .automation]
+        case "audioMixer": [.applicationAudio]
+        case "clipboard", "emoji": [.accessibility]
         default: []
         }
     }
@@ -151,12 +156,32 @@ public extension ExtensionRegistryEntry {
         optionalToolIDs.compactMap(ToolProvisioning.spec(id:))
     }
 
-    func isEnabled(in defaults: UserDefaults) -> Bool {
+    var suiteDescriptor: SuiteDescriptor { SuiteRegistry.suite(suite) }
+
+    func isSelected(in defaults: UserDefaults) -> Bool {
         if let stored = defaults.object(forKey: defaultsKey) as? Bool { return stored }
         guard let definition = ConfigCatalog.definition(for: defaultsKey),
             case let .bool(fallback) = definition.fallback
         else { return false }
         return fallback
+    }
+
+    func isEnabled(in defaults: UserDefaults) -> Bool {
+        guard isSelected(in: defaults), SuiteRegistry.isEnabled(suite, in: defaults) else {
+            return false
+        }
+        return requires.allSatisfy { requirement in
+            ExtensionRegistry.entry(requirement)?.isEnabled(in: defaults) ?? true
+        }
+    }
+
+    func unmetRequirements(in defaults: UserDefaults) -> [ExtensionRegistryEntry] {
+        requires.compactMap { requirement in
+            guard let entry = ExtensionRegistry.entry(requirement),
+                !entry.isEnabled(in: defaults)
+            else { return nil }
+            return entry
+        }
     }
 }
 

@@ -182,14 +182,14 @@ import Testing
         }
     }
 
-    @Test func limitsRefreshStillUsesTheAppRequestAndUnavailableExitContract() async {
+    @Test func limitsRefreshUsesTheAgentAndUnavailableExitContract() async {
         await CLIProbe.inWorld { world in
-            world.helperRunning(true)
+            world.configureLimitsRefreshAgent()
             world.answers { name in name == IPC.Name.limitsUpdated ? [:] : nil }
 
             let result = await CLIProbe.capture(["usage", "limits", "--refresh", "--json"])
 
-            #expect(world.postedNames() == [IPC.Name.requestLimitsRefresh.rawValue])
+            #expect(world.postedNames() == [IPC.Name.limitsUpdated.rawValue])
             #expect(result.code == 0 || result.code == ExitCodes.unavailable)
             if result.code != 0 { #expect(result.stdout.isEmpty) }
         }

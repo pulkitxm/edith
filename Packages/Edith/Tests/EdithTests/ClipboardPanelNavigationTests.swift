@@ -38,7 +38,14 @@ private struct ClipboardMutationFailure: LocalizedError {
     }
 
     @Test @MainActor func clearSurfacesPersistenceFailure() async throws {
-        let store = ClipboardStore { _ in throw ClipboardMutationFailure() }
+        let client = AgentClipboardClient { operation, _ in
+            if operation == AgentClipboardOperation.snapshot {
+                return try AgentPayload.encode(
+                    ClipboardSnapshot(entries: [], revision: "fixture", total: 0))
+            }
+            throw ClipboardMutationFailure()
+        }
+        let store = ClipboardStore(client: client, capturesPasteboard: false)
         defer { store.shutdown() }
         let entry = ClipboardEntry(
             id: "target", sha256: "target", types: ["public.utf8-plain-text"], ext: "txt",

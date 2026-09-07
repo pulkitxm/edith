@@ -1,6 +1,27 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Suites {
+        public static let agents = "suiteAgentsEnabled"
+        public static let maintenance = "suiteMaintenanceEnabled"
+        public static let system = "suiteSystemEnabled"
+        public static let desk = "suiteDeskEnabled"
+        public static let media = "suiteMediaEnabled"
+        public static let data = "suiteDataEnabled"
+    }
+
+    public enum AppMaintenance {
+        public static let categoriesExpanded = "appMaintenanceCategoriesExpanded"
+        public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
+        public static let section = "appMaintenanceSection"
+        public static let updateAutoRefresh = "appUpdateAutoRefresh"
+        public static let updateConcurrency = "appUpdateConcurrency"
+        public static let updateNotifications = "appUpdateNotifications"
+        public static let updateRefreshInterval = "appUpdateRefreshInterval"
+        public static let updateRetries = "appUpdateRetries"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
@@ -26,6 +47,7 @@ public enum AppStorageKeys {
         public static let hotKeyLabel = "hotKeyLabel"
         public static let hotKeyMods = "hotKeyMods"
         public static let panelTab = "tab"
+        public static let keepAwakeEnabled = "keepAwakeEnabled"
         public static let preventSleep = "preventSleep"
     }
 
@@ -77,6 +99,17 @@ public enum AppStorageKeys {
         public static let setupDeclined = "companionSetupDeclined"
     }
 
+    public enum Emoji {
+        public static let enabled = "emojiEnabled"
+        public static let frequentCount = "emojiFrequentCount"
+        public static let hotKeyCode = "emojiHotKeyCode"
+        public static let hotKeyLabel = "emojiHotKeyLabel"
+        public static let hotKeyMods = "emojiHotKeyMods"
+        public static let popupAt = "emojiPopupAt"
+        public static let skinTone = "emojiSkinTone"
+        public static let usage = "emojiUsage"
+    }
+
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let hotKeyCode = "focusDimHotKeyCode"
@@ -123,9 +156,41 @@ public enum AppStorageKeys {
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
         public static let railOpen = "herdrRailOpen"
+        public static let railWidth = "herdrRailWidth"
         public static let detailOpen = "herdrDetailOpen"
+        public static let detailWidth = "herdrDetailWidth"
         public static let agentsCollapsed = "herdrAgentsCollapsed"
+        public static let agentsCollapsedCount = "herdrAgentsCollapsedCount"
         public static let terminalsCollapsed = "herdrTerminalsCollapsed"
+        public static let terminalsCollapsedCount = "herdrTerminalsCollapsedCount"
+        public static let spaceGroupingEnabled = "herdrSpaceGroupingEnabled"
+        public static let collapsedSpaces = "herdrCollapsedSpaces"
+        public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
+    }
+
+    public enum Cleaner {
+        public static let enabled = "cleanerEnabled"
+    }
+
+    public enum Downloads {
+        public static let enabled = "downloadsEnabled"
+    }
+
+    public enum Homebrew {
+        public static let defaultKind = "homebrewDefaultKind"
+        public static let enabled = "homebrewEnabled"
+    }
+
+    public enum KeystrokeHighlight {
+        public static let active = "keystrokeHighlightActive"
+        public static let duration = "keystrokeHighlightDuration"
+        public static let enabled = "keystrokeHighlightEnabled"
+        public static let hotKeyCode = "keystrokeHighlightHotKeyCode"
+        public static let hotKeyLabel = "keystrokeHighlightHotKeyLabel"
+        public static let hotKeyMods = "keystrokeHighlightHotKeyMods"
+        public static let position = "keystrokeHighlightPosition"
+        public static let runtimeActive = "keystrokeHighlightRuntimeActive"
+        public static let runtimeError = "keystrokeHighlightRuntimeError"
     }
 
     public enum Limits {
@@ -162,6 +227,7 @@ public enum AppStorageKeys {
         public static let lowColorHex = "menuBarLowColorHex"
         public static let midColorHex = "menuBarMidColorHex"
         public static let statsColorHex = "menuBarStatsColorHex"
+        public static let statsColorMode = "menuBarStatsColorMode"
         public static let subColorHex = "menuBarSubColorHex"
         public static let systemStats = "menuBarSystemStats"
     }
@@ -172,6 +238,8 @@ public enum AppStorageKeys {
     }
 
     public enum Music {
+        public static let barAutoHide = "musicBarAutoHide"
+        public static let barCollapsed = "musicBarCollapsed"
         public static let lastBackupAt = "lastMusicBackupAt"
         public static let backup = "musicBackup"
         public static let downloadKind = "musicDownloadKind"
@@ -242,15 +310,21 @@ public enum AppStorageKeys {
         public static let mode = "presenterMode"
     }
 
+    public enum Skills {
+        public static let agentSelections = "skillsAgentSelections"
+    }
+
     public enum Tabs {
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
+        public static let pluginsEnabled = "tabPluginsEnabled"
+        public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
-        public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
+        public static let seoAuditEnabled = "tabSEOAuditEnabled"
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }

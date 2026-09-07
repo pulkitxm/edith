@@ -7,7 +7,7 @@ import EdithKit
 @MainActor
 final class WindowToolsEngine: FeatureModule {
     private struct HotKeySpec {
-        let id: UInt32
+        let id: String
         let action: WindowLayoutAction
         let codeKey: String
         let modsKey: String
@@ -95,9 +95,9 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     func shutdown() {
-        layoutHotKeys.forEach { GlobalHotKey.clear(id: $0.id) }
-        GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceCapture)
-        GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceRestore)
+        layoutHotKeys.forEach { HotKeyRegistrar.clear($0.id) }
+        HotKeyRegistrar.clear(HotKeyCatalog.workspaceCapture)
+        HotKeyRegistrar.clear(HotKeyCatalog.workspaceRestore)
         restoreTask?.cancel()
         restoreTask = nil
         stopEventTap()
@@ -472,11 +472,11 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     private static var windowToolsEnabled: Bool {
-        SharedDefaults.store.bool(forKey: AppStorageKeys.WindowTools.enabled)
+        ExtensionRegistry.entry("windowTools")?.isEnabled(in: SharedDefaults.store) == true
     }
 
     private static var workspaceRestorerEnabled: Bool {
-        SharedDefaults.store.bool(forKey: AppStorageKeys.WorkspaceRestorer.enabled)
+        ExtensionRegistry.entry("workspaceRestorer")?.isEnabled(in: SharedDefaults.store) == true
     }
 
     private static var restoreOptions: WorkspaceRestoreOptions {
@@ -494,19 +494,19 @@ final class WindowToolsEngine: FeatureModule {
     private var layoutHotKeys: [HotKeySpec] {
         [
             HotKeySpec(
-                id: GlobalHotKey.ID.windowLeft, action: .leftHalf,
+                id: HotKeyCatalog.windowLeft, action: .leftHalf,
                 codeKey: AppStorageKeys.WindowTools.leftHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.leftHotKeyMods, defaultCode: kVK_LeftArrow),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowRight, action: .rightHalf,
+                id: HotKeyCatalog.windowRight, action: .rightHalf,
                 codeKey: AppStorageKeys.WindowTools.rightHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.rightHotKeyMods, defaultCode: kVK_RightArrow),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowMaximize, action: .maximize,
+                id: HotKeyCatalog.windowMaximize, action: .maximize,
                 codeKey: AppStorageKeys.WindowTools.maximizeHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.maximizeHotKeyMods, defaultCode: kVK_ANSI_M),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowRestore, action: .restore,
+                id: HotKeyCatalog.windowRestore, action: .restore,
                 codeKey: AppStorageKeys.WindowTools.restoreHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.restoreHotKeyMods, defaultCode: kVK_ANSI_R),
         ]
@@ -514,16 +514,7 @@ final class WindowToolsEngine: FeatureModule {
 
     private func registerHotKeys() {
         for spec in layoutHotKeys {
-            guard Self.windowToolsEnabled else {
-                GlobalHotKey.clear(id: spec.id)
-                continue
-            }
-            let code =
-                SharedDefaults.store.object(forKey: spec.codeKey) as? Int ?? spec.defaultCode
-            let modifiers =
-                SharedDefaults.store.object(forKey: spec.modsKey) as? Int
-                ?? (controlKey | optionKey)
-            GlobalHotKey.set(id: spec.id, keyCode: code, modifiers: modifiers) { [weak self] in
+            HotKeyRegistrar.install(spec.id) { [weak self] in
                 MainActor.assumeIsolated { self?.perform(spec.action) }
             }
         }
@@ -532,21 +523,11 @@ final class WindowToolsEngine: FeatureModule {
 
     private func registerWorkspaceHotKeys() {
         guard Self.workspaceRestorerEnabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceCapture)
-            GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceRestore)
+            HotKeyRegistrar.clear(HotKeyCatalog.workspaceCapture)
+            HotKeyRegistrar.clear(HotKeyCatalog.workspaceRestore)
             return
         }
-        let captureCode =
-            SharedDefaults.store.object(
-                forKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyCode) as? Int
-            ?? kVK_ANSI_S
-        let captureMods =
-            SharedDefaults.store.object(
-                forKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyMods) as? Int
-            ?? (controlKey | optionKey | shiftKey)
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.workspaceCapture, keyCode: captureCode, modifiers: captureMods
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.workspaceCapture) { [weak self] in
             MainActor.assumeIsolated {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "MMM d, HH:mm"
@@ -555,17 +536,7 @@ final class WindowToolsEngine: FeatureModule {
                         operation: .capture, profile: formatter.string(from: Date())))
             }
         }
-        let restoreCode =
-            SharedDefaults.store.object(
-                forKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyCode) as? Int
-            ?? kVK_ANSI_W
-        let restoreMods =
-            SharedDefaults.store.object(
-                forKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyMods) as? Int
-            ?? (controlKey | optionKey | shiftKey)
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.workspaceRestore, keyCode: restoreCode, modifiers: restoreMods
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.workspaceRestore) { [weak self] in
             MainActor.assumeIsolated {
                 guard
                     let latest = WorkspaceRestorerStore.load().profiles.max(by: {
