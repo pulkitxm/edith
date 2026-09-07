@@ -766,7 +766,8 @@ public enum CommandTree {
         "ed machines files get": Spec(
             options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
             arguments: [.machine, .remotePath, .localPath], destructivePolicy: .previewThenYes),
-        "ed machines files open": Spec(options: ["--json"], arguments: [.machineOrLocal, .remotePath]),
+        "ed machines files open": Spec(
+            options: ["--json"], arguments: [.machineOrLocal, .remotePath]),
         "ed machines files preview": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .remotePath]),
         "ed machines files launch": Spec(

@@ -38,7 +38,11 @@ enum CLIWindowBridge {
         guard !requestID.isEmpty, let raw = info["machine"] as? String,
             let id = UUID(uuidString: raw), model.knows(id)
         else {
-            IPC.post(IPC.Name.finderOpenResult, userInfo: ["opened": false, "reason": "Machine is unavailable.", "requestID": requestID])
+            IPC.post(
+                IPC.Name.finderOpenResult,
+                userInfo: [
+                    "opened": false, "reason": "Machine is unavailable.", "requestID": requestID,
+                ])
             return
         }
         FinderWindow.open(session: model.session(for: id), path: info["path"] as? String)

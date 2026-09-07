@@ -369,21 +369,29 @@ struct MachinesFilesOpenCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let target = machine.lowercased() == "local" ? Machine.local : try MachineResolver.machine(machine)
+            let target =
+                machine.lowercased() == "local"
+                ? Machine.local : try MachineResolver.machine(machine)
             let directory =
                 path ?? MachineWorkingDirectory.load(machineID: target.id)
             let progress = CLIProgress.forCommand(json: json)
             if !AppBridge.mainAppIsRunning {
                 guard let bundle = CLIEnvironment.installedAppURL() else {
-                    throw CLIFailure.unavailable("Edith is not installed", hint: "install Edith and retry")
+                    throw CLIFailure.unavailable(
+                        "Edith is not installed", hint: "install Edith and retry")
                 }
                 try await EdithProcesses.launch(bundle)
             }
             let requestID = UUID().uuidString
             var answer: [AnyHashable: Any]?
             for _ in 0..<4 {
-                answer = await AppBridge.awaitReply(IPC.Name.finderOpenResult, timeout: 3, matching: { $0["requestID"] as? String == requestID }) {
-                    var info: [String: Any] = ["machine": target.id.uuidString, "requestID": requestID]
+                answer = await AppBridge.awaitReply(
+                    IPC.Name.finderOpenResult, timeout: 3,
+                    matching: { $0["requestID"] as? String == requestID }
+                ) {
+                    var info: [String: Any] = [
+                        "machine": target.id.uuidString, "requestID": requestID,
+                    ]
                     if let directory { info["path"] = directory }
                     AppBridge.post(IPC.Name.requestFinderOpen, userInfo: info)
                 }
