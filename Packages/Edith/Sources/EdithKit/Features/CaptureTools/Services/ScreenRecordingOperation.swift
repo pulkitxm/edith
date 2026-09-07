@@ -11,6 +11,7 @@ public enum ScreenRecordingOperation: String, CaseIterable, Sendable {
     case cancel
     case status
     case library
+    case export
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -38,12 +39,14 @@ public enum ScreenRecordingOperation: String, CaseIterable, Sendable {
         case .cancel: "Cancel and discard the active recording."
         case .status: "Read the current recording status."
         case .library: "Open recent and recovered recordings."
+        case .export: "Export an edited recording as MP4 or GIF."
         }
     }
 
     private var effect: UserOperationEffect {
         switch self {
         case .status: .read
+        case .export: .write
         case .cancel: .destructive
         default: .interactive
         }
@@ -59,7 +62,7 @@ public enum ScreenRecordingOperation: String, CaseIterable, Sendable {
         case .stop: IPC.Name.requestRecordingStop
         case .cancel: IPC.Name.requestRecordingCancel
         case .library: IPC.Name.requestRecordingLibrary
-        case .status: nil
+        case .status, .export: nil
         }
     }
 }

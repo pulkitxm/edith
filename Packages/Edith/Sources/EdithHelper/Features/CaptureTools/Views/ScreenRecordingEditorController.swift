@@ -17,7 +17,7 @@ private final class ScreenRecordingEditorModel {
     var errorMessage: String?
     var finishedURL: URL?
     var overlayText = ""
-    private var exporter: ScreenRecordingExporter?
+    private var exportTask: Task<Void, Never>?
     private var pointerTrack = ScreenRecordingPointerTrack()
 
     init(take: ScreenRecordingTake) {
@@ -120,35 +120,34 @@ private final class ScreenRecordingEditorModel {
         errorMessage = nil
         finishedURL = nil
         persist()
-        let exporter = ScreenRecordingExporter()
-        self.exporter = exporter
         let take = self.take
         let document = self.document
-        exporter.onProgress = { [weak self] progress in
-            Task { @MainActor in self?.exportProgress = progress }
-        }
-        Task { [weak self] in
+        exportTask = Task { [weak self] in
             do {
-                try await exporter.export(take: take, document: document, to: destination)
+                try await AgentRecordingExportClient.export(
+                    take: take, document: document, to: destination
+                ) { [weak self] progress in
+                    Task { @MainActor in self?.exportProgress = progress }
+                }
                 guard let self else { return }
                 exporting = false
                 finishedURL = destination
-                self.exporter = nil
+                self.exportTask = nil
                 NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch is CancellationError {
                 self?.exporting = false
-                self?.exporter = nil
+                self?.exportTask = nil
             } catch {
                 self?.exporting = false
                 self?.errorMessage = error.localizedDescription
-                self?.exporter = nil
+                self?.exportTask = nil
                 NSSound.beep()
             }
         }
     }
 
     func cancelExport() {
-        exporter?.cancel()
+        exportTask?.cancel()
     }
 
     func copyFinished() {

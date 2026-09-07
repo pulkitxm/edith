@@ -1198,6 +1198,10 @@ private extension ScreenRecordingOperation {
             userInterface("Capture Tools menu", "show recording state")
         case .library:
             userInterface("Capture Tools settings", "open recent recordings")
+        case .export:
+            userInterface(
+                "Recording editor", "export the edited recording",
+                ["00000000-0000-0000-0000-000000000001", "--to", "/tmp/recording.mp4"])
         }
     }
 }

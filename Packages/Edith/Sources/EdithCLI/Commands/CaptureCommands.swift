@@ -1,5 +1,6 @@
 import ArgumentParser
 import EdithKit
+import Foundation
 
 struct CaptureCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -20,14 +21,17 @@ struct CaptureRecordCommand: AsyncParsableCommand {
             CaptureRecordDisplayCommand.self, CaptureRecordPauseCommand.self,
             CaptureRecordResumeCommand.self, CaptureRecordStopCommand.self,
             CaptureRecordCancelCommand.self, CaptureRecordStatusCommand.self,
-            CaptureRecordLibraryCommand.self,
+            CaptureRecordLibraryCommand.self, CaptureRecordExportCommand.self,
         ], defaultSubcommand: CaptureRecordAreaCommand.self)
 }
 
 private enum CaptureRecordBridge {
     static func request(_ operation: ScreenRecordingOperation, json: Bool) async throws {
         try await execute {
-            guard CLIEnvironment.sharedDefaults.bool(forKey: AppStorageKeys.Capture.enabled) else {
+            guard
+                ExtensionRegistry.entry("captureTools")?.isEnabled(
+                    in: CLIEnvironment.sharedDefaults) == true
+            else {
                 throw CLIFailure.unavailable(
                     "the Capture Tools extension is off",
                     hint: "run `ed extensions enable captureTools`, then retry")
@@ -232,5 +236,44 @@ struct CaptureLibraryCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await CaptureCommandBridge.request(.library, json: json)
+    }
+}
+
+struct CaptureRecordExportCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "export", abstract: "Export a saved recording through the background agent.")
+    @Argument(help: "The recording identifier from its library folder.") var id: String
+    @Option(name: .customLong("to"), help: "A new MP4 or GIF output file.") var destination: String
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+
+    func run() async throws {
+        try await execute {
+            guard let identifier = UUID(uuidString: id),
+                let take = ScreenRecordingLibrary.load().first(where: { $0.id == identifier })
+            else { throw CLIFailure.notFound("no recording with that identifier") }
+            let output = URL(fileURLWithPath: NSString(string: destination).expandingTildeInPath)
+            guard !FileManager.default.fileExists(atPath: output.path) else {
+                throw CLIFailure.usage("choose a new output file to preserve the existing file")
+            }
+            guard let format = ScreenRecordingFormat(rawValue: output.pathExtension.lowercased())
+            else {
+                throw CLIFailure.usage("the output filename must end in .mp4 or .gif")
+            }
+            var document =
+                (try? Data(contentsOf: ScreenRecordingLibrary.editURL(for: take.id)))
+                .flatMap { try? JSONDecoder().decode(ScreenRecordingEditDocument.self, from: $0) }
+                ?? ScreenRecordingEditDocument(trimEnd: take.duration)
+            document.preset.format = format
+            try await AgentRecordingExportClient.export(take: take, document: document, to: output)
+            if json {
+                CLIOut.json(
+                    .object([
+                        "operation": .string("capture.record.export"),
+                        "output": .string(output.path),
+                    ]))
+            } else {
+                CLIOut.out("exported recording to \(output.path)")
+            }
+        }
     }
 }

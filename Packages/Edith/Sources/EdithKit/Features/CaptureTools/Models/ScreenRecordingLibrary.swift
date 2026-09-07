@@ -34,12 +34,7 @@ public enum ScreenRecordingLibrary {
     public static let unfinishedLifetime: TimeInterval = 7 * 24 * 60 * 60
 
     public static func defaultDirectory() throws -> URL {
-        guard
-            let root = FileManager.default.urls(
-                for: .applicationSupportDirectory, in: .userDomainMask
-            ).first
-        else { throw CocoaError(.fileNoSuchFile) }
-        return root.appendingPathComponent("Edith/Capture Studio/Recordings", isDirectory: true)
+        DataRoot.captures.appendingPathComponent("Recordings", isDirectory: true)
     }
 
     public static func makeTake(
