@@ -24,6 +24,42 @@ import Testing
         #expect(try storage.history().map(\.id) == [record.id])
     }
 
+    @Test func sceneRunsThroughTheDaemonTaskTransport() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = AutomationStorage(root: root)
+        let scene = AutomationScene(
+            name: "Mock transport", actions: [AutomationAction(operationID: "app.info")])
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let tasks = try AgentTaskService(directory: nil)
+        let service = AutomationService(
+            storage: storage, isEnabled: { true }, runner: { _ in "ready" })
+        await service.register(on: runtime, tasks: tasks)
+        await AgentTaskOperations.register(on: runtime, service: tasks)
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let client = listener.client()
+        _ = try client.performInternal(
+            AgentAutomationOperation.save,
+            payload: AgentPayload.encode(AutomationDocument(scenes: [scene])))
+        let document = try AgentPayload.decode(
+            AutomationDocument.self,
+            from: client.performInternal(AgentAutomationOperation.load))
+        #expect(document.scenes == [scene])
+        let result = try await AgentTaskClient(client: client, pollInterval: 0.01).run(
+            AgentTaskSubmission(
+                operation: AgentAutomationOperation.run, title: scene.name,
+                payload: AgentPayload.encode(
+                    AgentAutomationRunRequest(sceneID: scene.id, origin: .commandLine))))
+        let record = try AgentPayload.decode(AutomationRunRecord.self, from: result)
+        #expect(record.succeeded)
+        let history = try AgentPayload.decode(
+            [AutomationRunRecord].self,
+            from: client.performInternal(AgentAutomationOperation.history))
+        #expect(history.map(\.id) == [record.id])
+        await service.shutdown()
+    }
+
     @Test func disabledAbilityRefusesExecutionBeforeLaunchingAProcess() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
