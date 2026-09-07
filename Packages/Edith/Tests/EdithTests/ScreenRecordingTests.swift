@@ -4,6 +4,22 @@ import Testing
 @testable import EdithKit
 
 @Suite struct ScreenRecordingTests {
+    @Test func cancellationBeforeExportDoesNotStartReadingOrWriting() async throws {
+        let exporter = ScreenRecordingExporter()
+        exporter.cancel()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let output = root.appendingPathComponent("cancelled.mp4")
+        do {
+            try await exporter.export(
+                take: ScreenRecordingTake(source: .area),
+                document: ScreenRecordingEditDocument(trimEnd: 1), to: output,
+                directory: root)
+            Issue.record("A cancelled export unexpectedly completed.")
+        } catch is CancellationError {
+            #expect(!FileManager.default.fileExists(atPath: output.path))
+        }
+    }
+
     @Test func timelineNormalizesCutsAndProducesKeptRanges() {
         let document = ScreenRecordingEditDocument(
             trimStart: 1, trimEnd: 9,
