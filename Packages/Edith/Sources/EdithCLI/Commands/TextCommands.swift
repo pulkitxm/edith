@@ -85,7 +85,8 @@ struct TextStatusCommand: AsyncParsableCommand {
         try await execute {
             let defaults = CLIEnvironment.sharedDefaults
             let fields: [String: JSONValue] = [
-                "enabled": .bool(defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled)),
+                "enabled": .bool(
+                    ExtensionRegistry.entry("textUtilities")?.isEnabled(in: defaults) == true),
                 "snippetsEnabled": .bool(
                     defaults.object(forKey: AppStorageKeys.TextUtilities.snippetsEnabled) as? Bool
                         ?? true),
@@ -114,7 +115,8 @@ struct TextStatusCommand: AsyncParsableCommand {
                     headers: ["EXTENSION", "SNIPPETS", "CLEAN URLS", "AUTO CLEAR", "SHORTCUT"],
                     rows: [
                         [
-                            defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled)
+                            ExtensionRegistry.entry("textUtilities")?.isEnabled(in: defaults)
+                                == true
                                 ? "on" : "off",
                             String(TextCLI.snippets.count),
                             defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
@@ -180,8 +182,8 @@ struct TextPastePlainCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             guard
-                CLIEnvironment.sharedDefaults.bool(
-                    forKey: AppStorageKeys.TextUtilities.enabled)
+                ExtensionRegistry.entry("textUtilities")?.isEnabled(
+                    in: CLIEnvironment.sharedDefaults) == true
             else {
                 throw CLIFailure.unavailable(
                     "the Text Utilities extension is off",

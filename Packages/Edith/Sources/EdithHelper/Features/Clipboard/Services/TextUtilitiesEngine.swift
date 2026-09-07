@@ -9,6 +9,7 @@ final class TextUtilitiesEngine: FeatureModule {
     private var snippets: [TextSnippet] = []
     private var buffer = ""
     private var expanding = false
+    private var expansionTask: Task<Void, Never>?
 
     required init() {
         syncSettings()
@@ -35,6 +36,8 @@ final class TextUtilitiesEngine: FeatureModule {
     }
 
     func shutdown() {
+        expansionTask?.cancel()
+        expansionTask = nil
         clipboardPrivacy.shutdown()
         if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
         keyboardMonitor = nil
@@ -53,7 +56,9 @@ final class TextUtilitiesEngine: FeatureModule {
     }
 
     private func handle(_ event: NSEvent) {
-        guard !expanding else { return }
+        guard !expanding,
+            ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true
+        else { return }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers.intersection([.command, .control, .option]).isEmpty else {
             buffer = ""
@@ -88,12 +93,18 @@ final class TextUtilitiesEngine: FeatureModule {
             TextUtilitiesSupport.expand(
                 snippet.replacement, clipboard: clipboard) + delimiter
         let deletedCharacters = snippet.trigger.count + delimiter.count
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+        expansionTask?.cancel()
+        expansionTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(10))
+            guard !Task.isCancelled, let self,
+                ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store)
+                    == true
+            else { return }
             ClipboardPasteSynth.synthesizeDeletes(deletedCharacters)
             ClipboardPasteSynth.pasteTemporarily(replacement)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.expanding = false
+            try? await Task.sleep(for: .milliseconds(390))
+            guard !Task.isCancelled else { return }
+            expanding = false
         }
     }
 }
@@ -218,7 +229,7 @@ private final class TextClipboardPrivacy {
     }
 
     private func clearPasteboardAfterDelayIfNeeded(_ pasteboard: NSPasteboard) {
-        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled),
+        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true,
             SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)
         else { return }
         let delay = TextUtilitiesSupport.clampedAutoClearDelay(
@@ -233,7 +244,7 @@ private final class TextClipboardPrivacy {
     }
 
     private func clearPasteboardIfConfigured(_ key: String) {
-        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled),
+        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true,
             SharedDefaults.store.bool(forKey: key)
         else { return }
         clearPasteboard(.general)

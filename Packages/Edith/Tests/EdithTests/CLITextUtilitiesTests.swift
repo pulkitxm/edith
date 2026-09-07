@@ -7,6 +7,7 @@ import Testing
 @Suite(.serialized) struct CLITextUtilitiesTests {
     @Test func statusIsTheSafeDefault() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
             let snippet = TextSnippet(name: "Signature", trigger: ";sig", replacement: "Thanks")
             world.shared.set(
@@ -88,6 +89,7 @@ import Testing
             let disabled = await CLIProbe.capture(["text", "paste-plain", "--json"])
             #expect(disabled.code == ExitCodes.unavailable)
 
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
             world.helperRunning(true)
             world.answers { name in
@@ -107,6 +109,7 @@ import Testing
 
     @Test func plainPasteReportsTheHelpersActualOutcome() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
             world.helperRunning(true)
             world.answers { name in
@@ -126,6 +129,7 @@ import Testing
 
     @Test func plainPasteDoesNotClaimSuccessWhenTheHelperDoesNotAnswer() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
             world.helperRunning(true)
             world.answers { _ in nil }
@@ -136,4 +140,17 @@ import Testing
             #expect(result.stderr.contains("did not answer"))
         }
     }
+    @Test func disabledDeskSuiteBlocksPlainPasteAndReportsInactive() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
+            world.shared.set(false, forKey: AppStorageKeys.Suites.desk)
+            world.helperRunning(true)
+            let status = await CLIProbe.capture(["text", "status", "--json"])
+            let paste = await CLIProbe.capture(["text", "paste-plain", "--json"])
+            #expect(status.object?["enabled"] as? Bool == false)
+            #expect(paste.code == ExitCodes.unavailable)
+            #expect(!world.postedNames().contains(IPC.Name.requestPlainTextPaste.rawValue))
+        }
+    }
+
 }
