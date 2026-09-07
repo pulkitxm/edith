@@ -18,9 +18,6 @@ import EdithDatabase
 
     static let matrix = [
         MatrixRow(
-            id: "commandBar", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
             id: "usage", helper: true, machine: false,
             toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
@@ -87,6 +84,9 @@ import EdithDatabase
         MatrixRow(
             id: "keystrokeHighlight", helper: true, machine: false,
             toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "commandBar", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "focusDim", helper: true, machine: false,
