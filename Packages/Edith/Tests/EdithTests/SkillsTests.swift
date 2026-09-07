@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import Edith
@@ -8,6 +9,83 @@ import Testing
 
 @Suite struct SkillsTests {
     private let skill = EdithSkillLibrary.skills[0]
+    private static let markdown =
+        "---\nname: edith-remote-work\ndescription: Work remotely.\n---\n# Remote work\n\nUse `ed`.\n"
+
+    @Test func documentPreservesCopySourceAndSeparatesMetadata() {
+        let document = SkillDocument(markdown: Self.markdown)
+        #expect(document.markdown == Self.markdown)
+        #expect(document.metadata == "name: edith-remote-work\ndescription: Work remotely.")
+        #expect(document.body == "# Remote work\n\nUse `ed`.")
+        #expect(SkillDocument(markdown: "# No metadata").body == "# No metadata")
+    }
+
+    @Test func githubLoadCachesValidContentAndFallsBackOffline() async throws {
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let remote = SkillDocumentStore(cacheDirectory: cache) { _ in Data(Self.markdown.utf8) }
+        let fresh = try await remote.load(skill)
+        #expect(fresh.markdown == Self.markdown)
+        #expect(!fresh.isCached)
+        let offline = SkillDocumentStore(cacheDirectory: cache) { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        let saved = try await offline.load(skill)
+        #expect(saved.markdown == Self.markdown)
+        #expect(saved.isCached)
+        let invalid = SkillDocumentStore(cacheDirectory: cache) { _ in Data("not a skill".utf8) }
+        #expect(try await invalid.load(skill).markdown == Self.markdown)
+    }
+
+    @Test func invalidRemoteContentCannotBecomeAnInstallableSkill() async throws {
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        for text in [
+            "<html>Not found</html>", "---\nname: another-skill\n---\n# Wrong skill",
+            String(repeating: "a", count: 400_000),
+        ] {
+            let store = SkillDocumentStore(cacheDirectory: cache) { _ in Data(text.utf8) }
+            await #expect(throws: SkillsError.self) { try await store.load(skill) }
+        }
+        #expect(!FileManager.default.fileExists(atPath: cache.path))
+    }
+
+    @Test func markdownHighlightingPreservesSourceAndAddsSyntaxColors() async throws {
+        for dark in [false, true] {
+            let highlighted = try #require(
+                await SyntaxHighlighting.shared.highlight(
+                    text: Self.markdown, language: "markdown", dark: dark))
+            #expect(highlighted.string == Self.markdown)
+            var colors = Set<String>()
+            highlighted.enumerateAttribute(
+                .foregroundColor, in: NSRange(location: 0, length: highlighted.length)
+            ) { value, _, _ in
+                if let color = value as? NSColor { colors.insert(color.description) }
+            }
+            #expect(colors.count > 1)
+        }
+    }
+
+    @MainActor @Test func markdownViewerAllowsSelectionButNotEditing() throws {
+        _ = TestWindowHost.application
+        let host = NSHostingView(
+            rootView: CodePreview(
+                text: Self.markdown, language: "markdown", truncated: false, dark: true))
+        host.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        defer { window.orderOut(nil) }
+        window.contentView = host
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        func textView(in view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView { return text }
+            return view.subviews.lazy.compactMap { textView(in: $0) }.first
+        }
+        let text = try #require(textView(in: host))
+        #expect(!text.isEditable)
+        #expect(text.isSelectable)
+        #expect(text.string == Self.markdown)
+    }
 
     @MainActor @Test func menuLogosHaveConsistentIntrinsicSizeAndTemplateAppearance() throws {
         for id in [
@@ -20,33 +98,37 @@ import Testing
         }
     }
 
-    @Test func libraryContainsOnlyTheRequestedBundledSkill() throws {
+    @Test func libraryContainsOnlyTheRequestedGitHubSkill() {
         #expect(EdithSkillLibrary.skills.map(\.id) == ["edith-remote-work"])
-        let directory = try #require(skill.directory)
-        let instructions = try String(
-            contentsOf: directory.appendingPathComponent("SKILL.md"), encoding: .utf8)
-        #expect(instructions.hasPrefix("---\nname: edith-remote-work\n"))
-        #expect(!instructions.contains("tuf-wired"))
+        #expect(
+            skill.sourceURL.absoluteString
+                == "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-remote-work/SKILL.md"
+        )
     }
 
     @Test func installerTargetsExactlyTheSelectedAgentsWithoutAShell() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data(Self.markdown.utf8).write(to: directory.appendingPathComponent("SKILL.md"))
         let arguments = try SkillInstaller.arguments(
-            skill: skill, agentIDs: ["cursor", "claude-code", "cursor"])
+            skill: skill, directory: directory, agentIDs: ["cursor", "claude-code", "cursor"])
         #expect(arguments.suffix(3) == ["--agent", "claude-code", "cursor"])
         #expect(arguments.contains("--global"))
         #expect(arguments.contains("--copy"))
-        #expect(arguments.contains(try #require(skill.directory).path))
+        #expect(arguments.contains(directory.path))
         #expect(!arguments.contains("*"))
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: skill, agentIDs: [])
+            try SkillInstaller.arguments(skill: skill, directory: directory, agentIDs: [])
         }
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: skill, agentIDs: ["unknown"])
+            try SkillInstaller.arguments(skill: skill, directory: directory, agentIDs: ["unknown"])
         }
         let invalid = EdithSkill(
             id: "../other", name: "Other", summary: "", detail: "", symbol: "terminal")
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: invalid, agentIDs: ["cursor"])
+            try SkillInstaller.arguments(skill: invalid, directory: directory, agentIDs: ["cursor"])
         }
     }
 
@@ -125,7 +207,8 @@ import Testing
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         for status: Int32 in [1, 0] {
-            let installer = SkillInstaller { request, _ in
+            let installer = SkillInstaller(load: { _ in SkillDocument(markdown: Self.markdown) }) {
+                request, _ in
                 #expect(request.executableURL.path == "/usr/bin/env")
                 #expect(request.arguments.first == "npx")
                 #expect(request.terminatesProcessGroup)
@@ -146,15 +229,15 @@ import Testing
         defer { try? FileManager.default.removeItem(at: home) }
         try Data("name: edith-remote-work".utf8).write(
             to: folder.appendingPathComponent("SKILL.md"))
-        let installer = SkillInstaller { _, _ in
+        let installer = SkillInstaller(load: { _ in SkillDocument(markdown: Self.markdown) }) {
+            _, _ in
             CLICommandResult(terminationStatus: 0, output: "done")
         }
         await #expect(throws: SkillsError.self) {
             try await installer.install(
                 skill: skill, agentIDs: ["cursor"], home: home, environment: [:])
         }
-        let source = try #require(skill.directory).appendingPathComponent("SKILL.md")
-        try Data(contentsOf: source).write(to: folder.appendingPathComponent("SKILL.md"))
+        try Data(Self.markdown.utf8).write(to: folder.appendingPathComponent("SKILL.md"))
         try await installer.install(
             skill: skill, agentIDs: ["cursor"], home: home, environment: [:])
     }

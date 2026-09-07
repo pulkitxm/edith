@@ -2,26 +2,32 @@ import Foundation
 
 public struct SkillInstaller: Sendable {
     public static let package = "skills@1.5.24"
+    private let load: @Sendable (EdithSkill) async throws -> SkillDocument
     private let run: ToolInstaller.RunCommand
 
     public init(
+        load: @escaping @Sendable (EdithSkill) async throws -> SkillDocument = {
+            try await SkillDocumentStore.shared.load($0)
+        },
         run: @escaping ToolInstaller.RunCommand = {
             try await CLICommandRunner.run($0, onLine: $1)
         }
     ) {
+        self.load = load
         self.run = run
     }
 
-    public static func arguments(skill: EdithSkill, agentIDs: [String]) throws -> [String] {
+    public static func arguments(skill: EdithSkill, directory: URL, agentIDs: [String]) throws
+        -> [String]
+    {
         guard EdithSkillLibrary.skills.contains(where: { $0.id == skill.id }),
-            let directory = skill.directory,
             FileManager.default.fileExists(
                 atPath: directory.appendingPathComponent("SKILL.md").path),
             !agentIDs.isEmpty,
             agentIDs.allSatisfy({ id in SkillAgentCatalog.agents.contains { $0.id == id } })
         else {
             throw SkillsError.message(
-                "Choose a bundled Edith skill and at least one supported agent.")
+                "Choose an Edith skill and at least one supported agent.")
         }
         return [
             "--yes", package, "add", directory.path,
@@ -35,7 +41,15 @@ public struct SkillInstaller: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         log: @escaping ToolInstaller.Log = { _ in }
     ) async throws {
-        let arguments = try Self.arguments(skill: skill, agentIDs: agentIDs)
+        let document = try await load(skill)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-skill-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let expected = Data(document.markdown.utf8)
+        try expected.write(to: directory.appendingPathComponent("SKILL.md"), options: .atomic)
+        if document.isCached { log("Using the cached skill because GitHub is unavailable.") }
+        let arguments = try Self.arguments(skill: skill, directory: directory, agentIDs: agentIDs)
         var environment = CLIToolEnvironment.sanitized(processEnvironment: environment)
         environment["NO_COLOR"] = "1"
         environment["CI"] = "1"
@@ -50,12 +64,6 @@ public struct SkillInstaller: Sendable {
             throw SkillsError.message(
                 "Installation failed (exit \(result.terminationStatus)). Check the output and try again."
             )
-        }
-        guard let source = skill.directory,
-            let expected = try? Data(contentsOf: source.appendingPathComponent("SKILL.md"))
-        else {
-            throw SkillsError.message(
-                "The bundled skill could not be read. Reinstall Edith and try again.")
         }
         let installed = agentIDs.allSatisfy { id in
             guard let agent = SkillAgentCatalog.agents.first(where: { $0.id == id }) else {
