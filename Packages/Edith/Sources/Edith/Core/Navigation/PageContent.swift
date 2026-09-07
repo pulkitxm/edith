@@ -19,6 +19,7 @@ struct PageContent: View {
         case .herdr: HerdrPage()
         case .quinjet: QuinjetPage()
         case .companion: CompanionPage()
+        case .plugins: PluginsPage()
         case .appMaintenance: AppMaintenanceView()
         case .system: SuiteLandingPage(suite: SuiteRegistry.suite(.system))
         case .runningApps: SystemPage()

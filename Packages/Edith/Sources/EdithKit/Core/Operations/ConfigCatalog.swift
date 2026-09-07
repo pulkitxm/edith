@@ -130,6 +130,12 @@ public enum ConfigCatalog {
 
     private static let panel: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Tabs.pluginsEnabled, .bool, group: "panel",
+            summary: "Show Plugins in the Agents suite.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Skills.agentSelections, .map, group: "panel",
+            summary: "Remember agent selections when installing plugins.", fallback: .object([:])),
+        SettingDefinition(
             "extensionsExpand", .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
         SettingDefinition(

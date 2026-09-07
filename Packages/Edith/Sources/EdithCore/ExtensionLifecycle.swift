@@ -285,6 +285,32 @@ public enum ExtensionLifecycleCatalog {
                     "ed herdr ls --json")
             ]),
         descriptor(
+            "plugins",
+            "Install bundled Edith skills for selected agents on this Mac.",
+            workflows: [
+                instruction(
+                    "browse", "Browse skills",
+                    "Explore the skills included with Edith.")
+            ],
+            prerequisites: [
+                instruction(
+                    "node", "Install Node.js",
+                    "Node.js 22.20 or later supplies npx for the skills installer.")
+            ],
+            examples: ["ed extensions enable plugins"],
+            docs: [documentation("guide", "Plugins guide", "docs/plugins.md")],
+            recovery: [
+                instruction(
+                    "node", "Check the installer", "Verify Node.js and npx are available.",
+                    "ed extensions doctor plugins --json")
+            ],
+            verification: [
+                instruction(
+                    "installed", "Inspect installed skills",
+                    "Confirm the plugin installer is ready.",
+                    "ed extensions verify plugins --json")
+            ]),
+        descriptor(
             "quinjet",
             "Review pull requests and follow live workspace changes without leaving Edith.",
             workflows: [

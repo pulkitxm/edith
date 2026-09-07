@@ -45,14 +45,23 @@ public struct SkillAgent: Identifiable, Equatable, Sendable {
 }
 
 public enum SkillAgentCatalog {
+    public static func detected(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> [SkillAgent] {
+        agents.filter { $0.isDetected(home: home, environment: environment, exists: exists) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     public static let agents: [SkillAgent] = [
         SkillAgent("aider-desk", "AiderDesk", "/HOME/.aider-desk/skills", ["/HOME/.aider-desk"]),
-        SkillAgent("amp", "Amp", "/CONFIG/agents/skills", ["/CONFIG/amp"]),
+        SkillAgent("amp", "Amp", "/HOME/.agents/skills", ["/CONFIG/amp"]),
         SkillAgent(
-            "antigravity", "Antigravity", "/HOME/.gemini/antigravity/skills",
+            "antigravity", "Antigravity", "/HOME/.agents/skills",
             ["/HOME/.gemini/antigravity"]),
         SkillAgent(
-            "antigravity-cli", "Antigravity CLI", "/HOME/.gemini/antigravity-cli/skills",
+            "antigravity-cli", "Antigravity CLI", "/HOME/.agents/skills",
             ["/HOME/.gemini/antigravity-cli"]),
         SkillAgent("astrbot", "AstrBot", "/HOME/.astrbot/data/skills", ["/HOME/.astrbot"]),
         SkillAgent(
@@ -73,23 +82,23 @@ public enum SkillAgentCatalog {
         SkillAgent("codebuddy", "CodeBuddy", "/HOME/.codebuddy/skills", ["/HOME/.codebuddy"]),
         SkillAgent("codemaker", "Codemaker", "/HOME/.codemaker/skills", ["/HOME/.codemaker"]),
         SkillAgent("codestudio", "Code Studio", "/HOME/.codestudio/skills", ["/HOME/.codestudio"]),
-        SkillAgent("codex", "Codex", "/ENV/CODEX_HOME/skills", ["/ENV/CODEX_HOME", "/etc/codex"]),
+        SkillAgent("codex", "Codex", "/HOME/.agents/skills", ["/ENV/CODEX_HOME", "/etc/codex"]),
         SkillAgent(
             "command-code", "Command Code", "/HOME/.commandcode/skills", ["/HOME/.commandcode"]),
         SkillAgent("continue", "Continue", "/HOME/.continue/skills", ["/HOME/.continue"]),
         SkillAgent(
             "cortex", "Cortex Code", "/HOME/.snowflake/cortex/skills", ["/HOME/.snowflake/cortex"]),
         SkillAgent("crush", "Crush", "/HOME/.config/crush/skills", ["/HOME/.config/crush"]),
-        SkillAgent("cursor", "Cursor", "/HOME/.cursor/skills", ["/HOME/.cursor"]),
+        SkillAgent("cursor", "Cursor", "/HOME/.agents/skills", ["/HOME/.cursor"]),
         SkillAgent(
-            "deepagents", "Deep Agents", "/HOME/.deepagents/agent/skills", ["/HOME/.deepagents"]),
+            "deepagents", "Deep Agents", "/HOME/.agents/skills", ["/HOME/.deepagents"]),
         SkillAgent("devin", "Devin for Terminal", "/CONFIG/devin/skills", ["/CONFIG/devin"]),
         SkillAgent("dexto", "Dexto", "/HOME/.agents/skills", ["/HOME/.dexto"]),
         SkillAgent("droid", "Droid", "/HOME/.factory/skills", ["/HOME/.factory"]),
-        SkillAgent("firebender", "Firebender", "/HOME/.firebender/skills", ["/HOME/.firebender"]),
+        SkillAgent("firebender", "Firebender", "/HOME/.agents/skills", ["/HOME/.firebender"]),
         SkillAgent("forgecode", "ForgeCode", "/HOME/.forge/skills", ["/HOME/.forge"]),
-        SkillAgent("gemini-cli", "Gemini CLI", "/HOME/.gemini/skills", ["/HOME/.gemini"]),
-        SkillAgent("github-copilot", "GitHub Copilot", "/HOME/.copilot/skills", ["/HOME/.copilot"]),
+        SkillAgent("gemini-cli", "Gemini CLI", "/HOME/.agents/skills", ["/HOME/.gemini"]),
+        SkillAgent("github-copilot", "GitHub Copilot", "/HOME/.agents/skills", ["/HOME/.copilot"]),
         SkillAgent("goose", "Goose", "/CONFIG/goose/skills", ["/CONFIG/goose"]),
         SkillAgent("grok", "Grok Build", "/ENV/GROK_HOME/skills", ["/ENV/GROK_HOME"]),
         SkillAgent("hermes-agent", "Hermes Agent", "/ENV/HERMES_HOME/skills", ["/ENV/HERMES_HOME"]),
@@ -115,7 +124,7 @@ public enum SkillAgentCatalog {
         SkillAgent("mistral-vibe", "Mistral Vibe", "/ENV/VIBE_HOME/skills", ["/ENV/VIBE_HOME"]),
         SkillAgent("moxby", "Moxby", "/HOME/.moxby/skills", ["/HOME/.moxby"]),
         SkillAgent("mux", "Mux", "/HOME/.mux/skills", ["/HOME/.mux"]),
-        SkillAgent("opencode", "OpenCode", "/CONFIG/opencode/skills", ["/CONFIG/opencode"]),
+        SkillAgent("opencode", "OpenCode", "/HOME/.agents/skills", ["/CONFIG/opencode"]),
         SkillAgent("openhands", "OpenHands", "/HOME/.openhands/skills", ["/HOME/.openhands"]),
         SkillAgent("ona", "Ona", "/HOME/.ona/skills", ["/HOME/.ona"]),
         SkillAgent("pi", "Pi", "/HOME/.pi/agent/skills", ["/HOME/.pi/agent"]),
@@ -125,7 +134,7 @@ public enum SkillAgentCatalog {
         SkillAgent("qoder", "Qoder", "/HOME/.qoder/skills", ["/HOME/.qoder"]),
         SkillAgent("qoder-cn", "Qoder CN", "/HOME/.qoder-cn/skills", ["/HOME/.qoder-cn"]),
         SkillAgent("qwen-code", "Qwen Code", "/HOME/.qwen/skills", ["/HOME/.qwen"]),
-        SkillAgent("replit", "Replit", "/CONFIG/agents/skills", ["/CONFIG/agents"]),
+        SkillAgent("replit", "Replit", "/HOME/.agents/skills", ["/CONFIG/agents"]),
         SkillAgent("reasonix", "Reasonix", "/HOME/.reasonix/skills", ["/HOME/.reasonix"]),
         SkillAgent("rovodev", "Rovo Dev", "/HOME/.rovodev/skills", ["/HOME/.rovodev"]),
         SkillAgent("roo", "Roo Code", "/HOME/.roo/skills", ["/HOME/.roo"]),

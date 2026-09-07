@@ -437,6 +437,8 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
         var databaseEnabled =
         false
+    @AppStorage(AppStorageKeys.Tabs.pluginsEnabled, store: SharedDefaults.store) private
+        var pluginsEnabled = false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
         var companionEnabled =
         false
@@ -935,7 +937,8 @@ struct MainWindowView: View {
 
     private var extensionSelectionToken: [Bool] {
         [
-            usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, appMaintenanceEnabled,
+            usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, pluginsEnabled,
+            appMaintenanceEnabled,
             homebrewEnabled, cleanerEnabled, systemEnabled, musicEnabled, calendarEnabled,
             databaseEnabled, attentionEnabled, seoAuditEnabled, agentsSuite, maintenanceSuite,
             systemSuite, mediaSuite, dataSuite,

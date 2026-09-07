@@ -129,6 +129,9 @@ enum NavigationCatalog {
         SidebarPage(
             id: "companion", title: "Memory", symbolName: "brain.head.profile",
             band: .suite(.agents), abilityIDs: ["companion"], parentID: "agents"),
+        SidebarPage(
+            id: "plugins", title: "Plugins", symbolName: "square.stack.3d.up",
+            band: .suite(.agents), abilityIDs: ["plugins"], parentID: "agents"),
 
         SidebarPage(
             id: "appMaintenance", title: "Maintenance",
@@ -262,7 +265,7 @@ enum NavigationCatalog {
 
 enum MainDestination: String, CaseIterable, Identifiable {
     case home, machines
-    case agents, dashboard, herdr, quinjet, companion
+    case agents, dashboard, herdr, quinjet, companion, plugins
     case appMaintenance
     case system, runningApps
     case desk

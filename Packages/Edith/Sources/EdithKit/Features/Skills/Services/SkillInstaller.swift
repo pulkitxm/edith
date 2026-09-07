@@ -12,28 +12,25 @@ public struct SkillInstaller: Sendable {
         self.run = run
     }
 
-    public static func arguments(skill: CatalogSkill, agentIDs: [String]) throws -> [String] {
-        let segments = skill.source.split(separator: "/", omittingEmptySubsequences: false)
-        let validSegment: (String) -> Bool = {
-            !$0.isEmpty && $0 != "." && $0 != ".." && !$0.hasPrefix("-")
-                && $0.unicodeScalars.allSatisfy {
-                    CharacterSet.alphanumerics.contains($0) || "._-".unicodeScalars.contains($0)
-                }
-        }
-        guard segments.count == 2, segments.allSatisfy({ validSegment(String($0)) }),
-            validSegment(skill.skillId), !agentIDs.isEmpty,
+    public static func arguments(skill: EdithSkill, agentIDs: [String]) throws -> [String] {
+        guard EdithSkillLibrary.skills.contains(where: { $0.id == skill.id }),
+            let directory = skill.directory,
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("SKILL.md").path),
+            !agentIDs.isEmpty,
             agentIDs.allSatisfy({ id in SkillAgentCatalog.agents.contains { $0.id == id } })
         else {
-            throw SkillsError.message("Choose a GitHub skill and at least one supported agent.")
+            throw SkillsError.message(
+                "Choose a bundled Edith skill and at least one supported agent.")
         }
         return [
-            "--yes", package, "add", "https://github.com/" + skill.source,
-            "--skill", skill.skillId, "--global", "--yes", "--copy", "--agent",
+            "--yes", package, "add", directory.path,
+            "--skill", skill.id, "--global", "--yes", "--copy", "--agent",
         ] + Array(Set(agentIDs)).sorted()
     }
 
     public func install(
-        skill: CatalogSkill, agentIDs: [String],
+        skill: EdithSkill, agentIDs: [String],
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         log: @escaping ToolInstaller.Log = { _ in }
@@ -54,13 +51,19 @@ public struct SkillInstaller: Sendable {
                 "Installation failed (exit \(result.terminationStatus)). Check the output and try again."
             )
         }
+        guard let source = skill.directory,
+            let expected = try? Data(contentsOf: source.appendingPathComponent("SKILL.md"))
+        else {
+            throw SkillsError.message(
+                "The bundled skill could not be read. Reinstall Edith and try again.")
+        }
         let installed = agentIDs.allSatisfy { id in
             guard let agent = SkillAgentCatalog.agents.first(where: { $0.id == id }) else {
                 return false
             }
-            return FileManager.default.fileExists(
-                atPath: agent.resolvedDirectory(home: home, environment: environment)
-                    .appendingPathComponent(skill.skillId).appendingPathComponent("SKILL.md").path)
+            let destination = agent.resolvedDirectory(home: home, environment: environment)
+                .appendingPathComponent(skill.id).appendingPathComponent("SKILL.md")
+            return (try? Data(contentsOf: destination)) == expected
         }
         guard installed else {
             throw SkillsError.message(

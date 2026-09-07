@@ -80,6 +80,7 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.AppMaintenance.updateAutoRefresh: false,
         AppStorageKeys.AppMaintenance.updateNotifications: true,
         AppStorageKeys.Tabs.companionEnabled: false,
+        AppStorageKeys.Tabs.pluginsEnabled: false,
         AppStorageKeys.Tabs.herdrEnabled: false,
         AppStorageKeys.Tabs.quinjetEnabled: false,
         AppStorageKeys.Tabs.seoAuditEnabled: false,

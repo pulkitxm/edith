@@ -141,6 +141,11 @@ public enum ExtensionRegistry {
             symbolName: "brain.head.profile", suite: .agents, host: .agent, featured: false,
             defaultsKey: "tabCompanionEnabled", requiredCapabilities: [.companionService]),
         ExtensionRegistryEntry(
+            id: "plugins", title: "Plugins",
+            subtitle: "Install Edith skills for your coding agents.",
+            symbolName: "square.stack.3d.up", suite: .agents, host: .window, featured: false,
+            defaultsKey: "tabPluginsEnabled", requiredCapabilities: [.skillInstallation]),
+        ExtensionRegistryEntry(
             id: "appMaintenance", title: "Updates",
             subtitle: "Verified app installs, updates, review-first removal and history.",
             symbolName: "shippingbox.and.arrow.backward", suite: .maintenance, host: .agent,

@@ -11,6 +11,7 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabCompanionEnabled",
+        "tabPluginsEnabled",
         "appMaintenanceEnabled",
         "homebrewEnabled",
         "cleanerEnabled",
@@ -42,7 +43,7 @@ import Testing
     @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "usage", "herdr", "quinjet", "companion",
+                "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
@@ -326,6 +327,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "companion": [],
+            "plugins": [],
             "appMaintenance": [],
             "homebrew": [],
             "cleaner": [],
@@ -353,6 +355,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "companion": [],
+            "plugins": [],
             "appMaintenance": [.notifications],
             "homebrew": [],
             "cleaner": [],
