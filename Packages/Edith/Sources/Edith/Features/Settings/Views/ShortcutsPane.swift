@@ -12,6 +12,9 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
         var colorPickerEnabled =
         false
+    @AppStorage(AppStorageKeys.Emoji.enabled, store: SharedDefaults.store) private
+        var emojiEnabled =
+        false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
@@ -19,12 +22,15 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            commandBar: commandBarEnabled, clipboard: clipboardEnabled, micMute: micMuteEnabled,
+            commandBar: commandBarEnabled, clipboard: clipboardEnabled, emoji: emojiEnabled,
+            micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled)
+            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled)
     }
 
     var body: some View {
@@ -110,6 +116,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
                 keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
+        case .emoji:
+            shortcutRow(
+                "Emoji picker", subtitle: "Opens the emoji picker over whatever you are typing in",
+                keyPrefix: "emojiHotKey", defaultLabel: "⌃⇧E")
         case .micMute:
             shortcutRow(
                 "Mic mute", subtitle: "Mutes or unmutes every microphone system-wide",
@@ -126,6 +136,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .keystrokeHighlight:
+            shortcutRow(
+                "Keystroke highlight", subtitle: "Starts or pauses the on-screen keycaps",
+                keyPrefix: "keystrokeHighlightHotKey", defaultLabel: "⌃⌥⌘K")
         }
     }
 }

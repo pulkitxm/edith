@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
+public enum UsageRefreshFailure: LocalizedError, CustomStringConvertible, Equatable {
     case scriptMissing
     case busy
     case launchFailed(String)
@@ -32,6 +32,10 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
         }
     }
 
+    public var errorDescription: String? { description }
+
+    public var recoverySuggestion: String? { hint }
+
     public var hint: String? {
         switch self {
         case .scriptMissing:
@@ -42,7 +46,8 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
             return "check that /bin/bash is available"
         case .timedOut, .outputLimitExceeded:
             return "the pipeline output is in data/refresh.log"
-        case .reported(let message) where message.contains("bun or npx"):
+        case .reported(let message)
+        where message.contains("bun is required for durable billing history"):
             return "install bun (`brew install oven-sh/bun/bun`) and retry"
         case .reported, .exited:
             return "the pipeline output is in data/refresh.log"
@@ -220,6 +225,7 @@ public enum UsageRefreshRunner {
             throw UsageRefreshFailure.launchFailed(error.localizedDescription)
         }
 
+        collector.flush()
         if let message = collector.reportedFailure {
             throw UsageRefreshFailure.reported(message)
         }
@@ -228,7 +234,16 @@ public enum UsageRefreshRunner {
             throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
         }
         do {
-            try publish(stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+            let retained = try publish(
+                stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+            if retained > 0 {
+                let message =
+                    "\(retained) day/source blocks retain prior usage; "
+                    + "overlapping changes remain unresolved, newer days continue"
+                if !collector.events.contains(.note(message)) {
+                    collector.ingestStandardOutput(Data("note\t\(message)\n".utf8))
+                }
+            }
         } catch {
             throw UsageRefreshFailure.reported(
                 "usage refresh publication failed; previous data preserved")
@@ -238,25 +253,41 @@ public enum UsageRefreshRunner {
             events: collector.events, seconds: elapsed, startedAt: startedAt)
     }
 
+    @discardableResult
     static func publish(
         stagedUsage: URL, baseline: UsageRefreshBaseline, dataDir: URL
-    ) throws {
+    ) throws -> Int {
         guard
             let fresh = try UsageDataFiles.readRegularFile(
                 at: stagedUsage, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes),
             UsageHistory.isValidDocument(fresh)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+        guard let merged = UsageHistory.mergeRefresh(fresh: fresh, previous: baseline.usage),
+            merged.count <= UsageDataFiles.maximumUsageDocumentBytes,
+            UsageHistory.isValidDocument(merged)
+        else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+        var published = merged
         try UsageDataLock.withLock(dataDirectory: dataDir) {
             let current = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
                 maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
             let machines = try MachineUsageStore.generation(
                 in: dataDir.appendingPathComponent("machines"))
-            guard current == baseline.usage, machines == baseline.machines else {
+            guard machines == baseline.machines else {
                 throw UsageDataFileError.unsafe(stagedUsage.path)
             }
-            try UsageDataFiles.write(fresh, to: dataDir.appendingPathComponent("usage.json"))
+            if current != baseline.usage {
+                guard current != nil,
+                    let rebased = UsageHistory.mergeRefresh(fresh: merged, previous: current),
+                    rebased.count <= UsageDataFiles.maximumUsageDocumentBytes,
+                    UsageHistory.isValidDocument(rebased)
+                else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+                published = rebased
+            }
+            try UsageDataFiles.write(
+                published, to: dataDir.appendingPathComponent("usage.json"))
         }
+        return UsageHistory.retainedHistoryBlockCount(in: published)
     }
 
     static func stageCurrentUsage(
@@ -266,6 +297,9 @@ public enum UsageRefreshRunner {
             let usage = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
                 maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+            if let usage, !UsageHistory.isValidDocument(usage) {
+                throw UsageDataFileError.unsafe(dataDir.appendingPathComponent("usage.json").path)
+            }
             let machines = try MachineUsageStore.generation(
                 in: dataDir.appendingPathComponent("machines"))
             return UsageRefreshBaseline(usage: usage, machines: machines)
@@ -329,7 +363,9 @@ final class UsageRefreshCollector: @unchecked Sendable {
     var reportedFailure: String? {
         lock.lock()
         defer { lock.unlock() }
-        return failure
+        guard let failure else { return nil }
+        let diagnostics = stray.filter { !failure.contains($0) }.joined(separator: "; ")
+        return diagnostics.isEmpty ? failure : "\(failure): \(diagnostics)"
     }
 
     var totalSeconds: Double? {
@@ -353,18 +389,27 @@ final class UsageRefreshCollector: @unchecked Sendable {
     func ingestStandardError(_ data: Data) {
         guard !data.isEmpty else { return }
         let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &errBuffer)
-        lock.lock()
-        for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
-            stray.append(line)
-        }
-        lock.unlock()
+        for line in lines { recordDiagnostic(line) }
     }
 
     func flush() {
         let pending = outBuffer
         outBuffer = ""
         if !pending.isEmpty { handle(pending) }
+        let pendingError = errBuffer
+        errBuffer = ""
+        if !pendingError.isEmpty { recordDiagnostic(pendingError) }
         sink.flush()
+    }
+
+    private func recordDiagnostic(_ line: String) {
+        let diagnostic = String(line.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        guard !diagnostic.isEmpty else { return }
+        lock.lock()
+        stray.append(diagnostic)
+        if stray.count > 6 { stray.removeFirst(stray.count - 6) }
+        lock.unlock()
+        sink.writeDiagnostic(diagnostic)
     }
 
     private func takeLines(_ text: String, buffer: inout String) -> [String] {
@@ -376,10 +421,7 @@ final class UsageRefreshCollector: @unchecked Sendable {
 
     private func handle(_ line: String) {
         guard let event = UsageRefreshEvent.parse(line) else {
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-            lock.lock()
-            stray.append(line)
-            lock.unlock()
+            recordDiagnostic(line)
             return
         }
         lock.lock()
@@ -428,6 +470,12 @@ final class UsageRefreshSink: @unchecked Sendable {
         let due = lastFlush.map { Date().timeIntervalSince($0) >= 0.25 } ?? true
         lock.unlock()
         if due { persist() }
+    }
+
+    func writeDiagnostic(_ diagnostic: String) {
+        lock.lock()
+        transcript.append("  ! " + diagnostic)
+        lock.unlock()
     }
 
     func flush() { persist() }

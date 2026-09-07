@@ -3,6 +3,7 @@ import EdithCore
 public enum CommandBarOperation: String, CaseIterable, Sendable {
     case calculate
     case convert
+    case transform
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -10,6 +11,11 @@ public enum CommandBarOperation: String, CaseIterable, Sendable {
             UserOperationDescriptor(
                 id: UserOperationID(rawValue: "commandBar.calculate"),
                 summary: "Evaluate a local arithmetic expression.",
+                cli: ["command-bar", rawValue], effect: .read)
+        case .transform:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "commandBar.transform"),
+                summary: "Transform text with the Command Bar utilities.",
                 cli: ["command-bar", rawValue], effect: .read)
         case .convert:
             UserOperationDescriptor(
@@ -26,6 +32,12 @@ public enum CommandBarOperation: String, CaseIterable, Sendable {
                 UserInterfaceActionPlacement(
                     surface: "Command Bar", action: "Evaluate arithmetic inline",
                     exampleArguments: ["2 + 3 * 4"])
+            ])
+        case .transform:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "Transform selected text",
+                    exampleArguments: ["uppercase", "hello world"])
             ])
         case .convert:
             .userInterface([

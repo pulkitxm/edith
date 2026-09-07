@@ -84,23 +84,22 @@ struct CommandBarClipboardProvider: CommandBarProvider {
 }
 
 struct CommandBarEmojiProvider: CommandBarProvider {
+    private static let search = EmojiSearchService(EmojiCatalog.shared.emoji)
+
     func results(for context: CommandBarProviderContext) async -> [CommandBarItem] {
         guard !Task.isCancelled else { return [] }
         let query = CommandBarSearch.normalized(context.query)
-        guard
-            query.hasPrefix("emoji")
-                || CommandBarEmoji.common.contains(where: {
-                    $0.keywords.contains(where: { $0.hasPrefix(query) || $0.contains(query) })
-                })
-        else { return [] }
-        return CommandBarEmoji.common.map { emoji in
-            let scalarID = emoji.character.unicodeScalars.map {
-                String($0.value, radix: 16)
-            }.joined(separator: "-")
+        guard !query.isEmpty else { return [] }
+        let phrase =
+            query.hasPrefix("emoji ") ? String(query.dropFirst(6)) : query == "emoji" ? "" : query
+        let matches = await Self.search.results(query: phrase, limit: 20)
+        return matches.map { emoji in
+            let scalarID = emoji.character.unicodeScalars.map { String($0.value, radix: 16) }
+                .joined(separator: "-")
             return CommandBarItem(
                 id: "emoji.\(scalarID)", title: emoji.character,
-                subtitle: emoji.keywords.first?.capitalized ?? "Emoji",
-                symbolName: "face.smiling", keywords: ["emoji"] + emoji.keywords,
+                subtitle: emoji.name, symbolName: "face.smiling",
+                keywords: ["emoji", emoji.name] + emoji.terms,
                 sourceBias: -20, kind: .emoji(emoji.character))
         }
     }

@@ -156,7 +156,7 @@ private actor DockerDetailCommandHarness {
             }
         }
         await harness.waitForProcess()
-        for _ in 0..<20 where model.processes.isEmpty { await Task.yield() }
+        for _ in 0..<100 where !model.processesLoaded { await Task.yield() }
 
         #expect(model.processes.map(\.command) == ["ready"])
         #expect(model.inspect == nil)

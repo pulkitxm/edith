@@ -67,3 +67,5 @@ search state.
 - [`ed extensions`](../extensions/README.md), to enable and verify Command Bar
 - [`ed config`](../config/README.md), for shortcut, application, and ranking settings
 - [All `ed` commands](../README.md)
+
+`ed command-bar transform uppercase 'hello world' --json` runs the same text utility used for selected text in the palette. Available utilities are `uppercase`, `lowercase`, `titleCase`, `trimWhitespace`, `sortLines`, and `countWords`. Emoji results use the shared macOS catalog and follow the Emoji ability's suite enablement.

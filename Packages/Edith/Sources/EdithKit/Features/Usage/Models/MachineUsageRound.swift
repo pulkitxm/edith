@@ -87,9 +87,6 @@ public enum MachineUsageRound {
             }
             await connection.disconnect()
         }
-        await Task.detached(priority: .utility) {
-            MachineUsageStore.prune(keeping: registry.map(\.id))
-        }.value
         return result
     }
 

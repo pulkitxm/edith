@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import Foundation
 import SwiftUI
 import Testing
@@ -22,7 +23,7 @@ import Testing
         model.query = "extensions"
 
         for _ in 0..<100 where model.items.first?.id != "action.openExtensions" {
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(10))
         }
 
         #expect(model.items.first?.id == "action.openExtensions")
@@ -32,7 +33,7 @@ import Testing
         let model = CommandBarModel(services: AppServices())
         model.query = "settings"
         for _ in 0..<100 where model.items.first?.id != "action.openGeneralSettings" {
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(10))
         }
 
         let view = ZStack {
@@ -64,6 +65,37 @@ import Testing
         #expect(image.pixelsHigh >= Int(CommandBarController.height))
         #expect(distinctColours(in: image) > 30)
         dump(image, named: "command-bar")
+    }
+
+    @Test func paletteRendersSharedEmojiSearch() async throws {
+        let defaults = SharedDefaults.store
+        let keys = ["emojiEnabled", "suiteDeskEnabled"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+        }
+        for key in keys { defaults.set(true, forKey: key) }
+        let services = AppServices()
+        let model = CommandBarModel(services: services)
+        defer { model.shutdown() }
+        model.query = "smile"
+        for _ in 0..<200 where !model.items.contains(where: { $0.id.hasPrefix("emoji.") }) {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(model.items.contains { $0.id.hasPrefix("emoji.") })
+        let view = ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            CommandBarView(model: model)
+        }.frame(width: CommandBarController.width, height: CommandBarController.height)
+        let image = try #require(render(view))
+        #expect(distinctColours(in: image) > 30)
+        dump(image, named: "command-bar-emoji")
     }
 
     private func render(_ view: some View) -> NSBitmapImageRep? {

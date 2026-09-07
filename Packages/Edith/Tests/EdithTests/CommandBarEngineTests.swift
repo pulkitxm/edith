@@ -143,9 +143,4 @@ import Testing
         #expect(CommandBarTextUtility.countWords.transform("one two\nthree") == "3")
     }
 
-    @Test func emojiCatalogHasStableUniqueCharacters() {
-        #expect(!CommandBarEmoji.common.isEmpty)
-        #expect(Set(CommandBarEmoji.common.map(\.character)).count == CommandBarEmoji.common.count)
-        #expect(CommandBarEmoji.common.allSatisfy { !$0.keywords.isEmpty })
-    }
 }

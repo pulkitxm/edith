@@ -40,3 +40,14 @@ import Testing
         #expect(conversion.stderr.contains("could not convert"))
     }
 }
+
+@Suite struct CLICommandBarTransformTests {
+    @Test func transformsTextThroughTheSharedCLI() throws {
+        let result = try CLIProcessProbe.run([
+            "command-bar", "transform", "uppercase", "hello world", "--json",
+        ])
+        #expect(result.code == 0)
+        #expect(result.object?["text"] as? String == "HELLO WORLD")
+        #expect(result.object?["operation"] as? String == "commandBar.transform")
+    }
+}

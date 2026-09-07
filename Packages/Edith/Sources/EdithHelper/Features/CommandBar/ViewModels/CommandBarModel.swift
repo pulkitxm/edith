@@ -25,6 +25,7 @@ final class CommandBarModel {
     @ObservationIgnored var dismiss: () -> Void = {}
     @ObservationIgnored var shortcutsChanged: () -> Void = {}
     @ObservationIgnored private var applications: [CommandBarApplication] = []
+    @ObservationIgnored private var applicationsLoadedAt: Date?
     @ObservationIgnored private var selection: CommandBarSelection?
     @ObservationIgnored private var applicationTask: Task<Void, Never>?
     @ObservationIgnored private var selectionTask: Task<Void, Never>?
@@ -48,6 +49,16 @@ final class CommandBarModel {
         query = ""
         copiedAnswer = false
         selection = nil
+        let running = Dictionary(
+            NSWorkspace.shared.runningApplications.compactMap { app in
+                app.bundleIdentifier.map { ($0, app.processIdentifier) }
+            }, uniquingKeysWith: { first, _ in first })
+        applications = applications.map { app in
+            CommandBarApplication(
+                id: app.id, title: app.title, url: app.url,
+                bundleIdentifier: app.bundleIdentifier,
+                runningPID: app.bundleIdentifier.flatMap { running[$0] })
+        }
         loadApplications()
         loadSelection(frontmostPID)
         refresh()
@@ -122,10 +133,10 @@ final class CommandBarModel {
             dismiss()
             services?.clipboard?.activate(entry)
         case .emoji(let emoji):
-            guard operationExists(ColorSwatchOperation.copy.descriptor) else { return }
+            guard operationExists(EmojiOperation.copy.descriptor) else { return }
             copy(emoji)
         case .textUtility(let utility, let selection):
-            guard operationExists(ClipboardOperation.copy.descriptor) else { return }
+            guard operationExists(CommandBarOperation.transform.descriptor) else { return }
             let transformed = utility.transform(selection.text)
             if utility == .countWords {
                 copy(transformed)
@@ -199,20 +210,35 @@ final class CommandBarModel {
             var candidates = self.actionItems()
             candidates += await CommandBarApplicationProvider().results(for: context)
             candidates += await CommandBarSystemSettingsProvider().results(for: context)
-            candidates += await CommandBarEmojiProvider().results(for: context)
+            if ExtensionRegistry.entry("emoji")?.isEnabled(in: SharedDefaults.store) == true,
+                id.hasPrefix("emoji."),
+                let emoji = EmojiCatalog.shared.emoji.first(where: {
+                    "emoji."
+                        + $0.character.unicodeScalars.map { String($0.value, radix: 16) }.joined(
+                            separator: "-") == id
+                })
+            {
+                candidates.append(
+                    CommandBarItem(
+                        id: id, title: emoji.character, subtitle: emoji.name,
+                        symbolName: "face.smiling", keywords: emoji.terms, sourceBias: -20,
+                        kind: .emoji(emoji.character)))
+            }
             guard let item = candidates.first(where: { $0.id == id }) else { return }
             self.execute(item)
         }
     }
 
     private func loadApplications() {
-        guard applicationTask == nil else { return }
+        guard showsApplications, applicationTask == nil else { return }
+        if let applicationsLoadedAt, Date().timeIntervalSince(applicationsLoadedAt) < 60 { return }
         loadingApplications = true
         applicationTask = Task.detached(priority: .utility) {
             let applications = CommandBarApplicationCatalog.load()
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 self?.applications = applications
+                self?.applicationsLoadedAt = Date()
                 self?.loadingApplications = false
                 self?.applicationTask = nil
                 self?.refresh()
@@ -281,8 +307,11 @@ final class CommandBarModel {
 
     private var activeProviders: [any CommandBarProvider] {
         var providers: [any CommandBarProvider] = [
-            CommandBarSystemSettingsProvider(), CommandBarEmojiProvider(), CommandBarFileProvider(),
+            CommandBarSystemSettingsProvider(), CommandBarFileProvider(),
         ]
+        if ExtensionRegistry.entry("emoji")?.isEnabled(in: SharedDefaults.store) == true {
+            providers.append(CommandBarEmojiProvider())
+        }
         if showsApplications { providers.append(CommandBarApplicationProvider()) }
         if services?.clipboard != nil { providers.append(CommandBarClipboardProvider()) }
         if selection != nil { providers.append(CommandBarTextUtilityProvider()) }
@@ -304,6 +333,9 @@ final class CommandBarModel {
     private func actionItems() -> [CommandBarItem] {
         var items = [
             action(.openHome, "Open Edith", "Home", "house.fill", ["dashboard", "edith"]),
+            action(
+                .openMachines, "Open Fleet", "SSH computers and files", "server.rack",
+                ["ssh", "servers", "remote"]),
             action(
                 .openExtensions, "Open Extensions", "Manage Edith features",
                 "puzzlepiece.extension.fill", ["features", "plugins", "manage"]),
@@ -327,15 +359,16 @@ final class CommandBarModel {
                 "Activity and focus", "hourglass", ["focus", "activity", "time"]
             ),
             (
-                AppStorageKeys.Tabs.usageEnabled, .openUsage, "Open Agent Usage",
+                AppStorageKeys.Tabs.usageEnabled, .openUsage, "Open Usage",
                 "Limits, tokens, and cost", "chart.bar.fill", ["limits", "tokens", "cost"]
             ),
             (
-                AppStorageKeys.Tabs.herdrEnabled, .openHerdr, "Open Herdr", "Live agent sessions",
+                AppStorageKeys.Tabs.herdrEnabled, .openHerdr, "Open Sessions",
+                "Live agent sessions",
                 "rectangle.split.3x1.fill", ["agents", "sessions"]
             ),
             (
-                AppStorageKeys.Tabs.quinjetEnabled, .openQuinjet, "Open Quinjet",
+                AppStorageKeys.Tabs.quinjetEnabled, .openQuinjet, "Open Review",
                 "Review workspaces", "arrow.triangle.branch", ["review", "pull request"]
             ),
             (
@@ -351,11 +384,7 @@ final class CommandBarModel {
                 "Apps, sleep, and controls", "cpu", ["apps", "sleep", "clean keyboard"]
             ),
             (
-                AppStorageKeys.Tabs.machinesEnabled, .openMachines, "Open Machines",
-                "SSH computers and files", "server.rack", ["ssh", "servers", "remote"]
-            ),
-            (
-                AppStorageKeys.Tabs.companionEnabled, .openCompanion, "Open Companion",
+                AppStorageKeys.Tabs.companionEnabled, .openCompanion, "Open Memory",
                 "Notes, voice, and memory", "brain.head.profile", ["memory", "notes", "voice"]
             ),
         ]
@@ -415,7 +444,7 @@ final class CommandBarModel {
         case .openQuinjet: MainApp.open(section: "quinjet")
         case .openMusic: MainApp.open(section: "music")
         case .openCalendar: MainApp.open(section: "calendar")
-        case .openSystem: MainApp.open(section: "system")
+        case .openSystem: MainApp.open(section: "runningApps")
         case .openMachines: MainApp.open(section: "machines")
         case .openCompanion: MainApp.open(section: "companion")
         case .openCommandBarSettings: openExtension("commandBar")
@@ -520,7 +549,8 @@ final class CommandBarModel {
     }
 
     private func enabled(_ key: String) -> Bool {
-        SharedDefaults.store.bool(forKey: key)
+        ExtensionRegistry.entries.first { $0.defaultsKey == key }?.isEnabled(
+            in: SharedDefaults.store) == true
     }
 
     nonisolated private static func rank(
