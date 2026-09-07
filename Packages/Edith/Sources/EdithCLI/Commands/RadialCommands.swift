@@ -19,8 +19,8 @@ struct RadialShowCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             guard
-                CLIEnvironment.sharedDefaults.bool(
-                    forKey: RadialLauncherPreferenceKeys.enabled)
+                ExtensionRegistry.entry("radialLauncher")?.isEnabled(
+                    in: CLIEnvironment.sharedDefaults) == true
             else {
                 throw CLIFailure.unavailable(
                     "the Radial Launcher extension is off",

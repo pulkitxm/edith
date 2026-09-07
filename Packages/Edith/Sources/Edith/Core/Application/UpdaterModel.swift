@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Observation
 import Sparkle
@@ -58,7 +59,7 @@ final class UpdaterModel: NSObject,
                 self?.checkHistory = checkHistory
             }
         }
-        guard startingUpdater else { return }
+        guard startingUpdater, !AppBuildIdentity.isDevelopment else { return }
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
         self.updaterController = updaterController

@@ -45,7 +45,7 @@ struct MachineToolsTab: View {
             }
             .pageContent(compact)
         }
-        .task {
+        .task(id: session.remotePlatform) {
             guard connectionsEnabled else { return }
             await session.refreshServices()
             await session.restoreMount()
@@ -111,7 +111,10 @@ struct MachineToolsTab: View {
                     }
                     Spacer(minLength: 0)
                     if session.isRemounting {
-                        ProgressView().controlSize(.small).scaleEffect(0.6)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 8, corner: 4)
+                        }
+                        .accessibilityLabel("Reconnecting disk")
                     }
                     Button("Reveal") {
                         RemoteFileOperationExecution.present(
@@ -139,7 +142,10 @@ struct MachineToolsTab: View {
                     .truncationMode(.head)
                     Spacer(minLength: 0)
                     if mounting {
-                        ProgressView().controlSize(.small).scaleEffect(0.6)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 8, corner: 4)
+                        }
+                        .accessibilityLabel("Mounting disk")
                     }
                     Button("Mount") { mountDisk() }
                         .disabled(
@@ -174,7 +180,8 @@ struct MachineToolsTab: View {
         message = nil
         Task {
             let result = await MachineMountOperationExecution.perform(
-                .mount, machine: session.machine)
+                .mount, machine: session.machine,
+                platform: session.remotePlatform ?? .linux)
             switch result {
             case let .success(outcome):
                 message = "Mounted at \(outcome.mount.mountPoint)."
@@ -331,7 +338,7 @@ struct MachineToolsTab: View {
 
     private var servicesCard: some View {
         SkinCard(
-            title: "Services", note: session.services.isEmpty ? "systemd not detected" : nil,
+            title: "Services", note: session.services.isEmpty ? "no services reported" : nil,
             dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -448,7 +455,9 @@ struct MachineToolsTab: View {
         runningSnippet = true
         snippetOutput = "$ \(snippet.command)\n"
         snippetTask = Task {
-            let result = await SavedSnippetOperationExecution.run(snippet) { command, timeout in
+            let result = await SavedSnippetOperationExecution.run(
+                snippet, platform: session.remotePlatform ?? .linux
+            ) { command, timeout in
                 await session.runCommand(command, timeout: timeout)
             }
             guard !Task.isCancelled, snippetRunID == runID, session.machine.id == machineID else {
@@ -480,9 +489,11 @@ struct MachineToolsTab: View {
         guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
             let machineID = session.machine.id
-            let stdin = SudoPassword.stdin(machineID: machineID)
+            let platform = session.remotePlatform ?? .linux
+            let stdin = platform == .windows ? nil : SudoPassword.stdin(machineID: machineID)
             let result = await MachineServiceOperationExecution.perform(
                 operation, unit: unit, sudoPassword: stdin,
+                platform: platform,
                 using: { command, stdin, timeout in
                     await session.runCommand(command, stdin: stdin, timeout: timeout)
                 })

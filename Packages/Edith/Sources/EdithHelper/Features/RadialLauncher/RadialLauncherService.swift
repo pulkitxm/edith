@@ -32,20 +32,13 @@ final class RadialLauncherService: ObservableObject {
     func syncSettings() {
         profile = RadialLauncherProfileStore.decode(
             SharedDefaults.store.string(forKey: RadialLauncherPreferenceKeys.profile))
-        guard SharedDefaults.store.bool(forKey: RadialLauncherPreferenceKeys.enabled) else {
+        guard HotKeyCatalog.binding(HotKeyCatalog.radialLauncher)?.isEnabled() == true else {
             shutdownRuntime()
             return
         }
-        let code =
-            SharedDefaults.store.object(
-                forKey: RadialLauncherPreferenceKeys.hotKeyCode) as? Int ?? kVK_Space
-        let modifiers =
-            SharedDefaults.store.object(
-                forKey: RadialLauncherPreferenceKeys.hotKeyMods) as? Int ?? (cmdKey | optionKey)
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.radialLauncher, keyCode: code, modifiers: modifiers,
-            action: { [weak self] in self?.show() },
-            release: { [weak self] in self?.shortcutReleased() })
+        HotKeyRegistrar.install(
+            HotKeyCatalog.radialLauncher, release: { [weak self] in self?.shortcutReleased() },
+            action: { [weak self] in self?.show() })
     }
 
     func shutdown() {
@@ -55,6 +48,9 @@ final class RadialLauncherService: ObservableObject {
     }
 
     func show() {
+        guard HotKeyCatalog.binding(HotKeyCatalog.radialLauncher)?.isEnabled() == true else {
+            return
+        }
         guard !items.isEmpty else {
             NSSound.beep()
             return
@@ -117,7 +113,7 @@ final class RadialLauncherService: ObservableObject {
         panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: RadialLauncherWheel(service: self))
+        panel.contentView = NSHostingView(rootView: RadialLauncherPresentation(service: self))
         self.panel = panel
         return panel
     }
@@ -286,7 +282,7 @@ final class RadialLauncherService: ObservableObject {
     }
 
     private func shutdownRuntime() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.radialLauncher)
+        HotKeyRegistrar.clear(HotKeyCatalog.radialLauncher)
         dismiss()
         panel?.contentView = nil
         panel = nil
@@ -303,8 +299,22 @@ private enum RadialLauncherLayout {
     static let deadZone: CGFloat = 46
 }
 
-private struct RadialLauncherWheel: View {
+private struct RadialLauncherPresentation: View {
     @ObservedObject var service: RadialLauncherService
+
+    var body: some View {
+        RadialLauncherWheel(
+            profile: service.profile, highlightedIndex: service.highlightedIndex,
+            select: service.select)
+    }
+}
+
+struct RadialLauncherWheel: View {
+    let profile: RadialLauncherProfile
+    let highlightedIndex: Int?
+    let select: (Int) -> Void
+
+    private var items: [RadialLauncherItem] { profile.items.filter(\.isConfigured) }
 
     var body: some View {
         ZStack {
@@ -313,14 +323,14 @@ private struct RadialLauncherWheel: View {
                 .frame(width: 350, height: 350)
                 .overlay(Circle().stroke(.white.opacity(0.16)))
                 .shadow(color: .black.opacity(0.3), radius: 28, y: 12)
-            ForEach(Array(service.items.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 itemButton(item, index: index)
-                    .offset(offset(index, count: service.items.count))
+                    .offset(offset(index, count: items.count))
             }
             VStack(spacing: 4) {
                 Image(systemName: "circle.hexagongrid.fill")
                     .font(.system(size: 25, weight: .semibold))
-                Text(service.profile.name)
+                Text(profile.name)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 Text("esc to close")
@@ -336,7 +346,7 @@ private struct RadialLauncherWheel: View {
 
     private func itemButton(_ item: RadialLauncherItem, index: Int) -> some View {
         Button {
-            service.select(index)
+            select(index)
         } label: {
             VStack(spacing: 6) {
                 itemIcon(item)
@@ -347,23 +357,23 @@ private struct RadialLauncherWheel: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
-            .foregroundStyle(service.highlightedIndex == index ? Color.white : Color.primary)
+            .foregroundStyle(highlightedIndex == index ? Color.white : Color.primary)
             .frame(width: 86, height: 86)
             .background(
-                service.highlightedIndex == index ? Color.accentColor : Color.clear,
+                highlightedIndex == index ? Color.accentColor : Color.clear,
                 in: Circle()
             )
             .background(.regularMaterial, in: Circle())
             .overlay(
-                Circle().stroke(.white.opacity(service.highlightedIndex == index ? 0.5 : 0.12))
+                Circle().stroke(.white.opacity(highlightedIndex == index ? 0.5 : 0.12))
             )
-            .scaleEffect(service.highlightedIndex == index ? 1.1 : 1)
+            .scaleEffect(highlightedIndex == index ? 1.1 : 1)
             .shadow(
-                color: service.highlightedIndex == index
+                color: highlightedIndex == index
                     ? Color.accentColor.opacity(0.45) : .black.opacity(0.18),
-                radius: service.highlightedIndex == index ? 15 : 7, y: 4
+                radius: highlightedIndex == index ? 15 : 7, y: 4
             )
-            .animation(.snappy(duration: 0.16), value: service.highlightedIndex)
+            .animation(.snappy(duration: 0.16), value: highlightedIndex)
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityLabel("\(index + 1), \(item.displayName)")

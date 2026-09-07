@@ -48,6 +48,58 @@ import Testing
             ])
     }
 
+    @Test(arguments: [
+        UsageRefreshFailure.scriptMissing,
+        .busy,
+        .launchFailed("permission denied"),
+        .timedOut,
+        .outputLimitExceeded,
+        .reported("history merge failed; previous data preserved"),
+        .exited(5, "jq: error: invalid history document"),
+        .exited(1, ""),
+    ])
+    func failuresPreserveDiagnosticsAcrossFoundationBridging(failure: UsageRefreshFailure) {
+        let error: any Error = failure
+        let bridged = error as NSError
+
+        #expect(error.localizedDescription == failure.description)
+        #expect(bridged.localizedDescription == failure.description)
+        #expect(bridged.localizedRecoverySuggestion == failure.hint)
+    }
+
+    @Test func pipelineFailureIncludesBoundedStderrAndPersistsItOnce() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sink = UsageRefreshSink(dataDir: dir, startedAt: Date())
+        sink.begin()
+        let collector = UsageRefreshCollector(sink: sink, onEvent: { _ in })
+        for index in 0..<8 {
+            collector.ingestStandardError(Data("diagnostic \(index)\n".utf8))
+        }
+        collector.ingestStandardError(Data("jq: invalid history document".utf8))
+        collector.ingestStandardOutput(Data("error\thistory merge failed".utf8))
+        collector.flush()
+        collector.flush()
+
+        let failure = try #require(collector.reportedFailure)
+        #expect(failure.hasPrefix("history merge failed: "))
+        #expect(failure.contains("jq: invalid history document"))
+        #expect(!failure.contains("diagnostic 0"))
+        #expect(collector.diagnosticTail.split(separator: ";").count == 6)
+        let log = try String(contentsOf: UsageRefreshRunner.logURL(dataDir: dir), encoding: .utf8)
+        #expect(log.components(separatedBy: "jq: invalid history document").count == 2)
+    }
+
+    @Test func reportedFailureDoesNotDuplicateIdenticalDiagnostic() {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let collector = UsageRefreshCollector(
+            sink: UsageRefreshSink(dataDir: dir, startedAt: Date()), onEvent: { _ in })
+        collector.ingestStandardError(Data("history merge failed\n".utf8))
+        collector.ingestStandardOutput(Data("error\thistory merge failed\n".utf8))
+        #expect(collector.reportedFailure == "history merge failed")
+    }
+
     @Test func parsesEveryEventTheScriptEmits() {
         #expect(
             UsageRefreshEvent.parse("phase\tcli\t28 days\t0.88")
@@ -125,13 +177,70 @@ import Testing
         #expect(UsageRefreshLock.acquire(at: url) != nil)
     }
 
-    @Test func publicationReplacesTheBaselineWithoutRestoringRemovedHistory() throws {
+    @Test(arguments: ["", "{\"daily\":", "[]"])
+    func stagingRejectsUndecodablePreviousUsage(previous: String) throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let bytes = Data(previous.utf8)
+        try bytes.write(to: live)
+
+        #expect(throws: UsageDataFileError.self) {
+            try UsageRefreshRunner.stageCurrentUsage(at: staged, dataDir: dir)
+        }
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        #expect(try Data(contentsOf: live) == bytes)
+    }
+
+    @Test(arguments: ["", "{\"daily\":", "[]"])
+    func publicationRejectsUndecodablePreviousUsage(previous: String) throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let bytes = Data(previous.utf8)
+        let fresh = try usage(period: "2026-08-24", source: "fresh")
+        try bytes.write(to: live)
+        try fresh.write(to: staged)
+
+        #expect(throws: UsageDataFileError.self) {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged, baseline: UsageRefreshBaseline(usage: bytes, machines: nil),
+                dataDir: dir)
+        }
+        #expect(try Data(contentsOf: live) == bytes)
+        #expect(try Data(contentsOf: staged) == fresh)
+    }
+
+    @Test func missingPreviousUsageAllowsFirstRefreshPublication() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let baseline = try UsageRefreshRunner.stageCurrentUsage(at: staged, dataDir: dir)
+        #expect(baseline.usage == nil)
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+
+        try UsageRefreshRunner.publish(stagedUsage: staged, baseline: baseline, dataDir: dir)
+
+        let published = try Data(contentsOf: live)
+        #expect(UsageHistory.isValidDocument(published))
+        let document = try #require(
+            JSONSerialization.jsonObject(with: published) as? [String: Any])
+        #expect(document["sources"] as? [String] == ["fresh"])
+        #expect((document["daily"] as? [[String: Any]])?.count == 1)
+    }
+
+    @Test func publicationRetainsUnavailableMachineHistory() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let live = dir.appendingPathComponent("usage.json")
         let staged = dir.appendingPathComponent("staged.json")
         let fresh = try usage(period: "2026-08-24", source: "fresh")
-        let baseline = try usage(period: "2026-08-20", source: "forgotten-machine")
+        let machine = "machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:cli"
+        let baseline = try usage(period: "2026-08-20", source: machine)
         try fresh.write(to: staged)
         try baseline.write(to: live)
 
@@ -139,10 +248,14 @@ import Testing
             stagedUsage: staged, baseline: UsageRefreshBaseline(usage: baseline, machines: nil),
             dataDir: dir)
 
-        #expect(try Data(contentsOf: live) == fresh)
+        let published = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: live)) as? [String: Any])
+        #expect(Set(published["sources"] as? [String] ?? []) == ["fresh", machine])
+        #expect((published["daily"] as? [[String: Any]])?.count == 2)
+        #expect((published["totals"] as? [String: Any])?["tokens"] as? Double == 2)
     }
 
-    @Test func publicationRejectsAConcurrentLiveReplacement() async throws {
+    @Test func publicationRebasesAConcurrentLiveReplacement() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let live = dir.appendingPathComponent("usage.json")
@@ -161,10 +274,37 @@ import Testing
         try UsageDataFiles.write(concurrent, to: live)
 
         held.release()
+        _ = try await publication.value
+        let published = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: live)) as? [String: Any])
+        #expect(Set(published["sources"] as? [String] ?? []) == ["old", "during", "fresh"])
+        #expect((published["daily"] as? [[String: Any]])?.count == 3)
+        #expect((published["totals"] as? [String: Any])?["tokens"] as? Double == 3)
+    }
+
+    @Test func publicationRejectsAnInvalidConcurrentLiveReplacement() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let baseline = try usage(period: "2026-08-20", source: "old")
+        let invalid = Data("{\"daily\":".utf8)
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+        try baseline.write(to: live)
+        let held = try UsageDataLock.acquire(dataDirectory: dir)
+        let publication = Task.detached {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged,
+                baseline: UsageRefreshBaseline(usage: baseline, machines: nil), dataDir: dir)
+        }
+        await Task.yield()
+        try invalid.write(to: live)
+
+        held.release()
         await #expect(throws: UsageDataFileError.self) {
             try await publication.value
         }
-        #expect(try Data(contentsOf: live) == concurrent)
+        #expect(try Data(contentsOf: live) == invalid)
     }
 
     @Test func publicationRejectsMachineHistoryChangedDuringRefresh() throws {

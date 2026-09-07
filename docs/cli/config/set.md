@@ -41,6 +41,7 @@ written:
 ```
 
 ```
+ed extensions enable keepAwake
 ed config set preventSleep true
 ed config set warnPercent 70
 ed config set limitsProvider codex

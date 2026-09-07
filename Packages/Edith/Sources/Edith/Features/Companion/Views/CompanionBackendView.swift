@@ -72,7 +72,7 @@ struct CompanionBackendScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if model.hosts.isEmpty {
                     if model.probing {
-                        ListRowsSkeleton(rows: 2, showsLeadingDot: true, dark: dark)
+                        CompanionHostRowsSkeleton()
                     } else {
                         Text("No machines found yet.")
                             .font(.system(size: UIScale.pt(12)))
@@ -190,20 +190,33 @@ struct CompanionBackendScreen: View {
                     }
                 }
                 HStack(spacing: UIScale.pt(8)) {
-                    CompanionButton(title: "Start", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Start", busy: model.busy == "Starting",
+                        busyTitle: "Starting…",
+                        disabled: model.busy != nil && model.busy != "Starting"
+                    ) {
                         Task { await model.start() }
                     }
-                    CompanionButton(title: "Stop", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Stop", busy: model.busy == "Stopping",
+                        busyTitle: "Stopping…",
+                        disabled: model.busy != nil && model.busy != "Stopping"
+                    ) {
                         Task { await model.stop() }
                     }
-                    CompanionButton(title: "Restart", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Restart", busy: model.busy == "Restarting",
+                        busyTitle: "Restarting…",
+                        disabled: model.busy != nil && model.busy != "Restarting"
+                    ) {
                         Task { await model.restart() }
                     }
-                    CompanionButton(title: "Logs", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Logs", busy: model.busy == "Reading logs",
+                        busyTitle: "Reading logs…",
+                        disabled: model.busy != nil && model.busy != "Reading logs"
+                    ) {
                         Task { await model.readLogs(nil) }
-                    }
-                    if let busy = model.busy {
-                        CompanionStatusLine(text: "\(busy)…", tone: .info)
                     }
                     Spacer(minLength: 0)
                 }
@@ -339,6 +352,35 @@ struct CompanionBackendScreen: View {
             CompanionFieldLabel(text: label)
             EdithNumberField(value: value, width: UIScale.pt(84))
         }
+    }
+}
+
+private struct CompanionHostRowsSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                ForEach(0..<2, id: \.self) { index in
+                    HStack(alignment: .top, spacing: UIScale.pt(9)) {
+                        SkeletonBlock(width: 13, height: 13, corner: 7)
+                            .padding(.top, UIScale.pt(3))
+                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                            HStack(spacing: UIScale.pt(7)) {
+                                SkeletonBlock(
+                                    width: index == 0 ? 92 : 124,
+                                    height: 10)
+                                SkeletonBlock(width: 52, height: 16, corner: 8)
+                            }
+                            SkeletonBlock(width: 232, height: 8)
+                            if index == 1 {
+                                SkeletonBlock(width: 184, height: 8)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Probing companion hosts")
     }
 }
 

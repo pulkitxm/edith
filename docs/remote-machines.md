@@ -1,7 +1,7 @@
 # Remote machines
 
 Machines turns computers reachable over SSH into one fleet inside Edith. The local
-Mac is always present. Add Linux, macOS or other SSH hosts to monitor them, browse
+Mac is always present. Add Linux, macOS or Windows SSH hosts to monitor them, browse
 their files, run terminals and containers, and collect agent usage without juggling
 separate connections.
 
@@ -56,12 +56,18 @@ Open Control Center from the machine toolbar to see fan RPM and thermal profile
 controls. Fan RPM is read-only. Thermal profile control appears only when a Linux
 host exposes both `/sys/firmware/acpi/platform_profile` and its choices file. Edith
 offers the profiles the kernel reports, rather than assuming names such as balanced
-or performance.
+or performance. On Windows, the same control lists and switches the power schemes
+reported by `powercfg`.
 
 A profile can remain active until changed or automatically revert after 15 minutes,
 30 minutes, 1 hour or 2 hours. Timed changes use `systemd-run` on the host. They need
-systemd and sudo access to the platform profile file. Applying another profile
+systemd and sudo access to the platform profile file. Windows runs its reversion in
+a hidden PowerShell process owned by the connected user. Applying another profile
 cancels the previous timer and starts a new one; an untimed choice cancels rollback.
+
+Windows terminals prefer Git Bash when it is installed, then PowerShell 7, then
+Windows PowerShell. Edith uses the same selection for ordinary machine terminals
+and terminals opened at a directory from Files or Herdr.
 
 Thermal profiles affect heat, fan noise, performance and battery life. Use a timed
 change for experiments or short builds, and verify that the host reports the
