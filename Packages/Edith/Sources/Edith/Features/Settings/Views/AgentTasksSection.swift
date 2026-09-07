@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentTasksSection: View {
     let tasks: [AgentTaskSnapshot]
+    var loading = false
     @State private var expandedID: UUID?
     @State private var detail: AgentTaskStatus?
     @State private var failure: String?
@@ -16,7 +17,9 @@ struct AgentTasksSection: View {
 
     var body: some View {
         Section {
-            if tasks.isEmpty {
+            if loading {
+                AgentRowsSkeleton(count: 3)
+            } else if tasks.isEmpty {
                 Text("Long-running actions appear here with their progress and result.")
                     .settingsCaption()
             }
@@ -83,6 +86,13 @@ struct AgentTasksSection: View {
                     Task { await cancel(task.id) }
                 }
                 .disabled(task.state == .cancelling)
+            }
+            if detail == nil && failure == nil {
+                SkeletonGroup {
+                    SkeletonBlock(height: 12)
+                    SkeletonBlock(height: 12)
+                    SkeletonBlock(width: 180, height: 12)
+                }
             }
             if let detail, detail.snapshot.id == task.id, !detail.output.isEmpty {
                 ScrollView {
