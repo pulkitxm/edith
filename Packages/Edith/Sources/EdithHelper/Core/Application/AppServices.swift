@@ -318,7 +318,8 @@ final class AppServices {
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
 
-        let windowSwitcherOn = ExtensionRegistry.entry("windowSwitcher")?.isEnabled(in: SharedDefaults.store) == true
+        let windowSwitcherOn =
+            ExtensionRegistry.entry("windowSwitcher")?.isEnabled(in: SharedDefaults.store) == true
         if windowSwitcherOn, windowSwitcher == nil { windowSwitcher = WindowSwitcherService() }
         if !windowSwitcherOn, let service = windowSwitcher {
             service.shutdown()

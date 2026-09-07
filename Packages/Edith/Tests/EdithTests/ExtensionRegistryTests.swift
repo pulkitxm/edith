@@ -48,7 +48,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "windowSwitcher", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "clipboard", "windowSwitcher", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -202,7 +203,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard", "windowSwitcher",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "windowSwitcher",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
