@@ -99,7 +99,8 @@ struct NetworkDiagnoseCommand: AsyncParsableCommand {
             if let count { configuration.pingCount = count }
             configuration = configuration.normalized
             let snapshot = try await NetworkDiagnosticsClient.diagnose(
-                configuration: configuration, keepHistory: !noHistory, saveBaseline: saveBaseline)
+                configuration: configuration, keepHistory: !noHistory, saveBaseline: saveBaseline,
+                client: CLIEnvironment.networkClient)
             if json {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

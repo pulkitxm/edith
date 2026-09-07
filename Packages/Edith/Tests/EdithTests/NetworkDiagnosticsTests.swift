@@ -3,6 +3,7 @@ import Testing
 
 @testable import EdithKit
 @testable import EdithAgent
+@testable import EdithCLI
 
 @Suite struct NetworkDiagnosticsTests {
     @Test func configurationClampsAndFiltersUnsafeValues() {
@@ -137,14 +138,30 @@ import Testing
         #expect(Date().timeIntervalSince(started) < 1)
     }
 
-    @Test func completedFailedDiagnosisReturnsSnapshotAndSuccess() async {
-        let result = await CLIProbe.run([
-            "network", "diagnose", "--service", "127.0.0.1:1", "--timeout", "0.2", "--retries",
-            "0", "--count", "1", "--json", "--no-history",
-        ])
-
-        #expect(result.code == 0)
-        #expect(result.object?["state"] as? String == "failed")
+    @Test func completedFailedDiagnosisReturnsSnapshotAndSuccess() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try AgentStore(url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            NetworkCommandResult(status: 1, output: "connection refused")
+        }
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        let runtime = AgentRuntime(build: "test", store: store)
+        await service.register(on: runtime)
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        await CLIProbe.inWorld { _ in
+            let original = CLIEnvironment.networkClient
+            CLIEnvironment.networkClient = listener.client()
+            defer { CLIEnvironment.networkClient = original }
+            let result = await CLIProbe.capture([
+                "network", "diagnose", "--service", "127.0.0.1:1", "--timeout", "0.2", "--retries",
+                "0", "--count", "1", "--json", "--no-history",
+            ])
+            #expect(result.code == 0)
+            #expect(result.object?["state"] as? String == "failed")
+        }
     }
 
     private func snapshot(check: NetworkDiagnosticCheck) -> NetworkDiagnosticSnapshot {

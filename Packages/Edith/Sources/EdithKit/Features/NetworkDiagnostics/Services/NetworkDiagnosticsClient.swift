@@ -18,11 +18,11 @@ public enum NetworkDiagnosticsClient {
 
     public static func diagnose(
         configuration: NetworkDiagnosticsConfiguration, keepHistory: Bool = true,
-        saveBaseline: Bool = false
+        saveBaseline: Bool = false, client: AgentClient = .shared
     ) async throws -> NetworkDiagnosticSnapshot {
         let request = NetworkDiagnosticRequest(
             configuration: configuration, keepHistory: keepHistory, saveBaseline: saveBaseline)
-        return try await AgentClient.shared.performAsync(
+        return try await client.performAsync(
             NetworkDiagnosticSnapshot.self, operation: NetworkDiagnosticOperation.diagnose.descriptor.id,
             payload: AgentPayload.encode(request), timeout: 180)
     }
