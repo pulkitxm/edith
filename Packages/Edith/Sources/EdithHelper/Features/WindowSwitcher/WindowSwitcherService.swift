@@ -289,8 +289,8 @@ final class WindowSwitcherService {
     }
 
     func shutdown() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.windowSwitcher)
-        GlobalHotKey.clear(id: GlobalHotKey.ID.windowCycle)
+        HotKeyRegistrar.clear(HotKeyCatalog.windowSwitcher)
+        HotKeyRegistrar.clear(HotKeyCatalog.windowCycle)
         controller.shutdown()
     }
 
@@ -327,22 +327,10 @@ final class WindowSwitcherService {
     }
 
     private func registerHotKeys() {
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.windowSwitcher,
-            keyCode: SharedDefaults.store.object(
-                forKey: AppStorageKeys.WindowSwitcher.showHotKeyCode) as? Int ?? kVK_Tab,
-            modifiers: SharedDefaults.store.object(
-                forKey: AppStorageKeys.WindowSwitcher.showHotKeyMods) as? Int ?? optionKey
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.windowSwitcher) { [weak self] in
             self?.controller.show()
         }
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.windowCycle,
-            keyCode: SharedDefaults.store.object(
-                forKey: AppStorageKeys.WindowSwitcher.cycleHotKeyCode) as? Int ?? kVK_ANSI_Grave,
-            modifiers: SharedDefaults.store.object(
-                forKey: AppStorageKeys.WindowSwitcher.cycleHotKeyMods) as? Int ?? optionKey
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.windowCycle) { [weak self] in
             _ = self?.controller.cycle()
         }
     }

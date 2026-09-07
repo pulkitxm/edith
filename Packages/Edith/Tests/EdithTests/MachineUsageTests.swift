@@ -204,7 +204,7 @@ import Testing
         #expect(MachineUsageStore.summaries(in: dir).map(\.name) == ["alpha", "zeta"])
     }
 
-    @Test func pruningDropsMachinesTheRegistryNoLongerHas() throws {
+    @Test func storedHistorySurvivesRegistryChangesUntilExplicitlyForgotten() throws {
         let dir = directory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let kept = Machine(id: UUID(), name: "kept", host: "a")
@@ -217,7 +217,9 @@ import Testing
             in: dir)
         try Data("not json".utf8).write(to: dir.appendingPathComponent("junk.json"))
 
-        MachineUsageStore.prune(keeping: [kept.id], in: dir)
+        #expect(MachineUsageStore.restamp([kept], in: dir).isEmpty)
+        #expect(Set(MachineUsageStore.storedIDs(in: dir)) == [kept.id, gone.id])
+        #expect(MachineUsageStore.forget(machineID: gone.id, in: dir))
         #expect(MachineUsageStore.storedIDs(in: dir) == [kept.id])
     }
 
@@ -357,6 +359,14 @@ import Testing
 }
 
 @Suite struct MachineUsageCollectorTests {
+    private func decodedPowerShell(_ command: String) -> String {
+        guard let encoded = command.split(separator: " ").last,
+            let data = Data(base64Encoded: String(encoded)),
+            let script = String(data: data, encoding: .utf16LittleEndian)
+        else { return "" }
+        return script
+    }
+
     @Test func theRemoteRunWritesUnderTheMachinesOwnHome() {
         #expect(
             MachineUsageCollector.runCommand(home: "/home/pi")
@@ -372,8 +382,29 @@ import Testing
     }
 
     @Test func theProbeAsksForTheHomeAndTheHostName() {
-        #expect(MachineUsageCollector.probeCommand.contains("$HOME"))
-        #expect(MachineUsageCollector.probeCommand.contains("uname -n"))
+        let command = MachineUsageCollector.probeCommand(platform: .linux)
+        #expect(command.contains("$HOME"))
+        #expect(command.contains("uname -n"))
+    }
+
+    @Test func windowsUsesItsNativeHomeAndGitBashCollector() {
+        let probe = decodedPowerShell(MachineUsageCollector.probeCommand(platform: .windows))
+        let command = decodedPowerShell(
+            MachineUsageCollector.runCommand(
+                home: "C:\\Users\\kpulk", platform: .windows))
+        #expect(probe.contains("USERPROFILE"))
+        #expect(command.contains("Git/bin/bash.exe"))
+        #expect(command.contains("bash -s --"))
+        #expect(
+            MachineUsageCollector.documentPath(
+                home: "C:\\Users\\kpulk", platform: .windows)
+                == "C:\\Users\\kpulk\\.cache\\edith\\usage\\usage.json")
+    }
+
+    @Test func windowsProbeRemovesCarriageReturnsFromItsPaths() {
+        let values = MachineUsageCollector.probeValues("C:\\Users\\kpulk\r\nPULKIT-TUF\r\n")
+        #expect(values.home == "C:\\Users\\kpulk")
+        #expect(values.host == "PULKIT-TUF")
     }
 
     @Test func theReportedFailureIsTheLastThingTheCollectorSaid() {

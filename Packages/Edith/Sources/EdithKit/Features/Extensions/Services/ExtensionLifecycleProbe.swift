@@ -71,17 +71,12 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             ).isEmpty
         },
         platformCapabilities: .macOS,
-        usesOptionalCapability: { capability in
-            switch capability {
-            case .applicationAudio:
-                SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
-            default:
-                true
-            }
-        },
+        usesOptionalCapability: { _ in true },
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
+            case "database":
+                await DatabaseBrokerExtensionReadinessAdapter().readiness()
             case "companion": nil
             case "herdr": await herdrReadiness()
             default: await ExtensionLiveAdapters.readiness(for: id)
@@ -181,6 +176,8 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     static let policies: [String: Policy] = [
+        "plugins": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "attention": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "usage": Policy(
@@ -189,10 +186,16 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "quinjet": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "seoAudit": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "keepAwake": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "machines": Policy(
-            requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
+        "appMaintenance": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "database": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "companion": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "systemStats": Policy(
@@ -211,11 +214,23 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "windowSwitcher": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "keystrokeHighlight": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "presenter": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "emoji": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "homebrew": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "cleaner": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "downloads": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "audioMixer": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

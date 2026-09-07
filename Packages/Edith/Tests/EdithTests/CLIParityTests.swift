@@ -47,8 +47,6 @@ enum UIParity {
         "ed color clear": "the colour picker no longer offers a clear-history action",
         "ed companion machines add":
             "the companion setup no longer adds deployment machines from the app",
-        "ed machines files open":
-            "the Files window is presentation state rather than a domain operation",
         "ed machines docker compose up":
             "the Docker window groups by project but never runs compose",
         "ed machines docker compose down":

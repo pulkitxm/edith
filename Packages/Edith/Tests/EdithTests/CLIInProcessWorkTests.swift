@@ -2,6 +2,7 @@ import EdithKit
 import Foundation
 import Testing
 
+@testable import EdithAgent
 @testable import EdithCLI
 
 @Suite struct CLIInProcessWorkTests {
@@ -35,13 +36,13 @@ import Testing
         }
     }
 
-    @Test func downloadCancelReportsWhenNoAppWasNotified() async throws {
+    @Test func downloadCancelReturnsAnEmptyMutationWhenNoDownloadIsActive() async throws {
         await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["download", "cancel", "--json"])
             #expect(result.code == 0)
-            #expect(result.object?["appRunning"] as? Bool == false)
-            #expect(result.object?["appNotified"] as? Bool == false)
+            #expect(result.object?["cancelled"] as? Int == 0)
+            #expect((result.object?["records"] as? [[String: Any]])?.isEmpty == true)
         }
     }
 
@@ -71,11 +72,11 @@ import Testing
 
             let retried = await CLIProbe.capture(["download", "retry", "1", "--json"])
             #expect(retried.object?["retried"] as? Int == 1)
-            #expect(world.postedNames().contains(IPC.Name.downloadQueueChanged.rawValue))
+            #expect(world.postedNames().isEmpty)
         }
     }
 
-    @Test func downloadCancelTargetsOneRecordAndPostsItsStableIdentity() async {
+    @Test func downloadCancelTargetsOneRecordAndReturnsItsStableIdentity() async {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             let first = await CLIProbe.capture([
@@ -92,15 +93,50 @@ import Testing
             let records = result.object?["records"] as? [[String: Any]]
             #expect(result.code == 0)
             #expect(result.object?["cancelled"] as? Int == 1)
-            #expect(result.object?["appNotified"] as? Bool == true)
             #expect(records?.first?["id"] as? String == id)
-            #expect(
-                world.postedPayloads(for: IPC.Name.requestDownloadCancel).last?["id"] as? String
-                    == id)
+            #expect(world.postedNames().isEmpty)
             let recordsAfter = DownloadQueue.load(from: CLIEnvironment.downloadQueueFile)
             #expect(recordsAfter.first { $0.id.uuidString == id }?.state == "interrupted")
             #expect(recordsAfter.first { $0.id.uuidString != id }?.state == "queued")
         }
+    }
+
+    @Test func downloadMutationAdapterKeepsIdentityAcrossTheActualDaemonTransport() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "download-cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let file = directory.appendingPathComponent("queue.json")
+        let worker = DownloadWorker(file: file, executable: { nil }, isEnabled: { false })
+        await AgentOperations.register(on: runtime, downloads: worker)
+        try await worker.start()
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let adapter = AgentDownloadClient(client: listener.client())
+        let added = try await adapter.mutateAsync(
+            .enqueue(
+                urls: [
+                    URL(string: "https://example.com/one")!,
+                    URL(string: "https://example.com/two")!,
+                ],
+                prefix: "", kind: .audio, outputDirectory: directory))
+        let id = try #require(added.added.first?.id)
+        #expect(added.changed == 2)
+        let cancelled = try await adapter.mutateAsync(
+            .cancel(id: id, includeQueued: true, reason: "Cancelled"))
+        #expect(cancelled.changed == 1)
+        #expect(cancelled.records.first { $0.id == id }?.state == "interrupted")
+        #expect(cancelled.records.first { $0.id != id }?.state == "queued")
+        let retried = try await adapter.mutateAsync(.retry(id: id, all: false))
+        #expect(retried.changed == 1)
+        #expect(retried.records.first { $0.id == id }?.state == "queued")
+        let removed = try await adapter.mutateAsync(.remove(id: id))
+        #expect(removed.changed == 1)
+        #expect(removed.records.count == 1)
+        #expect(removed.records.first?.id != id)
+        #expect(DownloadQueue.load(from: file).map(\.id) == removed.records.map(\.id))
+        await worker.stop()
     }
 
     @Test func filteredAndAddedRowsKeepTheirFullQueueIndexes() async throws {

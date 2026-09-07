@@ -32,7 +32,7 @@ optional hint.
     "bundled": true,
     "complete": true,
     "directory": "/Users/me/.local/bin",
-    "linked": ["ed", "edh", "edith"],
+    "linked": ["ed", "edith"],
     "missing": [],
     "onPath": true
   }
