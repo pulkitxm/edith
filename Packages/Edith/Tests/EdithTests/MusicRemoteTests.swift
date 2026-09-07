@@ -60,6 +60,25 @@ import Testing
         #expect(remote.progress == 0)
     }
 
+    @Test func emptyFolderOnlyBecomesEmptyAfterItsListingFinishes() async {
+        let root = URL(fileURLWithPath: "/tmp/music-loading-fixture")
+        let remote = MusicRemote(listFolder: { path in
+            MusicLibraryContentListing(
+                folder: MusicFolder(url: root.appendingPathComponent(path), relativePath: path),
+                folders: [], tracks: [])
+        })
+        remote.navigate(to: "Empty")
+        #expect(!remote.entriesLoaded)
+        #expect(await waitUntil { remote.entriesLoaded })
+        #expect(remote.folderTracks.isEmpty)
+        remote.navigate(to: "Another")
+        #expect(!remote.entriesLoaded)
+        #expect(await waitUntil { remote.entriesLoaded })
+        remote.stop()
+        #expect(!remote.entriesLoaded)
+        #expect(!remote.searchLoaded)
+    }
+
     @Test func newestSameFolderListingWinsAfterTheOlderTaskFinishes() async {
         let fixture = MusicRemoteLoadFixture()
         let remote = MusicRemote(listFolder: { fixture.list($0) })
