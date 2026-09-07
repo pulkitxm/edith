@@ -202,7 +202,7 @@ struct HomebrewMaintenanceView: View {
                     .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(.secondary)
                 Text("Homebrew is not installed")
-                    .font(DashSkin.serif(24))
+                    .font(DashSkin.heading(24))
                 Text(
                     "Edith never downloads or runs a package manager installer. Install Homebrew from its official site, then check again."
                 )

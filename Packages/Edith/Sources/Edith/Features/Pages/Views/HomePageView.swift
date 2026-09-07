@@ -418,7 +418,7 @@ private struct ClockTile: View {
                 }
             VStack(spacing: UIScale.pt(2)) {
                 Text(label)
-                    .font(DashSkin.serif(compact ? 13 : 15))
+                    .font(DashSkin.heading(compact ? 13 : 15))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -925,7 +925,7 @@ private struct UsageSummaryCard: View {
                 .font(DashSkin.mono(9.5)).tracking(UIScale.pt(1.3))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(DashFmt.usd(cost))
-                .font(DashSkin.serif(24))
+                .font(DashSkin.heading(24))
                 .foregroundStyle(DashSkin.ink(dark))
                 .presenterBlur(blurMoney)
             Text("\(DashFmt.tokens(tokens)) tokens")

@@ -150,28 +150,12 @@ struct DashboardView: View {
     }
 
     private var background: some View {
-        DashSkin.paper(dark)
-            .overlay(alignment: .topTrailing) {
-                RadialGradient(
-                    colors: [acc.opacity(0.08), .clear], center: .topTrailing,
-                    startRadius: 0, endRadius: 620
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .overlay(alignment: .bottomLeading) {
-                RadialGradient(
-                    colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
-                    startRadius: 0, endRadius: 520
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .ignoresSafeArea(edges: .vertical)
+        DashSkin.paper(dark).ignoresSafeArea(edges: .vertical)
     }
 
     private var masthead: some View {
         PageHeader {
-            (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark)))
+            Text("Agent usage")
         } trailing: {
             mastheadButtons
         } accessory: {
@@ -211,7 +195,7 @@ struct DashboardView: View {
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
             if model.loaded {
-                OrbitingShareButton(
+                MastheadButton(
                     action: {
                         withAnimation(
                             Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
@@ -219,7 +203,8 @@ struct DashboardView: View {
                             showShare = true
                         }
                     },
-                    dark: dark)
+                    systemImage: "square.and.arrow.up",
+                    helperText: "Share usage cards")
             }
         }
     }
@@ -257,68 +242,14 @@ struct DashboardView: View {
                         Image(systemName: systemImage)
                     }
                 }
-                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+                .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.edith(.toolbar))
+            .buttonStyle(.plain)
+            .edithGlass(interactive: true, in: RoundedRectangle(cornerRadius: 8))
             .disabled(isLoading)
             .help(helperText)
             .accessibilityLabel(helperText)
-        }
-    }
-
-    private struct OrbitingShareButton: View {
-        let action: () -> Void
-        let dark: Bool
-
-        @State private var hovering = false
-        @State private var rotation = 0.0
-
-        private var ink: Color { DashSkin.ink(dark) }
-
-        var body: some View {
-            Button(action: action) {
-                ZStack {
-                    Circle()
-                        .fill(ink.opacity(hovering ? 0.11 : 0.065))
-                    Circle()
-                        .strokeBorder(ink.opacity(0.14), lineWidth: 1)
-                    CircularShareText(color: ink.opacity(0.72))
-                        .rotationEffect(.degrees(rotation))
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        .foregroundStyle(ink)
-                }
-                .frame(width: UIScale.pt(50), height: UIScale.pt(50))
-                .scaleEffect(hovering ? 1.07 : 1)
-                .animation(.easeOut(duration: 0.18), value: hovering)
-            }
-            .buttonStyle(.edith(.borderless))
-            .onAppear {
-                rotation = 0
-                withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
-            .onHover { hovering = $0 }
-            .help("Share usage cards")
-            .accessibilityLabel("Share usage cards")
-        }
-    }
-
-    private struct CircularShareText: View {
-        let color: Color
-        private let letters = Array("SHARE • SHARE • ")
-
-        var body: some View {
-            ZStack {
-                ForEach(Array(letters.enumerated()), id: \.offset) { index, letter in
-                    Text(String(letter))
-                        .font(.system(size: UIScale.pt(5.4), weight: .bold, design: .rounded))
-                        .foregroundStyle(color)
-                        .offset(y: UIScale.pt(-19))
-                        .rotationEffect(.degrees(Double(index) * 360 / Double(letters.count)))
-                }
-            }
         }
     }
 
@@ -365,7 +296,7 @@ struct DashboardView: View {
                             .font(DashSkin.mono(10)).tracking(UIScale.pt(1.4))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Text(kpi.value)
-                            .font(DashSkin.serif(26))
+                            .font(DashSkin.heading(26))
                             .foregroundStyle(DashSkin.ink(dark))
                             .monospacedDigit()
                             .contentTransition(.numericText())

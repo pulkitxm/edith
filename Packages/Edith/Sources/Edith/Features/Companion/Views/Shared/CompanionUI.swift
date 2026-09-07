@@ -367,7 +367,7 @@ struct CompanionConfirmSheet: View {
                     .font(.system(size: UIScale.pt(20)))
                     .foregroundStyle(DashSkin.danger)
                 Text(title)
-                    .font(DashSkin.serif(20))
+                    .font(DashSkin.heading(20))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Text(message)

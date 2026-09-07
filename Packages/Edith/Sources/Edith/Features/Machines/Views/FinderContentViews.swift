@@ -344,6 +344,7 @@ struct QuickLookOverlay: View {
     let model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var dark: Bool { scheme == .dark }
 
@@ -353,15 +354,22 @@ struct QuickLookOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.28)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+            Button(action: close) {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close preview")
             panel
-                .scaleEffect(shown ? 1 : 0.88)
+                .scaleEffect(shown || reduceMotion ? 1 : 0.96)
                 .opacity(shown ? 1 : 0)
         }
+        .onExitCommand { close() }
         .onAppear {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { shown = true }
+            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                shown = true
+            }
             if let entry, entry.isDirectory { Task { await model.measure(entry) } }
         }
         .onChange(of: model.quickLookPath) { _, _ in
@@ -371,7 +379,9 @@ struct QuickLookOverlay: View {
     }
 
     private func close() {
-        withAnimation(.easeOut(duration: 0.16)) { shown = false }
+        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+            shown = false
+        }
         model.quickLookPath = nil
     }
 
@@ -382,12 +392,8 @@ struct QuickLookOverlay: View {
             body(for: entry)
         }
         .frame(width: UIScale.pt(680), height: UIScale.pt(500))
-        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(16))
-                .strokeBorder(DashSkin.line(dark).opacity(0.7))
-        }
-        .shadow(color: .black.opacity(0.45), radius: UIScale.pt(34), y: 14)
+        .edithSurface(cornerRadius: 16)
+        .shadow(color: .black.opacity(0.2), radius: UIScale.pt(24), y: 12)
     }
 
     private var header: some View {
@@ -445,7 +451,7 @@ struct QuickLookOverlay: View {
                 .frame(width: UIScale.pt(150), height: UIScale.pt(150))
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(entry.name)
-                    .font(DashSkin.serif(22))
+                    .font(DashSkin.heading(22))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(2)
                 Text(model.folderSummary(for: entry))
@@ -573,7 +579,7 @@ struct FinderInfoSheet: View {
                     .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(summary.name)
-                        .font(DashSkin.serif(17))
+                        .font(DashSkin.heading(17))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(2)
                     Text(summary.kind)
@@ -642,7 +648,7 @@ struct FinderConflictSheet: View {
                     ? "An item named \"\(conflict.names[0])\" already exists here."
                     : "\(conflict.names.count) items already exist here."
             )
-            .font(DashSkin.serif(17))
+            .font(DashSkin.heading(17))
             .foregroundStyle(DashSkin.ink(dark))
             if conflict.names.count > 1 {
                 ScrollView {

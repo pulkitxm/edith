@@ -434,7 +434,7 @@ struct DockerContainerDetail: View {
                 .help("Back to the list")
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(live.displayName)
-                        .font(DashSkin.serif(20))
+                        .font(DashSkin.heading(20))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text("\(live.image)  ·  \(live.shortID)")
                         .font(DashSkin.mono(10.5))
@@ -746,7 +746,7 @@ struct DockerContainerDetail: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 Text(value)
-                    .font(DashSkin.serif(18))
+                    .font(DashSkin.heading(18))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Sparkline(

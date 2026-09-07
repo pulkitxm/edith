@@ -63,7 +63,7 @@ struct PluginsPage: View {
             await model.discoverAgents()
         }
         .sheet(item: $previewSkill) { skill in
-            SkillPreviewSheet(skill: skill)
+            SkillPreviewSheet(skill: skill).transientPresentation()
         }
         .sheet(item: $model.presentedSkill) { skill in
             SkillInstallSheet(model: model, skill: skill)

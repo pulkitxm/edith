@@ -171,7 +171,7 @@ struct MachinesPage: View {
                 .font(.system(size: UIScale.pt(38)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text("No machines yet")
-                .font(DashSkin.serif(20))
+                .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(
                 "Add a computer you can reach over SSH to watch its resources, browse its files, and run its containers."

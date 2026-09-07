@@ -181,7 +181,7 @@ struct CompanionDeskScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if let question = model.question {
                     Text(question.question)
-                        .font(DashSkin.serif(16, weight: .medium))
+                        .font(DashSkin.heading(16, weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text(question.motive)
                         .font(.system(size: UIScale.pt(11.5)))
@@ -322,7 +322,7 @@ struct CompanionDeskScreen: View {
     private func overrideSheet(_ discrepancy: CompanionDiscrepancy) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text("What actually happened?")
-                .font(DashSkin.serif(16, weight: .semibold))
+                .font(DashSkin.heading(16, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(discrepancy.claim)
                 .font(.system(size: UIScale.pt(12)))

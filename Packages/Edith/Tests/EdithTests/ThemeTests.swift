@@ -36,8 +36,8 @@ import Testing
     }
 
     @Test func appSurfacesStayConstantWhileAccentsChange() {
-        #expect(rgb(DashSkin.paper(true)) == [26, 23, 20])
-        #expect(rgb(DashSkin.paper2(true)) == [34, 29, 25])
+        #expect(rgb(DashSkin.paper(true)) == [24, 24, 26])
+        #expect(rgb(DashSkin.paper2(true)) == [36, 36, 38])
         #expect(DashSkin.accent(true, theme: .blue) != DashSkin.accent(true, theme: .orange))
     }
 

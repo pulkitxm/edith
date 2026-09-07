@@ -341,7 +341,7 @@ struct CompanionLibraryScreen: View {
     private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text(value)
-                .font(DashSkin.serif(17, weight: .semibold))
+                .font(DashSkin.heading(17, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Text(label.uppercased())
@@ -362,7 +362,7 @@ struct CompanionLibraryScreen: View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text("\(pending)")
-                .font(DashSkin.serif(17, weight: .semibold))
+                .font(DashSkin.heading(17, weight: .semibold))
                 .foregroundStyle(pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("PENDING")

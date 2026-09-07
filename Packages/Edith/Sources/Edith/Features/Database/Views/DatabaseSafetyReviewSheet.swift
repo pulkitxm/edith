@@ -137,7 +137,7 @@ struct DatabaseSafetyReviewSheet: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(presentation.actionTitle)
-                    .font(DashSkin.serif(24, weight: .bold))
+                    .font(DashSkin.heading(24, weight: .bold))
                     .foregroundStyle(palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
@@ -707,7 +707,7 @@ private struct DatabaseSafetyCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Label(title, systemImage: symbol)
-                .font(DashSkin.serif(17))
+                .font(DashSkin.heading(17))
                 .foregroundStyle(palette.ink)
                 .accessibilityAddTraits(.isHeader)
             content()
