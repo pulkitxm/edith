@@ -27,7 +27,9 @@ struct UsageMachineRows: View {
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
                     if collecting != nil {
-                        ProgressView().controlSize(.small)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 16, height: 16, corner: 8)
+                        }
                         Button("Stop") { stop() }
                     } else {
                         Button("Collect now") { collect() }

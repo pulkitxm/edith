@@ -90,8 +90,10 @@ enum PowerBridge {
                 return
             }
             let runner = try await MachineResolver.runner(name)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let outcome = await MachinePowerOperationExecution.perform(
                 operation, machine: target,
+                platform: platform,
                 sudoPassword: { _ in request?.stdin },
                 run: { command, stdin, timeout in
                     do {
@@ -233,7 +235,7 @@ struct MachinesWakeCommand: AsyncParsableCommand {
 struct MachinesServicesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "services",
-        abstract: "systemd units on a machine.",
+        abstract: "System services on a machine.",
         subcommands: [
             MachinesServicesListCommand.self, MachinesServiceStartCommand.self,
             MachinesServiceStopCommand.self, MachinesServiceRestartCommand.self,
@@ -249,9 +251,13 @@ enum ServiceBridge {
     {
         try await execute {
             let runner = try await MachineResolver.runner(name)
-            let stdin = SudoPassword.stdin(machineID: runner.machine.id)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let stdin =
+                platform == .windows
+                ? nil : SudoPassword.stdin(machineID: runner.machine.id)
             let result = await MachineServiceOperationExecution.perform(
                 operation, unit: unit, sudoPassword: stdin,
+                platform: platform,
                 using: { command, stdin, timeout in
                     do {
                         let output = try await runner.run(
@@ -389,8 +395,9 @@ struct MachinesKillCommand: AsyncParsableCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let result = await MachineProcessOperationExecution.perform(
-                pid: pid, signal: named,
+                pid: pid, signal: named, platform: platform,
                 using: { command, timeout in
                     do {
                         let output = try await runner.run(command, timeout: timeout)
@@ -497,7 +504,9 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
                 var text = ""
                 do {
                     try await runner.connect()
-                    let result = try await runner.run(plan.command, timeout: 120)
+                    let platform = await runner.ssh.remotePlatform ?? .linux
+                    let result = try await runner.run(
+                        plan.remoteCommand(for: platform), timeout: 120)
                     status = result.status
                     text = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 } catch {

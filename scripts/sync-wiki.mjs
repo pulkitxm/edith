@@ -17,6 +17,7 @@ const repoRoot = path.resolve(
 
 const SECTIONS = [
   { dir: "docs/cli", prefix: "CLI", label: "CLI reference" },
+  { dir: "docs/database", prefix: "Database", label: "Database" },
   { dir: "docs", prefix: "Guides", label: "Guides", filesOnly: true },
 ];
 
@@ -46,6 +47,7 @@ const READING_ORDER = [
   "machines-workspace",
   "homebrew",
   "homebrew-internals",
+  "database",
 ];
 
 const SMALL = new Set([
@@ -298,7 +300,7 @@ function buildHome() {
   const lines = [
     "Documentation for **Edith**: the command line reference and the longer guides, auto-generated from the `docs/` directory of the main repository. Edit the docs in the repo, these pages are overwritten on every push to `main`.",
     "",
-    "`ed`, `edh` and `edith` are the same binary. The built-in manual is `ed guide`.",
+    "`ed` and `edith` are the same binary. The built-in manual is `ed guide`.",
     "",
   ];
   for (const section of SECTIONS) {

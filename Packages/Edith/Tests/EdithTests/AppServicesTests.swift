@@ -36,18 +36,75 @@ private actor AppServicesCallProbe {
         #expect(services.usage == nil)
         #expect(services.music == nil)
         #expect(services.system == nil)
-        #expect(services.machines == nil)
+        #expect(services.keepAwake == nil)
         #expect(services.calendar == nil)
         #expect(services.notchShelf == nil)
         #expect(services.colorPicker == nil)
         #expect(services.clipboard == nil)
         #expect(services.finderTools == nil)
+        #expect(services.emoji == nil)
         #expect(services.focusDim == nil)
         #expect(services.presenter == nil)
         #expect(services.micMute == nil)
         #expect(services.lidAwake == nil)
         #expect(services.systemStats == nil)
         #expect(services.attention == nil)
+    }
+
+    @Test func keepAwakeSurvivesDisablingSystemAndReleasesItsOwnAssertion() async throws {
+        let defaults = SharedDefaults.store
+        let keys = [
+            AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.keepAwakeEnabled,
+            AppStorageKeys.General.preventSleep, AppStorageKeys.Tabs.calendarEnabled,
+        ]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        let services = AppServices()
+        defer {
+            services.keepAwake?.shutdown()
+            services.system?.shutdown()
+            for (key, value) in zip(keys, saved) {
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+        }
+        defaults.set(false, forKey: AppStorageKeys.Tabs.calendarEnabled)
+        defaults.set(true, forKey: AppStorageKeys.Tabs.systemEnabled)
+        defaults.set(true, forKey: AppStorageKeys.General.keepAwakeEnabled)
+        defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        services.reconcileSystemServices()
+        let store = try #require(services.keepAwake)
+        #expect(store.preventingSleep)
+
+        defaults.set(false, forKey: AppStorageKeys.Tabs.systemEnabled)
+        services.reconcileSystemServices()
+        #expect(services.system == nil)
+        #expect(services.keepAwake === store)
+        #expect(store.preventingSleep)
+        #expect(defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+
+        defaults.set(false, forKey: AppStorageKeys.General.preventSleep)
+        store.syncPreventSleep()
+        #expect(!store.preventingSleep)
+        defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        store.syncPreventSleep()
+        #expect(store.preventingSleep)
+
+        defaults.set(false, forKey: AppStorageKeys.General.keepAwakeEnabled)
+        services.reconcileSystemServices()
+        #expect(services.keepAwake == nil)
+        #expect(!store.preventingSleep)
+        #expect(!defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+
+        defaults.set(true, forKey: AppStorageKeys.General.keepAwakeEnabled)
+        defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        services.reconcileSystemServices()
+        let restarted = try #require(services.keepAwake)
+        #expect(restarted.preventingSleep)
+        await services.prepareForTermination()
+        #expect(!restarted.preventingSleep)
     }
 
     @Test func extensionDefaultsToDisabledWhenUnset() {

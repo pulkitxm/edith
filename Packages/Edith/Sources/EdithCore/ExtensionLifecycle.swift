@@ -185,7 +185,19 @@ public struct ExtensionLifecycleDescriptor: Identifiable, Codable, Equatable, Se
 }
 
 public enum ExtensionLifecycleCatalog {
-    public static let descriptors: [ExtensionLifecycleDescriptor] = [
+    public static let descriptors: [ExtensionLifecycleDescriptor] = {
+        let order = Dictionary(
+            uniqueKeysWithValues: ExtensionRegistry.entries.enumerated().map {
+                ($0.element.id, $0.offset)
+            })
+        return
+            allDescriptors
+            .compactMap { descriptor in order[descriptor.id].map { (descriptor, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+    }()
+
+    public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
             "attention", "Understand app and browser activity, then protect focused work.",
             workflows: [
@@ -273,6 +285,32 @@ public enum ExtensionLifecycleCatalog {
                     "ed herdr ls --json")
             ]),
         descriptor(
+            "plugins",
+            "Install bundled Edith skills for selected agents on this Mac.",
+            workflows: [
+                instruction(
+                    "browse", "Browse skills",
+                    "Explore the skills included with Edith.")
+            ],
+            prerequisites: [
+                instruction(
+                    "node", "Install Node.js",
+                    "Node.js 22.20 or later supplies npx for the skills installer.")
+            ],
+            examples: ["ed extensions enable plugins"],
+            docs: [documentation("guide", "Plugins guide", "docs/plugins.md")],
+            recovery: [
+                instruction(
+                    "node", "Check the installer", "Verify Node.js and npx are available.",
+                    "ed extensions doctor plugins --json")
+            ],
+            verification: [
+                instruction(
+                    "installed", "Inspect installed skills",
+                    "Confirm the plugin installer is ready.",
+                    "ed extensions verify plugins --json")
+            ]),
+        descriptor(
             "quinjet",
             "Review pull requests and follow live workspace changes without leaving Edith.",
             workflows: [
@@ -309,13 +347,48 @@ public enum ExtensionLifecycleCatalog {
                     "ed tools ls --json")
             ]),
         descriptor(
+            "seoAudit",
+            "Find every page in a sitemap and keep comparable search audits on this Mac.",
+            workflows: [
+                instruction(
+                    "discover", "Discover pages",
+                    "Read robots.txt and nested sitemap indexes before choosing pages."),
+                instruction(
+                    "audit", "Audit selected pages",
+                    "Inspect metadata and optionally run Lighthouse for each selected URL."),
+            ],
+            prerequisites: [
+                instruction(
+                    "site", "Choose a site", "Use a reachable HTTP or HTTPS URL.",
+                    "ed extensions enable seoAudit")
+            ],
+            examples: [
+                "ed extensions enable seoAudit", "ed extensions doctor seoAudit --json",
+            ],
+            docs: [
+                documentation(
+                    "extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Site Audit readiness",
+                    "Verify the extension is enabled and supported on this Mac.",
+                    "ed extensions doctor seoAudit --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify Site Audit",
+                    "Confirm the local audit workspace is ready.",
+                    "ed extensions doctor seoAudit --json")
+            ]),
+        descriptor(
             "system",
-            "Control running apps, sleep prevention and keyboard cleaning from one panel.",
+            "Control running apps and keyboard cleaning from one panel.",
             workflows: [
                 instruction(
                     "apps", "Manage applications",
                     "Inspect and quit applications with open windows."),
-                instruction("sleep", "Prevent sleep", "Keep long-running work active when needed."),
+                instruction("clean", "Clean the keyboard", "Temporarily lock keys for cleaning."),
             ],
             prerequisites: [
                 instruction(
@@ -334,6 +407,76 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "apps", "List applications", "Confirm running applications are visible.",
                     "ed apps ls --json")
+            ]),
+        descriptor(
+            "appMaintenance",
+            "Manage packages, installed applications, updates, and exact support files.",
+            workflows: [
+                instruction(
+                    "packages", "Manage Homebrew packages",
+                    "Browse, search, install, upgrade, and confirm package removal."),
+                instruction(
+                    "updates", "Review updates",
+                    "Compare managed, store, and app-native updates before running a batch."),
+                instruction(
+                    "inventory", "Review installed apps",
+                    "See versions and Homebrew update status for regular Applications folders."),
+                instruction(
+                    "remove", "Remove an app safely",
+                    "Choose exact bundle-identifier matches and move only the selection to Trash."),
+                instruction(
+                    "install", "Install a disk image safely",
+                    "Verify the single app in a disk image, stage it, install it and clean up recoverably."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Use regular Applications folders",
+                    "User-owned apps need no extra access. macOS may refuse protected or administrator-owned items."
+                ),
+                instruction(
+                    "tool", "Install Homebrew for packages",
+                    "Install Homebrew from brew.sh to use package discovery and management.",
+                    "ed brew status --json"
+                ),
+            ],
+            examples: [
+                "ed extensions enable appMaintenance", "ed maintenance inventory --json",
+                "ed maintenance updates --json", "ed maintenance update",
+                "ed brew ls --outdated --json", "ed brew search ripgrep --kind formula --json",
+                "ed maintenance scan /Applications/Example.app --json",
+                "ed maintenance install ~/Downloads/Example.dmg --json",
+            ],
+            docs: [
+                documentation("guide", "App Maintenance guide", "docs/app-maintenance.md"),
+                documentation("packages", "Homebrew package guide", "docs/homebrew-manager.md"),
+            ],
+            recovery: [
+                instruction(
+                    "status", "Check Homebrew", "Confirm Homebrew is installed and callable.",
+                    "ed brew status --json"),
+                instruction(
+                    "rescan", "Rescan a changed app",
+                    "Build a fresh removal plan when an app changes after review.",
+                    "ed maintenance scan /Applications/Example.app"),
+                instruction(
+                    "image", "Retry a changed disk image",
+                    "Choose the download again, review it and explicitly retry installation.",
+                    "ed maintenance install ~/Downloads/Example.dmg --yes"),
+            ],
+            verification: [
+                instruction(
+                    "packages", "Read installed packages",
+                    "Confirm Homebrew metadata is available without changing packages.",
+                    "ed brew ls --json"),
+                instruction(
+                    "inventory", "List installed apps",
+                    "Confirm the Applications folders and optional Homebrew status are readable.",
+                    "ed maintenance inventory --json"),
+                instruction(
+                    "installer", "Review an installer",
+                    "Mount, verify, preview and eject a single-app disk image without installing it.",
+                    "ed maintenance install ~/Downloads/Example.dmg --json"),
             ]),
         descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
@@ -360,6 +503,39 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "list", "List machines", "Confirm the expected hosts are configured.",
                     "ed machines ls --json")
+            ]),
+        descriptor(
+            "database", "Explore and operate databases through a guarded local workbench.",
+            workflows: [
+                instruction(
+                    "explore", "Explore database structure",
+                    "Browse catalogs, schemas, collections, indexes and rows."),
+                instruction(
+                    "mutate", "Review changes before execution",
+                    "Preview impact and confirm destructive operations exactly."),
+            ],
+            prerequisites: [
+                instruction(
+                    "connection", "Add a database connection",
+                    "Open Database and configure a reachable database endpoint.")
+            ],
+            examples: [
+                "ed extensions enable database", "ed extensions doctor database --json",
+            ],
+            docs: [
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Database readiness",
+                    "Inspect extension availability and local broker readiness.",
+                    "ed extensions doctor database --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify the Database extension",
+                    "Confirm the extension is enabled and available.",
+                    "ed extensions status database --json")
             ]),
         descriptor(
             "companion", "Search and reason over your notes, activity and voice memories.",
@@ -389,6 +565,31 @@ public enum ExtensionLifecycleCatalog {
                     "status", "Check the backend",
                     "Confirm the configured Companion endpoint is healthy.",
                     "ed companion status --json")
+            ]),
+        descriptor(
+            "keepAwake",
+            "Keep the Mac and display awake independently of running apps and keyboard cleaning.",
+            workflows: [
+                instruction(
+                    "sleep", "Keep awake", "Prevent idle sleep until you turn it off.",
+                    "ed config set preventSleep true")
+            ],
+            prerequisites: [
+                instruction(
+                    "enable", "Enable Keep Awake", "Enable the independent Keep Awake ability.",
+                    "ed extensions enable keepAwake")
+            ],
+            examples: ["ed extensions enable keepAwake", "ed config set preventSleep true"],
+            docs: [documentation("guide", "Keep Awake settings", "docs/cli/config/README.md")],
+            recovery: [
+                instruction(
+                    "off", "Restore idle sleep", "Turn Keep Awake off.",
+                    "ed config set preventSleep false")
+            ],
+            verification: [
+                instruction(
+                    "status", "Check Keep Awake", "Read the current Keep Awake setting.",
+                    "ed config get preventSleep --json")
             ]),
         descriptor(
             "systemStats", "Keep current CPU and memory pressure visible in the menu bar.",
@@ -627,6 +828,49 @@ public enum ExtensionLifecycleCatalog {
                     "ed extensions status finderTools --json")
             ]),
         descriptor(
+            "keystrokeHighlight",
+            "Show keyboard input as clear keycaps that disappear automatically.",
+            workflows: [
+                instruction(
+                    "demo", "Record a demo",
+                    "Show letters, symbols, navigation keys and shortcuts as they are pressed."),
+                instruction(
+                    "position", "Place the overlay",
+                    "Keep the keycaps at the top or bottom of the screen under the pointer."),
+                instruction(
+                    "toggle", "Pause between takes",
+                    "Start or pause the overlay without removing the extension.",
+                    "ed config set keystrokeHighlightActive false"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Input Monitoring",
+                    "Allow Edith to observe physical key presses outside its own windows.",
+                    "ed permissions request inputMonitoring")
+            ],
+            examples: [
+                "ed extensions enable keystrokeHighlight",
+                "ed config set keystrokeHighlightActive true",
+                "ed config set keystrokeHighlightDuration 1.5",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Keystroke Highlight guide",
+                    "docs/cli/keystroke-highlight/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check the overlay",
+                    "Inspect the helper, permission and runtime state.",
+                    "ed extensions doctor keystrokeHighlight --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify monitoring",
+                    "Confirm the event monitor and overlay are ready.",
+                    "ed extensions verify keystrokeHighlight --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(
@@ -691,6 +935,42 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group presenter --json")
             ]),
         descriptor(
+            "emoji", "Insert any emoji macOS can draw into whatever you are typing in.",
+            workflows: [
+                instruction(
+                    "pick", "Open the picker",
+                    "Open the emoji panel from its shortcut or the command line.",
+                    "ed emoji pick"),
+                instruction(
+                    "search", "Find an emoji",
+                    "Type a name, keyword or shortcode to filter every category."),
+                instruction(
+                    "tone", "Choose a skin tone",
+                    "Set the default tone applied to emoji that support one.",
+                    "ed emoji tone medium"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "macOS requires Accessibility to type into the frontmost app.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable emoji", "ed emoji ls --json",
+                "ed emoji insert 1F600",
+            ],
+            docs: [documentation("guide", "Emoji Picker guide", "docs/cli/emoji/README.md")],
+            recovery: [
+                instruction(
+                    "permission", "Refresh typing access",
+                    "Refresh the mirrored Accessibility grant.", "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "catalog", "Read the emoji catalog",
+                    "Confirm the bundled catalog loads on this Mac.", "ed emoji ls --json")
+            ]),
+        descriptor(
             "colorPicker", "Sample an exact screen color and copy it in the format you need.",
             workflows: [
                 instruction(
@@ -722,9 +1002,117 @@ public enum ExtensionLifecycleCatalog {
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
+        descriptor(
+            "homebrew", "Install, upgrade and remove Homebrew packages from one client.",
+            workflows: [
+                instruction(
+                    "browse", "Browse packages",
+                    "Search installed and discoverable formulae, casks and taps."),
+                instruction(
+                    "change", "Install or upgrade",
+                    "Queue package changes and watch each one run to completion."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install Homebrew", "Put brew on Edith's PATH.",
+                    "ed tools install homebrew")
+            ],
+            examples: ["ed extensions enable homebrew", "ed brew ls --json"],
+            docs: [documentation("guide", "Homebrew guide", "docs/cli/brew/README.md")],
+            recovery: [
+                instruction(
+                    "install", "Repair Homebrew", "Reinstall the managed Homebrew client.",
+                    "ed tools install homebrew")
+            ],
+            verification: [
+                instruction(
+                    "list", "List packages", "Confirm brew reports installed packages.",
+                    "ed brew ls --json")
+            ]),
+        descriptor(
+            "cleaner", "Find reclaimable space on your drives and remove it after review.",
+            workflows: [
+                instruction(
+                    "scan", "Scan for space", "Measure caches, logs and other reclaimable files."),
+                instruction(
+                    "clean", "Reclaim space", "Review each category before anything is removed."),
+            ],
+            prerequisites: [
+                instruction(
+                    "drives", "Choose drives", "Pick the volumes the cleaner is allowed to scan.",
+                    "ed cleaner drives --json")
+            ],
+            examples: ["ed extensions enable cleaner", "ed cleaner scan --json"],
+            docs: [documentation("guide", "Cleaner guide", "docs/cli/cleaner/README.md")],
+            recovery: [
+                instruction(
+                    "drives", "Reset the drive selection",
+                    "List the volumes the cleaner can reach.", "ed cleaner drives --json")
+            ],
+            verification: [
+                instruction(
+                    "scan", "Read a scan", "Confirm a scan reports category sizes.",
+                    "ed cleaner scan --json")
+            ]),
+        descriptor(
+            "downloads", "Queue audio and video downloads that outlive the window.",
+            workflows: [
+                instruction("add", "Queue a download", "Add one or more URLs to the queue."),
+                instruction(
+                    "watch", "Follow progress", "Track each item until the file lands on disk."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install yt-dlp", "Put yt-dlp on Edith's PATH.",
+                    "ed tools install yt-dlp"),
+                instruction(
+                    "folder", "Choose a music folder",
+                    "Downloads are written into the folder Music uses."),
+            ],
+            examples: ["ed extensions enable downloads", "ed download ls --json"],
+            docs: [documentation("guide", "Download guide", "docs/cli/download/README.md")],
+            recovery: [
+                instruction(
+                    "tool", "Repair yt-dlp", "Reinstall the managed downloader.",
+                    "ed download tool --json"),
+                instruction(
+                    "retry", "Retry a failed item", "Requeue an item that stopped early.",
+                    "ed download retry"),
+            ],
+            verification: [
+                instruction(
+                    "queue", "Read the queue", "Confirm the queue is readable.",
+                    "ed download ls --json")
+            ]),
+        descriptor(
+            "audioMixer", "Set the volume of each app from the notch shelf.",
+            workflows: [
+                instruction("mix", "Balance apps", "Change one app's volume without the others."),
+                instruction("mute", "Silence an app", "Mute a single app while the rest play on."),
+            ],
+            prerequisites: [
+                instruction(
+                    "shelf", "Enable Notch Shelf", "The mixer lives in the shelf's audio tab.",
+                    "ed extensions enable notchShelf"),
+                instruction(
+                    "permission", "Allow application audio",
+                    "macOS asks for audio capture the first time the mixer runs."),
+            ],
+            examples: ["ed extensions enable audioMixer", "ed shelf ls --json"],
+            docs: [documentation("guide", "Notch Shelf guide", "docs/cli/shelf/README.md")],
+            recovery: [
+                instruction(
+                    "shelf", "Check the shelf", "Confirm the shelf is enabled and reachable.",
+                    "ed extensions doctor notchShelf --json")
+            ],
+            verification: [
+                instruction(
+                    "shelf", "Read the shelf", "Confirm the shelf responds.", "ed shelf ls --json")
+            ]),
     ]
 
-    public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })
+    public static let byID = Dictionary(
+        uniqueKeysWithValues: allDescriptors.map { ($0.id, $0) })
 
     public static func descriptor(for extensionID: String) -> ExtensionLifecycleDescriptor? {
         byID[extensionID]

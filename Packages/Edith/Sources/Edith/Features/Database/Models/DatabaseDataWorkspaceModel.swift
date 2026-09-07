@@ -1,0 +1,1984 @@
+import AppKit
+import EdithDatabase
+import Foundation
+import Observation
+
+enum DatabaseDataWorkspaceState: Equatable, Sendable {
+    case idle
+    case loading
+    case loaded
+    case failed(String)
+}
+
+enum DatabaseRowEditorMode: Equatable, Sendable {
+    case insert
+    case update(recordIndex: Int)
+}
+
+enum DatabaseDataResultMode: Equatable, Sendable {
+    case browse
+    case query
+}
+
+enum DatabaseSearchQueryOperation: String, CaseIterable, Sendable {
+    case search
+    case aggregate
+
+    var title: String {
+        switch self {
+        case .search: "Search"
+        case .aggregate: "Aggregate"
+        }
+    }
+}
+
+enum DatabaseWorkspaceFilterConjunction: String, CaseIterable, Sendable {
+    case and
+    case or
+
+    var title: String {
+        rawValue.uppercased()
+    }
+}
+
+struct DatabaseWorkspaceFilterClause: Identifiable, Equatable, Sendable {
+    let id: UUID
+    var field: String
+    var operation: DatabaseFilterOperator
+    var valueText: String
+    var isEnabled: Bool
+    var caseSensitivity: DatabaseFilterCaseSensitivity
+
+    init(
+        id: UUID = UUID(),
+        field: String,
+        operation: DatabaseFilterOperator,
+        valueText: String = "",
+        isEnabled: Bool = true,
+        caseSensitivity: DatabaseFilterCaseSensitivity = .productDefault
+    ) {
+        self.id = id
+        self.field = field
+        self.operation = operation
+        self.valueText = valueText
+        self.isEnabled = isEnabled
+        self.caseSensitivity = caseSensitivity
+    }
+
+    var summary: String {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fieldTitle = normalizedField.isEmpty ? "Field" : normalizedField
+        if Self.usesNoValue(operation) {
+            return "\(fieldTitle) \(Self.title(operation))"
+        }
+        let normalizedValue = valueText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedValue.isEmpty
+            ? "\(fieldTitle) \(Self.title(operation))"
+            : "\(fieldTitle) \(Self.title(operation)) \(normalizedValue)"
+    }
+
+    private static func usesNoValue(_ operation: DatabaseFilterOperator) -> Bool {
+        switch operation {
+        case .isNull, .isNotNull, .isMissing, .isNotMissing:
+            true
+        default:
+            false
+        }
+    }
+
+    private static func title(_ operation: DatabaseFilterOperator) -> String {
+        switch operation {
+        case .equal: "is"
+        case .notEqual: "is not"
+        case .greaterThan: "is greater than"
+        case .greaterThanOrEqual: "is at least"
+        case .lessThan: "is less than"
+        case .lessThanOrEqual: "is at most"
+        case .contains: "contains"
+        case .startsWith: "starts with"
+        case .endsWith: "ends with"
+        case .in: "is in"
+        case .notIn: "is not in"
+        case .between: "is between"
+        case .isNull: "is null"
+        case .isNotNull: "is not null"
+        case .isMissing: "is missing"
+        case .isNotMissing: "is present"
+        case .regularExpression: "matches"
+        case .fullText: "matches text"
+        }
+    }
+}
+
+struct DatabaseWorkspaceSort: Identifiable, Equatable, Sendable {
+    var id: String { field }
+    let field: String
+    let direction: DatabaseSortDirection
+
+    var summary: String {
+        "\(field) \(direction == .ascending ? "ascending" : "descending")"
+    }
+}
+
+struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
+    let id: String
+    let typeName: String
+    let originalValue: DatabaseValue?
+    let isIdentity: Bool
+    let isEditable: Bool
+    var text: String
+    var isIncluded: Bool
+}
+
+@MainActor
+@Observable
+final class DatabaseDataWorkspaceModel {
+    var targetText = ""
+    var queryText = ""
+    var searchQueryOperation = DatabaseSearchQueryOperation.search
+    private(set) var filterClauses: [DatabaseWorkspaceFilterClause] = []
+    private(set) var filterConjunction = DatabaseWorkspaceFilterConjunction.and
+    private(set) var orderedSorts: [DatabaseWorkspaceSort] = []
+    private(set) var state = DatabaseDataWorkspaceState.idle
+    private(set) var resultMode = DatabaseDataResultMode.browse
+    private(set) var records: [DatabaseRecord] = []
+    private(set) var fields: [DatabaseFieldDescriptor] = []
+    private(set) var selectedRecordIndex: Int?
+    private(set) var nextContinuation: DatabaseContinuationToken?
+    private(set) var metadata: DatabasePageMetadata?
+    private(set) var pageSize = 100
+    private(set) var editorMode: DatabaseRowEditorMode?
+    private(set) var editorFields: [DatabaseRowFieldDraft] = []
+    private(set) var documentText = ""
+    private(set) var editorError: String?
+    private(set) var selectedObject: DatabaseObjectIdentifier?
+
+    private let sender: any DatabaseBrokerCommandSending
+    private let announcement: @MainActor (String) -> Void
+    private var activeTask: Task<Void, Never>?
+    private var generation = UUID()
+    private var activeConnection: DatabaseConnectionSummary?
+    private var activeConnectionID: DatabaseConnectionID?
+    private var activeProduct: DatabaseProduct?
+    private var lastQueryRequest: DatabaseQueryRequest?
+
+    init(
+        sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
+        announcement: @escaping @MainActor (String) -> Void = DatabaseDataWorkspaceModel.announce
+    ) {
+        self.sender = sender
+        self.announcement = announcement
+    }
+
+    var selectedRecord: DatabaseRecord? {
+        guard let selectedRecordIndex, records.indices.contains(selectedRecordIndex) else {
+            return nil
+        }
+        return records[selectedRecordIndex]
+    }
+
+    var hasNextPage: Bool {
+        nextContinuation != nil
+    }
+
+    static let pageSizeOptions = [25, 50, 100]
+
+    var isLoading: Bool {
+        state == .loading
+    }
+
+    var canSubmitEditor: Bool {
+        guard let editorMode else { return false }
+        if let activeConnection, Self.usesDocumentEditor(activeConnection) {
+            guard let objectTarget = try? target(activeConnection) else { return false }
+            return
+                (try? documentEditorMutationRequest(
+                    product: activeConnection.product,
+                    mode: editorMode,
+                    objectTarget: objectTarget)) != nil
+        }
+        if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
+            var includesKey = false
+            var includesValue = false
+            for field in editorFields where field.isIncluded {
+                includesKey = includesKey || field.id == "key"
+                includesValue = includesValue || field.id == "value"
+            }
+            return includesKey && includesValue
+        }
+        return editorFields.contains(where: { $0.isEditable && $0.isIncluded })
+    }
+
+    var activeFilterCount: Int {
+        filterClauses.count(where: \.isEnabled)
+    }
+
+    var hasActiveFilters: Bool {
+        activeFilterCount > 0
+    }
+
+    var activeFilterSummary: String {
+        let enabled = filterClauses.filter(\.isEnabled)
+        guard !enabled.isEmpty else { return "No active filters" }
+        if enabled.count == 1 {
+            return enabled[0].summary
+        }
+        return "\(enabled.count) filters, match \(filterConjunction == .and ? "all" : "any")"
+    }
+
+    var activeSortCount: Int {
+        orderedSorts.count
+    }
+
+    var hasActiveSorts: Bool {
+        activeSortCount > 0
+    }
+
+    var activeSortSummary: String {
+        guard !orderedSorts.isEmpty else { return "No active sorts" }
+        return orderedSorts.map(\.summary).joined(separator: ", ")
+    }
+
+    func defaultFilterOperator(
+        for field: DatabaseFieldDescriptor
+    ) -> DatabaseFilterOperator {
+        DatabaseFilterOperatorPolicy.defaultOperator(product: activeProduct, field: field)
+    }
+
+    @discardableResult
+    func addFilterClause(
+        field: String,
+        operation: DatabaseFilterOperator? = nil,
+        valueText: String = "",
+        isEnabled: Bool = true,
+        caseSensitivity: DatabaseFilterCaseSensitivity? = nil
+    ) -> UUID {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        let descriptor = fields.first {
+            $0.path.segments.joined(separator: ".") == normalizedField
+        }
+        let resolvedOperation =
+            operation
+            ?? descriptor.map(defaultFilterOperator(for:))
+            ?? .contains
+        let resolvedSensitivity =
+            caseSensitivity
+            ?? DatabaseFilterOperatorPolicy.defaultCaseSensitivity(
+                product: activeProduct,
+                field: descriptor,
+                operation: resolvedOperation)
+        let clause = DatabaseWorkspaceFilterClause(
+            field: normalizedField,
+            operation: resolvedOperation,
+            valueText: valueText,
+            isEnabled: isEnabled,
+            caseSensitivity: resolvedSensitivity)
+        filterClauses.append(clause)
+        resetBrowsePaging()
+        return clause.id
+    }
+
+    func updateFilterClause(_ clause: DatabaseWorkspaceFilterClause) {
+        guard let index = filterClauses.firstIndex(where: { $0.id == clause.id }) else { return }
+        filterClauses[index] = clause
+        resetBrowsePaging()
+    }
+
+    func removeFilterClause(id: UUID) {
+        guard let index = filterClauses.firstIndex(where: { $0.id == id }) else { return }
+        filterClauses.remove(at: index)
+        resetBrowsePaging()
+    }
+
+    func setFilterConjunction(_ conjunction: DatabaseWorkspaceFilterConjunction) {
+        guard
+            conjunction == .and
+                || DatabaseFilterOperatorPolicy.supportsDisjunction(product: activeProduct)
+        else { return }
+        guard filterConjunction != conjunction else { return }
+        filterConjunction = conjunction
+        resetBrowsePaging()
+    }
+
+    func clearFilters() {
+        filterClauses = []
+        filterConjunction = .and
+        resetBrowsePaging()
+    }
+
+    func cycleSort(field: String, additive: Bool) {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedField.isEmpty else { return }
+        if let index = orderedSorts.firstIndex(where: { $0.field == normalizedField }) {
+            if orderedSorts[index].direction == .ascending {
+                setSort(field: normalizedField, direction: .descending, additive: additive)
+            } else if additive {
+                removeSort(field: normalizedField)
+            } else {
+                clearSorts()
+            }
+        } else {
+            setSort(field: normalizedField, direction: .ascending, additive: additive)
+        }
+    }
+
+    func setSort(
+        field: String,
+        direction: DatabaseSortDirection,
+        additive: Bool
+    ) {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedField.isEmpty else { return }
+        let sort = DatabaseWorkspaceSort(field: normalizedField, direction: direction)
+        var sorts = orderedSorts
+        if additive {
+            if let index = sorts.firstIndex(where: { $0.field == normalizedField }) {
+                sorts[index] = sort
+            } else {
+                sorts.append(sort)
+            }
+        } else {
+            sorts = [sort]
+        }
+        guard sorts != orderedSorts else { return }
+        orderedSorts = sorts
+        resetBrowsePaging()
+    }
+
+    func removeSort(field: String) {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard orderedSorts.contains(where: { $0.field == normalizedField }) else { return }
+        orderedSorts.removeAll { $0.field == normalizedField }
+        resetBrowsePaging()
+    }
+
+    func moveSort(field: String, to destination: Int) {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let source = orderedSorts.firstIndex(where: { $0.field == normalizedField }) else {
+            return
+        }
+        let boundedDestination = min(max(destination, 0), orderedSorts.count - 1)
+        guard source != boundedDestination else { return }
+        let sort = orderedSorts.remove(at: source)
+        orderedSorts.insert(sort, at: boundedDestination)
+        resetBrowsePaging()
+    }
+
+    func clearSorts() {
+        guard !orderedSorts.isEmpty else { return }
+        orderedSorts = []
+        resetBrowsePaging()
+    }
+
+    func prepare(for connection: DatabaseConnectionSummary?) {
+        guard activeConnectionID != connection?.id else { return }
+        cancel()
+        activeConnection = connection
+        activeConnectionID = connection?.id
+        activeProduct = connection?.product
+        records = []
+        fields = []
+        selectedRecordIndex = nil
+        nextContinuation = nil
+        metadata = nil
+        editorMode = nil
+        editorFields = []
+        documentText = ""
+        editorError = nil
+        selectedObject = nil
+        filterClauses = []
+        filterConjunction = .and
+        orderedSorts = []
+        queryText = ""
+        searchQueryOperation = .search
+        resultMode = .browse
+        lastQueryRequest = nil
+        state = .idle
+        targetText = connection.map(Self.initialTargetText) ?? ""
+    }
+
+    func browse(_ connection: DatabaseConnectionSummary, appending: Bool = false) {
+        guard !isLoading else { return }
+        let continuation = appending ? nextContinuation : nil
+        if appending, continuation == nil { return }
+        if !appending { lastQueryRequest = nil }
+        let request: DatabaseBrowseRequest
+        do {
+            request = try browseRequest(connection, continuation: continuation)
+        } catch {
+            state = .failed(Self.message(for: error))
+            announcement(Self.message(for: error))
+            return
+        }
+
+        activeTask?.cancel()
+        let requestGeneration = UUID()
+        generation = requestGeneration
+        resultMode = .browse
+        state = .loading
+        let sender = sender
+        activeTask = Task { [weak self] in
+            do {
+                let response = try await sender.send(.browse(request))
+                try Task.checkCancellation()
+                self?.finish(
+                    response,
+                    connectionID: connection.id,
+                    generation: requestGeneration,
+                    appending: appending,
+                    mode: .browse)
+            } catch is CancellationError {
+            } catch {
+                self?.fail(error, generation: requestGeneration)
+            }
+        }
+    }
+
+    func refresh(_ connection: DatabaseConnectionSummary) {
+        browse(connection)
+    }
+
+    func open(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        prepareTarget(object, connection: connection, mode: .browse)
+        browse(connection)
+    }
+
+    func prepareQuery(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        prepareTarget(object, connection: connection, mode: .query)
+    }
+
+    func runQuery(_ connection: DatabaseConnectionSummary, appending: Bool = false) {
+        guard !isLoading else { return }
+        let continuation = appending ? nextContinuation : nil
+        if appending, continuation == nil { return }
+        let request: DatabaseQueryRequest
+        do {
+            if appending {
+                guard let continuation, let lastQueryRequest else { return }
+                request = Self.replay(lastQueryRequest, continuation: continuation)
+            } else {
+                request = try queryRequest(connection, continuation: nil)
+                lastQueryRequest = request
+            }
+        } catch {
+            resultMode = .query
+            state = .failed(Self.message(for: error))
+            announcement(Self.message(for: error))
+            return
+        }
+
+        activeTask?.cancel()
+        let requestGeneration = UUID()
+        generation = requestGeneration
+        resultMode = .query
+        state = .loading
+        let sender = sender
+        activeTask = Task { [weak self] in
+            do {
+                let response = try await sender.send(.query(request))
+                try Task.checkCancellation()
+                self?.finish(
+                    response,
+                    connectionID: connection.id,
+                    generation: requestGeneration,
+                    appending: appending,
+                    mode: .query)
+            } catch is CancellationError {
+            } catch {
+                self?.fail(error, generation: requestGeneration)
+            }
+        }
+    }
+
+    func setSearchQueryOperation(
+        _ operation: DatabaseSearchQueryOperation,
+        connection: DatabaseConnectionSummary
+    ) {
+        guard searchQueryOperation != operation else { return }
+        let replacesTemplate =
+            selectedObject.map {
+                queryText
+                    == Self.defaultQueryText(
+                        connection.product,
+                        object: $0,
+                        operation: searchQueryOperation)
+            } == true
+        searchQueryOperation = operation
+        if replacesTemplate, let selectedObject {
+            queryText = Self.defaultQueryText(
+                connection.product,
+                object: selectedObject,
+                operation: operation)
+        }
+    }
+
+    func loadNextPage(_ connection: DatabaseConnectionSummary) {
+        if resultMode == .query {
+            runQuery(connection, appending: true)
+        } else {
+            browse(connection, appending: true)
+        }
+    }
+
+    func setPageSize(_ size: Int) {
+        guard Self.pageSizeOptions.contains(size), pageSize != size else { return }
+        pageSize = size
+        resetBrowsePaging()
+    }
+
+    func selectRecord(at index: Int) {
+        guard records.indices.contains(index) else { return }
+        cancelEditor()
+        selectedRecordIndex = selectedRecordIndex == index ? nil : index
+        announcement(selectedRecordIndex == nil ? "Closed row details." : "Opened row details.")
+    }
+
+    func cancel() {
+        activeTask?.cancel()
+        activeTask = nil
+        generation = UUID()
+        if state == .loading {
+            state = records.isEmpty ? .idle : .loaded
+        }
+    }
+
+    func beginInsert(_ connection: DatabaseConnectionSummary) {
+        guard supportsDataMutation(.insert, connection: connection),
+            Self.usesDocumentEditor(connection) || !fields.isEmpty
+        else {
+            editorError = mutationUnavailableMessage(connection, capability: .insert)
+            return
+        }
+        activeConnection = connection
+        activeConnectionID = connection.id
+        activeProduct = connection.product
+        editorMode = .insert
+        editorError = nil
+        if connection.product == .mongoDB {
+            editorFields = []
+            documentText = "{\n  \n}"
+        } else if connection.product == .elasticsearch || connection.product == .openSearch {
+            editorFields = []
+            documentText = "{\n  \"_id\": \"\"\n}"
+        } else if connection.product == .redis || connection.product == .valkey {
+            editorFields = [
+                DatabaseRowFieldDraft(
+                    id: "key", typeName: "string", originalValue: nil,
+                    isIdentity: true, isEditable: true, text: "", isIncluded: false),
+                DatabaseRowFieldDraft(
+                    id: "value", typeName: "string", originalValue: nil,
+                    isIdentity: false, isEditable: true, text: "", isIncluded: false),
+                DatabaseRowFieldDraft(
+                    id: "ttlMilliseconds", typeName: "int64", originalValue: nil,
+                    isIdentity: false, isEditable: true, text: "", isIncluded: false),
+            ]
+        } else {
+            editorFields = fields.map { field in
+                let name = field.path.segments.joined(separator: ".")
+                return DatabaseRowFieldDraft(
+                    id: name,
+                    typeName: field.typeName,
+                    originalValue: nil,
+                    isIdentity: false,
+                    isEditable: Self.supportsEditing(typeName: field.typeName),
+                    text: "",
+                    isIncluded: false)
+            }
+        }
+    }
+
+    func beginEditingSelectedRow(_ connection: DatabaseConnectionSummary) {
+        guard canMutateSelectedRecord(.update, connection: connection),
+            let selectedRecordIndex,
+            records.indices.contains(selectedRecordIndex),
+            let identity = records[selectedRecordIndex].identity
+        else {
+            editorError = mutationUnavailableMessage(connection, capability: .update)
+            return
+        }
+        activeConnection = connection
+        activeConnectionID = connection.id
+        activeProduct = connection.product
+        let record = records[selectedRecordIndex]
+        var identityNames = Set<String>()
+        for component in identity.components {
+            identityNames.insert(component.name)
+        }
+        editorMode = .update(recordIndex: selectedRecordIndex)
+        editorError = nil
+        if Self.usesDocumentEditor(connection) {
+            editorFields = []
+            do {
+                if connection.product == .elasticsearch || connection.product == .openSearch {
+                    guard let source = searchEditorSource(record) else {
+                        throw DatabaseJSONDocumentCodecError.unsupportedValue
+                    }
+                    documentText = source
+                } else {
+                    documentText = try DatabaseJSONDocumentCodec.encodeObject(
+                        record.fields.filter { $0.name != "_id" })
+                }
+            } catch {
+                documentText = ""
+                editorError = "This document contains values that cannot be edited as JSON."
+            }
+            return
+        }
+        let redisString = Self.isRedisString(record)
+        editorFields = record.fields.map { field in
+            let typeName =
+                fields.first {
+                    $0.path.segments.joined(separator: ".") == field.name
+                }?.typeName ?? "text"
+            let isIdentity = identityNames.contains(field.name)
+            let isEditable: Bool
+            if connection.product == .redis || connection.product == .valkey {
+                isEditable =
+                    field.name == "ttlMilliseconds"
+                    || (field.name == "value" && redisString && Self.supportsEditing(field.value))
+            } else {
+                isEditable = !isIdentity && Self.supportsEditing(field.value)
+            }
+            return DatabaseRowFieldDraft(
+                id: field.name,
+                typeName: typeName,
+                originalValue: field.value,
+                isIdentity: isIdentity,
+                isEditable: isEditable,
+                text: Self.text(for: field.value),
+                isIncluded: false)
+        }
+    }
+
+    func canMutateSelectedRecord(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard let selectedRecordIndex else { return false }
+        return canMutateRecord(
+            at: selectedRecordIndex,
+            capability: capability,
+            connection: connection)
+    }
+
+    func canEdit(
+        recordAt index: Int,
+        field name: String,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard canMutateRecord(at: index, capability: .update, connection: connection),
+            let identity = records[index].identity,
+            !identity.components.contains(where: { $0.name == name }),
+            let field = fields.first(where: {
+                $0.path.segments.joined(separator: ".") == name
+            })
+        else { return false }
+        if Self.usesDocumentEditor(connection) { return false }
+        if connection.product == .redis || connection.product == .valkey {
+            if name == "ttlMilliseconds" { return true }
+            return name == "value" && Self.isRedisString(records[index])
+                && Self.supportsEditing(value(named: name, in: records[index]))
+        }
+        return Self.supportsEditing(typeName: field.typeName)
+    }
+
+    func inlineMutationRequest(
+        recordAt index: Int,
+        field name: String,
+        text: String,
+        connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        guard canEdit(recordAt: index, field: name, connection: connection) else { return nil }
+        selectedRecordIndex = index
+        beginEditingSelectedRow(connection)
+        updateEditorField(name, text: text)
+        return editorMutationRequest(connection)
+    }
+
+    func updateEditorField(_ id: String, text: String) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].text = text
+        if let originalValue = editorFields[index].originalValue {
+            editorFields[index].isIncluded = text != Self.text(for: originalValue)
+        } else {
+            editorFields[index].isIncluded = true
+        }
+        editorError = nil
+    }
+
+    func updateDocumentText(_ text: String) {
+        documentText = text
+        editorError = nil
+    }
+
+    func setEditorFieldIncluded(_ id: String, included: Bool) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].isIncluded = included
+        editorError = nil
+    }
+
+    func setEditorFieldNull(_ id: String) {
+        updateEditorField(id, text: "NULL")
+    }
+
+    func resetEditorField(_ id: String) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].text = editorFields[index].originalValue.map(Self.text(for:)) ?? ""
+        editorFields[index].isIncluded = false
+        editorError = nil
+    }
+
+    func cancelEditor() {
+        editorMode = nil
+        editorFields = []
+        documentText = ""
+        editorError = nil
+    }
+
+    func editorMutationRequest(
+        _ connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        do {
+            guard let editorMode else { throw DatabaseRowEditorError.notEditing }
+            let capability: DatabaseCapabilityID
+            switch editorMode {
+            case .insert: capability = .insert
+            case .update: capability = .update
+            }
+            guard supportsDataMutation(capability, connection: connection) else {
+                editorError = mutationUnavailableMessage(connection, capability: capability)
+                return nil
+            }
+            let objectTarget = try target(connection)
+            if Self.usesDocumentEditor(connection) {
+                let request = try documentEditorMutationRequest(
+                    product: connection.product,
+                    mode: editorMode,
+                    objectTarget: objectTarget)
+                editorError = nil
+                return request
+            }
+            var values: [DatabaseObjectField] = []
+            for field in editorFields where field.isIncluded {
+                values.append(
+                    DatabaseObjectField(
+                        name: field.id,
+                        value: try Self.value(from: field)))
+            }
+            switch (connection.product, editorMode) {
+            case (.postgresql, .insert):
+                let request = try DatabaseRowMutationRequests.postgreSQLInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
+            case (.postgresql, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.postgreSQLUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    values: values)
+                editorError = nil
+                return request
+            case (.mysql, .insert), (.mariaDB, .insert):
+                let request = try DatabaseRowMutationRequests.mySQLInsert(
+                    target: objectTarget,
+                    product: connection.product,
+                    values: values)
+                editorError = nil
+                return request
+            case (.mysql, .update(let recordIndex)), (.mariaDB, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.mySQLUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    product: connection.product,
+                    values: values)
+                editorError = nil
+                return request
+            case (.sqlite, .insert):
+                let request = try DatabaseRowMutationRequests.sqliteInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
+            case (.sqlite, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.sqliteUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    values: values)
+                editorError = nil
+                return request
+            case (.clickHouse, .insert):
+                let request = try DatabaseRowMutationRequests.clickHouseInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
+            case (.redis, .insert), (.valkey, .insert):
+                guard let key = values.first(where: { $0.name == "key" })?.value,
+                    let value = values.first(where: { $0.name == "value" })?.value
+                else {
+                    throw DatabaseKeyspaceMutationRequestError.invalidValue
+                }
+                let request = try DatabaseKeyspaceMutationRequests.insertString(
+                    target: objectTarget,
+                    product: connection.product,
+                    key: key,
+                    value: value,
+                    ttlMilliseconds: try Self.redisTTL(values))
+                editorError = nil
+                return request
+            case (.redis, .update(let recordIndex)), (.valkey, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let target = DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity)
+                let value = values.first(where: { $0.name == "value" })?.value
+                let ttlField = values.first(where: { $0.name == "ttlMilliseconds" })
+                if let value {
+                    let ttl = try ttlField.map { try Self.redisTTL([$0]) }
+                    let request = try DatabaseKeyspaceMutationRequests.updateString(
+                        target: target,
+                        product: connection.product,
+                        value: value,
+                        ttlMilliseconds: ttl ?? nil,
+                        preservesExistingTTL: ttlField == nil)
+                    editorError = nil
+                    return request
+                }
+                guard ttlField != nil else {
+                    throw DatabaseRowMutationRequestError.missingValues
+                }
+                let request = try DatabaseKeyspaceMutationRequests.updateTTL(
+                    target: target,
+                    product: connection.product,
+                    ttlMilliseconds: try Self.redisTTL(values))
+                editorError = nil
+                return request
+            default:
+                throw DatabaseRowEditorError.unsupportedDatabase
+            }
+        } catch {
+            editorError = Self.editorMessage(error)
+            return nil
+        }
+    }
+
+    private func documentEditorMutationRequest(
+        product: DatabaseProduct,
+        mode: DatabaseRowEditorMode,
+        objectTarget: DatabaseTargetIdentifier
+    ) throws -> DatabaseDestructiveRequest {
+        switch (product, mode) {
+        case (.mongoDB, .insert):
+            return try DatabaseDocumentMutationRequests.mongoDBInsert(
+                target: objectTarget,
+                document: .object(try DatabaseJSONDocumentCodec.decodeObject(documentText)))
+        case (.mongoDB, .update(let recordIndex)):
+            guard records.indices.contains(recordIndex),
+                let identity = records[recordIndex].identity
+            else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                target: DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity),
+                values: try DatabaseJSONDocumentCodec.decodeObject(documentText))
+        case (.elasticsearch, .insert), (.openSearch, .insert):
+            let input = try Self.searchDocumentInput(documentText)
+            guard let object = objectTarget.object, let index = object.path.first else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: object,
+                record: DatabaseRecordIdentity(
+                    kind: .searchDocument,
+                    components: [
+                        DatabaseIdentityComponent(name: "_index", value: .string(index)),
+                        DatabaseIdentityComponent(name: "_id", value: .string(input.identifier)),
+                    ]))
+            if product == .elasticsearch {
+                return try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                    target: target,
+                    document: .object(input.fields))
+            }
+            return try DatabaseDocumentMutationRequests.openSearchCreate(
+                target: target,
+                document: .object(input.fields))
+        case (.elasticsearch, .update(let recordIndex)),
+            (.openSearch, .update(let recordIndex)):
+            guard records.indices.contains(recordIndex),
+                let identity = records[recordIndex].identity
+            else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            let input = try Self.searchDocumentInput(documentText)
+            guard
+                identity.components.contains(where: {
+                    $0.name == "_id" && $0.value == .string(input.identifier)
+                })
+            else {
+                throw DatabaseRowEditorError.changedIdentity
+            }
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: objectTarget.object,
+                record: identity)
+            if product == .elasticsearch {
+                return try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                    target: target,
+                    document: .object(input.fields))
+            }
+            return try DatabaseDocumentMutationRequests.openSearchReplace(
+                target: target,
+                document: .object(input.fields))
+        default:
+            throw DatabaseRowEditorError.unsupportedDatabase
+        }
+    }
+
+    func deleteMutationRequest(
+        _ connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        do {
+            guard canMutateSelectedRecord(.delete, connection: connection),
+                let identity = selectedRecord?.identity
+            else {
+                editorError = mutationUnavailableMessage(connection, capability: .delete)
+                return nil
+            }
+            let objectTarget = try target(connection)
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: objectTarget.object,
+                record: identity)
+            let request = try Self.executableDeleteMutationRequest(
+                product: connection.product,
+                target: target)
+            editorError = nil
+            return request
+        } catch {
+            editorError = Self.editorMessage(error)
+            return nil
+        }
+    }
+
+    func finishMutation(_ connection: DatabaseConnectionSummary) {
+        cancelEditor()
+        browse(connection)
+    }
+
+    func text(for value: DatabaseValue) -> String {
+        Self.text(for: value)
+    }
+
+    func documentSource(_ record: DatabaseRecord) -> String? {
+        try? DatabaseJSONDocumentCodec.encodeObject(
+            record.fields.filter { $0.name != "_highlight" })
+    }
+
+    func value(named name: String, in record: DatabaseRecord) -> DatabaseValue {
+        record.fields.first(where: { $0.name == name })?.value ?? .missing
+    }
+
+    private func prepareTarget(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary,
+        mode: DatabaseDataResultMode
+    ) {
+        let replacesTemplate =
+            queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedObject.map {
+                queryText
+                    == Self.defaultQueryText(
+                        connection.product,
+                        object: $0,
+                        operation: searchQueryOperation)
+            } == true
+        cancel()
+        selectedObject = object
+        targetText = object.path.joined(separator: ".")
+        records = []
+        fields = []
+        selectedRecordIndex = nil
+        nextContinuation = nil
+        metadata = nil
+        resultMode = mode
+        lastQueryRequest = nil
+        state = .idle
+        if replacesTemplate {
+            queryText = Self.defaultQueryText(
+                connection.product,
+                object: object,
+                operation: searchQueryOperation)
+        }
+    }
+
+    private func queryRequest(
+        _ connection: DatabaseConnectionSummary,
+        continuation: DatabaseContinuationToken?
+    ) throws -> DatabaseQueryRequest {
+        let text = queryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw DatabaseDataWorkspaceInputError.invalidQuery("Enter a query to run.")
+        }
+        let page = DatabasePageRequest(
+            pageSize: try DatabasePageSize(pageSize),
+            continuation: continuation)
+        switch connection.product {
+        case .postgresql, .mysql, .mariaDB, .sqlite:
+            return DatabaseQueryRequest(
+                target: DatabaseTargetIdentifier(connectionID: connection.id),
+                language: .sql,
+                command: text,
+                page: page)
+        case .clickHouse:
+            return DatabaseQueryRequest(
+                target: DatabaseTargetIdentifier(connectionID: connection.id),
+                language: .clickHouseSQL,
+                command: text,
+                page: page)
+        case .redis, .valkey:
+            let parts = text.split(
+                maxSplits: 1,
+                omittingEmptySubsequences: true,
+                whereSeparator: \.isWhitespace)
+            guard parts.count == 2 else {
+                throw DatabaseDataWorkspaceInputError.invalidQuery(
+                    "Enter a read command and key, such as GET session:1.")
+            }
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .redisCommand,
+                command: String(parts[0]),
+                parameters: [
+                    DatabaseQueryParameter(
+                        name: "key",
+                        value: .string(String(parts[1]).trimmingCharacters(in: .whitespaces)))
+                ],
+                page: page)
+        case .mongoDB:
+            let fields = try queryBody(text, preservingExtendedJSON: true)
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .mongoQuery,
+                command: "find",
+                body: fields.isEmpty ? nil : .object(fields),
+                page: page)
+        case .elasticsearch, .openSearch:
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .searchQueryDSL,
+                command: searchQueryOperation.rawValue,
+                body: .object(try queryBody(text, preservingExtendedJSON: false)),
+                page: page)
+        }
+    }
+
+    private func queryBody(
+        _ text: String,
+        preservingExtendedJSON: Bool
+    ) throws -> [DatabaseObjectField] {
+        do {
+            return try preservingExtendedJSON
+                ? DatabaseJSONDocumentCodec.decodeObject(text)
+                : DatabaseJSONDocumentCodec.decodePlainObject(text)
+        } catch {
+            throw DatabaseDataWorkspaceInputError.invalidQuery("Enter one valid JSON object.")
+        }
+    }
+
+    private func browseRequest(
+        _ connection: DatabaseConnectionSummary,
+        continuation: DatabaseContinuationToken?
+    ) throws -> DatabaseBrowseRequest {
+        let pageSize = try DatabasePageSize(pageSize)
+        let filter = try workspaceFilter()
+        let sorts = orderedSorts.map {
+            DatabaseSort(field: fieldPath(named: $0.field), direction: $0.direction)
+        }
+        return DatabaseBrowseRequest(
+            target: try target(connection),
+            page: DatabasePageRequest(
+                pageSize: pageSize,
+                continuation: continuation,
+                filter: filter,
+                sorts: sorts))
+    }
+
+    private func workspaceFilter() throws -> DatabaseFilter? {
+        let filters = try filterClauses.filter(\.isEnabled).map(filter(for:))
+        if filters.count == 1 {
+            return filters[0]
+        }
+        guard !filters.isEmpty else { return nil }
+        return filterConjunction == .and ? .all(filters) : .any(filters)
+    }
+
+    private func filter(
+        for clause: DatabaseWorkspaceFilterClause
+    ) throws -> DatabaseFilter {
+        let normalizedField = clause.field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedField.isEmpty else {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Choose a field for every enabled filter.")
+        }
+        if let activeProduct,
+            let descriptor = fields.first(where: {
+                $0.path.segments.joined(separator: ".") == normalizedField
+            })
+        {
+            guard
+                DatabaseFilterOperatorPolicy.operators(
+                    product: activeProduct,
+                    field: descriptor
+                ).contains(clause.operation)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "\(DatabaseFilterOperatorPolicy.title(product: activeProduct, operation: clause.operation)) is not available for \(descriptor.displayName)."
+                )
+            }
+            guard
+                clause.caseSensitivity == .productDefault
+                    || DatabaseFilterOperatorPolicy.supportsCaseSensitivity(
+                        product: activeProduct,
+                        field: descriptor,
+                        operation: clause.operation)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Case matching is not available for \(descriptor.displayName).")
+            }
+        }
+        return .predicate(
+            DatabaseFilterPredicate(
+                field: fieldPath(named: normalizedField),
+                operation: clause.operation,
+                values: try filterValues(for: clause, fieldName: normalizedField),
+                caseSensitivity: clause.caseSensitivity))
+    }
+
+    private func filterValues(
+        for clause: DatabaseWorkspaceFilterClause,
+        fieldName: String
+    ) throws -> [DatabaseValue] {
+        switch clause.operation {
+        case .isNull, .isNotNull, .isMissing, .isNotMissing:
+            return []
+        default:
+            break
+        }
+        let valueTexts: [String]
+        switch clause.operation {
+        case .in, .notIn, .between:
+            valueTexts = try Self.listValueTexts(
+                clause.valueText,
+                fieldName: fieldName)
+        default:
+            let value = clause.valueText.trimmingCharacters(in: .whitespacesAndNewlines)
+            valueTexts = value.isEmpty ? [] : [value]
+        }
+        if clause.operation == .between, valueTexts.count != 2 {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Enter two values as a JSON array or comma-separated list for the \(fieldName) filter."
+            )
+        }
+        if [.in, .notIn].contains(clause.operation), valueTexts.count > 100 {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Use at most 100 values for the \(fieldName) filter.")
+        }
+        guard !valueTexts.isEmpty else {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Enter a value for the \(fieldName) filter.")
+        }
+        let typeName =
+            fields.first {
+                $0.path.segments.joined(separator: ".") == fieldName
+            }?.typeName ?? "text"
+        do {
+            return try valueTexts.map {
+                try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
+            }
+        } catch {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Enter a valid \(typeName) value for the \(fieldName) filter.")
+        }
+    }
+
+    private func fieldPath(named name: String) -> DatabaseFieldPath {
+        fields.first {
+            $0.path.segments.joined(separator: ".") == name
+        }?.path ?? DatabaseFieldPath(name)
+    }
+
+    private func resetBrowsePaging() {
+        if isLoading {
+            cancel()
+        }
+        nextContinuation = nil
+    }
+
+    private nonisolated static func listValueTexts(
+        _ text: String,
+        fieldName: String
+    ) throws -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("[") else {
+            return trimmed.split(separator: ",", omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        guard let data = trimmed.data(using: .utf8),
+            let values = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        else {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Enter a valid JSON array or comma-separated list for the \(fieldName) filter.")
+        }
+        return try values.map { value in
+            if let value = value as? String {
+                return value
+            }
+            if value is NSNull {
+                return "NULL"
+            }
+            guard value is NSNumber,
+                let data = try? JSONSerialization.data(
+                    withJSONObject: value,
+                    options: [.fragmentsAllowed]),
+                let text = String(data: data, encoding: .utf8)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Use only text, numbers, booleans, or null in the \(fieldName) list.")
+            }
+            return text
+        }
+    }
+
+    private func target(
+        _ connection: DatabaseConnectionSummary
+    ) throws -> DatabaseTargetIdentifier {
+        if let selectedObject {
+            return DatabaseTargetIdentifier(connectionID: connection.id, object: selectedObject)
+        }
+        let entered = targetText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let segments = entered.split(separator: ".", omittingEmptySubsequences: true).map(
+            String.init)
+        let object: DatabaseObjectIdentifier
+        switch connection.product {
+        case .postgresql:
+            let path = try relationalPath(
+                segments,
+                defaultNamespace: connection.defaultSchema ?? "public",
+                product: connection.product)
+            object = DatabaseObjectIdentifier(kind: .table, path: path)
+        case .sqlite:
+            guard (1...2).contains(segments.count) else {
+                throw DatabaseDataWorkspaceInputError.invalidTarget(
+                    "Enter a table name, such as customers.")
+            }
+            object = DatabaseObjectIdentifier(kind: .table, path: segments)
+        case .mysql, .mariaDB:
+            let path = try relationalPath(
+                segments,
+                defaultNamespace: connection.defaultDatabase,
+                product: connection.product)
+            object = DatabaseObjectIdentifier(kind: .table, path: path)
+        case .redis, .valkey:
+            guard segments.count <= 1 else {
+                throw DatabaseDataWorkspaceInputError.invalidTarget(
+                    "Enter one logical database number or leave it empty.")
+            }
+            let path =
+                segments.isEmpty
+                ? connection.logicalDatabase.map { [$0] } ?? []
+                : segments
+            object = DatabaseObjectIdentifier(kind: .keyspace, path: path)
+        case .mongoDB:
+            let path = try relationalPath(
+                segments,
+                defaultNamespace: connection.defaultDatabase,
+                product: connection.product)
+            object = DatabaseObjectIdentifier(kind: .collection, path: path)
+        case .elasticsearch, .openSearch:
+            guard segments.count == 1 else {
+                throw DatabaseDataWorkspaceInputError.invalidTarget(
+                    "Enter one index name, such as products.")
+            }
+            object = DatabaseObjectIdentifier(kind: .index, path: segments)
+        case .clickHouse:
+            let path = try relationalPath(
+                segments,
+                defaultNamespace: connection.defaultDatabase,
+                product: connection.product)
+            object = DatabaseObjectIdentifier(kind: .table, path: path)
+        }
+        return DatabaseTargetIdentifier(connectionID: connection.id, object: object)
+    }
+
+    private func relationalPath(
+        _ segments: [String],
+        defaultNamespace: String?,
+        product: DatabaseProduct
+    ) throws -> [String] {
+        if segments.count == 2 { return segments }
+        if segments.count == 1, let defaultNamespace {
+            return [defaultNamespace, segments[0]]
+        }
+        throw DatabaseDataWorkspaceInputError.invalidTarget(
+            "Enter a namespace and object, such as public.customers, for \(product.displayName).")
+    }
+
+    private func finish(
+        _ response: DatabaseBrokerCommandResponse,
+        connectionID: DatabaseConnectionID,
+        generation: UUID,
+        appending: Bool,
+        mode: DatabaseDataResultMode
+    ) {
+        guard self.generation == generation, activeConnectionID == connectionID else { return }
+        activeTask = nil
+        let page: EdithDatabase.DatabasePage<DatabaseRecord>
+        switch (mode, response) {
+        case (.browse, .browse(let result)):
+            guard result.status != .failed, let payload = result.payload else {
+                state = .failed(Self.message(for: result.error))
+                announcement(Self.message(for: result.error))
+                return
+            }
+            page = payload.page
+        case (.query, .query(let result)):
+            guard result.status != .failed, let payload = result.payload else {
+                state = .failed(Self.message(for: result.error))
+                announcement(Self.message(for: result.error))
+                return
+            }
+            page = payload.page
+        default:
+            state = .failed("The database returned an unexpected data response.")
+            return
+        }
+        if appending {
+            records.append(contentsOf: page.records)
+        } else {
+            records = page.records
+            selectedRecordIndex = nil
+        }
+        fields = page.fields
+        nextContinuation = page.nextContinuation
+        metadata = page.metadata
+        state = .loaded
+        announcement("Loaded \(page.records.count) database records.")
+    }
+
+    private func fail(_ error: Error, generation: UUID) {
+        guard self.generation == generation else { return }
+        activeTask = nil
+        let message = Self.message(for: error)
+        state = .failed(message)
+        announcement(message)
+    }
+
+    private static func initialTargetText(_ connection: DatabaseConnectionSummary) -> String {
+        switch connection.product {
+        case .redis, .valkey:
+            connection.logicalDatabase ?? ""
+        case .postgresql:
+            if let defaultSchema = connection.defaultSchema {
+                "\(defaultSchema)."
+            } else {
+                "public."
+            }
+        case .mysql, .mariaDB, .mongoDB, .clickHouse:
+            if let defaultDatabase = connection.defaultDatabase {
+                "\(defaultDatabase)."
+            } else {
+                ""
+            }
+        case .sqlite, .elasticsearch, .openSearch:
+            ""
+        }
+    }
+
+    private static func defaultQueryText(
+        _ product: DatabaseProduct,
+        object: DatabaseObjectIdentifier,
+        operation: DatabaseSearchQueryOperation
+    ) -> String {
+        switch product {
+        case .postgresql, .sqlite:
+            return "SELECT * FROM " + qualifiedIdentifier(object.path, quote: doubleQuoted)
+        case .mysql, .mariaDB, .clickHouse:
+            return "SELECT * FROM " + qualifiedIdentifier(object.path, quote: backtickQuoted)
+        case .redis, .valkey:
+            return "TYPE session:1"
+        case .mongoDB:
+            return "{}"
+        case .elasticsearch, .openSearch:
+            if operation == .aggregate {
+                return
+                    "{\n  \"aggs\": {\n    \"values\": {\n      \"terms\": { \"field\": \"field.keyword\" }\n    }\n  }\n}"
+            }
+            return "{\n  \"query\": {\n    \"match_all\": {}\n  }\n}"
+        }
+    }
+
+    private static func qualifiedIdentifier(
+        _ path: [String],
+        quote: (String) -> String
+    ) -> String {
+        var identifier = ""
+        for component in path {
+            if !identifier.isEmpty {
+                identifier += "."
+            }
+            identifier += quote(component)
+        }
+        return identifier
+    }
+
+    private static func replay(
+        _ request: DatabaseQueryRequest,
+        continuation: DatabaseContinuationToken
+    ) -> DatabaseQueryRequest {
+        DatabaseQueryRequest(
+            version: request.version,
+            target: request.target,
+            language: request.language,
+            command: request.command,
+            parameters: request.parameters,
+            body: request.body,
+            page: DatabasePageRequest(
+                pageSize: request.page.pageSize,
+                continuation: continuation,
+                projection: request.page.projection,
+                filter: request.page.filter,
+                sorts: request.page.sorts,
+                consistency: request.page.consistency),
+            operation: request.operation)
+    }
+
+    private static func doubleQuoted(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private static func backtickQuoted(_ value: String) -> String {
+        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
+    }
+
+    private static func text(for value: DatabaseValue) -> String {
+        switch value {
+        case .missing: "missing"
+        case .null: "null"
+        case .boolean(let value): value ? "true" : "false"
+        case .signedInteger(let value): value.formatted()
+        case .unsignedInteger(let value): value.formatted()
+        case .decimal(let value): value.rawValue
+        case .floatingPoint(let value): value.formatted()
+        case .string(let value): value
+        case .binary(let value): "\(value.byteCount.formatted()) bytes"
+        case .date(let value): value.text
+        case .time(let value): value.text
+        case .timestamp(let value): value.text
+        case .uuid(let value): value.uuidString.lowercased()
+        case .array(let values): "[\(values.count) values]"
+        case .object(let fields): "{\(fields.count) fields}"
+        case .productSpecific(let value): value.textRepresentation ?? value.typeName
+        }
+    }
+
+    private func canMutateRecord(
+        at index: Int,
+        capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard capability == .update || capability == .delete,
+            supportsDataMutation(capability, connection: connection),
+            records.indices.contains(index),
+            let identity = records[index].identity,
+            let objectTarget = try? target(connection)
+        else { return false }
+        if connection.product == .mongoDB,
+            !Self.mongoDBIdentityRoundTrips(identity)
+        {
+            return false
+        }
+        if capability == .update {
+            let record = records[index]
+            if connection.product == .mongoDB,
+                (try? DatabaseJSONDocumentCodec.encodeObject(
+                    record.fields.filter { $0.name != "_id" })) == nil
+            {
+                return false
+            }
+            if connection.product == .elasticsearch || connection.product == .openSearch,
+                searchEditorSource(record) == nil
+            {
+                return false
+            }
+        }
+        let target = DatabaseTargetIdentifier(
+            connectionID: objectTarget.connectionID,
+            object: objectTarget.object,
+            record: identity)
+        guard
+            let request = try? Self.executableDeleteMutationRequest(
+                product: connection.product,
+                target: target)
+        else { return false }
+        return request.target.record == identity
+    }
+
+    private static func executableDeleteMutationRequest(
+        product: DatabaseProduct,
+        target: DatabaseTargetIdentifier
+    ) throws -> DatabaseDestructiveRequest {
+        switch product {
+        case .postgresql:
+            try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
+        case .mysql, .mariaDB:
+            try DatabaseRowMutationRequests.mySQLDelete(target: target, product: product)
+        case .sqlite:
+            try DatabaseRowMutationRequests.sqliteDelete(target: target)
+        case .redis, .valkey:
+            try DatabaseKeyspaceMutationRequests.deleteKey(target: target, product: product)
+        case .mongoDB:
+            try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+        case .elasticsearch:
+            try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+        case .openSearch:
+            try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
+        case .clickHouse:
+            throw DatabaseRowEditorError.unsupportedDatabase
+        }
+    }
+
+    private static func mongoDBIdentityRoundTrips(_ identity: DatabaseRecordIdentity) -> Bool {
+        guard identity.kind == .documentID,
+            identity.components.count == 1,
+            identity.components[0].name == "_id",
+            identity.concurrencyTokens.isEmpty
+        else { return false }
+        let field = DatabaseObjectField(name: "_id", value: identity.components[0].value)
+        guard let encoded = try? DatabaseJSONDocumentCodec.encodeObject([field]),
+            let decoded = try? DatabaseJSONDocumentCodec.decodeObject(encoded),
+            decoded == [field]
+        else { return false }
+        if case let .productSpecific(value) = field.value {
+            guard value.product == nil || value.product == .mongoDB,
+                value.typeName == "objectId",
+                value.binaryRepresentation == nil,
+                value.attributes.isEmpty,
+                let text = value.textRepresentation
+            else { return false }
+            return isMongoDBObjectID(text)
+        }
+        return true
+    }
+
+    func supportsDataMutation(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard connection.readOnlyPolicy == .disabled,
+            connection.environmentProtection != .readOnly,
+            connection.productionPolicy != .prohibitMutations
+        else { return false }
+        return switch capability {
+        case .insert:
+            connection.product == .postgresql || connection.product == .mysql
+                || connection.product == .mariaDB || connection.product == .sqlite
+                || connection.product == .redis || connection.product == .valkey
+                || connection.product == .mongoDB || connection.product == .elasticsearch
+                || connection.product == .openSearch || connection.product == .clickHouse
+        case .update, .delete:
+            connection.product == .postgresql || connection.product == .mysql
+                || connection.product == .mariaDB || connection.product == .sqlite
+                || connection.product == .redis || connection.product == .valkey
+                || connection.product == .mongoDB || connection.product == .elasticsearch
+                || connection.product == .openSearch
+        default:
+            false
+        }
+    }
+
+    private func mutationUnavailableMessage(
+        _ connection: DatabaseConnectionSummary,
+        capability: DatabaseCapabilityID
+    ) -> String {
+        if connection.product == .clickHouse, capability == .update || capability == .delete {
+            return "ClickHouse rows cannot be targeted uniquely for safe editing or deletion."
+        }
+        if connection.product != .postgresql && connection.product != .mysql
+            && connection.product != .mariaDB && connection.product != .sqlite
+            && connection.product != .redis
+            && connection.product != .valkey && connection.product != .mongoDB
+            && connection.product != .elasticsearch && connection.product != .openSearch
+            && connection.product != .clickHouse
+        {
+            return "Data editing is not available for this database yet."
+        }
+        if connection.readOnlyPolicy != .disabled
+            || connection.environmentProtection == .readOnly
+            || connection.productionPolicy == .prohibitMutations
+        {
+            return "This connection policy does not allow data editing."
+        }
+        if capability != .insert,
+            !canMutateSelectedRecord(capability, connection: connection)
+        {
+            return "This record has no stable identity for safe editing."
+        }
+        return "Open a table or keyspace before editing data."
+    }
+
+    private static func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
+        connection.product == .mongoDB || connection.product == .elasticsearch
+            || connection.product == .openSearch
+    }
+
+    private static func searchDocumentInput(
+        _ text: String
+    ) throws -> (identifier: String, fields: [DatabaseObjectField]) {
+        let fields = try DatabaseJSONDocumentCodec.decodePlainObject(text)
+        guard let identifierField = fields.first(where: { $0.name == "_id" }),
+            case .string(let identifier) = identifierField.value,
+            !identifier.isEmpty,
+            identifier.utf8.count <= 512
+        else {
+            throw DatabaseRowEditorError.missingIdentity
+        }
+        return (identifier, fields.filter { $0.name != "_id" })
+    }
+
+    private func searchEditorSource(_ record: DatabaseRecord) -> String? {
+        guard let identity = record.identity,
+            identity.kind == .searchDocument,
+            let identifier = identity.components.first(where: { $0.name == "_id" })
+        else { return nil }
+        var fields = record.fields.filter { $0.name != "_highlight" && $0.name != "_id" }
+        fields.insert(
+            DatabaseObjectField(name: identifier.name, value: identifier.value),
+            at: 0)
+        return try? DatabaseJSONDocumentCodec.encodeObject(fields)
+    }
+
+    private static func isRedisString(_ record: DatabaseRecord) -> Bool {
+        value(named: "type", in: record) == .string("string")
+    }
+
+    private static func value(named name: String, in record: DatabaseRecord) -> DatabaseValue {
+        record.fields.first(where: { $0.name == name })?.value ?? .missing
+    }
+
+    private static func redisTTL(_ fields: [DatabaseObjectField]) throws -> Int64? {
+        guard let field = fields.first(where: { $0.name == "ttlMilliseconds" }) else {
+            return nil
+        }
+        guard case let .signedInteger(value) = field.value, value == -1 || value > 0 else {
+            throw DatabaseKeyspaceMutationRequestError.invalidTTL
+        }
+        return value == -1 ? nil : value
+    }
+
+    private static func supportsEditing(_ value: DatabaseValue) -> Bool {
+        switch value {
+        case .missing, .binary, .array, .object, .productSpecific:
+            false
+        case .null, .boolean, .signedInteger, .unsignedInteger, .decimal, .floatingPoint,
+            .string, .date, .time, .timestamp, .uuid:
+            true
+        }
+    }
+
+    private static func supportsEditing(typeName: String) -> Bool {
+        let type = typeName.lowercased()
+        return !type.contains("bytea")
+            && !type.contains("json")
+            && !type.hasSuffix("[]")
+    }
+
+    private static func value(
+        from field: DatabaseRowFieldDraft
+    ) throws -> DatabaseValue {
+        let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.uppercased() == "NULL" {
+            return .null
+        }
+        if let original = field.originalValue {
+            switch original {
+            case .boolean:
+                guard let value = parseBoolean(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .boolean(value)
+            case .signedInteger:
+                guard let value = Int64(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .signedInteger(value)
+            case .unsignedInteger:
+                guard let value = UInt64(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .unsignedInteger(value)
+            case .decimal:
+                return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+            case .floatingPoint:
+                guard let value = Double(trimmed), value.isFinite else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .floatingPoint(value)
+            case .string:
+                return .string(field.text)
+            case .date:
+                return .date(DatabaseDateValue(text: trimmed))
+            case .time:
+                return .time(DatabaseTimeValue(text: trimmed))
+            case .timestamp:
+                return .timestamp(DatabaseTimestampValue(text: trimmed))
+            case .uuid:
+                guard let value = UUID(uuidString: trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .uuid(value)
+            case .null:
+                break
+            case .missing, .binary, .array, .object, .productSpecific:
+                throw DatabaseRowEditorError.unsupportedValue(field.id)
+            }
+        }
+        return try value(from: field.text, typeName: field.typeName, fieldName: field.id)
+    }
+
+    private static func value(
+        from text: String,
+        typeName: String,
+        fieldName: String
+    ) throws -> DatabaseValue {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = typeName.lowercased()
+        if type == "objectid" {
+            guard isMongoDBObjectID(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .productSpecific(
+                DatabaseProductValue(
+                    product: .mongoDB,
+                    typeName: "objectId",
+                    textRepresentation: trimmed))
+        }
+        if type.contains("bool") {
+            guard let value = parseBoolean(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .boolean(value)
+        }
+        if type == "unsigned_long" {
+            guard let value = UInt64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .unsignedInteger(value)
+        }
+        if type == "long" || type == "short" || type == "byte" {
+            guard let value = Int64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .signedInteger(value)
+        }
+        if type.contains("int") || type.contains("serial") {
+            guard let value = Int64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .signedInteger(value)
+        }
+        if type.contains("numeric") || type.contains("decimal") {
+            return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+        }
+        if type.contains("real") || type.contains("double") {
+            guard let value = Double(trimmed), value.isFinite else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .floatingPoint(value)
+        }
+        if type == "float" || type == "half_float" || type == "scaled_float" {
+            guard let value = Double(trimmed), value.isFinite else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .floatingPoint(value)
+        }
+        if type == "uuid" {
+            guard let value = UUID(uuidString: trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .uuid(value)
+        }
+        if type.contains("timestamp") {
+            return .timestamp(DatabaseTimestampValue(text: trimmed))
+        }
+        if type == "date" {
+            return .date(DatabaseDateValue(text: trimmed))
+        }
+        if type.hasPrefix("time") {
+            return .time(DatabaseTimeValue(text: trimmed))
+        }
+        return .string(text)
+    }
+
+    private static func isMongoDBObjectID(_ value: String) -> Bool {
+        value.utf8.count == 24
+            && value.utf8.allSatisfy { byte in
+                switch byte {
+                case 48...57, 65...70, 97...102: true
+                default: false
+                }
+            }
+    }
+
+    private static func parseBoolean(_ value: String) -> Bool? {
+        switch value.lowercased() {
+        case "true", "t", "1", "yes": true
+        case "false", "f", "0", "no": false
+        default: nil
+        }
+    }
+
+    private static func editorMessage(_ error: Error) -> String {
+        if let editorError = error as? DatabaseRowEditorError {
+            switch editorError {
+            case .notEditing: return "Open the row editor before saving."
+            case .unsupportedDatabase:
+                return "Data editing is not available for this database yet."
+            case .missingIdentity:
+                return "This row has no stable primary or unique key for safe editing."
+            case .changedIdentity:
+                return "The document identifier cannot be changed while editing."
+            case .invalidValue(let field, let type):
+                return "Enter a valid \(type) value for \(field)."
+            case .unsupportedValue(let field):
+                return "The value in \(field) cannot be edited in this form yet."
+            }
+        }
+        if let requestError = error as? DatabaseRowMutationRequestError {
+            switch requestError {
+            case .missingValues: return "Select at least one field to save."
+            case .unsupportedIdentity:
+                return "This row has no supported stable identity for safe editing."
+            case .invalidTarget, .invalidIdentifier, .duplicateField:
+                return "The row mutation could not be created safely."
+            }
+        }
+        if let requestError = error as? DatabaseKeyspaceMutationRequestError {
+            switch requestError {
+            case .invalidKey: return "Enter a non-empty key up to 4 KB."
+            case .invalidValue: return "Enter a string value up to 64 KB."
+            case .invalidTTL: return "Enter -1 for no expiry or a positive TTL in milliseconds."
+            case .invalidProduct, .invalidTarget:
+                return "The key mutation could not be created safely."
+            }
+        }
+        if let requestError = error as? DatabaseDocumentMutationRequestError {
+            switch requestError {
+            case .missingValues: return "Enter at least one document field."
+            case .invalidIdentity: return "This document has no supported stable identifier."
+            case .invalidTarget, .invalidDocument, .duplicateField:
+                return "The document mutation could not be created safely."
+            }
+        }
+        if let documentError = error as? DatabaseJSONDocumentCodecError {
+            switch documentError {
+            case .invalidJSON: return "Enter a valid JSON document."
+            case .invalidDocument: return "The editor requires one JSON object."
+            case .unsupportedValue: return "The document contains an unsupported JSON value."
+            case .resourceLimit: return "The document exceeds the 1 MB editing limit."
+            }
+        }
+        return "The data mutation could not be created."
+    }
+
+    private static func message(for error: Error) -> String {
+        if let inputError = error as? DatabaseDataWorkspaceInputError {
+            switch inputError {
+            case .invalidTarget(let message): return message
+            case .invalidQuery(let message): return message
+            case .invalidFilter(let message): return message
+            }
+        }
+        if let client = error as? DatabaseBrokerCommandClientError {
+            switch client {
+            case .timedOut: return "The data request timed out."
+            case .unavailable: return "The database service is unavailable."
+            case .unsafePeer: return "The database service could not be verified."
+            case .outcomeUnknown: return "The data request outcome could not be confirmed."
+            case .invalidRequest: return "The database rejected this data request."
+            }
+        }
+        return "The data could not be loaded."
+    }
+
+    private static func message(for error: DatabaseErrorEnvelope?) -> String {
+        error?.message ?? "The data could not be loaded."
+    }
+
+    private static func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ])
+    }
+}
+
+private enum DatabaseDataWorkspaceInputError: Error {
+    case invalidTarget(String)
+    case invalidQuery(String)
+    case invalidFilter(String)
+}
+
+private enum DatabaseRowEditorError: Error {
+    case notEditing
+    case unsupportedDatabase
+    case missingIdentity
+    case changedIdentity
+    case invalidValue(String, String)
+    case unsupportedValue(String)
+}

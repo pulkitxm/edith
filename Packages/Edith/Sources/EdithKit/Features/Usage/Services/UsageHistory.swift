@@ -10,7 +10,8 @@ public enum UsageHistory {
             document.sourceReferences.isSubset(of: Set(document.sources)),
             document.daily.map(\.period) == document.daily.map(\.period).sorted(),
             Set(document.daily.map(\.period)).count == document.daily.count,
-            document.daily.allSatisfy(\.isValid)
+            document.daily.allSatisfy(\.isValid),
+            document.historyRetention?.isValid ?? true
         else { return false }
         var totals = ValidationTotals.zero
         for day in document.daily {
@@ -31,6 +32,7 @@ public enum UsageHistory {
         let machines: [ValidationMachine]?
         let totals: ValidationTotals
         let daily: [ValidationDay]
+        let historyRetention: ValidationRetention?
 
         var sourceReferences: Set<String> {
             var result = Set(sourceMeta.keys)
@@ -40,6 +42,40 @@ public enum UsageHistory {
             for day in daily { result.formUnion(day.sourceReferences) }
             return result
         }
+    }
+
+    private struct ValidationRetention: Decodable {
+        let version: Int
+        let blocks: [ValidationRetentionBlock]
+
+        var isValid: Bool {
+            version == 1 && blocks.count <= 4_096
+                && blocks.reduce(0) { $0 + $1.candidates.count } <= 8_192
+                && blocks.allSatisfy(\.isValid)
+        }
+    }
+
+    private struct ValidationRetentionBlock: Decodable {
+        let period: String
+        let source: String
+        let state: String
+        let provenance: ValidationRetentionProvenance
+        let baseline: ValidationDay
+        let candidates: [ValidationDay]
+
+        var isValid: Bool {
+            !period.isEmpty && !source.isEmpty && !source.hasPrefix("machine:")
+                && state == "partial-overlap" && !provenance.kind.isEmpty
+                && baseline.bySource[source] != nil
+                && ([baseline] + candidates).allSatisfy {
+                    $0.period == period && $0.bySource.keys.allSatisfy { $0 == source }
+                        && $0.isValid
+                }
+        }
+    }
+
+    private struct ValidationRetentionProvenance: Decodable {
+        let kind: String
     }
 
     private struct ValidationDay: Decodable {
@@ -313,13 +349,16 @@ public enum UsageHistory {
         let normalizedLocal = rawLocal.map(normalized)
         let normalizedCloud = rawCloud.map(normalized)
         guard let l = normalizedLocal else {
-            guard let c = normalizedCloud else { return nil }
+            guard let c = normalizedCloud,
+                let protected = protectingRetainedHistory(c, inputs: [c])
+            else { return nil }
             return oneSided(
-                original: cloud, raw: rawCloud, normalized: pruningUnusedMachineSources(c))
+                original: cloud, raw: rawCloud, normalized: pruningUnusedMachineSources(protected))
         }
         guard let cloudDocument = normalizedCloud else {
+            guard let protected = protectingRetainedHistory(l, inputs: [l]) else { return nil }
             return oneSided(
-                original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(l))
+                original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(protected))
         }
         let c = removingReplacedMachines(from: cloudDocument, active: l)
 
@@ -350,9 +389,270 @@ public enum UsageHistory {
         for (k, v) in l["sourceMeta"] as? [String: Any] ?? [:] { meta[k] = v }
         out["sourceMeta"] = meta
         out["sessions"] = mergeSessions(l["sessions"], c["sessions"])
+        out["machines"] = mergeMachines(l["machines"], c["machines"])
         out["totals"] = totals(of: mergedDaily)
 
-        return encoded(pruningUnusedMachineSources(out))
+        guard let protected = protectingRetainedHistory(out, inputs: [c, l]) else { return nil }
+        return encoded(pruningUnusedMachineSources(protected))
+    }
+
+    private static func protectingRetainedHistory(
+        _ document: [String: Any], inputs: [[String: Any]]
+    ) -> [String: Any]? {
+        guard var retained = retainedBlocks(inputs.first ?? [:], inputs.dropFirst().first ?? [:])
+        else { return nil }
+        guard !retained.isEmpty else { return document }
+        var days = Dictionary(
+            daily(document).compactMap { day in
+                (day["period"] as? String).map { ($0, day) }
+            }, uniquingKeysWith: { _, latest in latest })
+        for key in retained.keys.sorted() {
+            guard var block = retained[key], let period = block["period"] as? String,
+                let source = block["source"] as? String,
+                let baseline = block["baseline"] as? [String: Any]
+            else { return nil }
+            if let current = days[period],
+                let rows = (baseline["bySource"] as? [String: Any])?[source],
+                let candidates = block["candidates"] as? [[String: Any]],
+                !candidates.isEmpty, !sameHistory(current, baseline, source: source),
+                ([current] + candidates).allSatisfy({ day in
+                    !coverageRegressed(
+                        old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                })
+            {
+                retained.removeValue(forKey: key)
+                continue
+            }
+            var candidates = block["candidates"] as? [[String: Any]] ?? []
+            for input in inputs {
+                guard let day = daily(input).first(where: { $0["period"] as? String == period }),
+                    (day["bySource"] as? [String: Any])?[source] != nil
+                else { continue }
+                let candidate = historyBlock(day, source: source)
+                if !sameHistory(candidate, baseline, source: source),
+                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
+                {
+                    candidates.append(candidate)
+                }
+            }
+            block["candidates"] = candidates
+            retained[key] = block
+            days[period] = mergeDay(
+                local: baseline, cloud: days[period] ?? baseline, mergeSourceDetail: true)
+        }
+        let blocks = retained.keys.sorted().compactMap { retained[$0] }
+        guard validRetention(blocks) else { return nil }
+        var out = document
+        let protectedDays = days.keys.sorted().compactMap { days[$0] }
+        out["daily"] = protectedDays
+        out["totals"] = totals(of: protectedDays)
+        out["historyRetention"] = ["version": 1, "blocks": blocks]
+        return out
+    }
+
+    public static func mergeRefresh(fresh: Data, previous: Data?) -> Data? {
+        guard var incoming = decode(fresh), retainedBlocks([:], incoming) != nil else { return nil }
+        guard let previous else {
+            return merge(local: fresh, cloud: nil)
+        }
+        guard var old = decode(previous) else { return nil }
+        guard var retained = retainedBlocks(old, incoming) else { return nil }
+        let incomingDays = Dictionary(
+            daily(incoming).compactMap { day in
+                (day["period"] as? String).map { ($0, day) }
+            }, uniquingKeysWith: { _, latest in latest })
+        var excluded: [String: Set<String>] = [:]
+        for oldDay in daily(old) {
+            guard let period = oldDay["period"] as? String else { return nil }
+            let newDay = incomingDays[period] ?? ["period": period]
+            let newSources = newDay["bySource"] as? [String: Any] ?? [:]
+            for (source, rows) in oldDay["bySource"] as? [String: Any] ?? [:] {
+                guard !source.hasPrefix("machine:") else { continue }
+                let key = period + "\u{0}" + source
+                if let block = retained[key],
+                    let baseline = block["baseline"] as? [String: Any],
+                    sameHistory(baseline, historyBlock(oldDay, source: source), source: source),
+                    let candidates = block["candidates"] as? [[String: Any]],
+                    !candidates.isEmpty,
+                    ([newDay] + candidates).allSatisfy({ day in
+                        !coverageRegressed(
+                            old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                    })
+                {
+                    retained.removeValue(forKey: key)
+                }
+                guard
+                    retained[key] != nil || coverageRegressed(old: rows, fresh: newSources[source])
+                else { continue }
+                let baseline = historyBlock(oldDay, source: source)
+                let candidate = historyBlock(newDay, source: source)
+                var block =
+                    retained[key] ?? [
+                        "period": period, "source": source, "state": "partial-overlap",
+                        "provenance": [
+                            "kind": "published-aggregate", "generatedAt": old["generatedAt"] ?? "",
+                        ],
+                        "baseline": baseline, "candidates": [[String: Any]](),
+                    ]
+                guard let recordedBaseline = block["baseline"] as? [String: Any],
+                    sameHistory(recordedBaseline, baseline, source: source)
+                else { return nil }
+                var candidates = block["candidates"] as? [[String: Any]] ?? []
+                if !sameHistory(candidate, baseline, source: source),
+                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
+                {
+                    candidates.append(candidate)
+                }
+                block["candidates"] = candidates
+                retained[key] = block
+                excluded[period, default: []].insert(source)
+            }
+        }
+        let blocks = retained.keys.sorted().compactMap { retained[$0] }
+        guard validRetention(blocks) else { return nil }
+        incoming["daily"] = daily(incoming).map { day in
+            let excludedSources = excluded[day["period"] as? String ?? ""] ?? []
+            return filteringMachineDay(day) { !excludedSources.contains($0) }
+        }
+        incoming["historyRetention"] = ["version": 1, "blocks": blocks]
+        old["historyRetention"] = ["version": 1, "blocks": blocks]
+        guard let filtered = encoded(incoming), let protectedPrevious = encoded(old) else {
+            return nil
+        }
+        return merge(local: filtered, cloud: protectedPrevious)
+    }
+
+    public static func retainedHistoryBlockCount(in data: Data) -> Int {
+        let retention = decode(data)?["historyRetention"] as? [String: Any]
+        return (retention?["blocks"] as? [[String: Any]])?.count ?? 0
+    }
+
+    private static func historyBlock(_ day: [String: Any], source: String) -> [String: Any] {
+        let filtered = filteringMachineDay(day) { $0 == source }
+        return [
+            "period": day["period"] ?? "", "bySource": filtered["bySource"] ?? [:],
+            "hours": filtered["hours"]
+                ?? (0..<24).map { _ in
+                    ["tokens": 0, "cost": 0, "bySource": [:], "byPath": [:]] as [String: Any]
+                }, "projects": filtered["projects"] ?? [],
+        ]
+    }
+
+    private static func sameHistory(
+        _ lhs: [String: Any], _ rhs: [String: Any], source: String
+    ) -> Bool {
+        func identity(_ day: [String: Any]) -> Data? {
+            guard let ordered = orderedHistory(day) as? [String: Any],
+                let projected = orderedHistory(historyBlock(ordered, source: source))
+                    as? [String: Any]
+            else { return nil }
+            return encoded(projected)
+        }
+        guard let left = identity(lhs), let right = identity(rhs) else { return false }
+        return left == right
+    }
+
+    private static func orderedHistory(_ value: Any, field: String = "") -> Any {
+        if let object = value as? [String: Any] {
+            return object.reduce(into: [String: Any]()) { result, entry in
+                result[entry.key] = orderedHistory(entry.value, field: entry.key)
+            }
+        }
+        if field == "cost", let number = value as? NSNumber {
+            return (number.doubleValue * 1_000_000_000).rounded() / 1_000_000_000
+        }
+        guard let array = value as? [Any] else { return value }
+        let ordered = array.map { orderedHistory($0) }
+        guard field != "hours" else { return ordered }
+        return ordered.map { item in
+            (
+                try? JSONSerialization.data(
+                    withJSONObject: item, options: [.sortedKeys, .fragmentsAllowed]), item
+            )
+        }.sorted { ($0.0 ?? Data()).lexicographicallyPrecedes($1.0 ?? Data()) }.map(\.1)
+    }
+
+    private static func coverageRegressed(old: Any, fresh: Any?) -> Bool {
+        let oldRows = old as? [[String: Any]] ?? []
+        let newRows = fresh as? [[String: Any]] ?? []
+        let fields = [
+            "inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens",
+        ]
+        if newRows.reduce(0, { $0 + num($1["cost"]) }) + 0.000_001
+            < oldRows.reduce(0, { $0 + num($1["cost"]) })
+        {
+            return true
+        }
+        return oldRows.contains { row in
+            let model = row["modelName"] as? String ?? "unknown"
+            let previous = oldRows.filter { ($0["modelName"] as? String ?? "unknown") == model }
+            let current = newRows.filter { ($0["modelName"] as? String ?? "unknown") == model }
+            return fields.contains { field in
+                current.reduce(0) { $0 + num($1[field]) } + 0.000_001
+                    < previous.reduce(0) { $0 + num($1[field]) }
+            }
+        }
+    }
+
+    private static func retainedBlocks(
+        _ previous: [String: Any], _ fresh: [String: Any]
+    ) -> [String: [String: Any]]? {
+        var retained: [String: [String: Any]] = [:]
+        for document in [previous, fresh] {
+            guard let value = document["historyRetention"] else { continue }
+            guard let retention = value as? [String: Any], intOf(retention["version"]) == 1,
+                let blocks = retention["blocks"] as? [[String: Any]], validRetention(blocks)
+            else { return nil }
+            for block in blocks {
+                guard let period = block["period"] as? String,
+                    let source = block["source"] as? String
+                else { return nil }
+                let key = period + "\u{0}" + source
+                if var current = retained[key] {
+                    guard let baseline = block["baseline"] as? [String: Any],
+                        let existing = current["baseline"] as? [String: Any],
+                        sameHistory(baseline, existing, source: source)
+                    else { return nil }
+                    var candidates = current["candidates"] as? [[String: Any]] ?? []
+                    for candidate in block["candidates"] as? [[String: Any]] ?? []
+                    where !candidates.contains(where: { sameHistory($0, candidate, source: source) }
+                    ) {
+                        candidates.append(candidate)
+                    }
+                    current["candidates"] = candidates
+                    retained[key] = current
+                } else {
+                    retained[key] = block
+                }
+            }
+        }
+        return retained
+    }
+
+    private static func validRetention(_ blocks: [[String: Any]]) -> Bool {
+        guard blocks.count <= 4_096,
+            blocks.reduce(0, { $0 + (($1["candidates"] as? [Any])?.count ?? 0) }) <= 8_192,
+            let data = encoded(["blocks": blocks]), data.count <= 16 * 1_024 * 1_024
+        else { return false }
+        return blocks.allSatisfy { block in
+            guard let period = block["period"] as? String, !period.isEmpty,
+                let source = block["source"] as? String, !source.isEmpty,
+                !source.hasPrefix("machine:"), block["state"] as? String == "partial-overlap",
+                let provenance = block["provenance"] as? [String: Any],
+                provenance["kind"] is String,
+                let baseline = block["baseline"] as? [String: Any],
+                (baseline["bySource"] as? [String: Any])?[source] != nil,
+                let candidates = block["candidates"] as? [[String: Any]]
+            else { return false }
+            return ([baseline] + candidates).allSatisfy { day in
+                guard day["period"] as? String == period,
+                    let sources = day["bySource"] as? [String: Any],
+                    sources.keys.allSatisfy({ $0 == source }), day["hours"] is [Any],
+                    day["projects"] is [Any]
+                else { return false }
+                return true
+            }
+        }
     }
 
     private static let legacyCloudSource = "cc-cloud"
@@ -1123,6 +1423,21 @@ public enum UsageHistory {
         var out = a
         for s in b where !out.contains(s) { out.append(s) }
         return out
+    }
+
+    private static func mergeMachines(_ localValue: Any?, _ cloudValue: Any?) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var merged: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for machine in cloud + local {
+            guard let id = (machine["id"] as? String)?.lowercased(), !id.isEmpty else {
+                continue
+            }
+            if merged[id] == nil { order.append(id) }
+            merged[id] = machine
+        }
+        return order.compactMap { merged[$0] }
     }
 
     private static func mergeDay(
