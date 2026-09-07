@@ -91,9 +91,7 @@ test("every change area covers its repository inputs", () => {
 });
 
 test("a main push releases when the Swift area changed", () => {
-  const releaseBuildJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
-  );
+  const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
   expect(releaseBuildJob).toContain(
     "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
@@ -148,7 +146,8 @@ test("main releases skip the redundant debug app build", () => {
   );
   expect(swiftBuild).toContain("github.event_name != 'push'");
   const releaseBuild = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
+    ciWorkflow.indexOf("\n  dmg:"),
   );
   expect(releaseBuild).toContain("&& ((github.event_name == 'push'");
   expect(releaseBuild).not.toContain("needs.swift-build");
@@ -204,7 +203,7 @@ test("every workflow change runs the runtime guard", () => {
   );
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
   );
   expect(swiftTest).toContain("needs.changes.outputs.workflows == 'true'");
   expect(ciWorkflow).toContain(
