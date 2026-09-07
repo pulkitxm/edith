@@ -202,7 +202,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "networkDiagnostics", "keepAwake", "clipboard",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "networkDiagnostics",
+                "keepAwake", "clipboard",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }

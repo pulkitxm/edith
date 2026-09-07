@@ -8,7 +8,8 @@ public enum AgentJobCatalog {
 
     static func jobs(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil, network: NetworkDiagnosticsService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil,
+        network: NetworkDiagnosticsService? = nil
     ) -> [AgentJob] {
         let bodies = collectors(
             store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
@@ -25,7 +26,8 @@ public enum AgentJobCatalog {
 
     static func collectors(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil, network: NetworkDiagnosticsService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil,
+        network: NetworkDiagnosticsService? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
         let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
@@ -40,7 +42,9 @@ public enum AgentJobCatalog {
         }
         return [
             "network.diagnostics": {
-                guard let network else { throw AgentError(.unavailable, "Network diagnostic storage is unavailable.") }
+                guard let network else {
+                    throw AgentError(.unavailable, "Network diagnostic storage is unavailable.")
+                }
                 return try await network.scheduled()
             },
             "usage.refresh": { try await usage.run() },

@@ -13,7 +13,8 @@ public enum AgentOperationCatalog {
 
     public static let internalOperations: [String] =
         [
-            NetworkDiagnosticsClient.timelineOperation, NetworkDiagnosticsClient.saveBaselineOperation,
+            NetworkDiagnosticsClient.timelineOperation,
+            NetworkDiagnosticsClient.saveBaselineOperation,
             AgentFaviconClient.operation, AttentionOperation.hasEvents, AttentionOperation.summary,
             AttentionOperation.backup, AttentionOperation.restore,
             AttentionDeliveryClient.operation, AttentionDeliveryClient.statusOperation,

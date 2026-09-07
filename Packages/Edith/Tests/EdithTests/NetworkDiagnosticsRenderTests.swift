@@ -9,13 +9,18 @@ import Testing
     @Test func successfulSnapshotRendersInTheMenuPanel() throws {
         let snapshot = NetworkDiagnosticSnapshot(
             createdAt: Date(timeIntervalSince1970: 1_783_080_000), durationMS: 124,
-            state: .healthy, path: NetworkPathSummary(), checks: [
-                NetworkDiagnosticCheck(id: "route", title: "Route", state: .healthy, summary: "Available"),
-                NetworkDiagnosticCheck(id: "dns", title: "DNS", state: .healthy, summary: "Resolved"),
-                NetworkDiagnosticCheck(id: "gateway", title: "Gateway", state: .healthy, summary: "Reachable"),
+            state: .healthy, path: NetworkPathSummary(),
+            checks: [
+                NetworkDiagnosticCheck(
+                    id: "route", title: "Route", state: .healthy, summary: "Available"),
+                NetworkDiagnosticCheck(
+                    id: "dns", title: "DNS", state: .healthy, summary: "Resolved"),
+                NetworkDiagnosticCheck(
+                    id: "gateway", title: "Gateway", state: .healthy, summary: "Reachable"),
             ])
-        let hosting = NSHostingView(rootView:
-            NetworkDiagnosticsPanel(snapshot: snapshot, openWorkspace: {})
+        let hosting = NSHostingView(
+            rootView:
+                NetworkDiagnosticsPanel(snapshot: snapshot, openWorkspace: {})
                 .padding(20).frame(width: 460, height: 245)
                 .background(Color(nsColor: .windowBackgroundColor)))
         hosting.frame = NSRect(x: 0, y: 0, width: 460, height: 245)
@@ -25,7 +30,9 @@ import Testing
         #expect(bitmap.pixelsWide >= 460)
         if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
-            try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("network-diagnostics.png"))
+            try data.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent(
+                    "network-diagnostics.png"))
         }
     }
 }

@@ -5,7 +5,9 @@ public struct NetworkDiagnosticRequest: Codable, Sendable {
     public var keepHistory: Bool
     public var saveBaseline: Bool
 
-    public init(configuration: NetworkDiagnosticsConfiguration, keepHistory: Bool, saveBaseline: Bool) {
+    public init(
+        configuration: NetworkDiagnosticsConfiguration, keepHistory: Bool, saveBaseline: Bool
+    ) {
         self.configuration = configuration
         self.keepHistory = keepHistory
         self.saveBaseline = saveBaseline
@@ -23,7 +25,8 @@ public enum NetworkDiagnosticsClient {
         let request = NetworkDiagnosticRequest(
             configuration: configuration, keepHistory: keepHistory, saveBaseline: saveBaseline)
         return try await client.performAsync(
-            NetworkDiagnosticSnapshot.self, operation: NetworkDiagnosticOperation.diagnose.descriptor.id,
+            NetworkDiagnosticSnapshot.self,
+            operation: NetworkDiagnosticOperation.diagnose.descriptor.id,
             payload: AgentPayload.encode(request), timeout: 180)
     }
 

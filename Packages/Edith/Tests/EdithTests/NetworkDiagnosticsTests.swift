@@ -77,7 +77,8 @@ import Testing
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = try AgentStore(url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
         defer { try? store.close() }
         let engine = NetworkDiagnosticsEngine { _, _, _ in
             NetworkCommandResult(status: 0, output: "")
@@ -86,8 +87,9 @@ import Testing
         var configuration = NetworkDiagnosticsConfiguration()
         configuration.timelineLimit = 10
         for _ in 0..<15 {
-            _ = try await service.diagnose(NetworkDiagnosticRequest(
-                configuration: configuration, keepHistory: true, saveBaseline: false))
+            _ = try await service.diagnose(
+                NetworkDiagnosticRequest(
+                    configuration: configuration, keepHistory: true, saveBaseline: false))
         }
         let loaded = try AgentPayload.decode(
             [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 100))
@@ -139,9 +141,11 @@ import Testing
     }
 
     @Test func completedFailedDiagnosisReturnsSnapshotAndSuccess() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = try AgentStore(url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
         defer { try? store.close() }
         let engine = NetworkDiagnosticsEngine { _, _, _ in
             NetworkCommandResult(status: 1, output: "connection refused")

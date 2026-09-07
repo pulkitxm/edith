@@ -4,7 +4,8 @@ import Foundation
 public enum AgentOperations {
     static func register(
         on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
-        downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil, network: NetworkDiagnosticsService? = nil
+        downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil,
+        network: NetworkDiagnosticsService? = nil
     ) async {
         if let network {
             await network.register(on: runtime)

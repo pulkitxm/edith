@@ -25,8 +25,9 @@ final class NetworkDiagnosticsModel {
 
     func activate() {
         Task {
-            timeline = (try? await NetworkDiagnosticsClient.timeline(
-                limit: configuration.timelineLimit)) ?? []
+            timeline =
+                (try? await NetworkDiagnosticsClient.timeline(
+                    limit: configuration.timelineLimit)) ?? []
         }
     }
 
@@ -146,7 +147,8 @@ final class NetworkDiagnosticsModel {
         let previous = latest ?? timeline.first
         latest = snapshot
         do {
-            timeline = try await NetworkDiagnosticsClient.timeline(limit: configuration.timelineLimit)
+            timeline = try await NetworkDiagnosticsClient.timeline(
+                limit: configuration.timelineLimit)
         } catch {
             errorMessage = error.localizedDescription
         }

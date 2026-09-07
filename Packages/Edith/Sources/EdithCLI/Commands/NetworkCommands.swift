@@ -18,7 +18,11 @@ struct NetworkBaselineCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard let snapshot = try await AgentClient.shared.performAsync(NetworkDiagnosticSnapshot?.self, operation: NetworkDiagnosticOperation.baseline.descriptor.id) else {
+            guard
+                let snapshot = try await AgentClient.shared.performAsync(
+                    NetworkDiagnosticSnapshot?.self,
+                    operation: NetworkDiagnosticOperation.baseline.descriptor.id)
+            else {
                 throw CLIFailure.notFound(
                     "no network baseline has been saved",
                     hint: "run `ed network diagnose --save-baseline`")

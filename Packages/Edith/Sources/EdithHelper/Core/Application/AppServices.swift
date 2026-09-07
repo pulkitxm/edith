@@ -258,7 +258,6 @@ final class AppServices {
             calendar = nil
         }
 
-
     }
 
     private func reconcilePanelServices() {
