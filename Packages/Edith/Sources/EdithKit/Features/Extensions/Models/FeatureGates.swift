@@ -9,8 +9,12 @@ public enum FeatureGates {
         presenterEnabled && autoEnabled
     }
 
-    public static func preventSleepPersisted(systemOn: Bool, current: Bool) -> Bool {
-        systemOn && current
+    public static func preventSleepPersisted(keepAwakeOn: Bool, current: Bool) -> Bool {
+        keepAwakeOn && current
+    }
+
+    public static func keystrokeHighlightMonitorWanted(enabled: Bool, active: Bool) -> Bool {
+        enabled && active
     }
 }
 
@@ -24,27 +28,31 @@ public enum ContextualPermissionGate {
 
 public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
     case clipboard
+    case emoji
     case micMute
     case focusDim
     case presenter
     case colorPicker
     case captureRead
     case captureScreenshot
+    case keystrokeHighlight
 }
 
 public enum ExtensionShortcutVisibility {
     public static func visible(
-        clipboard: Bool, micMute: Bool, focusDim: Bool, presenter: Bool,
-        colorPicker: Bool, captureTools: Bool
+        clipboard: Bool, emoji: Bool, micMute: Bool, focusDim: Bool, presenter: Bool,
+        colorPicker: Bool, keystrokeHighlight: Bool, captureTools: Bool = false
     ) -> [ExtensionShortcut] {
         let states: [(ExtensionShortcut, Bool)] = [
             (.clipboard, clipboard),
+            (.emoji, emoji),
             (.micMute, micMute),
             (.focusDim, focusDim),
             (.presenter, presenter),
             (.colorPicker, colorPicker),
             (.captureRead, captureTools),
             (.captureScreenshot, captureTools),
+            (.keystrokeHighlight, keystrokeHighlight),
         ]
         return states.compactMap { shortcut, enabled in enabled ? shortcut : nil }
     }

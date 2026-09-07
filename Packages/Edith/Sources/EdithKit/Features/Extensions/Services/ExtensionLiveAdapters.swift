@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import EdithCore
+import EdithLidAwakeSupport
 import EventKit
 import Foundation
 import ServiceManagement
@@ -64,9 +65,12 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker", "captureTools",
+        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
+        "keepAwake", "lidAwake",
+        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "attention", "seoAudit",
+        "captureTools",
     ]
 
     public static func provider(
@@ -90,23 +94,36 @@ public enum ExtensionLiveAdapters {
         }
     ) async -> ExtensionAdapterReadiness? {
         switch id {
+        case "plugins":
+            executableNamed("npx") == nil
+                ? .needsSetup(
+                    "Install Node.js 22.20 or later to install plugins. Browsing is available now.")
+                : .ready("Install bundled Edith skills for detected agents.")
         case "attention": attentionReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
+        case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
-        case "machines": machinesReadiness()
+        case "keepAwake": .ready("Keep Awake is ready to prevent idle sleep without System.")
+        case "appMaintenance": appMaintenanceReadiness()
+        case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
+        case "cleaner": cleanerReadiness()
+        case "downloads": downloadsReadiness(executable: executableNamed("yt-dlp"))
+        case "audioMixer": audioMixerReadiness(defaults: defaults)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
-        case "clipboard": clipboardReadiness()
+        case "clipboard": await clipboardReadiness()
+        case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "captureTools": await captureToolsReadiness(defaults: defaults)
+        case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
     }
@@ -122,6 +139,10 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Attention tracking is configured for the selected sources.",
             setupDetail: "Turn on application tracking, browser tracking, or both."
         ).readiness
+    }
+
+    static func siteAuditReadiness() -> ExtensionAdapterReadiness {
+        .ready("Site Audit is ready to store projects and run history locally.")
     }
 
     static func usageReadiness(
@@ -191,6 +212,73 @@ public enum ExtensionLiveAdapters {
         return ExtensionAdapterFacts(
             contentCount: count, readyDetail: "Running application control is available.",
             emptyDetail: "No regular applications are visible to the system runtime."
+        ).readiness
+    }
+
+    static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
+        let roots = AppMaintenanceInventory.defaultApplicationRoots
+        let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }
+        let tools = ["/usr/bin/hdiutil", "/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/ditto"]
+        let installerAvailable = tools.allSatisfy(FileManager.default.isExecutableFile(atPath:))
+        return ExtensionAdapterFacts(
+            configured: available && installerAvailable,
+            readyDetail:
+                "Verified disk image installation, app inventory and safe Trash review are available.",
+            setupDetail: available
+                ? "Required macOS disk image verification tools are unavailable."
+                : "No readable Applications folder is available."
+        ).readiness
+    }
+
+    static func homebrewReadiness(
+        executable: URL? = CLIToolEnvironment.executable(named: "brew")
+    ) -> ExtensionAdapterReadiness {
+        ExtensionAdapterFacts(
+            installed: executable != nil,
+            readyDetail: "Homebrew is installed and reachable.",
+            uninstalledDetail: "Homebrew is not installed on this Mac."
+        ).readiness
+    }
+
+    static func cleanerReadiness(
+        drives: [DriveInfo] = JunkScanner.drives()
+    ) -> ExtensionAdapterReadiness {
+        let readable = drives.filter { FileManager.default.isReadableFile(atPath: $0.id) }
+        return ExtensionAdapterFacts(
+            contentCount: readable.count,
+            readyDetail: "Scannable volumes: \(readable.count).",
+            emptyDetail: "No volume is readable for scanning."
+        ).readiness
+    }
+
+    static func downloadsReadiness(
+        executable: URL? = CLIToolEnvironment.executable(named: "yt-dlp"),
+        directory: URL = Repo.musicDir
+    ) -> ExtensionAdapterReadiness {
+        var isDirectory: ObjCBool = false
+        let hasFolder =
+            FileManager.default.fileExists(
+                atPath: directory.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        return ExtensionAdapterFacts(
+            installed: executable != nil, configured: hasFolder,
+            readyDetail: "yt-dlp is installed and the download folder is writable.",
+            uninstalledDetail: "yt-dlp is not installed on this Mac.",
+            setupDetail: "The download folder does not exist yet."
+        ).readiness
+    }
+
+    static func audioMixerReadiness(
+        defaults: UserDefaults,
+        capabilities: PlatformCapabilities = .macOS
+    ) -> ExtensionAdapterReadiness {
+        let supported = capabilities.state(for: .applicationAudio).isSupported
+        let shelfEnabled = defaults.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
+        return ExtensionAdapterFacts(
+            configured: shelfEnabled,
+            unsupportedReason: supported
+                ? nil : "Application audio mixing requires macOS 14.4 or later.",
+            readyDetail: "The per-app mixer is available in the notch shelf.",
+            setupDetail: "Turn on Notch Shelf to reach the mixer."
         ).readiness
     }
 
@@ -359,37 +447,20 @@ public enum ExtensionLiveAdapters {
         }
     }
 
-    static func clipboardReadiness(
-        index: URL = ClipboardPaths.indexFile, blobs: URL = ClipboardPaths.blobsDir
-    ) -> ExtensionAdapterReadiness {
-        guard FileManager.default.fileExists(atPath: index.path) else {
-            return ExtensionAdapterFacts(
-                contentCount: 0, readyDetail: "Clipboard storage is readable.",
-                emptyDetail: "Clipboard history is ready and empty."
-            ).readiness
-        }
+    static func clipboardReadiness(client: AgentClipboardClient = .init()) async
+        -> ExtensionAdapterReadiness
+    {
         do {
-            let text = try String(contentsOf: index, encoding: .utf8)
-            let lines = text.split(whereSeparator: \.isNewline)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let entries = try lines.map {
-                try decoder.decode(ClipboardEntry.self, from: Data($0.utf8))
-            }
-            let missing = entries.filter {
-                !FileManager.default.fileExists(
-                    atPath: blobs.appendingPathComponent("\($0.sha256).\($0.ext)").path)
-            }.count
+            let value = try await client.inspect()
             return ExtensionAdapterFacts(
-                contentCount: entries.count,
-                degradedReason: missing > 0
-                    ? "Clipboard entries missing payloads: \(missing)." : nil,
-                readyDetail: "Clipboard history entries: \(entries.count).",
+                contentCount: value.entries,
+                degradedReason: value.missingPayloads > 0
+                    ? "Clipboard entries missing payloads: \(value.missingPayloads)." : nil,
+                readyDetail: "Clipboard history entries: \(value.entries).",
                 emptyDetail: "Clipboard history is ready and empty."
             ).readiness
         } catch {
-            return .failed(
-                "Clipboard storage could not be read: \(error.localizedDescription)")
+            return .failed("Clipboard storage could not be read: \(error.localizedDescription)")
         }
     }
 
@@ -437,6 +508,25 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
+    static func keystrokeHighlightReadiness(
+        defaults: UserDefaults
+    ) -> ExtensionAdapterReadiness {
+        guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
+            return .uninstalled("Keystroke Highlight is off.")
+        }
+        guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active) else {
+            let shortcut =
+                defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel) ?? "⌃⌥⌘K"
+            return .ready("Keystroke Highlight is ready and paused. Press \(shortcut) to start it.")
+        }
+        let error = defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.runtimeError) ?? ""
+        if !error.isEmpty { return .failed(error) }
+        if defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive) {
+            return .ready("Key presses are being monitored and the overlay is ready.")
+        }
+        return .loading("The keystroke overlay is starting.")
+    }
+
     static func colorPickerReadiness(defaults: UserDefaults) async -> ExtensionAdapterReadiness {
         let formatRaw = defaults.string(forKey: AppStorageKeys.ColorPicker.copyFormat)
         let profileRaw = defaults.string(forKey: AppStorageKeys.ColorPicker.profile)
@@ -478,6 +568,26 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for capture."
                 : "Offline recognition is ready and the history is empty."
+        ).readiness
+    }
+
+    static func emojiReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let catalog = EmojiCatalog.shared
+        guard !catalog.emoji.isEmpty else {
+            return .failed("The bundled emoji catalog could not be read.")
+        }
+        let toneRaw = defaults.object(forKey: AppStorageKeys.Emoji.skinTone) as? Int
+        let frequentCount = defaults.object(forKey: AppStorageKeys.Emoji.frequentCount) as? Int
+        let configured =
+            (toneRaw == nil || EmojiSkinTone(rawValue: toneRaw!) != nil)
+            && (frequentCount == nil || (0...24).contains(frequentCount!))
+        let ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: ledger.entries.count,
+            readyDetail:
+                "\(catalog.emoji.count) emoji available, \(ledger.entries.count) used recently.",
+            setupDetail: "The stored skin tone or frequently used count is invalid.",
+            emptyDetail: "\(catalog.emoji.count) emoji are ready and nothing has been used yet."
         ).readiness
     }
 

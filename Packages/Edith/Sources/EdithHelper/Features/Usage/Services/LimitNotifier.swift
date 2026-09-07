@@ -4,57 +4,12 @@ import UserNotifications
 
 @MainActor
 final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
-    private let defaults = UserDefaults.standard
+    static let shared = LimitNotifier()
     private var center: UNUserNotificationCenter { .current() }
-    private let reminderQueue: LimitReminderQueue
 
-    init(reminderQueue: LimitReminderQueue = LimitReminderQueue()) {
-        self.reminderQueue = reminderQueue
+    override init() {
         super.init()
         center.delegate = self
-    }
-
-    func evaluate(session: LimitWindow?, week: LimitWindow?) {
-        let settings = NotifySettings.fromDefaults(SharedDefaults.store)
-        guard settings.master else {
-            cancelReminders()
-            return
-        }
-        var state = loadState()
-        let before = state
-        let alerts = LimitNotifierLogic.decide(
-            session: session, week: week, settings: settings, state: &state, now: Date())
-        if state != before { save(state) }
-        for alert in alerts { send(alert) }
-        scheduleReminders(session: session, week: week, settings: settings)
-    }
-
-    func clearStateIfMasterOff() {
-        guard !NotifySettings.fromDefaults(SharedDefaults.store).master else { return }
-        for key in [
-            "notifSessionLevel", "notifWeeklyLevel", "notifSessionPacing", "notifWeeklyPacing",
-        ] {
-            defaults.removeObject(forKey: key)
-        }
-    }
-
-    func cancelReminders() {
-        reminderQueue.submit([])
-    }
-
-    func notifyTokenExpired() {
-        let settings = NotifySettings.fromDefaults(SharedDefaults.store)
-        guard settings.master, settings.tokenExpired else { return }
-        if let last = defaults.object(forKey: "notifTokenExpiredAt") as? Date,
-            Date().timeIntervalSince(last) < 3600
-        {
-            return
-        }
-        defaults.set(Date(), forKey: "notifTokenExpiredAt")
-        send(
-            LimitAlert(
-                id: "token_expired",
-                title: "Claude token expired", body: "Run claude to log in again"))
     }
 
     func sendTest() async -> String {
@@ -99,66 +54,4 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         [.banner, .list, .sound]
     }
 
-    private func loadState() -> LimitNotifierState {
-        var s = LimitNotifierState()
-        s.sessionLevel =
-            UsageLevel(rawValue: defaults.integer(forKey: "notifSessionLevel")) ?? .green
-        s.weeklyLevel = UsageLevel(rawValue: defaults.integer(forKey: "notifWeeklyLevel")) ?? .green
-        s.sessionPacing =
-            PacingZone(rawValue: defaults.string(forKey: "notifSessionPacing") ?? "") ?? .onTrack
-        s.weeklyPacing =
-            PacingZone(rawValue: defaults.string(forKey: "notifWeeklyPacing") ?? "") ?? .onTrack
-        return s
-    }
-
-    private func save(_ s: LimitNotifierState) {
-        defaults.set(s.sessionLevel.rawValue, forKey: "notifSessionLevel")
-        defaults.set(s.weeklyLevel.rawValue, forKey: "notifWeeklyLevel")
-        defaults.set(s.sessionPacing.rawValue, forKey: "notifSessionPacing")
-        defaults.set(s.weeklyPacing.rawValue, forKey: "notifWeeklyPacing")
-    }
-
-    private func send(_ alert: LimitAlert) {
-        let content = UNMutableNotificationContent()
-        content.title = alert.title
-        content.body = alert.body
-        content.sound = .default
-        let id = alert.id
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
-            if let error {
-                NSLog("Edith notifications: add failed (%@): %@", id, error.localizedDescription)
-            }
-        }
-    }
-
-    private func scheduleReminders(
-        session: LimitWindow?, week: LimitWindow?, settings: NotifySettings
-    ) {
-        var reminders: [LimitReminder] = []
-        if settings.reminderSession,
-            let fire = LimitNotifierLogic.reminderFireDate(
-                reset: session?.resetsAt, offsetMinutes: settings.reminderSessionOffsetMin)
-        {
-            reminders.append(
-                LimitReminder(
-                    identifier: "reminder_session",
-                    title:
-                        "Session resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderSessionOffsetMin))",
-                    body: "Save your spot or send it",
-                    fireDate: fire))
-        }
-        if settings.reminderWeekly,
-            let fire = LimitNotifierLogic.reminderFireDate(
-                reset: week?.resetsAt, offsetMinutes: settings.reminderWeeklyOffsetMin)
-        {
-            reminders.append(
-                LimitReminder(
-                    identifier: "reminder_weekly",
-                    title:
-                        "Weekly resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderWeeklyOffsetMin))",
-                    body: "Last lap on the cycle",
-                    fireDate: fire))
-        }
-        reminderQueue.submit(reminders)
-    }
 }

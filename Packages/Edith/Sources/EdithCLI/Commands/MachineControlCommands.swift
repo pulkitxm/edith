@@ -15,6 +15,7 @@ struct MachinesControlCommand: AsyncParsableCommand {
             MachinesControlBluetoothCommand.self,
             MachinesControlAirplaneCommand.self,
             MachinesControlDNDCommand.self,
+            MachinesControlCaffeinateCommand.self,
             MachinesControlKeyboardLightCommand.self,
         ],
         defaultSubcommand: MachinesControlStatusCommand.self)
@@ -31,6 +32,10 @@ final class MachineControlTarget {
     let machine: Machine
     let isLocal: Bool
     private let connection: SSHConnection?
+
+    var remotePlatform: RemoteMachinePlatform? {
+        get async { await connection?.remotePlatform }
+    }
 
     init(query: String) async throws {
         if ["local", "this-mac", "thismac"].contains(query.lowercased()) {
@@ -78,7 +83,9 @@ final class MachineControlTarget {
 enum MachineControlCLI {
     static func status(machine query: String, json: Bool) async throws {
         let target = try await MachineControlTarget(query: query)
-        let result = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let platform = await controlPlatform(target)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(result, target: target)
@@ -99,11 +106,13 @@ enum MachineControlCLI {
         confirmed: Bool = true
     ) async throws {
         let target = try await MachineControlTarget(query: query)
+        let platform = await controlPlatform(target)
         if action.isDisruptive, !confirmed {
             renderPreview(action, target: target, json: json)
             return
         }
-        let status = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let status = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(status, target: target)
@@ -141,6 +150,13 @@ enum MachineControlCLI {
         }
     }
 
+    private static func controlPlatform(_ target: MachineControlTarget) async
+        -> MachineControlPlatform
+    {
+        guard !target.isLocal else { return .darwin }
+        return MachineControlPlatform(await target.remotePlatform ?? .linux)
+    }
+
     private static func statusRows(_ snapshot: MachineControlSnapshot) -> [[String]] {
         var rows: [[String]] = []
         if let value = snapshot.platform { rows.append(["platform", value.rawValue]) }
@@ -164,6 +180,9 @@ enum MachineControlCLI {
         if let value = snapshot.doNotDisturb {
             rows.append(["Do Not Disturb", switchText(value)])
         }
+        if let value = snapshot.caffeinateEnabled {
+            rows.append(["Caffeinate", switchText(value)])
+        }
         return rows
     }
 
@@ -184,6 +203,7 @@ enum MachineControlCLI {
             "bluetoothEnabled": optional(snapshot.bluetoothEnabled),
             "airplaneMode": optional(snapshot.airplaneMode),
             "doNotDisturb": optional(snapshot.doNotDisturb),
+            "caffeinateEnabled": optional(snapshot.caffeinateEnabled),
         ])
     }
 
@@ -226,7 +246,7 @@ enum MachineControlCLI {
             return .int(value)
         case let .setMuted(value), let .setWiFiEnabled(value),
             let .setBluetoothEnabled(value), let .setAirplaneMode(value),
-            let .setDoNotDisturb(value):
+            let .setDoNotDisturb(value), let .setCaffeinateEnabled(value):
             return .bool(value)
         }
     }
@@ -244,6 +264,8 @@ enum MachineControlCLI {
             value ? "turned airplane mode on" : "turned airplane mode off"
         case let .setDoNotDisturb(value):
             value ? "turned Do Not Disturb on" : "turned Do Not Disturb off"
+        case let .setCaffeinateEnabled(value):
+            value ? "turned Caffeinate on" : "turned Caffeinate off"
         }
     }
 
@@ -378,6 +400,22 @@ struct MachinesControlDNDCommand: AsyncParsableCommand {
         try await execute {
             try await MachineControlCLI.apply(
                 .setDoNotDisturb(state.enabled), machine: machine, json: json)
+        }
+    }
+}
+
+struct MachinesControlCaffeinateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "caffeinate", abstract: "Prevent automatic sleep.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Machine name, or local for this Mac.") var machine: String
+    @Argument(help: "One of on or off.") var state: MachineControlSwitch
+
+    func run() async throws {
+        try await execute {
+            try await MachineControlCLI.apply(
+                .setCaffeinateEnabled(state.enabled), machine: machine, json: json)
         }
     }
 }

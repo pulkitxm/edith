@@ -49,7 +49,7 @@ public enum CompletionScripts {
     }
 
     public static let zsh = """
-        #compdef ed edh edith
+        #compdef ed edith
 
         _ed_complete() {
           local -a lines matches
@@ -73,7 +73,7 @@ public enum CompletionScripts {
         if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
           _ed_complete "$@"
         else
-          compdef _ed_complete ed edh edith
+          compdef _ed_complete ed edith
         fi
         """
 
@@ -95,7 +95,7 @@ public enum CompletionScripts {
           done < <("$__ed" __complete --index "$COMP_CWORD" -- "${COMP_WORDS[@]}" 2>/dev/null)
         }
 
-        complete -o bashdefault -F _ed_complete ed edh edith
+        complete -o bashdefault -F _ed_complete ed edith
         """
 
     public static let fish = """
@@ -115,7 +115,6 @@ public enum CompletionScripts {
         end
 
         complete -c ed -f -a '(__ed_complete)'
-        complete -c edh -f -a '(__ed_complete)'
         complete -c edith -f -a '(__ed_complete)'
         """
 

@@ -97,7 +97,7 @@ struct MachineProcessesTab: View {
             .padding(.bottom, UIScale.pt(6))
             Divider().opacity(0.4)
             if rows.isEmpty, session.sample == nil {
-                ListRowsSkeleton(rows: 8, showsLeadingDot: false, dark: dark)
+                MachineProcessRowsSkeleton()
             } else if rows.isEmpty {
                 Text("Nothing matches that filter.")
                     .font(.system(size: UIScale.pt(12)))
@@ -131,6 +131,7 @@ struct MachineProcessesTab: View {
         Task {
             let result = await MachineProcessOperationExecution.perform(
                 pid: process.pid, signal: signal,
+                platform: session.remotePlatform ?? .linux,
                 using: { command, timeout in
                     await session.runCommand(command, timeout: timeout)
                 })

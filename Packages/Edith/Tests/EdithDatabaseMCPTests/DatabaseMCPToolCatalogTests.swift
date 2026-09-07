@@ -1,0 +1,84 @@
+import MCP
+import Testing
+
+@testable import EdithDatabase
+@testable import EdithDatabaseMCP
+
+@Suite struct DatabaseMCPToolCatalogTests {
+    @Test func exposesBoundedReadOnlyConnectionAndCapabilityTools() {
+        #expect(
+            DatabaseMCPToolCatalog.tools.map(\.name)
+                == [
+                    "database_connections", "database_capabilities", "database_browse",
+                    "database_query", "database_operations", "database_cancel_operation",
+                    "database_test_connection", "database_session", "database_key_mutation",
+                    "database_document_mutation",
+                ])
+
+        for tool in DatabaseMCPToolCatalog.tools {
+            #expect(
+                tool.annotations.readOnlyHint
+                    == ([
+                        "database_cancel_operation", "database_session", "database_key_mutation",
+                        "database_document_mutation",
+                    ].contains(tool.name)
+                        ? false : true))
+            #expect(
+                tool.annotations.destructiveHint
+                    == (["database_key_mutation", "database_document_mutation"].contains(tool.name))
+            )
+            #expect(
+                tool.annotations.idempotentHint
+                    == !["database_key_mutation", "database_document_mutation"].contains(tool.name))
+            #expect(tool.annotations.openWorldHint == false)
+            #expect(tool.inputSchema.objectValue?["type"]?.stringValue == "object")
+            #expect(tool.inputSchema.objectValue?["additionalProperties"]?.boolValue == false)
+            #expect(tool.outputSchema?.objectValue?["type"]?.stringValue == "object")
+            #expect(tool.outputSchema?.objectValue?["required"]?.arrayValue == ["status"])
+        }
+
+        let connectionProperties =
+            DatabaseMCPToolCatalog.connections.inputSchema.objectValue?["properties"]?
+            .objectValue
+        #expect(connectionProperties?["action"] != nil)
+        #expect(connectionProperties?["connection_id"] != nil)
+        #expect(connectionProperties?["search"] != nil)
+
+        let capabilityRequired =
+            DatabaseMCPToolCatalog.capabilities.inputSchema.objectValue?["required"]?
+            .arrayValue
+        #expect(capabilityRequired == ["connection_id"])
+
+        let browseProperties =
+            DatabaseMCPToolCatalog.browse.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(browseProperties?["object_path"]?.objectValue?["maxItems"]?.intValue == 32)
+        #expect(browseProperties?["page_size"]?.objectValue?["maximum"]?.intValue == 500)
+        #expect(
+            browseProperties?["continuation"]?.objectValue?["maxLength"]?.intValue == 32_768)
+        #expect(
+            browseProperties?["object_kind"]?.objectValue?["enum"]?.arrayValue
+                == DatabaseObjectKind.allCases.map { .string($0.rawValue) })
+
+        let queryProperties =
+            DatabaseMCPToolCatalog.query.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(queryProperties?["command"]?.objectValue?["maxLength"]?.intValue == 262_144)
+        #expect(queryProperties?["language"]?.objectValue?["enum"]?.arrayValue?.count == 5)
+
+        let operationProperties =
+            DatabaseMCPToolCatalog.operations.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(operationProperties?["limit"]?.objectValue?["maximum"]?.intValue == 1_000)
+        #expect(operationProperties?["states"]?.objectValue?["maxItems"]?.intValue == 7)
+        #expect(DatabaseMCPToolCatalog.cancelOperation.annotations.readOnlyHint == false)
+        #expect(DatabaseMCPToolCatalog.testConnection.annotations.readOnlyHint == true)
+        #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
+        #expect(DatabaseMCPToolCatalog.keyMutation.annotations.destructiveHint == true)
+        #expect(DatabaseMCPToolCatalog.documentMutation.annotations.destructiveHint == true)
+        let documentProperties =
+            DatabaseMCPToolCatalog.documentMutation.inputSchema.objectValue?["properties"]?
+            .objectValue
+        #expect(
+            documentProperties?["product"]?.objectValue?["enum"]?.arrayValue
+                == ["mongodb", "elasticsearch", "opensearch"])
+        #expect(documentProperties?["document"]?.objectValue?["maxProperties"]?.intValue == 4_096)
+    }
+}

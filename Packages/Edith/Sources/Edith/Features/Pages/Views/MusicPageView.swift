@@ -82,6 +82,9 @@ final class MusicRemote {
     static let shared = MusicRemote()
 
     private(set) var tracks: [Track] = []
+    private(set) var entriesLoaded = false
+    private(set) var searchLoaded = false
+    private(set) var favouritesLoaded = false
     private(set) var folderPath = ""
     private(set) var folders: [MusicFolder] = []
     private(set) var folderTracks: [Track] = []
@@ -133,17 +136,25 @@ final class MusicRemote {
     private var revealObserver: NSObjectProtocol?
     private var searchScopePath: String?
     private var folderCache: [String: [MusicFolder]] = [:]
+    private var favouritesTask: Task<Void, Never>?
+    private var favouritesGeneration = 0
     private var rescanTask: Task<Void, Never>?
     private var entriesTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var rescanGeneration = 0
     private var entriesGeneration = 0
     private var searchGeneration = 0
+    private let scanFavourites: @Sendable () -> [Track]
+    private let listSubfolders: @Sendable (String) -> [MusicFolder]
     private let scanLibrary: @Sendable () -> [Track]
     private let listFolder: @Sendable (String) -> MusicLibraryContentListing
     private let searchFolder: @Sendable (String) -> (tracks: [Track], folders: [MusicFolder])
 
     init(
+        scanFavourites: @escaping @Sendable () -> [Track] = { Favourites.tracks() },
+        listSubfolders: @escaping @Sendable (String) -> [MusicFolder] = {
+            TrackMeta.subfolders(in: $0)
+        },
         scanLibrary: @escaping @Sendable () -> [Track] = {
             MusicLibraryContentOperationExecution.rescan()
         },
@@ -156,6 +167,8 @@ final class MusicRemote {
             (TrackMeta.tracks(under: path), TrackMeta.folders(under: path))
         }
     ) {
+        self.scanFavourites = scanFavourites
+        self.listSubfolders = listSubfolders
         self.scanLibrary = scanLibrary
         self.listFolder = listFolder
         self.searchFolder = searchFolder
@@ -224,6 +237,10 @@ final class MusicRemote {
     }
 
     func stop() {
+        favouritesTask?.cancel()
+        favouritesTask = nil
+        favouritesGeneration &+= 1
+        favouritesLoaded = false
         rescanTask?.cancel()
         rescanTask = nil
         rescanGeneration &+= 1
@@ -253,6 +270,7 @@ final class MusicRemote {
         }
         visibilityObserver = nil
         tracks = []
+        entriesLoaded = false
         currentFile = nil
         isPlaying = false
         duration = 0
@@ -264,27 +282,27 @@ final class MusicRemote {
         rescanGeneration &+= 1
         let generation = rescanGeneration
         let scanLibrary = scanLibrary
+        refreshFavourites()
         entriesTask?.cancel()
         entriesTask = nil
         entriesGeneration &+= 1
         folderCache.removeAll()
+        let refreshSearch = searchScopePath != nil
         invalidateSearchScope()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
             folderPath = ""
+            entriesLoaded = false
         }
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
         rescanTask = Task { [weak self] in
-            let scanned = await Task.detached {
-                (tracks: scanLibrary(), favourites: Favourites.tracks())
-            }.value
+            let scanned = await Task.detached { scanLibrary() }.value
             guard !Task.isCancelled, let self, self.rescanGeneration == generation else { return }
             self.rescanTask = nil
-            self.tracks = scanned.tracks
-            self.favourites = scanned.favourites
-            self.favouritePaths = Set(scanned.favourites.map(\.relativePath))
+            self.tracks = scanned
             self.refreshEntries()
+            if refreshSearch { self.loadSearchScope() }
         }
     }
 
@@ -294,14 +312,33 @@ final class MusicRemote {
         let generation = entriesGeneration
         let path = folderPath
         let listFolder = listFolder
+        let listSubfolders = listSubfolders
+        var ancestor = path
+        var missingAncestors: [String] = []
+        while !ancestor.isEmpty {
+            let parent = (ancestor as NSString).deletingLastPathComponent
+            guard parent != ancestor else { break }
+            ancestor = parent
+            if folderCache[ancestor] == nil { missingAncestors.append(ancestor) }
+        }
+        let ancestorPaths = missingAncestors
         entriesTask = Task { [weak self] in
-            let entries = await Task.detached { listFolder(path) }.value
+            let result = await Task.detached {
+                (
+                    entries: listFolder(path),
+                    ancestors: ancestorPaths.map { ($0, listSubfolders($0)) }
+                )
+            }.value
             guard !Task.isCancelled, let self, self.entriesGeneration == generation,
                 self.folderPath == path
             else { return }
+            let entries = result.entries
             self.entriesTask = nil
             self.folders = entries.folders
             self.folderTracks = entries.tracks
+            self.entriesLoaded = true
+            self.folderCache[path] = entries.folders
+            for (ancestor, folders) in result.ancestors { self.folderCache[ancestor] = folders }
         }
     }
 
@@ -312,6 +349,7 @@ final class MusicRemote {
         searchGeneration &+= 1
         let generation = searchGeneration
         searchScopePath = path
+        searchLoaded = false
         let searchFolder = searchFolder
         searchTask = Task { [weak self] in
             let found = await Task.detached { searchFolder(path) }.value
@@ -321,6 +359,7 @@ final class MusicRemote {
             self.searchTask = nil
             self.searchTracks = found.tracks
             self.searchFolders = found.folders
+            self.searchLoaded = true
         }
     }
 
@@ -329,21 +368,23 @@ final class MusicRemote {
         searchTask = nil
         searchGeneration &+= 1
         searchScopePath = nil
+        searchLoaded = false
         searchTracks = []
         searchFolders = []
     }
 
-    func subfolders(of path: String) -> [MusicFolder] {
-        if let hit = folderCache[path] { return hit }
-        let list = TrackMeta.subfolders(in: path)
-        folderCache[path] = list
-        return list
+    func subfolders(of path: String) -> [MusicFolder]? {
+        folderCache[path]
     }
 
     func open(_ folder: MusicFolder) { navigate(to: folder.relativePath) }
 
     func navigate(to path: String) {
         showingFavourites = false
+        if folderPath != path {
+            entriesLoaded = false
+            invalidateSearchScope()
+        }
         folderPath = path
         refreshEntries()
     }
@@ -360,14 +401,33 @@ final class MusicRemote {
     }
 
     private func refreshFavourites() {
-        favourites = Favourites.tracks()
-        favouritePaths = Set(favourites.map(\.relativePath))
+        favouritesTask?.cancel()
+        favouritesGeneration &+= 1
+        let generation = favouritesGeneration
+        let scanFavourites = scanFavourites
+        favouritesTask = Task { [weak self] in
+            let tracks = await Task.detached { scanFavourites() }.value
+            guard !Task.isCancelled, let self, self.favouritesGeneration == generation else {
+                return
+            }
+            self.favouritesTask = nil
+            self.favourites = tracks
+            self.favouritePaths = Set(tracks.map(\.relativePath))
+            self.favouritesLoaded = true
+        }
     }
 
     func toggleFavourite(_ track: Track) {
         let operation: MusicLibraryOperation =
             favouritePaths.contains(track.relativePath) ? .unfavorite : .favorite
         _ = MusicLibraryOperationExecution.setFavourite(operation, path: track.relativePath)
+        if operation == .unfavorite {
+            favouritePaths.remove(track.relativePath)
+            favourites.removeAll { $0.relativePath == track.relativePath }
+        } else {
+            favouritePaths.insert(track.relativePath)
+            favourites.append(track)
+        }
         refreshFavourites()
     }
 
@@ -1002,32 +1062,45 @@ struct MusicPage: View {
 
     @ViewBuilder
     private func chevronMenu(parentPath: String) -> some View {
-        let folders = remote.subfolders(of: parentPath)
-        if folders.isEmpty {
-            Image(systemName: "chevron.right")
-                .font(.system(size: UIScale.pt(9)))
-                .foregroundStyle(.tertiary)
-        } else {
-            Menu {
-                ForEach(folders) { folder in
-                    Button(folder.name) { remote.navigate(to: folder.relativePath) }
-                }
-            } label: {
+        if let folders = remote.subfolders(of: parentPath) {
+            if folders.isEmpty {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: UIScale.pt(9), weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(16), height: UIScale.pt(16))
-                    .contentShape(Rectangle())
+                    .font(.system(size: UIScale.pt(9)))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Menu {
+                    ForEach(folders) { folder in
+                        Button(folder.name) { remote.navigate(to: folder.relativePath) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Jump to a folder here")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Jump to a folder here")
+        } else {
+            SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading folders")
         }
     }
 
     @ViewBuilder private var trackList: some View {
-        if filteredFolders.isEmpty && filteredTracks.isEmpty {
+        if remote.showingFavourites
+            ? !remote.favouritesLoaded
+            : (search.isEmpty ? !remote.entriesLoaded : !remote.searchLoaded)
+        {
+            ScrollView {
+                MusicLibrarySkeleton(grid: gridView)
+                    .pageContent(compact)
+            }
+        } else if filteredFolders.isEmpty && filteredTracks.isEmpty {
             VStack(spacing: UIScale.pt(8)) {
                 Text(emptyMessage)
                     .font(.system(size: UIScale.pt(13)))
@@ -1466,6 +1539,50 @@ private func trackMenu(
         }
     }
     Button("Move to Trash", role: .destructive, action: onDelete)
+}
+
+struct MusicLibrarySkeleton: View {
+    let grid: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            if grid {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: MusicTile.width), alignment: .top)],
+                    alignment: .leading, spacing: UIScale.pt(16)
+                ) {
+                    ForEach(0..<12, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                            SkeletonBlock(width: MusicTile.art, height: MusicTile.art, corner: 8)
+                            SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 78, height: 12)
+                            SkeletonBlock(width: 64, height: 10)
+                        }
+                        .padding(UIScale.pt(MusicTile.inset))
+                    }
+                }
+            } else {
+                LazyVStack(spacing: UIScale.pt(2)) {
+                    ForEach(0..<8, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(10)) {
+                            SkeletonBlock(width: 38, height: 38, corner: 6)
+                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 164 : 132, height: 13)
+                                SkeletonBlock(width: 92, height: 10.5)
+                            }
+                            Spacer()
+                            SkeletonBlock(width: 32, height: 10)
+                            SkeletonBlock(width: 22, height: 22, corner: 11)
+                        }
+                        .padding(.vertical, UIScale.pt(6))
+                        .padding(.horizontal, UIScale.pt(8))
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading music library")
+    }
 }
 
 private enum MusicTile {
@@ -2024,29 +2141,82 @@ struct MusicFooter: View {
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
         var presenterBlurMusic =
         true
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var collapsed = false
     private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
     private var dark: Bool { scheme == .dark }
 
+    static let expandedHeight: CGFloat = 64
+    static let collapsedHeight: CGFloat = 2
+
     var body: some View {
-        Group {
-            if let track = remote.current {
-                playing(track)
+        ZStack(alignment: .trailing) {
+            if collapsed {
+                collapsedLine
             } else {
-                idle
+                Group {
+                    if let track = remote.current {
+                        playing(track)
+                    } else {
+                        idle
+                    }
+                }
+                .frame(height: UIScale.pt(Self.expandedHeight))
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(height: UIScale.pt(1))
+                }
+            }
+            collapseToggle
+        }
+        .frame(
+            height: UIScale.pt(collapsed ? Self.collapsedHeight : Self.expandedHeight),
+            alignment: .bottom
+        )
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: collapsed)
+    }
+
+    private var collapsedLine: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                Rectangle()
+                    .fill(theme)
+                    .frame(
+                        width: geo.size.width
+                            * MusicBarProgress.fraction(
+                                elapsed: remote.elapsed, duration: remote.duration))
             }
         }
-        .frame(height: UIScale.pt(64))
+        .frame(height: UIScale.pt(Self.collapsedHeight))
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(height: UIScale.pt(1))
+    }
+
+    private var collapseToggle: some View {
+        Button {
+            collapsed.toggle()
+        } label: {
+            Image(systemName: "chevron.up")
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(collapsed ? 0 : 180))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.edith(.borderless))
+        .padding(.trailing, UIScale.pt(6))
+        .padding(.bottom, UIScale.pt(collapsed ? 4 : 0))
+        .help(collapsed ? "Show the player bar" : "Collapse the player bar")
+        .accessibilityLabel(collapsed ? "Show the player bar" : "Collapse the player bar")
     }
 
     private func playing(_ track: Track) -> some View {
@@ -2266,5 +2436,62 @@ private struct PageArtworkThumb: View {
             }
             artwork = await TrackMeta.artwork(for: track)
         }
+    }
+}
+
+enum MusicBarProgress {
+    static func fraction(elapsed: Double, duration: Double) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(1, max(0, elapsed / duration))
+    }
+}
+
+struct MusicSidebarPill: View {
+    let theme: Color
+    let expand: () -> Void
+    @State private var remote = MusicRemote.shared
+    @ObservedObject private var visibility = WindowVisibility.shared
+
+    private var progress: Double {
+        MusicBarProgress.fraction(elapsed: remote.elapsed, duration: remote.duration)
+    }
+
+    var body: some View {
+        Button(action: expand) {
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(theme)
+                    Text(remote.current?.title ?? "Nothing playing")
+                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if remote.current != nil {
+                        PlaybackWave(
+                            playing: remote.isPlaying && visibility.visible,
+                            color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
+                    }
+                }
+                if remote.current != nil {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.12))
+                            Capsule()
+                                .fill(theme)
+                                .frame(width: max(2, geo.size.width * progress))
+                        }
+                    }
+                    .frame(height: UIScale.pt(2))
+                }
+            }
+            .padding(.horizontal, UIScale.pt(9))
+            .padding(.vertical, UIScale.pt(7))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        }
+        .buttonStyle(.edith(.borderless))
+        .help("Show the player bar")
+        .accessibilityLabel("Show the player bar")
     }
 }
