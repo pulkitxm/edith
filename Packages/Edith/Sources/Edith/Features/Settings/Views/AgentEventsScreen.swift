@@ -67,12 +67,13 @@ final class AgentEventsModel {
 
     func copyEvents() async {
         let events = Array(matches.reversed())
-        let value = await Task.detached(priority: .userInitiated) {
-            events.map { event in
+        let value = await Task.detached(priority: .userInitiated) { () -> String in
+            let lines: [String] = events.map { event in
                 let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
                 return
                     "\(event.date.ISO8601Format()) [\(event.level.rawValue)] \(event.category).\(event.name)\(task): \(event.message)"
-            }.joined(separator: "\n")
+            }
+            return lines.joined(separator: "\n")
         }.value
         guard !Task.isCancelled else { return }
         NSPasteboard.general.clearContents()
