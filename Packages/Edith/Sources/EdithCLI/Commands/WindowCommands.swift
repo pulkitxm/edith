@@ -21,7 +21,8 @@ struct WindowStatusCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let enabled =
-                ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults) ?? false
+                ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults)
+                ?? false
             let greenButton =
                 CLIEnvironment.sharedDefaults.object(
                     forKey: AppStorageKeys.WindowTools.greenButtonMaximizes) as? Bool ?? true
@@ -58,7 +59,8 @@ struct WindowStatusCommand: AsyncParsableCommand {
 private func requestWindowLayout(_ action: WindowLayoutAction, json: Bool) async throws {
     try await execute {
         guard
-            ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults) == true
+            ExtensionRegistry.entry("windowTools")?.isEnabled(in: CLIEnvironment.sharedDefaults)
+                == true
         else {
             throw CLIFailure.unavailable(
                 "the Window Tools extension is off",
