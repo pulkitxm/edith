@@ -3,6 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct MouseControlsRows: View {
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @AppStorage(AppStorageKeys.Mouse.enabled, store: SharedDefaults.store) private var enabled =
         false
     @AppStorage(AppStorageKeys.Mouse.smoothScroll, store: SharedDefaults.store) private
@@ -57,7 +58,7 @@ struct MouseControlsRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .onAppear(perform: refreshRunningApps)
+        .onAppear { if automaticActionsEnabled { refreshRunningApps() } }
     }
 
     @ViewBuilder private var generalSections: some View {

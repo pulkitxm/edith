@@ -4,6 +4,8 @@ import SwiftUI
 
 @MainActor
 enum HerdrAgentWindow {
+    static let viewControlsContentWidth = 262.0
+    static let viewControlsWidth = 270.0
     private static var windows: [String: NSWindow] = [:]
 
     static var openIDs: Set<String> { Set(windows.keys) }
@@ -15,6 +17,10 @@ enum HerdrAgentWindow {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         return true
+    }
+
+    static func close(_ id: String) {
+        windows[id]?.performClose(nil)
     }
 
     static func open(agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
@@ -55,10 +61,10 @@ enum HerdrAgentWindow {
         accessory.layoutAttribute = .right
         let hosting = NSHostingView(
             rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
-                .frame(width: 228, height: 28)
+                .frame(width: viewControlsContentWidth, height: 28)
                 .padding(.trailing, 8)
         )
-        hosting.frame = NSRect(x: 0, y: 0, width: 236, height: 28)
+        hosting.frame = NSRect(x: 0, y: 0, width: viewControlsWidth, height: 28)
         accessory.view = hosting
         window.addTitlebarAccessoryViewController(accessory)
     }
@@ -103,6 +109,7 @@ struct HerdrTitlebarViewPicker: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selection: HerdrAgentView {
         store.detachedTab(id: agentID)?.view ?? .agent
@@ -113,26 +120,49 @@ struct HerdrTitlebarViewPicker: View {
     private var accent: Color { DashSkin.accent(dark, theme: theme) }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(2)) {
-            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
-                HerdrTitlebarViewButton(
-                    mode: mode,
-                    selected: selection == mode,
-                    dark: dark,
-                    theme: theme
-                ) {
-                    store.setView(mode, for: agentID)
+        HStack(spacing: UIScale.pt(6)) {
+            HStack(spacing: UIScale.pt(2)) {
+                ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                    HerdrTitlebarViewButton(
+                        mode: mode,
+                        selected: selection == mode,
+                        dark: dark,
+                        theme: theme
+                    ) {
+                        store.setView(mode, for: agentID)
+                    }
                 }
             }
+            .padding(UIScale.pt(2))
+            .frame(width: UIScale.pt(228))
+            .widgetBar(
+                cornerRadius: 8,
+                fill: DashSkin.paper(dark, theme: theme),
+                stroke: accent.opacity(dark ? 0.5 : 0.35)
+            )
+            Button {
+                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                    store.detailOpen.toggle()
+                }
+            } label: {
+                Image(systemName: "sidebar.right")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark, theme: theme).opacity(0.72))
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                    .padding(UIScale.pt(2))
+                    .widgetBar(
+                        cornerRadius: 8,
+                        fill: store.detailOpen
+                            ? accent.opacity(dark ? 0.24 : 0.16)
+                            : DashSkin.paper(dark, theme: theme),
+                        stroke: accent.opacity(dark ? 0.5 : 0.35)
+                    )
+            }
+            .buttonStyle(.edith(.borderless, selected: store.detailOpen, tint: accent))
+            .help(store.detailOpen ? "Hide details" : "Show details")
+            .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
         }
-        .padding(UIScale.pt(2))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: DashSkin.paper(dark, theme: theme),
-            stroke: accent.opacity(dark ? 0.5 : 0.35)
-        )
         .tint(accent)
-        .help("Choose the agent, split, or diff view")
     }
 }
 

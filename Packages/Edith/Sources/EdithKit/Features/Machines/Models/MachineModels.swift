@@ -125,7 +125,7 @@ public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-public enum MachineConnectionState: Equatable, Sendable {
+public enum MachineConnectionState: Codable, Equatable, Sendable {
     case disconnected
     case connecting
     case reconnecting(message: String? = nil)

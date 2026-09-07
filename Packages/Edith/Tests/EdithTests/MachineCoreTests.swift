@@ -4,6 +4,13 @@ import Testing
 @testable import EdithCore
 @testable import EdithKit
 
+private func decodedMachinePowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
+}
+
 @Suite struct ShellQuoteTests {
     @Test func passesSafeStringsThrough() {
         #expect(ShellQuote.quote("docker") == "docker")
@@ -104,14 +111,120 @@ import Testing
 }
 
 @Suite struct SSHConnectionPlatformTests {
-    @Test func supportsMacOSAndLinux() {
+    @Test func supportsMacOSLinuxAndWindows() {
         #expect(SSHConnection.supportsPlatform("Darwin"))
         #expect(SSHConnection.supportsPlatform("Linux"))
+        #expect(SSHConnection.supportsPlatform("Windows_NT"))
     }
 
     @Test func rejectsUnknownRemotePlatforms() {
         #expect(!SSHConnection.supportsPlatform("FreeBSD"))
         #expect(!SSHConnection.supportsPlatform(""))
+    }
+
+    @Test func connectionProbeUsesNativeCommandsForEveryPlatform() {
+        let linux = MachineConnectionProbe.command(platform: .linux)
+        let windows = MachineConnectionProbe.command(platform: .windows)
+        let windowsScript = decodedMachinePowerShell(windows)
+
+        #expect(linux.contains("uname -sr"))
+        #expect(linux.contains("command -v docker"))
+        #expect(windows.hasPrefix("powershell.exe "))
+        #expect(!windows.contains("uname"))
+        #expect(!windows.contains("/dev/null"))
+        #expect(windowsScript?.contains("Get-Command docker.exe") == true)
+        #expect(windowsScript?.contains("Environment]::UserName") == true)
+    }
+
+    @Test func connectionProbeParsesWindowsLineEndings() {
+        let result = MachineConnectionProbe.parse(
+            "Microsoft Windows 11\r\npulkit\r\ndocker-yes\r\n")
+
+        #expect(result.system == "Microsoft Windows 11")
+        #expect(result.user == "pulkit")
+        #expect(result.dockerAvailable)
+    }
+}
+
+@Suite struct PowerShellTests {
+    @Test func quotesLiteralValues() {
+        #expect(PowerShell.literal("C:\\Users\\O'Brien") == "'C:\\Users\\O''Brien'")
+    }
+
+    @Test func encodesCommandsAsUTF16LE() throws {
+        let command = PowerShell.command("Write-Output 'hello'")
+        #expect(command.contains("-OutputFormat Text"))
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        #expect(String(data: data, encoding: .utf16LittleEndian) == "Write-Output 'hello'")
+    }
+
+    @Test func invocationsPropagateNativeAndPowerShellFailures() throws {
+        let single = try #require(PowerShell.invocation(["Get-Date"]))
+        let native = try #require(PowerShell.invocation(["cmd.exe", "/c", "exit /b 7"]))
+
+        #expect(
+            single.hasPrefix(
+                "$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; try { "
+                    + "& 'Get-Date'"))
+        #expect(native.contains("& 'cmd.exe' '/c' 'exit /b 7'"))
+        #expect(native.contains("exit $edithExitCode"))
+        #expect(native.contains("[Console]::Error.WriteLine($_.Exception.Message); exit 1"))
+    }
+
+    @Test func decodesPowerShellErrorsAndDropsStartupProgress() {
+        let error = """
+            #< CLIXML
+            <Objs><S S="Error">Cannot find &apos;service&apos;._x000D__x000A_</S><S S="Error">Try again.</S></Objs>
+            """
+        let progress = """
+            #< CLIXML
+            <Objs><Obj S="progress"><AV>Preparing modules for first use.</AV></Obj></Objs>
+            """
+
+        #expect(PowerShell.decodedError(error) == "Cannot find 'service'.\r\nTry again.")
+        #expect(PowerShell.decodedError(progress).isEmpty)
+        #expect(PowerShell.decodedError("plain error") == "plain error")
+    }
+
+    @Test func successfulCommandsDropMultiplexingWarningsWithoutDroppingRemoteStderr() {
+        let result = SSHExecResult(
+            status: 0, stdout: Data("C:\\Users\\kpulk".utf8),
+            stderr: Data(
+                "mux_client_request_session: session request failed: Session open refused by peer\n"
+                    .utf8))
+        let remoteWarning = SSHExecResult(
+            status: 0, stdout: Data("value\n".utf8),
+            stderr: Data("remote warning\n".utf8))
+
+        #expect(result.successfulCommandText == "C:\\Users\\kpulk")
+        #expect(remoteWarning.successfulCommandText == "value\nremote warning\n")
+    }
+
+    @Test func multiplexingWarningsDoNotHidePowerShellErrors() {
+        let result = SSHExecResult(
+            status: 1, stdout: Data(),
+            stderr: Data(
+                """
+                mux_client_request_session: session request failed: Session open refused by peer
+                #< CLIXML
+                <Objs><S S="Error">Could not find the destination._x000D__x000A_</S></Objs>
+                """.utf8))
+
+        #expect(result.stderrText == "Could not find the destination.")
+    }
+
+    @Test func windowsUploadsCreateTheirDestinationDirectorySafely() throws {
+        let command = try #require(
+            SSHTransferCommands.createUploadDirectory(
+                path: "C:\\Users\\me\\AppData\\Local\\Temp\\nested\\image.png",
+                platform: .windows))
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+
+        #expect(script.contains("[IO.Directory]::CreateDirectory($parent)"))
+        #expect(script.contains("[Console]::Error.WriteLine($_.Exception.Message)"))
     }
 }
 
@@ -229,11 +342,24 @@ import Testing
     }
 
     @Test func remoteInstallPlacesTheNativeBinaryOnTheManagedPath() {
-        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.8")
+        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.10")
+        #expect(
+            command.contains(
+                "https://raw.githubusercontent.com/pulkitxm/ssh-clipboard/5f41edfa86e30c090e2f5bca5d48692dd2ca6137/dist/ssh-clipboard-0.2.10.tgz"
+            ))
         #expect(command.contains("vendor/$os-$arch/ssh-clipboard"))
         #expect(command.contains("$HOME/.local/bin/ssh-clipboard"))
         #expect(command.contains("chmod 755"))
         #expect(command.contains("mv \"$temporary\""))
+    }
+
+    @Test func clipboardSyncRejectsWindowsBeforeRunningUnixSetup() {
+        #expect(SSHClipboardManager.supports(.darwin))
+        #expect(SSHClipboardManager.supports(.linux))
+        #expect(!SSHClipboardManager.supports(.windows))
+        #expect(
+            SSHClipboardManagerError.unsupportedPlatform.errorDescription
+                == "Clipboard sync supports remote macOS and Linux machines.")
     }
 }
 
@@ -418,6 +544,56 @@ import Testing
         #expect(text.contains("@EDITH@"))
     }
 
+    @Test func windowsCollectorUsesBoundedNativeMetrics() {
+        let script = MachineCollector.script(for: .windows, follow: false, interval: 5)
+        let text = String(decoding: script ?? Data(), as: UTF8.self)
+        #expect(text.hasPrefix("$EdithMode = 'once'\n$EdithInterval = 5"))
+        #expect(text.contains("Win32_OperatingSystem"))
+        #expect(text.contains("Win32_PerfFormattedData_PerfOS_Processor"))
+        #expect(text.contains("Get-NetAdapterStatistics"))
+        #expect(text.contains("Get-Process"))
+        #expect(!text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(!text.contains("Win32_PerfFormattedData_PerfProc_Process"))
+        #expect(text.contains("Test-EdithTransport"))
+        #expect(text.contains("$current.StartTime -eq $transportStartedAt"))
+        #expect(text.contains("$collectorLifetimeSeconds = 600"))
+        #expect(text.contains("$_['rxBps']"))
+        #expect(text.contains("Sort-Object { $_['cpu'] } -Descending"))
+        #expect(text.contains("@EDITH@"))
+    }
+
+    @Test func decodesWindowsCollectorHelloWithCarriageReturn() {
+        let line =
+            "@EDITH@{\"t\":\"hello\",\"v\":1,\"os\":\"Microsoft Windows 11 Home Single Language\","
+            + "\"osID\":\"windows\",\"kernel\":\"10.0.26200\",\"arch\":\"AMD64\","
+            + "\"host\":\"PULKIT-TUF\",\"cpuModel\":\"12th Gen Intel(R) Core(TM) i7-12700H\","
+            + "\"cores\":20,\"memTotalKB\":66720300,\"virtual\":false}\r"
+        guard case let .hello(hello)? = MachineMetricsDecoder.decode(line: line) else {
+            Issue.record("expected Windows hello record")
+            return
+        }
+        #expect(hello.host == "PULKIT-TUF")
+    }
+
+    @Test func collectorSelectsShellForEachPlatform() {
+        let linux = MachineCollector.invocation(for: .linux, follow: true)
+        let mac = MachineCollector.invocation(for: .darwin, follow: false)
+        let windows = MachineCollector.invocation(for: .windows, follow: true)
+        let windowsInput = String(decoding: windows?.stdinData ?? Data(), as: UTF8.self)
+        #expect(linux?.command == "sh -s -- --stream -i 2")
+        #expect(linux?.stdinData != nil)
+        #expect(mac?.command == "sh -s -- --once")
+        #expect(mac?.stdinData != nil)
+        #expect(windows?.command.contains("powershell.exe") == true)
+        #expect(windowsInput.hasSuffix("\n\(MachineCollector.windowsScriptTerminator)\n"))
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadLine") == true)
+        #expect(
+            decodedMachinePowerShell(windows?.command ?? "")?.contains(
+                MachineCollector.windowsScriptTerminator)
+                == true)
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadToEnd") == false)
+    }
+
     @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {
         let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
         #expect(text.contains("/fan\" j \"_input"))
@@ -460,9 +636,43 @@ import Testing
         #expect(command.contains("/run/edith-platform-profile-original"))
         #expect(!command.contains("performance;"))
     }
+
+    @Test func parsesWindowsPowerSchemesWithSpaces() {
+        let profile = WindowsPowerProfileCommands.parseStatus(
+            "Balanced\nPower saver\nBalanced\nHigh performance\n")
+
+        #expect(profile?.current == "Balanced")
+        #expect(profile?.choices == ["Power saver", "Balanced", "High performance"])
+        #expect(WindowsPowerProfileCommands.parseStatus("Balanced\nPower saver\n") == nil)
+    }
+
+    @Test func buildsWindowsPowerSchemeCommandsAndReversion() throws {
+        let status = try #require(decodedMachinePowerShell(WindowsPowerProfileCommands.status))
+        let permanent = try #require(
+            WindowsPowerProfileCommands.setProfile("Power saver", durationSeconds: 0))
+        let timed = try #require(
+            WindowsPowerProfileCommands.setProfile("High performance", durationSeconds: 1_800))
+        let permanentScript = try #require(decodedMachinePowerShell(permanent))
+        let timedScript = try #require(decodedMachinePowerShell(timed))
+
+        #expect(status.contains("powercfg.exe /getactivescheme"))
+        #expect(status.contains("powercfg.exe /list"))
+        #expect(permanentScript.contains("$requested = 'Power saver'"))
+        #expect(permanentScript.contains("powercfg.exe /setactive $selectedGuid"))
+        #expect(!permanentScript.contains("Start-Sleep"))
+        #expect(timedScript.contains("Start-Sleep -Seconds 1800"))
+        #expect(timedScript.contains("power-profile-revert.json"))
+        #expect(WindowsPowerProfileCommands.setProfile("\n", durationSeconds: 0) == nil)
+    }
 }
 
 @Suite struct MachineControlCenterCommandsTests {
+    @Test func mapsRemotePlatformsToControlPlatforms() {
+        #expect(MachineControlPlatform(.darwin) == .darwin)
+        #expect(MachineControlPlatform(.linux) == .linux)
+        #expect(MachineControlPlatform(.windows) == .windows)
+    }
+
     @Test func parsesACompleteSnapshot() {
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
@@ -477,6 +687,7 @@ import Testing
             EDITH_CONTROL_BLUETOOTH_ENABLED=1
             EDITH_CONTROL_AIRPLANE_MODE=0
             EDITH_CONTROL_DO_NOT_DISTURB=1
+            EDITH_CONTROL_CAFFEINATE_ENABLED=1
             """)
 
         #expect(
@@ -492,7 +703,8 @@ import Testing
                     wifiEnabled: false,
                     bluetoothEnabled: true,
                     airplaneMode: false,
-                    doNotDisturb: true
+                    doNotDisturb: true,
+                    caffeinateEnabled: true
                 ))
         #expect(!snapshot.isEmpty)
     }
@@ -507,6 +719,68 @@ import Testing
         #expect(snapshot.volume == nil)
         #expect(!snapshot.isEmpty)
         #expect(MachineControlCenterCommands.parseStatus("banner text").isEmpty)
+    }
+
+    @Test func parsesWindowsSnapshots() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_PLATFORM=windows
+            EDITH_CONTROL_BATTERY_LEVEL=81
+            EDITH_CONTROL_BRIGHTNESS=55
+            EDITH_CONTROL_VOLUME=34
+            EDITH_CONTROL_MUTED=0
+            EDITH_CONTROL_WIFI_ENABLED=1
+            EDITH_CONTROL_BLUETOOTH_ENABLED=0
+            EDITH_CONTROL_AIRPLANE_MODE=0
+            EDITH_CONTROL_DO_NOT_DISTURB=1
+            """)
+
+        #expect(snapshot.platform == .windows)
+        #expect(snapshot.batteryLevel == 81)
+        #expect(snapshot.brightness == 55)
+        #expect(snapshot.volume == 34)
+        #expect(snapshot.muted == false)
+        #expect(snapshot.wifiEnabled == true)
+        #expect(snapshot.bluetoothEnabled == false)
+        #expect(snapshot.airplaneMode == false)
+        #expect(snapshot.doNotDisturb == true)
+    }
+
+    @Test func buildsNativeWindowsStatusAndMutations() throws {
+        let status = String(decoding: WindowsMachineControlCommands.statusInput, as: UTF8.self)
+        let brightness = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setBrightness(140),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let volume = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setVolume(-10),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let airplane = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setAirplaneMode(true),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+
+        #expect(status.contains("EDITH_CONTROL_PLATFORM=windows"))
+        #expect(status.contains("WmiMonitorBrightness"))
+        #expect(status.contains("Get-NetAdapter"))
+        #expect(status.contains("Get-PnpDevice -Class Bluetooth"))
+        #expect(status.contains("IAudioEndpointVolume"))
+        #expect(
+            status.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[Console]"))
+        #expect(brightness.contains("Brightness = [byte]100"))
+        #expect(volume.contains("[EdithAudio]::Level = 0"))
+        #expect(
+            volume.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[EdithAudio]")
+        )
+        #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(airplane.contains("Disable-NetAdapter"))
+        #expect(airplane.contains("Disable-PnpDevice"))
     }
 
     @Test func parsesBatteryOnlySnapshots() {
@@ -549,6 +823,7 @@ import Testing
             EDITH_CONTROL_BLUETOOTH_ENABLED=
             EDITH_CONTROL_AIRPLANE_MODE=no
             EDITH_CONTROL_DO_NOT_DISTURB=-1
+            EDITH_CONTROL_CAFFEINATE_ENABLED=enabled
             """)
 
         #expect(snapshot.isEmpty)
@@ -620,6 +895,9 @@ import Testing
                 for: .setDoNotDisturb(true), platform: .linux))
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setCaffeinateEnabled(true), platform: .linux))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
                 for: .setBrightness(50), platform: .darwin))
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
@@ -633,6 +911,9 @@ import Testing
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
                 for: .setAirplaneMode(true), platform: nil))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setWiFiEnabled(false), platform: .windows))
     }
 
     @Test func protectsSudoInputFromUnprivilegedFallbacks() {
@@ -681,6 +962,27 @@ import Testing
         #expect(
             MachineControlCenterCommands.statusCommand.contains(
                 "NameHasOwner org.gnome.Shell"))
+    }
+
+    @Test func supportsCurrentAndLegacyCaffeineExtensionSettings() {
+        let status = MachineControlCenterCommands.statusCommand
+        let enable = MachineControlCenterCommands.command(
+            for: .setCaffeinateEnabled(true), withSudoPassword: false)
+        let disable = MachineControlCenterCommands.command(
+            for: .setCaffeinateEnabled(false), withSudoPassword: false)
+
+        for command in [status, enable, disable] {
+            #expect(command.contains("gnome-extensions info caffeine@patapon.info"))
+            #expect(command.contains("org.gnome.shell.extensions.caffeine"))
+            #expect(command.contains("cli-toggle"))
+            #expect(command.contains("toggle-state"))
+            #expect(command.contains("caffeine@patapon.info/schemas"))
+        }
+        #expect(status.contains("EDITH_CONTROL_%s=%s"))
+        #expect(status.contains("emit_bool CAFFEINATE_ENABLED"))
+        #expect(enable.contains("set \"$caffeine_schema\" \"$caffeine_key\" true"))
+        #expect(disable.contains("set \"$caffeine_schema\" \"$caffeine_key\" false"))
+        #expect(enable.contains("Caffeinate setting did not change."))
     }
 
     @Test func marksOnlyDisruptiveNetworkOperations() {
@@ -766,6 +1068,7 @@ import Testing
             .setBluetoothEnabled(true),
             .setAirplaneMode(true),
             .setDoNotDisturb(true),
+            .setCaffeinateEnabled(true),
         ]
         let commands =
             [MachineControlCenterCommands.statusCommand]
@@ -826,6 +1129,46 @@ import Testing
         #expect(snapshot.volume == 37)
     }
 
+    @Test func windowsStatusUsesTheNativeCommand() async throws {
+        var command = ""
+        var input = Data()
+        let result = await MachineControlOperationExecution.status(platform: .windows) {
+            next, stdin, _ in
+            command = next
+            input = stdin ?? Data()
+            return .success("EDITH_CONTROL_PLATFORM=windows\nEDITH_CONTROL_VOLUME=37\n")
+        }
+
+        let snapshot = try result.get()
+        #expect(command == WindowsMachineControlCommands.status)
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        let launcher = try #require(decodedMachinePowerShell(command))
+        #expect(launcher.contains("while($o-lt $b.Length)"))
+        #expect(!launcher.contains("ReadToEnd"))
+        #expect(input == WindowsMachineControlCommands.statusInput)
+        #expect(command.count < 1_000)
+        #expect(input.count > 5_000)
+        #expect(snapshot.platform == .windows)
+        #expect(snapshot.volume == 37)
+    }
+
+    @Test func windowsMutationsUseStandardInput() async throws {
+        var command = ""
+        var input = Data()
+        let result = await MachineControlOperationExecution.perform(
+            .setVolume(41), machineID: Machine.localID, isLocal: false,
+            platform: .windows
+        ) { next, stdin, _ in
+            command = next
+            input = stdin ?? Data()
+            return .success("")
+        }
+
+        _ = try result.get()
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        #expect(String(decoding: input, as: UTF8.self).contains("[EdithAudio]::Level = 41"))
+    }
+
     @Test func mutationsUseTheSharedBuilderAndTimeout() async throws {
         var command = ""
         var timeout: TimeInterval = 0
@@ -849,6 +1192,7 @@ import Testing
         #expect(!MachineControlAction.setWiFiEnabled(true).isDisruptive)
         #expect(!MachineControlAction.setAirplaneMode(false).isDisruptive)
         #expect(MachineControlAction.setMuted(true).operation == .mute)
+        #expect(MachineControlAction.setCaffeinateEnabled(true).operation == .caffeinate)
     }
 }
 

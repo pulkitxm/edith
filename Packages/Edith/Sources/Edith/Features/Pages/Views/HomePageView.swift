@@ -16,6 +16,8 @@ struct HomePage: View {
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -23,6 +25,8 @@ struct HomePage: View {
         false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
     @Environment(\.colorScheme) private var scheme
     @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -40,22 +44,34 @@ struct HomePage: View {
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled {
+                                if systemEnabled || keepAwakeEnabled || presenterEnabled
+                                    || lidAwakeEnabled
+                                    || keystrokeHighlightEnabled
+                                {
                                     QuickActionsCard(dark: dark)
                                 }
                             }
                             VStack(spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled {
+                                if systemEnabled || keepAwakeEnabled || presenterEnabled
+                                    || lidAwakeEnabled
+                                    || keystrokeHighlightEnabled
+                                {
                                     QuickActionsCard(dark: dark)
                                 }
                             }
                         }
-                        if usageEnabled, model.loaded {
-                            SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                ActivityHeatmap(
-                                    days: model.calendarDays, cuts: model.chartData.heatCuts,
-                                    model: model, dark: dark, blur: blurMoney)
+                        if usageEnabled {
+                            if model.loaded {
+                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                                    ActivityHeatmap(
+                                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                                        model: model, dark: dark, blur: blurMoney)
+                                }
+                            } else if !model.loadAttempted {
+                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                                    ActivityHeatmapSkeleton()
+                                }
                             }
                         }
                         LazyVGrid(
@@ -523,10 +539,16 @@ private struct QuickActionsCard: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var keystrokeHighlightActive = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @State private var lidAwakeActive = SharedDefaults.store.bool(
@@ -535,10 +557,16 @@ private struct QuickActionsCard: View {
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
+    private var actionCount: Int {
+        (systemEnabled ? 1 : 0) + (keepAwakeEnabled ? 1 : 0)
+            + (lidAwakeEnabled ? 1 : 0)
+            + (keystrokeHighlightEnabled ? 1 : 0)
+            + (presenterEnabled ? 1 : 0)
+    }
     private var columns: [GridItem] {
         Array(
             repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
-            count: 4)
+            count: max(1, actionCount))
     }
 
     var body: some View {
@@ -551,21 +579,14 @@ private struct QuickActionsCard: View {
                     ) {
                         AppRuntimeCenter().request(.cleanKeys)
                     }
+                }
+                if keepAwakeEnabled {
                     tile(
                         icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",
                         sub: "Stop this Mac from sleeping", active: preventSleep
                     ) {
                         $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue
                             .toggle()
-                    }
-                }
-                if presenterEnabled {
-                    tile(
-                        icon: "person.wave.2", title: "Presenter mode",
-                        sub: "Blur sensitive values on screen", active: presenterMode
-                    ) {
-                        _ = PresenterRuntimeOperationExecution.perform(
-                            presenterMode ? .stop : .start)
                     }
                 }
                 if lidAwakeEnabled {
@@ -578,6 +599,25 @@ private struct QuickActionsCard: View {
                         } else {
                             confirmingLidAwake = true
                         }
+                    }
+                }
+                if keystrokeHighlightEnabled {
+                    tile(
+                        icon: "keyboard.badge.ellipsis", title: "Keystrokes",
+                        sub: "Show keyboard input on screen", active: keystrokeHighlightActive
+                    ) {
+                        $keystrokeHighlightActive
+                            .configured(AppStorageKeys.KeystrokeHighlight.active).wrappedValue
+                            .toggle()
+                    }
+                }
+                if presenterEnabled {
+                    tile(
+                        icon: "person.wave.2", title: "Presenter mode",
+                        sub: "Blur sensitive values on screen", active: presenterMode
+                    ) {
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            presenterMode ? .stop : .start)
                     }
                 }
             }
@@ -867,10 +907,14 @@ private struct UsageSummaryCard: View {
                     jumpLink("Open Agent Usage", to: .dashboard, dark: dark)
                 }
             } else {
-                Text(model.loadAttempted ? "No usage data yet" : "Loading usage data…")
-                    .font(.system(size: UIScale.pt(12.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                if model.loadAttempted {
+                    Text("No usage data yet")
+                        .font(.system(size: UIScale.pt(12.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                } else {
+                    UsageSummarySkeleton(dark: dark)
+                }
             }
         }
     }
@@ -915,6 +959,66 @@ private struct UsageSummaryCard: View {
         }
         .chartYAxis(.hidden)
         .frame(height: UIScale.pt(64))
+    }
+}
+
+private struct ActivityHeatmapSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                    ForEach(0..<18, id: \.self) { _ in
+                        VStack(spacing: UIScale.pt(3)) {
+                            SkeletonBlock(width: 14, height: 8, corner: 3)
+                            ForEach(0..<7, id: \.self) { _ in
+                                SkeletonBlock(width: 14, height: 14, corner: 3)
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: UIScale.pt(137))
+        }
+        .accessibilityLabel("Loading activity")
+    }
+}
+
+private struct UsageSummarySkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                HStack(spacing: UIScale.pt(24)) {
+                    ForEach(0..<2, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            SkeletonBlock(width: index == 0 ? 44 : 66, height: 8)
+                            SkeletonBlock(width: 72, height: 22)
+                            SkeletonBlock(width: 88, height: 8)
+                        }
+                    }
+                }
+                HStack(alignment: .bottom, spacing: UIScale.pt(5)) {
+                    ForEach(0..<14, id: \.self) { index in
+                        SkeletonBlock(
+                            height: CGFloat(18 + index % 5 * 8),
+                            corner: 2)
+                    }
+                }
+                .frame(height: UIScale.pt(62), alignment: .bottom)
+                HStack(spacing: UIScale.pt(12)) {
+                    ForEach(0..<3, id: \.self) { index in
+                        SkeletonBlock(
+                            width: index == 1 ? 78 : 62,
+                            height: 9)
+                    }
+                }
+                SkeletonBlock(width: 116, height: 9)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
+        .accessibilityLabel("Loading usage summary")
     }
 }
 

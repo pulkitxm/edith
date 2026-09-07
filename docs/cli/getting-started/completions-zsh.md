@@ -18,7 +18,7 @@ ed completions zsh
 ed completions zsh > ~/.zsh/completions/_ed
 ```
 
-The script starts with `#compdef ed edh edith` and defines `_ed_complete`, which
+The script starts with `#compdef ed edith` and defines `_ed_complete`, which
 shells out to `ed __complete --index $((CURRENT-1)) -- "${words[@]}"`, treats a
 line of `#files` as a call to `_files`, and passes everything else to `compadd`.
 It handles being loaded either as an autoloaded function or sourced directly.

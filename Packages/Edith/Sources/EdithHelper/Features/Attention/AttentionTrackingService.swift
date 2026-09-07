@@ -6,61 +6,51 @@ import Foundation
 
 @MainActor
 final class AttentionTrackingService {
-    private struct HeartbeatSnapshot: Sendable {
-        let startedAt: Date
-        let duration: TimeInterval
-        let presence: AttentionPresence
-        let appName: String?
-        let bundleID: String?
-        let pid: pid_t
-        let wantsWindowTitle: Bool
-    }
-
     private let repository: AttentionRepository
     private var settings: AttentionSettings
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var lastHeartbeatAt = Date()
     private var locked = false
-    private var server: AttentionIngestionServer?
-    private var lastBackupAt = Date.distantPast
-    private var appendTask: Task<Void, Never>?
+    private let writer: AttentionHeartbeatWriter
+    nonisolated(unsafe) private var shutdownTask: Task<Void, Never>?
 
-    init(repository: AttentionRepository = AttentionRepository()) {
+    init(
+        repository: AttentionRepository = AttentionRepository(),
+        writer: AttentionHeartbeatWriter? = nil
+    ) {
+        self.writer =
+            writer
+            ?? AttentionHeartbeatWriter(
+                spool: AttentionDeliverySpool(
+                    file: repository.directory.appendingPathComponent("delivery-spool.json")))
         self.repository = repository
         settings = repository.loadSettings()
         installObservers()
         startTimer()
-        startServer()
     }
 
-    func shutdown() {
-        writeHeartbeat()
+    deinit { shutdownTask?.cancel() }
+
+    @discardableResult
+    func shutdown() -> Task<Void, Never> {
+        if let shutdownTask { return shutdownTask }
         timer?.invalidate()
         timer = nil
-        server?.stop()
-        server = nil
-        backupIfNeeded(force: true)
         let center = NSWorkspace.shared.notificationCenter
         observers.forEach(center.removeObserver)
         observers.removeAll()
-        appendTask?.cancel()
+        writeHeartbeat()
+        let writer = writer
+        let task = Task { await writer.stop() }
+        shutdownTask = task
+        return task
     }
 
     func sync(_ nextSettings: AttentionSettings) {
-        let serverChanged =
-            settings.isEnabled != nextSettings.isEnabled
-            || settings.browserTrackingEnabled != nextSettings.browserTrackingEnabled
-            || settings.serverPort != nextSettings.serverPort
-            || settings.serverToken != nextSettings.serverToken
         writeHeartbeat()
         settings = nextSettings
-        if serverChanged {
-            server?.stop()
-            server = nil
-            startServer()
-        }
-        backupIfNeeded(force: true)
+
     }
 
     private func startTimer() {
@@ -70,18 +60,6 @@ final class AttentionTrackingService {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-    }
-
-    private func startServer() {
-        guard settings.isEnabled, settings.browserTrackingEnabled else { return }
-        let server = AttentionIngestionServer(repository: repository, settings: settings)
-        do {
-            try server.start()
-            self.server = server
-        } catch {
-            Log.lifecycle.error(
-                "attention server failed: \(error.localizedDescription, privacy: .public)")
-        }
     }
 
     private func installObservers() {
@@ -121,7 +99,6 @@ final class AttentionTrackingService {
 
     private func writeHeartbeat(now: Date = Date()) {
         let duration = min(30, max(0, now.timeIntervalSince(lastHeartbeatAt)))
-        backupIfNeeded()
         guard settings.isEnabled, settings.trackingEnabled, duration > 0.2,
             let app = NSWorkspace.shared.frontmostApplication
         else {
@@ -132,48 +109,13 @@ final class AttentionTrackingService {
             .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
         let presence: AttentionPresence =
             locked ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
-        let snapshot = HeartbeatSnapshot(
-            startedAt: lastHeartbeatAt, duration: duration, presence: presence,
-            appName: app.localizedName, bundleID: app.bundleIdentifier,
-            pid: app.processIdentifier, wantsWindowTitle: settings.windowTitlesEnabled)
+        let event = AttentionEvent(
+            startedAt: lastHeartbeatAt, duration: duration, source: .application,
+            presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier)
         lastHeartbeatAt = now
-        let repository = repository
-        let previous = appendTask
-        appendTask = Task.detached(priority: .utility) {
-            await previous?.value
-            let title = snapshot.wantsWindowTitle ? Self.focusedWindowTitle(pid: snapshot.pid) : nil
-            let event = AttentionEvent(
-                startedAt: snapshot.startedAt, duration: snapshot.duration, source: .application,
-                presence: snapshot.presence, appName: snapshot.appName,
-                bundleID: snapshot.bundleID, windowTitle: title)
-            try? repository.append(event)
-        }
-    }
-
-    private nonisolated static func focusedWindowTitle(pid: pid_t) -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-        let application = AXUIElementCreateApplication(pid)
-        var windowValue: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                application, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-            let window = windowValue
-        else { return nil }
-        var titleValue: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                window as! AXUIElement, kAXTitleAttribute as CFString, &titleValue) == .success
-        else { return nil }
-        return (titleValue as? String).map { String($0.prefix(500)) }
-    }
-
-    private func backupIfNeeded(force: Bool = false) {
-        guard settings.iCloudBackupEnabled,
-            force || Date().timeIntervalSince(lastBackupAt) >= 900
-        else { return }
-        lastBackupAt = Date()
-        DispatchQueue.global(qos: .utility).async {
-            _ = try? AttentionCloudBackup().backup()
-        }
+        writer.submit(
+            AttentionHeartbeatSample(
+                event: event, processID: app.processIdentifier,
+                captureWindowTitle: settings.windowTitlesEnabled))
     }
 }
