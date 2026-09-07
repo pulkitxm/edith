@@ -42,7 +42,7 @@ test("every change area covers its repository inputs", () => {
       ".swift-format",
     ],
     docs: ["docs/cli/README.md"],
-    workflows: [".github/workflows/ci.yml"],
+    workflows: [".github/workflows/ci.yml", ".github/actions/cache-swift/action.yml"],
     promo: ["apps/promo-video/src/Promo.tsx"],
     site: ["apps/site/index.html"],
     scripts: [
@@ -187,7 +187,7 @@ test("targeted publishing workflows watch every deployment input", () => {
 });
 
 test("every workflow change runs the runtime guard", () => {
-  expect(ciWorkflow).toContain("area workflows '^\\.github/workflows/'");
+  expect(ciWorkflow).toContain("area workflows '^\\.github/(workflows|actions)/'");
   expect(ciWorkflow).toContain(
     "needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'",
   );
