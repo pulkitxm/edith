@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum DockPreviewMode: String, CaseIterable, Codable, Sendable {
