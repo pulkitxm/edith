@@ -280,7 +280,7 @@ final class UsageStore: FeatureModule {
         let on =
             SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {
-            statusItem = LimitsStatusItem()
+            statusItem = LimitsStatusItem(store: self)
             updateStatusItem()
         }
         if !on, let item = statusItem {

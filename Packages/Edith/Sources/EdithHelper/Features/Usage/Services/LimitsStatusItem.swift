@@ -1,18 +1,23 @@
 import AppKit
 import EdithKit
+import SwiftUI
 
 @MainActor
 final class LimitsStatusItem {
     nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
 
+    private let panel = StatusItemPanel()
+    private weak var store: UsageStore?
     private var item: NSStatusItem?
     private var stackedView: StackedLimitsView?
 
-    init() {
+    init(store: UsageStore) {
+        self.store = store
         showUnavailable()
     }
 
     func remove() {
+        panel.close()
         if let item { NSStatusBar.system.removeStatusItem(item) }
         item = nil
         stackedView = nil
@@ -21,7 +26,24 @@ final class LimitsStatusItem {
 
     @objc private func clicked() {
         guard let item else { return }
-        StatusItemMenu.handleClick(on: item) { MainApp.open(section: "dashboard") }
+        StatusItemMenu.handleClick(on: item) {
+            if let store {
+                panel.show(
+                    from: item, title: "Rate Limits",
+                    actions: [
+                        .init(
+                            title: store.refreshingLimits ? "Refreshing…" : "Refresh",
+                            enabled: !store.refreshingLimits
+                        ) {
+                            Task { await store.refreshLimits(force: true) }
+                        },
+                        .init(title: "Open Usage…") { MainApp.open(section: "dashboard") },
+                    ]
+                ) {
+                    LimitsMenuPanel(store: store)
+                }
+            }
+        }
     }
 
     func update(_ providers: [ProviderLimits]) {
@@ -418,5 +440,42 @@ final class StackedLimitsView: NSView {
     ) -> NSAttributedString {
         NSAttributedString(
             string: text, attributes: [.font: font, .foregroundColor: color])
+    }
+}
+
+struct LimitsMenuPanel: View {
+    let store: UsageStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if PresenterState.shared.active
+                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            {
+                Text("Usage hidden during presentation").foregroundStyle(.secondary)
+            } else {
+                ForEach(store.enabledProviders) { provider in
+                    let limits = store.limits(for: provider)
+                    Text(provider.label).font(.headline)
+                    StatusProgressRow(
+                        title: "5-hour limit", percent: limits.session?.percent,
+                        resetsAt: limits.session?.resetsAt)
+                    StatusProgressRow(
+                        title: "Weekly · all models", percent: limits.week?.percent,
+                        resetsAt: limits.week?.resetsAt)
+                    if let fable = limits.fable {
+                        StatusProgressRow(
+                            title: "Weekly · Fable", percent: fable.percent,
+                            resetsAt: fable.resetsAt)
+                    }
+                }
+            }
+            if let error = store.limitsError {
+                Text(error).font(.caption).foregroundStyle(.secondary)
+            }
+            if let updated = store.limitsUpdatedAt {
+                Text("Updated \(updated, style: .relative) ago")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }
