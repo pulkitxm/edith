@@ -417,7 +417,9 @@ HISTORY='
         | . as $block
         | ([($old.daily // [])[] | select(.period == $block.period)][0]) as $published
         | select(
-            any($existing[]; historyKey(.) == historyKey($block))
+            .source != "cli"
+            or .provenance.kind != "published-aggregate"
+            or any($existing[]; historyKey(.) == historyKey($block))
             or $published == null
             or (.baseline | baselineIdentity($block.source)) == ($published | baselineIdentity($block.source))
             or coverageRegressed(.baseline.bySource[$block.source]; $published.bySource[$block.source])) ];

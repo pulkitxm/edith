@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BillingArchive } from "../Packages/Edith/Sources/EdithKit/Resources/usage-billing-archive.mjs";
+
 const inheritedGitVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
   "GIT_COMMON_DIR",
@@ -110,6 +112,7 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  archivedBaseline,
   missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
 }) {
@@ -278,6 +281,14 @@ exec "$REAL_JQ" "$@"
 `,
     );
     chmodSync(jqPath, 0o755);
+  }
+  if (archivedBaseline) {
+    const archive = new BillingArchive(join(output, "billing-history", "cli"));
+    archive.bootstrap({
+      generatedAt: "2026-09-01T00:00:00Z",
+      blocks: [archivedBaseline],
+    });
+    archive.close();
   }
   const process = Bun.spawnSync(["bash", scriptPath, output], {
     env: {
@@ -2940,6 +2951,58 @@ describe("retained history coverage", () => {
       regressed.historyRetention.blocks[0].candidates[0].bySource.cli[0]
         .inputTokens,
     ).toBe(125);
+  });
+
+  test("full collection publishes new usage after an archived baseline was resolved", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = merge(
+      doc([]),
+      doc([day(baseline.period, { cli: [row("one", 150)] })]),
+    );
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      archivedBaseline: baseline,
+      existingUsage: JSON.stringify(previous),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const saved = JSON.parse(result.output);
+    expect(saved.totals.tokens).toBe(151);
+    expect(
+      saved.daily.find((value) => value.period === baseline.period).bySource
+        .cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      saved.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(result.stdout).toContain("summary");
+  }, 15_000);
+
+  test("an uncovered incoming archive baseline still refuses publication", () => {
+    const previous = doc([day("2026-09-05", { cli: [row("one", 100)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: "2026-09-05",
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline: day("2026-09-05", { cli: [row("one", 150)] }),
+          candidates: [],
+        },
+      ],
+    };
+    expect(
+      jqExit(HISTORY, "null", [
+        "--argjson",
+        "previous",
+        JSON.stringify([previous]),
+        "--argjson",
+        "fresh",
+        JSON.stringify([fresh]),
+      ]),
+    ).not.toBe(0);
   });
 
   test("moving model costs into an aggregate does not freeze growing token totals", () => {
