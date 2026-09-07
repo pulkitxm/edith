@@ -1,7 +1,6 @@
 import AppKit
 import EdithKit
 import SwiftUI
-import Observation
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
@@ -173,7 +172,6 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 }
 
 @MainActor
-@Observable
 final class SystemMenuSnapshot {
     var cpu = 0.0
     var memory = 0.0
@@ -186,8 +184,6 @@ struct SystemMenuReadings: View {
         VStack(alignment: .leading, spacing: 14) {
             StatusProgressRow(title: "CPU", percent: snapshot.cpu)
             StatusProgressRow(title: "Memory", percent: snapshot.memory)
-            Text("Updates every 2 seconds")
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }
