@@ -168,7 +168,7 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain("timeout-minutes: 30");
+  expect(swiftTest).toContain("timeout-minutes: 45");
   expect(swiftTest).toContain(
     "python3 -B scripts/test-swift-test-isolation.py",
   );
