@@ -193,16 +193,18 @@ ed system stats --follow --interval 5 --json | jq -c '{at: .sample.at, cpu: .sam
 
 ## Behaviour notes
 
-Nothing is mutated and nothing is written: the command samples and prints.
-Neither the Edith app nor the menu bar helper has to be running, and no macOS
-permission is involved, so this never exits 4.
+The command reads metrics without changing system settings. The main window and
+menu bar app do not need to be running, but the installed background agent must
+be available for the native monitor snapshot. An unavailable agent returns an
+error instead of starting another native sampler.
 
-The first sample costs about half a second. `ed` takes throwaway machine and
-monitor samples,
-sleeps 500 ms, then takes the one it prints, because CPU and network figures are
-deltas between two readings and the first reading has nothing to compare
-against. That is also why `intervalSeconds` on the first line of a `--follow`
-run reads around `0.56` rather than your `--interval`.
+The portable machine sample uses a 500 ms warm-up to calculate its initial CPU
+and network deltas. The native `monitor` object comes from the shared daemon
+sampler, which also supplies the System Monitor page and menu bar. Following
+holds a live subscription for two-second monitor updates; GPU readings are
+cached for ten seconds and disk-capacity and battery readings for thirty.
+`--interval` controls printed samples, so shorter intervals can repeat the same
+native monitor snapshot.
 
 `--interval` is validated as greater than zero and finite, so `--interval 0`,
 a negative value and `--interval nan` all exit 2 before any sampling happens.
