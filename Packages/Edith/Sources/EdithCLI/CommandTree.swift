@@ -135,6 +135,24 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed scratchpad ls": Spec(options: ["--json", "--help", "--search"]),
+        "ed scratchpad show": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad create": Spec(options: ["--json", "--help", "--name", "--text", "--file"]),
+        "ed scratchpad set": Spec(
+            options: ["--json", "--help", "--text", "--file"], arguments: [.free]),
+        "ed scratchpad rename": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad duplicate": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad rm": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed scratchpad clear": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed scratchpad copy-all": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad export": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad open": Spec(options: ["--json", "--help"]),
+        "ed scratchpad remember": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed scratchpad": Spec(options: ["--json", "--help"]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

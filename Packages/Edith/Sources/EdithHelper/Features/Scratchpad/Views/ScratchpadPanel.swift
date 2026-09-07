@@ -27,7 +27,7 @@ final class ScratchpadPanel: NSObject, NSWindowDelegate {
     }
 
     func uninstall() {
-        store?.flushSave()
+        store?.shutdown()
         hide()
         store = nil
         panel?.delegate = nil
@@ -36,8 +36,15 @@ final class ScratchpadPanel: NSObject, NSWindowDelegate {
         hosting = nil
     }
 
+    func shutdownForTermination() async {
+        store?.shutdown()
+        await store?.waitForWrites()
+        uninstall()
+    }
+
     func toggle() {
-        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true else { return }
+        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true
+        else { return }
         isVisible ? hide() : show()
     }
 

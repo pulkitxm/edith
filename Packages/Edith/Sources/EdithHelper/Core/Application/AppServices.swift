@@ -104,7 +104,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         ScratchpadHotKey.unregister()
-        ScratchpadPanel.shared.uninstall()
+        await ScratchpadPanel.shared.shutdownForTermination()
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
         stopAttentionService()
@@ -305,7 +305,8 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
-        let scratchpadOn = ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) ?? false
+        let scratchpadOn =
+            ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) ?? false
         if scratchpadOn {
             ScratchpadPanel.shared.install()
             ScratchpadHotKey.register()

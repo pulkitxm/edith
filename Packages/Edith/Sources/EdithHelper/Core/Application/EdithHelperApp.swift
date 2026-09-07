@@ -431,7 +431,8 @@ enum ScratchpadHotKey {
     }
 
     static func register() {
-        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true else {
+        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true
+        else {
             unregister()
             return
         }

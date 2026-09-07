@@ -16,6 +16,7 @@ struct ScratchpadPanelView: View {
             tabs
             Divider()
             editor
+                .disabled(!store.ready)
             Divider()
             footer
         }

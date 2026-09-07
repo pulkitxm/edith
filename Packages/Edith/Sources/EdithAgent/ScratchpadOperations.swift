@@ -9,15 +9,20 @@ public enum AgentScratchpadOperations {
                 let document: ScratchpadDocument
                 switch operation {
                 case .list:
-                    document = try ScratchpadRepository.load(retention: request.retention, now: request.now)
+                    document = try ScratchpadRepository.load(
+                        retention: request.retention, now: request.now)
                 case .create:
-                    document = try ScratchpadRepository.create(name: request.name, text: request.text, now: request.now)
+                    document = try ScratchpadRepository.create(
+                        name: request.name, text: request.text, now: request.now)
                 case .update:
-                    document = try ScratchpadRepository.update(request.selector, text: request.text, now: request.now)
+                    document = try ScratchpadRepository.update(
+                        request.selector, text: request.text, now: request.now)
                 case .rename:
-                    document = try ScratchpadRepository.rename(request.selector, to: request.name ?? "")
+                    document = try ScratchpadRepository.rename(
+                        request.selector, to: request.name ?? "")
                 case .duplicate:
-                    document = try ScratchpadRepository.duplicate(request.selector, now: request.now)
+                    document = try ScratchpadRepository.duplicate(
+                        request.selector, now: request.now)
                 case .remove:
                     document = try ScratchpadRepository.remove(request.selector)
                 case .clear:

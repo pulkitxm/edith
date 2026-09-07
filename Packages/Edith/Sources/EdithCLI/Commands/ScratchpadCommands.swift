@@ -24,8 +24,8 @@ enum ScratchpadCLI {
             CLIEnvironment.sharedDefaults.string(forKey: AppStorageKeys.Scratchpad.retention))
     }
 
-    static func load() throws -> ScratchpadDocument {
-        try AgentScratchpadClient.load(retention: retention)
+    static func load() async throws -> ScratchpadDocument {
+        try await AgentScratchpadClient.load(retention: retention)
     }
 
     static func pad(_ selector: String?, in document: ScratchpadDocument) throws -> ScratchpadPad {
@@ -80,7 +80,7 @@ struct ScratchpadListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let results =
                 search.map { ScratchpadRepository.search($0, in: document) }
                 ?? document.pads.map { ScratchpadSearchResult(pad: $0, matchCount: 0) }
@@ -121,7 +121,7 @@ struct ScratchpadShowCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let value = try ScratchpadCLI.pad(pad, in: document)
             if json {
                 CLIOut.json(ScratchpadCLI.json(value, selected: value.id == document.selectedID))
@@ -143,9 +143,9 @@ struct ScratchpadCreateCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            _ = try ScratchpadCLI.load()
+            _ = try await ScratchpadCLI.load()
             let body = try ScratchpadCLI.content(text: text, file: file)
-            let document = try AgentScratchpadClient.create(name: name, text: body)
+            let document = try await AgentScratchpadClient.create(name: name, text: body)
             let created = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -171,10 +171,10 @@ struct ScratchpadSetCommand: AsyncParsableCommand {
             guard text != nil || file != nil else {
                 throw CLIFailure("pass --text or --file")
             }
-            let current = try ScratchpadCLI.load()
+            let current = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: current)
             let body = try ScratchpadCLI.content(text: text, file: file)
-            let document = try AgentScratchpadClient.update(target.id.uuidString, text: body)
+            let document = try await AgentScratchpadClient.update(target.id.uuidString, text: body)
             let updated = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -196,8 +196,8 @@ struct ScratchpadRenameCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            _ = try ScratchpadCLI.load()
-            let document = try AgentScratchpadClient.rename(pad, to: name)
+            _ = try await ScratchpadCLI.load()
+            let document = try await AgentScratchpadClient.rename(pad, to: name)
             let updated = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -218,9 +218,9 @@ struct ScratchpadDuplicateCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let current = try ScratchpadCLI.load()
+            let current = try await ScratchpadCLI.load()
             let source = try ScratchpadCLI.pad(pad, in: current)
-            let document = try AgentScratchpadClient.duplicate(source.id.uuidString)
+            let document = try await AgentScratchpadClient.duplicate(source.id.uuidString)
             let copy = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -242,13 +242,13 @@ struct ScratchpadRemoveCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: document)
             let plan = CLIDestructivePlan(
                 action: "remove scratchpad", targets: [target.id.uuidString],
                 confirmed: yes, json: json, fields: ["name": .string(target.name)])
             guard plan.shouldApply() else { return }
-            let updated = try AgentScratchpadClient.remove(target.id.uuidString)
+            let updated = try await AgentScratchpadClient.remove(target.id.uuidString)
             ScratchpadCLI.announce()
             plan.finish(
                 changed: true, plain: "removed \(target.name)",
@@ -267,14 +267,14 @@ struct ScratchpadClearCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: document)
             let plan = CLIDestructivePlan(
                 action: "clear scratchpad", targets: [target.id.uuidString],
                 confirmed: yes, json: json,
                 fields: ["name": .string(target.name), "characters": .int(target.text.count)])
             guard plan.shouldApply() else { return }
-            _ = try AgentScratchpadClient.clear(target.id.uuidString)
+            _ = try await AgentScratchpadClient.clear(target.id.uuidString)
             ScratchpadCLI.announce()
             plan.finish(changed: !target.text.isEmpty, plain: "cleared \(target.name)")
         }
@@ -290,7 +290,7 @@ struct ScratchpadCopyAllCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: document)
             let text = try ScratchpadRepository.copyAllText(target)
             CLIEnvironment.clipboardPasteboard.clearContents()
@@ -318,7 +318,7 @@ struct ScratchpadExportCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: document)
             let destination = URL(fileURLWithPath: path).standardizedFileURL
             try ScratchpadRepository.export(target, to: destination)
@@ -343,7 +343,9 @@ struct ScratchpadOpenCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard CLIEnvironment.sharedDefaults.bool(forKey: AppStorageKeys.Scratchpad.enabled)
+            guard
+                ExtensionRegistry.entry("scratchpad")?.isEnabled(in: CLIEnvironment.sharedDefaults)
+                    == true
             else {
                 throw CLIFailure.unavailable(
                     "the Scratchpad extension is off",
@@ -379,7 +381,7 @@ struct ScratchpadRememberCommand: AsyncParsableCommand {
                         "Scratchpad works without Companion; enable Companion before promoting a pad"
                 )
             }
-            let document = try ScratchpadCLI.load()
+            let document = try await ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: document)
             guard !target.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw CLIFailure.unavailable("the scratchpad is empty")

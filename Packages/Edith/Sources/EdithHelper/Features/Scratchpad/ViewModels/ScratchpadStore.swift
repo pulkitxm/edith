@@ -17,9 +17,19 @@ final class ScratchpadStore {
 
     private var saveTask: Task<Void, Never>?
     private var retentionTimer: Timer?
+    private var operationTail: Task<Void, Never>?
+    private var operationID = UUID()
+    private var editRevision = 0
+    private var stopped = false
+    private(set) var ready = false
 
     init() {
         reload()
+    }
+
+    init(document: ScratchpadDocument) {
+        self.document = document
+        ready = true
     }
 
     var selectedPad: ScratchpadPad? {
@@ -32,6 +42,7 @@ final class ScratchpadStore {
             guard let index = document.pads.firstIndex(where: { $0.id == document.selectedID }),
                 document.pads[index].text != newValue
             else { return }
+            editRevision += 1
             document.pads[index].text = newValue
             document.pads[index].modifiedAt = newValue.isEmpty ? nil : Date()
             scheduleSave()
@@ -48,90 +59,80 @@ final class ScratchpadStore {
 
     func reload() {
         flushSave()
-        do {
-            document = try AgentScratchpadClient.load(retention: retention)
-            failure = nil
-            scheduleRetention()
-        } catch {
-            failure = error.localizedDescription
-        }
+        let retention = retention
+        enqueue { try await AgentScratchpadClient.load(retention: retention) }
     }
 
     func select(_ id: UUID) {
         flushSave()
-        do {
-            document = try AgentScratchpadClient.select(id.uuidString)
-            previewing = false
-            failure = nil
-        } catch {
-            failure = error.localizedDescription
-        }
+        previewing = false
+        enqueue { try await AgentScratchpadClient.select(id.uuidString) }
     }
 
     func create() {
         flushSave()
-        do {
-            document = try AgentScratchpadClient.create()
-            query = ""
-            previewing = false
-            failure = nil
-            announceChange()
-        } catch {
-            failure = error.localizedDescription
-        }
+        query = ""
+        previewing = false
+        enqueue { try await AgentScratchpadClient.create() }
     }
 
     func renameSelected(to name: String) {
         guard let selectedPad else { return }
         flushSave()
-        do {
-            document = try AgentScratchpadClient.rename(selectedPad.id.uuidString, to: name)
-            failure = nil
-            announceChange()
-        } catch {
-            failure = error.localizedDescription
-        }
+        enqueue { try await AgentScratchpadClient.rename(selectedPad.id.uuidString, to: name) }
     }
 
     func duplicateSelected() {
         guard let selectedPad else { return }
         flushSave()
-        do {
-            document = try AgentScratchpadClient.duplicate(selectedPad.id.uuidString)
-            query = ""
-            previewing = false
-            failure = nil
-            announceChange()
-        } catch {
-            failure = error.localizedDescription
-        }
+        query = ""
+        previewing = false
+        enqueue { try await AgentScratchpadClient.duplicate(selectedPad.id.uuidString) }
     }
 
     func removeSelected() {
         guard let selectedPad else { return }
         flushSave()
-        do {
-            document = try AgentScratchpadClient.remove(selectedPad.id.uuidString)
-            previewing = false
-            failure = nil
-            announceChange()
-        } catch {
-            failure = error.localizedDescription
-        }
+        previewing = false
+        enqueue { try await AgentScratchpadClient.remove(selectedPad.id.uuidString) }
     }
 
     func clearSelected() {
         guard let selectedPad else { return }
         saveTask?.cancel()
         saveTask = nil
-        do {
-            document = try AgentScratchpadClient.clear(selectedPad.id.uuidString)
-            savePending = false
-            outcome = "Cleared"
-            failure = nil
-            announceChange()
-        } catch {
-            failure = error.localizedDescription
+        savePending = false
+        editRevision += 1
+        if let index = document.pads.firstIndex(where: { $0.id == selectedPad.id }) {
+            document.pads[index].text = ""
+            document.pads[index].modifiedAt = nil
+        }
+        enqueue { try await AgentScratchpadClient.clear(selectedPad.id.uuidString) }
+    }
+
+    private func enqueue(_ operation: @escaping @MainActor () async throws -> ScratchpadDocument) {
+        let previous = operationTail
+        let id = UUID()
+        operationID = id
+        let revision = editRevision
+        operationTail = Task { [self] in
+            await previous?.value
+            defer { if operationID == id { operationTail = nil } }
+            do {
+                var updated = try await operation()
+                if revision != editRevision, let current = selectedPad,
+                    let index = updated.pads.firstIndex(where: { $0.id == current.id })
+                {
+                    updated.pads[index].text = current.text
+                    updated.pads[index].modifiedAt = current.modifiedAt
+                }
+                document = updated
+                ready = true
+                failure = nil
+                scheduleRetention()
+            } catch {
+                failure = error.localizedDescription
+            }
         }
     }
 
@@ -195,17 +196,28 @@ final class ScratchpadStore {
         guard savePending, let selectedPad else { return }
         saveTask?.cancel()
         saveTask = nil
-        do {
-            document = try AgentScratchpadClient.update(
-                selectedPad.id.uuidString, text: selectedPad.text,
-                now: selectedPad.modifiedAt ?? Date())
-            savePending = false
-            failure = nil
-            announceChange()
-            scheduleRetention()
-        } catch {
-            failure = error.localizedDescription
+        savePending = false
+        enqueue {
+            do {
+                return try await AgentScratchpadClient.update(
+                    selectedPad.id.uuidString, text: selectedPad.text,
+                    now: selectedPad.modifiedAt ?? Date())
+            } catch {
+                self.savePending = true
+                throw error
+            }
         }
+    }
+
+    func shutdown() {
+        stopped = true
+        flushSave()
+        retentionTimer?.invalidate()
+        retentionTimer = nil
+    }
+
+    func waitForWrites() async {
+        await operationTail?.value
     }
 
     func clearMessage() {
@@ -234,16 +246,12 @@ final class ScratchpadStore {
 
     private func scheduleRetention() {
         retentionTimer?.invalidate()
-        guard let expiry = document.nextExpiry(for: retention) else { return }
+        guard !stopped, let expiry = document.nextExpiry(for: retention) else { return }
         retentionTimer = Timer.scheduledTimer(
             withTimeInterval: max(1, expiry.timeIntervalSinceNow + 0.1), repeats: false
         ) { [weak self] _ in
             Task { @MainActor in self?.reload() }
         }
-    }
-
-    private func announceChange() {
-        IPC.post(IPC.Name.scratchpadChanged)
     }
 
     private func safeFileName(_ value: String) -> String {
