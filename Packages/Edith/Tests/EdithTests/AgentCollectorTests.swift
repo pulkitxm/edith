@@ -97,7 +97,7 @@ import Testing
         let payload = try #require(try await job.run())
         let snapshot = try AgentPayload.decode(UsageTopicSnapshot.self, from: payload)
 
-        #expect(snapshot.failure != nil)
+        #expect(snapshot.failure == "the usage refresh pipeline is missing from this build")
         #expect(snapshot.days == 0)
     }
 
