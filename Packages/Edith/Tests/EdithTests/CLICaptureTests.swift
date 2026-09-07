@@ -30,6 +30,14 @@ import Testing
             try EdRoot.parseAsRoot(["capture", "record", "library"]) is CaptureRecordLibraryCommand)
     }
 
+    @Test func parsesDaemonExportWithAnExplicitDestination() throws {
+        let command = try EdRoot.parseAsRoot([
+            "capture", "record", "export", "00000000-0000-0000-0000-000000000001",
+            "--to", "/tmp/recording.mp4", "--json",
+        ])
+        #expect(command is CaptureRecordExportCommand)
+    }
+
     @Test func commandTreeMatchesTheParserSurface() throws {
         let capture = try #require(CommandTree.root.child("capture"))
         #expect(
@@ -41,7 +49,7 @@ import Testing
         #expect(
             record.children.map(\.name) == [
                 "area", "window", "display", "pause", "resume", "stop", "cancel", "status",
-                "library",
+                "library", "export",
             ])
         #expect(record.children.allSatisfy { $0.options.contains("--json") })
     }
