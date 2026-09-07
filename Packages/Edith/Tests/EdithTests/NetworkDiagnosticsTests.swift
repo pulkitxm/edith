@@ -126,6 +126,11 @@ import Testing
                 NetworkDiagnosticRequest(
                     configuration: configuration, keepHistory: true, saveBaseline: false))
         }
+        try store.write { database in
+            try database.execute(
+                sql: "UPDATE network_diagnostic SET capturedAt = ?",
+                arguments: [Date(timeIntervalSince1970: 0)])
+        }
         let loaded = try AgentPayload.decode(
             [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 100))
         #expect(loaded.count == 10)

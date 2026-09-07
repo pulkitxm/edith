@@ -109,7 +109,7 @@ actor NetworkDiagnosticsService {
                     arguments: [snapshot.id.uuidString, Date(), data])
                 try database.execute(
                     sql:
-                        "DELETE FROM network_diagnostic WHERE id NOT IN (SELECT id FROM network_diagnostic ORDER BY capturedAt DESC LIMIT ?)",
+                        "DELETE FROM network_diagnostic WHERE id NOT IN (SELECT id FROM network_diagnostic ORDER BY capturedAt DESC, rowid DESC LIMIT ?)",
                     arguments: [configuration.timelineLimit])
             }
         }
@@ -126,7 +126,8 @@ actor NetworkDiagnosticsService {
         let rows = try store.read { database in
             try Data.fetchAll(
                 database,
-                sql: "SELECT payload FROM network_diagnostic ORDER BY capturedAt DESC LIMIT ?",
+                sql:
+                    "SELECT payload FROM network_diagnostic ORDER BY capturedAt DESC, rowid DESC LIMIT ?",
                 arguments: [max(1, min(limit, 1000))])
         }
         return try AgentPayload.encode(
