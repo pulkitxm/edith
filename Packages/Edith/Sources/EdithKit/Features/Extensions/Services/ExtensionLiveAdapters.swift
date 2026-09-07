@@ -66,7 +66,7 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
-        "lidAwake",
+        "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
         "attention", "seoAudit",
@@ -104,6 +104,7 @@ public enum ExtensionLiveAdapters {
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
+        case "keepAwake": .ready("Keep Awake is ready to prevent idle sleep without System.")
         case "appMaintenance": appMaintenanceReadiness()
         case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
         case "cleaner": cleanerReadiness()
