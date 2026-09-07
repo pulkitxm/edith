@@ -22,7 +22,11 @@ Development startup does not replace command-line symlinks or unregister retired
 production login items. Automatic production updates are disabled in development builds.
 `build.sh --install` requires `--release`; launch a development
 build from its build directory instead. Existing development bundles must be rebuilt
-to receive this separation.
+to receive this separation. Verify a signed development package with
+`python3 scripts/test-development-identity-e2e.py`. This starts the packaged daemon
+on its default development service, checks its separate data directory, and runs
+a task through the packaged client. It refuses to replace an already registered
+development daemon and uses disposable fixture settings.
 
 On macOS 26, Control Center can explicitly block a status item after Edith requests
 visibility. Inspect the `appStatusItems` log category for the helper bundle identifier
