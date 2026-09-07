@@ -189,7 +189,7 @@ private struct ExtensionMutationWorld {
 
         #expect(world.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled))
         #expect(!world.defaults.bool(forKey: AppStorageKeys.Limits.claudeEnabled))
-        #expect(!world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+        #expect(world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
     }
 
     @Test func everyMutationDescriptorResolvesThroughTheCatalog() {

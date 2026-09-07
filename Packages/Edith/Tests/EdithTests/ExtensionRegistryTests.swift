@@ -16,6 +16,7 @@ import Testing
         "homebrewEnabled",
         "cleanerEnabled",
         "tabSystemEnabled",
+        "keepAwakeEnabled",
         "lidAwakeEnabled",
         "menuBarSystemStats",
         "micMuteEnabled",
@@ -45,7 +46,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
-                "system", "lidAwake", "systemStats", "micMute",
+                "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
@@ -200,7 +201,7 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "clipboard",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }

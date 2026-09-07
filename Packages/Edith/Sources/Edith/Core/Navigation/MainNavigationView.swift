@@ -202,12 +202,13 @@ enum SidebarDisclosureGeometry {
 
 struct SidebarUtilityVisibility: Equatable {
     let system: Bool
+    let keepAwake: Bool
     let presenter: Bool
     let lidAwake: Bool
     let keystrokeHighlight: Bool
 
     var hasActions: Bool {
-        system || presenter || lidAwake || keystrokeHighlight
+        system || keepAwake || presenter || lidAwake || keystrokeHighlight
     }
 }
 
@@ -385,6 +386,8 @@ struct MainWindowView: View {
         var appMaintenanceSection = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
@@ -813,7 +816,7 @@ struct MainWindowView: View {
 
     private var sidebarUtilityVisibility: SidebarUtilityVisibility {
         SidebarUtilityVisibility(
-            system: systemEnabled,
+            system: systemEnabled, keepAwake: keepAwakeEnabled,
             presenter: presenterEnabled,
             lidAwake: lidAwakeEnabled,
             keystrokeHighlight: keystrokeHighlightEnabled)
@@ -939,7 +942,8 @@ struct MainWindowView: View {
         [
             usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, pluginsEnabled,
             appMaintenanceEnabled,
-            homebrewEnabled, cleanerEnabled, systemEnabled, musicEnabled, calendarEnabled,
+            homebrewEnabled, cleanerEnabled, systemEnabled, keepAwakeEnabled, musicEnabled,
+            calendarEnabled,
             databaseEnabled, attentionEnabled, seoAuditEnabled, agentsSuite, maintenanceSuite,
             systemSuite, mediaSuite, dataSuite,
         ]
@@ -1157,14 +1161,15 @@ struct MainWindowView: View {
             },
         ]
         VStack(spacing: UIScale.pt(8)) {
-            if systemEnabled {
+            if systemEnabled || keepAwakeEnabled {
                 VStack(spacing: UIScale.pt(8)) {
-                    if clampedSidebarWidth < 220 {
-                        tiles[0]; tiles[1]
-                    } else {
+                    if systemEnabled && keepAwakeEnabled && clampedSidebarWidth >= 220 {
                         HStack(spacing: UIScale.pt(8)) {
                             tiles[0]; tiles[1]
                         }
+                    } else {
+                        if systemEnabled { tiles[0] }
+                        if keepAwakeEnabled { tiles[1] }
                     }
                 }
                 .transition(sidebarUtilityTransition)

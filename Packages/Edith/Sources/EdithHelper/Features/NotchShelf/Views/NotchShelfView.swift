@@ -298,6 +298,8 @@ private struct NotchHomeTab: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         true
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = true
     @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
@@ -331,7 +333,7 @@ private struct NotchHomeTab: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            if systemEnabled || presenterEnabled || controller.canPickColor
+            if systemEnabled || keepAwakeEnabled || presenterEnabled || controller.canPickColor
                 || controller.canToggleLidAwake
             {
                 quickActions
@@ -346,10 +348,13 @@ private struct NotchHomeTab: View {
                 actionTile("keyboard", "Clean keys", active: false) {
                     controller.cleanKeyboard()
                 }
+            }
+            if keepAwakeEnabled {
                 actionTile(
                     preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake", active: preventSleep
                 ) {
-                    preventSleep.toggle()
+                    $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue
+                        .toggle()
                     controller.collapseNow()
                 }
             }

@@ -16,6 +16,8 @@ struct HomePage: View {
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -42,7 +44,8 @@ struct HomePage: View {
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled
+                                if systemEnabled || keepAwakeEnabled || presenterEnabled
+                                    || lidAwakeEnabled
                                     || keystrokeHighlightEnabled
                                 {
                                     QuickActionsCard(dark: dark)
@@ -50,7 +53,8 @@ struct HomePage: View {
                             }
                             VStack(spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled
+                                if systemEnabled || keepAwakeEnabled || presenterEnabled
+                                    || lidAwakeEnabled
                                     || keystrokeHighlightEnabled
                                 {
                                     QuickActionsCard(dark: dark)
@@ -535,6 +539,8 @@ private struct QuickActionsCard: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
@@ -552,7 +558,7 @@ private struct QuickActionsCard: View {
 
     private var theme: Color { themeColor(themeName) }
     private var actionCount: Int {
-        (systemEnabled ? 2 : 0)
+        (systemEnabled ? 1 : 0) + (keepAwakeEnabled ? 1 : 0)
             + (lidAwakeEnabled ? 1 : 0)
             + (keystrokeHighlightEnabled ? 1 : 0)
             + (presenterEnabled ? 1 : 0)
@@ -573,6 +579,8 @@ private struct QuickActionsCard: View {
                     ) {
                         AppRuntimeCenter().request(.cleanKeys)
                     }
+                }
+                if keepAwakeEnabled {
                     tile(
                         icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",
                         sub: "Stop this Mac from sleeping", active: preventSleep
