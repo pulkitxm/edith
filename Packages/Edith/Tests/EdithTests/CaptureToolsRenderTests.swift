@@ -48,7 +48,13 @@ import Testing
                 rootView: CaptureEditorView(
                     model: model, copy: {}, save: {}, pin: {}, done: {}
                 )
-                .background(Color(nsColor: .windowBackgroundColor)))
+                .background(Color(nsColor: .windowBackgroundColor))
+                .preferredColorScheme(.dark))
+            let window = TestWindowHost.window(
+                contentRect: NSRect(x: 0, y: 0, width: 980, height: 700))
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.contentView = editor
+            defer { window.close() }
             editor.frame = NSRect(x: 0, y: 0, width: 980, height: 700)
             editor.layoutSubtreeIfNeeded()
             let rendered = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
