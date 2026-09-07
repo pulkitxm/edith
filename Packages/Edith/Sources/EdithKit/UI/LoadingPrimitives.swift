@@ -114,11 +114,20 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     }
 }
 
+private struct SkeletonGroupActiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 private struct SkeletonPhaseKey: EnvironmentKey {
     static let defaultValue = false
 }
 
 private extension EnvironmentValues {
+    var skeletonGroupActive: Bool {
+        get { self[SkeletonGroupActiveKey.self] }
+        set { self[SkeletonGroupActiveKey.self] = newValue }
+    }
+
     var skeletonPhase: Bool {
         get { self[SkeletonPhaseKey.self] }
         set { self[SkeletonPhaseKey.self] = newValue }
@@ -129,6 +138,9 @@ public struct SkeletonGroup<Content: View>: View {
     @ViewBuilder public let content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.skeletonGroupActive) private var hasParentGroup
+    @Environment(\.skeletonPhase) private var parentPhase
     @State private var phase = false
 
     public init(@ViewBuilder content: () -> Content) {
@@ -137,9 +149,12 @@ public struct SkeletonGroup<Content: View>: View {
 
     public var body: some View {
         content
-            .environment(\.skeletonPhase, phase)
+            .environment(\.skeletonPhase, hasParentGroup ? parentPhase : phase)
+            .environment(\.skeletonGroupActive, true)
             .onAppear(perform: updatePhase)
             .onChange(of: reduceMotion) { _, _ in updatePhase() }
+            .onChange(of: scenePhase) { _, _ in updatePhase() }
+            .onChange(of: hasParentGroup) { _, _ in updatePhase() }
             .onDisappear {
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
@@ -151,7 +166,7 @@ public struct SkeletonGroup<Content: View>: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { phase = false }
-        guard !reduceMotion else { return }
+        guard !reduceMotion, !hasParentGroup, scenePhase == .active else { return }
         withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
             phase = true
         }

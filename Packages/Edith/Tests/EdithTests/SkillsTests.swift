@@ -184,40 +184,85 @@ import Testing
                 .path == home.appendingPathComponent(".openclaw/skills").path)
     }
 
-    @MainActor @Test func selectionPersistsAcrossSkillsAndNewModelsIncludingAllOff() throws {
+    @MainActor @Test func discoveryRunsOffMainThreadAndResolvesEmptyState() async {
+        let model = SkillsModel(detectAgents: {
+            #expect(!Thread.isMainThread)
+            return []
+        })
+        #expect(!model.agentsLoaded)
+        await model.discoverAgents()
+        #expect(model.agentsLoaded)
+        #expect(!model.isDiscovering)
+        #expect(model.agents.isEmpty)
+    }
+
+    @MainActor @Test func overlappingDiscoverySharesWorkAndPublishesLoadedAgents() async {
+        let gate = DispatchSemaphore(value: 0)
+        let agents = Array(SkillAgentCatalog.agents.prefix(2))
+        let model = SkillsModel(detectAgents: {
+            #expect(!Thread.isMainThread)
+            #expect(gate.wait(timeout: .now() + 5) == .success)
+            return agents
+        })
+        let first = Task { await model.discoverAgents() }
+        for _ in 0..<1_000 {
+            if model.isDiscovering { break }
+            await Task.yield()
+        }
+        #expect(model.isDiscovering)
+        #expect(!model.agentsLoaded)
+        var secondStarted = false
+        let second = Task {
+            secondStarted = true
+            await model.discoverAgents()
+        }
+        for _ in 0..<1_000 {
+            if secondStarted { break }
+            await Task.yield()
+        }
+        #expect(secondStarted)
+        gate.signal()
+        await first.value
+        await second.value
+        #expect(model.agentsLoaded)
+        #expect(!model.isDiscovering)
+        #expect(model.agents == agents)
+    }
+
+    @MainActor @Test func selectionPersistsAcrossSkillsAndNewModelsIncludingAllOff() async throws {
         let name = "com.pulkit.edith.tests.skills.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         let agents = Array(SkillAgentCatalog.agents.prefix(2))
         let model = SkillsModel(defaults: defaults, detectAgents: { agents })
-        model.present(skill)
+        await model.present(skill)
         #expect(model.selectedAgentIDs == Set(agents.map(\.id)))
         for agent in agents { model.setSelected(agent.id, enabled: false) }
-        model.present(
+        await model.present(
             EdithSkill(id: "other", name: "Other", summary: "", detail: "", symbol: "terminal"))
         #expect(model.selectedAgentIDs.isEmpty)
         let reopened = SkillsModel(defaults: defaults, detectAgents: { agents })
-        reopened.present(skill)
+        await reopened.present(skill)
         #expect(reopened.selectedAgentIDs.isEmpty)
-        reopened.present(skill, agentID: agents[0].id)
+        await reopened.present(skill, agentID: agents[0].id)
         #expect(reopened.selectedAgentIDs == [agents[0].id])
-        reopened.present(skill)
+        await reopened.present(skill)
         #expect(reopened.selectedAgentIDs.isEmpty)
         reopened.setSelected(agents[1].id, enabled: true)
-        model.present(skill)
+        await model.present(skill)
         #expect(model.selectedAgentIDs == [agents[1].id])
     }
 
-    @MainActor @Test func newAgentsDefaultOnWithoutReenablingOptedOutAgents() throws {
+    @MainActor @Test func newAgentsDefaultOnWithoutReenablingOptedOutAgents() async throws {
         let name = "com.pulkit.edith.tests.skills.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         let agents = Array(SkillAgentCatalog.agents.prefix(2))
         let model = SkillsModel(defaults: defaults, detectAgents: { [agents[0]] })
-        model.present(skill)
+        await model.present(skill)
         model.setSelected(agents[0].id, enabled: false)
         let replacement = SkillsModel(defaults: defaults, detectAgents: { agents })
-        replacement.present(skill)
+        await replacement.present(skill)
         #expect(replacement.selectedAgentIDs == [agents[1].id])
     }
 
