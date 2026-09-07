@@ -90,7 +90,6 @@ not here cannot be set, and `import` skips it.
 | `settingsTab` | string | none | shared | Settings tab shown on open. |
 | `mainSidebarOpen` | bool | `true` | shared | Whether the main window sidebar starts open. |
 | `mainSidebarWidth` | number | none | shared | Main window sidebar width in points. |
-| `repoPath` | string | none | shared | Development repository root used for usage data and music. |
 
 ### `attention`
 
@@ -226,7 +225,8 @@ not here cannot be set, and `import` skips it.
 | `SUEnableAutomaticChecks` | bool | `true` | standard | Check for updates on a schedule. |
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
-| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
+| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps and the cleaning lock. |
+| `keepAwakeEnabled` | bool | `false` | shared | Enable the independent Keep Awake ability. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
 | `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |

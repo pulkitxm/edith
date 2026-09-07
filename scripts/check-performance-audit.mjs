@@ -133,10 +133,26 @@ const declarationRanges = (masked, prefix) => {
 const callableRanges = (masked) => {
   const ranges = [];
   const callable =
-    /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)[^{]{0,1_000}\{/gm;
+    /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)/gm;
   for (const match of masked.matchAll(callable)) {
-    const opening = masked.indexOf("{", match.index);
-    ranges.push([opening, closingBrace(masked, opening)]);
+    let parentheses = 0;
+    let brackets = 0;
+    const limit = Math.min(masked.length, match.index + 1_000);
+    for (
+      let cursor = match.index + match[0].length;
+      cursor < limit;
+      cursor += 1
+    ) {
+      const character = masked[cursor];
+      if (character === "(") parentheses += 1;
+      else if (character === ")") parentheses -= 1;
+      else if (character === "[") brackets += 1;
+      else if (character === "]") brackets -= 1;
+      else if (character === "{" && parentheses === 0 && brackets === 0) {
+        ranges.push([cursor, closingBrace(masked, cursor)]);
+        break;
+      }
+    }
   }
   return ranges;
 };
@@ -177,6 +193,26 @@ const detachedExpression = (masked, index) => {
   return { closure: null, end: closing };
 };
 
+const taskOwnerIsCancelled = (masked, owner, indexed) => {
+  const subscript = indexed ? "\\s*\\[[^\\]\\n]+\\]" : "";
+  if (
+    new RegExp(`\\b${owner}${subscript}\\s*\\??\\.cancel\\s*\\(`).test(masked)
+  )
+    return true;
+  if (!indexed) return false;
+  const loops = new RegExp(
+    `\\bfor\\s+(\\w+)\\s+in\\s+(?:self\\s*\\.\\s*)?${owner}\\.values\\s*\\{`,
+    "g",
+  );
+  for (const match of masked.matchAll(loops)) {
+    const opening = masked.indexOf("{", match.index);
+    const body = masked.slice(opening + 1, closingBrace(masked, opening));
+    if (new RegExp(`\\b${match[1]}\\s*\\.cancel\\s*\\(`).test(body))
+      return true;
+  }
+  return false;
+};
+
 const addViolation = (violations, rule, path, source, index) => {
   violations.push({
     rule,
@@ -199,7 +235,9 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     if (expression.closure) detachedRanges.push(expression.closure);
     const assignment = masked
       .slice(Math.max(0, match.index - 160), match.index)
-      .match(/(?:let|var)?\s*([A-Za-z_]\w*)\s*=\s*(?:try\s+)?(?:await\s+)?$/);
+      .match(
+        /(?:let|var)?\s*([A-Za-z_]\w*)\s*(\[[^\]\n]+\])?\s*=\s*(?:try\s+)?(?:await\s+)?$/,
+      );
     const awaited =
       /(?:try\s+)?await\s*$/.test(
         masked.slice(Math.max(0, match.index - 40), match.index),
@@ -209,7 +247,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     );
     const owned =
       assignment &&
-      new RegExp(`\\b${assignment[1]}\\s*\\??\\.cancel\\s*\\(`).test(masked);
+      taskOwnerIsCancelled(masked, assignment[1], Boolean(assignment[2]));
     if (!awaited && !returned && !owned) {
       addViolation(
         violations,
@@ -331,7 +369,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   }
 
   for (const match of masked.matchAll(
-    /\b([A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g,
+    /\b((?:[A-Za-z_]\w*\s*\.\s*)*[A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g,
   )) {
     const range = closureRange(masked, match.index);
     if (!range) continue;
@@ -342,18 +380,35 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const owner = ownerRange
       ? masked.slice(ownerRange[0], match.index)
       : masked.slice(Math.max(0, match.index - 2_000), match.index);
+    const receiver = match[1]
+      .replaceAll(/\s+/g, "")
+      .split(".")
+      .join("\\s*\\.\\s*");
     const cancellation = new RegExp(
-      `\\b${match[1]}\\s*\\??\\.cancel\\s*\\(`,
+      `\\b${receiver}\\s*\\??\\.cancel\\s*\\(`,
     ).test(owner);
     const lastAwait = body.lastIndexOf("await");
     const publication = body
       .slice(lastAwait)
-      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
+      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=(?!=)\s*/);
     const guarded =
       /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
-        body.slice(lastAwait, publication?.index ?? body.length),
+        body.slice(
+          lastAwait,
+          publication ? lastAwait + publication.index : body.length,
+        ),
       );
-    if (publication && (!cancellation || !guarded)) {
+    const replacementGuard = owner.match(
+      new RegExp(
+        `\\bguard\\s+${receiver}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,
+      ),
+    );
+    const refusesReplacement =
+      replacementGuard !== null &&
+      !/\bawait\b/.test(
+        owner.slice(replacementGuard.index + replacementGuard[0].length),
+      );
+    if (publication && ((!cancellation && !refusesReplacement) || !guarded)) {
       addViolation(
         violations,
         "stale-task-publication",

@@ -1,3 +1,4 @@
+import CoreAudio
 import EdithKit
 import Foundation
 import Observation
@@ -35,6 +36,8 @@ final class AudioControlsEngine: FeatureModule {
     private let defaults: UserDefaults
     private let managesMixer: Bool
     private var monitorTask: Task<Void, Never>?
+    private var propertyListeners:
+        [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
     private var previousSnapshot: AudioDeviceSnapshot?
     private var launchBlocker: MusicLaunchBlocker?
     private weak var music: MusicPlayer?
@@ -85,6 +88,12 @@ final class AudioControlsEngine: FeatureModule {
     }
 
     func shutdown() {
+        for (address, listener) in propertyListeners {
+            var address = address
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &address, .main, listener)
+        }
+        propertyListeners.removeAll()
         monitorTask?.cancel()
         monitorTask = nil
         launchBlocker?.stop()
@@ -96,6 +105,24 @@ final class AudioControlsEngine: FeatureModule {
     }
 
     private func startMonitoring() {
+        let selectors = [
+            kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultInputDevice,
+            kAudioHardwarePropertyDefaultOutputDevice,
+        ]
+        for selector in selectors {
+            var address = AudioObjectPropertyAddress(
+                mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+                Task { @MainActor [weak self] in self?.refresh() }
+            }
+            if AudioObjectAddPropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr
+            {
+                propertyListeners.append((address, listener))
+            }
+        }
+        guard propertyListeners.count != selectors.count else { return }
         monitorTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 do {

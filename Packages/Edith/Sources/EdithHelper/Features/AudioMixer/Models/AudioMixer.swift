@@ -564,7 +564,8 @@ final class MixerEngine {
     }
 
     private func reconcileMonitoring() {
-        let shouldMonitor = serviceEnabled || visibleViewCount > 0 || !taps.isEmpty
+        let shouldMonitor =
+            (serviceEnabled && !routeMap().isEmpty) || visibleViewCount > 0 || !taps.isEmpty
         if shouldMonitor, monitoringTask == nil {
             isMonitoring = true
             monitoringTask = Task { @MainActor [weak self] in

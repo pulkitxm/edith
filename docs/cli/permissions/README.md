@@ -34,7 +34,7 @@ full list as the hint.
 | --- | --- | --- | --- |
 | `calendar` | Privacy & Security > Calendars | Read and show your schedule in Calendar | required by `calendar` |
 | `notifications` | Notifications | Usage limit, pacing and reset alerts | optional for `usage`, `machines` |
-| `accessibility` | Privacy & Security > Accessibility | Clean keys, and clipboard instant paste | optional for `system`, `clipboard` |
+| `accessibility` | Privacy & Security > Accessibility | Clean keys, clipboard instant paste, and typing an emoji into the frontmost app | optional for `system`, `clipboard`, `emoji` |
 | `inputMonitoring` | Privacy & Security > Input Monitoring | Block key presses while Clean keys is locking the keyboard | optional for `system` |
 | `fullDisk` | Privacy & Security > Full Disk Access | Reach local service credentials and usage data | nothing declares it |
 | `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, and sample colours from the screen | required by `focusDim`, `presenter`, `colorPicker` |

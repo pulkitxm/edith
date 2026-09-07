@@ -5,7 +5,17 @@ import Dispatch
 import Foundation
 
 @testable import EdithCLI
+@testable import EdithAgent
+@testable import EdithDatabase
 @testable import EdithKit
+
+private struct CLIUnavailableDatabaseBrokerSender: DatabaseBrokerCommandSending {
+    func send(
+        _ request: DatabaseBrokerCommandRequest
+    ) async throws -> DatabaseBrokerCommandResponse {
+        throw DatabaseBrokerCommandClientError.unavailable
+    }
+}
 
 actor CLIGate {
     static let shared = CLIGate()
@@ -47,12 +57,15 @@ struct CLIRun: Sendable {
 
 enum CLIProcessProbeError: Error, Equatable, LocalizedError {
     case timedOut(executable: String, arguments: [String], seconds: TimeInterval)
+    case cleanupFailed(processID: Int32)
 
     var errorDescription: String? {
         switch self {
         case let .timedOut(executable, arguments, seconds):
             return
                 "\(([executable] + arguments).joined(separator: " ")) timed out after \(seconds) seconds"
+        case .cleanupFailed(let processID):
+            return "The fixture process group \(processID) did not terminate."
         }
     }
 }
@@ -60,24 +73,6 @@ enum CLIProcessProbeError: Error, Equatable, LocalizedError {
 enum CLIProcessProbe {
     static let defaultTimeout: TimeInterval = 15
     private static let terminationGrace: TimeInterval = 2
-    private static let processGroupScript = """
-        set -m
-        "$@" &
-        child=$!
-        set +m
-        terminate_group() {
-            if kill -TERM -"$child" 2>/dev/null; then
-                sleep 1
-                kill -KILL -"$child" 2>/dev/null || :
-            fi
-        }
-        trap 'terminate_group; exit 124' TERM INT
-        wait "$child"
-        status=$?
-        terminate_group
-        trap - TERM INT
-        exit "$status"
-        """
 
     static let packageRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -110,28 +105,22 @@ enum CLIProcessProbe {
             try? stderr.close()
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments =
-            [
-                "-c", processGroupScript, "cli-process-probe", target.path,
-            ] + arguments
-        process.currentDirectoryURL = currentDirectory
-        process.environment = environment
-        process.standardOutput = stdout
-        process.standardError = stderr
-        process.standardInput = FileHandle.nullDevice
         let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
-        try process.run()
+        let process = try CLIChildProcess(
+            request: CLICommandRequest(
+                executableURL: target, arguments: arguments, environment: environment,
+                currentDirectoryURL: currentDirectory, terminatesProcessGroup: true),
+            input: FileHandle.nullDevice.fileDescriptor, output: stdout.fileDescriptor,
+            error: stderr.fileDescriptor, onExit: { finished.signal() })
+        let deadline = ProcessInfo.processInfo.systemUptime + max(0, timeout)
         guard finished.wait(timeout: .now() + max(0, timeout)) == .success else {
-            if process.isRunning { process.terminate() }
-            if finished.wait(timeout: .now() + terminationGrace) == .timedOut,
-                process.isRunning
-            {
-                kill(process.processIdentifier, SIGKILL)
-                _ = finished.wait(timeout: .now() + terminationGrace)
-            }
+            _ = try terminate(
+                process, finished: finished,
+                deadline: ProcessInfo.processInfo.systemUptime + terminationGrace)
+            throw CLIProcessProbeError.timedOut(
+                executable: target.path, arguments: arguments, seconds: timeout)
+        }
+        if process.groupIsAlive, try terminate(process, finished: finished, deadline: deadline) {
             throw CLIProcessProbeError.timedOut(
                 executable: target.path, arguments: arguments, seconds: timeout)
         }
@@ -143,6 +132,31 @@ enum CLIProcessProbe {
             stdout: String(decoding: out, as: UTF8.self),
             stderr: String(decoding: err, as: UTF8.self), code: process.terminationStatus)
     }
+
+    private static func terminate(
+        _ process: CLIChildProcess, finished: DispatchSemaphore, deadline: TimeInterval
+    ) throws -> Bool {
+        process.signal(SIGTERM)
+        let grace = min(deadline, ProcessInfo.processInfo.systemUptime + terminationGrace)
+        while process.groupIsAlive, ProcessInfo.processInfo.systemUptime < grace {
+            _ = finished.wait(timeout: .now() + 0.01)
+        }
+        let exceededDeadline =
+            process.groupIsAlive
+            && ProcessInfo.processInfo.systemUptime >= deadline
+        if process.groupIsAlive { process.signal(SIGKILL) }
+        let reaping = ProcessInfo.processInfo.systemUptime + terminationGrace
+        while (process.isRunning || process.groupIsAlive),
+            ProcessInfo.processInfo.systemUptime < reaping
+        {
+            _ = finished.wait(timeout: .now() + 0.01)
+        }
+        guard !process.isRunning, !process.groupIsAlive else {
+            throw CLIProcessProbeError.cleanupFailed(processID: process.processIdentifier)
+        }
+        return exceededDeadline
+    }
+
 }
 
 final class CLIWorld: @unchecked Sendable {
@@ -150,6 +164,7 @@ final class CLIWorld: @unchecked Sendable {
     let shared: UserDefaults
     let standard: UserDefaults
     let sandbox: URL
+    private let previousDataRoot: String?
     let pasteboard: NSPasteboard
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
@@ -158,6 +173,7 @@ final class CLIWorld: @unchecked Sendable {
     private let lock = NSLock()
 
     init(_ label: String = UUID().uuidString) {
+        previousDataRoot = ProcessInfo.processInfo.environment[DataRoot.devOverrideVariable]
         suite = "test.cli.\(label)"
         pasteboard = NSPasteboard(name: NSPasteboard.Name(suite))
         pasteboard.clearContents()
@@ -179,13 +195,23 @@ final class CLIWorld: @unchecked Sendable {
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
         CLIEnvironment.sharedDefaults = shared
+        let clipboard = ClipboardService(
+            archive: ClipboardArchive(root: sandbox.appendingPathComponent("clipboard")),
+            defaults: shared,
+            changed: { CLIEnvironment.deliver(IPC.Name.clipboardChanged, nil) })
+        ClipboardCLIEnvironment.client = AgentClipboardClient {
+            try await clipboard.perform(operation: $0, payload: $1)
+        }
         CLIEnvironment.standardDefaults = standard
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
         CLIEnvironment.executableNamed = { _ in nil }
+        CLIEnvironment.homebrewClient = { HomebrewClient(executableURL: nil) }
         QuinjetCLIEnvironment.client = {
             QuinjetClient { _ in throw QuinjetClientError.notInstalled }
         }
+        DatabaseCLIEnvironment.makeSender = { CLIUnavailableDatabaseBrokerSender() }
+        DatabaseCLIEnvironment.runMCPServer = {}
         CLIEnvironment.installedAppURL = { nil }
         CLIEnvironment.appContributors = { [] }
         CLIEnvironment.appInspectionCenter = { [weak self] in
@@ -298,6 +324,53 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { running }
     }
 
+    func configureUsageRefreshAgent(
+        events: [UsageRefreshEvent],
+        busy: Bool = false,
+        failure: UsageRefreshFailure? = nil
+    ) {
+        setenv(DataRoot.devOverrideVariable, sandbox.path, 1)
+        let dataDir = Repo.dataDir
+        try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: UsageRefreshRunner.lockURL(dataDir: dataDir))
+        try? FileManager.default.removeItem(at: UsageRefreshRunner.eventsURL(dataDir: dataDir))
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
+        let refreshID = UsageCollectionOperation.refresh.descriptor.id
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == refreshID else { return Data() }
+            if busy {
+                guard
+                    let lock = UsageRefreshLock.acquire(
+                        at: UsageRefreshRunner.lockURL(dataDir: Repo.dataDir))
+                else { throw UsageRefreshFailure.busy }
+                DispatchQueue.global().async {
+                    try? UsageRefreshPlayback.replayBlocking(
+                        events: events, holdLock: true, failure: failure)
+                    lock.release()
+                }
+                return Data()
+            }
+            try UsageRefreshPlayback.replayBlocking(events: events, failure: failure)
+            return Data()
+        }
+    }
+
+    func configureLimitsRefreshAgent() {
+        CLIEnvironment.verifyAgentHandshake = {
+            AgentHandshake(
+                protocolVersion: AgentService.protocolVersion, build: "test", startedAt: Date())
+        }
+        let limitsID = UsageCollectionOperation.limitsRefresh.descriptor.id
+        CLIEnvironment.performAgentOperation = { operation in
+            guard operation == limitsID else { return Data() }
+            CLIEnvironment.deliver(IPC.Name.limitsUpdated, nil)
+            return Data()
+        }
+    }
+
     func answers(_ block: @escaping @Sendable (Notification.Name) -> [AnyHashable: Any]?) {
         CLIEnvironment.answer = block
     }
@@ -324,6 +397,11 @@ final class CLIWorld: @unchecked Sendable {
     }
 
     func tearDown() {
+        if let previousDataRoot {
+            setenv(DataRoot.devOverrideVariable, previousDataRoot, 1)
+        } else {
+            unsetenv(DataRoot.devOverrideVariable)
+        }
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")

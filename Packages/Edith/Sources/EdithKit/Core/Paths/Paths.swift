@@ -26,16 +26,30 @@ public enum RestoredPathValidation {
 
 public enum AppData {
     public static let supportDir: URL = {
-        let dir = AppDirectories.current.data
+        let dir = DataRoot.support
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
 
-    public static let cloudDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Edith")
+    public static let cloudOverrideVariable = "EDITH_CLOUD_ROOT"
+    public static let cloudDir = resolveCloudDirectory()
+
+    public static func resolveCloudDirectory(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        if let path = environment[cloudOverrideVariable], !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return homeDirectory.appendingPathComponent(
+            "Library/Mobile Documents/com~apple~CloudDocs/\(AppBuildIdentity.directoryName)")
+    }
 
     public static var cloudAvailable: Bool {
-        FileManager.default.fileExists(
+        if let path = ProcessInfo.processInfo.environment[cloudOverrideVariable], !path.isEmpty {
+            return FileManager.default.fileExists(atPath: cloudDir.path)
+        }
+        return FileManager.default.fileExists(
             atPath: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs").path)
     }
@@ -49,28 +63,15 @@ public enum AppData {
 }
 
 public enum Repo {
-    public static let pathKey = "repoPath"
     public static let musicFolderPathKey = "musicFolderPath"
     public static let musicFolderStaleKey = "musicFolderStale"
     private static let musicFolderConfirmationKey = "musicFolderExternalConfirmation"
-    private static let repoPathConfirmationKey = "repoPathExternalConfirmation"
 
-    public static var devRoot: URL? {
-        confirmedPath(
-            forKey: pathKey, confirmationKey: repoPathConfirmationKey,
-            defaults: SharedDefaults.store)
-    }
-
-    public static var dataDir: URL {
-        devRoot?.appendingPathComponent("apps/dashboard/data")
-            ?? AppData.supportDir.appendingPathComponent("data")
-    }
+    public static var dataDir: URL { DataRoot.usage }
     public static var usageJSON: URL { dataDir.appendingPathComponent("usage.json") }
     public static var limitsJSONL: URL { dataDir.appendingPathComponent("limits-history.jsonl") }
     public static var musicDir: URL {
-        selectedMusicDirectory()
-            ?? devRoot?.appendingPathComponent("local/music")
-            ?? AppData.supportDir.appendingPathComponent("music")
+        selectedMusicDirectory() ?? DataRoot.music
     }
 
     public static func selectedMusicDirectory(
@@ -87,20 +88,8 @@ public enum Repo {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) {
         validateStoredPath(
-            forKey: pathKey, confirmationKey: repoPathConfirmationKey, marksMusicStale: true,
-            defaults: defaults, homeDirectory: homeDirectory)
-        validateStoredPath(
             forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
             marksMusicStale: true, defaults: defaults, homeDirectory: homeDirectory)
-    }
-
-    public static func setDevRootPath(
-        _ path: String?, defaults: UserDefaults = SharedDefaults.store,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) {
-        setConfirmedPath(
-            path, forKey: pathKey, confirmationKey: repoPathConfirmationKey,
-            defaults: defaults, homeDirectory: homeDirectory)
     }
 
     public static func setMusicDirectory(
@@ -163,7 +152,7 @@ public enum Repo {
 }
 
 public enum ClipboardPaths {
-    nonisolated(unsafe) public static var root: URL = AppData.supportDir
+    nonisolated(unsafe) public static var root: URL = DataRoot.support
 
     public static var dir: URL {
         root.appendingPathComponent("clipboard")

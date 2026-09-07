@@ -25,7 +25,6 @@ public final class ExtensionReadinessModel {
         generation &+= 1
         let requestedGeneration = generation
         refreshTask?.cancel()
-        report = nil
         isRefreshing = true
         let load = load
         let task = Task { [weak self] in

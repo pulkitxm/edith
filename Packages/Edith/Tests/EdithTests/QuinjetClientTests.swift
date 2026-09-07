@@ -79,6 +79,182 @@ import Testing
         }
     }
 
+    @Test func discoversQuinjetAcrossSupportedRemotePlatforms() throws {
+        let darwin = QuinjetRemoteExecutable.command(for: .darwin)
+        let linux = QuinjetRemoteExecutable.command(for: .linux)
+        let windows = QuinjetRemoteExecutable.command(for: .windows)
+
+        #expect(darwin.contains("$HOME/.local/bin/quinjet"))
+        #expect(darwin.contains("/opt/homebrew/bin/quinjet"))
+        #expect(linux.contains("/etc/os-release"))
+        #expect(linux.contains("$HOME/.linuxbrew/bin/quinjet"))
+        #expect(linux.contains("/home/linuxbrew/.linuxbrew/bin/quinjet"))
+        let payload = try #require(windows.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(payload)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(script.contains("Get-Command quinjet.exe"))
+        #expect(script.contains(#"Microsoft\WinGet\Links\quinjet.exe"#))
+        #expect(script.contains(#"Programs\Quinjet\bin\quinjet.exe"#))
+    }
+
+    @Test func parsesAbsoluteRemoteExecutablesAndDistribution() throws {
+        #expect(
+            QuinjetRemoteExecutable.parse(
+                "noise\n@EDITH_QUINJET@ubuntu\t/home/pulkit/.local/bin/quinjet\n",
+                platform: .linux)
+                == QuinjetRemoteExecutableResolution(
+                    path: "/home/pulkit/.local/bin/quinjet", distributionID: "ubuntu"))
+        #expect(
+            QuinjetRemoteExecutable.parse(
+                "@EDITH_QUINJET@macos\t/opt/homebrew/bin/quinjet\n", platform: .darwin)
+                == QuinjetRemoteExecutableResolution(
+                    path: "/opt/homebrew/bin/quinjet", distributionID: "macos"))
+        #expect(
+            QuinjetRemoteExecutable.parse(
+                "@EDITH_QUINJET@windows\tC:\\Users\\pulkit\\scoop\\shims\\quinjet.exe",
+                platform: .windows)
+                == QuinjetRemoteExecutableResolution(
+                    path: #"C:\Users\pulkit\scoop\shims\quinjet.exe"#,
+                    distributionID: "windows"))
+        #expect(
+            QuinjetRemoteExecutable.parse(
+                "@EDITH_QUINJET@ubuntu\tquinjet\n", platform: .linux) == nil)
+        #expect(
+            QuinjetRemoteExecutable.parse(
+                "@EDITH_QUINJET@debian\t\n", platform: .linux)
+                == QuinjetRemoteExecutableResolution(path: nil, distributionID: "debian"))
+    }
+
+    @Test func distinguishesMissingQuinjetFromProbeFailures() async throws {
+        let missing = try QuinjetRemoteExecutable.resolution(
+            from: SSHExecResult(
+                status: 0, stdout: Data("@EDITH_QUINJET@ubuntu\t\n".utf8), stderr: Data()),
+            platform: .linux)
+
+        #expect(missing == QuinjetRemoteExecutableResolution(path: nil, distributionID: "ubuntu"))
+        #expect(throws: QuinjetRemoteExecutableError.probeFailed("permission denied")) {
+            try QuinjetRemoteExecutable.resolution(
+                from: SSHExecResult(
+                    status: 126, stdout: Data(), stderr: Data("permission denied".utf8)),
+                platform: .linux)
+        }
+        #expect(throws: QuinjetRemoteExecutableError.invalidResponse) {
+            try QuinjetRemoteExecutable.resolution(
+                from: SSHExecResult(status: 0, stdout: Data("unexpected".utf8), stderr: Data()),
+                platform: .linux)
+        }
+        await #expect(throws: QuinjetRemoteExecutableError.probeFailed("connection reset")) {
+            try await QuinjetRemoteExecutable.resolve(platform: .linux) { _ in
+                throw RemoteQuinjetProbeFailure()
+            }
+        }
+    }
+
+    @Test func reportsMissingRemoteQuinjetBeforeReadingRecentFolders() async {
+        let client = QuinjetClient { _ in
+            Issue.record("recent folders were read before validating remote Quinjet")
+            return Data()
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock", platform: .linux, executablePath: nil,
+            distributionID: "ubuntu")
+
+        await #expect(
+            throws: QuinjetClientError.remoteNotInstalled(
+                machine: "build", platform: .linux, distributionID: "ubuntu")
+        ) {
+            try await client.recentProjects(remote: remote)
+        }
+    }
+
+    @Test func unresolvedRemoteDoesNotAssumeQuinjetIsOnPath() {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        #expect(remote.executablePath == nil)
+    }
+
+    @Test func launchRequestRejectsAnUnresolvedRemote() {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        #expect(
+            throws: QuinjetClientError.remoteNotInstalled(
+                machine: "build", platform: .linux, distributionID: "linux")
+        ) {
+            try QuinjetOperationExecution.launchRequest(
+                executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"),
+                worktreePath: "/srv/project", remote: remote,
+                configuration: .default, managedByEdith: false,
+                localHomeDirectory: "/Users/pulkit")
+        }
+    }
+
+    @Test func missingRemoteGuidanceMatchesThePlatform() {
+        let macOS = QuinjetClientError.remoteNotInstalled(
+            machine: "mac", platform: .darwin, distributionID: "macos")
+        let ubuntu = QuinjetClientError.remoteNotInstalled(
+            machine: "ubuntu", platform: .linux, distributionID: "ubuntu")
+        let linux = QuinjetClientError.remoteNotInstalled(
+            machine: "fedora", platform: .linux, distributionID: "fedora")
+        let windows = QuinjetClientError.remoteNotInstalled(
+            machine: "windows", platform: .windows, distributionID: "windows")
+
+        #expect(macOS.localizedDescription.contains("brew install"))
+        #expect(ubuntu.localizedDescription.contains("apt repository"))
+        #expect(linux.localizedDescription.contains("shell installer"))
+        #expect(windows.localizedDescription.contains("winget install"))
+    }
+
+    @Test func liveRequestsUseTheResolvedUnixRemoteExecutable() throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock", platform: .linux,
+            executablePath: "/home/pulkit/.local/bin/quinjet", distributionID: "ubuntu")
+
+        let request = try QuinjetClient.liveRequest(
+            arguments: ["-C", "/srv/project", "worktree", "list", "--json"],
+            remote: remote, executable: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"))
+
+        #expect(request.executableURL.path == "/opt/homebrew/bin/quinjet")
+        #expect(
+            request.arguments
+                == [
+                    "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith.sock",
+                    "-C", "/srv/project", "worktree", "list", "--json",
+                ])
+        #expect(
+            request.environment["QUINJET_REMOTE_BINARY"]
+                == "/home/pulkit/.local/bin/quinjet")
+    }
+
+    @Test func liveRequestsRunResolvedWindowsQuinjetThroughPowerShell() throws {
+        let executable = #"C:\Users\pulkit\scoop\shims\quinjet.exe"#
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "windows", target: "pulkit@windows",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            executablePath: executable, distributionID: "windows")
+
+        let request = try QuinjetClient.liveRequest(
+            arguments: ["-C", #"E:\work\project"#, "worktree", "list", "--json"],
+            remote: remote, executable: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"))
+
+        #expect(request.executableURL == SSHConnection.executable)
+        #expect(
+            Array(request.arguments.prefix(5))
+                == ["-T", "-S", "/tmp/edith.sock", "--", "pulkit@windows"])
+        let command = try #require(request.arguments.last)
+        #expect(command.hasPrefix("powershell.exe "))
+        let payload = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(payload)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(script.contains("& '\(executable)' '-C' 'E:\\work\\project'"))
+        #expect(script.contains("'worktree' 'list' '--json'"))
+    }
+
     @Test func requestsWorktreesForCurrentPath() async throws {
         let client = QuinjetClient { arguments in
             #expect(
@@ -97,7 +273,7 @@ import Testing
     @Test func requestsWorktreesThroughAnEdithMachineSession() async throws {
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith.sock")
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
         let client = QuinjetClient { arguments in
             #expect(
                 arguments
@@ -116,7 +292,7 @@ import Testing
     @Test func hydratesRecentFoldersFromTheSelectedMachine() async throws {
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith.sock")
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
         let client = QuinjetClient { arguments in
             if arguments == ["remote", "list", "--json"] {
                 return Data(Self.remoteFoldersJSON.utf8)
@@ -135,6 +311,60 @@ import Testing
         #expect(projects.count == 1)
         #expect(projects[0].name == "edith")
         #expect(projects[0].availableWorktrees.count == 2)
+    }
+
+    @Test func hydratesWindowsFoldersEvenWhenLocalAccessibilityIsFalse() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let folderData = try JSONEncoder().encode(
+            QuinjetRemoteFolders(remotes: [
+                QuinjetRemoteFolder(
+                    target: "win-lan", folder: folder, accessible: false, uses: 10)
+            ]))
+        let worktreeData = try JSONEncoder().encode([
+            QuinjetWorktree(
+                path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                bare: false, detached: false, locked: nil, prunable: nil)
+        ])
+        let client = QuinjetClient { arguments in
+            if arguments == ["remote", "list", "--json"] { return folderData }
+            #expect(arguments.contains(folder))
+            return worktreeData
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#,
+            executablePath: #"C:\Users\kpulk\scoop\shims\quinjet.exe"#)
+
+        let projects = try await client.recentProjects(remote: remote)
+
+        #expect(projects.map(\.name) == ["mono-volt"])
+        #expect(projects.first?.defaultWorktree?.path == folder)
+    }
+
+    @Test func resolvesWindowsHomeAndMatchesNestedWorktreePathsCaseInsensitively() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let client = QuinjetClient { arguments in
+            #expect(
+                arguments.contains(
+                    #"C:\Users\kpulk\desktop\Crowdvolt\mono-volt\Sources"#))
+            return try JSONEncoder().encode([
+                QuinjetWorktree(
+                    path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                    bare: false, detached: false, locked: nil, prunable: nil)
+            ])
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#,
+            executablePath: #"C:\Users\kpulk\scoop\shims\quinjet.exe"#)
+
+        let selection = try await QuinjetOperationExecution.openSelection(
+            at: #"~\desktop\Crowdvolt\mono-volt\Sources"#, remote: remote, using: client)
+
+        #expect(selection.projectName == "mono-volt")
+        #expect(selection.worktree.path == folder)
     }
 
     @Test func boundsRemoteFolderProbesAndPreservesFolderOrder() async throws {
@@ -163,7 +393,7 @@ import Testing
         }
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith.sock")
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
 
         let request = Task { try await client.recentProjects(remote: remote) }
         await harness.waitUntilStarted(2)
@@ -194,11 +424,26 @@ import Testing
             "error: Not a Git repository: fatal: not a git repository"
         )
 
+        #expect(error.isNotGitRepository)
         #expect(
             error.localizedDescription
                 == "This folder is not a Git repository. "
                 + "Choose the project folder that contains .git."
         )
+        #expect(!QuinjetClientError.commandFailed("permission denied").isNotGitRepository)
+    }
+
+    @Test func nonRepositoryLaunchUsesTheOriginalDirectory() throws {
+        let request = try QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"),
+            worktreePath: "/tmp/non-repository", remote: nil,
+            configuration: .default, managedByEdith: false,
+            localHomeDirectory: "/Users/pulkit")
+
+        #expect(
+            Array(request.arguments.prefix(3))
+                == ["-C", "/tmp/non-repository", "tui"])
+        #expect(request.currentDirectory == "/tmp/non-repository")
     }
 
     @Test func mapsManagedHostPayloads() {
@@ -271,6 +516,10 @@ import Testing
           ]
         }
         """
+}
+
+private struct RemoteQuinjetProbeFailure: Error, LocalizedError, Sendable {
+    var errorDescription: String? { "connection reset" }
 }
 
 private actor RemoteProbeHarness {
@@ -511,7 +760,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             client: QuinjetClient { arguments in try await harness.execute(arguments) })
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith.sock")
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
 
         let first = Task { await model.refreshProjects(for: remote) }
         await harness.waitUntilRequested(1)
@@ -549,7 +798,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         let configuration = QuinjetLaunchConfiguration(
             terminal: .embedded, theme: .tokyoNight, appearance: .light)
 
-        let request = QuinjetOperationExecution.launchRequest(
+        let request = try QuinjetOperationExecution.launchRequest(
             executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
             worktreePath: Self.main.path, remote: nil, configuration: configuration,
             managedByEdith: true, localHomeDirectory: "/Users/pulkit")
@@ -567,7 +816,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             terminal: .embedded, theme: .ayu, appearance: .dark,
             hostTheme: .edith(appTheme: .orange))
 
-        let request = QuinjetOperationExecution.launchRequest(
+        let request = try QuinjetOperationExecution.launchRequest(
             executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
             worktreePath: Self.main.path, remote: nil, configuration: configuration,
             managedByEdith: true, localHomeDirectory: "/Users/pulkit")
@@ -606,11 +855,12 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
     @Test func cmuxLaunchKeepsRemoteSessionWithoutEdithRouting() throws {
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith socket")
+            controlPath: "/tmp/edith socket",
+            executablePath: "/home/pulkit/.local/bin/quinjet", distributionID: "ubuntu")
         let configuration = QuinjetLaunchConfiguration(
             terminal: .cmux, theme: .gruvbox, appearance: .dark)
 
-        let request = QuinjetOperationExecution.launchRequest(
+        let request = try QuinjetOperationExecution.launchRequest(
             executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
             worktreePath: Self.main.path, remote: remote, configuration: configuration,
             managedByEdith: false, localHomeDirectory: "/Users/pulkit")
@@ -623,6 +873,47 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
                 ])
         #expect(!request.arguments.contains("--client"))
         #expect(request.currentDirectory == "/Users/pulkit")
+        #expect(
+            request.environment
+                == ["QUINJET_REMOTE_BINARY": "/home/pulkit/.local/bin/quinjet"])
+        #expect(request.shellCommand.contains("exec '/usr/bin/env'"))
+        #expect(
+            request.shellCommand.contains(
+                "'QUINJET_REMOTE_BINARY=/home/pulkit/.local/bin/quinjet'"))
+    }
+
+    @Test func WindowsLaunchRunsQuinjetThroughEncodedPowerShell() throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith socket", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#,
+            executablePath: #"C:\Users\kpulk\scoop\shims\quinjet.exe"#)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .gruvbox, appearance: .dark,
+            hostTheme: .edith(appTheme: .orange))
+
+        let request = try QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: #"E:\career\3. MagicAPI\noveum-app-nextjs"#, remote: remote,
+            configuration: configuration, managedByEdith: true,
+            localHomeDirectory: "/Users/pulkit")
+
+        #expect(request.executableURL.path == "/usr/bin/ssh")
+        #expect(
+            Array(request.arguments.prefix(5)) == [
+                "-tt", "-S", "/tmp/edith socket", "--", "win-lan",
+            ])
+        let command = try #require(request.arguments.last)
+        let payload = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(payload)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(
+            script.contains(
+                #"& 'C:\Users\kpulk\scoop\shims\quinjet.exe' '--client' 'edith' '-C'"#))
+        #expect(script.contains(#"'E:\career\3. MagicAPI\noveum-app-nextjs'"#))
+        #expect(script.contains("'tui' '--theme' 'gruvbox' '--appearance' 'dark'"))
+        #expect(request.arguments.count == 6)
+        #expect(request.currentDirectory == nil)
     }
 
     @Test func cmuxCommandQuotesEveryArgument() {
@@ -691,7 +982,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         let machineID = UUID()
         original.remote = QuinjetRemote(
             machineID: machineID, machineName: "build", target: "pulkit@build",
-            controlPath: "/tmp/edith.sock")
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
 
         model.handleHostPayload("quinjet;open-new-tab", from: original)
         for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }

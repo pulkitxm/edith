@@ -1,14 +1,20 @@
 import AppKit
+import EdithCore
 import EdithKit
 import Foundation
 
 public struct CLIRemoteDirectoryTarget: Sendable {
     public let machine: Machine
     public let endpoint: RemoteDirectoryEndpoint
+    public let platform: RemoteMachinePlatform
 
-    public init(machine: Machine, endpoint: RemoteDirectoryEndpoint) {
+    public init(
+        machine: Machine, endpoint: RemoteDirectoryEndpoint,
+        platform: RemoteMachinePlatform = .linux
+    ) {
         self.machine = machine
         self.endpoint = endpoint
+        self.platform = platform
     }
 }
 
@@ -31,12 +37,6 @@ public enum CLIEnvironment {
     nonisolated(unsafe) public static var isMainAppRunning: @Sendable () -> Bool = {
         !NSRunningApplication.runningApplications(
             withBundleIdentifier: AppBridge.mainBundleID
-        ).isEmpty
-    }
-
-    nonisolated(unsafe) public static var isFilesAppRunning: @Sendable () -> Bool = {
-        !NSRunningApplication.runningApplications(
-            withBundleIdentifier: AppBridge.filesBundleID
         ).isEmpty
     }
 
@@ -87,6 +87,15 @@ public enum CLIEnvironment {
     nonisolated(unsafe) public static var setAudioOutput: @Sendable (String) throws -> Void = {
         try AudioDeviceOperations.setDefaultOutput(uid: $0)
     }
+    nonisolated(unsafe) public static var verifyAgentHandshake:
+        @Sendable () throws -> AgentHandshake = {
+            try AgentClient.shared.verifyHandshake()
+        }
+
+    nonisolated(unsafe) public static var performAgentOperation:
+        @Sendable (UserOperationID) throws -> Data = {
+            try AgentClient.shared.perform($0)
+        }
 
     nonisolated(unsafe) public static var installTool:
         @Sendable (CLIToolSpec, @escaping @Sendable (String) -> Void) async throws -> String = {
@@ -95,6 +104,10 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var executableNamed: @Sendable (String) -> URL? = {
         CLIToolEnvironment.executable(named: $0)
+    }
+
+    nonisolated(unsafe) public static var homebrewClient: @Sendable () -> HomebrewClient = {
+        HomebrewClient()
     }
 
     nonisolated(unsafe) public static var extensionToolReadiness:
@@ -163,14 +176,23 @@ public enum CLIEnvironment {
         }
 
     private static func detectedInstalledAppURL() -> URL? {
-        let bundled = Bundle.main.bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        if bundled.pathExtension == "app",
-            FileManager.default.fileExists(atPath: bundled.path)
-        {
-            return bundled
+        let starts = [
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL,
+            CommandLine.arguments.first.map { URL(fileURLWithPath: $0) },
+        ].compactMap { $0 }
+        for start in starts {
+            var candidate: URL? = start.resolvingSymlinksInPath()
+            for _ in 0..<6 {
+                guard let current = candidate else { break }
+                if current.pathExtension == "app",
+                    FileManager.default.fileExists(atPath: current.path)
+                {
+                    return current
+                }
+                candidate =
+                    current.pathComponents.count > 1 ? current.deletingLastPathComponent() : nil
+            }
         }
         let standard = URL(fileURLWithPath: "/Applications/Edith.app")
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
@@ -206,14 +228,10 @@ public enum CLIEnvironment {
                 withBundleIdentifier: AppBridge.mainBundleID
             ).isEmpty
         }
-        isFilesAppRunning = {
-            !NSRunningApplication.runningApplications(
-                withBundleIdentifier: AppBridge.filesBundleID
-            ).isEmpty
-        }
         deliver = { IPC.post($0, userInfo: $1) }
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         clipboardPasteboard = .general
+        ClipboardCLIEnvironment.reset()
         downloadQueueFile = DownloadQueue.file
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir
@@ -231,8 +249,11 @@ public enum CLIEnvironment {
         audioSnapshot = { try AudioDeviceOperations.snapshot() }
         setAudioInput = { try AudioDeviceOperations.setDefaultInput(uid: $0) }
         setAudioOutput = { try AudioDeviceOperations.setDefaultOutput(uid: $0) }
+        verifyAgentHandshake = { try AgentClient.shared.verifyHandshake() }
+        performAgentOperation = { try AgentClient.shared.perform($0) }
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
+        homebrewClient = { HomebrewClient() }
         extensionToolReadiness = { id in
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
                 id, executableNamed: CLIEnvironment.executableNamed)
@@ -277,6 +298,7 @@ public enum CLIEnvironment {
                 endpoint: .remote(machine: runner.machine, connection: runner.ssh))
         }
         QuinjetCLIEnvironment.reset()
+        DatabaseCLIEnvironment.reset()
     }
 
     private static func liveRemoteDirectoryTarget(
@@ -285,6 +307,7 @@ public enum CLIEnvironment {
         let runner = try await MachineResolver.runner(query)
         return CLIRemoteDirectoryTarget(
             machine: runner.machine,
-            endpoint: .remote(machine: runner.machine, connection: runner.ssh))
+            endpoint: .remote(machine: runner.machine, connection: runner.ssh),
+            platform: await runner.ssh.remotePlatform ?? .linux)
     }
 }

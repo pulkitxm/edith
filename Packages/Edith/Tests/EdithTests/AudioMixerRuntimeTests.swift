@@ -310,7 +310,7 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
             ).isEmpty)
     }
 
-    @Test func serviceOwnershipKeepsMonitoringWithoutAVisibleView() {
+    @Test func serviceWithoutRoutesStaysIdleWithoutAVisibleView() {
         guard #available(macOS 14.4, *) else { return }
         let engine = MixerEngine(
             snapshotLoader: { AudioMixerSnapshot(apps: [], outputUID: "output-a") },
@@ -319,7 +319,7 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
 
         engine.startService()
         #expect(engine.serviceEnabled)
-        #expect(engine.isMonitoring)
+        #expect(!engine.isMonitoring)
         engine.stopService()
         #expect(!engine.serviceEnabled)
         #expect(!engine.isMonitoring)

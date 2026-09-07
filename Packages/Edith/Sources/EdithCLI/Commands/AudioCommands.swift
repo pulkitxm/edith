@@ -26,7 +26,7 @@ enum AudioCLI {
     ) throws -> AudioDeviceDescriptor {
         guard let device = AudioDeviceOperations.resolve(value, among: devices) else {
             throw CLIFailure.notFound(
-                "no (kind) device matches \(value)",
+                "no \(kind) device matches \(value)",
                 hint: devices.isEmpty
                     ? "connect an audio device and try again"
                     : "available: " + devices.map(\.name).joined(separator: ", "))

@@ -2,6 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct AudioControlsRows: View {
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @AppStorage(AppStorageKeys.Audio.enabled, store: SharedDefaults.store) private var enabled =
         false
     @AppStorage(AppStorageKeys.Audio.preferredInputUID, store: SharedDefaults.store) private
@@ -15,6 +16,13 @@ struct AudioControlsRows: View {
     @State private var snapshot = AudioDeviceSnapshot(
         devices: [], defaultInputUID: nil, defaultOutputUID: nil)
     @State private var errorMessage: String?
+
+    init(
+        snapshot: AudioDeviceSnapshot = AudioDeviceSnapshot(
+            devices: [], defaultInputUID: nil, defaultOutputUID: nil)
+    ) {
+        _snapshot = State(initialValue: snapshot)
+    }
 
     var body: some View {
         Group {
@@ -94,10 +102,10 @@ struct AudioControlsRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .onAppear { refresh() }
+        .onAppear { if automaticActionsEnabled { refresh() } }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in refresh() }
+        ) { _ in if automaticActionsEnabled { refresh() } }
     }
 
     private var preferredInputBinding: Binding<String> {
