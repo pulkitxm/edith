@@ -1,4 +1,5 @@
 import Carbon.HIToolbox
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -30,7 +31,7 @@ func migratedServices() -> AppServices {
     let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
     defer { PerformanceTrace.end(launchTrace) }
     let d = UserDefaults.standard
-    if !d.bool(forKey: "migratedFromControlCenter"),
+    if !AppBuildIdentity.isDevelopment, !d.bool(forKey: "migratedFromControlCenter"),
         let old = d.persistentDomain(forName: "com.pulkit.control-center")
     {
         for (key, value) in old where !key.hasPrefix("NSStatusItem") {
