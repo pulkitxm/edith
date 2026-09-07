@@ -21,8 +21,13 @@ runs:
           Packages/Edith/.build/artifacts
           Packages/Edith/.build/repositories
           Packages/Edith/.build/workspace-state.json
-          build/SourcePackages
-        key: swift-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.variant }}-${{ hashFiles('Packages/Edith/Package.resolved', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+        key: swift-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Packages/Edith/Package.resolved', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+    - name: Restore Xcode package downloads
+      if: inputs.variant != 'tests-debug'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: build/SourcePackages
+        key: xcode-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Packages/Edith/Package.resolved', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
     - name: Restore Swift build products
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
