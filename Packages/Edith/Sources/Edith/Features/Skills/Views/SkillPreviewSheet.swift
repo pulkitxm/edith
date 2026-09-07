@@ -11,6 +11,11 @@ struct SkillPreviewSheet: View {
     @State private var copied = false
     @State private var refreshID = UUID()
 
+    init(skill: EdithSkill) {
+        self.skill = skill
+        _document = State(initialValue: SkillDocumentStore.shared.cachedDocument(for: skill))
+    }
+
     private enum Mode: String, CaseIterable {
         case preview = "Preview"
         case markdown = "Markdown"
@@ -76,7 +81,7 @@ struct SkillPreviewSheet: View {
         }
         .frame(width: UIScale.pt(740), height: UIScale.pt(650))
         .task(id: refreshID) {
-            document = nil
+            guard document == nil else { return }
             error = nil
             copied = false
             do {

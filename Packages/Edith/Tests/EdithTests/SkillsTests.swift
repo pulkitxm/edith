@@ -20,7 +20,7 @@ import Testing
         #expect(SkillDocument(markdown: "# No metadata").body == "# No metadata")
     }
 
-    @Test func githubLoadCachesValidContentAndFallsBackOffline() async throws {
+    @MainActor @Test func githubLoadCachesValidContentAndFallsBackOffline() async throws {
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: cache) }
         let remote = SkillDocumentStore(cacheDirectory: cache) { _ in Data(Self.markdown.utf8) }
@@ -37,7 +37,26 @@ import Testing
         #expect(try await invalid.load(skill).markdown == Self.markdown)
     }
 
-    @Test func invalidRemoteContentCannotBecomeAnInstallableSkill() async throws {
+    @MainActor @Test func reopeningUsesTheLoadedDocumentWithoutFetchingAgain() async throws {
+        actor FetchCount {
+            var value = 0
+            func increment() { value += 1 }
+        }
+        let count = FetchCount()
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let store = SkillDocumentStore(cacheDirectory: cache) { _ in
+            await count.increment()
+            return Data(Self.markdown.utf8)
+        }
+        #expect(store.cachedDocument(for: skill) == nil)
+        let first = try await store.load(skill)
+        #expect(store.cachedDocument(for: skill) == first)
+        #expect(try await store.load(skill) == first)
+        #expect(await count.value == 1)
+    }
+
+    @MainActor @Test func invalidRemoteContentCannotBecomeAnInstallableSkill() async throws {
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: cache) }
         for text in [

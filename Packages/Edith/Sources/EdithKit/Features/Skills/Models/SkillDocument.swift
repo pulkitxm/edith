@@ -29,8 +29,9 @@ public struct SkillDocument: Sendable, Equatable {
     }
 }
 
-public actor SkillDocumentStore {
+@MainActor public final class SkillDocumentStore {
     public static let shared = SkillDocumentStore()
+    private var documents: [String: SkillDocument] = [:]
     private let cacheDirectory: URL
     private let fetch: @Sendable (URL) async throws -> Data
 
@@ -50,10 +51,15 @@ public actor SkillDocumentStore {
         self.fetch = fetch
     }
 
+    public func cachedDocument(for skill: EdithSkill) -> SkillDocument? {
+        documents[skill.id]
+    }
+
     public func load(_ skill: EdithSkill) async throws -> SkillDocument {
         guard EdithSkillLibrary.skills.contains(skill) else {
             throw SkillsError.message("This skill is not in the Edith library.")
         }
+        if let document = documents[skill.id] { return document }
         let cached = cacheDirectory.appendingPathComponent(skill.id + ".md")
         do {
             let data = try await fetch(skill.sourceURL)
@@ -62,12 +68,14 @@ public actor SkillDocumentStore {
             try? FileManager.default.createDirectory(
                 at: cacheDirectory, withIntermediateDirectories: true)
             try? data.write(to: cached, options: .atomic)
+            documents[skill.id] = document
             return document
         } catch {
             try Task.checkCancellation()
             if let data = try? Data(contentsOf: cached),
                 let document = try? Self.decode(data, skill: skill, cached: true)
             {
+                documents[skill.id] = document
                 return document
             }
             throw SkillsError.message(

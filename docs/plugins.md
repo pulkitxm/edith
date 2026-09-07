@@ -13,7 +13,8 @@ renders the instructions with spacious headings, paragraphs and code blocks,
 without the front matter. Skeletons indicate loading. The Markdown tab shows
 the complete file in a read-only, syntax-highlighted viewer where text can be
 selected. Copy copies the complete original Markdown, including metadata,
-from either tab.
+from either tab. A loaded skill stays in memory for the app session, so reopening
+the preview displays it immediately without another download.
 
 Skill content is fetched from the Edith repository on GitHub, on the main
 branch. A valid download is cached locally. When GitHub cannot be reached,
