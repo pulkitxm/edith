@@ -42,7 +42,7 @@ struct SkillPreviewSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Close preview")
                 .keyboardShortcut(.cancelAction)
