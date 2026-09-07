@@ -3,6 +3,7 @@ import ApplicationServices
 import CoreGraphics
 import Darwin
 import EdithKit
+import EdithLidAwakeSupport
 import Foundation
 import ImageIO
 
