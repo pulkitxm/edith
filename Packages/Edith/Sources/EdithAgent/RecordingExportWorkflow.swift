@@ -6,6 +6,9 @@ public enum RecordingExportWorkflow {
         await tasks.register(
             operation: ScreenRecordingOperation.export.descriptor.id.rawValue, concurrency: 1
         ) { payload, context in
+            guard
+                ExtensionRegistry.entry("captureTools")?.isEnabled(in: SharedDefaults.store) == true
+            else { throw ScreenRecordingError.disabled }
             let request = try AgentPayload.decode(RecordingExportRequest.self, from: payload)
             let exporter = ScreenRecordingExporter()
             exporter.onProgress = { context.report(String($0)) }

@@ -11,6 +11,17 @@ import Testing
 
 @Suite(.serialized) struct RecordingExportWorkflowTests {
     @Test func syntheticTakeExportsThroughTheDaemon() async throws {
+        let defaults = SharedDefaults.store
+        let suiteKey = "suiteMediaEnabled"
+        let abilityKey = AppStorageKeys.Tabs.captureToolsEnabled
+        let suiteBefore = defaults.object(forKey: suiteKey)
+        let abilityBefore = defaults.object(forKey: abilityKey)
+        defaults.set(true, forKey: suiteKey)
+        defaults.set(true, forKey: abilityKey)
+        defer {
+            defaults.set(suiteBefore, forKey: suiteKey)
+            defaults.set(abilityBefore, forKey: abilityKey)
+        }
         var take = try ScreenRecordingLibrary.makeTake(source: .area)
         let folder = ScreenRecordingLibrary.folderURL(for: take.id)
         defer { try? FileManager.default.removeItem(at: folder) }

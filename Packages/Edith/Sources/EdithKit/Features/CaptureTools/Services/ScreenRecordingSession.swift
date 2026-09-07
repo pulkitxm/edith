@@ -4,6 +4,7 @@ import ScreenCaptureKit
 
 public enum ScreenRecordingError: LocalizedError, Equatable {
     case busy
+    case disabled
     case cancelled
     case permissionDenied
     case sourceUnavailable
@@ -13,6 +14,7 @@ public enum ScreenRecordingError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case .disabled: "Enable Capture Tools in the Media suite before exporting recordings."
         case .busy: "A recording is already active."
         case .cancelled: "Recording was cancelled."
         case .permissionDenied: "Screen Recording access is required."
