@@ -67,8 +67,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
                     SkillTargetsSkeleton()
                         .padding(28)
                         .background(scheme == .dark ? Color.black : Color.white)
-                        .environment(\.colorScheme, scheme)
-                        .environment(\.accessibilityReduceMotion, true),
+                        .environment(\.colorScheme, scheme),
                     width: 600, height: 240))
             #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
             if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
@@ -90,8 +89,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
                     MusicLibrarySkeleton(grid: grid)
                         .padding(28)
                         .background(Color.white)
-                        .environment(\.colorScheme, .light)
-                        .environment(\.accessibilityReduceMotion, true),
+                        .environment(\.colorScheme, .light),
                     width: 900, height: 520))
             #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
             if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
