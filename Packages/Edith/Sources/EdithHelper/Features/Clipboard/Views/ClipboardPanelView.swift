@@ -204,6 +204,13 @@ struct ClipboardPanelView: View {
                         return .handled
                     }
                     .onKeyPress { press in handle(press) }
+                if let error = store.captureError ?? store.refreshError {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .help("Clipboard synchronization is retrying. \(error)")
+                        .accessibilityLabel("Clipboard synchronization is retrying")
+                        .padding(.horizontal, 4)
+                }
                 if !filterText.isEmpty {
                     Button {
                         filterText = ""
