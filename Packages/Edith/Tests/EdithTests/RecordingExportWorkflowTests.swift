@@ -49,7 +49,7 @@ import Testing
             context.setFillColor(CGColor(red: 0.08, green: 0.12, blue: 0.23, alpha: 1))
             context.fill(CGRect(x: 0, y: 0, width: 320, height: 180))
             context.setFillColor(CGColor(red: 0.3, green: 0.75, blue: 0.9, alpha: 1))
-            context.fill(CGRect(x: 30 + frame * 6, y: 60, width: 64, height: 60))
+            context.fill(CGRect(x: CGFloat(30 + frame * 6), y: 60, width: 64, height: 60))
             CVPixelBufferUnlockBaseAddress(buffer, [])
             #expect(
                 adaptor.append(
