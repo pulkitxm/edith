@@ -49,7 +49,7 @@ final class ScratchpadStore {
     func reload() {
         flushSave()
         do {
-            document = try ScratchpadRepository.load(retention: retention)
+            document = try AgentScratchpadClient.load(retention: retention)
             failure = nil
             scheduleRetention()
         } catch {
@@ -60,7 +60,7 @@ final class ScratchpadStore {
     func select(_ id: UUID) {
         flushSave()
         do {
-            document = try ScratchpadRepository.select(id.uuidString)
+            document = try AgentScratchpadClient.select(id.uuidString)
             previewing = false
             failure = nil
         } catch {
@@ -71,7 +71,7 @@ final class ScratchpadStore {
     func create() {
         flushSave()
         do {
-            document = try ScratchpadRepository.create()
+            document = try AgentScratchpadClient.create()
             query = ""
             previewing = false
             failure = nil
@@ -85,7 +85,7 @@ final class ScratchpadStore {
         guard let selectedPad else { return }
         flushSave()
         do {
-            document = try ScratchpadRepository.rename(selectedPad.id.uuidString, to: name)
+            document = try AgentScratchpadClient.rename(selectedPad.id.uuidString, to: name)
             failure = nil
             announceChange()
         } catch {
@@ -97,7 +97,7 @@ final class ScratchpadStore {
         guard let selectedPad else { return }
         flushSave()
         do {
-            document = try ScratchpadRepository.duplicate(selectedPad.id.uuidString)
+            document = try AgentScratchpadClient.duplicate(selectedPad.id.uuidString)
             query = ""
             previewing = false
             failure = nil
@@ -111,7 +111,7 @@ final class ScratchpadStore {
         guard let selectedPad else { return }
         flushSave()
         do {
-            document = try ScratchpadRepository.remove(selectedPad.id.uuidString)
+            document = try AgentScratchpadClient.remove(selectedPad.id.uuidString)
             previewing = false
             failure = nil
             announceChange()
@@ -125,7 +125,7 @@ final class ScratchpadStore {
         saveTask?.cancel()
         saveTask = nil
         do {
-            document = try ScratchpadRepository.clear(selectedPad.id.uuidString)
+            document = try AgentScratchpadClient.clear(selectedPad.id.uuidString)
             savePending = false
             outcome = "Cleared"
             failure = nil
@@ -196,7 +196,7 @@ final class ScratchpadStore {
         saveTask?.cancel()
         saveTask = nil
         do {
-            document = try ScratchpadRepository.update(
+            document = try AgentScratchpadClient.update(
                 selectedPad.id.uuidString, text: selectedPad.text,
                 now: selectedPad.modifiedAt ?? Date())
             savePending = false

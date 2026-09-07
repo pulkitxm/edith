@@ -7,6 +7,11 @@ import SwiftUI
 @MainActor
 @Observable
 final class TerminalTabsModel {
+    typealias UserCloseRequester =
+        @MainActor (
+            TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
+        ) -> Void
+
     struct Tab: Identifiable {
         let id = UUID()
         var title: String
@@ -16,6 +21,15 @@ final class TerminalTabsModel {
     private(set) var tabs: [Tab] = []
     var selected: UUID?
     var broadcast = false
+    private let requestUserClose: UserCloseRequester
+
+    init(
+        requestUserClose: @escaping UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
+    ) {
+        self.requestUserClose = requestUserClose
+    }
 
     func ensureFirstTab(named title: String) {
         guard tabs.isEmpty else { return }
@@ -32,7 +46,17 @@ final class TerminalTabsModel {
 
     func closeTab(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        tabs[index].holder.stop()
+        let holder = tabs[index].holder
+        requestUserClose(holder) { [weak self, weak holder] confirmed in
+            guard confirmed, let self, let holder else { return }
+            self.removeTab(id, holder: holder)
+        }
+    }
+
+    private func removeTab(_ id: UUID, holder: TerminalSessionHolder) {
+        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+            return
+        }
         tabs.remove(at: index)
         if selected == id { selected = tabs.last?.id }
     }
@@ -52,7 +76,7 @@ final class TerminalTabsModel {
         _ plan: MachineBroadcastPlan,
         isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
-            $0.terminalView.send(txt: $1)
+            $0.sendInput($1)
         }
     ) -> MachineTerminalBroadcastDelivery {
         var sent = 0
@@ -78,7 +102,7 @@ final class TerminalTabsModel {
 struct TerminalTabsView: View {
     let session: MachineSession
     var presented = true
-    @State private var model = TerminalTabsModel()
+    @State var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
     @State private var broadcastError: String?
@@ -238,11 +262,16 @@ struct TerminalTabsView: View {
 
 @MainActor
 enum TerminalWindow {
-    private static var windows: [UUID: NSWindow] = [:]
+    private struct Entry {
+        let window: NSWindow
+        let model: TerminalTabsModel
+    }
 
-    static func open(session: MachineSession) {
+    private static var windows: [UUID: Entry] = [:]
+
+    static func open(session: MachineSession, model: TerminalTabsModel? = nil) {
         if let existing = windows[session.machine.id] {
-            existing.makeKeyAndOrderFront(nil)
+            existing.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
@@ -255,21 +284,26 @@ enum TerminalWindow {
         window.contentMinSize = NSSize(width: 520, height: 320)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithTerminal"
+        let ownedModel = model ?? TerminalTabsModel()
         let hosting = NSHostingController(
-            rootView: ZoomableRoot { TerminalTabsView(session: session) })
+            rootView: ZoomableRoot { TerminalTabsView(session: session, model: ownedModel) })
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 900, height: 560))
         window.setFrameAutosaveName("EdithTerminalWindow")
         if window.frame.origin == .zero { window.center() }
         window.delegate = TerminalWindowDelegate.shared
-        windows[session.machine.id] = window
+        windows[session.machine.id] = Entry(window: window, model: ownedModel)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     static func forget(_ window: NSWindow) {
-        windows = windows.filter { $0.value !== window }
+        guard let entry = windows.first(where: { $0.value.window === window }) else { return }
+        entry.value.model.stopAll()
+        window.contentViewController = nil
+        window.contentView = nil
+        windows.removeValue(forKey: entry.key)
     }
 }
 

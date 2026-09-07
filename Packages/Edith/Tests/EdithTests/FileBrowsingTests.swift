@@ -293,7 +293,9 @@ import Testing
         #expect(
             DropResolver.intent(
                 payload: payload, fileURLPaths: [], destinationMachine: machineB,
-                optionHeld: false) == .transferBetweenMachines(from: machineA, paths: ["/a/x"]))
+                optionHeld: false)
+                == .transferBetweenMachines(
+                    from: machineA, paths: ["/a/x"], moving: false))
     }
 
     @Test func externalFilesUpload() {

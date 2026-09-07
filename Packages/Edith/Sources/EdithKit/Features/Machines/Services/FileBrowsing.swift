@@ -40,14 +40,36 @@ public enum FileSorting {
         _ entries: [RemoteFileEntry], by key: FileSortKey, ascending: Bool,
         foldersFirst: Bool = true
     ) -> [RemoteFileEntry] {
-        entries.sorted { lhs, rhs in
-            if foldersFirst, lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-            let ordered = compare(lhs, rhs, key: key)
-            if ordered == .orderedSame {
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-            return ascending ? ordered == .orderedAscending : ordered == .orderedDescending
+        entries.sorted {
+            precedes($0, $1, key: key, ascending: ascending, foldersFirst: foldersFirst)
         }
+    }
+
+    public static func sortCheckingCancellation(
+        _ entries: [RemoteFileEntry], by key: FileSortKey, ascending: Bool,
+        foldersFirst: Bool = true
+    ) throws -> [RemoteFileEntry] {
+        try Task.checkCancellation()
+        var comparisons = 0
+        let result = try entries.sorted { lhs, rhs in
+            if comparisons % 128 == 0 { try Task.checkCancellation() }
+            comparisons += 1
+            return precedes(lhs, rhs, key: key, ascending: ascending, foldersFirst: foldersFirst)
+        }
+        try Task.checkCancellation()
+        return result
+    }
+
+    private static func precedes(
+        _ lhs: RemoteFileEntry, _ rhs: RemoteFileEntry, key: FileSortKey,
+        ascending: Bool, foldersFirst: Bool
+    ) -> Bool {
+        if foldersFirst, lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+        let ordered = compare(lhs, rhs, key: key)
+        if ordered == .orderedSame {
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return ascending ? ordered == .orderedAscending : ordered == .orderedDescending
     }
 
     static func compare(
@@ -142,7 +164,12 @@ public enum FileOperations {
         return candidate
     }
 
-    public static func trashCommand(paths: [String]) -> String {
+    public static func trashCommand(
+        paths: [String], platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.remove(paths: paths, permanently: false)
+        }
         let trashFiles = "$HOME/.local/share/Trash/files"
         let trashInfo = "$HOME/.local/share/Trash/info"
         var lines = ["mkdir -p \(trashFiles) \(trashInfo)"]
@@ -161,11 +188,22 @@ public enum FileOperations {
         return lines.joined(separator: "; ")
     }
 
-    public static func deleteCommand(paths: [String]) -> String {
-        "rm -rf " + paths.map(ShellQuote.quote).joined(separator: " ")
+    public static func deleteCommand(
+        paths: [String], platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.remove(paths: paths, permanently: true)
+        }
+        return "rm -rf " + paths.map(ShellQuote.quote).joined(separator: " ")
     }
 
-    public static func duplicateCommand(path: String, destination: String? = nil) -> String {
+    public static func duplicateCommand(
+        path: String, destination: String? = nil,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.duplicate(path: path, destination: destination)
+        }
         let source = ShellQuote.quote(path)
         if let destination {
             let target = ShellQuote.quote(destination)
@@ -181,19 +219,35 @@ public enum FileOperations {
             """
     }
 
-    public static func copyCommand(paths: [String], toDirectory directory: String) -> String {
-        "cp -a " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
+    public static func copyCommand(
+        paths: [String], toDirectory directory: String,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.copy(paths: paths, directory: directory)
+        }
+        return "cp -a " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
             + ShellQuote.quote(directory)
     }
 
-    public static func moveCommand(paths: [String], toDirectory directory: String) -> String {
-        "mv " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
+    public static func moveCommand(
+        paths: [String], toDirectory directory: String,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.move(paths: paths, directory: directory)
+        }
+        return "mv " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
             + ShellQuote.quote(directory)
     }
 
     public static func renameCommand(
-        path: String, to newPath: String, viaTemporary: Bool = false
+        path: String, to newPath: String, viaTemporary: Bool = false,
+        platform: RemoteMachinePlatform = .linux
     ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.rename(path: path, destination: newPath)
+        }
         let source = ShellQuote.quote(path)
         let destination = ShellQuote.quote(newPath)
         guard viaTemporary else {
@@ -203,20 +257,35 @@ public enum FileOperations {
         return "mv \(source) \(staging) && mv \(staging) \(destination)"
     }
 
-    public static func makeDirectoryCommand(path: String) -> String {
-        "mkdir -p \(ShellQuote.quote(path))"
+    public static func makeDirectoryCommand(
+        path: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows { return WindowsFileCommands.makeDirectory(path) }
+        return "mkdir -p \(ShellQuote.quote(path))"
     }
 
-    public static func directorySizeCommand(path: String) -> String {
-        "du -sk \(ShellQuote.quote(path)) 2>/dev/null | cut -f1"
+    public static func directorySizeCommand(
+        path: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows { return WindowsFileCommands.directorySize(path) }
+        return "du -sk \(ShellQuote.quote(path)) 2>/dev/null | cut -f1"
     }
 
-    public static func freeSpaceCommand(path: String) -> String {
-        "df -Pk \(ShellQuote.quote(path)) 2>/dev/null | awk 'NR==2 {print $4}'"
+    public static func freeSpaceCommand(
+        path: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows { return WindowsFileCommands.freeSpace(path) }
+        return "df -Pk \(ShellQuote.quote(path)) 2>/dev/null | awk 'NR==2 {print $4}'"
     }
 
-    public static func searchCommand(path: String, query: String, limit: Int = 300) -> String {
-        "find \(ShellQuote.quote(path)) -iname \(ShellQuote.quote("*\(query)*")) "
+    public static func searchCommand(
+        path: String, query: String, limit: Int = 300,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.search(path: path, query: query, limit: limit)
+        }
+        return "find \(ShellQuote.quote(path)) -iname \(ShellQuote.quote("*\(query)*")) "
             + "-not -path '*/.git/*' 2>/dev/null | head -\(limit)"
     }
 }

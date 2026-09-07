@@ -1,9 +1,12 @@
 import AppKit
 import EdithKit
+import SwiftUI
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
-    private let item: NSStatusItem
+    private let panel = StatusItemPanel()
+    private let snapshot = SystemMenuSnapshot()
+    private var item: NSStatusItem!
     private var timer: Timer?
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
@@ -14,12 +17,14 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
     override init() {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "systemStats"
         super.init()
-        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
+        ensureStyleCache()
         previous = SystemStatsReader.readCPUTicks()
-        update()
+        let initialTitle = title(cpu: 0, memory: SystemStatsReader.memoryUsedPercent())
+        item = NSStatusBar.system.statusItem(
+            withLength: StatusItemSizing.titleLength(initialTitle))
+        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
+        item.button?.attributedTitle = initialTitle
         startTimer()
         let workspace = NSWorkspace.shared.notificationCenter
         sleepObservers = [
@@ -65,6 +70,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        panel.close()
         stopTimer()
         for observer in sleepObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -78,7 +84,17 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     @objc private func clicked() {
-        StatusItemMenu.handleClick(on: item) { MainApp.open(section: "system") }
+        StatusItemMenu.handleClick(on: item) {
+            let snapshot = snapshot
+            panel.show(
+                from: item, title: "System",
+                actions: [
+                    .init(title: "Open System…") { MainApp.open(section: "system") }
+                ]
+            ) {
+                SystemMenuReadings(snapshot: snapshot)
+            }
+        }
     }
 
     private func update() {
@@ -90,12 +106,20 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             previous = SystemStatsReader.readCPUTicks()
         }
         let memory = SystemStatsReader.memoryUsedPercent()
+        snapshot.cpu = cpu
+        snapshot.memory = memory
         ensureStyleCache()
+        let title = title(cpu: cpu, memory: memory)
+        item.length = StatusItemSizing.titleLength(title)
+        item.button?.attributedTitle = title
+    }
+
+    private func title(cpu: Double, memory: Double) -> NSAttributedString {
         let title = NSMutableAttributedString()
         appendStat(symbol: "cpu", value: cpu, into: title)
-        title.append(NSAttributedString(string: "  "))
+        title.append(NSAttributedString(string: " "))
         appendStat(symbol: "memorychip", value: memory, into: title)
-        item.button?.attributedTitle = title
+        return title
     }
 
     private func ensureStyleCache() {
@@ -144,5 +168,22 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         out.append(
             NSAttributedString(string: "\(Int(value.rounded()))", attributes: numberAttributes))
         out.append(NSAttributedString(string: "%", attributes: percentAttributes))
+    }
+}
+
+@MainActor
+final class SystemMenuSnapshot {
+    var cpu = 0.0
+    var memory = 0.0
+}
+
+struct SystemMenuReadings: View {
+    let snapshot: SystemMenuSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StatusProgressRow(title: "CPU", percent: snapshot.cpu)
+            StatusProgressRow(title: "Memory", percent: snapshot.memory)
+        }
     }
 }

@@ -37,7 +37,7 @@ final class ScratchpadPanel: NSObject, NSWindowDelegate {
     }
 
     func toggle() {
-        guard SharedDefaults.store.bool(forKey: AppStorageKeys.Scratchpad.enabled) else { return }
+        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true else { return }
         isVisible ? hide() : show()
     }
 

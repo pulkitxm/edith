@@ -25,7 +25,7 @@ enum ScratchpadCLI {
     }
 
     static func load() throws -> ScratchpadDocument {
-        try ScratchpadRepository.load(retention: retention)
+        try AgentScratchpadClient.load(retention: retention)
     }
 
     static func pad(_ selector: String?, in document: ScratchpadDocument) throws -> ScratchpadPad {
@@ -145,7 +145,7 @@ struct ScratchpadCreateCommand: AsyncParsableCommand {
         try await execute {
             _ = try ScratchpadCLI.load()
             let body = try ScratchpadCLI.content(text: text, file: file)
-            let document = try ScratchpadRepository.create(name: name, text: body)
+            let document = try AgentScratchpadClient.create(name: name, text: body)
             let created = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -174,7 +174,7 @@ struct ScratchpadSetCommand: AsyncParsableCommand {
             let current = try ScratchpadCLI.load()
             let target = try ScratchpadCLI.pad(pad, in: current)
             let body = try ScratchpadCLI.content(text: text, file: file)
-            let document = try ScratchpadRepository.update(target.id.uuidString, text: body)
+            let document = try AgentScratchpadClient.update(target.id.uuidString, text: body)
             let updated = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -197,7 +197,7 @@ struct ScratchpadRenameCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             _ = try ScratchpadCLI.load()
-            let document = try ScratchpadRepository.rename(pad, to: name)
+            let document = try AgentScratchpadClient.rename(pad, to: name)
             let updated = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -220,7 +220,7 @@ struct ScratchpadDuplicateCommand: AsyncParsableCommand {
         try await execute {
             let current = try ScratchpadCLI.load()
             let source = try ScratchpadCLI.pad(pad, in: current)
-            let document = try ScratchpadRepository.duplicate(source.id.uuidString)
+            let document = try AgentScratchpadClient.duplicate(source.id.uuidString)
             let copy = try ScratchpadCLI.pad(nil, in: document)
             ScratchpadCLI.announce()
             if json {
@@ -248,7 +248,7 @@ struct ScratchpadRemoveCommand: AsyncParsableCommand {
                 action: "remove scratchpad", targets: [target.id.uuidString],
                 confirmed: yes, json: json, fields: ["name": .string(target.name)])
             guard plan.shouldApply() else { return }
-            let updated = try ScratchpadRepository.remove(target.id.uuidString)
+            let updated = try AgentScratchpadClient.remove(target.id.uuidString)
             ScratchpadCLI.announce()
             plan.finish(
                 changed: true, plain: "removed \(target.name)",
@@ -274,7 +274,7 @@ struct ScratchpadClearCommand: AsyncParsableCommand {
                 confirmed: yes, json: json,
                 fields: ["name": .string(target.name), "characters": .int(target.text.count)])
             guard plan.shouldApply() else { return }
-            _ = try ScratchpadRepository.clear(target.id.uuidString)
+            _ = try AgentScratchpadClient.clear(target.id.uuidString)
             ScratchpadCLI.announce()
             plan.finish(changed: !target.text.isEmpty, plain: "cleared \(target.name)")
         }

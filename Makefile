@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -22,7 +22,10 @@ ci:
 site-dev:
 	cd apps/site && python3 -m http.server 8000
 
-cli:
+approve-package-plugins:
+	python3 scripts/approve-package-plugins.py
+
+cli: approve-package-plugins
 	$(XCODEBUILD) -scheme ed -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
@@ -98,7 +101,7 @@ ci-promo:
 ci-swift-lint:
 	cd $(PKG) && swift format lint --strict --parallel --recursive Sources Tests Package.swift
 
-ci-swift-build:
+ci-swift-build: approve-package-plugins
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
@@ -123,48 +126,57 @@ verify-bundle: verify-release-build-settings
 	test ! -L dist/Edith.app/Contents/MacOS/Edith
 	test -x dist/Edith.app/Contents/MacOS/Edith
 	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
-	test -f dist/Edith.app/Contents/MacOS/ed
-	test ! -L dist/Edith.app/Contents/MacOS/ed
+	test -L dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/ed
-	file -b dist/Edith.app/Contents/MacOS/ed | grep -q '^Mach-O'
+	test "$$(readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher
+	test -f dist/Edith.app/Contents/Resources/ed-launcher
+	test -x dist/Edith.app/Contents/Resources/ed-launcher
+	head -n 1 dist/Edith.app/Contents/Resources/ed-launcher | grep -qx '#!/bin/sh'
 	test ! -e dist/Edith.app/Contents/MacOS/edh
 	test ! -L dist/Edith.app/Contents/MacOS/edh
-	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type f \( -name ed -o -name edh \) | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/MacOS/ed
-	@install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
+	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type l -name ed | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/MacOS/Edith
+	@set -e; install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
 	  trap 'rm -rf "$$install_dir"' EXIT; \
 	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
 	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
 	  version="$$($$install_dir/ed --version)"; \
+	  test -n "$$version"; \
+	  test "$$version" != development; \
 	  for name in ed edith; do \
 	    test -L "$$install_dir/$$name"; \
 	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \
 	    test -x "$$install_dir/$$name"; \
-	    codesign --verify --strict "$$install_dir/$$name"; \
 	    test "$$version" = "$$($$install_dir/$$name --version)"; \
 	  done; \
 	  test ! -e "$$install_dir/edh"; \
 	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
-	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
+	@! find dist/Edith.app -type f -perm -u+x -exec file {} + | grep -q 'universal binary'
+	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
+	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/ghostty/shell-integration/zsh/ghostty-integration' -type f | grep -q .
+	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/terminfo/78/xterm-ghostty' -type f | grep -q .
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
+	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
+	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns)" = ../../../../../Resources/AppIcon.icns
+	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle
+	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle)" = ../../../../../Resources/Edith_EdithKit.bundle
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx com.pulkit.edith.helper
+	python3 scripts/verify-app-identity.py dist/Edith.app
 	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist
 	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test "$$(stat -f %z dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake)" -le 500000
 	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
+	test -x dist/Edith.app/Contents/MacOS/edithd
 	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
 	codesign -dvv dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake 2>&1 | grep -qx Identifier=com.pulkit.edith.lidawake
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx Edith
 	@for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do \
 	  for field in CFBundleName CFBundleDisplayName; do \
 	    /usr/libexec/PlistBuddy -c "Print :$$field" "$$plist" | grep -q Helper \
@@ -182,13 +194,13 @@ build:
 	./build.sh $(FLAGS)
 
 install:
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 reset:
 	./reset.sh
 
 reinstall: reset
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 loc:
 	cloc --vcs=git

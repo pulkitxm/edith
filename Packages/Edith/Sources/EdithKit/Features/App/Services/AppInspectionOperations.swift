@@ -54,6 +54,8 @@ public enum AppPathID: String, CaseIterable, Equatable, Sendable {
     case data
     case refreshLog = "refresh-log"
     case music
+    case caches
+    case logs
 }
 
 public struct AppPathSnapshot: Equatable, Sendable {
@@ -206,6 +208,8 @@ public struct AppInspectionCenter {
             (.data, "Usage data", Repo.dataDir),
             (.refreshLog, "Refresh log", Repo.dataDir.appendingPathComponent("refresh.log")),
             (.music, "Music", Repo.musicDir),
+            (.caches, "Caches", DataRoot.caches),
+            (.logs, "Logs", DataRoot.logs),
         ]
         return entries.map { id, label, url in
             AppPathSnapshot(id: id, label: label, url: url, exists: exists(url))

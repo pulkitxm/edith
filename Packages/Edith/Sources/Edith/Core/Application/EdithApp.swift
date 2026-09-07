@@ -4,8 +4,6 @@ import Security
 import ServiceManagement
 import SwiftUI
 
-private let helperBundleIdentifier = MainApp.statusBarBundleIdentifier
-
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
@@ -16,6 +14,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var launchCleanupTask: Task<Void, Never>?
     private var helperMaintenanceTask: Task<Void, Never>?
     private let lidAwakeDaemonRegistrar = LidAwakeDaemonRegistrar()
+    private let agentRegistrar = AgentRegistrar()
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,7 +35,13 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         appStarted = true
         ExtensionDefaultsMigration.migrate()
-        lidAwakeDaemonRegistrar.register()
+        AttentionRepository.sink = AgentAttentionSink()
+        IPCTransport.enable()
+        AgentCommandRouting.enable()
+        if !AgentService.usesCustomService {
+            lidAwakeDaemonRegistrar.register()
+            agentRegistrar.registerAndRestartIfStale()
+        }
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
@@ -56,15 +61,17 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         postLaunch.start([
             StartupPhase(name: "main.launchCleanup") { [weak self] in
-                guard let self else { return }
+                guard !AgentService.usesCustomService, let self else { return }
                 self.launchCleanupTask?.cancel()
                 self.launchCleanupTask = Task.detached(priority: .utility) {
+                    DataRoot.prepare()
+                    DataRoot.pruneLogs()
                     Repo.prepareStoredPaths()
                     RetiredLicenseCleanup.run()
                 }
             },
             StartupPhase(name: "main.helper") { [weak self] in
-                guard let self else { return }
+                guard !AgentService.usesCustomService, let self else { return }
                 self.helperMaintenanceTask?.cancel()
                 self.helperMaintenanceTask = Task.detached(priority: .utility) {
                     await launchHelperIfNeeded()
@@ -127,6 +134,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        CalendarPermission.shutdown()
         flushSettingsChangedBroadcast()
         launchCleanupTask?.cancel()
         helperMaintenanceTask?.cancel()
@@ -238,60 +246,6 @@ private final class LidAwakeDaemonRegistrar {
             let data = values[kSecCodeInfoUnique] as? Data
         else { return nil }
         return data.map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-private let retiredHelperBundleIdentifiers = [
-    "com.pulkit.edith.statusbar", "com.pulkit.edith.panel", "com.pulkit.edith.bar",
-    "com.pulkit.edith.menubar",
-]
-
-private func launchHelperIfNeeded() async {
-    for identifier in retiredHelperBundleIdentifiers {
-        let retired = SMAppService.loginItem(identifier: identifier)
-        if retired.status == .enabled {
-            try? await retired.unregister()
-        }
-    }
-    let service = SMAppService.loginItem(identifier: helperBundleIdentifier)
-    if service.status != .enabled {
-        try? service.register()
-    }
-    let helperURL = Bundle.main.bundleURL
-        .appendingPathComponent("Contents/Library/LoginItems/Edith.app")
-    if let running = NSRunningApplication.runningApplications(
-        withBundleIdentifier: helperBundleIdentifier
-    ).first {
-        guard let installedAt = helperInstalledDate(helperURL),
-            let launchedAt = running.launchDate, launchedAt < installedAt
-        else { return }
-        await MainActor.run {
-            running.forceTerminate()
-            relaunchHelper(at: helperURL, after: running)
-        }
-        return
-    }
-    await MainActor.run {
-        NSWorkspace.shared.openApplication(
-            at: helperURL, configuration: NSWorkspace.OpenConfiguration())
-    }
-}
-
-private func helperInstalledDate(_ helperURL: URL) -> Date? {
-    let exec = helperURL.appendingPathComponent("Contents/MacOS/Edith")
-    return (try? FileManager.default.attributesOfItem(atPath: exec.path)[.modificationDate])
-        as? Date
-}
-
-private func relaunchHelper(at url: URL, after proc: NSRunningApplication) {
-    DispatchQueue.global(qos: .userInitiated).async {
-        for _ in 0..<50 where !proc.isTerminated {
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        DispatchQueue.main.async {
-            NSWorkspace.shared.openApplication(
-                at: url, configuration: NSWorkspace.OpenConfiguration())
-        }
     }
 }
 

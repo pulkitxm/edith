@@ -2,7 +2,9 @@ import ArgumentParser
 import EdithKit
 import Foundation
 
-public let edithCLIVersion = EdithCLIVersion.resolve(Bundle.main.infoDictionary)
+public let edithCLIVersion = EdithCLIVersion.resolve(
+    CLIEnvironment.installedAppURL().flatMap { Bundle(url: $0)?.infoDictionary }
+        ?? Bundle.main.infoDictionary)
 
 enum EdithCLIVersion {
     static func resolve(_ infoDictionary: [String: Any]?) -> String {
@@ -47,6 +49,8 @@ public struct EdRoot: AsyncParsableCommand {
             UninstallCommand.self,
             ConfigCommand.self,
             AppCommand.self,
+            AgentCommand.self,
+            MCPCommand.self,
             ExtensionsCommand.self,
             LidAwakeCLICommand.self,
             PermissionsCommand.self,
@@ -66,7 +70,10 @@ public struct EdRoot: AsyncParsableCommand {
             EmojiCommand.self,
             ShelfCommand.self,
             CleanerCommand.self,
+            HomebrewCommand.self,
+            MaintenanceCommand.self,
             QuinjetCommand.self,
+            DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
             CompleteCommand.self,

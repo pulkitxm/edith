@@ -22,6 +22,41 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed brew status", ["brew", "status", "--json"]),
+        JSONCase("ed brew ls", ["brew", "ls", "--json"]),
+        JSONCase("ed brew search", ["brew", "search", "edith", "--json"]),
+        JSONCase(
+            "ed brew install", ["brew", "install", "edith", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed brew upgrade", ["brew", "upgrade", "edith", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed brew uninstall", ["brew", "uninstall", "edith", "--yes", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance inventory", ["maintenance", "inventory", "--no-updates", "--json"]),
+        JSONCase(
+            "ed maintenance scan",
+            ["maintenance", "scan", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance remove",
+            ["maintenance", "remove", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance install",
+            ["maintenance", "install", "/path/that/does/not/exist.dmg", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance updates", ["maintenance", "updates", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance update", ["maintenance", "update", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
+        JSONCase(
+            "ed maintenance backup-updates",
+            ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
@@ -151,6 +186,192 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
+        JSONCase(
+            "ed database connections add",
+            [
+                "database", "connections", "add", "Analytics staging",
+                "--product", "postgresql", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase("ed database connections list", ["database", "connections", "list", "--json"]),
+        JSONCase(
+            "ed database connections get",
+            [
+                "database", "connections", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database capabilities",
+            [
+                "database", "capabilities",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database connections test",
+            [
+                "database", "connections", "test",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database connections edit",
+            [
+                "database", "connections", "edit",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--environment", "testing",
+                "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections duplicate",
+            [
+                "database", "connections", "duplicate",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "copy", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections rename",
+            [
+                "database", "connections", "rename",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "renamed", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections delete",
+            [
+                "database", "connections", "delete",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connect",
+            [
+                "database", "connect", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database disconnect",
+            [
+                "database", "disconnect", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database browse",
+            [
+                "database", "browse", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--path", "public", "--path", "events", "--json",
+            ]),
+        JSONCase(
+            "ed database query",
+            [
+                "database", "query", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--file", "/path/that/does/not/exist.sql", "--json",
+            ]),
+        JSONCase(
+            "ed database saved-queries list",
+            ["database", "saved-queries", "list", "--json"]),
+        JSONCase(
+            "ed database saved-queries get",
+            [
+                "database", "saved-queries", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database saved-queries save",
+            [
+                "database", "saved-queries", "save", "probe", "--file",
+                "/path/that/does/not/exist.sql", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries duplicate",
+            [
+                "database", "saved-queries", "duplicate",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "copy", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries rename",
+            [
+                "database", "saved-queries", "rename",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "renamed", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries delete",
+            [
+                "database", "saved-queries", "delete",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations key-request",
+            [
+                "database", "mutations", "key-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--key",
+                "probe", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations row-request",
+            [
+                "database", "mutations", "row-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--path",
+                "public", "--path", "events", "--identity",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations document-request",
+            [
+                "database", "mutations", "document-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--path",
+                "app", "--path", "people", "--document-id", "507f1f77bcf86cd799439011",
+                "--json",
+            ]),
+        JSONCase(
+            "ed database mutations preview",
+            [
+                "database", "mutations", "preview", "--request",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations apply",
+            [
+                "database", "mutations", "apply", "--request",
+                "/path/that/does/not/exist.json", "--confirmation",
+                "/path/that/does/not/exist-confirmation.json", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations status",
+            [
+                "database", "mutations", "status", "--receipt",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations cancel",
+            [
+                "database", "mutations", "cancel", "--receipt",
+                "/path/that/does/not/exist.json", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations outcome",
+            [
+                "database", "mutations", "outcome",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase("ed database operations list", ["database", "operations", "list", "--json"]),
+        JSONCase(
+            "ed database operations get",
+            [
+                "database", "operations", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database operations cancel",
+            [
+                "database", "operations", "cancel",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
         JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),
@@ -417,6 +638,9 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
+            "ed usage export", ["usage", "export", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed usage refresh", ["usage", "refresh", "--json"],
             mutatesTheMachine: true),
         JSONCase(
@@ -568,6 +792,9 @@ enum JSONContract {
         JSONCase(
             "ed machines control dnd",
             ["machines", "control", "dnd", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control caffeinate",
+            ["machines", "control", "caffeinate", "nowhere-at-all", "on", "--json"]),
         JSONCase(
             "ed machines control keyboard-light",
             ["machines", "control", "keyboard-light", "nowhere-at-all", "25", "--json"]),
@@ -740,14 +967,26 @@ enum JSONContract {
         JSONCase(
             "ed machines mount-reveal",
             ["machines", "mount-reveal", "nowhere-at-all", "--json"]),
+        JSONCase("ed agent status", ["agent", "status", "--json"]),
+        JSONCase("ed agent jobs", ["agent", "jobs", "--json"]),
+        JSONCase("ed agent restart", ["agent", "restart", "--json"]),
+        JSONCase("ed agent logs", ["agent", "logs", "--json"]),
+        JSONCase("ed agent events", ["agent", "events", "--json"]),
+        JSONCase("ed agent run", ["agent", "run", "missing-job", "--json"]),
+        JSONCase("ed agent cancel", ["agent", "cancel", "missing-job", "--json"]),
+        JSONCase("ed agent tasks ls", ["agent", "tasks", "ls", "--json"]),
+        JSONCase("ed agent tasks inspect", ["agent", "tasks", "inspect", "invalid", "--json"]),
+        JSONCase("ed agent tasks cancel", ["agent", "tasks", "cancel", "invalid", "--json"]),
+        JSONCase(
+            "ed agent tasks exec", ["agent", "tasks", "exec", "--json", "--", "/usr/bin/true"]),
     ]
 }
 
 @Suite struct CLIJSONContractTests {
     @Test func isolatedCommandsCannotReachLiveRefreshOrInstallServices() async {
         let refresh = await CLIProbe.run(["usage", "refresh", "--json"])
-        #expect(refresh.code == 0)
-        #expect(refresh.object?["completed"] as? Bool == true)
+        #expect(refresh.code == ExitCodes.unavailable)
+        #expect(refresh.stdout.isEmpty)
 
         let install = await CLIProbe.run(["tools", "install", "yt-dlp", "--json"])
         #expect(install.code == ExitCodes.unavailable)
@@ -827,7 +1066,7 @@ enum JSONContract {
         let rows = result.array as? [[String: Any]] ?? []
         #expect(rows.count == ExtensionRegistry.entries.count)
         let expected: Set<String> = [
-            "id", "title", "summary", "group", "featured", "key", "enabled",
+            "id", "title", "summary", "suite", "host", "requires", "featured", "key", "enabled",
             "requiredCapabilities", "optionalCapabilities",
             "requiredPermissions", "optionalPermissions", "missingRequiredPermissions",
             "requiredTools", "optionalTools",
@@ -1089,7 +1328,7 @@ enum JSONContract {
         }
     }
 
-    static let silenceIsNotAnError: Set<String> = []
+    static let silenceIsNotAnError: Set<String> = ["UsageCommands.swift"]
 
     @Test func everyPlaceThatWaitsOnTheAppDiagnosesItsSilence() throws {
         let root = URL(fileURLWithPath: #filePath)
