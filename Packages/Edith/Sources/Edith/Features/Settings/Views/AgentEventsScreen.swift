@@ -88,6 +88,7 @@ struct AgentEventsScreen: View {
     @State private var retryID = 0
     @State private var copyTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
@@ -110,7 +111,7 @@ struct AgentEventsScreen: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.ink(scheme == .dark))
                         .frame(width: 28, height: 28)
                         .contentShape(Circle())
                 }

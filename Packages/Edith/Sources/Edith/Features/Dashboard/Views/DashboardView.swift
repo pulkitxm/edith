@@ -232,6 +232,7 @@ struct DashboardView: View {
         let helperText: String
         var isLoading = false
         var tint: Color?
+        @Environment(\.colorScheme) private var scheme
 
         var body: some View {
             Button(action: action) {
@@ -243,7 +244,8 @@ struct DashboardView: View {
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
-                        Image(systemName: systemImage).foregroundStyle(.secondary)
+                        Image(systemName: systemImage).foregroundStyle(
+                            DashSkin.ink(scheme == .dark))
                     }
                 }
                 .frame(width: UIScale.pt(30), height: UIScale.pt(30))
