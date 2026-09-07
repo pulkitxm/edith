@@ -95,8 +95,11 @@ struct CommandBarView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             if model.loadingApplications {
-                ProgressView()
-                    .controlSize(.small)
+                SkeletonReplica("Loading applications") {
+                    Image(systemName: "app.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.tertiary)
+                }
             } else {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 22))
