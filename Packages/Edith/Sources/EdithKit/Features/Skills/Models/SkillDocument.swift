@@ -60,6 +60,16 @@ public struct SkillDocument: Sendable, Equatable {
             throw SkillsError.message("This skill is not in the Edith library.")
         }
         if let document = documents[skill.id] { return document }
+        let document = try await Self.loadDocument(
+            skill, cacheDirectory: cacheDirectory, fetch: fetch)
+        documents[skill.id] = document
+        return document
+    }
+
+    nonisolated private static func loadDocument(
+        _ skill: EdithSkill, cacheDirectory: URL,
+        fetch: @Sendable (URL) async throws -> Data
+    ) async throws -> SkillDocument {
         let cached = cacheDirectory.appendingPathComponent(skill.id + ".md")
         do {
             let data = try await fetch(skill.sourceURL)
@@ -68,14 +78,12 @@ public struct SkillDocument: Sendable, Equatable {
             try? FileManager.default.createDirectory(
                 at: cacheDirectory, withIntermediateDirectories: true)
             try? data.write(to: cached, options: .atomic)
-            documents[skill.id] = document
             return document
         } catch {
             try Task.checkCancellation()
             if let data = try? Data(contentsOf: cached),
                 let document = try? Self.decode(data, skill: skill, cached: true)
             {
-                documents[skill.id] = document
                 return document
             }
             throw SkillsError.message(
@@ -83,7 +91,7 @@ public struct SkillDocument: Sendable, Equatable {
         }
     }
 
-    private static func decode(_ data: Data, skill: EdithSkill, cached: Bool) throws
+    nonisolated private static func decode(_ data: Data, skill: EdithSkill, cached: Bool) throws
         -> SkillDocument
     {
         guard data.count < 400_000, let markdown = String(data: data, encoding: .utf8) else {
