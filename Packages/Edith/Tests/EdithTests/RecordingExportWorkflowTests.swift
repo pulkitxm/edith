@@ -110,9 +110,12 @@ import Testing
         let model = ScreenRecordingEditorModel(take: take)
         model.document = document
         model.finishedURL = output
-        let hosting = NSHostingView(rootView: ScreenRecordingEditorView(model: model))
+        let hosting = NSHostingView(
+            rootView: ScreenRecordingEditorView(model: model)
+                .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark))
         let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760))
+        window.appearance = NSAppearance(named: .darkAqua)
         defer { window.close() }
         window.contentView = hosting
         hosting.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
