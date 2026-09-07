@@ -2,6 +2,7 @@ import EdithKit
 import Foundation
 
 struct DashboardIngestDigest {
+    var allowsInlineComputation = false
     var sortedPeriods: [String] = []
     var allSources: [SourceInfo] = []
     var sourceIndex: [String: Int] = [:]
@@ -65,6 +66,48 @@ enum DashboardComputation {
 
     static func snapshot(_ request: DashboardComputeRequest) -> DashboardSnapshot? {
         DashboardFilterComputer(request).run()
+    }
+
+    static func allowsInlineComputation(_ data: DashUsage) -> Bool {
+        guard data.daily.count <= 32 else { return false }
+        var remaining = 512
+        for day in data.daily {
+            remaining -= 1
+            for models in (day.bySource ?? [:]).values {
+                remaining -= models.count
+                guard remaining >= 0 else { return false }
+            }
+            for project in day.projects ?? [] {
+                remaining -= 1 + (project.chats?.count ?? 0)
+                guard remaining >= 0 else { return false }
+                for source in (project.bySource ?? [:]).values {
+                    remaining -= 1 + (source.byModel?.count ?? 0)
+                    guard remaining >= 0 else { return false }
+                }
+                for worktree in project.worktrees ?? [] {
+                    remaining -= 1 + (worktree.chats?.count ?? 0)
+                    guard remaining >= 0 else { return false }
+                }
+            }
+            for hour in day.hours ?? [] {
+                remaining -= 1
+                for source in (hour.bySource ?? [:]).values {
+                    remaining -= 1 + (source.byModel?.count ?? 0)
+                    guard remaining >= 0 else { return false }
+                }
+                for path in (hour.byPath ?? [:]).values {
+                    remaining -= 1
+                    for source in (path.bySource ?? [:]).values {
+                        remaining -= 1 + (source.byModel?.count ?? 0)
+                        guard remaining >= 0 else { return false }
+                    }
+                    guard remaining >= 0 else { return false }
+                }
+                guard remaining >= 0 else { return false }
+            }
+            guard remaining >= 0 else { return false }
+        }
+        return true
     }
 
     static func isUnattributedCost(_ row: DashUsage.Model) -> Bool {
@@ -198,6 +241,7 @@ enum DashboardComputation {
 
     static func digest(_ parsed: DashUsage, calendar: Calendar) -> DashboardIngestDigest {
         var digest = DashboardIngestDigest()
+        digest.allowsInlineComputation = allowsInlineComputation(parsed)
         digest.sortedPeriods = parsed.daily.map(\.period).sorted()
         let srcIds = (parsed.sources ?? []).filter { id in
             parsed.daily.contains { ($0.bySource?[id]?.isEmpty == false) }
@@ -718,7 +762,7 @@ private struct DashboardFilterComputer {
     }
 
     func run() -> DashboardSnapshot? {
-        guard let win = window() else { return nil }
+        guard !Task.isCancelled, let win = window() else { return nil }
         let fromStr = ymdStr(win.from)
         let toStr = ymdStr(win.to)
         let inRange = data.daily.filter { $0.period >= fromStr && $0.period <= toStr }
@@ -741,6 +785,7 @@ private struct DashboardFilterComputer {
 
         var cursor = win.from
         while cursor <= win.to {
+            guard !Task.isCancelled else { return nil }
             let key = ymdStr(cursor)
             var datum = DayDatum(id: key, date: cursor, label: String(key.dropFirst(5)))
             if let day = byDate[key] {
@@ -760,6 +805,7 @@ private struct DashboardFilterComputer {
                         || (!sourceTokenModels.isEmpty
                             && sourceTokenModels.isSubset(of: selectedModels))
                     for m in models {
+                        guard !Task.isCancelled else { return nil }
                         let unattributedCost = DashboardComputation.isUnattributedCost(m)
                         if unattributedCost, !includeUnattributedCost {
                             if !selectedSourceModels.isEmpty {
@@ -815,6 +861,7 @@ private struct DashboardFilterComputer {
                 hourlyUnattributed.cost += hourly.unattributed.cost
                 let attributed = projectAllocations(day, canonical: canonicalProjects)
                 for allocation in attributed.projects {
+                    guard !Task.isCancelled else { return nil }
                     let p = allocation.project
                     let repository = DashboardComputation.repositoryIdentity(p)
                     let folder = DashboardComputation.folderIdentity(p, repository: repository)
@@ -857,6 +904,7 @@ private struct DashboardFilterComputer {
             if cursor <= win.from { break }
         }
 
+        guard !Task.isCancelled else { return nil }
         var snapshot = DashboardSnapshot()
         snapshot.series = rows
 
@@ -902,7 +950,7 @@ private struct DashboardFilterComputer {
         snapshot.chartData = chartData(
             series: rows, dow: snapshot.dow, hourly: snapshot.hourlyAll,
             projects: snapshot.projects)
-        return snapshot
+        return Task.isCancelled ? nil : snapshot
     }
 
     private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
