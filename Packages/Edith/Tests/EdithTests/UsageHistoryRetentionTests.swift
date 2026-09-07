@@ -286,6 +286,11 @@ import Testing
         #expect(tokens(try object(repaired)) == 150)
         #expect(UsageHistory.retainedHistoryBlockCount(in: repaired) == 0)
         #expect(UsageHistory.mergeRefresh(fresh: fresh, previous: repaired) == repaired)
+        let cloudMerged = try #require(
+            UsageHistory.merge(
+                local: repaired, cloud: JSONSerialization.data(withJSONObject: frozen)))
+        #expect(tokens(try object(cloudMerged)) == 150)
+        #expect(UsageHistory.retainedHistoryBlockCount(in: cloudMerged) == 0)
     }
 
     private func document(_ days: [[String: Any]]) throws -> Data {

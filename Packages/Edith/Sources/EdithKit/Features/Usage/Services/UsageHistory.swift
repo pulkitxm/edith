@@ -411,6 +411,18 @@ public enum UsageHistory {
                 let source = block["source"] as? String,
                 let baseline = block["baseline"] as? [String: Any]
             else { return nil }
+            if let current = days[period],
+                let rows = (baseline["bySource"] as? [String: Any])?[source],
+                let candidates = block["candidates"] as? [[String: Any]],
+                !candidates.isEmpty, !sameHistory(current, baseline, source: source),
+                ([current] + candidates).allSatisfy({ day in
+                    !coverageRegressed(
+                        old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                })
+            {
+                retained.removeValue(forKey: key)
+                continue
+            }
             var candidates = block["candidates"] as? [[String: Any]] ?? []
             for input in inputs {
                 guard let day = daily(input).first(where: { $0["period"] as? String == period }),
