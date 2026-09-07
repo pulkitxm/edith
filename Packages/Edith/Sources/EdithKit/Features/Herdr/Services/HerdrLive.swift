@@ -52,7 +52,7 @@ public enum HerdrLive {
     }
 
     private static func watchRemoteLease(_ machine: Machine, _ fleet: FleetBag) async {
-        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        let connection = SSHConnection(machine: machine, controlSocketMode: .isolated)
         do {
             try await connection.connect()
         } catch {
@@ -64,13 +64,19 @@ public enum HerdrLive {
             try? await Task.sleep(for: .seconds(5))
             return
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
         let sockets = await remoteSockets(connection)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
         if sockets.isEmpty {
-            let collected = await HerdrCollector.collect(.machine(machine))
-            if let host = collected.first { fleet.put(host) }
+            fleet.put(await HerdrCollector.collectRemote(machine, connection: connection))
             try? await Task.sleep(for: .seconds(8))
+            await connection.disconnect()
             return
         }
         await runHostLease(
@@ -81,6 +87,7 @@ public enum HerdrLive {
             machineIsLocal: false,
             sshTarget: machine.sshTarget,
             fleet: fleet)
+        await connection.disconnect()
     }
 
     private static func runHostLease(
@@ -106,6 +113,7 @@ public enum HerdrLive {
     private static func remoteSockets(_ connection: SSHConnection) async -> [(
         name: String, path: String
     )] {
+        guard await connection.remotePlatform != .windows else { return [] }
         let result = try? await connection.run(
             HerdrSocketDiscovery.remoteProbeCommand(), timeout: 12)
         return HerdrSocketDiscovery.sockets(fromRemoteListing: result?.stdoutText ?? "")

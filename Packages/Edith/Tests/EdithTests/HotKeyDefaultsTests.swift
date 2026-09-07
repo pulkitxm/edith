@@ -52,9 +52,18 @@ import Testing
         }
     }
 
+    @Test func keystrokeHighlightHotKeyDefaults() {
+        withCleanKeys("keystrokeHighlightHotKey") {
+            #expect(KeystrokeHighlightHotKey.code == kVK_ANSI_K)
+            #expect(KeystrokeHighlightHotKey.mods == controlKey | optionKey | cmdKey)
+            #expect(KeystrokeHighlightHotKey.label == "⌃⌥⌘K")
+        }
+    }
+
     @Test func panelHotKeySaveRoundTrips() {
         withCleanKeys("hotKey") {
-            HotKey.save(code: kVK_ANSI_J, mods: cmdKey | shiftKey, label: "⇧⌘J")
+            HotKeyCatalog.binding(HotKeyCatalog.panel)?
+                .save(code: kVK_ANSI_J, mods: cmdKey | shiftKey, label: "⇧⌘J")
             #expect(HotKey.code == kVK_ANSI_J)
             #expect(HotKey.mods == cmdKey | shiftKey)
             #expect(HotKey.label == "⇧⌘J")
@@ -63,7 +72,8 @@ import Testing
 
     @Test func clipboardHotKeySaveRoundTrips() {
         withCleanKeys("clipboardHotKey") {
-            ClipboardHotKey.save(code: kVK_ANSI_V, mods: controlKey | optionKey, label: "⌃⌥V")
+            HotKeyCatalog.binding(HotKeyCatalog.clipboard)?
+                .save(code: kVK_ANSI_V, mods: controlKey | optionKey, label: "⌃⌥V")
             #expect(ClipboardHotKey.code == kVK_ANSI_V)
             #expect(ClipboardHotKey.mods == controlKey | optionKey)
             #expect(ClipboardHotKey.label == "⌃⌥V")
@@ -71,17 +81,7 @@ import Testing
     }
 
     @Test func globalHotKeyIdentifiersAreUnique() {
-        let identifiers = [
-            GlobalHotKey.ID.panel,
-            GlobalHotKey.ID.clipboard,
-            GlobalHotKey.ID.notchShelf,
-            GlobalHotKey.ID.focusDim,
-            GlobalHotKey.ID.colorPicker,
-            GlobalHotKey.ID.micMute,
-            GlobalHotKey.ID.presenterToggle,
-            GlobalHotKey.ID.captureRead,
-            GlobalHotKey.ID.captureScreenshot,
-        ]
+        let identifiers = HotKeyCatalog.bindings.map(\.carbonID)
 
         #expect(Set(identifiers).count == identifiers.count)
     }

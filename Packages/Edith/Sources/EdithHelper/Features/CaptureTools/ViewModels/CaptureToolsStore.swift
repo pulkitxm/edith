@@ -55,14 +55,10 @@ final class CaptureToolsStore: FeatureModule {
     }
 
     func registerHotKeys() {
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.captureRead, keyCode: CaptureToolsHotKeys.readCode,
-            modifiers: CaptureToolsHotKeys.readMods
-        ) { [weak self] in self?.start(.read) }
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.captureScreenshot, keyCode: CaptureToolsHotKeys.screenshotCode,
-            modifiers: CaptureToolsHotKeys.screenshotMods
-        ) { [weak self] in self?.start(.screenshot) }
+        HotKeyRegistrar.install(HotKeyCatalog.captureRead) { [weak self] in self?.start(.read) }
+        HotKeyRegistrar.install(HotKeyCatalog.captureScreenshot) { [weak self] in
+            self?.start(.screenshot)
+        }
     }
 
     func start(_ operation: CaptureToolOperation) {
@@ -101,8 +97,8 @@ final class CaptureToolsStore: FeatureModule {
         session.cancel()
         preview?.close()
         preview = nil
-        GlobalHotKey.clear(id: GlobalHotKey.ID.captureRead)
-        GlobalHotKey.clear(id: GlobalHotKey.ID.captureScreenshot)
+        HotKeyRegistrar.clear(HotKeyCatalog.captureRead)
+        HotKeyRegistrar.clear(HotKeyCatalog.captureScreenshot)
         if let readObserver { IPC.stopObserving(readObserver) }
         if let screenshotObserver { IPC.stopObserving(screenshotObserver) }
         readObserver = nil

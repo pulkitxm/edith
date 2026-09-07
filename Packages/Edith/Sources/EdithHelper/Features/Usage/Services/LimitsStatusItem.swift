@@ -1,29 +1,49 @@
 import AppKit
 import EdithKit
+import SwiftUI
 
 @MainActor
 final class LimitsStatusItem {
     nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
 
-    private let item: NSStatusItem
+    private let panel = StatusItemPanel()
+    private weak var store: UsageStore?
+    private var item: NSStatusItem?
     private var stackedView: StackedLimitsView?
 
-    init() {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "limits"
-        item.isVisible = true
-        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
-        Self.button = item.button
+    init(store: UsageStore) {
+        self.store = store
         showUnavailable()
     }
 
     func remove() {
-        NSStatusBar.system.removeStatusItem(item)
+        panel.close()
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        item = nil
+        stackedView = nil
         Self.button = nil
     }
 
     @objc private func clicked() {
-        StatusItemMenu.handleClick(on: item) { MainApp.open(section: "dashboard") }
+        guard let item else { return }
+        StatusItemMenu.handleClick(on: item) {
+            if let store {
+                panel.show(
+                    from: item, title: "Rate Limits",
+                    actions: [
+                        .init(
+                            title: store.refreshingLimits ? "Refreshing…" : "Refresh",
+                            enabled: !store.refreshingLimits
+                        ) {
+                            Task { await store.refreshLimits(force: true) }
+                        },
+                        .init(title: "Open Usage…") { MainApp.open(section: "dashboard") },
+                    ]
+                ) {
+                    LimitsMenuPanel(store: store)
+                }
+            }
+        }
     }
 
     func update(_ providers: [ProviderLimits]) {
@@ -32,32 +52,37 @@ final class LimitsStatusItem {
             PresenterState.shared.active
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        let source =
-            providers.isEmpty
-            ? [ProviderLimits(provider: .claude, session: nil, week: nil)] : providers
+        let source = Self.stableProviders(providers, defaults: defaults)
         let groups = MenuBarLimits.groups(
             providers: source,
             selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
             masked: masked)
-        item.isVisible = !groups.isEmpty
-        guard !groups.isEmpty else { return }
+        guard !groups.isEmpty else {
+            item?.isVisible = false
+            return
+        }
         switch MenuBarLimits.style(defaults) {
         case .stacked: renderStacked(groups)
         case .tagged: renderTagged(groups)
         case .slash: renderSlash(groups)
         }
+        item?.isVisible = true
     }
 
     func showUnavailable() { update([]) }
 
     private func setTitle(_ title: NSAttributedString) {
+        ensureStatusItem(length: StatusItemSizing.titleLength(title))
         stackedView?.removeFromSuperview()
         stackedView = nil
-        item.length = NSStatusItem.variableLength
-        item.button?.attributedTitle = title
+        item?.button?.attributedTitle = title
     }
 
     private func renderTagged(_ groups: [MenuBarProviderGroup]) {
+        setTitle(taggedTitle(groups))
+    }
+
+    private func taggedTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
         let multi = groups.count > 1
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
@@ -69,12 +94,16 @@ final class LimitsStatusItem {
                 appendValue(segment, percentSuffix: !multi, into: title)
             }
         }
-        setTitle(title)
+        return title
     }
 
     private func renderSlash(_ groups: [MenuBarProviderGroup]) {
+        setTitle(slashTitle(groups))
+    }
+
+    private func slashTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
         let title = NSMutableAttributedString()
-        let separatorColor = (subColor ?? numberOverride ?? NSColor.labelColor)
+        let separatorColor = (subColor ?? NSColor.labelColor)
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
@@ -93,30 +122,74 @@ final class LimitsStatusItem {
                 appendValue(segment, percentSuffix: false, into: title)
             }
         }
-        setTitle(title)
+        return title
     }
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
-        item.button?.attributedTitle = NSAttributedString()
+        let renderedGroups = stackedGroups(groups)
         let view = stackedView ?? StackedLimitsView()
-        if stackedView == nil, let button = item.button {
+        view.groups = renderedGroups
+        let width = view.desiredWidth
+        ensureStatusItem(length: width)
+        guard let button = item?.button else { return }
+        button.attributedTitle = NSAttributedString(
+            string: " ", attributes: [.foregroundColor: NSColor.clear])
+        if stackedView == nil, let button = item?.button {
             view.autoresizingMask = [.width, .height]
-            view.frame = button.bounds
             button.addSubview(view)
             stackedView = view
         }
+        view.frame = NSRect(
+            x: 0, y: 0, width: width,
+            height: max(button.bounds.height, NSStatusBar.system.thickness))
+        view.needsDisplay = true
+    }
+
+    private func ensureStatusItem(length: CGFloat) {
+        if let item {
+            item.length = length
+            return
+        }
+        let next = NSStatusBar.system.statusItem(withLength: length)
+        StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
+        item = next
+        Self.button = next.button
+    }
+
+    static func stableProviders(
+        _ providers: [ProviderLimits], defaults: UserDefaults
+    ) -> [ProviderLimits] {
+        var available: [LimitProvider: ProviderLimits] = [:]
+        for provider in providers.prefix(LimitProvider.allCases.count) {
+            available[provider.provider] = provider
+        }
+        let enabled = UsageStore.enabledLimitProviders(
+            claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
+            codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true)
+        var stable: [ProviderLimits] = []
+        stable.reserveCapacity(enabled.count)
+        for provider in enabled.prefix(LimitProvider.allCases.count) {
+            stable.append(
+                available[provider]
+                    ?? ProviderLimits(provider: provider, session: nil, week: nil))
+        }
+        return stable
+    }
+
+    private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
         let multi = groups.count > 1
-        view.groups = groups.map { stackedGroup($0, multi: multi) }
-        item.length = view.desiredWidth
+        return groups.map { stackedGroup($0, multi: multi) }
     }
 
     private func stackedGroup(
         _ group: MenuBarProviderGroup, multi: Bool
     ) -> StackedLimitsView.Group {
-        let logoColor = subColor ?? numberOverride ?? NSColor.labelColor
+        let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let columns = group.segments.map { segment -> StackedLimitsView.Column in
+        var columns: [StackedLimitsView.Column] = []
+        columns.reserveCapacity(group.segments.count)
+        for segment in group.segments {
             let value: String
             let color: NSColor
             switch segment.value {
@@ -129,13 +202,13 @@ final class LimitsStatusItem {
             case .percent(let percent):
                 value = "\(percent)"
                 color =
-                    numberOverride
-                    ?? segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
+                    segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
                     ?? dimColor
             }
-            return StackedLimitsView.Column(
-                label: segment.slot.menuBarLabel, value: value, valueColor: color,
-                labelColor: labelColor)
+            columns.append(
+                StackedLimitsView.Column(
+                    label: segment.slot.menuBarLabel, value: value, valueColor: color,
+                    labelColor: labelColor))
         }
         return StackedLimitsView.Group(
             logo: multi ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
@@ -143,7 +216,7 @@ final class LimitsStatusItem {
     }
 
     private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
-        let textColor = subColor ?? numberOverride ?? NSColor.labelColor
+        let textColor = subColor ?? NSColor.labelColor
         guard let image = ProviderLogo.tintedImage(provider, color: textColor) else { return }
         let attachment = NSTextAttachment()
         attachment.image = image
@@ -179,8 +252,7 @@ final class LimitsStatusItem {
                     string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
         case .percent(let percent):
             let tint =
-                numberOverride
-                ?? segment.window.map { color(for: $0, kind: segment.slot.kind) }
+                segment.window.map { color(for: $0, kind: segment.slot.kind) }
                 ?? dimColor
             out.append(
                 NSAttributedString(
@@ -213,30 +285,23 @@ final class LimitsStatusItem {
         }
     }
 
-    private var mode: String {
-        SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode) ?? "auto"
+    private var mode: MenuBarTintMode {
+        MenuBarTintMode(
+            preference: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode))
     }
 
     private var subColor: NSColor? {
         switch mode {
-        case "white": return .white
-        case "black": return .black
-        default:
+        case .automatic:
+            return nil
+        case .custom:
             return Self.nsColor(
                 hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
         }
     }
 
-    private var numberOverride: NSColor? {
-        switch mode {
-        case "white": return .white
-        case "black": return .black
-        default: return nil
-        }
-    }
-
     private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == "custom" || mode == "auto" else { return fallback }
+        guard mode == .custom else { return fallback }
         return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
     }
 
@@ -375,5 +440,42 @@ final class StackedLimitsView: NSView {
     ) -> NSAttributedString {
         NSAttributedString(
             string: text, attributes: [.font: font, .foregroundColor: color])
+    }
+}
+
+struct LimitsMenuPanel: View {
+    let store: UsageStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if PresenterState.shared.active
+                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            {
+                Text("Usage hidden during presentation").foregroundStyle(.secondary)
+            } else {
+                ForEach(store.enabledProviders) { provider in
+                    let limits = store.limits(for: provider)
+                    Text(provider.label).font(.headline)
+                    StatusProgressRow(
+                        title: "5-hour limit", percent: limits.session?.percent,
+                        resetsAt: limits.session?.resetsAt)
+                    StatusProgressRow(
+                        title: "Weekly · all models", percent: limits.week?.percent,
+                        resetsAt: limits.week?.resetsAt)
+                    if let fable = limits.fable {
+                        StatusProgressRow(
+                            title: "Weekly · Fable", percent: fable.percent,
+                            resetsAt: fable.resetsAt)
+                    }
+                }
+            }
+            if let error = store.limitsError {
+                Text(error).font(.caption).foregroundStyle(.secondary)
+            }
+            if let updated = store.limitsUpdatedAt {
+                Text("Updated \(updated, style: .relative) ago")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

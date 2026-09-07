@@ -80,7 +80,7 @@ enum WithinMachineTransferCLI {
         }
         guard
             let command = RemoteTransferOperationExecution.withinMachineCommand(
-                plan, moving: moving)
+                plan, moving: moving, platform: target.platform)
         else { return }
         let applied = try await FileOps.run(
             command, machine: machine, describing: "\(verb) \(sources.count) item(s)")
@@ -183,7 +183,10 @@ struct MachinesFilesRenameCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let result = await MachineFileOperationExecution.rename(path: path, name: name) {
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await MachineFileOperationExecution.rename(
+                path: path, name: name, platform: platform
+            ) {
                 await FileOps.sharedRun(runner)($0, $1)
             }
             let target = try FileOps.resolved(
@@ -281,7 +284,10 @@ struct MachinesFilesRemoveCommand: AsyncParsableCommand {
                 return
             }
             let runner = try await MachineResolver.runner(machine)
-            let result = await MachineFileOperationExecution.remove(plan, confirmed: yes) {
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await MachineFileOperationExecution.remove(
+                plan, confirmed: yes, platform: platform
+            ) {
                 await FileOps.sharedRun(runner)($0, $1)
             }
             _ = try FileOps.resolved(
@@ -329,8 +335,9 @@ struct MachinesFilesSearchCommand: AsyncParsableCommand {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let result = await MachineFileOperationExecution.search(
-                path: path, query: query, limit: limit
+                path: path, query: query, limit: limit, platform: platform
             ) { await FileOps.sharedRun(runner)($0, $1) }
             let hits = try FileOps.resolved(
                 result, failure: "could not search \(path) on \(runner.machine.name)"
@@ -367,7 +374,10 @@ struct MachinesFilesInfoCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let result = await MachineFileOperationExecution.info(path: path) {
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await MachineFileOperationExecution.info(
+                path: path, platform: platform
+            ) {
                 await FileOps.sharedRun(runner)($0, $1)
             }
             let bytes = try FileOps.resolved(
@@ -412,7 +422,10 @@ struct MachinesFilesDuplicateCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let result = await MachineFileOperationExecution.duplicate(path: path) {
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await MachineFileOperationExecution.duplicate(
+                path: path, platform: platform
+            ) {
                 await FileOps.sharedRun(runner)($0, $1)
             }
             let created = try FileOps.resolved(

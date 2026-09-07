@@ -148,6 +148,66 @@ private actor HerdrWatchHarness {
         #expect(store.selectedTab == keep)
     }
 
+    @Test func liveAgentTabsDetachWithoutTerminalCloseRequests() {
+        var requested: [ObjectIdentifier] = []
+        let store = seededStore { holder, completion in
+            requested.append(ObjectIdentifier(holder))
+            completion(false)
+        }
+        let keep = store.tabs[0]
+        let first = store.tabs[1]
+        let second = store.tabs[2]
+        first.holder.start(executable: "/bin/cat", arguments: [], environment: [])
+        second.holder.start(executable: "/bin/cat", arguments: [], environment: [])
+
+        store.closeOthers(besides: keep.id)
+
+        #expect(requested.isEmpty)
+        #expect(store.tabs.map(\.id) == [keep.id])
+        #expect(store.selectedTab == keep.id)
+        #expect(!first.holder.started)
+        #expect(!second.holder.started)
+    }
+
+    @Test func herdrTerminalTabsKeepTerminalCloseConfirmation() throws {
+        var decisions: [(Bool) -> Void] = []
+        var requested: [ObjectIdentifier] = []
+        let store = HerdrStore(
+            requestUserClose: { holder, completion in
+                requested.append(ObjectIdentifier(holder))
+                decisions.append(completion)
+            })
+        let terminal = HerdrMachineTerminal.agent(
+            for: .local(herdrPresent: true))
+        store.open(terminal)
+        let holder = try #require(store.tabs.first?.holder)
+
+        store.close(terminal.id)
+
+        #expect(requested == [ObjectIdentifier(holder)])
+        #expect(store.tabs.map(\.id) == [terminal.id])
+        decisions[0](false)
+        #expect(store.tabs.map(\.id) == [terminal.id])
+
+        store.close(terminal.id)
+
+        #expect(requested == [ObjectIdentifier(holder), ObjectIdentifier(holder)])
+        decisions[1](true)
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+    }
+
+    @Test func closeAllReturnsToTheBoard() {
+        let store = seededStore()
+
+        #expect(store.canCloseAll)
+        store.closeAll()
+
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(!store.canCloseAll)
+    }
+
     @Test func closeToTheRightDropsLaterTabs() {
         let store = seededStore()
         let first = store.tabs[0].id
@@ -169,8 +229,12 @@ private actor HerdrWatchHarness {
         #expect(store.canCloseToTheRight(of: last) == false)
     }
 
-    private func seededStore() -> HerdrStore {
-        let store = HerdrStore()
+    private func seededStore(
+        requestUserClose: @escaping HerdrStore.UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
+    ) -> HerdrStore {
+        let store = HerdrStore(requestUserClose: requestUserClose)
         store.tabs = [
             HerdrOpenTab(
                 agent: agent("Claude Code", pane: "a"), machine: nil,
@@ -236,21 +300,56 @@ private actor HerdrWatchHarness {
         #expect(store.hosts.first?.agents.first?.pane == "fresh")
     }
 
-    @Test func localTabAttachmentUsesTheSharedRequest() async throws {
+    @Test func machineChangesRebuildTheLiveFleet() async {
+        let harness = HerdrWatchHarness()
+        let store = HerdrStore { callback in await harness.watch(callback) }
+        defer { store.stopWatching() }
+        let stale = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "stale")])
+        let fresh = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "fresh")])
+
+        await store.watch()
+        await harness.waitForCallbacks(1)
+        await store.machinesDidChange()
+        await harness.waitForCallbacks(2)
+        await harness.send([stale], through: 0)
+        await harness.send([fresh], through: 1)
+        try? await Task.sleep(for: HerdrStore.settleWindow * 3)
+
+        #expect(store.hosts.first?.agents.first?.pane == "fresh")
+    }
+
+    @Test func partialReplacementSnapshotsKeepConfiguredHostsVisible() async {
+        let store = HerdrStore()
+        let local = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "visible")])
+        store.apply([local])
+
+        store.settle([])
+        try? await Task.sleep(for: HerdrStore.settleWindow * 3)
+
+        #expect(store.hosts.map(\.id) == [HerdrHostSnapshot.localID])
+    }
+
+    @Test func localAgentAttachmentUsesTheRawTerminalBridge() async throws {
         let store = HerdrStore()
         let selected = agent("Codex", pane: "pane-1")
         store.open(selected)
         let tab = try #require(store.tabs.first)
         let executable = URL(fileURLWithPath: "/tmp/herdr")
+        let bridge = URL(fileURLWithPath: "/tmp/ed")
         let environment = ["TERM=xterm-256color"]
 
         let request = try await store.attachRequest(
-            for: tab, environment: environment, localExecutable: executable)
+            for: tab, environment: environment, localExecutable: executable,
+            bridgeExecutable: bridge)
+        let controller = HerdrOperationExecution.localControlRequest(
+            for: selected, environment: environment, executable: executable)
+        let expected = try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: bridge, controller: controller)
 
-        #expect(
-            request
-                == HerdrOperationExecution.localAttachRequest(
-                    for: selected, environment: environment, executable: executable))
+        #expect(request == expected)
     }
 
     @Test func openingADiffRemembersItForThatAgent() {
