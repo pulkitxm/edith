@@ -202,6 +202,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "textUtilities",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
