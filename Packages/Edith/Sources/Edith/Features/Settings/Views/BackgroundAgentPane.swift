@@ -187,7 +187,7 @@ struct BackgroundAgentPane: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             Text(
                 "Search and inspect the most recent \(AgentDiagnostics.capacity) events in a dedicated view."
             )
