@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 import CoreGraphics
 import Foundation
+import ImageIO
 import Testing
 
 @testable import EdithAgent
@@ -116,6 +117,24 @@ import Testing
             try await renderEditor(
                 take: take, document: document, output: result, directory: directory)
         }
+        let gif = folder.appendingPathComponent("edited.gif")
+        document.preset.format = .gif
+        let gifRequest = AgentTaskSubmission(
+            operation: ScreenRecordingOperation.export.descriptor.id.rawValue,
+            title: "Export synthetic GIF",
+            payload: try AgentPayload.encode(
+                RecordingExportRequest(take: take, document: document, destination: gif)))
+        _ = try await service.submit(gifRequest)
+        var gifStatus = try await service.status(gifRequest.id)
+        for _ in 0..<600 where !gifStatus.snapshot.state.isTerminal {
+            try await Task.sleep(for: .milliseconds(100))
+            gifStatus = try await service.status(gifRequest.id)
+        }
+        #expect(gifStatus.snapshot.state == .succeeded)
+        let gifSource = try #require(CGImageSourceCreateWithURL(gif as CFURL, nil))
+        let gifFrame = try #require(CGImageSourceCreateImageAtIndex(gifSource, 8, nil))
+        let gifRecognition = try CaptureRecognizer.recognize(gifFrame, detectCodes: false)
+        #expect(gifRecognition.text.contains("Release preview"))
         defaults.set(false, forKey: suiteKey)
         let disabled = AgentTaskSubmission(
             operation: ScreenRecordingOperation.export.descriptor.id.rawValue,
