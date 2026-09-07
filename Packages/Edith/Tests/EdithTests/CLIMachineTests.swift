@@ -11,6 +11,12 @@ import Testing
     static let manual = Machine(name: "Builder", host: "10.0.0.9", port: 2222, username: "root")
     static let all = [alias, manual]
 
+    @Test func remoteCommandsReuseTheAppConnection() {
+        let runner = RemoteRunner(machine: Self.alias)
+        #expect(
+            runner.ssh.controlSocketPath == MachinePaths.socketFile(for: Self.alias.id).path)
+    }
+
     @Test func namesIncludeBothTheLabelAndTheSSHAlias() {
         #expect(MachineDirectory.names(from: Self.all) == ["Asus TUF 7", "tuf", "Builder"])
     }
@@ -251,6 +257,7 @@ import Testing
                     "--remote", "80", "--json",
                 ])
                 #expect(added.code == 0)
+                #expect(added.object?["index"] as? Int == 1)
             }
             let listed = await CLIProbe.capture([
                 "machines", "forwards", "ls", "builder", "--json",
@@ -286,12 +293,15 @@ import Testing
         await CLIProbe.inWorld { _ in
             Self.seed()
             MachineRegistry.add(Machine(name: "Other", host: "10.0.0.5"))
-            _ = await CLIProbe.capture([
-                "machines", "snippets", "add", "--shared", "builder", "disk", "df", "-h",
+            let shared = await CLIProbe.capture([
+                "machines", "snippets", "add", "--json", "--shared", "builder", "disk", "df",
+                "-h",
             ])
-            _ = await CLIProbe.capture([
-                "machines", "snippets", "add", "builder", "logs", "journalctl", "-xe",
+            let local = await CLIProbe.capture([
+                "machines", "snippets", "add", "--json", "builder", "logs", "journalctl", "-xe",
             ])
+            #expect(shared.object?["index"] as? Int == 1)
+            #expect(local.object?["index"] as? Int == 2)
             let mine = await CLIProbe.capture(["machines", "snippets", "ls", "builder", "--json"])
             let theirs = await CLIProbe.capture(["machines", "snippets", "ls", "other", "--json"])
             #expect(

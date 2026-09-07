@@ -1,58 +1,61 @@
 import EdithCore
+import EdithDatabase
 
 public enum UserOperationCatalog {
-    private static let machineRegistrations: [RegisteredUserOperation] =
-        MachineControlOperation.allCases.map {
+    private static let machineRegistrations: [RegisteredUserOperation] = {
+        var registrations = MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineThermalOperation.allCases.map {
+        registrations += MachineThermalOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineExecOperation.allCases.map {
+        registrations += MachineExecOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMountOperation.allCases.map {
+        registrations += MachineMountOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineBroadcastOperation.allCases.map {
+        registrations += MachineBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineTerminalBroadcastOperation.allCases.map {
+        registrations += MachineTerminalBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerLifecycleOperation.allCases.map {
+        registrations += DockerLifecycleOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMutationOperation.allCases.map {
+        registrations += MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachinePowerOperation.allCases.map {
+        registrations += MachinePowerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineConnectionOperation.allCases.map {
+        registrations += MachineConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerDetailOperation.allCases.map {
+        registrations += DockerDetailOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + SavedSnippetOperation.allCases.map {
+        registrations += SavedSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineForwardOperation.allCases.map {
+        registrations += MachineForwardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineSnippetOperation.allCases.map {
+        registrations += MachineSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineServiceOperation.allCases.map {
+        registrations += MachineServiceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineProcessOperation.allCases.map {
+        registrations += MachineProcessOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineDockerPauseOperation.allCases.map {
+        registrations += MachineDockerPauseOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        return registrations
+    }()
 
     private static let applicationRegistrations: [RegisteredUserOperation] =
         AppInspectionOperation.allCases.map {
@@ -101,44 +104,63 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
-    private static let featureRegistrations: [RegisteredUserOperation] =
-        UsageProjectOperation.allCases.map {
+    private static let featureRegistrations: [RegisteredUserOperation] = {
+        var registrations = UsageProjectOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ConfigurationOperation.allCases.map {
+        registrations += ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + TerminalToolingOperation.allCases.map {
+        registrations += TerminalToolingOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + PermissionOperation.allCases.map {
+        registrations += PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + RunningAppOperation.allCases.map {
+        registrations += RunningAppOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ColorPickerOperation.allCases.map {
+        registrations += ColorPickerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ColorSwatchOperation.allCases.map {
+        registrations += ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + WindowLayoutAction.allCases.map {
+        registrations += WindowLayoutAction.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CompanionSettingsOperation.allCases.map {
+        registrations += EmojiOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ClipboardOperation.allCases.map {
+        registrations += CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + AttentionFocusOperation.allCases.map {
+        registrations += ClipboardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CleanerOperation.allCases.map {
+        registrations += AttentionFocusOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + WorkspaceOperation.allCases.map {
+        registrations += CleanerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += HomebrewOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += AppMaintenanceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += DatabaseConnectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += WorkspaceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        return registrations
+    }()
+
+    private static let agentRegistrations: [RegisteredUserOperation] =
+        AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
@@ -192,7 +214,7 @@ public enum UserOperationCatalog {
 
     public static let registrations =
         machineRegistrations + applicationRegistrations + featureRegistrations
-        + remoteFileRegistrations + remoteActionRegistrations
+        + agentRegistrations + remoteFileRegistrations + remoteActionRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)
 
@@ -297,6 +319,8 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn airplane mode on", ["box", "on", "--yes"])
         case .doNotDisturb:
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
+        case .caffeinate:
+            userInterface("Machine controls", "prevent automatic sleep", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
         }
@@ -1079,6 +1103,44 @@ private extension ColorPickerOperation {
     }
 }
 
+private extension DatabaseConnectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Database page", "test and save a database connection",
+                ["Analytics staging", "--product", "postgresql"])
+        case .edit:
+            userInterface(
+                "Database connection settings", "edit safety and display metadata",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--environment", "testing"])
+        case .connect:
+            userInterface(
+                "Database workbench", "open the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
+        case .disconnect:
+            userInterface(
+                "Database workbench", "close the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
+        }
+    }
+}
+
+private extension EmojiOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pick:
+            userInterface("Emoji settings", "open the emoji picker")
+        case .insert:
+            userInterface("Emoji picker grid", "insert the chosen emoji", ["1F600"])
+        case .tone:
+            userInterface("Emoji settings", "choose the default skin tone", ["medium"])
+        case .clear:
+            userInterface("Emoji settings", "clear the frequently used emoji")
+        }
+    }
+}
+
 private extension ColorSwatchOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -1215,6 +1277,61 @@ private extension CleanerOperation {
                     surface: "Cleaner card", action: "clean one category",
                     exampleArguments: ["--category", "npm", "--yes"]),
             ])
+        }
+    }
+}
+
+private extension HomebrewOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("App Maintenance", "inspect Homebrew availability")
+        case .list:
+            userInterface("App Maintenance", "browse installed packages")
+        case .search:
+            userInterface(
+                "App Maintenance", "search available formulae and casks",
+                ["ripgrep", "--kind", "formula"])
+        case .install:
+            userInterface(
+                "App Maintenance", "install a package",
+                ["ripgrep", "--kind", "formula"])
+        case .upgrade:
+            userInterface(
+                "App Maintenance", "upgrade a package",
+                ["ripgrep", "--kind", "formula"])
+        case .uninstall:
+            userInterface(
+                "App Maintenance", "uninstall a package",
+                ["ripgrep", "--kind", "formula", "--yes"])
+        }
+    }
+}
+private extension AppMaintenanceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .inventory:
+            userInterface("App Maintenance", "list installed applications and updates")
+        case .scan:
+            userInterface(
+                "App Maintenance", "review exact support files",
+                ["/Applications/Example.app"])
+        case .remove:
+            userInterface(
+                "App Maintenance", "move selected reviewed items to the Trash",
+                ["/Applications/Example.app", "--yes"])
+        case .install:
+            userInterface(
+                "App Maintenance", "verify and install one app from a disk image",
+                ["~/Downloads/Example.dmg", "--yes"])
+        case .updates:
+            userInterface("App Update Center", "discover available updates")
+        case .update:
+            userInterface("App Update Center", "review and run selected updates", ["--yes"])
+        case .history:
+            userInterface("App Update Center", "review update history")
+        case .backupUpdates:
+            .commandLineOnly(reason: "Backups require an explicit destination path.")
         }
     }
 }

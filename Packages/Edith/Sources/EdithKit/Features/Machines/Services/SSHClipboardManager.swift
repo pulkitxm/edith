@@ -110,6 +110,7 @@ public struct SSHClipboardConfiguration: Codable, Equatable, Sendable {
 
 public enum SSHClipboardManagerError: LocalizedError, Equatable {
     case unsupportedAuthentication
+    case unsupportedPlatform
     case missingLocalExecutable
     case localCommandFailed(String)
     case remoteCommandFailed(String)
@@ -118,6 +119,8 @@ public enum SSHClipboardManagerError: LocalizedError, Equatable {
         switch self {
         case .unsupportedAuthentication:
             return "Clipboard sync requires passwordless SSH through your SSH agent or SSH config."
+        case .unsupportedPlatform:
+            return "Clipboard sync supports remote macOS and Linux machines."
         case .missingLocalExecutable:
             return "ssh-clipboard could not be installed because npm is unavailable."
         case let .localCommandFailed(message), let .remoteCommandFailed(message):
@@ -128,7 +131,15 @@ public enum SSHClipboardManagerError: LocalizedError, Equatable {
 
 public actor SSHClipboardManager {
     public static let shared = SSHClipboardManager()
-    public static let packageVersion = "0.2.8"
+    public static let packageVersion = "0.2.10"
+
+    static func packageSource(version: String) -> String {
+        "https://raw.githubusercontent.com/pulkitxm/ssh-clipboard/5f41edfa86e30c090e2f5bca5d48692dd2ca6137/dist/ssh-clipboard-\(version).tgz"
+    }
+
+    public nonisolated static func supports(_ platform: RemoteMachinePlatform) -> Bool {
+        platform != .windows
+    }
 
     private let configFile: URL
     private let homeDirectory: URL
@@ -161,6 +172,10 @@ public actor SSHClipboardManager {
         let connection = suppliedConnection ?? SSHConnection(machine: machine)
         do {
             try await connection.connect()
+            let platform = await connection.remotePlatform ?? .linux
+            guard Self.supports(platform) else {
+                throw SSHClipboardManagerError.unsupportedPlatform
+            }
             try await installRemote(on: connection, machine: machine)
             if ownsConnection { await connection.disconnect() }
         } catch {
@@ -241,7 +256,11 @@ public actor SSHClipboardManager {
     }
 
     private func resolveLocalExecutable() async throws -> URL {
-        if let existing = existingLocalExecutable() { return existing }
+        if let existing = existingLocalExecutable(),
+            await localVersion(existing) == Self.packageVersion
+        {
+            return existing
+        }
         guard let npm = npmExecutable() else {
             throw SSHClipboardManagerError.missingLocalExecutable
         }
@@ -250,10 +269,13 @@ public actor SSHClipboardManager {
             arguments: [
                 "install", "--no-audit", "--no-fund", "--prefix",
                 homeDirectory.appendingPathComponent(".local").path,
-                "ssh-clipboard@\(Self.packageVersion)",
+                Self.packageSource(version: Self.packageVersion),
             ])
-        try installLocalVendorBinary()
-        guard let installed = existingLocalExecutable() else {
+        let installed = try installLocalVendorBinary()
+        try await runLocal(
+            URL(fileURLWithPath: "/usr/bin/codesign"),
+            arguments: ["--force", "--sign", "-", installed.path])
+        guard await localVersion(installed) == Self.packageVersion else {
             throw SSHClipboardManagerError.missingLocalExecutable
         }
         return installed
@@ -263,7 +285,7 @@ public actor SSHClipboardManager {
         """
         set -eu
         command -v npm >/dev/null 2>&1
-        npm install --no-audit --no-fund --prefix "$HOME/.local" ssh-clipboard@\(version) >/dev/null
+        npm install --no-audit --no-fund --prefix "$HOME/.local" \(ShellQuote.quote(packageSource(version: version))) >/dev/null
         os=$(uname -s | tr '[:upper:]' '[:lower:]')
         arch=$(uname -m)
         case "$arch" in
@@ -283,7 +305,7 @@ public actor SSHClipboardManager {
         """
     }
 
-    private func installLocalVendorBinary() throws {
+    private func installLocalVendorBinary() throws -> URL {
         #if arch(arm64)
         let architecture = "arm64"
         #else
@@ -303,6 +325,7 @@ public actor SSHClipboardManager {
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
         try? fileManager.removeItem(at: destination)
         try fileManager.moveItem(at: temporary, to: destination)
+        return destination
     }
 
     private func existingLocalExecutable() -> URL? {
@@ -323,7 +346,17 @@ public actor SSHClipboardManager {
         return candidates.first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 
-    private func runLocal(_ executable: URL, arguments: [String]) async throws {
+    private func localVersion(_ executable: URL) async -> String? {
+        guard let data = try? await runLocal(executable, arguments: ["--version"]) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "ssh-clipboard ", with: "")
+    }
+
+    @discardableResult
+    private func runLocal(_ executable: URL, arguments: [String]) async throws -> Data {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -355,6 +388,7 @@ public actor SSHClipboardManager {
                 detail.isEmpty
                     ? "\(executable.lastPathComponent) exited with status \(status)." : detail)
         }
+        return stdout
     }
 
     private func remoteFailure(_ result: SSHExecResult, fallback: String) -> String {

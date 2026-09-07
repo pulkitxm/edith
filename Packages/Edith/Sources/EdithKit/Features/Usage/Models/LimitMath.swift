@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LimitWindow: Equatable, Sendable {
+public struct LimitWindow: Equatable, Codable, Sendable {
     public let percent: Double
     public let resetsAt: Date?
 

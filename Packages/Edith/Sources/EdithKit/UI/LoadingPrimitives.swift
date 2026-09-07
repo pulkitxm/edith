@@ -2,8 +2,6 @@ import SwiftUI
 
 public enum ContentLoadingState: Equatable, Sendable {
     case loading
-    case refreshing
-    case partial
     case content
     case empty
     case error
@@ -12,7 +10,7 @@ public enum ContentLoadingState: Equatable, Sendable {
 
     public var presentsContent: Bool {
         switch self {
-        case .refreshing, .partial, .content: true
+        case .content: true
         case .loading, .empty, .error, .offline, .cancelled: false
         }
     }
@@ -20,7 +18,7 @@ public enum ContentLoadingState: Equatable, Sendable {
     public var permitsRetry: Bool {
         switch self {
         case .empty, .error, .offline, .cancelled: true
-        case .loading, .refreshing, .partial, .content: false
+        case .loading, .content: false
         }
     }
 }
@@ -59,17 +57,6 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         ZStack {
             if state.presentsContent {
                 content
-                    .overlay(alignment: .topTrailing) {
-                        if state == .refreshing || state == .partial {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(UIScale.pt(10))
-                                .accessibilityLabel(
-                                    state == .refreshing
-                                        ? "Refreshing" : "Loading remaining content"
-                                )
-                        }
-                    }
             } else if state == .loading {
                 placeholder
                     .opacity(showsLoading ? 1 : 0)
@@ -127,11 +114,20 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     }
 }
 
+private struct SkeletonGroupActiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 private struct SkeletonPhaseKey: EnvironmentKey {
     static let defaultValue = false
 }
 
 private extension EnvironmentValues {
+    var skeletonGroupActive: Bool {
+        get { self[SkeletonGroupActiveKey.self] }
+        set { self[SkeletonGroupActiveKey.self] = newValue }
+    }
+
     var skeletonPhase: Bool {
         get { self[SkeletonPhaseKey.self] }
         set { self[SkeletonPhaseKey.self] = newValue }
@@ -142,6 +138,9 @@ public struct SkeletonGroup<Content: View>: View {
     @ViewBuilder public let content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.skeletonGroupActive) private var hasParentGroup
+    @Environment(\.skeletonPhase) private var parentPhase
     @State private var phase = false
 
     public init(@ViewBuilder content: () -> Content) {
@@ -150,9 +149,12 @@ public struct SkeletonGroup<Content: View>: View {
 
     public var body: some View {
         content
-            .environment(\.skeletonPhase, phase)
+            .environment(\.skeletonPhase, hasParentGroup ? parentPhase : phase)
+            .environment(\.skeletonGroupActive, true)
             .onAppear(perform: updatePhase)
             .onChange(of: reduceMotion) { _, _ in updatePhase() }
+            .onChange(of: scenePhase) { _, _ in updatePhase() }
+            .onChange(of: hasParentGroup) { _, _ in updatePhase() }
             .onDisappear {
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
@@ -164,10 +166,44 @@ public struct SkeletonGroup<Content: View>: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { phase = false }
-        guard !reduceMotion else { return }
+        guard !reduceMotion, !hasParentGroup, scenePhase == .active else { return }
         withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
             phase = true
         }
+    }
+}
+
+public struct SkeletonReplica<Content: View>: View {
+    public let label: String
+    @ViewBuilder public let content: Content
+
+    public init(_ label: String = "Loading", @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    public var body: some View {
+        content.skeletonized()
+            .disabled(true)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+    }
+}
+
+public extension View {
+    func skeletonized() -> some View {
+        modifier(SkeletonReplicaModifier())
+    }
+}
+
+private struct SkeletonReplicaModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .redacted(reason: .placeholder)
+            .opacity(0.58)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

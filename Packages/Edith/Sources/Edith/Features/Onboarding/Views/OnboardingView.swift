@@ -8,9 +8,11 @@ struct OnboardingView: View {
         case welcome
         case restore
         case picks
+        case agent
         case permissions
         case ready
         case provisioning
+        case connect
     }
 
     let onFinish: () -> Void
@@ -98,13 +100,48 @@ struct OnboardingView: View {
             restoreStep
         case .picks:
             picksStep
+        case .agent:
+            agentStep
         case .permissions:
             permissionsStep
         case .ready:
             readyStep
         case .provisioning:
             provisioningStep
+        case .connect:
+            connectStep
         }
+    }
+
+    private var agentStep: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            stepHeading(
+                "Edith works with the window closed",
+                detail:
+                    "A small background process called edithd collects usage, watches your "
+                    + "machines and runs long jobs. It has no window and never asks for a "
+                    + "permission.")
+            OnboardingAgentPanel(dark: dark)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, UIScale.pt(40))
+        .padding(.horizontal, UIScale.pt(30))
+        .padding(.bottom, UIScale.pt(16))
+    }
+
+    private var connectStep: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            stepHeading(
+                "Connect your agents",
+                detail:
+                    "Edith installs the ed command and can register itself with Claude Code "
+                    + "and Codex, so an agent can read your limits and machines directly.")
+            OnboardingConnectPanel(dark: dark)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, UIScale.pt(40))
+        .padding(.horizontal, UIScale.pt(30))
+        .padding(.bottom, UIScale.pt(16))
     }
 
     private var welcomeStep: some View {
@@ -142,47 +179,64 @@ struct OnboardingView: View {
     private var restoreStep: some View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
-            ZStack {
-                Circle()
-                    .fill(DashSkin.accent(dark).opacity(0.13))
-                    .frame(width: UIScale.pt(106), height: UIScale.pt(106))
-                Image(systemName: restoreSymbol)
-                    .font(.system(size: UIScale.pt(40), weight: .medium))
-                    .foregroundStyle(DashSkin.accent(dark))
-            }
-            Text(restoreTitle)
-                .font(DashSkin.serif(34, weight: .bold))
-                .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, UIScale.pt(22))
-            Text(restoreDetail)
-                .font(.system(size: UIScale.pt(14)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .multilineTextAlignment(.center)
-                .padding(.top, UIScale.pt(7))
-            VStack(spacing: UIScale.pt(10)) {
-                if cloudChecked {
-                    Button("Continue") { move(to: .picks, direction: 1) }
+            if cloudChecking {
+                SkeletonGroup {
+                    VStack(spacing: UIScale.pt(0)) {
+                        SkeletonBlock(width: 106, height: 106, corner: 53)
+                        SkeletonBlock(width: 178, height: 28)
+                            .padding(.top, UIScale.pt(22))
+                        VStack(spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: 410, height: 10)
+                            SkeletonBlock(width: 326, height: 10)
+                        }
+                        .padding(.top, UIScale.pt(7))
+                        SkeletonBlock(width: 230, height: 34, corner: 9)
+                            .padding(.top, UIScale.pt(26))
+                    }
+                }
+                .accessibilityLabel("Checking iCloud for a backup")
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(DashSkin.accent(dark).opacity(0.13))
+                        .frame(width: UIScale.pt(106), height: UIScale.pt(106))
+                    Image(systemName: restoreSymbol)
+                        .font(.system(size: UIScale.pt(40), weight: .medium))
+                        .foregroundStyle(DashSkin.accent(dark))
+                }
+                Text(restoreTitle)
+                    .font(DashSkin.serif(34, weight: .bold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .padding(.top, UIScale.pt(22))
+                Text(restoreDetail)
+                    .font(.system(size: UIScale.pt(14)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, UIScale.pt(7))
+                VStack(spacing: UIScale.pt(10)) {
+                    if cloudChecked {
+                        Button("Continue") { move(to: .picks, direction: 1) }
+                            .buttonStyle(OnboardingPrimaryButtonStyle())
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Check for a backup") {
+                            checkForCloudBackup()
+                        }
                         .buttonStyle(OnboardingPrimaryButtonStyle())
                         .keyboardShortcut(.defaultAction)
-                } else {
-                    Button(cloudChecking ? "Checking iCloud…" : "Check for a backup") {
-                        checkForCloudBackup()
+                        Button("Start fresh") { move(to: .picks, direction: 1) }
+                            .buttonStyle(.edith(.borderless))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
-                    .buttonStyle(OnboardingPrimaryButtonStyle())
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(cloudChecking)
-                    Button("Start fresh") { move(to: .picks, direction: 1) }
-                        .buttonStyle(.edith(.borderless))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
                 }
-            }
-            .frame(width: UIScale.pt(230))
-            .padding(.top, UIScale.pt(26))
-            if !cloudChecked {
-                Text("macOS will ask permission to read Edith's folder in iCloud Drive.")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .padding(.top, UIScale.pt(12))
+                .frame(width: UIScale.pt(230))
+                .padding(.top, UIScale.pt(26))
+                if !cloudChecked {
+                    Text("macOS will ask permission to read Edith's folder in iCloud Drive.")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .padding(.top, UIScale.pt(12))
+                }
             }
             Spacer(minLength: 28)
         }
@@ -233,21 +287,15 @@ struct OnboardingView: View {
             stepHeading(
                 "Make Edith yours",
                 detail: picksDetail)
+            presetRow
             ScrollView {
                 VStack(spacing: UIScale.pt(0)) {
                     LazyVGrid(columns: gridColumns, spacing: UIScale.pt(12)) {
-                        ForEach(displayedEntries) { entry in
-                            ExtensionChoiceCard(
-                                entry: entry, selected: selectedIDs.contains(entry.id), dark: dark
-                            ) {
-                                withAnimation(glide) {
-                                    if selectedIDs.contains(entry.id) {
-                                        selectedIDs.remove(entry.id)
-                                    } else {
-                                        selectedIDs.insert(entry.id)
-                                    }
-                                }
-                            }
+                        ForEach(OnboardingFlow.suitePicks()) { pick in
+                            SuiteChoiceCard(
+                                pick: pick, selectedIDs: selectedIDs, dark: dark,
+                                toggleSuite: { toggle(suite: pick) },
+                                toggleAbility: { toggle(ability: $0) })
                         }
                     }
                     marketplaceCard
@@ -260,6 +308,58 @@ struct OnboardingView: View {
         }
         .padding(.top, UIScale.pt(40))
         .padding(.horizontal, UIScale.pt(30))
+    }
+
+    private var presetRow: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            ForEach(OnboardingPreset.allCases, id: \.rawValue) { preset in
+                Button {
+                    withAnimation(glide) {
+                        selectedIDs = OnboardingFlow.abilityIDs(
+                            forSuites: Set(preset.suites))
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(preset.title)
+                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                        Text(preset.detail)
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.vertical, UIScale.pt(7))
+                }
+                .buttonStyle(
+                    EdithButtonStyle(
+                        .selection,
+                        selected: OnboardingFlow.suites(forAbilities: selectedIDs)
+                            == Set(preset.suites),
+                        tint: DashSkin.accent(dark)))
+            }
+        }
+    }
+
+    private func toggle(suite pick: OnboardingSuitePick) {
+        let ids = Set(pick.abilities.map(\.id))
+        withAnimation(glide) {
+            if ids.isSubset(of: selectedIDs) {
+                selectedIDs.subtract(ids)
+            } else {
+                selectedIDs.formUnion(ids)
+            }
+        }
+    }
+
+    private func toggle(ability id: String) {
+        withAnimation(glide) {
+            if selectedIDs.contains(id) {
+                selectedIDs.remove(id)
+            } else {
+                selectedIDs.insert(id)
+            }
+        }
     }
 
     private var marketplaceCard: some View {
@@ -414,8 +514,8 @@ struct OnboardingView: View {
 
     private var provisioningStep: some View {
         ToolProvisioningPanel(
-            title: "Setting up your extensions", tools: selectedTools,
-            continueAction: onFinish
+            title: "Setting up your tools", tools: selectedTools,
+            continueAction: { move(to: .connect, direction: 1) }
         )
         .padding(.horizontal, UIScale.pt(32))
     }
@@ -436,18 +536,26 @@ struct OnboardingView: View {
     @ViewBuilder
     private var footer: some View {
         HStack(spacing: UIScale.pt(10)) {
-            if step == .restore || step == .picks || step == .permissions {
+            if [Step.restore, .picks, .agent, .permissions, .connect].contains(step) {
                 Button("Back") { goBack() }
                     .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
             Spacer()
             if step == .picks {
-                Button(continueLabel, action: continueFromPicks)
+                Button(continueLabel) { move(to: .agent, direction: 1) }
+                    .buttonStyle(OnboardingPrimaryButtonStyle(compact: true))
+                    .keyboardShortcut(.defaultAction)
+            } else if step == .agent {
+                Button("Continue", action: continueFromPicks)
                     .buttonStyle(OnboardingPrimaryButtonStyle(compact: true))
                     .keyboardShortcut(.defaultAction)
             } else if step == .permissions {
                 Button("Continue", action: finishSelection)
+                    .buttonStyle(OnboardingPrimaryButtonStyle(compact: true))
+                    .keyboardShortcut(.defaultAction)
+            } else if step == .connect {
+                Button("Finish") { onFinish() }
                     .buttonStyle(OnboardingPrimaryButtonStyle(compact: true))
                     .keyboardShortcut(.defaultAction)
             }
@@ -484,11 +592,9 @@ struct OnboardingView: View {
 
     private var picksDetail: String {
         if cloudBackupFound && !selectedIDs.isEmpty {
-            return "We preselected the extensions from your iCloud backup. Adjust as you like."
+            return "We preselected the suites from your iCloud backup. Adjust as you like."
         }
-        return showsAllExtensions
-            ? "Choose any extensions you want ready on day one."
-            : "Start with a few favorites. You can change these anytime."
+        return "Core is always on. Pick the suites you want, then fine-tune their abilities."
     }
 
     private var marketplaceDetail: String {
@@ -558,7 +664,7 @@ struct OnboardingView: View {
         OnboardingFlow.finish(selectedIDs: selectedIDs, icloudBackup: icloudBackup)
         IPC.post(IPC.Name.settingsChanged)
         if selectedTools.isEmpty {
-            onFinish()
+            move(to: .connect, direction: 1)
         } else {
             move(to: .provisioning, direction: 1)
         }
@@ -568,7 +674,9 @@ struct OnboardingView: View {
         switch step {
         case .restore: move(to: .welcome, direction: -1)
         case .picks: move(to: .restore, direction: -1)
-        case .permissions: move(to: .picks, direction: -1)
+        case .agent: move(to: .picks, direction: -1)
+        case .permissions: move(to: .agent, direction: -1)
+        case .connect: move(to: .ready, direction: -1)
         default: break
         }
     }

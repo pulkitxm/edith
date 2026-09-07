@@ -152,7 +152,7 @@ a prebuilt binary by definition: Homebrew downloads exactly what the vendor
 published, checks its hash, and moves it into place.
 
 Edith is a cask. It is a signed `.app` bundle distributed as a `.dmg`, which is the
-canonical cask shape. The fact that the bundle also contains two command line tools
+canonical cask shape. The fact that the bundle also exposes two command line names
 does not make it a formula: the unit of distribution is still the application.
 
 An important consequence of "cask means macOS only": nothing about the cask can be
@@ -409,15 +409,18 @@ declares the processes to stop:
 ```ruby
 uninstall quit: [
   "com.pulkit.edith",
+  "com.pulkit.edith.helper.v2",
+  "com.pulkit.edith.helper",
   "com.pulkit.edith.statusbar",
   "com.pulkit.edith.files",
 ]
 ```
 
-Three bundle identifiers, because Edith is three bundles: the main application, the
-menu bar login item, and the Files helper. Quitting them before removing the app
-avoids the classic failure where a running process holds files open and a partially
-deleted app keeps its menu bar icon until logout.
+The first three identifiers cover Edith's current bundles: the main application,
+the menu bar login item, and the Files helper. The retired status-bar identifier
+keeps uninstall reliable for users upgrading from an older release. Quitting them
+before removing the app avoids the classic failure where a running process holds
+files open and a partially deleted app keeps its menu bar icon until logout.
 
 The `zap` stanza is the opt-in deep clean, listing the paths the application creates
 outside its bundle. Edith's covers the support directory, both caches, the network
@@ -574,10 +577,12 @@ cask "edith" do
 
   app "Edith.app"
   binary "#{appdir}/Edith.app/Contents/MacOS/ed"
-  binary "#{appdir}/Edith.app/Contents/MacOS/edh"
+  binary "#{appdir}/Edith.app/Contents/MacOS/ed", target: "edith"
 
   uninstall quit: [
     "com.pulkit.edith",
+    "com.pulkit.edith.helper.v2",
+    "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]
@@ -589,6 +594,8 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.v2.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
   ]
@@ -638,13 +645,14 @@ takes the bundle.
 
 **The two `binary` lines** point inside the installed bundle, using `appdir`, which
 is Homebrew's variable for the applications directory rather than a hard-coded
-`/Applications`. This is the mechanism that makes `ed` and `edh` work immediately
-after install, with no separate `ed install` step, and it is also the most
-consequential line in the file, for reasons in section 15.
+`/Applications`. This is the mechanism that makes `ed` and `edith` work immediately
+after install, with no separate `ed install` step. Both paths are aliases of the
+one signed `ed` executable. These are also the most
+consequential lines in the file, for reasons in section 15.
 
-**`uninstall quit:`** lists all three bundle identifiers, as covered in section 8.
-They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
-`com.pulkit.edith.statusbar` is `Resources/HelperInfo.plist`, and
+**`uninstall quit:`** lists the current and retired bundle identifiers, as covered
+in section 8. They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
+`com.pulkit.edith.helper.v2` is `Resources/HelperInfo.plist`, and
 `com.pulkit.edith.files` is the Files helper, named in
 `Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
 `Packages/Edith/Sources/EdithCLI/AppBridge.swift`.
@@ -668,17 +676,18 @@ requires knowing what runs before it.
 
 ### Trigger
 
-There is one entry point. `.github/workflows/ci.yml` runs on every pull request and
-every push to `main`. Its `changes` job works out which areas a commit touched, the
-check jobs run for the areas that moved, and a final `release` job calls
-`.github/workflows/release.yml` through its gated dispatch inputs.
+There is one entry point. `.github/workflows/ci.yml` runs on every pull request,
+every push to `main`, and manual dispatch. Its `changes` job works out which areas
+a commit touched, then the check jobs run for the areas that moved. The same
+workflow contains `version`, `dmg`, and `publish`, so the commit's CI run shows the
+complete path from validation through publication.
 
-That `release` job requires a push to `main`, a successful routing and policy job,
-no applicable job failure or cancellation, and a change in the routed Swift area. The
-macOS build, Swift tests and Companion backend are each required when their routed
-area changed. Checks and release are therefore the same run, and the release cannot
-start until every applicable check has gone green.
-There is no second workflow watching for a tag, and no tag trigger anywhere.
+Automatic releases require a push to `main` and a change in the routed Swift area.
+After routing, release preparation runs alongside checks. Publication requires the
+routing and policy checks to pass, every applicable product check to pass, and a
+successful DMG build that has not been superseded. Optional routed checks may be
+skipped when their areas did not change. A failed or canceled check blocks
+publication. There is no external workflow dispatch or polling and no tag trigger.
 
 `ci.yml` skips itself when the head commit message starts with `Release v` or
 `Refresh the contributor list`. That stops either generated commit from starting
@@ -692,7 +701,7 @@ still deciding whether its source is releasable.
 
 ### Build
 
-`release.yml` has two build jobs feeding the publisher.
+`ci.yml` has two release preparation jobs feeding the publisher.
 
 **`version`** runs on Linux, refuses to start without the signing and Sparkle
 secrets, and computes the next patch version and build number from the latest
@@ -704,7 +713,7 @@ which commit is being built.
 **`dmg`** runs on macOS. It checks out the commit `version` chose, stamps both plists
 with the release version, imports the signing certificate into a temporary keychain,
 builds with `./build.sh --no-open --release`, checks the built bundle carries the
-version it was told to build, packages a UDZO disk image with an `/Applications`
+version it was told to build, packages a ULMO disk image with an `/Applications`
 symlink inside, notarizes and staples when the notary secrets exist, generates the
 Sparkle appcast signed with the Sparkle key, verifies the appcast points at the right
 disk image and carries a signature, and uploads `Edith.dmg`, `appcast.xml`, and the
@@ -722,16 +731,16 @@ Nothing is written until the build has passed, so a failed build leaves no tag a
 no commit, tag, or cask pointing at a release that does not exist. The next merge
 simply tries the same version again.
 
-To rebuild the current release when its assets need replacing, run the Release
-workflow by hand from `main` with its required `rebuild` input set to that tag. The
-workflow builds from the tag, replaces the release assets, commits a changed DMG
-checksum to `main` when needed, and mirrors that cask to the tap. It refuses older
-tags. This path does not create a new version or move the existing tag.
+To rebuild the current release when its assets need replacing, run the CI
+workflow by hand from `main` with `rebuild` set to that tag. The workflow builds
+from the tag, replaces the release assets, commits a changed DMG checksum to
+`main` when needed, and mirrors that cask to the tap. It refuses older tags. This
+path does not create a new version or move the existing tag.
 
-A new release cannot be cut from the Release workflow's manual entry point. To
-recover an automatic release that CI skipped, dispatch the CI workflow from `main`
-with its `release` input enabled. CI runs every routed product check and calls the
-reusable Release workflow with `cut_release: true` only after they pass.
+To recover an automatic release that CI skipped, run CI manually from `main`
+with `release` enabled. Both manual release paths run the product checks and use
+the same publication gate as automatic releases. Choose either `release` or
+`rebuild`, not both. Manual release requests from another branch are rejected.
 
 ---
 
@@ -927,9 +936,9 @@ parse, and a bare token cannot resolve on a machine with no tap. The only free
 choice is the middle segment, which is the tap repository name. `pulkitxm/edith/edith`
 was the first attempt and reads badly, hence `homebrew-tap`.
 
-### Why both `ed` and `edh` are linked
+### Why both `ed` and `edith` are linked
 
-The alternative was linking `edh` only and leaving `ed` to the app's own
+The alternative was linking `edith` only and leaving `ed` to the app's own
 `ed install --directory ~/.local/bin` flow, which avoids shadowing the POSIX line
 editor.
 
@@ -958,9 +967,9 @@ the docs guard the cask.
 
 ### Cut a release
 
-Nothing Homebrew-specific to do. Merge to `main` and let CI call the release
-workflow after every required check passes. To rebuild the current release, run
-the Release workflow manually from `main` with `rebuild` set to its tag. The
+Nothing Homebrew-specific to do. Merge to `main` and let CI build and publish
+the release after every required check passes. To rebuild the current release,
+run CI manually from `main` with `rebuild` set to its tag. The
 `publish` job refreshes the release assets, updates this repository if the checksum
 changed, and mirrors the cask to the tap.
 
@@ -1068,8 +1077,8 @@ about which claims are tested and which are structural.
   `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
 - The zap paths match `EdithCore/AppDirectories.swift` and
   `EdithKit/Core/Defaults/SharedDefaults.swift`.
-- `ed` and `edh` exist at the linked paths inside the built bundle, asserted by
-  `make verify-bundle`.
+- `ed` is the only regular CLI executable, asserted by `make verify-bundle`
+  together with both installed names' targets, signatures, and behavior.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from
   `tap_constants.rb` and `cmd/install.rb`.
 - `scripts/homebrew-cask.test.js` guards the cask's shape, the release job's
@@ -1138,5 +1147,5 @@ In this repository:
 
 - [docs/homebrew.md](homebrew.md), the command reference.
 - `Casks/edith.rb`, the cask.
-- `.github/workflows/release.yml`, the release publisher and cask mirror.
+- `.github/workflows/ci.yml`, the checks, release publisher, and cask mirror.
 - `scripts/homebrew-cask.test.js`, the tests.

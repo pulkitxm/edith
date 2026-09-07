@@ -7,7 +7,7 @@ import EdithKit
 @MainActor
 final class WindowToolsEngine: FeatureModule {
     private struct HotKeySpec {
-        let id: UInt32
+        let id: String
         let action: WindowLayoutAction
         let codeKey: String
         let modsKey: String
@@ -76,7 +76,7 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     func shutdown() {
-        hotKeys.forEach { GlobalHotKey.clear(id: $0.id) }
+        hotKeys.forEach { HotKeyRegistrar.clear($0.id) }
         stopEventTap()
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
@@ -95,19 +95,19 @@ final class WindowToolsEngine: FeatureModule {
     private var hotKeys: [HotKeySpec] {
         [
             HotKeySpec(
-                id: GlobalHotKey.ID.windowLeft, action: .leftHalf,
+                id: HotKeyCatalog.windowLeft, action: .leftHalf,
                 codeKey: AppStorageKeys.WindowTools.leftHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.leftHotKeyMods, defaultCode: kVK_LeftArrow),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowRight, action: .rightHalf,
+                id: HotKeyCatalog.windowRight, action: .rightHalf,
                 codeKey: AppStorageKeys.WindowTools.rightHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.rightHotKeyMods, defaultCode: kVK_RightArrow),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowMaximize, action: .maximize,
+                id: HotKeyCatalog.windowMaximize, action: .maximize,
                 codeKey: AppStorageKeys.WindowTools.maximizeHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.maximizeHotKeyMods, defaultCode: kVK_ANSI_M),
             HotKeySpec(
-                id: GlobalHotKey.ID.windowRestore, action: .restore,
+                id: HotKeyCatalog.windowRestore, action: .restore,
                 codeKey: AppStorageKeys.WindowTools.restoreHotKeyCode,
                 modsKey: AppStorageKeys.WindowTools.restoreHotKeyMods, defaultCode: kVK_ANSI_R),
         ]
@@ -115,12 +115,7 @@ final class WindowToolsEngine: FeatureModule {
 
     private func registerHotKeys() {
         for spec in hotKeys {
-            let code =
-                SharedDefaults.store.object(forKey: spec.codeKey) as? Int ?? spec.defaultCode
-            let modifiers =
-                SharedDefaults.store.object(forKey: spec.modsKey) as? Int
-                ?? (controlKey | optionKey)
-            GlobalHotKey.set(id: spec.id, keyCode: code, modifiers: modifiers) { [weak self] in
+            HotKeyRegistrar.install(spec.id) { [weak self] in
                 MainActor.assumeIsolated { self?.perform(spec.action) }
             }
         }
