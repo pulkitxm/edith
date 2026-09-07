@@ -122,7 +122,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             let snapshot = try? await SystemMonitorClient.snapshot()
             guard !Task.isCancelled, self?.subscriptionGeneration == generation else { return }
             self?.latest = snapshot
-            let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) {
+            let handler: @Sendable (Data) -> Void = {
                 [weak self] data in
                 guard let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data)
                 else { return }
@@ -131,6 +131,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                     self?.latest = value
                 }
             }
+            let subscription = try? await AgentClient.shared.subscribeAsync(
+                .systemMonitor, handler: handler)
             guard !Task.isCancelled, self?.subscriptionGeneration == generation else {
                 subscription?.cancel()
                 return
