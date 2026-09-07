@@ -12,3 +12,5 @@ ed machines files open workstation --json
 ```
 
 A JSON success includes `machine`, `opened`, and `path`. Unknown machines fail before the application is launched. An unavailable application or an unanswered window request returns an error.
+
+[Back to CLI index](../README.md)
