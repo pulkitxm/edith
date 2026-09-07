@@ -70,16 +70,18 @@ final class MicMuteEngine: NSObject, FeatureModule {
     @objc private func statusClicked() {
         guard let statusItem else { return }
         StatusItemMenu.handleClick(on: statusItem) {
-            panel.toggle(from: statusItem) {
-                StatusPanel(
-                    title: "Microphone",
-                    open: { [weak self] in
-                        self?.panel.close()
-                        MainApp.openDashboard()
-                    }
-                ) {
-                    MicrophoneMenuControls(engine: self)
-                }
+            panel.show(
+                from: statusItem, title: "Microphone",
+                actions: [
+                    .init(title: muted ? "Unmute microphone" : "Mute microphone") { [weak self] in
+                        self?.toggle()
+                    },
+                    .init(title: "Open Edith…") { MainApp.openDashboard() },
+                ]
+            ) {
+                Label(
+                    muted ? "Microphone muted" : "Microphone on",
+                    systemImage: muted ? "mic.slash.fill" : "mic.fill")
             }
         }
     }
@@ -194,19 +196,5 @@ final class MicMuteEngine: NSObject, FeatureModule {
                     device, &volume, 0, nil, UInt32(MemoryLayout<Float>.size), &restore)
             }
         }
-    }
-}
-
-struct MicrophoneMenuControls: View {
-    let engine: MicMuteEngine
-
-    var body: some View {
-        Label(
-            engine.muted ? "Microphone muted" : "Microphone on",
-            systemImage: engine.muted ? "mic.slash.fill" : "mic.fill")
-        Button(engine.muted ? "Unmute microphone" : "Mute microphone") {
-            engine.toggle()
-        }
-        .buttonStyle(.bordered)
     }
 }

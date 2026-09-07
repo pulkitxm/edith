@@ -28,11 +28,19 @@ final class LimitsStatusItem {
         guard let item else { return }
         StatusItemMenu.handleClick(on: item) {
             if let store {
-                panel.toggle(from: item) {
-                    LimitsMenuPanel(store: store) { [weak self] in
-                        self?.panel.close()
-                        MainApp.open(section: "dashboard")
-                    }
+                panel.show(
+                    from: item, title: "Rate Limits",
+                    actions: [
+                        .init(
+                            title: store.refreshingLimits ? "Refreshing…" : "Refresh",
+                            enabled: !store.refreshingLimits
+                        ) {
+                            Task { await store.refreshLimits(force: true) }
+                        },
+                        .init(title: "Open Usage…") { MainApp.open(section: "dashboard") },
+                    ]
+                ) {
+                    LimitsMenuPanel(store: store)
                 }
             }
         }
@@ -437,54 +445,37 @@ final class StackedLimitsView: NSView {
 
 struct LimitsMenuPanel: View {
     let store: UsageStore
-    let open: () -> Void
 
     var body: some View {
-        StatusPanel(title: "Rate Limits", open: open) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if PresenterState.shared.active
-                        && SharedDefaults.store.bool(
-                            forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
-                    {
-                        Text("Usage hidden during presentation").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(store.enabledProviders) { provider in
-                            let limits = store.limits(for: provider)
-                            Text(provider.label.uppercased())
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            StatusProgressRow(
-                                title: "5-hour limit", percent: limits.session?.percent,
-                                resetsAt: limits.session?.resetsAt)
-                            StatusProgressRow(
-                                title: "Weekly · all models", percent: limits.week?.percent,
-                                resetsAt: limits.week?.resetsAt)
-                            if let fable = limits.fable {
-                                StatusProgressRow(
-                                    title: "Weekly · Fable", percent: fable.percent,
-                                    resetsAt: fable.resetsAt)
-                            }
-                        }
-                    }
-                    if let error = store.limitsError {
-                        Text(error).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            if PresenterState.shared.active
+                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            {
+                Text("Usage hidden during presentation").foregroundStyle(.secondary)
+            } else {
+                ForEach(store.enabledProviders) { provider in
+                    let limits = store.limits(for: provider)
+                    Text(provider.label).font(.headline)
+                    StatusProgressRow(
+                        title: "5-hour limit", percent: limits.session?.percent,
+                        resetsAt: limits.session?.resetsAt)
+                    StatusProgressRow(
+                        title: "Weekly · all models", percent: limits.week?.percent,
+                        resetsAt: limits.week?.resetsAt)
+                    if let fable = limits.fable {
+                        StatusProgressRow(
+                            title: "Weekly · Fable", percent: fable.percent,
+                            resetsAt: fable.resetsAt)
                     }
                 }
             }
-            .frame(maxHeight: 380)
-            HStack {
-                Button(store.refreshingLimits ? "Refreshing…" : "Refresh") {
-                    Task { await store.refreshLimits(force: true) }
-                }
-                .disabled(store.refreshingLimits)
-                Spacer()
-                if let updated = store.limitsUpdatedAt {
-                    Text("Updated \(updated, style: .relative) ago")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+            if let error = store.limitsError {
+                Text(error).font(.caption).foregroundStyle(.secondary)
             }
-            Button("View usage details…", action: open)
+            if let updated = store.limitsUpdatedAt {
+                Text("Updated \(updated, style: .relative) ago")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

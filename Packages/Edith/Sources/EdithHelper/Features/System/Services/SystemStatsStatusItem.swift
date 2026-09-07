@@ -87,14 +87,13 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     @objc private func clicked() {
         StatusItemMenu.handleClick(on: item) {
             let snapshot = snapshot
-            panel.toggle(from: item) {
-                StatusPanel(
-                    title: "System",
-                    open: { [weak self] in
-                        self?.panel.close()
-                        MainApp.open(section: "system")
-                    }
-                ) {
+            panel.show(
+                from: item, title: "System",
+                actions: [
+                    .init(title: "Open System…") { MainApp.open(section: "system") }
+                ]
+            ) {
+                VStack(alignment: .leading, spacing: 14) {
                     StatusProgressRow(title: "CPU", percent: snapshot.cpu)
                     StatusProgressRow(title: "Memory", percent: snapshot.memory)
                     Text("Updates every 2 seconds")

@@ -3,56 +3,69 @@ import EdithKit
 import SwiftUI
 
 @MainActor
-final class StatusItemPanel: NSObject, NSPopoverDelegate {
-    private let popover = NSPopover()
-
-    func popoverDidClose(_ notification: Notification) {
-        popover.contentViewController = nil
+final class StatusItemPanel {
+    struct Action {
+        let title: String
+        var enabled = true
+        let perform: () -> Void
     }
+
+    private var menu: NSMenu?
 
     func close() {
-        popover.performClose(nil)
+        menu?.cancelTracking()
     }
 
-    func toggle<Content: View>(from item: NSStatusItem, @ViewBuilder content: () -> Content) {
-        if popover.isShown {
-            close()
-            return
-        }
+    func show<Content: View>(
+        from item: NSStatusItem, title: String, actions: [Action],
+        @ViewBuilder content: () -> Content
+    ) {
         guard let button = item.button else { return }
-        popover.delegate = self
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: content())
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let heading = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+        let readings = NSMenuItem()
+        let view = NSHostingView(
+            rootView: content()
+                .font(.system(size: NSFont.systemFontSize))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(width: 310))
+        view.frame.size = view.fittingSize
+        readings.view = view
+        menu.addItem(readings)
+        menu.addItem(.separator())
+        for action in actions {
+            let row = StatusPanelAction(title: action.title, perform: action.perform)
+            row.isEnabled = action.enabled
+            menu.addItem(row)
+        }
+        menu.addItem(.separator())
+        menu.addItem(StatusPanelAction(title: "Quit Edith") { AppRuntimeCenter().quitCompletely() })
+        self.menu = menu
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+        self.menu = nil
     }
 }
 
-struct StatusPanel<Content: View>: View {
-    let title: String
-    let open: () -> Void
-    @ViewBuilder let content: () -> Content
+@MainActor
+private final class StatusPanelAction: NSMenuItem {
+    private let perform: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.headline)
-                    Text("Edith").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Tap to open", action: open)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
-            Divider()
-            content()
-            Divider()
-            Button("Open Edith", action: open)
-            Button("Quit Edith") { AppRuntimeCenter().quitCompletely() }
-        }
-        .buttonStyle(.plain)
-        .padding(20)
-        .frame(width: 340)
+    init(title: String, perform: @escaping () -> Void) {
+        self.perform = perform
+        super.init(title: title, action: #selector(invoke), keyEquivalent: "")
+        target = self
+    }
+
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func invoke() {
+        perform()
     }
 }
 
@@ -62,7 +75,7 @@ struct StatusProgressRow: View {
     var resetsAt: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(title)
                 Spacer()
@@ -72,10 +85,9 @@ struct StatusProgressRow: View {
             }
             if let percent {
                 ProgressView(value: max(0, min(100, percent)), total: 100)
-                    .tint(.blue)
             }
             if let resetsAt {
-                Text("Resets \(resetsAt, style: .relative)")
+                Text("Resets in \(resetsAt, style: .relative)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
