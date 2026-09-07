@@ -39,9 +39,7 @@ import Observation
             task = existing
         } else {
             let detect = detectAgents
-            task = Task.detached(priority: .userInitiated) {
-                (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
-            }
+            task = Task { await Self.discover(using: detect) }
             discoveryID = UUID()
             discoveryTask = task
             isDiscovering = true
@@ -54,6 +52,14 @@ import Observation
         agentsLoaded = true
         isDiscovering = false
         discoveryTask = nil
+    }
+
+    private nonisolated static func discover(
+        using detect: @escaping @Sendable () -> [SkillAgent]
+    ) async -> ([SkillAgent], Bool) {
+        await Task.detached(priority: .userInitiated) {
+            (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
+        }.value
     }
 
     public func present(_ skill: EdithSkill, agentID: String? = nil) async {
