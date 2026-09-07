@@ -93,12 +93,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                     .init(title: "Open System…") { MainApp.open(section: "system") }
                 ]
             ) {
-                VStack(alignment: .leading, spacing: 14) {
-                    StatusProgressRow(title: "CPU", percent: snapshot.cpu)
-                    StatusProgressRow(title: "Memory", percent: snapshot.memory)
-                    Text("Updates every 2 seconds")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                SystemMenuReadings(snapshot: snapshot)
             }
         }
     }
@@ -182,4 +177,17 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 final class SystemMenuSnapshot {
     var cpu = 0.0
     var memory = 0.0
+}
+
+struct SystemMenuReadings: View {
+    let snapshot: SystemMenuSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StatusProgressRow(title: "CPU", percent: snapshot.cpu)
+            StatusProgressRow(title: "Memory", percent: snapshot.memory)
+            Text("Updates every 2 seconds")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
 }
