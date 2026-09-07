@@ -88,7 +88,7 @@ final class CaptureEditorController: NSObject, NSWindowDelegate {
     }
 }
 
-private struct CaptureEditorView: View {
+struct CaptureEditorView: View {
     @Bindable var model: CaptureEditorModel
     let copy: () -> Void
     let save: () -> Void

@@ -39,6 +39,21 @@ import Testing
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         #expect(bitmap.pixelsWide >= 440)
         if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
+            let model = try #require(CaptureEditorModel(image: image))
+            model.begin(at: CGPoint(x: 540, y: 210))
+            model.end(at: CGPoint(x: 400, y: 125))
+            #expect(model.document.annotations.count == 1)
+            #expect(try !model.exportData().isEmpty)
+            let editor = NSHostingView(
+                rootView: CaptureEditorView(
+                    model: model, copy: {}, save: {}, pin: {}, done: {}))
+            editor.frame = NSRect(x: 0, y: 0, width: 980, height: 700)
+            editor.layoutSubtreeIfNeeded()
+            let rendered = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
+            editor.cacheDisplay(in: editor.bounds, to: rendered)
+            let studioData = try #require(rendered.representation(using: .png, properties: [:]))
+            try studioData.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent("capture-studio.png"))
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             try data.write(
                 to: URL(fileURLWithPath: directory).appendingPathComponent("capture-tools.png"))
