@@ -142,7 +142,7 @@ test("swift tests leave enough time for a cold libghostty build", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTestJob).toContain("timeout-minutes: 30");
+  expect(swiftTestJob).toContain("timeout-minutes: 45");
   expect(swiftTestJob).toContain("name: Cache libghostty");
   expect(swiftTestJob).toContain("name: Build libghostty");
 });

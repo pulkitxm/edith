@@ -42,7 +42,10 @@ test("every change area covers its repository inputs", () => {
       ".swift-format",
     ],
     docs: ["docs/cli/README.md"],
-    workflows: [".github/workflows/ci.yml"],
+    workflows: [
+      ".github/workflows/ci.yml",
+      ".github/actions/cache-swift/action.yml",
+    ],
     promo: ["apps/promo-video/src/Promo.tsx"],
     site: ["apps/site/index.html"],
     scripts: [
@@ -165,7 +168,7 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain("timeout-minutes: 30");
+  expect(swiftTest).toContain("timeout-minutes: 45");
   expect(swiftTest).toContain(
     "python3 -B scripts/test-swift-test-isolation.py",
   );
@@ -187,7 +190,9 @@ test("targeted publishing workflows watch every deployment input", () => {
 });
 
 test("every workflow change runs the runtime guard", () => {
-  expect(ciWorkflow).toContain("area workflows '^\\.github/workflows/'");
+  expect(ciWorkflow).toContain(
+    "area workflows '^\\.github/(workflows|actions)/'",
+  );
   expect(ciWorkflow).toContain(
     "needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'",
   );

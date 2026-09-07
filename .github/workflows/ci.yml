@@ -84,7 +84,7 @@ jobs:
           }
           area swift '^(scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
-          area workflows '^\.github/workflows/'
+          area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|README\.md$|Makefile$|package\.json$|bun\.lock$|biome\.json$)'
@@ -178,12 +178,13 @@ jobs:
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
       - name: Cache libghostty
+        id: ghostty-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             Packages/Edith/vendor/GhosttyKit.xcframework
             Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
       - name: Build libghostty
         run: |
           if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
@@ -192,12 +193,19 @@ jobs:
             command -v zig >/dev/null 2>&1 || brew install zig
             make ghostty
           fi
-      - name: Cache resolved packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Save validated libghostty
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: build/SourcePackages
-          key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
-          restore-keys: spm-xcode-${{ runner.os }}-
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Cache Swift build products
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: app-debug
       - name: Build the .app bundle
         run: ./build.sh --no-open
       - name: Verify nested bundles and signing
@@ -210,7 +218,7 @@ jobs:
       needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -220,12 +228,13 @@ jobs:
           command -v fish >/dev/null 2>&1 || brew install fish
           fish --version
       - name: Cache libghostty
+        id: ghostty-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             Packages/Edith/vendor/GhosttyKit.xcframework
             Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
       - name: Build libghostty
         run: |
           if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
@@ -234,15 +243,19 @@ jobs:
             command -v zig >/dev/null 2>&1 || brew install zig
             make ghostty
           fi
-      - name: Cache resolved packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Save validated libghostty
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
-            Packages/Edith/.build/checkouts
-            Packages/Edith/.build/artifacts
-            Packages/Edith/.build/repositories
-          key: spm-swiftpm-${{ runner.os }}-${{ hashFiles('Packages/Edith/Package.resolved') }}
-          restore-keys: spm-swiftpm-${{ runner.os }}-
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Cache Swift build products
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: tests-debug
       - name: Verify test isolation
         run: python3 -B scripts/test-swift-test-isolation.py
       - name: Tests
