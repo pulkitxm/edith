@@ -6,7 +6,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
 
-  --install      copy to /Applications and launch from there
+  --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
   --release      Release configuration, Developer ID signing required
   --pr N         build PR N's branch from its worktree, creating one if needed
@@ -102,7 +102,6 @@ if [ -n "$PR" ]; then
 fi
 
 if [ -n "$BRANCH" ]; then
-  INSTALL=1
   if [ "$BRANCH" != "$(git branch --show-current)" ]; then
     ROOT="$(git worktree list --porcelain \
       | awk -v b="branch refs/heads/$BRANCH" '/^worktree /{w=substr($0,10)} $0==b{print w; exit}')"

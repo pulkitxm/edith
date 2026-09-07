@@ -17,9 +17,14 @@ documentation, tests, and code all help.
 
 ```bash
 ./build.sh
-./build.sh --install
+./build.sh --release --install
 cd Packages/Edith && ./test.sh
 ```
+
+Default builds run as Edith Development, with separate menu helper and daemon
+identities, settings, and application data. `--branch` and `--pr` select the source
+without enabling installation. `make install` and `make reinstall` build a Release
+configuration before replacing the installed app.
 
 Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`

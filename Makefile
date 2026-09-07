@@ -194,13 +194,13 @@ build:
 	./build.sh $(FLAGS)
 
 install:
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 reset:
 	./reset.sh
 
 reinstall: reset
-	./build.sh --install $(FLAGS)
+	./build.sh --release --install $(FLAGS)
 
 loc:
 	cloc --vcs=git

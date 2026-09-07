@@ -6,6 +6,45 @@ const script = readFileSync(resolve("build.sh"), "utf8");
 const launcher = readFileSync(resolve("Resources/ed-launcher"), "utf8");
 
 describe("build install lifecycle", () => {
+  test.skipIf(process.platform !== "darwin")(
+    "rejects development installation before resolving a branch or pull request",
+    () => {
+      for (const selection of [
+        [],
+        ["--branch", "fixture-development"],
+        ["--pr", "999999"],
+      ]) {
+        const result = Bun.spawnSync(
+          ["bash", "build.sh", "--install", ...selection],
+          {
+            env: { ...process.env, EDITH_RELEASE: "0" },
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5000,
+          },
+        );
+        expect(result.exitCode).toBe(1);
+        expect(new TextDecoder().decode(result.stderr)).toContain(
+          "Development builds cannot replace /Applications/Edith.app.",
+        );
+      }
+    },
+  );
+
+  test("install targets explicitly select a release build", () => {
+    for (const target of ["install", "reinstall"]) {
+      const result = Bun.spawnSync(["make", "-n", target], {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5000,
+      });
+      expect(result.exitCode).toBe(0);
+      expect(new TextDecoder().decode(result.stdout)).toContain(
+        "./build.sh --release --install",
+      );
+    }
+  });
+
   test("routes CLI names through the application executable", () => {
     const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
     const install = script.indexOf(
