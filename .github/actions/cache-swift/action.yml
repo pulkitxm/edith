@@ -17,11 +17,14 @@ runs:
     - name: Identify the Swift toolchain
       id: toolchain
       shell: bash
+      env:
+        SWIFT_CACHE_VARIANT: ${{ inputs.variant }}
+        SWIFT_CACHE_INPUTS: ${{ hashFiles('Packages/Edith/Package.resolved', 'Packages/Edith/Package.swift', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'build.sh', 'scripts/build-ghostty.sh') }}
       run: |
         fingerprint="$( { xcodebuild -version; swift --version; xcrun --show-sdk-path; } | shasum -a 256 | cut -d ' ' -f 1)"
-        prefix="swift-v2-${{ runner.os }}-${{ runner.arch }}-$fingerprint-${{ inputs.variant }}-${{ hashFiles('Packages/Edith/Package.resolved', 'Packages/Edith/Package.swift', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'build.sh', 'scripts/build-ghostty.sh') }}-"
+        prefix="swift-v2-${RUNNER_OS}-${RUNNER_ARCH}-${fingerprint}-${SWIFT_CACHE_VARIANT}-${SWIFT_CACHE_INPUTS}-"
         echo "compiled-cache-prefix=$prefix" >> "$GITHUB_OUTPUT"
-        echo "compiled-cache-key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
+        echo "compiled-cache-key=${prefix}${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
     - name: Restore Swift package downloads
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
