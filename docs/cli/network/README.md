@@ -28,6 +28,8 @@ credentials, URL queries, and common secret fields before copy or export.
 
 The extension never changes DNS, routes, proxies, VPNs, Wi-Fi, or network
 services. Scheduled sampling is off by default, uses a minimum five-minute
-interval, and stops when the extension is disabled or Edith quits.
+interval, and pauses while the Mac is locked. The background agent owns scans
+and bounded SQLite history, so scheduled checks continue after the window
+closes. Disable the extension or scheduled sampling to stop future checks.
 
 [The `ed` command line](../README.md) covers the rest of the reference.
