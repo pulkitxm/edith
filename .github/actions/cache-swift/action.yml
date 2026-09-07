@@ -10,7 +10,7 @@ outputs:
     value: ${{ steps.toolchain.outputs.compiled-cache-key }}
   compiled-cache-hit:
     description: Whether the compiled products matched the primary key
-    value: ${{ steps.compiled.outputs.cache-hit }}
+    value: ${{ steps.compiled-tests.outputs.cache-hit || steps.compiled.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -42,7 +42,21 @@ runs:
         key: xcode-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Packages/Edith/Package.resolved', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
     - name: Restore Swift build products
       id: compiled
+      if: inputs.variant != 'tests-debug'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: |
+          Packages/Edith/.build/*-apple-macosx
+          Packages/Edith/.build/plugins
+          Packages/Edith/.build/*.db
+          Packages/Edith/.build/*.yaml
+        key: ${{ steps.toolchain.outputs.compiled-cache-key }}
+        restore-keys: |
+          ${{ steps.toolchain.outputs.compiled-cache-prefix }}
+    - name: Restore compiled tests
+      id: compiled-tests
+      if: inputs.variant == 'tests-debug'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: |
           Packages/Edith/.build/*-apple-macosx

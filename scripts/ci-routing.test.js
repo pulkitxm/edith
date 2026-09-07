@@ -207,12 +207,21 @@ test("Swift tests cache a successful build before bounded execution", () => {
     compiled.with.key,
   );
   expect(swiftCache.outputs["compiled-cache-hit"].value).toBe(
-    `\${{ steps.compiled.outputs.cache-hit }}`,
+    `\${{ steps.compiled-tests.outputs.cache-hit || steps.compiled.outputs.cache-hit }}`,
   );
 });
 
 test("Swift build consumers retain automatic compiled cache saves", () => {
   const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
+  const tests = swiftCache.runs.steps.find(
+    (step) => step.id === "compiled-tests",
+  );
+  expect(tests.if).toBe("inputs.variant == 'tests-debug'");
+  expect(tests.uses).toBe(
+    "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  expect(tests.with).toEqual(compiled.with);
+  expect(compiled.if).toBe("inputs.variant != 'tests-debug'");
   expect(compiled.uses).toBe(
     "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
   );
