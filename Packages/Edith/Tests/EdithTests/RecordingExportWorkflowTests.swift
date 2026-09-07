@@ -111,6 +111,17 @@ import Testing
             try await renderEditor(
                 take: take, document: document, output: result, directory: directory)
         }
+        defaults.set(false, forKey: suiteKey)
+        let disabled = AgentTaskSubmission(
+            operation: ScreenRecordingOperation.export.descriptor.id.rawValue,
+            title: "Reject disabled export", payload: request.payload)
+        _ = try await service.submit(disabled)
+        var rejected = try await service.status(disabled.id)
+        for _ in 0..<100 where !rejected.snapshot.state.isTerminal {
+            try await Task.sleep(for: .milliseconds(20))
+            rejected = try await service.status(disabled.id)
+        }
+        #expect(rejected.snapshot.state == .failed)
         await service.shutdown()
     }
 
