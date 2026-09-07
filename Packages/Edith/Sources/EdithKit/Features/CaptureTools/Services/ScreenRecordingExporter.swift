@@ -41,7 +41,8 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         take: ScreenRecordingTake, document: ScreenRecordingEditDocument,
         to destination: URL, directory: URL? = nil
     ) async throws {
-        lock.withLock { cancelled = false }
+        try Task.checkCancellation()
+        guard !lock.withLock({ cancelled }) else { throw CancellationError() }
         let source = ScreenRecordingLibrary.masterURL(for: take.id, in: directory)
         let asset = AVURLAsset(url: source)
         let duration = try await asset.load(.duration).seconds
@@ -52,12 +53,20 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         let built = try await Self.composition(
             asset: asset, ranges: ranges, document: normalized,
             pointerTrack: pointerTrack)
+        try Task.checkCancellation()
+        guard !lock.withLock({ cancelled }) else { throw CancellationError() }
         try? FileManager.default.removeItem(at: destination)
-        switch normalized.preset.format {
-        case .mp4:
-            try await exportMP4(built, document: normalized, to: destination)
-        case .gif:
-            try await exportGIF(built, document: normalized, to: destination)
+        do {
+            switch normalized.preset.format {
+            case .mp4:
+                try await exportMP4(built, document: normalized, to: destination)
+            case .gif:
+                try await exportGIF(built, document: normalized, to: destination)
+            }
+            try Task.checkCancellation()
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
         }
     }
 
@@ -74,7 +83,12 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         session.shouldOptimizeForNetworkUse = true
         session.videoComposition = built.videoComposition
         session.audioMix = built.audioMix
-        lock.withLock { activeSession = session }
+        let shouldStart = lock.withLock {
+            guard !cancelled else { return false }
+            activeSession = session
+            return true
+        }
+        guard shouldStart else { throw CancellationError() }
         let progressTask = Task { [weak self, weak session] in
             while let self, let session, session.status == .waiting || session.status == .exporting
             {
@@ -87,9 +101,11 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         }
         progressTask.cancel()
         lock.withLock { activeSession = nil }
-        guard session.status == .completed, !lock.withLock({ cancelled }) else {
-            try? FileManager.default.removeItem(at: destination)
+        if lock.withLock({ cancelled }) || session.status == .cancelled {
             throw CancellationError()
+        }
+        guard session.status == .completed else {
+            throw session.error ?? ScreenRecordingExportError.exportFailed
         }
         onProgress?(1)
     }
