@@ -102,7 +102,7 @@ public actor AutomationService {
     public func tick(now: Date = Date()) async throws -> Data? {
         guard isEnabled()
         else {
-            await shutdown()
+            stopTriggers()
             return nil
         }
         let document = try storage.load()
@@ -186,13 +186,17 @@ public actor AutomationService {
     }
 
     public func shutdown() async {
+        stopTriggers()
+        await executor.cancelAll()
+    }
+
+    private func stopTriggers() {
         networkMonitor?.cancel()
         networkMonitor = nil
         lastNetwork = nil
         lastPower = nil
         lastBattery = nil
         scheduledMinutes.removeAll()
-        await executor.cancelAll()
     }
 
     private static func powerSnapshot() -> (source: AutomationPowerSource?, battery: Int?) {
