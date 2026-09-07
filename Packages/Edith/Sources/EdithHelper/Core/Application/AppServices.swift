@@ -377,7 +377,8 @@ final class AppServices {
     }
 
     private func reconcileInputServices() {
-        let mouseOn = ExtensionRegistry.entry("mouseControls")?.isEnabled(in: SharedDefaults.store) ?? false
+        let mouseOn =
+            ExtensionRegistry.entry("mouseControls")?.isEnabled(in: SharedDefaults.store) ?? false
         if mouseOn, mouseControls == nil { mouseControls = MouseControlsEngine() }
         if !mouseOn, let engine = mouseControls {
             engine.shutdown()
