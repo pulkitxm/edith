@@ -2907,6 +2907,62 @@ describe("retained history coverage", () => {
       JSON.stringify([fresh]),
     ])[0];
 
+  test("moving model costs into an aggregate does not freeze growing token totals", () => {
+    const previous = doc([day("2026-09-07", { codex: [row("one", 100)] })]);
+    const fresh = doc([
+      day("2026-09-07", {
+        codex: [
+          { ...row("one", 150), cost: 0 },
+          { ...row("two", 50), cost: 0 },
+          { ...row("unattributed-cost", 0), cost: 2 },
+        ],
+      }),
+    ]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.totals.cost).toBe(2);
+    expect(result.historyRetention.blocks).toEqual([]);
+  });
+
+  test("previous cost-attribution freezes recover without losing other historical days", () => {
+    const baseline = day("2026-09-07", { codex: [row("one", 100)] });
+    const candidate = day("2026-09-07", {
+      codex: [
+        { ...row("one", 150), cost: 0 },
+        { ...row("unattributed-cost", 0), cost: 1.5 },
+      ],
+    });
+    const previous = doc([
+      day("2026-08-01", { cli: [row("old", 500)] }),
+      baseline,
+    ]);
+    previous.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "codex",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [candidate],
+        },
+      ],
+    };
+    const fresh = doc([candidate]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(650);
+    expect(result.daily[0]).toEqual(previous.daily[0]);
+    expect(result.historyRetention.blocks.map((block) => block.source)).toEqual(
+      ["cli"],
+    );
+    expect(merge(result, fresh).totals.tokens).toBe(650);
+    const reduced = structuredClone(candidate);
+    reduced.bySource.codex[0].inputTokens = 90;
+    previous.historyRetention.blocks[0].candidates.unshift(reduced);
+    expect(merge(previous, fresh).totals.tokens).toBe(600);
+  });
+
   const retainedWithDerivedCostRoundTrip = () => {
     const source = (tokens, cost) => ({
       tokens,

@@ -299,85 +299,16 @@ public enum LimitsCollector {
         }
     }
 
-    private struct CodexWindow: Decodable {
-        let usedPercent: Double
-        let windowDurationMins: Double?
-        let resetsAt: Double?
-    }
-
-    private struct CodexSnapshot: Decodable {
-        let primary: CodexWindow?
-        let secondary: CodexWindow?
-    }
-
-    private struct CodexRateLimitsResult: Decodable {
-        let rateLimits: CodexSnapshot?
-    }
-
-    private struct CodexResponse: Decodable {
-        let id: Int?
-        let result: CodexRateLimitsResult?
-    }
-
     private enum CodexLimitsError: LocalizedError {
         case executableMissing
-        case unavailable
 
-        var errorDescription: String? {
-            switch self {
-            case .executableMissing: return "Codex is not installed"
-            case .unavailable: return "Codex limits are unavailable"
-            }
-        }
+        var errorDescription: String? { "The provider executable is not installed." }
     }
-
-    private static let codexReadTimeout: TimeInterval = 25
 
     private static func readCodexLimits() async throws -> ProviderLimits {
         guard let executable = codexExecutable() else { throw CodexLimitsError.executableMissing }
-        let input = Data(
-            """
-            {"method":"initialize","id":0,"params":{"clientInfo":{"name":"edith","title":"Edith","version":"1.0"}}}
-            {"method":"initialized","params":{}}
-            {"method":"account/rateLimits/read","id":1,"params":{}}
-            """.utf8)
-        var lines: [String] = []
-        let result = try await CLICommandRunner.run(
-            CLICommandRequest(
-                executableURL: URL(fileURLWithPath: "/bin/bash"),
-                arguments: ["-c", "\(executable.path) app-server"],
-                environment: CLIToolEnvironment.sanitized(),
-                timeout: codexReadTimeout,
-                maximumOutputBytes: 1_048_576,
-                standardInputData: input,
-                discardsStandardError: true,
-                terminatesProcessGroup: true),
-            onLine: { lines.append($0) })
-        guard result.terminationStatus == 0 else { throw CodexLimitsError.unavailable }
-        guard
-            let line = lines.first(where: { line in
-                guard let data = line.data(using: .utf8),
-                    let value = try? JSONDecoder().decode(CodexResponse.self, from: data),
-                    value.id == 1
-                else { return false }
-                return true
-            }),
-            let data = line.data(using: .utf8),
-            let response = try? JSONDecoder().decode(CodexResponse.self, from: data),
-            let snapshot = response.result?.rateLimits
-        else { throw CodexLimitsError.unavailable }
-        let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
-        let mapped = windows.map { window in
-            (
-                duration: window.windowDurationMins ?? 0,
-                value: LimitWindow(
-                    percent: window.usedPercent,
-                    resetsAt: window.resetsAt.map(Date.init(timeIntervalSince1970:)))
-            )
-        }.sorted { $0.duration < $1.duration }
-        let session = mapped.first { $0.duration > 0 && $0.duration < 7 * 24 * 60 }?.value
-        let week = mapped.last { $0.duration >= 7 * 24 * 60 }?.value ?? mapped.last?.value
-        return ProviderLimits(provider: .codex, session: session, week: week)
+        return try await CodexLimitsReader.read(
+            executable: executable, environment: CLIToolEnvironment.sanitized())
     }
 
     private static func codexExecutable() -> URL? {

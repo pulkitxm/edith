@@ -411,6 +411,18 @@ public enum UsageHistory {
                 let source = block["source"] as? String,
                 let baseline = block["baseline"] as? [String: Any]
             else { return nil }
+            if let current = days[period],
+                let rows = (baseline["bySource"] as? [String: Any])?[source],
+                let candidates = block["candidates"] as? [[String: Any]],
+                !candidates.isEmpty, !sameHistory(current, baseline, source: source),
+                ([current] + candidates).allSatisfy({ day in
+                    !coverageRegressed(
+                        old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                })
+            {
+                retained.removeValue(forKey: key)
+                continue
+            }
             var candidates = block["candidates"] as? [[String: Any]] ?? []
             for input in inputs {
                 guard let day = daily(input).first(where: { $0["period"] as? String == period }),
@@ -443,7 +455,7 @@ public enum UsageHistory {
         guard let previous else {
             return merge(local: fresh, cloud: nil)
         }
-        guard let old = decode(previous) else { return nil }
+        guard var old = decode(previous) else { return nil }
         guard var retained = retainedBlocks(old, incoming) else { return nil }
         let incomingDays = Dictionary(
             daily(incoming).compactMap { day in
@@ -457,6 +469,18 @@ public enum UsageHistory {
             for (source, rows) in oldDay["bySource"] as? [String: Any] ?? [:] {
                 guard !source.hasPrefix("machine:") else { continue }
                 let key = period + "\u{0}" + source
+                if let block = retained[key],
+                    let baseline = block["baseline"] as? [String: Any],
+                    sameHistory(baseline, historyBlock(oldDay, source: source), source: source),
+                    let candidates = block["candidates"] as? [[String: Any]],
+                    !candidates.isEmpty,
+                    ([newDay] + candidates).allSatisfy({ day in
+                        !coverageRegressed(
+                            old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                    })
+                {
+                    retained.removeValue(forKey: key)
+                }
                 guard
                     retained[key] != nil || coverageRegressed(old: rows, fresh: newSources[source])
                 else { continue }
@@ -490,11 +514,12 @@ public enum UsageHistory {
             let excludedSources = excluded[day["period"] as? String ?? ""] ?? []
             return filteringMachineDay(day) { !excludedSources.contains($0) }
         }
-        if !blocks.isEmpty {
-            incoming["historyRetention"] = ["version": 1, "blocks": blocks]
+        incoming["historyRetention"] = ["version": 1, "blocks": blocks]
+        old["historyRetention"] = ["version": 1, "blocks": blocks]
+        guard let filtered = encoded(incoming), let protectedPrevious = encoded(old) else {
+            return nil
         }
-        guard let filtered = encoded(incoming) else { return nil }
-        return merge(local: filtered, cloud: previous)
+        return merge(local: filtered, cloud: protectedPrevious)
     }
 
     public static func retainedHistoryBlockCount(in data: Data) -> Int {
@@ -551,8 +576,13 @@ public enum UsageHistory {
         let oldRows = old as? [[String: Any]] ?? []
         let newRows = fresh as? [[String: Any]] ?? []
         let fields = [
-            "inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens", "cost",
+            "inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens",
         ]
+        if newRows.reduce(0, { $0 + num($1["cost"]) }) + 0.000_001
+            < oldRows.reduce(0, { $0 + num($1["cost"]) })
+        {
+            return true
+        }
         return oldRows.contains { row in
             let model = row["modelName"] as? String ?? "unknown"
             let previous = oldRows.filter { ($0["modelName"] as? String ?? "unknown") == model }
