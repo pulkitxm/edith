@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import EdithKit
@@ -71,6 +72,40 @@ import Testing
         .compared(with: baseline)
 
         #expect(current.baselineChanges == ["DNS: healthy to warning"])
+    }
+
+    @Test func migrationPreservesTheExistingDaemonStore() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("edith.sqlite")
+        let previous = try DatabaseQueue(path: url.path)
+        try AgentSchema.migrator.migrate(previous, upTo: "0004-attention-delivery-receipts")
+        try previous.write { database in
+            try database.execute(sql: "PRAGMA user_version = 4")
+            try database.execute(
+                sql: "INSERT INTO attention_delivery_receipt VALUES ('fixture', 7, ?)",
+                arguments: [Date()])
+        }
+        try previous.close()
+        let store = try AgentStore(url: url, build: "network")
+        defer { try? store.close() }
+        #expect(store.schemaVersion == AgentSchema.version)
+        #expect(
+            try store.read {
+                try Int.fetchOne(
+                    $0,
+                    sql:
+                        "SELECT lastSequence FROM attention_delivery_receipt WHERE producerID = 'fixture'"
+                )
+            } == 7)
+        #expect(
+            try store.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM network_diagnostic") }
+                == 0)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: AgentStoreLayout.backupURL(root: directory, build: "network").path))
     }
 
     @Test func timelineRetentionKeepsNewestBoundedSnapshots() async throws {
