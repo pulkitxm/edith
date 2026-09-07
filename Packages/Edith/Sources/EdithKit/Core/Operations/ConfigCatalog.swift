@@ -61,7 +61,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + textUtilities + keystrokeHighlight + notch + focusDim + presenter
+        + music + calendar + clipboard + textUtilities + keystrokeHighlight + notch + focusDim
+        + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal

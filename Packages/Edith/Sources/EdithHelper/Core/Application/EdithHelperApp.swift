@@ -459,7 +459,8 @@ enum TextUtilitiesHotKey {
     }
 
     static func register() {
-        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true else {
+        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true
+        else {
             unregister()
             return
         }

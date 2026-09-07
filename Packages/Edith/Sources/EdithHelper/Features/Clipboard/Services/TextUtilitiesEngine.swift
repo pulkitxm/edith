@@ -143,9 +143,10 @@ private final class TextClipboardPrivacy {
 
     func syncSettings() {
         let defaults = SharedDefaults.store
-        let wantsPolling = !paused && (
-            defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
-            || defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled))
+        let wantsPolling =
+            !paused
+            && (defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
+                || defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled))
         if wantsPolling, timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.poll() }

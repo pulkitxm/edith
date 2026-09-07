@@ -135,6 +135,25 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed text status": Spec(options: ["--json", "--help"]),
+        "ed text clean-url": Spec(
+            options: ["--json", "--help", "--parameters"], arguments: [.free]),
+        "ed text paste-plain": Spec(options: ["--json", "--help"]),
+        "ed text snippets ls": Spec(options: ["--json", "--help", "--folder", "--search"]),
+        "ed text snippets add": Spec(
+            options: [
+                "--json", "--help", "--name", "--folder", "--mode",
+                "--ignore-case", "--disabled",
+            ], arguments: [.free, .free]),
+        "ed text snippets set": Spec(
+            options: [
+                "--json", "--help", "--name", "--trigger", "--replacement",
+                "--folder", "--mode", "--ignore-case", "--enabled",
+            ], arguments: [.historyIndex]),
+        "ed text snippets rm": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.historyIndex],
+            destructivePolicy: .previewThenYes),
+        "ed text": Spec(options: ["--json", "--help"]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

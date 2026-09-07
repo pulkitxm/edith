@@ -310,7 +310,8 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
-        let textUtilitiesOn = ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) ?? false
+        let textUtilitiesOn =
+            ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) ?? false
         if textUtilitiesOn {
             if textUtilities == nil { textUtilities = TextUtilitiesEngine() }
             textUtilities?.syncSettings()
