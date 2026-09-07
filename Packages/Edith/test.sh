@@ -97,4 +97,9 @@ if [[ -d "$FW/Testing.framework" ]]; then
         -Xlinker -rpath -Xlinker "$FW"
         -Xlinker -rpath -Xlinker "$LIB")
 fi
-swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+if [[ "${1:-}" == "--build-only" ]]; then
+    shift
+    swift build --build-tests --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+else
+    swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+fi

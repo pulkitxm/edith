@@ -978,9 +978,16 @@ enum JSONContract {
         #expect(uncovered.isEmpty, "no JSON contract case for: \(uncovered)")
     }
 
-    @Test func stdoutIsEitherOneJSONDocumentOrNothingAtAll() async {
+    @Test func everyJSONCommandHonorsOutputAndExitCodeContracts() async {
+        let documented: Set<Int32> = [0, 1, 2, 3, 4]
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
             let result = await CLIProbe.run(probe.arguments)
+            #expect(
+                !result.stdout.contains("error:"), "\(probe.label) put an error on stdout")
+            #expect(!result.stdout.contains("hint:"), "\(probe.label) put a hint on stdout")
+            #expect(
+                documented.contains(result.code),
+                "\(probe.label) exited \(result.code), which the guide does not document")
             guard !result.stdout.isEmpty else {
                 #expect(
                     result.code != 0,
@@ -992,27 +999,7 @@ enum JSONContract {
                 "\(probe.label) printed something that is not JSON: \(result.stdout)")
             let trailing = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             #expect(!trailing.contains("\n\n"), "\(probe.label) printed more than one document")
-        }
-    }
-
-    @Test func diagnosticsNeverLandOnStdout() async {
-        for probe in JSONContract.cases where !probe.mutatesTheMachine {
-            let result = await CLIProbe.run(probe.arguments)
-            #expect(
-                !result.stdout.contains("error:"), "\(probe.label) put an error on stdout")
-            #expect(!result.stdout.contains("hint:"), "\(probe.label) put a hint on stdout")
-        }
-    }
-
-    @Test func failuresUseDocumentedCodesAndOnlyPartialResultsReachStdout() async {
-        let documented: Set<Int32> = [0, 1, 2, 3, 4]
-        for probe in JSONContract.cases where !probe.mutatesTheMachine {
-            let result = await CLIProbe.run(probe.arguments)
-            #expect(
-                documented.contains(result.code),
-                "\(probe.label) exited \(result.code), which the guide does not document")
             guard result.code != 0 else { continue }
-            guard !result.stdout.isEmpty else { continue }
             let failures = result.object?["failures"] as? [Any]
             #expect(result.object?["executed"] as? Bool == true)
             #expect(failures?.isEmpty == false)
