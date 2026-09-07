@@ -19,6 +19,9 @@ struct JSONCase {
 
 enum JSONContract {
     static let cases: [JSONCase] = [
+        JSONCase(
+            "ed command-bar copy", ["command-bar", "copy", "mock text", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
@@ -110,6 +113,9 @@ enum JSONContract {
         JSONCase("ed clipboard unpin", ["clipboard", "unpin", "1", "--json"]),
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
+        JSONCase(
+            "ed command-bar transform",
+            ["command-bar", "transform", "uppercase", "mock text", "--json"]),
         JSONCase(
             "ed command-bar calculate",
             ["command-bar", "calculate", "2", "+", "3", "--json"]),

@@ -42,6 +42,15 @@ import Testing
 }
 
 @Suite struct CLICommandBarTransformTests {
+    @Test func unknownTextUtilityIsAUsageError() async {
+        let result = await CLIProbe.run([
+            "command-bar", "transform", "unknown", "mock text", "--json",
+        ])
+        #expect(result.code == ExitCodes.usage)
+        #expect(result.stdout.isEmpty)
+        #expect(result.stderr.contains("Unknown text utility"))
+    }
+
     @Test func transformsTextThroughTheSharedCLI() throws {
         let result = try CLIProcessProbe.run([
             "command-bar", "transform", "uppercase", "hello world", "--json",

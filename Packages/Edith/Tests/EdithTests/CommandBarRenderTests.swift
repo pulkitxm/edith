@@ -32,7 +32,8 @@ import Testing
     @Test func paletteRendersRankedActions() async throws {
         let model = CommandBarModel(services: AppServices())
         model.query = "settings"
-        for _ in 0..<100 where model.items.first?.id != "action.openGeneralSettings" {
+        for _ in 0..<200 where !model.items.contains(where: { $0.id.hasPrefix("system-settings.") })
+        {
             try? await Task.sleep(for: .milliseconds(10))
         }
 
@@ -44,6 +45,7 @@ import Testing
         let image = try #require(render(view))
 
         #expect(model.items.first?.title == "Open Settings")
+        #expect(model.items.contains { $0.id.hasPrefix("system-settings.") })
         #expect(distinctColours(in: image) > 30)
         dump(image, named: "command-bar-actions")
     }

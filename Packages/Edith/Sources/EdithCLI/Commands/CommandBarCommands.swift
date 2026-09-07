@@ -8,7 +8,7 @@ struct CommandBarCommand: AsyncParsableCommand {
         abstract: "Calculate and convert with the Command Bar engine.",
         subcommands: [
             CommandBarCalculateCommand.self, CommandBarConvertCommand.self,
-            CommandBarTransformCommand.self,
+            CommandBarTransformCommand.self, CommandBarCopyCommand.self,
         ],
         defaultSubcommand: CommandBarCalculateCommand.self)
 }
@@ -100,18 +100,47 @@ struct CommandBarTransformCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
-        guard let selected = CommandBarTextUtility(rawValue: utility) else {
-            throw CLIFailure.usage("Unknown text utility \(utility).")
+        try await execute {
+            guard let selected = CommandBarTextUtility(rawValue: utility) else {
+                throw CLIFailure.usage("Unknown text utility \(utility).")
+            }
+            let result = selected.transform(text.joined(separator: " "))
+            if json {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(CommandBarOperation.transform.descriptor.id.rawValue),
+                        "utility": .string(utility), "text": .string(result),
+                    ]))
+            } else {
+                CLIOut.out(result)
+            }
+
         }
-        let result = selected.transform(text.joined(separator: " "))
-        if json {
-            CLIOut.json(
-                .object([
-                    "operation": .string(CommandBarOperation.transform.descriptor.id.rawValue),
-                    "utility": .string(utility), "text": .string(result),
-                ]))
-        } else {
-            CLIOut.out(result)
+    }
+}
+
+struct CommandBarCopyCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy", abstract: CommandBarOperation.copy.descriptor.summary)
+    @Argument(parsing: .remaining, help: "Text to copy.") var text: [String]
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+
+    func run() async throws {
+        try await execute {
+            let value = text.joined(separator: " ")
+            guard CommandBarClipboard.copy(value) else {
+                throw CLIFailure("Could not write the clipboard.")
+            }
+            if json {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(CommandBarOperation.copy.descriptor.id.rawValue),
+                        "text": .string(value), "copied": .bool(true),
+                    ]))
+            } else {
+                CLIOut.out(value)
+            }
+
         }
     }
 }

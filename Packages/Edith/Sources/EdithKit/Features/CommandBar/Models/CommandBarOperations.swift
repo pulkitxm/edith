@@ -4,9 +4,15 @@ public enum CommandBarOperation: String, CaseIterable, Sendable {
     case calculate
     case convert
     case transform
+    case copy
 
     public var descriptor: UserOperationDescriptor {
         switch self {
+        case .copy:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "commandBar.copy"),
+                summary: "Copy a Command Bar text result to the clipboard.",
+                cli: ["command-bar", rawValue], effect: .write)
         case .calculate:
             UserOperationDescriptor(
                 id: UserOperationID(rawValue: "commandBar.calculate"),
@@ -27,6 +33,11 @@ public enum CommandBarOperation: String, CaseIterable, Sendable {
 
     public var interfaceExposure: UserOperationExposure {
         switch self {
+        case .copy:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "Copy an emoji result", exampleArguments: ["🚀"])
+            ])
         case .calculate:
             .userInterface([
                 UserInterfaceActionPlacement(

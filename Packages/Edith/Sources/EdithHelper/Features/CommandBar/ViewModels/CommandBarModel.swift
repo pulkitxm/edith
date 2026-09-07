@@ -49,16 +49,6 @@ final class CommandBarModel {
         query = ""
         copiedAnswer = false
         selection = nil
-        let running = Dictionary(
-            NSWorkspace.shared.runningApplications.compactMap { app in
-                app.bundleIdentifier.map { ($0, app.processIdentifier) }
-            }, uniquingKeysWith: { first, _ in first })
-        applications = applications.map { app in
-            CommandBarApplication(
-                id: app.id, title: app.title, url: app.url,
-                bundleIdentifier: app.bundleIdentifier,
-                runningPID: app.bundleIdentifier.flatMap { running[$0] })
-        }
         loadApplications()
         loadSelection(frontmostPID)
         refresh()
@@ -133,7 +123,7 @@ final class CommandBarModel {
             dismiss()
             services?.clipboard?.activate(entry)
         case .emoji(let emoji):
-            guard operationExists(EmojiOperation.copy.descriptor) else { return }
+            guard operationExists(CommandBarOperation.copy.descriptor) else { return }
             copy(emoji)
         case .textUtility(let utility, let selection):
             guard operationExists(CommandBarOperation.transform.descriptor) else { return }
@@ -231,14 +221,18 @@ final class CommandBarModel {
 
     private func loadApplications() {
         guard showsApplications, applicationTask == nil else { return }
-        if let applicationsLoadedAt, Date().timeIntervalSince(applicationsLoadedAt) < 60 { return }
-        loadingApplications = true
+        let cached = applicationsLoadedAt.flatMap { loadedAt in
+            Date().timeIntervalSince(loadedAt) < 60 ? applications : nil
+        }
+        loadingApplications = cached == nil
         applicationTask = Task.detached(priority: .utility) {
-            let applications = CommandBarApplicationCatalog.load()
+            let applications =
+                cached.map(CommandBarApplicationCatalog.refreshRunningState)
+                ?? CommandBarApplicationCatalog.load()
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 self?.applications = applications
-                self?.applicationsLoadedAt = Date()
+                if cached == nil { self?.applicationsLoadedAt = Date() }
                 self?.loadingApplications = false
                 self?.applicationTask = nil
                 self?.refresh()
@@ -341,7 +335,7 @@ final class CommandBarModel {
                 "puzzlepiece.extension.fill", ["features", "plugins", "manage"]),
             action(
                 .openGeneralSettings, "Open Settings", "General settings", "gearshape.fill",
-                ["preferences", "configure"]),
+                ["settings", "preferences", "configure"]),
             action(
                 .openShortcuts, "Open Shortcuts", "Record global shortcuts", "keyboard.fill",
                 ["hotkey", "keyboard", "keys"]),
@@ -503,8 +497,7 @@ final class CommandBarModel {
     }
 
     private func copy(_ value: String) {
-        NSPasteboard.general.clearContents()
-        copiedAnswer = NSPasteboard.general.setString(value, forType: .string)
+        copiedAnswer = CommandBarClipboard.copy(value)
         dismiss()
     }
 

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -19,6 +20,27 @@ import Testing
         #expect(results.filter { $0.id.contains("running") }.count == 4)
         #expect(results.contains { $0.id == "app-action.quit.app.running" })
         #expect(results.contains { $0.id == "app-action.relaunch.app.running" })
+    }
+
+    @Test @MainActor func textResultsUseTheSharedClipboardOperation() {
+        let pasteboard = NSPasteboard(
+            name: NSPasteboard.Name("command-bar-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        #expect(CommandBarClipboard.copy("🚀", to: pasteboard))
+        #expect(pasteboard.string(forType: .string) == "🚀")
+        #expect(UserOperationCatalog.descriptor(id: CommandBarOperation.copy.descriptor.id) != nil)
+    }
+
+    @Test func cachedApplicationsRefreshTheirRunningStateWithoutRescanning() {
+        let application = CommandBarApplication(
+            id: "app.editor", title: "Editor", url: URL(fileURLWithPath: "/MockEditor.app"),
+            bundleIdentifier: "com.example.editor", runningPID: 42)
+        let stopped = CommandBarApplicationCatalog.updatingRunningState([application], running: [:])
+        #expect(stopped.first?.runningPID == nil)
+        let restarted = CommandBarApplicationCatalog.updatingRunningState(
+            stopped, running: ["com.example.editor": 51])
+        #expect(restarted.first?.runningPID == 51)
+        #expect(restarted.first?.id == application.id)
     }
 
     @Test func clipboardProviderUsesAvailableHistory() async {

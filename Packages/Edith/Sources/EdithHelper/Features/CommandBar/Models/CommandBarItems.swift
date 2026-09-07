@@ -89,10 +89,7 @@ enum CommandBarApplicationCatalog {
     static func load(
         roots: [URL] = defaultRoots, fileManager: FileManager = .default
     ) -> [CommandBarApplication] {
-        let pairs = NSWorkspace.shared.runningApplications.compactMap { app in
-            app.bundleIdentifier.map { ($0, app.processIdentifier) }
-        }
-        let running = Dictionary(pairs, uniquingKeysWith: { first, _ in first })
+        let running = runningApplications()
         var applications: [String: CommandBarApplication] = [:]
         for root in roots {
             guard
@@ -109,6 +106,30 @@ enum CommandBarApplicationCatalog {
         return applications.values.sorted {
             $0.title.localizedStandardCompare($1.title) == .orderedAscending
         }
+    }
+
+    static func refreshRunningState(_ applications: [CommandBarApplication])
+        -> [CommandBarApplication]
+    {
+        updatingRunningState(applications, running: runningApplications())
+    }
+
+    static func updatingRunningState(
+        _ applications: [CommandBarApplication], running: [String: pid_t]
+    ) -> [CommandBarApplication] {
+        applications.map { application in
+            CommandBarApplication(
+                id: application.id, title: application.title, url: application.url,
+                bundleIdentifier: application.bundleIdentifier,
+                runningPID: application.bundleIdentifier.flatMap { running[$0] })
+        }
+    }
+
+    private static func runningApplications() -> [String: pid_t] {
+        let pairs = NSWorkspace.shared.runningApplications.compactMap { application in
+            application.bundleIdentifier.map { ($0, application.processIdentifier) }
+        }
+        return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
     }
 
     static func application(
