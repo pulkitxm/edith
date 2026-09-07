@@ -122,6 +122,7 @@ import Testing
 
     @Test func cliDispatchesOneTypedJSONRequest() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.WindowTools.enabled)
             world.helperRunning(true)
             let result = await CLIProbe.capture(["window", "top-right", "--json"])
@@ -137,6 +138,7 @@ import Testing
 
     @Test func cliStatusIsTheSafeDefault() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.WindowTools.enabled)
             world.shared.set(
                 true, forKey: AppStorageKeys.Permissions.accessibilityGranted)
@@ -159,6 +161,7 @@ import Testing
 
     @Test func cliStatusExplainsUnavailableRuntimeWithoutFailing() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.WindowTools.enabled)
             world.helperRunning(false)
             let result = await CLIProbe.capture(["window", "status", "--json"])
