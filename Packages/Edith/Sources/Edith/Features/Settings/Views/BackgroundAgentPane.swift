@@ -82,7 +82,7 @@ final class BackgroundAgentModel {
 }
 
 struct BackgroundAgentPane: View {
-    @State private var model = BackgroundAgentModel()
+    @State private var model: BackgroundAgentModel
     @State private var showingEvents = false
     @AppStorage(AgentSettingsKeys.pauseAmbientOnBattery, store: SharedDefaults.store) private
         var pauseAmbientOnBattery = false
@@ -92,6 +92,10 @@ struct BackgroundAgentPane: View {
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+
+    @MainActor init(model: BackgroundAgentModel? = nil) {
+        _model = State(initialValue: model ?? BackgroundAgentModel())
+    }
 
     var body: some View {
         Form {
@@ -103,8 +107,9 @@ struct BackgroundAgentPane: View {
             eventsSection
         }
         .formStyle(.grouped)
+        .disclosureGroupStyle(EdithDisclosureGroupStyle())
         .sheet(isPresented: $showingEvents) {
-            AgentEventsScreen()
+            AgentEventsScreen().transientPresentation()
         }
         .task {
             guard automaticActionsEnabled else { return }
@@ -116,22 +121,23 @@ struct BackgroundAgentPane: View {
         Section("Status") {
             LabeledContent("Registration", value: model.registration.title)
             if let runtime = model.runtime {
-                LabeledContent("Build", value: runtime.build)
-                LabeledContent("Process", value: String(runtime.processIdentifier))
                 LabeledContent("Uptime", value: AgentDuration.text(runtime.uptime))
                 LabeledContent(
                     "Memory",
                     value: ByteCountFormatter.string(
                         fromByteCount: Int64(runtime.residentBytes), countStyle: .memory))
                 LabeledContent("CPU", value: String(format: "%.1f%%", runtime.cpuPercent))
-                LabeledContent("Subscribers", value: String(runtime.subscriberCount))
-                LabeledContent("Store schema", value: String(runtime.schemaVersion))
+                DisclosureGroup("Technical details") {
+                    LabeledContent("Build", value: runtime.build)
+                    LabeledContent("Process", value: String(runtime.processIdentifier))
+                    LabeledContent("Subscribers", value: String(runtime.subscriberCount))
+                    LabeledContent("Store schema", value: String(runtime.schemaVersion))
+                }
             } else if model.loading {
                 SkeletonGroup {
                     ForEach(
                         [
-                            "Build", "Process", "Uptime", "Memory", "CPU", "Subscribers",
-                            "Store schema",
+                            "Uptime", "Memory", "CPU",
                         ], id: \.self
                     ) { title in
                         LabeledContent(title) { SkeletonBlock(width: 90, height: 12) }
@@ -170,7 +176,7 @@ struct BackgroundAgentPane: View {
             Toggle(
                 "Notify when an agent blocks",
                 isOn: $notifyWhenBlocked.configured(AgentSettingsKeys.notifyWhenBlocked))
-            Text("Live jobs keep running while a page is open, whatever these say.")
+            Text("Jobs for open pages continue running on battery.")
                 .settingsCaption()
         }
     }
@@ -181,17 +187,18 @@ struct BackgroundAgentPane: View {
                 showingEvents = true
             } label: {
                 HStack {
-                    Label("Open event timeline", systemImage: "waveform.path.ecg")
+                    Label("Event timeline", systemImage: "waveform.path.ecg")
                     Spacer()
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 20)
                 }
+                .padding(.vertical, 6)
+                .padding(.trailing, 8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            Text(
-                "Search and inspect the most recent \(AgentDiagnostics.capacity) events in a dedicated view."
-            )
-            .settingsCaption()
         }
     }
 

@@ -353,17 +353,23 @@ struct QuickLookOverlay: View {
     }
 
     var body: some View {
-        ZStack {
-            Button(action: close) {
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
+        GeometryReader { geometry in
+            ZStack {
+                Button(action: close) {
+                    Color.black.opacity(0.22)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close preview")
+                panel
+                    .frame(
+                        width: min(UIScale.pt(680), max(0, geometry.size.width - 48)),
+                        height: min(UIScale.pt(500), max(0, geometry.size.height - 48))
+                    )
+                    .scaleEffect(shown || reduceMotion ? 1 : 0.96)
+                    .opacity(shown ? 1 : 0)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close preview")
-            panel
-                .scaleEffect(shown || reduceMotion ? 1 : 0.96)
-                .opacity(shown ? 1 : 0)
         }
         .onExitCommand { close() }
         .onAppear {
@@ -391,7 +397,6 @@ struct QuickLookOverlay: View {
             Divider().opacity(0.4)
             body(for: entry)
         }
-        .frame(width: UIScale.pt(680), height: UIScale.pt(500))
         .edithSurface(cornerRadius: 16)
         .shadow(color: .black.opacity(0.2), radius: UIScale.pt(24), y: 12)
     }

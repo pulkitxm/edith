@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @State private var refresh = DashboardRefreshBridge()
-    @State private var model = DashboardModel.shared
+    @State private var model: DashboardModel
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -53,6 +53,10 @@ struct DashboardView: View {
         return formatter
     }()
 
+    @MainActor init(model: DashboardModel? = nil) {
+        _model = State(initialValue: model ?? DashboardModel.shared)
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { geo in
@@ -70,7 +74,7 @@ struct DashboardView: View {
                                 logView.pageGutter(compact)
                             }
                             if model.loaded {
-                                kpiGrid.pageGutter(compact)
+                                kpiGrid(compact: compact).pageGutter(compact)
                                 VStack(spacing: UIScale.pt(16)) {
                                     activityRow(compact: compact)
                                     LimitsCardView(theme: acc, dark: dark)
@@ -239,7 +243,7 @@ struct DashboardView: View {
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
-                        Image(systemName: systemImage)
+                        Image(systemName: systemImage).foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: UIScale.pt(30), height: UIScale.pt(30))
@@ -265,10 +269,7 @@ struct DashboardView: View {
         let m = model.meta
         let parts: [(String, Bool, Bool)] = [
             ("Updated \(m.updated)", false, false),
-            (m.totalCost, true, false),
             ("\(m.activeDays) active days", false, false),
-            ("\(m.totalTokens) tokens", false, true),
-            ("\(m.modelCount) models", false, false),
             (sourceMetaText, false, false),
         ]
         return parts.enumerated().map { index, part in
@@ -282,15 +283,27 @@ struct DashboardView: View {
         model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
-    private var kpiColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: UIScale.pt(158)), spacing: UIScale.pt(12))]
+    private func kpiGrid(compact: Bool) -> some View {
+        VStack(spacing: UIScale.pt(6)) {
+            metricGrid(Array(model.kpis.prefix(4)), compact: compact)
+            if model.kpis.count > 4 {
+                DisclosureGroup("More metrics") {
+                    metricGrid(Array(model.kpis.dropFirst(4)), compact: compact)
+                }
+                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .foregroundStyle(.secondary)
+                .disclosureGroupStyle(EdithDisclosureGroupStyle())
+            }
+        }
     }
 
-    private var kpiGrid: some View {
-        LazyVGrid(columns: kpiColumns, spacing: UIScale.pt(12)) {
-            ForEach(model.kpis) { kpi in
+    private func metricGrid(_ metrics: [KPI], compact: Bool) -> some View {
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
+            count: compact ? 2 : 4)
+        return LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+            ForEach(metrics) { kpi in
                 HStack(spacing: UIScale.pt(0)) {
-                    Rectangle().fill(kpi.hot ? acc : Color.clear).frame(width: UIScale.pt(3))
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text(kpi.label.uppercased())
                             .font(DashSkin.mono(10)).tracking(UIScale.pt(1.4))
@@ -322,15 +335,7 @@ struct DashboardView: View {
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .widgetBar(
-                    cornerRadius: 14,
-                    fill: DashSkin.paper2(dark),
-                    stroke: DashSkin.line(dark),
-                    shadow: .black.opacity(dark ? 0.3 : 0.05),
-                    shadowRadius: 8,
-                    shadowY: 4,
-                    clipsContent: true
-                )
+                .edithSurface(cornerRadius: 14)
             }
         }
     }

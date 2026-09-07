@@ -92,32 +92,71 @@ struct AgentEventsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Event timeline").font(.title2.bold())
-                    Text("Recent background activity on this Mac")
+                    Text("Event timeline").font(.system(size: UIScale.pt(20), weight: .semibold))
+                    Text("Recent background activity")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Spacer()
+                Spacer(minLength: 16)
                 Label(
                     model.paused ? "Paused" : "Live",
                     systemImage: model.paused ? "pause.circle" : "dot.radiowaves.left.and.right"
                 )
+                .font(.caption.weight(.medium))
                 .foregroundStyle(model.paused ? .secondary : Color.accentColor)
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .edithGlass(interactive: true, in: Circle())
+                .accessibilityLabel("Close event timeline")
+                .help("Close event timeline")
+                .keyboardShortcut(.cancelAction)
             }
-            .padding(20)
-            HStack {
-                TextField("Search events", text: $search).textFieldStyle(.roundedBorder)
+            .padding(24)
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search events", text: $search).textFieldStyle(.plain)
+                    if !search.isEmpty {
+                        Button {
+                            search = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .padding(9)
+                .edithSurface(cornerRadius: 9)
                 Toggle("Failures", isOn: $errorsOnly).toggleStyle(.button)
-                Button(model.paused ? "Resume" : "Pause") { model.paused.toggle() }
-                Button("Copy") {
+                Button {
+                    model.paused.toggle()
+                } label: {
+                    Label(
+                        model.paused ? "Resume" : "Pause",
+                        systemImage: model.paused ? "play" : "pause")
+                }
+                .help(model.paused ? "Resume live events" : "Pause live events")
+                Button {
                     copyTask?.cancel()
                     copyTask = Task { await model.copyEvents() }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
                 }
+                .help("Copy matching events")
                 .disabled(model.matches.isEmpty)
             }
-            .padding(.horizontal, 20).padding(.bottom, 12)
+            .controlSize(.regular)
+            .padding(.horizontal, 24).padding(.bottom, 16)
             Divider()
             eventList
             Divider()
@@ -126,11 +165,16 @@ struct AgentEventsScreen: View {
                     "\(min(model.visibleCount, model.matches.count)) of \(model.matches.count) matching events"
                 )
                 Spacer()
-                Text("Up to \(AgentDiagnostics.capacity) events retained")
+                if model.paused {
+                    Text("Live updates paused")
+                }
             }
-            .font(.caption).foregroundStyle(.secondary).padding(16)
+            .font(.caption).foregroundStyle(.secondary)
+            .padding(.horizontal, 24).padding(.vertical, 12)
         }
         .frame(minWidth: 680, idealWidth: 840, minHeight: 460, idealHeight: 620)
+        .background(.regularMaterial)
+        .disclosureGroupStyle(EdithDisclosureGroupStyle())
         .task(id: "\(model.paused)-\(retryID)") {
             guard automaticActionsEnabled else { return }
             await model.observe()
@@ -147,7 +191,8 @@ struct AgentEventsScreen: View {
     private var eventList: some View {
         if model.loading {
             List { AgentRowsSkeleton(count: 9, timeline: true) }
-                .listStyle(.plain)
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
         } else if let failure = model.failure, model.events.isEmpty {
             ContentUnavailableView {
                 Label("Agent unavailable", systemImage: "exclamationmark.circle")
@@ -174,6 +219,7 @@ struct AgentEventsScreen: View {
             List {
                 ForEach(model.visibleEvents) { event in
                     AgentEventRow(event: event)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 }
                 if model.hasMore {
                     Button("Load more events") { model.loadMore() }
@@ -181,7 +227,8 @@ struct AgentEventsScreen: View {
                         .onAppear { model.loadMore() }
                 }
             }
-            .listStyle(.plain)
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         }
     }
 }
