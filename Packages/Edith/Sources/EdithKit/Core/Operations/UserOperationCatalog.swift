@@ -155,12 +155,15 @@ public enum UserOperationCatalog {
         }
 
     private static let agentRegistrations: [RegisteredUserOperation] =
-        [RegisteredUserOperation(
-            descriptor: SystemMonitorClient.descriptor,
-            exposure: .userInterface([
-                UserInterfaceActionPlacement(surface: "System monitor", action: "read system metrics")
-            ]))] +
-        AgentControlOperation.allCases.map {
+        [
+            RegisteredUserOperation(
+                descriptor: SystemMonitorClient.descriptor,
+                exposure: .userInterface([
+                    UserInterfaceActionPlacement(
+                        surface: "System monitor", action: "read system metrics")
+                ]))
+        ]
+        + AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 

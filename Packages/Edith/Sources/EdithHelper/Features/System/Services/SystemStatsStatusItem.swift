@@ -115,8 +115,11 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                 defer { self?.refreshTask = nil }
                 self?.latest = try? await SystemMonitorClient.snapshot()
                 guard !Task.isCancelled else { return }
-                let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) { [weak self] data in
-                    guard let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data) else { return }
+                let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) {
+                    [weak self] data in
+                    guard
+                        let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data)
+                    else { return }
                     Task { @MainActor in self?.latest = value }
                 }
                 guard !Task.isCancelled else { subscription?.cancel(); return }

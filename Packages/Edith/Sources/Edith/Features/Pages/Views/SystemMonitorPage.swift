@@ -22,8 +22,11 @@ struct SystemMonitorPage: View {
         .task {
             do {
                 snapshot = try await SystemMonitorClient.snapshot()
-                let subscription = try await AgentClient.shared.subscribeAsync(.systemMonitor) { data in
-                    guard let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data) else { return }
+                let subscription = try await AgentClient.shared.subscribeAsync(.systemMonitor) {
+                    data in
+                    guard
+                        let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data)
+                    else { return }
                     Task { @MainActor in snapshot = value }
                 }
                 defer { subscription.cancel() }

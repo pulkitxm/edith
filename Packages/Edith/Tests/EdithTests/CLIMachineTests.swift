@@ -158,29 +158,30 @@ import Testing
     @Test func systemStatsCommandPublishesTheMonitorContract() async {
         let runtime = AgentRuntime(build: "test", store: nil)
         await runtime.register(operation: SystemMonitorClient.descriptor.id.rawValue) { _ in
-            try AgentPayload.encode(SystemMonitorSnapshot(sampledAt: 1, cpuPercent: 23.5, memoryPercent: 42.5))
+            try AgentPayload.encode(
+                SystemMonitorSnapshot(sampledAt: 1, cpuPercent: 23.5, memoryPercent: 42.5))
         }
         let listener = AgentRuntimeTestListener(runtime: runtime)
         defer { listener.stop() }
         await CLIProbe.inWorld { _ in
-        let original = CLIEnvironment.systemMonitorClient
-        CLIEnvironment.systemMonitorClient = listener.client()
-        defer { CLIEnvironment.systemMonitorClient = original }
-        let result = await CLIProbe.capture(["system", "stats", "--json"])
-        let monitor = result.object?["monitor"] as? [String: Any]
-        let network = monitor?["network"] as? [String: Any]
-        let disk = monitor?["disk"] as? [String: Any]
+            let original = CLIEnvironment.systemMonitorClient
+            CLIEnvironment.systemMonitorClient = listener.client()
+            defer { CLIEnvironment.systemMonitorClient = original }
+            let result = await CLIProbe.capture(["system", "stats", "--json"])
+            let monitor = result.object?["monitor"] as? [String: Any]
+            let network = monitor?["network"] as? [String: Any]
+            let disk = monitor?["disk"] as? [String: Any]
 
-        #expect(result.code == 0)
-        #expect(monitor?["cpuPercent"] is Double)
-        #expect(monitor?["memoryPercent"] is Double)
-        #expect(monitor?.keys.contains("gpuPercent") == true)
-        #expect(network?["downloadBps"] is Double)
-        #expect(network?["uploadBps"] is Double)
-        #expect(disk?["readBps"] is Double)
-        #expect(disk?["writeBps"] is Double)
-        #expect(disk?.keys.contains("rootUsedPercent") == true)
-        #expect(monitor?.keys.contains("power") == true)
+            #expect(result.code == 0)
+            #expect(monitor?["cpuPercent"] is Double)
+            #expect(monitor?["memoryPercent"] is Double)
+            #expect(monitor?.keys.contains("gpuPercent") == true)
+            #expect(network?["downloadBps"] is Double)
+            #expect(network?["uploadBps"] is Double)
+            #expect(disk?["readBps"] is Double)
+            #expect(disk?["writeBps"] is Double)
+            #expect(disk?.keys.contains("rootUsedPercent") == true)
+            #expect(monitor?.keys.contains("power") == true)
         }
     }
 

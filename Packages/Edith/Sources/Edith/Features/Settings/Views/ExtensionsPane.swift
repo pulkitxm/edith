@@ -2034,8 +2034,10 @@ struct SystemStatsRows: View {
                         }),
                     supportsOpacity: false)
             }
-            Text("The background agent shares one sampler across the menu bar, window, and command line.")
-                .settingsCaption()
+            Text(
+                "The background agent shares one sampler across the menu bar, window, and command line."
+            )
+            .settingsCaption()
             Toggle(
                 "Sustained alerts",
                 isOn: alertsBinding)
