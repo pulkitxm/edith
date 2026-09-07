@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -41,6 +42,48 @@ private struct AttentionDaemonFixture {
 }
 
 @Suite struct AttentionDaemonIntegrationTests {
+    @Test func refreshRetriesBriefSpoolContentionWithoutDroppingEvents() async throws {
+        let fixture = try AttentionDaemonFixture()
+        try fixture.repository.append(fixture.event(at: Date().addingTimeInterval(-30)))
+        let descriptor = open(
+            fixture.repository.directory.appendingPathComponent(".lock").path, O_RDWR)
+        #expect(descriptor >= 0)
+        defer { close(descriptor) }
+        #expect(flock(descriptor, LOCK_EX | LOCK_NB) == 0)
+        let refresh = Task { try await fixture.service.run() }
+        try await Task.sleep(for: .milliseconds(75))
+        #expect(flock(descriptor, LOCK_UN) == 0)
+        _ = try await refresh.value
+        #expect(try fixture.events.hasEvents())
+        #expect(
+            try FileManager.default.contentsOfDirectory(
+                at: fixture.repository.eventsDirectory, includingPropertiesForKeys: nil
+            ).isEmpty)
+        await fixture.close()
+    }
+
+    @Test func persistentSpoolContentionStillFailsAndRetainsThePendingFile() async throws {
+        let fixture = try AttentionDaemonFixture()
+        try fixture.repository.append(fixture.event(at: Date().addingTimeInterval(-30)))
+        let descriptor = open(
+            fixture.repository.directory.appendingPathComponent(".lock").path, O_RDWR)
+        #expect(descriptor >= 0)
+        defer { close(descriptor) }
+        #expect(flock(descriptor, LOCK_EX | LOCK_NB) == 0)
+        await #expect(throws: CocoaError(.fileLocking)) {
+            try await fixture.service.run()
+        }
+        #expect(try !fixture.events.hasEvents())
+        #expect(
+            try !FileManager.default.contentsOfDirectory(
+                at: fixture.repository.eventsDirectory, includingPropertiesForKeys: nil
+            ).isEmpty)
+        #expect(flock(descriptor, LOCK_UN) == 0)
+        _ = try await fixture.service.run()
+        #expect(try fixture.events.hasEvents())
+        await fixture.close()
+    }
+
     @Test func duplicateCategoryIdentifiersCannotCrashTheDaemonSummary() async throws {
         let fixture = try AttentionDaemonFixture()
         let now = Date()
