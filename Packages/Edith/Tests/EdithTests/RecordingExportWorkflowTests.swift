@@ -13,7 +13,7 @@ import Testing
     @Test func syntheticTakeExportsThroughTheDaemon() async throws {
         let defaults = SharedDefaults.store
         let suiteKey = "suiteMediaEnabled"
-        let abilityKey = AppStorageKeys.Tabs.captureToolsEnabled
+        let abilityKey = AppStorageKeys.Capture.enabled
         let suiteBefore = defaults.object(forKey: suiteKey)
         let abilityBefore = defaults.object(forKey: abilityKey)
         defaults.set(true, forKey: suiteKey)
