@@ -27,8 +27,10 @@ public enum MediaToolkitWorkflow {
     }
 
     private static func requireEnabled() throws {
-        guard ExtensionRegistry.entry("mediaToolkit")?.isEnabled(in: SharedDefaults.store) == true else {
-            throw MediaToolkitError.failed("Enable the Media Toolkit ability before processing media.")
+        guard ExtensionRegistry.entry("mediaToolkit")?.isEnabled(in: SharedDefaults.store) == true
+        else {
+            throw MediaToolkitError.failed(
+                "Enable the Media Toolkit ability before processing media.")
         }
     }
 }

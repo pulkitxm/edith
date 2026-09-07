@@ -365,6 +365,15 @@ enum JSONContract {
         JSONCase(
             "ed download reveal", ["download", "reveal", "1", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed media status", ["media", "status", "--json"]),
+        JSONCase(
+            "ed media convert-images",
+            ["media", "convert-images", "/tmp/source.png", "--to", "/tmp/output", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed media compress-video",
+            ["media", "compress-video", "/tmp/source.mov", "--to", "/tmp/output", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed color pick", ["color", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed color ls", ["color", "ls", "--json"]),
         JSONCase(

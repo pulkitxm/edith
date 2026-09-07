@@ -35,6 +35,19 @@ final class MediaCancellationToken: @unchecked Sendable {
     }
 }
 
+struct MediaToolkitExecutor {
+    var images:
+        ([URL], URL, MediaImageOptions, @escaping @Sendable (Int, Int) -> Void) async throws ->
+            [MediaImageResult]
+    var video:
+        (URL, URL, MediaVideoOptions, @escaping @Sendable (Double) -> Void) async throws ->
+            MediaVideoResult
+
+    static let agent = MediaToolkitExecutor(
+        images: { try await AgentMediaClient.convertImages($0, to: $1, options: $2, progress: $3) },
+        video: { try await AgentMediaClient.compressVideo($0, to: $1, options: $2, progress: $3) })
+}
+
 @MainActor
 @Observable
 final class MediaToolkitPageModel {
@@ -54,6 +67,12 @@ final class MediaToolkitPageModel {
     private(set) var errorMessage: String?
     private var task: Task<Void, Never>?
     private var cancellationToken: MediaCancellationToken?
+
+    private let executor: MediaToolkitExecutor
+
+    init(executor: MediaToolkitExecutor = .agent) {
+        self.executor = executor
+    }
 
     var canProcess: Bool {
         !isProcessing && (mode == .images ? !imageURLs.isEmpty : videoURL != nil)
@@ -128,28 +147,28 @@ final class MediaToolkitPageModel {
             do {
                 switch selectedMode {
                 case .images:
-                    let results = try await AgentMediaClient.convertImages(
-                            images, to: destination, options: imageOptions,
-                            progress: { completed, total in
-                                Task { @MainActor in
-                                    model.progress = Double(completed) / Double(max(1, total))
-                                    model.status = "Converted \(completed) of \(total)"
-                                }
-                            })
+                    let results = try await model.executor.images(
+                        images, destination, imageOptions,
+                        { completed, total in
+                            Task { @MainActor in
+                                model.progress = Double(completed) / Double(max(1, total))
+                                model.status = "Converted \(completed) of \(total)"
+                            }
+                        })
                     guard model.cancellationToken === token else { return }
                     model.imageResults = results
                     let succeeded = results.filter { $0.outputURL != nil }.count
                     model.status = "Converted \(succeeded) of \(results.count)"
                 case .video:
                     guard let video else { return }
-                    let result = try await AgentMediaClient.compressVideo(
-                            video, to: destination, options: videoOptions,
-                            progress: { value in
-                                Task { @MainActor in
-                                    model.progress = value
-                                    model.status = "Compressing \(Int(value * 100))%"
-                                }
-                            })
+                    let result = try await model.executor.video(
+                        video, destination, videoOptions,
+                        { value in
+                            Task { @MainActor in
+                                model.progress = value
+                                model.status = "Compressing \(Int(value * 100))%"
+                            }
+                        })
                     guard model.cancellationToken === token else { return }
                     model.videoResult = result
                     model.status = "Compression complete"
@@ -210,7 +229,7 @@ final class MediaToolkitPageModel {
 }
 
 struct MediaToolkitPage: View {
-    @State private var model = MediaToolkitPageModel()
+    @State private var model: MediaToolkitPageModel
     @State private var dropTargeted = false
     @AppStorage(AppStorageKeys.MediaToolkit.imageFormat, store: SharedDefaults.store)
     private var imageFormat = MediaImageFormat.jpeg.rawValue
@@ -224,6 +243,10 @@ struct MediaToolkitPage: View {
     private var videoTargetMegabytes = 20
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+
+    @MainActor init(model: MediaToolkitPageModel? = nil) {
+        _model = State(initialValue: model ?? MediaToolkitPageModel())
+    }
 
     private var dark: Bool { scheme == .dark }
 

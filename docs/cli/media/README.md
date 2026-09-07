@@ -1,12 +1,13 @@
 # `ed media`
 
-`ed media` processes images and videos entirely on this Mac. It does not upload files,
-start a background service, or require a third-party executable. Image conversion uses
-ImageIO, and video compression uses AVFoundation.
+`ed media` processes images and videos entirely on this Mac. It submits cancellable tasks to the local Edith daemon and does not upload files
+or require a third-party executable. Image conversion uses ImageIO, and video
+compression uses AVFoundation. Enable the Media suite and Media Toolkit ability
+before processing.
 
 The image command accepts a batch and writes collision-safe files into one output folder.
 The video command writes a complete H.264 MP4 whose final byte count is at or below the
-requested limit. Both commands preserve their inputs and can run while Edith is closed.
+requested limit. Both commands preserve their inputs and can run while the app window is closed and the daemon is running.
 
 ## Commands
 

@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import CoreGraphics
 import EdithKit
 import Foundation
@@ -45,19 +47,24 @@ import UniformTypeIdentifiers
     }
 
     @Test func modelProcessesAnImageAndPublishesTheResult() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let root = URL(fileURLWithPath: "/tmp")
+            .appendingPathComponent("media-demo-" + UUID().uuidString, isDirectory: true)
         let input = root.appendingPathComponent("source.png")
         let output = root.appendingPathComponent("output", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try writeImage(input)
-        let model = MediaToolkitPageModel()
+        let model = MediaToolkitPageModel(
+            executor: MediaToolkitExecutor(
+                images: { try MediaToolkit.convertImages($0, to: $1, options: $2, progress: $3) },
+                video: {
+                    try await MediaToolkit.compressVideo($0, to: $1, options: $2, progress: $3)
+                }))
         model.add([input])
         model.outputDirectory = output
 
         model.process(
-            imageOptions: MediaImageOptions(format: .jpeg, maxDimension: 40),
+            imageOptions: MediaImageOptions(format: .jpeg, maxDimension: 1600),
             videoOptions: MediaVideoOptions())
         while model.isProcessing {
             try await Task.sleep(for: .milliseconds(10))
@@ -69,6 +76,16 @@ import UniformTypeIdentifiers
         #expect(FileManager.default.fileExists(atPath: resultURL.path))
         #expect(model.progress == 1)
         #expect(model.status == "Converted 1 of 1")
+        if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
+            let hosting = NSHostingView(rootView: MediaToolkitPage(model: model))
+            hosting.frame = NSRect(x: 0, y: 0, width: 1000, height: 1100)
+            hosting.layoutSubtreeIfNeeded()
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent("media-toolkit.png"))
+        }
     }
 
     private func writeImage(_ url: URL) throws {

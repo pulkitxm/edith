@@ -17,7 +17,8 @@ public enum AgentMediaClient {
         _ inputs: [URL], to destination: URL, options: MediaImageOptions,
         progress: @escaping @Sendable (Int, Int) -> Void = { _, _ in }
     ) async throws -> [MediaImageResult] {
-        let request = MediaImageTaskRequest(inputs: inputs, destination: destination, options: options)
+        let request = MediaImageTaskRequest(
+            inputs: inputs, destination: destination, options: options)
         let submission = AgentTaskSubmission(
             operation: MediaToolkitOperation.convertImages.descriptor.id.rawValue,
             title: "Convert images", payload: try AgentPayload.encode(request))
@@ -32,7 +33,8 @@ public enum AgentMediaClient {
         _ input: URL, to destination: URL, options: MediaVideoOptions,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> MediaVideoResult {
-        let request = MediaVideoTaskRequest(input: input, destination: destination, options: options)
+        let request = MediaVideoTaskRequest(
+            input: input, destination: destination, options: options)
         let submission = AgentTaskSubmission(
             operation: MediaToolkitOperation.compressVideo.descriptor.id.rawValue,
             title: "Compress video", payload: try AgentPayload.encode(request))

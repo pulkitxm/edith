@@ -46,7 +46,7 @@ import UniformTypeIdentifiers
         #expect(video.json)
     }
 
-    @Test func conversionCommandEmitsJSONAndWritesResizedImage() async throws {
+    @Test func conversionRequiresTheAgentAndDoesNotWriteFromTheCLI() async throws {
         try await CLIProbe.inWorld { world in
             let input = world.sandbox.appendingPathComponent("input.png")
             let output = world.sandbox.appendingPathComponent("converted")
@@ -56,21 +56,8 @@ import UniformTypeIdentifiers
                 "media", "convert-images", input.path, "--to", output.path,
                 "--format", "jpeg", "--max-dimension", "20", "--json",
             ])
-            let object = try #require(result.object)
-            let rows = try #require(object["results"] as? [[String: Any]])
-            let outputPath = try #require(rows.first?["output"] as? String)
-            let imageSource = try #require(
-                CGImageSourceCreateWithURL(URL(fileURLWithPath: outputPath) as CFURL, nil))
-            let properties = try #require(
-                CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any])
-
-            #expect(result.code == 0)
-            #expect(result.stderr.isEmpty)
-            #expect(object["operation"] as? String == "media.convert-images")
-            #expect(object["succeeded"] as? Int == 1)
-            #expect(object["failed"] as? Int == 0)
-            #expect(properties[kCGImagePropertyPixelWidth] as? Int == 20)
-            #expect(properties[kCGImagePropertyPixelHeight] as? Int == 10)
+            #expect(result.code != 0)
+            #expect(!FileManager.default.fileExists(atPath: output.path))
         }
     }
 
