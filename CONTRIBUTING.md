@@ -182,20 +182,22 @@ form instead.
 
 ## Releases
 
-Merging application changes into `main` publishes a new patch version after the
-required CI jobs pass. CI calls the reusable release workflow, which builds the
-signed DMG, notarizes it when Apple credentials are available, generates the signed
-Sparkle appcast, then publishes both assets to one GitHub Release. The versioned
-plists and cask land together in one release commit and tag, and the cask is
-mirrored to the tap. To rebuild an existing release, run
-the Release workflow manually from `main` with its required `rebuild` input set to
-the current tag. Only the current release can be rebuilt. The rebuild replaces its
-two assets, commits a changed DMG checksum to `main` when needed, and mirrors the
-same cask to the tap. It does not create a new version or tag. To recover a skipped
-automatic release, run the CI workflow manually from `main` with `release` enabled.
-That path runs every routed product check before it calls the reusable workflow
-with permission to cut a new patch release. The Release workflow's manual entry
-point cannot cut a new release directly because it only accepts a rebuild tag.
+Merging application changes into `main` publishes a new patch version through the
+CI workflow. Its `version` and `dmg` jobs prepare the signed DMG alongside the
+routed checks, notarize it when Apple credentials are available, and generate the
+signed Sparkle appcast. The `publish` job waits for the required checks to pass
+and the DMG build to succeed without being superseded before publishing both
+assets to one GitHub Release. All jobs appear in the same CI run on the commit.
+The versioned plists and cask land together in one release commit and tag, and the
+cask is mirrored to the tap.
+
+To rebuild an existing release, run the CI workflow manually from `main` with
+`rebuild` set to the current tag. Only the current release can be rebuilt. The
+rebuild replaces its two assets, commits a changed DMG checksum to `main` when
+needed, and mirrors the same cask to the tap. It does not create a new version or
+tag. To recover a skipped automatic release, run CI manually from `main` with
+`release` enabled. Both manual release paths run the product checks and use the
+same publication gate. Choose either `release` or `rebuild`, not both.
 
 ### Required secrets
 
