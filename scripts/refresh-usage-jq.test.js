@@ -2907,6 +2907,41 @@ describe("retained history coverage", () => {
       JSON.stringify([fresh]),
     ])[0];
 
+  test("resolved archive baselines do not freeze newer published usage", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = doc([day("2026-09-05", { cli: [row("one", 150)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [day(baseline.period, { cli: [row("one", 150)] })],
+        },
+      ],
+    };
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.historyRetention.blocks).toEqual([]);
+    expect(merge(result, fresh).totals.tokens).toBe(200);
+
+    fresh.daily[0] = day(baseline.period, { cli: [row("one", 125)] });
+    const regressed = merge(previous, fresh);
+    expect(regressed.totals.tokens).toBe(150);
+    expect(regressed.historyRetention.blocks).toHaveLength(1);
+    expect(
+      regressed.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      regressed.historyRetention.blocks[0].candidates[0].bySource.cli[0]
+        .inputTokens,
+    ).toBe(125);
+  });
+
   test("moving model costs into an aggregate does not freeze growing token totals", () => {
     const previous = doc([day("2026-09-07", { codex: [row("one", 100)] })]);
     const fresh = doc([

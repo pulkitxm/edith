@@ -411,8 +411,18 @@ HISTORY='
         | any($fields[]; . as $field
           | ([($new // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0) + 0.000001
             < ([($old // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0)));
+  def incomingRetention($old; $fresh):
+    retainedBlocks($old) as $existing
+    | [ retainedBlocks($fresh)[]
+        | . as $block
+        | ([($old.daily // [])[] | select(.period == $block.period)][0]) as $published
+        | select(
+            any($existing[]; historyKey(.) == historyKey($block))
+            or $published == null
+            or (.baseline | baselineIdentity($block.source)) == ($published | baselineIdentity($block.source))
+            or coverageRegressed(.baseline.bySource[$block.source]; $published.bySource[$block.source])) ];
   def retainHistory($old; $fresh):
-    (reduce ((retainedBlocks($old) + retainedBlocks($fresh))[]) as $block ({};
+    (reduce ((retainedBlocks($old) + incomingRetention($old; $fresh))[]) as $block ({};
       historyKey($block) as $key
       | if .[$key] == null then .[$key] = $block
         elif (.[$key].baseline | baselineIdentity($block.source)) == ($block.baseline | baselineIdentity($block.source)) then
