@@ -52,6 +52,7 @@ import Testing
                 .preferredColorScheme(.dark))
             let window = TestWindowHost.window(
                 contentRect: NSRect(x: 0, y: 0, width: 980, height: 700))
+            window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = editor
             defer { window.close() }
