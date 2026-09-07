@@ -36,9 +36,10 @@ Bare `ed capture` runs `ed capture read`.
 - [`ed capture library`](./library.md)
 - [`ed capture record`](./record.md)
 
-Every command requires the Capture Tools extension and the running menu bar
-app. Capture commands also require Screen Recording permission. They return
-after sending the request, and interactive selection finishes asynchronously.
+Interactive commands require the Media suite, Capture Tools ability, and running
+menu bar app. Starting a capture also requires Screen Recording permission. These
+commands return after sending the request, and selection finishes asynchronously.
+Saved recording exports use the local daemon and wait for the finished file.
 Microphone recording requires Microphone permission.
 
 ## Privacy and related tools

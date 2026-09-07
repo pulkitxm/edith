@@ -14,6 +14,7 @@ ed capture record stop [--json]
 ed capture record cancel [--json]
 ed capture record status [--json]
 ed capture record library [--json]
+ed capture record export <take-id> --to <output.mp4|output.gif> [--json]
 ```
 
 | Command | What it does |
@@ -27,6 +28,7 @@ ed capture record library [--json]
 | `ed capture record cancel` | Safely closes the stream and discards the active take. |
 | `ed capture record status` | Reads shared lifecycle state without opening a native surface. |
 | `ed capture record library` | Opens recent and recovered recordings. |
+| `ed capture record export` | Exports a saved take and its edits through a cancellable daemon task. |
 
 Bare `ed capture record` runs `ed capture record area`.
 
@@ -47,6 +49,10 @@ available:
 The Capture Tools extension and running menu bar app are required for every
 interactive route. Screen Recording permission is required to start. Enabling
 microphone audio also requires Microphone permission.
+
+Export waits for the finished file, preserves the master take, and refuses to
+overwrite an existing destination. It requires the local daemon rather than an
+active recording session. JSON output includes the take ID, output path and format.
 
 ## Where to go next
 
