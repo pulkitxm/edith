@@ -46,7 +46,9 @@ import Testing
             #expect(try !model.exportData().isEmpty)
             let editor = NSHostingView(
                 rootView: CaptureEditorView(
-                    model: model, copy: {}, save: {}, pin: {}, done: {}))
+                    model: model, copy: {}, save: {}, pin: {}, done: {}
+                )
+                .background(Color(nsColor: .windowBackgroundColor)))
             editor.frame = NSRect(x: 0, y: 0, width: 980, height: 700)
             editor.layoutSubtreeIfNeeded()
             let rendered = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
