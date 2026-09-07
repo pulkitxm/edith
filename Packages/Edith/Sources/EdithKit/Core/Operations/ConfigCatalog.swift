@@ -45,20 +45,25 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
-        "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "agent", "suites", "appearance", "panel", "attention", "usage", "limits", "menubar",
+        "alerts",
+        "budget",
+        "dashboard", "database",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
+        "music",
         "calendar",
-        "clipboard", "keyboard",
-        "notch", "focusdim", "presenter", "colorpicker", "micmute",
+        "clipboard", "keyboard", "keystrokes",
+        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
-        appearance + panel + attention + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + cleaner
-        + music + calendar + clipboard + keyboard + notch + focusDim + presenter + colorPicker
+        agent + suites + appearance + panel + attention + usageAndLimits
+        + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
+        + finder + system + homebrew + cleaner
+        + music + calendar + clipboard + keyboard + keystrokeHighlight + notch + focusDim
+        + presenter
+        + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -79,6 +84,27 @@ public enum ConfigCatalog {
 
     public static let extensionKeys: [String: String] = Dictionary(
         uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.defaultsKey) })
+
+    private static let agent: [SettingDefinition] = [
+        SettingDefinition(
+            AgentSettingsKeys.pauseAmbientOnBattery, .bool, group: "agent",
+            summary: "Pause the agent's ambient jobs while this Mac is on battery.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenBlocked, .bool, group: "agent",
+            summary: "Notify when a background agent job is blocked.", fallback: .bool(false)),
+        SettingDefinition(
+            AgentService.stateKey, .string, group: "agent",
+            summary: "Login Items registration state of the background agent.",
+            allowed: AgentRegistrationState.allCases.map(\.rawValue),
+            fallback: .string(AgentRegistrationState.notRegistered.rawValue), readOnly: true),
+    ]
+
+    private static let suites: [SettingDefinition] = SuiteRegistry.suites.map { suite in
+        SettingDefinition(
+            suite.defaultsKey, .bool, group: "suites",
+            summary: "\(suite.title) suite: \(suite.subtitle)", fallback: .bool(false))
+    }
 
     private static let appearance: [SettingDefinition] = [
         SettingDefinition(
@@ -104,6 +130,12 @@ public enum ConfigCatalog {
     ]
 
     private static let panel: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.pluginsEnabled, .bool, group: "panel",
+            summary: "Show Plugins in the Agents suite.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Skills.agentSelections, .map, group: "panel",
+            summary: "Remember agent selections when installing plugins.", fallback: .object([:])),
         SettingDefinition(
             "extensionsExpand", .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
@@ -138,6 +170,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.order, .csv, group: "panel",
             summary: "Comma separated panel tab order."),
         SettingDefinition(
+            AppStorageKeys.Tabs.seoAuditEnabled, .bool, group: "panel",
+            summary: "Site Audit extension: sitemap, metadata, and local Lighthouse reports.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.General.mainWindowSection, .string, group: "panel",
             summary: "Section the main window opens on."),
         SettingDefinition(
@@ -154,8 +190,9 @@ public enum ConfigCatalog {
             summary: "Whether Settings categories are expanded in the main sidebar.",
             fallback: .bool(false)),
         SettingDefinition(
-            Repo.pathKey, .string, group: "panel",
-            summary: "Development repository root used for usage data and music."),
+            AppStorageKeys.AppMaintenance.categoriesExpanded, .bool, group: "panel",
+            summary: "Whether App Maintenance sections are expanded in the main sidebar.",
+            fallback: .bool(true)),
     ]
 
     private static let attention: [SettingDefinition] = [
@@ -216,7 +253,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.colorMode, .string, group: "menubar",
             summary: "How the menu bar readout is tinted.",
-            allowed: ["auto", "white", "custom"], fallback: .string("auto")),
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.General.smartColor, .bool, group: "menubar",
             summary: "Tint the menu bar readout by a time-aware risk model."),
@@ -235,6 +272,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.statsColorHex, .string, group: "menubar",
             summary: "Hex colour of the CPU and memory menu bar readout."),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsColorMode, .string, group: "menubar",
+            summary: "How the CPU and memory menu bar readout is tinted.",
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.MenuBar.systemStats, .bool, group: "menubar",
             summary: "CPU and memory readout as a menu bar item.", fallback: .bool(false)),
@@ -387,9 +428,6 @@ public enum ConfigCatalog {
             "dockerLogFontSize", .number, group: "machines",
             summary: "Text size in the Docker log viewer.", fallback: .double(11)),
         SettingDefinition(
-            AppStorageKeys.Tabs.machinesEnabled, .bool, group: "machines",
-            summary: "Machines extension: other computers over SSH.", fallback: .bool(false)),
-        SettingDefinition(
             AppStorageKeys.Machines.autoConnect, .bool, group: "machines",
             summary: "Connect to machines automatically when the app starts."),
         SettingDefinition(
@@ -461,7 +499,36 @@ public enum ConfigCatalog {
             scope: .standard),
         SettingDefinition(
             AppStorageKeys.Tabs.systemEnabled, .bool, group: "system",
-            summary: "System extension: running apps, prevent sleep and the cleaning lock.",
+            summary: "System extension: running apps and the cleaning lock.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
+            summary: "App Maintenance extension: inventory, installation and safe removal.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
+            summary: "Default disk image installation destination.",
+            allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
+            fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateAutoRefresh, .bool, group: "system",
+            summary: "Refresh App Update Center automatically.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRefreshInterval, .number, group: "system",
+            summary: "Seconds between enabled App Update Center refreshes.",
+            fallback: .double(86_400)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateNotifications, .bool, group: "system",
+            summary: "Notify after automatic refreshes find new updates.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateConcurrency, .int, group: "system",
+            summary: "Maximum updates running together.", fallback: .int(2)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRetries, .int, group: "system",
+            summary: "Retries after an update fails.", fallback: .int(1)),
+        SettingDefinition(
+            AppStorageKeys.General.keepAwakeEnabled, .bool, group: "system",
+            summary: "Keep Awake ability: prevent idle sleep independently of System.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
@@ -495,6 +562,10 @@ public enum ConfigCatalog {
 
     private static let cleaner: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Cleaner.enabled, .bool, group: "cleaner",
+            summary: "Cleaner ability: reclaimable space scanning and removal.",
+            fallback: .bool(false)),
+        SettingDefinition(
             "cleanerSelectedDrives", .stringList, group: "cleaner",
             summary: "Volumes the disk cleaner scans."),
         SettingDefinition(
@@ -508,7 +579,29 @@ public enum ConfigCatalog {
             summary: "Per-path cleaner selection overrides."),
     ]
 
+    private static let homebrew: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Homebrew.enabled, .bool, group: "homebrew",
+            summary: "Packages ability: the Homebrew client for formulae, casks and taps.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
+            summary: "Package kind selected when App Maintenance opens Packages.",
+            allowed: HomebrewPackageKind.allCases.map(\.rawValue),
+            fallback: .string(HomebrewPackageKind.formula.rawValue)),
+    ]
+
     private static let music: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Downloads.enabled, .bool, group: "music",
+            summary: "Downloads ability: queued audio and video downloads.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Music.barCollapsed, .bool, group: "music",
+            summary: "Collapse the player bar to a progress line.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Music.barAutoHide, .bool, group: "music",
+            summary: "Hide the player bar when nothing is playing.", fallback: .bool(false)),
         SettingDefinition(
             Repo.musicFolderStaleKey, .bool, group: "music",
             summary: "Whether the stored music folder has gone missing.", fallback: .bool(false),
@@ -710,7 +803,8 @@ public enum ConfigCatalog {
             summary: "Alert on Bluetooth connections."),
         SettingDefinition(
             AppStorageKeys.Notch.audioMixerEnabled, .bool, group: "notch",
-            summary: "Per-app audio mixer in the notch shelf."),
+            summary: "Audio Mixer ability: per-app volume in the notch shelf.",
+            fallback: .bool(false)),
     ]
 
     private static let focusDim: [SettingDefinition] = [
@@ -803,6 +897,35 @@ public enum ConfigCatalog {
             summary: "Printable label for the presenter shortcut."),
     ]
 
+    private static let keystrokeHighlight: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.enabled, .bool, group: "keystrokes",
+            summary: "Make the Keystroke Highlight extension available.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.active, .bool, group: "keystrokes",
+            summary: "Show key presses in an on-screen overlay.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.duration, .number, group: "keystrokes",
+            summary: "Seconds each key press remains on screen.",
+            fallback: .double(KeystrokeHighlightSettings.defaultDuration)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.position, .string, group: "keystrokes",
+            summary: "Screen edge used for the key press overlay.",
+            allowed: KeystrokeHighlightPosition.allCases.map(\.rawValue),
+            fallback: .string(KeystrokeHighlightPosition.bottom.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyCode, .int, group: "keystrokes",
+            summary: "Virtual key code of the keystroke highlight shortcut.", fallback: .int(40)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyMods, .int, group: "keystrokes",
+            summary: "Carbon modifier mask of the keystroke highlight shortcut.",
+            fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyLabel, .string, group: "keystrokes",
+            summary: "Printable label for the keystroke highlight shortcut.",
+            fallback: .string("⌃⌥⌘K")),
+    ]
+
     private static let colorPicker: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.ColorPicker.enabled, .bool, group: "colorpicker",
@@ -827,6 +950,41 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let database: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.databaseEnabled, .bool, group: "database",
+            summary: "Database extension: guarded database exploration and operations.",
+            fallback: .bool(false))
+    ]
+
+    private static let emoji: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Emoji.enabled, .bool, group: "emoji",
+            summary: "Emoji Picker extension: every macOS emoji on a hotkey.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.popupAt, .string, group: "emoji",
+            summary: "Where the emoji picker opens.",
+            allowed: PopupPosition.allCases.map(\.rawValue), fallback: .string("cursor")),
+        SettingDefinition(
+            AppStorageKeys.Emoji.skinTone, .int, group: "emoji",
+            summary: "Default skin tone index applied to emoji that support one.",
+            integerRange: 0...5, fallback: .int(0)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.frequentCount, .int, group: "emoji",
+            summary: "How many frequently used emoji pin to the top of the picker.",
+            integerRange: 0...EmojiCatalogSummary.maxFrequentCount, fallback: .int(10)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyCode, .int, group: "emoji",
+            summary: "Virtual key code of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyMods, .int, group: "emoji",
+            summary: "Carbon modifier mask of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyLabel, .string, group: "emoji",
+            summary: "Printable label for the emoji picker shortcut."),
     ]
 
     private static let micMute: [SettingDefinition] = [

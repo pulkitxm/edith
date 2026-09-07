@@ -46,12 +46,21 @@ public final class UsageDataLock: @unchecked Sendable {
             close(descriptor)
             throw UsageDataLockError.unavailable(url.path)
         }
-        let operation = LOCK_EX | (nonblocking ? LOCK_NB : 0)
-        while flock(descriptor, operation) != 0 {
-            guard errno == EINTR else {
-                close(descriptor)
-                throw UsageDataLockError.unavailable(url.path)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var delay = 0.005
+        do {
+            while true {
+                try Task.checkCancellation()
+                if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { break }
+                guard !nonblocking, errno == EWOULDBLOCK || errno == EINTR,
+                    ContinuousClock.now < deadline
+                else { throw UsageDataLockError.unavailable(url.path) }
+                Thread.sleep(forTimeInterval: delay)
+                delay = min(0.05, delay * 2)
             }
+        } catch {
+            close(descriptor)
+            throw error
         }
         return UsageDataLock(descriptor: descriptor)
     }

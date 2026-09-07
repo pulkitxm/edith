@@ -2,7 +2,7 @@ import Foundation
 
 public enum DockerParsing {
     public static func jsonLines(_ output: String) -> [[String: Any]] {
-        output.split(separator: "\n").compactMap { line in
+        output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("{"), let data = trimmed.data(using: .utf8) else { return nil }
             return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]

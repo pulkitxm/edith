@@ -15,7 +15,7 @@ or install it with Homebrew:
 brew install --cask pulkitxm/tap/edith
 ```
 
-That taps, installs the app and puts `ed` and `edh` on your `PATH`. Edith updates itself
+That taps, installs the app and puts `ed` and `edith` on your `PATH`. Edith updates itself
 through Sparkle, so `brew upgrade --cask --greedy edith` is the way to force
 Homebrew to fetch a newer release. Full command list:
 [docs/homebrew.md](docs/homebrew.md), and
@@ -38,6 +38,7 @@ Edith requires macOS 14 or later on Apple Silicon.
 - **Alerts** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset notifications, all optional.
 - **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.
 - **Activity heatmap** - GitHub-style daily spend calendar across your full history.
+- **Share cards** - export polished activity, token, and milestone images from the dashboard or CLI, branded with the Edith repository link.
 - **Project drilldown** - spend by project, worktree and chat, across every collected agent.
 - **Fleet usage** - the same collector runs on your SSH machines and folds their agents in as their own sources, so the totals cover every box you code on.
 
@@ -67,12 +68,14 @@ and platform details.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
 - **Keyboard Tools** - suppress accidental duplicate presses and use Caps Lock as a configurable tap or modifier chord.
+- **Emoji picker** - every emoji this Mac can draw on a hotkey, with search, categories, skin tones and your most-used pinned to the top.
+- **Keystroke Highlight** - toggle clear keycaps for demos with a global shortcut, then let each key press fade automatically.
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
 - **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.
 - **Mic mute** - system-wide microphone kill switch with a menu bar indicator.
 - **Focus dim** - dims every screen except the window you are working in.
-- **System tools** - prevent-sleep toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
+- **System tools** - independent Keep Awake toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
 - **Lid awake** - keeps the Mac running with the lid shut and unplugged, with timed or lid-cycle sessions, battery floors and automatic sleep restoration.
 - **Disk cleaner** - scans build caches, package managers and old logs.
 - **Global shortcut** - toggle the panel from anywhere, ⌥⌘E by default and re-recordable.
@@ -80,12 +83,14 @@ and platform details.
 ## Command line
 
 Installing Edith installs `ed`, a first-class CLI that reaches everything the UI
-does. `edh` and `edith` are the same binary.
+does. `edith` is the same binary under its full name.
 
 ```
+ed extensions enable keepAwake      enable independent sleep prevention
 ed config set preventSleep true     every setting the UI exposes, applied live
 ed lid-awake on --for 30m           keep running with the lid shut for 30 minutes
 ed usage limits --json              the same numbers the rings show
+ed usage export --card activity     export a branded usage card as a PNG
 ed machines ls                      the computers Edith can reach over SSH
 ed tuf docker ps                    run anything on one of them
 ```

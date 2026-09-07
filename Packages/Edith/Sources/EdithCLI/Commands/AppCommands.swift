@@ -52,6 +52,27 @@ enum AppInspectionCLI {
             "uptimeSeconds": .int(diagnostics.uptimeSeconds),
             "uptime": .string(diagnostics.uptimeText),
             "idleWakeups": .int(diagnostics.idleWakeups),
+            "agent": agentJSON(),
+        ])
+    }
+
+    static func agentJSON() -> JSONValue {
+        let state = AgentRegistrationState.current
+        guard let snapshot = try? AgentClient.shared.runtimeSnapshot() else {
+            return .object([
+                "state": .string(state.rawValue), "running": .bool(false),
+                "protocolVersion": .int(AgentService.protocolVersion),
+            ])
+        }
+        return .object([
+            "state": .string(state.rawValue), "running": .bool(true),
+            "build": .string(snapshot.build),
+            "pid": .int(Int(snapshot.processIdentifier)),
+            "uptimeSeconds": .int(Int(snapshot.uptime)),
+            "residentBytes": .int(Int(snapshot.residentBytes)),
+            "subscribers": .int(snapshot.subscriberCount),
+            "schemaVersion": .int(snapshot.schemaVersion),
+            "protocolVersion": .int(AgentService.protocolVersion),
         ])
     }
 
@@ -146,6 +167,7 @@ struct AppDiagnosticsCommand: AsyncParsableCommand {
                         ["uptime", diagnostics.uptimeText],
                         ["idle wakeups", String(diagnostics.idleWakeups)],
                         ["bundle path", diagnostics.info.bundlePath],
+                        ["agent", AgentRegistrationState.current.title],
                     ]))
         }
     }
@@ -635,8 +657,8 @@ struct AppRevealCommand: AsyncParsableCommand {
         help: ArgumentHelp(
             "The section to show; without it the window comes up where it was.",
             discussion:
-                "One of home, dashboard, herdr, quinjet, music, calendar, system, machines, "
-                + "companion, extensions, settings, about."))
+                "One of home, attention, dashboard, herdr, quinjet, music, calendar, system, "
+                + "appMaintenance, machines, companion, extensions, settings, about."))
     var section: String?
 
     @Option(help: "A tab inside the section; companion and settings have them.")
