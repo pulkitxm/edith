@@ -209,6 +209,7 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
                 height: crop.height * contentScale + padding))
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: outputCursor)
+        instruction.backgroundColor = color(document.backgroundHex ?? "#111827").cgColor
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
         var transform = preferredTransform
         transform = transform.concatenating(
