@@ -34,7 +34,6 @@ import Testing
             rootView:
                 view
                 .environment(\.automaticViewActionsEnabled, false)
-                .environment(\.accessibilityReduceMotion, true)
                 .environment(\.colorScheme, .light))
         host.frame = NSRect(x: 0, y: 0, width: 840, height: 620)
         let window = TestWindowHost.window(contentRect: host.frame)
