@@ -18,7 +18,7 @@ import Testing
         let carbonIDs = HotKeyCatalog.bindings.map(\.carbonID)
         #expect(Set(ids).count == ids.count)
         #expect(Set(carbonIDs).count == carbonIDs.count)
-        #expect(ids.count == 10)
+        #expect(ids.count == 11)
     }
 
     @Test func everyBindingNamesItsOwnDefaultsKeys() {

@@ -32,6 +32,7 @@ import Testing
                 "capture.record.area", "capture.record.window", "capture.record.display",
                 "capture.record.pause", "capture.record.resume", "capture.record.stop",
                 "capture.record.cancel", "capture.record.status", "capture.record.library",
+                "capture.record.export",
             ])
         #expect(descriptors.first?.cli == ["capture", "record", "area"])
         #expect(descriptors[7].effect == .read)
