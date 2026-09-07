@@ -116,7 +116,7 @@ import Testing
         #expect(extensions.contains("$theme.configured(AppStorageKeys.Quinjet.theme)"))
         #expect(toolsUI.contains("center.provision([tool])"))
         #expect(toolsCLI.contains("mutationCenter().install("))
-        #expect(downloadsUI.contains("DownloadOperationExecution.cancel(id: targetID)"))
+        #expect(downloadsUI.contains("AgentDownloadClient"))
         #expect(downloadsCLI.contains("DownloadOperationExecution.cancel("))
         #expect(configCLI.contains("store.set(parsed, for: found, announce: true)"))
     }

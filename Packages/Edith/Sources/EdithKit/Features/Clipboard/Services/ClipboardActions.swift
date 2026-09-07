@@ -16,13 +16,13 @@ public enum ClipboardActions {
         }
     }
 
-    public struct KindTotal: Sendable, Equatable {
+    public struct KindTotal: Codable, Sendable, Equatable {
         public let kind: ClipboardEntry.Kind
         public let count: Int
         public let bytes: Int
     }
 
-    public struct Stats: Sendable, Equatable {
+    public struct Stats: Codable, Sendable, Equatable {
         public let count: Int
         public let pinned: Int
         public let bytes: Int

@@ -2,16 +2,12 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import EdithKit
-import IOKit.pwr_mgt
 import Observation
 import SwiftUI
 
 @MainActor
 @Observable
 final class SystemStore: FeatureModule {
-
-    private(set) var preventingSleep = false
-    private var assertionID: IOPMAssertionID = 0
 
     enum CleaningPhase { case idle, arming, cleaning }
     private(set) var phase = CleaningPhase.idle
@@ -33,9 +29,6 @@ final class SystemStore: FeatureModule {
 
     init() {
         refreshPermissions()
-        if SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep) {
-            enableSleepPrevention()
-        }
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -45,41 +38,10 @@ final class SystemStore: FeatureModule {
 
     func shutdown() {
         stopCleaning()
-        if preventingSleep {
-            IOPMAssertionRelease(assertionID)
-            preventingSleep = false
-        }
         if let terminateObserver {
             NotificationCenter.default.removeObserver(terminateObserver)
             self.terminateObserver = nil
         }
-    }
-
-    func setPreventSleep(_ on: Bool) {
-        SharedDefaults.store.set(on, forKey: AppStorageKeys.General.preventSleep)
-        on ? enableSleepPrevention() : disableSleepPrevention()
-    }
-
-    func syncPreventSleep() {
-        let want = SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep)
-        guard want != preventingSleep else { return }
-        want ? enableSleepPrevention() : disableSleepPrevention()
-    }
-
-    private func enableSleepPrevention() {
-        guard !preventingSleep else { return }
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypeNoDisplaySleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "Edith: Prevent Sleep is on" as CFString,
-            &assertionID)
-        preventingSleep = (result == kIOReturnSuccess)
-    }
-
-    private func disableSleepPrevention() {
-        guard preventingSleep else { return }
-        IOPMAssertionRelease(assertionID)
-        preventingSleep = false
     }
 
     func refreshPermissions() {

@@ -87,14 +87,70 @@ private final class StreamLines: @unchecked Sendable {
     }
 
     @Test func stdoutAndStderrStaySeparated() async throws {
+        for iteration in 0..<100 {
+            let lines = StreamLines()
+            let stream = SSHLineStream(
+                process: process("printf 'out\\n'; printf 'err\\n' >&2"),
+                onLine: { lines.append($0, $1) }, onExit: { _ in })
+            try stream.start()
+            #expect(await stream.waitForExit() == 0)
+            let values = lines.read()
+            #expect(
+                values.contains { value in value.0 == "out" && !value.1 },
+                "stdout was lost on iteration \(iteration)")
+            #expect(
+                values.contains { value in value.0 == "err" && value.1 },
+                "stderr was lost on iteration \(iteration)")
+        }
+    }
+
+    @Test func standardInputIsDeliveredBeforeTheStreamCompletes() async throws {
         let lines = StreamLines()
         let stream = SSHLineStream(
-            process: process("printf 'out\\n'; printf 'err\\n' >&2"),
+            process: process("cat"), stdinData: Data("payload".utf8),
             onLine: { lines.append($0, $1) }, onExit: { _ in })
         try stream.start()
         #expect(await stream.waitForExit() == 0)
-        let values = lines.read()
-        #expect(values.contains { value in value.0 == "out" && !value.1 })
-        #expect(values.contains { value in value.0 == "err" && value.1 })
+        #expect(lines.read().map(\.0) == ["payload"])
+    }
+
+    @Test func windowsNewlinesSplitIntoIndividualRecords() async throws {
+        let lines = StreamLines()
+        let stream = SSHLineStream(
+            process: process("printf 'hello\\r\\nworld\\r\\n'"),
+            onLine: { lines.append($0, $1) }, onExit: { _ in })
+        try stream.start()
+        #expect(await stream.waitForExit() == 0)
+        #expect(lines.read().map(\.0) == ["hello", "world"])
+    }
+
+    @Test func liveStderrDoesNotBlockStdout() async throws {
+        let lines = StreamLines()
+        let stream = SSHLineStream(
+            process: process("printf 'progress\\n' >&2; printf 'record\\n'; sleep 30"),
+            onLine: { lines.append($0, $1) }, onExit: { _ in })
+        try stream.start()
+        for _ in 0..<40 {
+            if lines.read().contains(where: { $0.0 == "record" && !$0.1 }) { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(lines.read().contains { $0.0 == "progress" && $0.1 })
+        #expect(lines.read().contains { $0.0 == "record" && !$0.1 })
+        stream.cancel()
+        #expect(await stream.waitForExit() == 130)
+    }
+
+    @Test func releasingAStreamTerminatesItsProcess() async throws {
+        let child = process("sleep 30")
+        var stream: SSHLineStream? = SSHLineStream(
+            process: child, onLine: { _, _ in }, onExit: { _ in })
+        try stream?.start()
+        #expect(child.isRunning)
+        stream = nil
+        for _ in 0..<40 {
+            if !child.isRunning { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(!child.isRunning)
     }
 }

@@ -231,12 +231,9 @@ enum QuinjetCMUXLauncher {
     }
 
     static func launch(
-        quinjet: URL, arguments: [String], currentDirectory: String?, replacing workspaceID: String?
+        request: QuinjetLaunchRequest, replacing workspaceID: String?
     ) async throws -> String {
         guard executable != nil else { throw QuinjetLaunchError.cmuxUnavailable }
-        let request = QuinjetLaunchRequest(
-            executableURL: quinjet, arguments: arguments,
-            currentDirectory: currentDirectory, terminal: .cmux)
         return try await execute(QuinjetCMUX.launchScript(request: request, replacing: workspaceID))
     }
 

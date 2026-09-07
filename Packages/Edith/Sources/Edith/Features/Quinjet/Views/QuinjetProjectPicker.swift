@@ -68,8 +68,7 @@ struct QuinjetLocalProjectPicker: View {
     @ViewBuilder
     private var content: some View {
         if model.loadingProjects, model.projects.isEmpty {
-            ProgressView("Loading recent projects")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            QuinjetProjectGridSkeleton(dark: dark)
         } else if let error = model.projectError, model.projects.isEmpty {
             ContentUnavailableView {
                 Label("Projects unavailable", systemImage: "exclamationmark.triangle")

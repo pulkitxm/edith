@@ -128,34 +128,28 @@ final class MediaToolkitPageModel {
             do {
                 switch selectedMode {
                 case .images:
-                    let results = try await Task.detached(priority: .userInitiated) {
-                        try MediaToolkit.convertImages(
+                    let results = try await AgentMediaClient.convertImages(
                             images, to: destination, options: imageOptions,
                             progress: { completed, total in
                                 Task { @MainActor in
                                     model.progress = Double(completed) / Double(max(1, total))
                                     model.status = "Converted \(completed) of \(total)"
                                 }
-                            },
-                            cancelled: { token.isCancelled })
-                    }.value
+                            })
                     guard model.cancellationToken === token else { return }
                     model.imageResults = results
                     let succeeded = results.filter { $0.outputURL != nil }.count
                     model.status = "Converted \(succeeded) of \(results.count)"
                 case .video:
                     guard let video else { return }
-                    let result = try await Task.detached(priority: .userInitiated) {
-                        try await MediaToolkit.compressVideo(
+                    let result = try await AgentMediaClient.compressVideo(
                             video, to: destination, options: videoOptions,
                             progress: { value in
                                 Task { @MainActor in
                                     model.progress = value
                                     model.status = "Compressing \(Int(value * 100))%"
                                 }
-                            },
-                            cancelled: { token.isCancelled })
-                    }.value
+                            })
                     guard model.cancellationToken === token else { return }
                     model.videoResult = result
                     model.status = "Compression complete"

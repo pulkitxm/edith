@@ -6,8 +6,8 @@ public enum Guide {
 
         `ed` is the command line for Edith, the macOS menu bar app. Everything the app
         can configure, `ed` can configure, and everything the Machines extension can
-        reach over SSH, `ed` can reach. `edh` and `edith` are the same binary under
-        different names, so use whichever reads better in your shell history.
+        reach over SSH, `ed` can reach. `edith` is the same binary under its full
+        name, so use whichever reads better in your shell history.
 
         There are two surfaces, and picking the right one is the only thing to learn:
 
@@ -34,11 +34,16 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed database connections     saved database connection summaries
+        ed database capabilities <id>  detected support for one connection id
+        ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
+        ed usage export             branded PNG cards for sharing your activity
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
@@ -47,7 +52,7 @@ public enum Guide {
         ed guide --json             the complete parser command catalog
         ```
 
-        `ed install` links `ed`, `edh` and `edith` into a directory on PATH, and
+        `ed install` links `ed` and `edith` into a directory on PATH, and
         `ed uninstall` removes those links again. Neither touches anything else.
 
         Add `--json` to any read command for machine-readable output on stdout with
@@ -62,6 +67,7 @@ public enum Guide {
 
         ```
         ed config get preventSleep
+        ed extensions enable keepAwake
         ed config set preventSleep true
         ed config set warnPercent 70
         ed config ls --group presenter
@@ -107,6 +113,81 @@ public enum Guide {
         ed lid-awake status --json
         ed lid-awake off
         ```
+
+        ## Databases
+
+        Database reads go through the authenticated local broker used by the app.
+        Connection output never includes credential references or secret values.
+
+        ```
+        ed database connections
+        printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
+        ed database connections list --product postgresql --environment production
+        ed database connections get <connection-id>
+        ed database connections test <connection-id> --timeout-milliseconds 10000 --json
+        ed database connections edit <connection-id> --environment production --protection read-only
+        ed database connections duplicate <connection-id> "TUF PostgreSQL copy"
+        ed database connections rename <connection-id> "TUF PostgreSQL"
+        ed database connections delete <connection-id> --yes
+        printf 'select * from public.orders limit 100' | ed database saved-queries save "recent orders" --connection <connection-id>
+        ed database saved-queries list --connection <connection-id> --json
+        ed database saved-queries get <query-id>
+        ed database saved-queries rename <query-id> "recent orders by id"
+        ed database saved-queries delete <query-id> --yes
+        ed database capabilities <connection-id>
+        ed database capabilities <connection-id> --refresh --json
+        ed database connect <connection-id> --json
+        ed database browse <connection-id> --path public --path orders --limit 100 --json
+        printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
+        ed database mutations document-request <connection-id> --action update --path app --path people --document-id 507f1f77bcf86cd799439011 --document person.json > mutation.json
+        ed database mutations preview --request mutation.json --json > preview.json
+        ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
+        ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
+        ed database mutations status --receipt receipt.json --json
+        ed database mutations cancel --receipt receipt.json --yes --json
+        ed database mutations outcome <operation-id> --json
+        ed database operations list --connection <connection-id> --state running --json
+        ed database operations cancel <operation-id> --json
+        ed database disconnect <connection-id> --json
+        ed database mcp
+        ```
+
+        The bare `database` command defaults to `connections`, and bare `connections`
+        defaults to `list`. Use `--json` for stable fields and UUID connection ids.
+        `connections add` tests the exact connection through the broker before saving it.
+        Passwords are accepted only from stdin and stored in Keychain; arguments and
+        output contain no credential values or Keychain identifiers.
+        Connection edits preserve endpoints and credential references while changing labels,
+        grouping, favorites, colors, and safety policies. Duplicate connections intentionally
+        share their existing Keychain credentials and report that fact without printing their
+        references. Delete commands require `--yes` and disconnect active sessions first.
+        Saved query text is accepted only from stdin or a UTF-8 file, never from process
+        arguments. Lists omit query text, while `get` and `save --json` return the bounded body.
+        Capability discovery uses the cached report when possible. `--refresh` asks the
+        broker to reconnect and discover the current product, version, topology,
+        permissions, limits, supported operations, and safety limitations.
+        Browse and query return bounded pages. Use `--ndjson` for one record per line,
+        pass the opaque continuation back with `--continuation`, and set an operation
+        deadline with `--timeout-milliseconds`. Query text is read only from stdin or
+        a UTF-8 file so statements do not leak through process arguments.
+        Destructive work starts from a bounded `DatabaseDestructiveRequest` JSON file.
+        `mutations row-request` builds PostgreSQL insert, update, and delete requests with
+        quoted identifiers and bound values from typed identity and value documents.
+        `mutations document-request` builds MongoDB insert, update, and delete requests from
+        bounded JSON documents and an explicitly typed document identifier.
+        `mutations preview` returns the exact effect, impact, confirmation text, expiry,
+        and a short-lived one-time token. `mutations apply` requires the unchanged request,
+        the saved preview document, and `--yes`; it never accepts tokens or confirmation
+        text in process arguments. Save an accepted apply result to check status, request
+        cancellation, or reconcile the durable outcome after an interrupted operation.
+        `database operations` lists broker history, shows progress, and requests
+        cancellation using operation UUIDs returned by execution commands.
+
+        `ed database mcp` stays in the foreground and reserves stdout for MCP
+        protocol traffic. It exposes bounded connection and capability inspection
+        through the same authenticated broker. Tool failures remain structured MCP
+        responses, while process diagnostics use stderr.
 
         ## Machines
 
@@ -179,9 +260,10 @@ public enum Guide {
         ed machines box control wifi off --yes   apply it explicitly
         ```
 
-        Thermal controls use the Linux platform profile exposed by the machine.
-        A timed profile change schedules its reversion on that machine, so it still
-        restores the previous profile if Edith closes or the SSH connection drops.
+        Thermal controls use the Linux platform profile or Windows power scheme
+        exposed by the machine. A timed profile change schedules its reversion on
+        that machine, so it still restores the previous profile if Edith closes or
+        the SSH connection drops.
 
         The machine name comes first, subject then verb. The older order with the
         machine last still parses, so `ed machines docker ps tuf` keeps working. A
@@ -295,6 +377,7 @@ public enum Guide {
         ed usage projects copy-link edith
         ed usage projects copy-chat <chat-id>
         ed usage sources
+        ed usage export --card activity --output ./shares
         ed usage machines               machines counted with this Mac
         ed usage machines collect tuf   run the collector there, bring it back
         ed usage refresh                re-collect from every agent, live progress
@@ -402,6 +485,14 @@ public enum Guide {
         ed machines terminal broadcast box -- uptime one line, every open tab for box
         ed apps ls                      what is running here
         ed apps quit Safari --yes | --all --yes
+        ed brew ls --outdated           installed Homebrew packages with updates
+        ed brew search firefox          available casks matching a query
+        ed brew install ripgrep         install one exact formula
+        ed brew uninstall ripgrep       preview before removing anything
+        ed maintenance inventory        installed apps and Homebrew updates
+        ed maintenance scan <app>       exact app and support-file Trash plan
+        ed maintenance remove <app>     preview the reviewed selection
+        ed maintenance remove <app> --yes
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
@@ -420,6 +511,9 @@ public enum Guide {
         ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
+        ed emoji ls --search rocket     the emoji this Mac can render
+        ed emoji insert 1F600           type one into the app in front of you
+        ed emoji tone medium            the default skin tone
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
@@ -451,6 +545,27 @@ public enum Guide {
         ed app clear-updates            preview clearing the update history
         ed app reveal companion --tab chat  show a section, and a tab inside it
         ed app snapshot                 the open windows as PNGs, no screen recording
+        ```
+
+        ## The background agent
+
+        `edithd` is a headless LaunchAgent that owns collection and long jobs.
+        It has no window and never asks for a permission:
+
+        ```
+        ed agent status                 registration, build, uptime, memory, store schema
+        ed agent jobs                   the live job table with cadences and subscribers
+        ed agent restart                stop it so launchd starts a fresh one
+        ed agent logs --last 10m        recent lines from its log subsystem
+        ```
+
+        ## Serving yourself
+
+        `ed mcp` exposes every operation above as an MCP tool over stdio, so an
+        agent can call them directly instead of shelling out:
+
+        ```
+        ed mcp                          one tool per route, JSON in and out
         ```
 
         ## Completions

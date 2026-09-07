@@ -17,8 +17,7 @@ private func renderedBitmap(
             .environment(\.machineConnectionsEnabled, false)
             .environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-    let window = NSWindow(
-        contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    let window = TestWindowHost.window(contentRect: host.frame)
     defer { window.orderOut(nil) }
     window.contentView = host
     window.layoutIfNeeded()
@@ -47,24 +46,94 @@ private func descendantViews(of view: NSView) -> [NSView] {
 
 @MainActor @Suite(.serialized) struct UISmokeTests {
     init() {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
     }
 
     @Test func loadingSkeletonsRender() {
         #expect(renders(MachineOverviewSkeleton(dark: true)))
         #expect(renders(FleetHomeSkeleton(dark: true)))
+        #expect(renders(MusicLibrarySkeleton(grid: false)))
+        #expect(renders(MusicLibrarySkeleton(grid: true)))
         #expect(renders(ListRowsSkeleton(rows: 4, dark: true)))
         #expect(renders(FinderSkeleton(mode: .list, dark: true)))
         #expect(renders(FinderSkeleton(mode: .icon, dark: true)))
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
     }
 
+    @Test func pluginTargetsSkeletonRendersInBothAppearances() throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    SkillTargetsSkeleton()
+                        .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .background(scheme == .dark ? Color.black : Color.white)
+                        .environment(\.colorScheme, scheme),
+                    width: 600, height: 240))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent(
+                        "plugin-targets-\(scheme == .dark ? "dark" : "light").png"))
+            }
+        }
+    }
+
+    @Test func musicLibrarySkeletonsRenderWithSyntheticEvidence() throws {
+        for grid in [false, true] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    MusicLibrarySkeleton(grid: grid)
+                        .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .background(Color.white)
+                        .environment(\.colorScheme, .light),
+                    width: 900, height: 520))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent("music-library-\(grid ? "grid" : "list").png")
+                )
+            }
+        }
+    }
+
+    @Test func everyAppMaintenanceSkeletonRenders() {
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
+        #expect(renders(HomebrewPageSkeleton()))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .removal)))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .history)))
+    }
+
     @Test func homePageRenders() {
         #expect(renders(HomePage()))
     }
 
-    @Test func mediaToolkitPageRenders() {
-        #expect(renders(MediaToolkitPage()))
+    @Test func appMaintenanceRendersInstalledPackagesAndUpdates() {
+        let model = HomebrewPageModel()
+        model.status = HomebrewStatus(
+            available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
+        model.loaded = true
+        model.packages = [
+            HomebrewPackage(
+                kind: .formula, name: "ripgrep", displayName: "ripgrep",
+                description: "Search text quickly", installedVersions: ["14.1.0"],
+                currentVersion: "14.1.1", outdated: true),
+            HomebrewPackage(
+                kind: .formula, name: "jq", displayName: "jq",
+                description: "Process JSON", installedVersions: ["1.7.1"],
+                currentVersion: "1.7.1"),
+        ]
+
+        #expect(renders(HomebrewMaintenanceView(model: model)))
     }
 
     @Test func mainWindowRendersEveryDestination() {
@@ -107,8 +176,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let host = NSHostingView(
             rootView: ExtensionSettingsHeader(title: "Lid Awake", enabled: .constant(false)))
         host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
-        let window = NSWindow(
-            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
         window.contentView = host
         window.layoutIfNeeded()
@@ -129,8 +197,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
             rootView: ExtensionSettingsHeader(
                 title: "Lid Awake", enabled: .constant(true), disabled: true))
         host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
-        let window = NSWindow(
-            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
         window.contentView = host
         window.layoutIfNeeded()
@@ -202,6 +269,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let holder = TerminalSessionHolder()
         #expect(renders(MachineTerminalTab(session: session, holder: holder)))
         #expect(!holder.started)
+    }
+
+    @Test func spaceTerminalWindowRendersWithoutStartingSessions() {
+        let defaults = UserDefaults(
+            suiteName: "space-terminal-smoke-\(UUID().uuidString)")!
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex", status: .working,
+            title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        let model = HerdrSpaceWindowModel(
+            space: HerdrAgentSpace(id: "edith", title: "edith", agents: [agent]),
+            store: store)
+
+        #expect(
+            renders(
+                HerdrSpaceView(model: model, store: store, launchEnabled: false),
+                width: 1180, height: 760))
+        #expect(model.tabs.flatMap(\.holders).allSatisfy { !$0.started })
+        model.stopAll()
     }
 
     @Test func finderSmokeRenderDoesNotStartConnection() async throws {
@@ -281,6 +368,22 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
+    @Test func herdrBoardWithAgentSpacesRenders() {
+        let name = "herdr-board-smoke-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex",
+            status: .working, title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        store.apply([.local(herdrPresent: true, agents: [agent])])
+        store.spaceGroupingEnabled = true
+        store.selectBoard()
+
+        #expect(renders(HerdrPage(store: store), width: 1180, height: 760))
+    }
+
     @Test func musicPageRenders() {
         #expect(renders(MusicPage()))
     }
@@ -293,7 +396,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(
             renders(
                 HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                width: 240, height: 40))
+                width: 280, height: 40))
+    }
+
+    @Test func herdrTitlebarViewPickerReflectsDetailVisibility() throws {
+        let name = "UISmokeTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let visible = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        store.detailOpen = false
+        let hidden = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        #expect(visible != hidden)
     }
 
     @Test func herdrTitlebarViewPickerRendersEveryThemeDistinctly() throws {
@@ -312,17 +434,16 @@ private func descendantViews(of view: NSView) -> [NSView] {
             let bitmap = try #require(
                 renderedBitmap(
                     HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                    width: 240, height: 40))
+                    width: 280, height: 40))
             appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
         }
         #expect(appearances.count == AppTheme.allCases.count)
     }
 
     @Test func herdrViewPickerUsesTheRightTitlebarAccessory() throws {
-        let window = NSWindow(
+        let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
+            styleMask: [.titled, .closable, .resizable, .miniaturizable])
         defer { window.orderOut(nil) }
 
         HerdrAgentWindow.addViewControls(
@@ -331,9 +452,10 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let accessory = try #require(window.titlebarAccessoryViewControllers.first)
         #expect(window.titlebarAccessoryViewControllers.count == 1)
         #expect(accessory.layoutAttribute == .right)
-        #expect(accessory.view.frame.width == 236)
+        #expect(
+            abs(accessory.view.frame.width - HerdrAgentWindow.viewControlsWidth) < 0.5)
         #expect(accessory.view.frame.height >= 28)
-        #expect(accessory.view.fittingSize.width >= 228)
+        #expect(accessory.view.fittingSize.width >= HerdrAgentWindow.viewControlsContentWidth)
         #expect(accessory.view.fittingSize.height <= 36)
     }
 

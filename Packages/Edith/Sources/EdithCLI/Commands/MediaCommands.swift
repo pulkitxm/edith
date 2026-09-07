@@ -24,7 +24,7 @@ struct MediaStatusCommand: AsyncParsableCommand {
         try await execute {
             let defaults = CLIEnvironment.sharedDefaults
             let enabled =
-                defaults.object(forKey: AppStorageKeys.Tabs.mediaToolkitEnabled) as? Bool ?? false
+                ExtensionRegistry.entry("mediaToolkit")?.isEnabled(in: defaults) ?? false
             let format =
                 defaults.string(forKey: AppStorageKeys.MediaToolkit.imageFormat)
                 ?? MediaImageFormat.jpeg.rawValue
@@ -151,11 +151,8 @@ struct MediaConvertImagesCommand: AsyncParsableCommand {
                 maxDimension: maxDimension == 0 ? nil : maxDimension)
             let results: [MediaImageResult]
             do {
-                results = try await Task.detached(priority: .userInitiated) {
-                    try MediaToolkit.convertImages(
-                        inputURLs, to: outputURL, options: options,
-                        cancelled: { Task.isCancelled })
-                }.value
+                results = try await AgentMediaClient.convertImages(
+                    inputURLs, to: outputURL, options: options)
             } catch {
                 throw MediaCLI.failure(error)
             }
@@ -226,11 +223,8 @@ struct MediaCompressVideoCommand: AsyncParsableCommand {
                 targetMegabytes: targetMB, keepAudio: !noAudio)
             let result: MediaVideoResult
             do {
-                result = try await Task.detached(priority: .userInitiated) {
-                    try await MediaToolkit.compressVideo(
-                        inputURL, to: outputURL, options: options,
-                        cancelled: { Task.isCancelled })
-                }.value
+                result = try await AgentMediaClient.compressVideo(
+                    inputURL, to: outputURL, options: options)
             } catch {
                 throw MediaCLI.failure(error)
             }

@@ -23,6 +23,8 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
+    @State private var customRangeOpen = false
+    @State private var showShare = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -33,47 +35,73 @@ struct DashboardView: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
 
+    private static let shortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM"
+        return formatter
+    }()
+
+    private static let monthKey: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        return formatter
+    }()
+
+    private static let monthName: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
+
     var body: some View {
-        GeometryReader { geo in
-            let compact = geo.size.width < UIScale.pt(640)
-            VStack(spacing: UIScale.pt(0)) {
-                masthead
-                if model.loaded {
-                    controlsBar
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        if showLog {
-                            logView.pageGutter(compact)
-                        }
-                        if model.loaded {
-                            kpiGrid.pageGutter(compact)
-                            LazyVStack(spacing: UIScale.pt(16)) {
-                                activityRow(compact: compact)
-                                LimitsCardView(theme: acc, dark: dark)
-                                BudgetCardView(theme: acc, dark: dark)
-                                charts(compact: compact)
-                            }
-                            .pageContent(compact)
-                        } else if !model.loadAttempted {
-                            ProgressView("Loading usage data…")
-                                .controlSize(.small)
-                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
-                        } else {
-                            ContentUnavailableView(
-                                "No usage data yet", systemImage: "chart.bar",
-                                description: Text("Hit reload to run the bundled collector.")
-                            )
-                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
-                        }
+        ZStack {
+            GeometryReader { geo in
+                let compact = geo.size.width < UIScale.pt(640)
+                VStack(spacing: UIScale.pt(0)) {
+                    masthead
+                    if model.loaded {
+                        controlsBar
+                    } else if !model.loadAttempted {
+                        DashboardControlsSkeleton()
                     }
-                    .padding(.top, UIScale.pt(16))
-                    .frame(maxWidth: .infinity)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                            if showLog {
+                                logView.pageGutter(compact)
+                            }
+                            if model.loaded {
+                                kpiGrid.pageGutter(compact)
+                                VStack(spacing: UIScale.pt(16)) {
+                                    activityRow(compact: compact)
+                                    LimitsCardView(theme: acc, dark: dark)
+                                    BudgetCardView(theme: acc, dark: dark)
+                                    charts(compact: compact)
+                                }
+                                .pageContent(compact)
+                            } else if !model.loadAttempted {
+                                DashboardPageSkeleton(dark: dark)
+                                    .pageContent(compact)
+                            } else {
+                                ContentUnavailableView(
+                                    "No usage data yet", systemImage: "chart.bar",
+                                    description: Text("Hit reload to run the bundled collector.")
+                                )
+                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                            }
+                        }
+                        .padding(.top, UIScale.pt(16))
+                        .frame(maxWidth: .infinity)
+                    }
                 }
+                .background(background)
+                .environment(\.compactLayout, compact)
             }
-            .background(background)
-            .environment(\.compactLayout, compact)
+            if showShare {
+                shareOverlay
+                    .zIndex(10)
+            }
         }
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShare)
         .navigationTitle("Agent Usage")
         .task(id: refresh.updating) {
             guard automaticActionsEnabled else { return }
@@ -94,6 +122,30 @@ struct DashboardView: View {
         }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
+        }
+    }
+
+    private var shareOverlay: some View {
+        ZStack {
+            Button(action: closeShare) {
+                Color.black.opacity(dark ? 0.66 : 0.3)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .transition(.opacity)
+            UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
+                .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
+                .transition(
+                    Motion.transition(
+                        .move(edge: .top).combined(with: .opacity), reduceMotion: reduceMotion,
+                        preferCrossFade: false))
+        }
+    }
+
+    private func closeShare() {
+        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+            showShare = false
         }
     }
 
@@ -123,13 +175,24 @@ struct DashboardView: View {
         } trailing: {
             mastheadButtons
         } accessory: {
-            WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
-                ForEach(metaSegments) { seg in
-                    Text(seg.text)
-                        .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+            if model.loaded {
+                WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
+                    ForEach(metaSegments) { seg in
+                        Text(seg.text)
+                            .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+                    }
                 }
+                .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 112, height: 9)
+                        SkeletonBlock(width: 64, height: 9)
+                        SkeletonBlock(width: 86, height: 9)
+                    }
+                }
+                .accessibilityLabel("Loading usage summary")
             }
-            .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
@@ -147,7 +210,31 @@ struct DashboardView: View {
                 helperText: "Show collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
+            if model.loaded {
+                OrbitingShareButton(
+                    action: {
+                        withAnimation(
+                            Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
+                        ) {
+                            showShare = true
+                        }
+                    },
+                    dark: dark)
+            }
         }
+    }
+
+    private var shareSnapshot: UsageShareSnapshot {
+        let details = model.heatDetail.sorted { $0.key < $1.key }
+        let agents = Set(details.flatMap { $0.value.sources.map(\.id) })
+        let repositories = Set(
+            details.flatMap { $0.value.projects.map(\.id) }.filter { $0 != "unattributed" })
+        return UsageShareSnapshot(
+            days: details.map { period, detail in
+                UsageShareDay(period: period, tokens: detail.tokens, cost: detail.cost)
+            },
+            agentCount: agents.count, repositoryCount: repositories.count,
+            generatedAt: model.meta.updated)
     }
 
     private struct MastheadButton: View {
@@ -161,7 +248,9 @@ struct DashboardView: View {
             Button(action: action) {
                 Group {
                     if isLoading {
-                        ProgressView().controlSize(.small)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 18, corner: 9)
+                        }
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
@@ -173,6 +262,63 @@ struct DashboardView: View {
             .buttonStyle(.edith(.toolbar))
             .disabled(isLoading)
             .help(helperText)
+            .accessibilityLabel(helperText)
+        }
+    }
+
+    private struct OrbitingShareButton: View {
+        let action: () -> Void
+        let dark: Bool
+
+        @State private var hovering = false
+        @State private var rotation = 0.0
+
+        private var ink: Color { DashSkin.ink(dark) }
+
+        var body: some View {
+            Button(action: action) {
+                ZStack {
+                    Circle()
+                        .fill(ink.opacity(hovering ? 0.11 : 0.065))
+                    Circle()
+                        .strokeBorder(ink.opacity(0.14), lineWidth: 1)
+                    CircularShareText(color: ink.opacity(0.72))
+                        .rotationEffect(.degrees(rotation))
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(ink)
+                }
+                .frame(width: UIScale.pt(50), height: UIScale.pt(50))
+                .scaleEffect(hovering ? 1.07 : 1)
+                .animation(.easeOut(duration: 0.18), value: hovering)
+            }
+            .buttonStyle(.edith(.borderless))
+            .onAppear {
+                rotation = 0
+                withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+            .onHover { hovering = $0 }
+            .help("Share usage cards")
+            .accessibilityLabel("Share usage cards")
+        }
+    }
+
+    private struct CircularShareText: View {
+        let color: Color
+        private let letters = Array("SHARE • SHARE • ")
+
+        var body: some View {
+            ZStack {
+                ForEach(Array(letters.enumerated()), id: \.offset) { index, letter in
+                    Text(String(letter))
+                        .font(.system(size: UIScale.pt(5.4), weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                        .offset(y: UIScale.pt(-19))
+                        .rotationEffect(.degrees(Double(index) * 360 / Double(letters.count)))
+                }
+            }
         }
     }
 
@@ -192,13 +338,17 @@ struct DashboardView: View {
             ("\(m.activeDays) active days", false, false),
             ("\(m.totalTokens) tokens", false, true),
             ("\(m.modelCount) models", false, false),
-            (m.sourceLabels, false, false),
+            (sourceMetaText, false, false),
         ]
         return parts.enumerated().map { index, part in
             MetaSegment(
                 id: index, text: index == 0 ? part.0 : "·  \(part.0)", sensitive: part.1,
                 usage: part.2)
         }
+    }
+
+    private var sourceMetaText: String {
+        model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
     private var kpiColumns: [GridItem] {
@@ -278,37 +428,27 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        VStack(spacing: 10) {
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                rangeButton("Today", .today)
-                rangeButton("Yesterday", .yesterday)
-                rangeButton("Week", .thisWeek)
-                rangeButton("Last week", .lastWeek)
-                rangeButton("All", .all)
-                if !model.monthOptions.isEmpty {
-                    Menu {
-                        ForEach(model.monthOptions, id: \.self) { m in
-                            Button(m) { model.range = .month(m) }
-                        }
-                    } label: {
-                        Label("Month", systemImage: "calendar.badge.clock")
-                            .font(.system(size: UIScale.pt(11)))
-                            .modifier(FilterChip(dark: dark))
-                    }
-                    .menuStyle(.borderlessButton).fixedSize()
+        ViewThatFits(in: .horizontal) {
+            VStack(spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    filterSectionLabel("Range")
+                    rangePresets
+                    Spacer(minLength: UIScale.pt(24))
+                    monthArchiveMenu
+                    customRange
+                    resetButton
                 }
-                if !model.machineGroups.isEmpty { machineMenu }
-                Button("Reset") { model.reset() }
-                    .buttonStyle(.edith(.borderless)).font(DashSkin.mono(11))
-                    .foregroundStyle(acc)
-                    .padding(.vertical, UIScale.pt(5))
+                HStack(spacing: UIScale.pt(8)) {
+                    filterSectionLabel("Scope")
+                    if !model.machineGroups.isEmpty { machineMenu }
+                    modelMenu
+                    Spacer(minLength: UIScale.pt(24))
+                    projectMenu
+                    sourceMenu
+                }
             }
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                modelMenu
-                projectMenu
-                sourceMenu
-                customRange
-            }
+            regularControlsBar
+            compactControlsBar
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
@@ -316,32 +456,181 @@ struct DashboardView: View {
         .padding(.vertical)
     }
 
-    private var customRange: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customFrom },
-                    set: {
-                        customFrom = $0
-                        model.range = .custom(model.ymd($0), model.ymd(customTo))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
-            Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customTo },
-                    set: {
-                        customTo = $0
-                        model.range = .custom(model.ymd(customFrom), model.ymd($0))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+    private var regularControlsBar: some View {
+        VStack(spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(8)) {
+                filterSectionLabel("Range")
+                rangeButton("Today", .today)
+                rangeButton("This week", .thisWeek)
+                if let month = currentMonthOption {
+                    rangeButton("This month", .month(month))
+                }
+                rangeButton("All", .all)
+                alternateRangeMenu
+                Spacer(minLength: UIScale.pt(8))
+                customRange
+                resetButton
+            }
+            HStack(spacing: UIScale.pt(8)) {
+                filterSectionLabel("Scope")
+                if !model.machineGroups.isEmpty { machineMenu }
+                modelMenu
+                Spacer(minLength: UIScale.pt(8))
+                monthArchiveMenu
+                projectMenu
+                sourceMenu
+            }
         }
+    }
+
+    private var compactControlsBar: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            filterSectionLabel("Range")
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                rangePresets
+                monthArchiveMenu
+                customRange
+                resetButton
+            }
+            filterSectionLabel("Scope")
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                if !model.machineGroups.isEmpty { machineMenu }
+                modelMenu
+                projectMenu
+                sourceMenu
+            }
+        }
+    }
+
+    private var rangePresets: some View {
+        Group {
+            rangeButton("Today", .today)
+            rangeButton("Yesterday", .yesterday)
+            rangeButton("This week", .thisWeek)
+            rangeButton("Last week", .lastWeek)
+            if let month = currentMonthOption {
+                rangeButton("This month", .month(month))
+            }
+            if let month = previousMonthOption {
+                rangeButton("Last month", .month(month))
+            }
+            rangeButton("All", .all)
+        }
+    }
+
+    private func filterSectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(DashSkin.mono(8, weight: .semibold))
+            .tracking(UIScale.pt(1.2))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .frame(width: UIScale.pt(42), alignment: .leading)
+    }
+
+    private var monthArchiveMenu: some View {
+        Menu {
+            ForEach(model.monthOptions, id: \.self) { month in
+                Button(monthDisplayName(month)) { model.range = .month(month) }
+            }
+        } label: {
+            Label("Browse months", systemImage: "calendar.badge.clock")
+                .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(model.monthOptions.isEmpty)
+    }
+
+    private var alternateRangeMenu: some View {
+        Menu {
+            Button("Yesterday") { model.range = .yesterday }
+            Button("Last week") { model.range = .lastWeek }
+            if let month = previousMonthOption {
+                Button("Last month") { model.range = .month(month) }
+            }
+        } label: {
+            Label("More", systemImage: "clock.arrow.circlepath")
+                .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark, active: alternateRangeActive))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var alternateRangeActive: Bool {
+        switch model.range {
+        case .yesterday, .lastWeek:
+            return true
+        case .month(let month):
+            return month == previousMonthOption
+        default:
+            return false
+        }
+    }
+
+    private var resetButton: some View {
+        Button("Reset") { model.reset() }
+            .buttonStyle(.edith(.borderless))
+            .font(DashSkin.mono(11))
+            .foregroundStyle(acc)
+            .padding(.horizontal, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(5))
+    }
+
+    private var customRange: some View {
+        Button {
+            customRangeOpen = true
+        } label: {
+            Label(customRangeLabel, systemImage: "calendar")
+                .font(.system(size: UIScale.pt(11)))
+                .lineLimit(1)
+                .modifier(FilterChip(dark: dark, active: isCustomRangeActive))
+        }
+        .buttonStyle(.edith(.borderless))
+        .fixedSize()
+        .popover(isPresented: $customRangeOpen, arrowEdge: .bottom) {
+            DashboardDateRangePicker(
+                from: customFrom,
+                to: customTo,
+                bounds: model.dataRange ?? Date()...Date(),
+                onApply: { from, to in
+                    customFrom = from
+                    customTo = to
+                    model.range = .custom(model.ymd(from), model.ymd(to))
+                    customRangeOpen = false
+                },
+                onCancel: { customRangeOpen = false }
+            )
+        }
+    }
+
+    private var customRangeLabel: String {
+        guard isCustomRangeActive else { return "Custom range" }
+        return
+            "\(Self.shortDate.string(from: customFrom)) – \(Self.shortDate.string(from: customTo))"
+    }
+
+    private var isCustomRangeActive: Bool {
+        if case .custom = model.range { return true }
+        return false
+    }
+
+    private var currentMonthOption: String? {
+        guard let upperBound = model.dataRange?.upperBound else { return model.monthOptions.first }
+        return Self.monthKey.string(from: upperBound)
+    }
+
+    private var previousMonthOption: String? {
+        guard let upperBound = model.dataRange?.upperBound,
+            let date = Calendar.current.date(byAdding: .month, value: -1, to: upperBound)
+        else { return model.monthOptions.dropFirst().first }
+        let key = Self.monthKey.string(from: date)
+        return model.monthOptions.contains(key) ? key : nil
+    }
+
+    private func monthDisplayName(_ month: String) -> String {
+        guard let date = DateFormatter.monthParser.date(from: month) else { return month }
+        return Self.monthName.string(from: date)
     }
 
     private func syncCustomDates() {
@@ -383,6 +672,8 @@ struct DashboardView: View {
         case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
             (.lastWeek, .lastWeek), (.all, .all):
             return true
+        case (.month(let selected), .month(let target)):
+            return selected == target
         default: return false
         }
     }
@@ -505,87 +796,93 @@ struct DashboardView: View {
         TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
 
-    @ViewBuilder private func charts(compact: Bool) -> some View {
-        SkinCard(title: "Daily usage", dark: dark) {
-            ComboChart(
-                points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
-                scroll: true, blur: blurMoney, blurTokens: blurUsage)
-        }
-        SkinCard(title: "Token mix by day", dark: dark) {
-            StackedChart(
-                bars: model.chartData.tokenMix, costLine: model.chartData.daily,
-                domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney,
-                blurTokens: blurUsage)
-        }
-        SkinCard(title: "Model usage over time", dark: dark) {
-            StackedChart(
-                bars: model.chartData.modelTime, costLine: model.chartData.daily,
-                domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney,
-                blurTokens: blurUsage)
-        }
-        if model.allSources.count > 1 {
-            SkinCard(title: "Usage by source over time", dark: dark) {
+    private func charts(compact: Bool) -> some View {
+        LazyVStack(spacing: UIScale.pt(16)) {
+            LazyChartCard(title: "Daily usage", dark: dark) {
+                ComboChart(
+                    points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
+                    scroll: true, blur: blurMoney, blurTokens: blurUsage)
+            }
+            LazyChartCard(title: "Token mix by day", dark: dark) {
                 StackedChart(
-                    bars: model.chartData.source, costLine: model.chartData.daily,
-                    domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney,
+                    bars: model.chartData.tokenMix, costLine: model.chartData.stackedCost,
+                    domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney,
                     blurTokens: blurUsage)
             }
-        }
-        if compact {
-            VStack(spacing: UIScale.pt(16)) {
-                dowCard
-                shareByModelCard
+            LazyChartCard(title: "Model usage over time", dark: dark) {
+                StackedChart(
+                    bars: model.chartData.modelTime, costLine: model.chartData.stackedCost,
+                    domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney,
+                    blurTokens: blurUsage)
             }
-        } else {
-            HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                dowCard
-                shareByModelCard
+            if model.allSources.count > 1 {
+                LazyChartCard(title: "Usage by source over time", dark: dark) {
+                    StackedChart(
+                        bars: model.chartData.source, costLine: model.chartData.stackedCost,
+                        domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney,
+                        blurTokens: blurUsage)
+                }
             }
-        }
-        if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
-            SkinCard(title: "By project", dark: dark) {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    if !model.projects.isEmpty {
-                        ComboChart(
-                            points: model.chartData.project, barColor: acc, lineColor: gold,
-                            dark: dark, height: UIScale.pt(280), blur: blurMoney,
-                            blurTokens: blurUsage)
-                        ProjectDrilldownView(
-                            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+            if compact {
+                VStack(spacing: UIScale.pt(16)) {
+                    dowCard
+                    shareByModelCard
+                }
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                    dowCard
+                    shareByModelCard
+                }
+            }
+            if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
+                LazyChartCard(
+                    title: "By project", dark: dark, placeholderHeight: UIScale.pt(304)
+                ) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        if !model.projects.isEmpty {
+                            ComboChart(
+                                points: model.chartData.project, barColor: acc, lineColor: gold,
+                                dark: dark, height: UIScale.pt(280), blur: blurMoney,
+                                blurTokens: blurUsage)
+                            ProjectDrilldownView(
+                                model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                        }
+                        if !pathUnattributedText.isEmpty {
+                            Text(pathUnattributedText)
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                                .presenterBlur(blurMoney || blurUsage)
+                        }
                     }
-                    if !pathUnattributedText.isEmpty {
-                        Text(pathUnattributedText)
+                }
+            }
+            LazyChartCard(title: "Hourly usage", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    ComboChart(
+                        points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
+                        height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+                    if !hourlyUnattributedText.isEmpty {
+                        Text(hourlyUnattributedText)
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .presenterBlur(blurMoney || blurUsage)
                     }
                 }
             }
-        }
-        SkinCard(title: "Hourly usage", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                ComboChart(
-                    points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                    height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
-                if !hourlyUnattributedText.isEmpty {
-                    Text(hourlyUnattributedText)
+            SkinCard(
+                title: "Models", note: "\(model.modelTotals.count) total", dark: dark
+            ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    if model.modelUnfilterableCost > 0.000_001 {
+                        Text(
+                            "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
+                        )
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .presenterBlur(blurMoney || blurUsage)
+                        .presenterBlur(blurMoney)
+                    }
+                    modelsTable
                 }
-            }
-        }
-        SkinCard(title: "Models", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                if model.modelUnfilterableCost > 0.000_001 {
-                    Text(
-                        "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
-                    )
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .presenterBlur(blurMoney)
-                }
-                modelsTable
             }
         }
     }
@@ -625,7 +922,7 @@ struct DashboardView: View {
     }
 
     private var dowCard: some View {
-        SkinCard(title: "By day of week", dark: dark) {
+        LazyChartCard(title: "By day of week", dark: dark) {
             ComboChart(
                 points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
                 height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
@@ -633,7 +930,7 @@ struct DashboardView: View {
     }
 
     private var shareByModelCard: some View {
-        SkinCard(title: "Share by model", dark: dark) {
+        LazyChartCard(title: "Share by model", dark: dark) {
             DonutChart(slices: donutSlices, blurTokens: blurUsage)
         }
     }
@@ -643,38 +940,64 @@ struct DashboardView: View {
             HStack(spacing: UIScale.pt(8)) {
                 tableHeader("Model", .model, width: nil)
                 tableHeader("Cost", .cost, width: UIScale.pt(70))
-                tableHeader("Share", .share, width: UIScale.pt(60))
+                if !compactLayout {
+                    tableHeader("Share", .share, width: UIScale.pt(60))
+                }
                 tableHeader("Tokens", .tokens, width: UIScale.pt(70))
-                tableHeader("Days", .days, width: UIScale.pt(44))
+                if !compactLayout {
+                    tableHeader("Days", .days, width: UIScale.pt(44))
+                }
             }
             .font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.vertical, UIScale.pt(4))
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
-            ForEach(model.modelTotals) { m in
-                HStack(spacing: UIScale.pt(8)) {
-                    Circle().fill(model.modelColor(m.model, dark: dark)).frame(
-                        width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(model.modelLabel(m.model))
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
-                        .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
-                    Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
-                        width: UIScale.pt(70), alignment: .trailing
-                    ).presenterBlur(blurMoney)
+            if model.modelTotals.count > DashboardChartLayout.visibleModelRows {
+                ScrollView {
+                    LazyVStack(spacing: UIScale.pt(0)) {
+                        modelRows
+                    }
+                }
+                .frame(
+                    height: UIScale.pt(
+                        DashboardChartLayout.modelRowHeight
+                            * CGFloat(DashboardChartLayout.visibleModelRows)))
+            } else {
+                VStack(spacing: UIScale.pt(0)) {
+                    modelRows
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var modelRows: some View {
+        ForEach(model.modelTotals) { m in
+            HStack(spacing: UIScale.pt(8)) {
+                Circle().fill(model.modelColor(m.model, dark: dark)).frame(
+                    width: UIScale.pt(8), height: UIScale.pt(8))
+                Text(model.modelLabel(m.model))
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
+                    width: UIScale.pt(70), alignment: .trailing
+                ).presenterBlur(blurMoney)
+                if !compactLayout {
                     Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
                         width: UIScale.pt(60), alignment: .trailing
                     ).foregroundStyle(DashSkin.inkSoft(dark))
-                    Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
-                        width: UIScale.pt(70), alignment: .trailing
-                    ).presenterBlur(blurUsage)
+                }
+                Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
+                    width: UIScale.pt(70), alignment: .trailing
+                ).presenterBlur(blurUsage)
+                if !compactLayout {
                     Text("\(m.days)").font(DashSkin.mono(11)).frame(
                         width: UIScale.pt(44), alignment: .trailing
                     )
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 }
-                .foregroundStyle(DashSkin.ink(dark))
-                .padding(.vertical, UIScale.pt(5))
-                Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: UIScale.pt(1))
             }
+            .foregroundStyle(DashSkin.ink(dark))
+            .padding(.vertical, UIScale.pt(5))
+            Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: UIScale.pt(1))
         }
     }
 
@@ -707,30 +1030,48 @@ struct DashboardView: View {
             DashPalette.cacheCreateColor, DashPalette.cacheReadColor,
         ]
     }
-    private var modelDomain: [String] { model.allModels.map(DashFmt.shortModel) }
-    private var modelRange: [Color] { model.allModels.map { model.modelColor($0, dark: dark) } }
-    private var sourceDomain: [String] { model.allSources.map(\.label) }
+    private var modelDomain: [String] { chartSeriesDomain(model.chartData.modelTime) }
+    private var modelRange: [Color] {
+        modelDomain.map { series in
+            guard series != "Other",
+                let name = model.allModels.first(where: { DashFmt.shortModel($0) == series })
+            else { return DashSkin.inkFaint(dark) }
+            return model.modelColor(name, dark: dark)
+        }
+    }
+    private var sourceDomain: [String] { chartSeriesDomain(model.chartData.source) }
     private var sourceRange: [Color] {
-        model.allSources.map { model.sourceColor($0.id, dark: dark) }
+        sourceDomain.map { series in
+            guard series != "Other",
+                let source = model.allSources.first(where: { $0.label == series })
+            else { return DashSkin.inkFaint(dark) }
+            return model.sourceColor(source.id, dark: dark)
+        }
     }
     private var donutSlices: [DonutSlice] {
-        model.tokenBearingModelTotals.map {
+        let slices = model.tokenBearingModelTotals.map {
             DonutSlice(
                 id: $0.model, label: model.modelLabel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
         }
+        return compactDonutSlices(slices, otherColor: DashSkin.inkFaint(dark))
     }
 }
 
 private struct FilterChip: ViewModifier {
     let dark: Bool
+    var active = false
 
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, UIScale.pt(10))
             .padding(.vertical, UIScale.pt(5))
             .widgetBar(
-                cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.lineStrong(dark))
+                cornerRadius: 8,
+                fill: active
+                    ? AnyShapeStyle(DashSkin.accent(dark).opacity(0.13))
+                    : AnyShapeStyle(DashSkin.paper2(dark)),
+                stroke: active ? DashSkin.accent(dark).opacity(0.55) : DashSkin.lineStrong(dark))
     }
 }
 
@@ -844,5 +1185,233 @@ private struct HeatCellView: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(3))
                     .strokeBorder(stroke, lineWidth: UIScale.pt(1))
             )
+    }
+}
+
+private struct DashboardControlsSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+    private let rangeWidths = [48.0, 74, 92, 34, 62, 100, 98, 44]
+    private let scopeWidths = [88.0, 104, 92, 90]
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                controlRow(widths: rangeWidths, split: 5)
+                controlRow(widths: scopeWidths, split: 1)
+            }
+            .pageGutter(compact)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical)
+        }
+        .accessibilityLabel("Loading usage controls")
+    }
+
+    @ViewBuilder private func controlRow(widths: [Double], split: Int) -> some View {
+        if compact {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 42, height: 7)
+                WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                    ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                        SkeletonBlock(width: width, height: 25, corner: 8)
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 42, height: 7)
+                    .frame(width: UIScale.pt(42), alignment: .leading)
+                ForEach(Array(widths.prefix(split).enumerated()), id: \.offset) { _, width in
+                    SkeletonBlock(width: width, height: 25, corner: 8)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                ForEach(Array(widths.dropFirst(split).enumerated()), id: \.offset) { _, width in
+                    SkeletonBlock(width: width, height: 25, corner: 8)
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardPageSkeleton: View {
+    let dark: Bool
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(16)) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(minimum: UIScale.pt(compact ? 145 : 190)),
+                            spacing: UIScale.pt(12))
+                    ],
+                    spacing: UIScale.pt(12)
+                ) {
+                    ForEach(0..<8, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(0)) {
+                            SkeletonBlock(width: 3, height: 78, corner: 0)
+                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 3) ? 82 : 68, height: 8)
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 96 : 72, height: 22)
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 3) ? 116 : 92, height: 9)
+                            }
+                            .padding(UIScale.pt(14))
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            DashSkin.paper2(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+                    }
+                }
+                if compact {
+                    VStack(spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
+                        DashboardPanelSkeleton(kind: .dials, dark: dark)
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
+                        DashboardPanelSkeleton(kind: .dials, dark: dark)
+                            .frame(width: UIScale.pt(340))
+                    }
+                }
+                DashboardPanelSkeleton(kind: .history, dark: dark)
+                DashboardPanelSkeleton(kind: .budget, dark: dark)
+                ForEach(0..<3, id: \.self) { _ in
+                    DashboardPanelSkeleton(kind: .chart, dark: dark)
+                }
+                if compact {
+                    VStack(spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                    }
+                }
+                DashboardPanelSkeleton(kind: .table, dark: dark)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .top)
+        .accessibilityLabel("Loading usage data")
+    }
+}
+
+private enum DashboardPanelSkeletonKind: Equatable {
+    case heatmap, dials, history, budget, chart, table
+}
+
+private struct DashboardPanelSkeleton: View {
+    let kind: DashboardPanelSkeletonKind
+    let dark: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack {
+                SkeletonBlock(width: titleWidth, height: 16)
+                Spacer()
+                if kind == .dials || kind == .table {
+                    SkeletonBlock(width: 72, height: 8)
+                }
+            }
+            panelContent
+        }
+        .padding(UIScale.pt(16))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
+    }
+
+    @ViewBuilder private var panelContent: some View {
+        switch kind {
+        case .heatmap:
+            HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                VStack(spacing: UIScale.pt(7)) {
+                    ForEach(0..<7, id: \.self) { _ in SkeletonBlock(width: 24, height: 7) }
+                }
+                HStack(spacing: UIScale.pt(3)) {
+                    ForEach(0..<18, id: \.self) { column in
+                        VStack(spacing: UIScale.pt(3)) {
+                            ForEach(0..<7, id: \.self) { row in
+                                SkeletonBlock(
+                                    width: 8, height: 8,
+                                    corner: (column + row).isMultiple(of: 4) ? 3 : 2)
+                            }
+                        }
+                    }
+                }
+            }
+        case .dials:
+            HStack(spacing: UIScale.pt(24)) {
+                ForEach(0..<2, id: \.self) { _ in
+                    VStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 104, height: 104, corner: 52)
+                        SkeletonBlock(width: 72, height: 7)
+                        SkeletonBlock(width: 84, height: 8)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        case .history:
+            SkeletonBlock(width: 88, height: 18, corner: 9)
+            HStack {
+                ForEach(0..<4, id: \.self) { _ in
+                    SkeletonBlock(width: 38, height: 22, corner: 11)
+                }
+                Spacer()
+                SkeletonBlock(width: 126, height: 8)
+            }
+            chartPlot(height: 150)
+        case .budget:
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 54, height: 24)
+                SkeletonBlock(width: 74, height: 22, corner: 11)
+                Spacer()
+                SkeletonBlock(width: 108, height: 8)
+            }
+            SkeletonBlock(height: 8, corner: 4)
+            HStack(spacing: UIScale.pt(16)) {
+                ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 78, height: 22) }
+            }
+        case .chart:
+            chartPlot(height: 166)
+        case .table:
+            ForEach(0..<5, id: \.self) { index in
+                HStack(spacing: UIScale.pt(8)) {
+                    SkeletonBlock(width: 8, height: 8, corner: 4)
+                    SkeletonBlock(width: index.isMultiple(of: 2) ? 142 : 112, height: 9)
+                    Spacer()
+                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 54, height: 9) }
+                }
+                Divider()
+            }
+        }
+    }
+
+    private var titleWidth: Double {
+        switch kind {
+        case .heatmap: 66
+        case .dials: 86
+        case .history: 216
+        case .budget: 126
+        case .chart: 118
+        case .table: 58
+        }
+    }
+
+    private func chartPlot(height: Double) -> some View {
+        HStack(alignment: .bottom, spacing: UIScale.pt(6)) {
+            ForEach(0..<12, id: \.self) { index in
+                SkeletonBlock(height: Double(28 + index % 5 * 18), corner: 3)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .bottom)
     }
 }

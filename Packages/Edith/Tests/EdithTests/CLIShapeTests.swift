@@ -18,6 +18,11 @@ enum CommandCrawler {
         command.configuration.commandName ?? String(describing: command).lowercased()
     }
 
+    static func terminalDefault(of command: ParsableCommand.Type) -> ParsableCommand.Type {
+        guard let fallback = command.configuration.defaultSubcommand else { return command }
+        return terminalDefault(of: fallback)
+    }
+
     static func every(from root: ParsableCommand.Type = EdRoot.self) -> [CommandWalk] {
         var found: [CommandWalk] = []
         var queue = [CommandWalk(path: ["ed"], type: root)]
@@ -124,6 +129,8 @@ enum CommandCrawler {
                 var allowed: Set<String> = [name]
                 if let fallback = child.configuration.defaultSubcommand {
                     allowed.insert(CommandCrawler.name(of: fallback))
+                    allowed.insert(
+                        CommandCrawler.name(of: CommandCrawler.terminalDefault(of: fallback)))
                 }
                 guard allowed.contains(landed) else {
                     unreachable.append("ed \(arguments.joined(separator: " ")) -> \(landed)")
@@ -179,13 +186,13 @@ enum CommandCrawler {
 
     @Test func aBareGroupNameResolvesToItsDefault() throws {
         for walk in Self.commands {
-            guard let fallback = walk.type.configuration.defaultSubcommand,
-                CommandCrawler.requiredPositionals(fallback).isEmpty
-            else { continue }
+            guard let fallback = walk.type.configuration.defaultSubcommand else { continue }
+            let terminal = CommandCrawler.terminalDefault(of: fallback)
+            guard CommandCrawler.requiredPositionals(terminal).isEmpty else { continue }
             let parsed = try EdRoot.parseAsRoot(walk.invocation)
             #expect(
                 CommandCrawler.name(of: type(of: parsed))
-                    == CommandCrawler.name(of: fallback),
+                    == CommandCrawler.name(of: terminal),
                 "bare `\(walk.label)` did not fall through to its default")
         }
     }
@@ -193,10 +200,7 @@ enum CommandCrawler {
     @Test func everyAliasReachesTheSameCommandAsItsRealName() throws {
         for walk in Self.commands where walk.path.count > 1 {
             guard CommandCrawler.requiredPositionals(walk.type).isEmpty else { continue }
-            var expected = CommandCrawler.name(of: walk.type)
-            if let fallback = walk.type.configuration.defaultSubcommand {
-                expected = CommandCrawler.name(of: fallback)
-            }
+            let expected = CommandCrawler.name(of: CommandCrawler.terminalDefault(of: walk.type))
             for alias in walk.type.configuration.aliases {
                 let arguments = Array(walk.invocation.dropLast()) + [alias]
                 let parsed = try EdRoot.parseAsRoot(arguments)
@@ -216,14 +220,17 @@ enum CommandCrawler {
             "ed machines files", "ed machines docker", "ed config", "ed extensions",
             "ed permissions", "ed usage", "ed system", "ed music", "ed calendar",
             "ed presenter", "ed herdr",
-            "ed machines", "ed __complete", "ed app", "ed clipboard", "ed color",
-            "ed shelf", "ed cleaner", "ed machines docker compose",
+            "ed herdr bridge",
+            "ed machines", "ed __complete", "ed app", "ed clipboard", "ed color", "ed emoji",
+            "ed shelf", "ed cleaner", "ed maintenance", "ed machines docker compose",
             "ed machines docker compose logs", "ed machines forwards",
             "ed machines snippets", "ed machines power", "ed machines thermal",
             "ed machines control", "ed usage projects",
             "ed machines services", "ed apps",
-            "ed tools", "ed download", "ed machines workspace", "ed usage machines",
-            "ed media",
+            "ed agent", "ed agent tasks", "ed mcp", "ed tools", "ed download",
+            "ed machines workspace",
+            "ed usage machines",
+            "ed brew",
             "ed companion", "ed companion reason", "ed companion core",
             "ed companion inquire", "ed companion eval", "ed companion machines",
             "ed companion hypotheses", "ed companion discrepancies", "ed companion standup",
@@ -232,6 +239,8 @@ enum CommandCrawler {
             "ed lid-awake",
             "ed attention", "ed attention categories", "ed attention focus",
             "ed quinjet",
+            "ed database", "ed database connections", "ed database saved-queries",
+            "ed database mutations", "ed database operations", "ed database mcp",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {
             #expect(

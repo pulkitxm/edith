@@ -29,7 +29,7 @@ public enum MediaImageFormat: String, CaseIterable, Codable, Identifiable, Senda
     }
 }
 
-public struct MediaImageOptions: Equatable, Sendable {
+public struct MediaImageOptions: Codable, Equatable, Sendable {
     public var format: MediaImageFormat
     public var quality: Double
     public var maxDimension: Int?
@@ -41,7 +41,7 @@ public struct MediaImageOptions: Equatable, Sendable {
     }
 }
 
-public struct MediaImageResult: Equatable, Sendable {
+public struct MediaImageResult: Codable, Equatable, Sendable {
     public let inputURL: URL
     public let outputURL: URL?
     public let inputBytes: Int64
@@ -60,7 +60,7 @@ public struct MediaImageResult: Equatable, Sendable {
     }
 }
 
-public struct MediaVideoOptions: Equatable, Sendable {
+public struct MediaVideoOptions: Codable, Equatable, Sendable {
     public var targetMegabytes: Int
     public var keepAudio: Bool
 
@@ -86,7 +86,7 @@ public struct MediaVideoPlan: Equatable, Sendable {
     }
 }
 
-public struct MediaVideoResult: Equatable, Sendable {
+public struct MediaVideoResult: Codable, Equatable, Sendable {
     public let inputURL: URL
     public let outputURL: URL
     public let inputBytes: Int64

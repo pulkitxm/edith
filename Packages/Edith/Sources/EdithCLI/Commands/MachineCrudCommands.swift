@@ -419,7 +419,9 @@ struct MachinesForwardsAddCommand: AsyncParsableCommand {
                 throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
-                CLIOut.json(ForwardBridge.json(forward, index: 0))
+                let stored = try ForwardBridge.forwards(target.id.uuidString).all
+                let index = stored.firstIndex(where: { $0.id == forward.id }).map { $0 + 1 } ?? 0
+                CLIOut.json(ForwardBridge.json(forward, index: index))
                 return
             }
             CLIOut.out("added \(forward.forwardSpec) on \(target.name)")
@@ -611,7 +613,9 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
                 throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
-                CLIOut.json(SnippetBridge.json(snippet, index: 0))
+                let stored = try SnippetBridge.snippets(target.id.uuidString).all
+                let index = stored.firstIndex(where: { $0.id == snippet.id }).map { $0 + 1 } ?? 0
+                CLIOut.json(SnippetBridge.json(snippet, index: index))
                 return
             }
             CLIOut.out("saved \(title) on \(shared ? "every machine" : target.name)")
@@ -686,8 +690,10 @@ struct MachinesSnippetsRunCommand: AsyncParsableCommand {
                 throw error
             }
             let runner = try await MachineResolver.runner(selection.machine)
-            let result = await SavedSnippetOperationExecution.run(selection.snippet) {
-                command, timeout in
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await SavedSnippetOperationExecution.run(
+                selection.snippet, platform: platform
+            ) { command, timeout in
                 do {
                     let result = try await runner.run(command, timeout: timeout)
                     return .success(
