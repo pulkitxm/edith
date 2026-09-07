@@ -48,6 +48,58 @@ import Testing
             ])
     }
 
+    @Test(arguments: [
+        UsageRefreshFailure.scriptMissing,
+        .busy,
+        .launchFailed("permission denied"),
+        .timedOut,
+        .outputLimitExceeded,
+        .reported("history merge failed; previous data preserved"),
+        .exited(5, "jq: error: invalid history document"),
+        .exited(1, ""),
+    ])
+    func failuresPreserveDiagnosticsAcrossFoundationBridging(failure: UsageRefreshFailure) {
+        let error: any Error = failure
+        let bridged = error as NSError
+
+        #expect(error.localizedDescription == failure.description)
+        #expect(bridged.localizedDescription == failure.description)
+        #expect(bridged.localizedRecoverySuggestion == failure.hint)
+    }
+
+    @Test func pipelineFailureIncludesBoundedStderrAndPersistsItOnce() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sink = UsageRefreshSink(dataDir: dir, startedAt: Date())
+        sink.begin()
+        let collector = UsageRefreshCollector(sink: sink, onEvent: { _ in })
+        for index in 0..<8 {
+            collector.ingestStandardError(Data("diagnostic \(index)\n".utf8))
+        }
+        collector.ingestStandardError(Data("jq: invalid history document".utf8))
+        collector.ingestStandardOutput(Data("error\thistory merge failed".utf8))
+        collector.flush()
+        collector.flush()
+
+        let failure = try #require(collector.reportedFailure)
+        #expect(failure.hasPrefix("history merge failed: "))
+        #expect(failure.contains("jq: invalid history document"))
+        #expect(!failure.contains("diagnostic 0"))
+        #expect(collector.diagnosticTail.split(separator: ";").count == 6)
+        let log = try String(contentsOf: UsageRefreshRunner.logURL(dataDir: dir), encoding: .utf8)
+        #expect(log.components(separatedBy: "jq: invalid history document").count == 2)
+    }
+
+    @Test func reportedFailureDoesNotDuplicateIdenticalDiagnostic() {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let collector = UsageRefreshCollector(
+            sink: UsageRefreshSink(dataDir: dir, startedAt: Date()), onEvent: { _ in })
+        collector.ingestStandardError(Data("history merge failed\n".utf8))
+        collector.ingestStandardOutput(Data("error\thistory merge failed\n".utf8))
+        #expect(collector.reportedFailure == "history merge failed")
+    }
+
     @Test func parsesEveryEventTheScriptEmits() {
         #expect(
             UsageRefreshEvent.parse("phase\tcli\t28 days\t0.88")

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
+public enum UsageRefreshFailure: LocalizedError, CustomStringConvertible, Equatable {
     case scriptMissing
     case busy
     case launchFailed(String)
@@ -31,6 +31,10 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
                 : "usage refresh exited with status \(status): \(tail)"
         }
     }
+
+    public var errorDescription: String? { description }
+
+    public var recoverySuggestion: String? { hint }
 
     public var hint: String? {
         switch self {
@@ -221,6 +225,7 @@ public enum UsageRefreshRunner {
             throw UsageRefreshFailure.launchFailed(error.localizedDescription)
         }
 
+        collector.flush()
         if let message = collector.reportedFailure {
             throw UsageRefreshFailure.reported(message)
         }
@@ -358,7 +363,9 @@ final class UsageRefreshCollector: @unchecked Sendable {
     var reportedFailure: String? {
         lock.lock()
         defer { lock.unlock() }
-        return failure
+        guard let failure else { return nil }
+        let diagnostics = stray.filter { !failure.contains($0) }.joined(separator: "; ")
+        return diagnostics.isEmpty ? failure : "\(failure): \(diagnostics)"
     }
 
     var totalSeconds: Double? {
@@ -382,18 +389,27 @@ final class UsageRefreshCollector: @unchecked Sendable {
     func ingestStandardError(_ data: Data) {
         guard !data.isEmpty else { return }
         let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &errBuffer)
-        lock.lock()
-        for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
-            stray.append(line)
-        }
-        lock.unlock()
+        for line in lines { recordDiagnostic(line) }
     }
 
     func flush() {
         let pending = outBuffer
         outBuffer = ""
         if !pending.isEmpty { handle(pending) }
+        let pendingError = errBuffer
+        errBuffer = ""
+        if !pendingError.isEmpty { recordDiagnostic(pendingError) }
         sink.flush()
+    }
+
+    private func recordDiagnostic(_ line: String) {
+        let diagnostic = String(line.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        guard !diagnostic.isEmpty else { return }
+        lock.lock()
+        stray.append(diagnostic)
+        if stray.count > 6 { stray.removeFirst(stray.count - 6) }
+        lock.unlock()
+        sink.writeDiagnostic(diagnostic)
     }
 
     private func takeLines(_ text: String, buffer: inout String) -> [String] {
@@ -405,10 +421,7 @@ final class UsageRefreshCollector: @unchecked Sendable {
 
     private func handle(_ line: String) {
         guard let event = UsageRefreshEvent.parse(line) else {
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-            lock.lock()
-            stray.append(line)
-            lock.unlock()
+            recordDiagnostic(line)
             return
         }
         lock.lock()
@@ -457,6 +470,12 @@ final class UsageRefreshSink: @unchecked Sendable {
         let due = lastFlush.map { Date().timeIntervalSince($0) >= 0.25 } ?? true
         lock.unlock()
         if due { persist() }
+    }
+
+    func writeDiagnostic(_ diagnostic: String) {
+        lock.lock()
+        transcript.append("  ! " + diagnostic)
+        lock.unlock()
     }
 
     func flush() { persist() }
