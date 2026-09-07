@@ -102,7 +102,11 @@ struct QuickActionsView: View {
                 }
                 Spacer(minLength: 0)
                 if model.running == action {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica("Running quick action") {
+                        Image(systemName: action.symbolName)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(8)
