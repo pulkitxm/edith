@@ -83,8 +83,8 @@ final class KeyboardToolsRuntime {
     }
 }
 
-private final class KeyboardToolsEventTap: @unchecked Sendable {
-    private enum Route {
+final class KeyboardToolsEventTap: @unchecked Sendable {
+    enum Route: Equatable {
         case pass
         case swallow
         case modify(CGEventFlags)
@@ -101,15 +101,17 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
     private var thread: Thread?
     private var stopping = false
     private var pendingRestart = false
-    private var settings = KeyboardToolsSettings.load()
+    private var settings: KeyboardToolsSettings
     private var debounce = KeyboardDebounceState()
     private var superKey = KeyboardSuperState()
     private var superActive = false
 
     init(
+        settings: KeyboardToolsSettings = .load(),
         performTapAction: @escaping @Sendable (KeyboardSuperTapAction) -> Void,
         publishStatus: @escaping @Sendable (Bool, String?) -> Void
     ) {
+        self.settings = settings
         self.performTapAction = performTapAction
         self.publishStatus = publishStatus
     }
@@ -296,9 +298,12 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
         }
     }
 
-    private func classify(type: CGEventType, event: CGEvent) -> Route {
+    func classify(type: CGEventType, event: CGEvent) -> Route {
         lock.withLock {
-            guard !stopping else { return .pass }
+            guard !stopping,
+                event.getIntegerValueField(.eventSourceUnixProcessID)
+                    != Int64(ProcessInfo.processInfo.processIdentifier)
+            else { return .pass }
             let current = settings
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let repeated = event.getIntegerValueField(.keyboardEventAutorepeat) != 0

@@ -10,6 +10,49 @@ import Testing
         debounceEnabled: true, debounceWindow: 50, superEnabled: true,
         superTapAction: .escape, superHoldAction: .hyper)
 
+    @Test func localSyntheticDeletesBypassDebounceWithoutChangingHardwareState() throws {
+        let tap = KeyboardToolsEventTap(
+            settings: settings, performTapAction: { _ in }, publishStatus: { _, _ in })
+        let source = try #require(CGEventSource(stateID: .hidSystemState))
+        func event(down: Bool, timestamp: UInt64, hardware: Bool) throws -> CGEvent {
+            let event = try #require(
+                CGEvent(keyboardEventSource: source, virtualKey: 51, keyDown: down))
+            event.timestamp = timestamp
+            if hardware {
+                event.setIntegerValueField(.eventSourceUnixProcessID, value: 0)
+            }
+            return event
+        }
+        #expect(
+            tap.classify(
+                type: .keyDown,
+                event: try event(
+                    down: true, timestamp: 1_000_000_000, hardware: true)) == .pass)
+        #expect(
+            tap.classify(
+                type: .keyUp,
+                event: try event(
+                    down: false, timestamp: 1_010_000_000, hardware: true)) == .pass)
+        for index in 0..<5 {
+            let timestamp = UInt64(1_011_000_000 + index * 1_000_000)
+            #expect(
+                tap.classify(
+                    type: .keyDown,
+                    event: try event(
+                        down: true, timestamp: timestamp, hardware: false)) == .pass)
+            #expect(
+                tap.classify(
+                    type: .keyUp,
+                    event: try event(
+                        down: false, timestamp: timestamp + 1, hardware: false)) == .pass)
+        }
+        #expect(
+            tap.classify(
+                type: .keyDown,
+                event: try event(
+                    down: true, timestamp: 1_020_000_000, hardware: true)) == .swallow)
+    }
+
     @Test func debounceRejectsFastDuplicatePresses() {
         var state = KeyboardDebounceState()
         let firstDown = state.shouldSuppress(
