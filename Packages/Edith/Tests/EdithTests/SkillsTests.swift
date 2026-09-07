@@ -196,6 +196,31 @@ import Testing
         #expect(model.agents.isEmpty)
     }
 
+    @MainActor @Test func overlappingDiscoverySharesWorkAndPublishesLoadedAgents() async {
+        let gate = DispatchSemaphore(value: 0)
+        let agents = Array(SkillAgentCatalog.agents.prefix(2))
+        let model = SkillsModel(detectAgents: {
+            #expect(!Thread.isMainThread)
+            gate.wait()
+            return agents
+        })
+        let first = Task { await model.discoverAgents() }
+        while !model.isDiscovering { await Task.yield() }
+        #expect(!model.agentsLoaded)
+        var secondStarted = false
+        let second = Task {
+            secondStarted = true
+            await model.discoverAgents()
+        }
+        while !secondStarted { await Task.yield() }
+        gate.signal()
+        await first.value
+        await second.value
+        #expect(model.agentsLoaded)
+        #expect(!model.isDiscovering)
+        #expect(model.agents == agents)
+    }
+
     @MainActor @Test func selectionPersistsAcrossSkillsAndNewModelsIncludingAllOff() async throws {
         let name = "com.pulkit.edith.tests.skills.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

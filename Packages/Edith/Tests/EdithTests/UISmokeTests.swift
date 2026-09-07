@@ -58,6 +58,29 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
     }
 
+    @Test func pluginTargetsSkeletonRendersInBothAppearances() throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    SkillTargetsSkeleton()
+                        .padding(28)
+                        .background(scheme == .dark ? Color.black : Color.white)
+                        .environment(\.colorScheme, scheme)
+                        .environment(\.accessibilityReduceMotion, true),
+                    width: 600, height: 240))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent(
+                        "plugin-targets-\(scheme == .dark ? "dark" : "light").png"))
+            }
+        }
+    }
+
     @Test func everyAppMaintenanceSkeletonRenders() {
         #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
         #expect(renders(HomebrewPageSkeleton()))
