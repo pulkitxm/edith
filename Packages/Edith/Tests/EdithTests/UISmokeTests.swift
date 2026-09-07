@@ -83,6 +83,29 @@ private func descendantViews(of view: NSView) -> [NSView] {
         }
     }
 
+    @Test func musicLibrarySkeletonsRenderWithSyntheticEvidence() throws {
+        for grid in [false, true] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    MusicLibrarySkeleton(grid: grid)
+                        .padding(28)
+                        .background(Color.white)
+                        .environment(\.colorScheme, .light)
+                        .environment(\.accessibilityReduceMotion, true),
+                    width: 900, height: 520))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent("music-library-\(grid ? "grid" : "list").png")
+                )
+            }
+        }
+    }
+
     @Test func everyAppMaintenanceSkeletonRenders() {
         #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
         #expect(renders(HomebrewPageSkeleton()))
