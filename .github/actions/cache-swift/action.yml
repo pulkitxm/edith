@@ -4,6 +4,13 @@ inputs:
   variant:
     description: Build configuration and consumer
     required: true
+outputs:
+  compiled-cache-key:
+    description: Primary key for the compiled Swift products
+    value: ${{ steps.toolchain.outputs.compiled-cache-key }}
+  compiled-cache-hit:
+    description: Whether the compiled products matched the primary key
+    value: ${{ steps.compiled.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -12,7 +19,9 @@ runs:
       shell: bash
       run: |
         fingerprint="$( { xcodebuild -version; swift --version; xcrun --show-sdk-path; } | shasum -a 256 | cut -d ' ' -f 1)"
-        echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+        prefix="swift-v2-${{ runner.os }}-${{ runner.arch }}-$fingerprint-${{ inputs.variant }}-${{ hashFiles('Packages/Edith/Package.resolved', 'Packages/Edith/Package.swift', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'build.sh', 'scripts/build-ghostty.sh') }}-"
+        echo "compiled-cache-prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "compiled-cache-key=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
     - name: Restore Swift package downloads
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
@@ -29,6 +38,7 @@ runs:
         path: build/SourcePackages
         key: xcode-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Packages/Edith/Package.resolved', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
     - name: Restore Swift build products
+      id: compiled
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: |
@@ -36,6 +46,6 @@ runs:
           Packages/Edith/.build/plugins
           Packages/Edith/.build/*.db
           Packages/Edith/.build/*.yaml
-        key: swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ inputs.variant }}-${{ hashFiles('Packages/Edith/Package.resolved', 'Packages/Edith/Package.swift', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'build.sh', 'scripts/build-ghostty.sh') }}-${{ github.sha }}
+        key: ${{ steps.toolchain.outputs.compiled-cache-key }}
         restore-keys: |
-          swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ inputs.variant }}-${{ hashFiles('Packages/Edith/Package.resolved', 'Packages/Edith/Package.swift', 'edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'build.sh', 'scripts/build-ghostty.sh') }}-
+          ${{ steps.toolchain.outputs.compiled-cache-prefix }}
