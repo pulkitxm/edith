@@ -153,10 +153,14 @@ test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exi
 
 SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
-[ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+SWIFT_FLAGS=(--disable-index-store --force-resolved-versions)
+if [ "$CONFIG" = Release ]; then
+  SWIFT_CONFIGURATION=release
+  SWIFT_FLAGS+=(-Xswiftc -Osize)
+fi
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
   --product EdithLidAwakeHelper
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
   --product edithd
 SWIFT_BIN_PATH="$($SWIFT_BIN build --package-path Packages/Edith \
   --configuration "$SWIFT_CONFIGURATION" --show-bin-path)"
