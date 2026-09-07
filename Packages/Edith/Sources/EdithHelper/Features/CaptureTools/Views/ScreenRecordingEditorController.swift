@@ -18,6 +18,7 @@ final class ScreenRecordingEditorModel {
     var finishedURL: URL?
     var overlayText = ""
     private var exportTask: Task<Void, Never>?
+    private var exportGeneration = 0
     private var pointerTrack = ScreenRecordingPointerTrack()
 
     init(take: ScreenRecordingTake) {
@@ -111,10 +112,13 @@ final class ScreenRecordingEditorModel {
     }
 
     func export() {
+        guard exportTask == nil else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "Edith Recording.\(document.preset.format.rawValue)"
         panel.allowedContentTypes = document.preset.format == .gif ? [.gif] : [.mpeg4Movie]
         guard panel.runModal() == .OK, let destination = panel.url else { return }
+        exportGeneration += 1
+        let generation = exportGeneration
         exporting = true
         exportProgress = 0
         errorMessage = nil
@@ -127,27 +131,36 @@ final class ScreenRecordingEditorModel {
                 try await AgentRecordingExportClient.export(
                     take: take, document: document, to: destination
                 ) { [weak self] progress in
-                    Task { @MainActor in self?.exportProgress = progress }
+                    Task { @MainActor in
+                        guard let self, generation == self.exportGeneration else { return }
+                        self.exportProgress = progress
+                    }
                 }
-                guard let self else { return }
+                try Task.checkCancellation()
+                guard let self, generation == self.exportGeneration else { return }
                 exporting = false
                 finishedURL = destination
                 self.exportTask = nil
                 NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch is CancellationError {
-                self?.exporting = false
-                self?.exportTask = nil
+                guard let self, generation == self.exportGeneration else { return }
+                exporting = false
+                exportTask = nil
             } catch {
-                self?.exporting = false
-                self?.errorMessage = error.localizedDescription
-                self?.exportTask = nil
+                guard let self, generation == self.exportGeneration else { return }
+                exporting = false
+                errorMessage = error.localizedDescription
+                exportTask = nil
                 NSSound.beep()
             }
         }
     }
 
     func cancelExport() {
+        exportGeneration += 1
         exportTask?.cancel()
+        exportTask = nil
+        exporting = false
     }
 
     func copyFinished() {
