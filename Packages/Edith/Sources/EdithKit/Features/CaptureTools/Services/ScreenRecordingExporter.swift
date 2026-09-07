@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CoreText
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -339,9 +340,9 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         var times: [NSNumber] = [0]
         var values: [CATransform3D] = [CATransform3DIdentity]
         for zoom in zooms {
-            guard let start = outputTime(zoom.start, mappings: mappings),
-                let end = outputTime(zoom.end, mappings: mappings), end > start
+            guard let span = outputSpan(start: zoom.start, end: zoom.end, mappings: mappings)
             else { continue }
+            let (start, end) = span
             let scale = CGFloat(min(max(zoom.scale, 1), 3))
             times += [
                 NSNumber(value: start / duration),
@@ -371,15 +372,12 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
     ) {
         guard duration > 0 else { return }
         for text in texts {
-            guard let start = outputTime(text.start, mappings: mappings),
-                let end = outputTime(text.end, mappings: mappings), end > start,
+            guard let span = outputSpan(start: text.start, end: text.end, mappings: mappings),
                 !text.text.isEmpty
             else { continue }
-            let layer = CATextLayer()
-            layer.string = text.text
-            layer.alignmentMode = .center
-            layer.fontSize = CGFloat(min(max(text.fontSize, 10), 160))
-            layer.foregroundColor = color(text.colorHex).cgColor
+            let (start, end) = span
+            let layer = CALayer()
+            layer.contents = textImage(text)
             layer.shadowColor = NSColor.black.cgColor
             layer.shadowOpacity = 0.7
             layer.shadowRadius = 3
@@ -397,9 +395,49 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
             opacity.isRemovedOnCompletion = false
             opacity.fillMode = .both
             layer.add(opacity, forKey: "visibility")
-            layer.display()
             parent.addSublayer(layer)
         }
+    }
+
+    private static func textImage(_ text: ScreenRecordingTextOverlay) -> CGImage? {
+        guard
+            let context = CGContext(
+                data: nil, width: 1040, height: 160, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.scaleBy(x: 2, y: 2)
+        let font = CTFontCreateWithName(
+            "Helvetica" as CFString, CGFloat(min(max(text.fontSize, 10), 160)), nil)
+        let string = NSAttributedString(
+            string: text.text,
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String):
+                    color(text.colorHex).cgColor,
+            ])
+        let line = CTLineCreateWithAttributedString(string)
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        context.textPosition = CGPoint(x: (520 - width) / 2, y: 20)
+        CTLineDraw(line, context)
+        return context.makeImage()
+    }
+
+    private static func outputSpan(
+        start: Double, end: Double,
+        mappings: [(source: ScreenRecordingRange, outputStart: Double)]
+    ) -> (Double, Double)? {
+        let overlaps = mappings.compactMap { mapping -> (Double, Double)? in
+            let lower = max(start, mapping.source.start)
+            let upper = min(end, mapping.source.end)
+            guard upper > lower else { return nil }
+            return (
+                mapping.outputStart + lower - mapping.source.start,
+                mapping.outputStart + upper - mapping.source.start
+            )
+        }
+        guard let first = overlaps.first, let last = overlaps.last else { return nil }
+        return (first.0, last.1)
     }
 
     private static func outputTime(

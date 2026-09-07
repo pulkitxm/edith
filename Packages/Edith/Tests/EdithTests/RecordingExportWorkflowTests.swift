@@ -82,7 +82,7 @@ import Testing
         document.preset.width = 640
         document.preset.frameRate = 15
         document.padding = 20
-        document.texts = [ScreenRecordingTextOverlay(text: "Release preview", start: 0.2, end: 1.6)]
+        document.texts = [ScreenRecordingTextOverlay(text: "Release preview", start: 0, end: 1.6)]
         let service = try AgentTaskService(directory: nil)
         await RecordingExportWorkflow.register(on: service)
         let request = AgentTaskSubmission(
