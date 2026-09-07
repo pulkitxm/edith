@@ -115,7 +115,7 @@ struct AgentEventsScreen: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .edithGlass(interactive: true, in: Circle())
                 .accessibilityLabel("Close event timeline")
                 .help("Close event timeline")
@@ -132,7 +132,7 @@ struct AgentEventsScreen: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Clear search")
                     }
                 }

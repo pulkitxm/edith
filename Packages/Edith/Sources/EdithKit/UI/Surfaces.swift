@@ -50,7 +50,7 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
                 .padding(UIScale.pt(8))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
             if configuration.isExpanded {
                 configuration.content

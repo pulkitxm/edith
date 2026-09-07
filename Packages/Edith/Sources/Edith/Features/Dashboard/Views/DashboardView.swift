@@ -251,7 +251,7 @@ struct DashboardView: View {
                 .frame(width: UIScale.pt(30), height: UIScale.pt(30))
                 .contentShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .edithGlass(interactive: true, in: RoundedRectangle(cornerRadius: 8))
             .disabled(isLoading)
             .help(helperText)

@@ -360,7 +360,7 @@ struct QuickLookOverlay: View {
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .accessibilityLabel("Close preview")
                 panel
                     .frame(
