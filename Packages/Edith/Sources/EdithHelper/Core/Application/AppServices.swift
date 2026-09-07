@@ -318,7 +318,8 @@ final class AppServices {
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
 
-        let finderToolsOn = ExtensionRegistry.entry("finderTools")?.isEnabled(in: SharedDefaults.store) == true
+        let finderToolsOn =
+            ExtensionRegistry.entry("finderTools")?.isEnabled(in: SharedDefaults.store) == true
         if finderToolsOn, finderTools == nil { finderTools = FinderToolsService() }
         if !finderToolsOn {
             finderTools?.shutdown()
