@@ -42,7 +42,7 @@ public enum AppData {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
         return homeDirectory.appendingPathComponent(
-            "Library/Mobile Documents/com~apple~CloudDocs/Edith")
+            "Library/Mobile Documents/com~apple~CloudDocs/\(AppBuildIdentity.directoryName)")
     }
 
     public static var cloudAvailable: Bool {

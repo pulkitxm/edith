@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum IPC {
@@ -123,6 +124,7 @@ public enum IPC {
         guard
             let namespace = environment["EDITH_AGENT_MACH_SERVICE"]
                 ?? environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                ?? (AppBuildIdentity.isDevelopment ? AppBuildIdentity.agent : nil)
         else { return Notification.Name(rawValue) }
         return Notification.Name(rawValue + ".runtime." + namespace)
     }

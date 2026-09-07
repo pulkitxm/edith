@@ -1,3 +1,4 @@
+import EdithCore
 import AppKit
 import EdithKit
 import ServiceManagement
@@ -10,7 +11,7 @@ private let retiredHelperBundleIdentifiers = [
 ]
 
 func launchHelperIfNeeded() async {
-    for identifier in retiredHelperBundleIdentifiers {
+    for identifier in (AppBuildIdentity.isDevelopment ? [] : retiredHelperBundleIdentifiers) {
         guard !Task.isCancelled else { return }
         let retired = SMAppService.loginItem(identifier: identifier)
         if retired.status == .enabled {

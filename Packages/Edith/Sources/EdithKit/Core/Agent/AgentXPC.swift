@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 @objc public protocol EdithAgentXPC {
@@ -14,9 +15,9 @@ import Foundation
 
 public enum AgentPeerIdentity {
     public static let identifiers = [
-        "com.pulkit.edith",
-        "com.pulkit.edith.helper.v2",
-        "com.pulkit.edith.agent",
+        AppBuildIdentity.application,
+        AppBuildIdentity.helper,
+        AppBuildIdentity.agent,
         "ed",
     ]
 

@@ -10,6 +10,26 @@ in the product, the resource policy, and the ordered end-to-end verification pro
 
 ## Process boundary
 
+Debug builds use `com.pulkit.edith.development` for the application,
+`com.pulkit.edith.development.helper` for the menu bar, and
+`com.pulkit.edith.development.agent` for the daemon. They display as Edith Development
+and Edith Development Menu Bar. Release identities remain unchanged.
+
+The containing application bundle determines the identity for the main executable,
+nested helper, and daemon. Development preferences, IPC channels, application data,
+caches, logs, and cloud directories are separate from the installed product.
+Development startup does not replace command-line symlinks or unregister retired
+production login items. Automatic production updates are disabled in development builds.
+`build.sh --install` requires `--release`; launch a development
+build from its build directory instead. Existing development bundles must be rebuilt
+to receive this separation.
+
+On macOS 26, Control Center can explicitly block a status item after Edith requests
+visibility. Inspect the `appStatusItems` log category for the helper bundle identifier
+and `Moving host to blocked list`. Check System Settings, Menu Bar, Allow in the Menu Bar
+for the installed app and helper. Recreating the status item or restarting the daemon
+does not remove an operating-system visibility block.
+
 Edith ships one application bundle with three process roles:
 
 | Process | Responsibility | Lifetime |

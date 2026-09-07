@@ -365,6 +365,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper.v2;
+				EDITH_DISPLAY_NAME = "Edith Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -386,7 +387,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper.v2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.development.helper;
+				EDITH_DISPLAY_NAME = "Edith Development Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -409,7 +411,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.development;
+				EDITH_DISPLAY_NAME = "Edith Development";
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;
@@ -571,6 +574,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith;
+				EDITH_DISPLAY_NAME = Edith;
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;

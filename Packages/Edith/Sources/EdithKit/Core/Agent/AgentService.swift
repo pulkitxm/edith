@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum AgentService {
@@ -6,10 +7,10 @@ public enum AgentService {
     }
 
     public static var machServiceName: String {
-        ProcessInfo.processInfo.environment["EDITH_AGENT_MACH_SERVICE"] ?? "com.pulkit.edith.agent"
+        ProcessInfo.processInfo.environment["EDITH_AGENT_MACH_SERVICE"] ?? AppBuildIdentity.agent
     }
-    public static let plistName = "com.pulkit.edith.agent.plist"
-    public static let label = "com.pulkit.edith.agent"
+    public static let plistName = AppBuildIdentity.agent + ".plist"
+    public static let label = AppBuildIdentity.agent
     public static let executableName = "edithd"
     public static let stateKey = "agentRegistrationState"
     public static let protocolVersion = 1
