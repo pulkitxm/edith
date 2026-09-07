@@ -231,7 +231,7 @@ final class AppServices {
         }
     }
 
-    private func reconcileSystemServices() {
+    func reconcileSystemServices() {
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {

@@ -192,6 +192,22 @@ private struct ExtensionMutationWorld {
         #expect(world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
     }
 
+    @Test func keepAwakeCanBeEnabledAndDisabledWithoutSystem() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entry("keepAwake"))
+        let center = world.center()
+        #expect(entry.requires.isEmpty)
+        #expect(entry.requiredPermissions.isEmpty)
+        _ = center.setEnabled(true, for: entry)
+        #expect(world.defaults.bool(forKey: AppStorageKeys.General.keepAwakeEnabled))
+        #expect(!world.defaults.bool(forKey: AppStorageKeys.Tabs.systemEnabled))
+        world.defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        _ = center.setEnabled(false, for: entry)
+        #expect(!world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+        #expect(!world.defaults.bool(forKey: AppStorageKeys.Tabs.systemEnabled))
+    }
+
     @Test func everyMutationDescriptorResolvesThroughTheCatalog() {
         let descriptors = ExtensionMutationOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)

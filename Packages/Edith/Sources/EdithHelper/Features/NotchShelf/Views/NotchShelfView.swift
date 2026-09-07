@@ -353,8 +353,7 @@ private struct NotchHomeTab: View {
                 actionTile(
                     preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake", active: preventSleep
                 ) {
-                    $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue
-                        .toggle()
+                    preventSleep.toggle()
                     controller.collapseNow()
                 }
             }

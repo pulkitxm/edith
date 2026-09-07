@@ -333,6 +333,7 @@ import Testing
             "homebrew": [],
             "cleaner": [],
             "system": [],
+            "keepAwake": [],
             "lidAwake": [],
             "systemStats": [],
             "micMute": [],
@@ -361,6 +362,7 @@ import Testing
             "homebrew": [],
             "cleaner": [],
             "system": [.accessibility, .inputMonitoring],
+            "keepAwake": [],
             "lidAwake": [],
             "systemStats": [],
             "micMute": [],
@@ -540,6 +542,43 @@ import Testing
         #expect(defaults.bool(forKey: AppStorageKeys.Suites.data))
         #expect(defaults.bool(forKey: AppStorageKeys.Suites.desk))
         #expect(defaults.bool(forKey: AppStorageKeys.Suites.agents))
+    }
+
+    @Test func keepAwakeUpgradePreservesAvailabilityWithoutReseedingOtherAbilities() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(2, forKey: ExtensionDefaultsMigration.registryVersionKey)
+        defaults.set(true, forKey: AppStorageKeys.Tabs.systemEnabled)
+        defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        defaults.set(true, forKey: AppStorageKeys.AppMaintenance.enabled)
+        defaults.set(false, forKey: AppStorageKeys.Homebrew.enabled)
+        defaults.set(false, forKey: AppStorageKeys.Cleaner.enabled)
+        defaults.set(false, forKey: AppStorageKeys.Suites.maintenance)
+
+        ExtensionDefaultsMigration.migrateRegistry(defaults: defaults)
+
+        #expect(defaults.bool(forKey: AppStorageKeys.General.keepAwakeEnabled))
+        #expect(defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+        #expect(!defaults.bool(forKey: AppStorageKeys.Homebrew.enabled))
+        #expect(!defaults.bool(forKey: AppStorageKeys.Cleaner.enabled))
+        #expect(!defaults.bool(forKey: AppStorageKeys.Suites.maintenance))
+        defaults.set(false, forKey: AppStorageKeys.General.keepAwakeEnabled)
+        ExtensionDefaultsMigration.migrateRegistry(defaults: defaults)
+        #expect(!defaults.bool(forKey: AppStorageKeys.General.keepAwakeEnabled))
+    }
+
+    @Test(arguments: [false, true]) func keepAwakeUpgradeWithSystemDisabled(active: Bool) {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(2, forKey: ExtensionDefaultsMigration.registryVersionKey)
+        defaults.set(false, forKey: AppStorageKeys.Tabs.systemEnabled)
+        defaults.set(active, forKey: AppStorageKeys.General.preventSleep)
+
+        ExtensionDefaultsMigration.migrateRegistry(defaults: defaults)
+
+        #expect(defaults.bool(forKey: AppStorageKeys.General.keepAwakeEnabled) == active)
+        #expect(defaults.bool(forKey: AppStorageKeys.General.preventSleep) == active)
+        #expect(!defaults.bool(forKey: AppStorageKeys.Tabs.systemEnabled))
     }
 
     @Test func registryMigrationRunsOnlyOnce() {

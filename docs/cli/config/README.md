@@ -225,7 +225,8 @@ not here cannot be set, and `import` skips it.
 | `SUEnableAutomaticChecks` | bool | `true` | standard | Check for updates on a schedule. |
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
-| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
+| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps and the cleaning lock. |
+| `keepAwakeEnabled` | bool | `false` | shared | Enable the independent Keep Awake ability. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
 | `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |

@@ -125,6 +125,11 @@ import Testing
             .hasActions)
         #expect(
             SidebarUtilityVisibility(
+                system: false, keepAwake: true, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
+            ).hasActions)
+        #expect(
+            SidebarUtilityVisibility(
                 system: true, keepAwake: false, presenter: false, lidAwake: false,
                 keystrokeHighlight: false
             )
