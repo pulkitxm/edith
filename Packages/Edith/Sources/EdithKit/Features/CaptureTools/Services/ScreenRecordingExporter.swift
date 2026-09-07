@@ -397,6 +397,7 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
             opacity.isRemovedOnCompletion = false
             opacity.fillMode = .both
             layer.add(opacity, forKey: "visibility")
+            layer.display()
             parent.addSublayer(layer)
         }
     }
