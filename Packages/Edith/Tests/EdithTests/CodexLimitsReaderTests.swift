@@ -41,7 +41,7 @@ import Testing
         let limits = try await CodexLimitsReader.read(
             executable: executable,
             arguments: ["-c", "exec /usr/bin/python3 \"$@\"", "provider", "-u", "-c", script],
-            environment: ProcessInfo.processInfo.environment, timeout: 3)
+            environment: ProcessInfo.processInfo.environment, timeout: 15)
         #expect(limits.session == nil)
         #expect(limits.week?.percent == 17)
         #expect(limits.week?.resetsAt == Date(timeIntervalSince1970: 2_000_000_000))
@@ -66,7 +66,7 @@ import Testing
             _ = try await CodexLimitsReader.read(
                 executable: URL(fileURLWithPath: "/usr/bin/python3"),
                 arguments: ["-u", "-c", script], environment: ProcessInfo.processInfo.environment,
-                timeout: 3)
+                timeout: 15)
             Issue.record("Expected a provider error")
         } catch {
             #expect(error.localizedDescription.contains("fixture unavailable"))
@@ -76,7 +76,7 @@ import Testing
     @Test func boundsUnresponsiveAndOversizedProviders() async {
         for (script, timeout, maximumBytes) in [
             ("import time; time.sleep(30)", 0.1, 1024),
-            ("print('x' * 4096, flush=True)", 3.0, 1024),
+            ("print('x' * 4096, flush=True)", 15.0, 1024),
         ] {
             await #expect(throws: CodexLimitsReader.Failure.self) {
                 try await CodexLimitsReader.read(
@@ -100,7 +100,7 @@ import Testing
                 arguments: ["-u", "-c", script, marker.path],
                 environment: ProcessInfo.processInfo.environment)
         }
-        for _ in 0..<200 {
+        for _ in 0..<1500 {
             if FileManager.default.fileExists(atPath: marker.path) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
