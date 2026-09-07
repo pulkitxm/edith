@@ -64,7 +64,7 @@ public struct DockToolsPreferences: Equatable, Sendable {
             defaults.object(forKey: AppStorageKeys.DockTools.hoverDelay) as? Double
             ?? Self.defaultHoverDelay
         self.init(
-            enabled: defaults.bool(forKey: AppStorageKeys.DockTools.enabled),
+            enabled: ExtensionRegistry.entry("dockTools")?.isEnabled(in: defaults) ?? false,
             previewMode: previewMode, hoverDelay: delay, clickAction: clickAction,
             greenButtonMaximizes: defaults.bool(
                 forKey: AppStorageKeys.DockTools.greenButtonMaximizes),
@@ -168,6 +168,34 @@ public enum DockToolsPolicy {
     public static func adjacentIndex(current: Int?, count: Int, offset: Int) -> Int? {
         guard count > 0 else { return nil }
         return ((current ?? (offset > 0 ? -1 : 0)) + offset + count) % count
+    }
+}
+
+public enum DockToolsOperation: String, CaseIterable, Sendable {
+    case status
+    case windows
+    case show
+
+    public var descriptor: UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "dock." + rawValue), summary: summary,
+            cli: ["dock", rawValue], effect: self == .show ? .write : .read)
+    }
+
+    private var summary: String {
+        switch self {
+        case .status: "Inspect Dock Tools readiness."
+        case .windows: "List windows for a Dock application."
+        case .show: "Show a Dock application's window previews."
+        }
+    }
+
+    public var interfaceExposure: UserOperationExposure {
+        .userInterface([
+            UserInterfaceActionPlacement(
+                surface: self == .status ? "Dock Tools settings" : "Dock preview",
+                action: summary, exampleArguments: self == .status ? [] : ["com.example.Editor"])
+        ])
     }
 }
 

@@ -12,7 +12,7 @@ ed config ls [<prefix>] [--group <group>] [--changed] [--json]
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--group` | one of `appearance`, `panel`, `usage`, `limits`, `menubar`, `alerts`, `budget`, `dashboard`, `machines`, `companion`, `finder`, `system`, `cleaner`, `music`, `calendar`, `clipboard`, `notch`, `focusdim`, `presenter`, `colorpicker`, `micmute`, `backup`, `permissions`, `terminal` | none | Only settings in this group |
+| `--group` | one of `appearance`, `panel`, `attention`, `usage`, `limits`, `menubar`, `alerts`, `budget`, `dashboard`, `database`, `machines`, `herdr`, `quinjet`, `companion`, `finder`, `system`, `cleaner`, `music`, `calendar`, `clipboard`, `notch`, `focusdim`, `presenter`, `colorpicker`, `emoji`, `micmute`, `backup`, `permissions`, `terminal` | none | Only settings in this group |
 | `--changed` | flag | `false` | Only settings that differ from their default |
 | `--json` | flag | `false` | Emit JSON on stdout |
 

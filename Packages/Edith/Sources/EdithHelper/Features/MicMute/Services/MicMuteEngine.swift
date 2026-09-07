@@ -2,12 +2,14 @@ import AppKit
 import CoreAudio
 import EdithKit
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
 final class MicMuteEngine: NSObject, FeatureModule {
     private(set) var muted = false
 
+    private let panel = StatusItemPanel()
     private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
@@ -21,6 +23,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        panel.close()
         MicHotKey.unregister()
         if muted { apply(false) }
         if let listener = deviceListListener {
@@ -53,12 +56,12 @@ final class MicMuteEngine: NSObject, FeatureModule {
         let wanted =
             SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            item.autosaveName = "micMute"
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             StatusItemMenu.attach(to: item, target: self, action: #selector(statusClicked))
             statusItem = item
             updateIcon()
         } else if !wanted, let item = statusItem {
+            panel.close()
             NSStatusBar.system.removeStatusItem(item)
             statusItem = nil
         }
@@ -66,7 +69,21 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     @objc private func statusClicked() {
         guard let statusItem else { return }
-        StatusItemMenu.handleClick(on: statusItem) { toggle() }
+        StatusItemMenu.handleClick(on: statusItem) {
+            panel.show(
+                from: statusItem, title: "Microphone",
+                actions: [
+                    .init(title: muted ? "Unmute microphone" : "Mute microphone") { [weak self] in
+                        self?.toggle()
+                    },
+                    .init(title: "Open Edith…") { MainApp.openDashboard() },
+                ]
+            ) {
+                Label(
+                    muted ? "Microphone muted" : "Microphone on",
+                    systemImage: muted ? "mic.slash.fill" : "mic.fill")
+            }
+        }
     }
 
     private func updateIcon() {

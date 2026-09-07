@@ -22,6 +22,7 @@ herdr        off    Agent      Herdr
 quinjet      off    Agent      Quinjet
 system       on     System     System
 machines     on     System     Machines
+database     off    Utilities  Database
 companion    off    Agent      Companion
 systemStats  off    System     CPU & Memory in menu bar
 micMute      off    System     Mic Mute

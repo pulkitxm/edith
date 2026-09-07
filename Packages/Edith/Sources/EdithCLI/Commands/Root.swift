@@ -49,6 +49,8 @@ public struct EdRoot: AsyncParsableCommand {
             UninstallCommand.self,
             ConfigCommand.self,
             AppCommand.self,
+            AgentCommand.self,
+            MCPCommand.self,
             ExtensionsCommand.self,
             LidAwakeCLICommand.self,
             DockCommand.self,
@@ -68,7 +70,10 @@ public struct EdRoot: AsyncParsableCommand {
             EmojiCommand.self,
             ShelfCommand.self,
             CleanerCommand.self,
+            HomebrewCommand.self,
+            MaintenanceCommand.self,
             QuinjetCommand.self,
+            DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
             CompleteCommand.self,
@@ -532,9 +537,13 @@ struct CompleteCommand: AsyncParsableCommand {
                 || request.leading.starts(with: ["usage", "projects", "open"])
                 || request.leading.starts(with: ["usage", "projects", "copy-link"])
             ? UsageAnalysis.projectSelectors(usageDocument?.daily ?? []) : []
-        let runningApps =
-            request.leading.first == "apps"
-            ? RunningAppOperationCenter().completionValues() : []
+        let runningApps: [String]
+        switch request.leading.first {
+        case "apps": runningApps = RunningAppOperationCenter().completionValues()
+        case "dock":
+            runningApps = Array(Set(CLIEnvironment.runningApps().compactMap(\.bundleID))).sorted()
+        default: runningApps = []
+        }
         let appLinks =
             request.leading.first == "app"
             ? AppInspectionCLI.center.links(

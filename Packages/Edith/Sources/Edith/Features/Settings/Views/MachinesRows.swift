@@ -4,8 +4,6 @@ import SwiftUI
 struct MachinesRows: View {
     @State private var model = MachinesModel.shared
     @State private var addSheetPresented = false
-    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
-        var enabled = false
     @AppStorage(AppStorageKeys.Machines.notifyDown, store: SharedDefaults.store) private
         var notifyDown = true
     @AppStorage(AppStorageKeys.Machines.notifyDiskFull, store: SharedDefaults.store) private
@@ -46,8 +44,6 @@ struct MachinesRows: View {
                 "Checks run in the background while Edith is open and notify once per change, "
                     + "not repeatedly.")
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
 
         Section("Setup") {
             HStack {
@@ -57,8 +53,6 @@ struct MachinesRows: View {
             Text("Add an SSH host here or manage existing connections on the Machines page.")
                 .settingsCaption()
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
 
         Section {
             LabeledContent("Connections") {
@@ -81,8 +75,6 @@ struct MachinesRows: View {
                     + "options in your config keep working. Host keys are pinned on first "
                     + "connection.")
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
         .sheet(isPresented: $addSheetPresented) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))

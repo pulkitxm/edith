@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all nineteen |
+| `ed extensions status [id]` | Summarises readiness for one extension or all registered extensions |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all nineteen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all registered extensions, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -51,8 +51,8 @@ operations as their command-line equivalents.
 
 ## The registry
 
-`ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Nineteen entries, in this order:
+`ExtensionRegistry.entries` in EdithCore is the single list every command here
+walks, and its order is the order `ls` prints. Entries appear in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -60,8 +60,12 @@ walks, and its order is the order `ls` prints. Nineteen entries, in this order:
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
-| `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
+| `seoAudit` | Site Audit | Utilities | Crawl sitemaps, inspect page metadata, and keep every run local |
+| `system` | System | System | Running apps and the keyboard-cleaning lock |
+| `keepAwake` | Keep Awake | System | Prevent idle sleep independently of running apps and keyboard cleaning |
+| `appMaintenance` | App Maintenance | System | Packages, verified installs, updates, and review-first removal |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
+| `database` | Database | Utilities | Guarded database exploration and production mutations |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
@@ -70,15 +74,16 @@ walks, and its order is the order `ls` prints. Nineteen entries, in this order:
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
+| `keystrokeHighlight` | Keystroke Highlight | Utilities | Shows each key press on screen for demos |
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `dockTools` | Dock Tools | Utilities | Window previews, faster switching, and smarter Dock behavior |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
-| `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey, straight into the active app |
+| `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same nineteen, with what each one is made of. `Key` is the preference the app
+The same entries, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-eight the welcome tour shows before you ask it for all of them.
+eleven the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -86,8 +91,11 @@ eight the welcome tour shows before you ask it for all of them.
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` | none |
 | `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
 | `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
+| `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
+| `appMaintenance` | `appMaintenanceEnabled` | yes | none | none | none | `homebrew` |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
+| `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
@@ -96,6 +104,7 @@ eight the welcome tour shows before you ask it for all of them.
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
+| `keystrokeHighlight` | `keystrokeHighlightEnabled` | yes | `inputMonitoring` | none | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `dockTools` | `dockToolsEnabled` | no | `accessibility` | `screenRecording` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
@@ -112,8 +121,12 @@ the current platform, and which missing implementations merely degrade it:
 | `usage` | `usageCollection` | `notifications` |
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |
-| `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
+| `seoAudit` | `siteAuditing` | none |
+| `system` | `runningApplications` | `inputSuppression` |
+| `keepAwake` | `preventSleep` | none |
+| `appMaintenance` | `runningApplications` | `packageManagement` |
 | `machines` | `machineManagement` | `notifications` |
+| `database` | `databaseBroker` | none |
 | `companion` | `companionService` | none |
 | `systemStats` | `systemMetrics` | none |
 | `micMute` | `microphoneControl` | `globalShortcuts` |
@@ -122,6 +135,7 @@ the current platform, and which missing implementations merely degrade it:
 | `calendar` | `calendarEvents` | none |
 | `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
+| `keystrokeHighlight` | `keystrokeObservation` | none |
 | `focusDim` | `windowDimming` | none |
 | `dockTools` | `dockControl` | `windowPreviews` |
 | `presenter` | `screenShareDetection` | none |
@@ -206,7 +220,8 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - Every extension is also an ordinary `ed config` boolean, and both paths write
   the same primary key in the same store. The extension verbs also preserve
   lifecycle dependencies: enabling Agent Usage restores the selected provider
-  when both providers are off, and disabling System turns Prevent Sleep off.
+  when both providers are off. Disabling Keep Awake restores normal idle sleep;
+  disabling System leaves Keep Awake unchanged.
   Only the extension verbs know to mention a missing permission.
   Related settings sit in that extension's own config group, so
   `ed config ls --group clipboard` and `--group notch`, `--group focusdim` or

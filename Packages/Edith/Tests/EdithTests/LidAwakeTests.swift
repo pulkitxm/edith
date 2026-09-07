@@ -767,7 +767,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == LidAwakePrivilegedService.bundleIdentifier)
     }
 
-    @Test func helperIdentityMatchesDaemonClient() throws {
+    @Test func helperIdentityUsesBuildSettingsAndMatchesDaemonClient() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -781,7 +781,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 as? [String: Any])
         #expect(
             info["CFBundleIdentifier"] as? String
-                == MainApp.statusBarBundleIdentifier)
+                == "$(PRODUCT_BUNDLE_IDENTIFIER)")
         let daemonData = try Data(
             contentsOf: root.appendingPathComponent(
                 "Resources/com.pulkit.edith.lidawake.v2.plist"))

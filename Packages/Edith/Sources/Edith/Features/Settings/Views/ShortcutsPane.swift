@@ -20,12 +20,14 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, emoji: emojiEnabled, micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled)
+            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled)
     }
 
     var body: some View {
@@ -127,6 +129,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .keystrokeHighlight:
+            shortcutRow(
+                "Keystroke highlight", subtitle: "Starts or pauses the on-screen keycaps",
+                keyPrefix: "keystrokeHighlightHotKey", defaultLabel: "⌃⌥⌘K")
         }
     }
 }

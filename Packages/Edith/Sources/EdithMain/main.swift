@@ -1,10 +1,14 @@
+import Darwin
 import Edith
 import EdithCLI
+import EdithDatabase
 import Foundation
 
-let executableName = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent.lowercased()
-if ["ed", "edith"].contains(executableName) {
-    await EdithCLIMain.run()
-} else {
+switch ExecutableLaunch.destination(environment: ProcessInfo.processInfo.environment) {
+case .application:
     EdithApp.main()
+case .commandLine:
+    await EdithCLIMain.run()
+case .databaseBroker:
+    Darwin.exit(await DatabaseBrokerProcess.run())
 }

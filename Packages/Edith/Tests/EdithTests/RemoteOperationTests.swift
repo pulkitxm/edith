@@ -468,6 +468,45 @@ private actor PreviewTransferGate {
         #expect(request.environment.first == "TERM=xterm")
     }
 
+    @Test func remoteControllerUsesTheNonInteractiveConnectionTransport() {
+        let machine = Machine(name: "Box", host: "box.example", port: 2222, username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrOperationExecution.remoteControlRequest(
+            for: Self.agent(local: false), connection: connection,
+            environment: ["TERM=xterm"])
+
+        #expect(request.executable == SSHConnection.executable.path)
+        #expect(request.arguments.contains("-T"))
+        #expect(!request.arguments.contains("-tt"))
+        #expect(
+            request.arguments.last
+                == HerdrTerminalControlCommand.remoteShellLine(
+                    session: "work", pane: "w3:p1N"))
+        #expect(request.environment.first == "TERM=xterm")
+    }
+
+    @Test func WindowsRemoteAttachUsesPowerShell() {
+        let machine = Machine(name: "Box", host: "box.example", username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrOperationExecution.remoteAttachRequest(
+            for: Self.agent(local: false), connection: connection, environment: [],
+            platform: .windows)
+
+        #expect(request.arguments.last?.hasPrefix("powershell.exe ") == true)
+        #expect(request.arguments.last?.contains("export PATH") == false)
+    }
+
+    @Test func WindowsRemoteControllerUsesPowerShell() {
+        let machine = Machine(name: "Box", host: "box.example", username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrOperationExecution.remoteControlRequest(
+            for: Self.agent(local: false), connection: connection, environment: [],
+            platform: .windows)
+
+        #expect(request.arguments.last?.hasPrefix("powershell.exe ") == true)
+        #expect(request.arguments.last?.contains("export PATH") == false)
+    }
+
     @Test func hostJSONReportsReachabilitySeparatelyFromToolPresence() {
         let host = HerdrHostSnapshot(
             id: UUID().uuidString, name: "Offline", isLocal: false,

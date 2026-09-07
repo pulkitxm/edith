@@ -27,6 +27,7 @@ import Testing
 
     @Test func statusWorksFromStoredPreferencesWithoutTheApp() async throws {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.desk)
             world.shared.set(true, forKey: AppStorageKeys.DockTools.enabled)
             world.shared.set("optionClick", forKey: AppStorageKeys.DockTools.previewMode)
             world.shared.set("cycleWindows", forKey: AppStorageKeys.DockTools.clickAction)
@@ -115,4 +116,22 @@ import Testing
             #expect(result.stderr.contains("extensions enable dockTools"))
         }
     }
+    @Test func completionUsesBundleIdentifiersAcceptedByDockCommands() async throws {
+        await CLIProbe.inWorld { _ in
+            CLIEnvironment.runningApps = {
+                [
+                    RunningAppSnapshot(
+                        pid: 123, name: "Sample Editor", bundleID: "com.example.editor",
+                        active: true)
+                ]
+            }
+            let result = await CLIProbe.capture([
+                "__complete", "--index", "3", "--", "ed", "dock", "show", "com.example",
+            ])
+            #expect(result.code == 0)
+            #expect(result.stdout.contains("com.example.editor"))
+            #expect(!result.stdout.contains("Sample Editor"))
+        }
+    }
+
 }
