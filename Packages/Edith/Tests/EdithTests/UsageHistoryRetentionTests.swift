@@ -257,6 +257,37 @@ import Testing
         return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
     }
 
+    @Test func aggregateCostAttributionKeepsTokensLiveAndRepairsFalseRetention() throws {
+        let baseline = day("2026-09-07", ["codex": [row("one", 100)]])
+        var model = row("one", 150)
+        model["cost"] = 0.0
+        var aggregate = row("unattributed-cost", 0)
+        aggregate["cost"] = 1.5
+        let candidate = day("2026-09-07", ["codex": [model, aggregate]])
+        let fresh = try document([candidate])
+        let previous = try document([baseline])
+        let result = try #require(UsageHistory.mergeRefresh(fresh: fresh, previous: previous))
+        #expect(tokens(try object(result)) == 150)
+        #expect(UsageHistory.retainedHistoryBlockCount(in: result) == 0)
+        var frozen = try object(previous)
+        frozen["historyRetention"] = [
+            "version": 1,
+            "blocks": [
+                [
+                    "period": "2026-09-07", "source": "codex", "state": "partial-overlap",
+                    "provenance": ["kind": "published-aggregate"],
+                    "baseline": baseline, "candidates": [candidate],
+                ]
+            ],
+        ]
+        let repaired = try #require(
+            UsageHistory.mergeRefresh(
+                fresh: fresh, previous: JSONSerialization.data(withJSONObject: frozen)))
+        #expect(tokens(try object(repaired)) == 150)
+        #expect(UsageHistory.retainedHistoryBlockCount(in: repaired) == 0)
+        #expect(UsageHistory.mergeRefresh(fresh: fresh, previous: repaired) == repaired)
+    }
+
     private func document(_ days: [[String: Any]]) throws -> Data {
         let sources = Array(Set(days.flatMap { ($0["bySource"] as? [String: Any] ?? [:]).keys }))
             .sorted()

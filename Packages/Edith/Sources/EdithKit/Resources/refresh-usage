@@ -404,8 +404,10 @@ HISTORY='
     then $document.historyRetention.blocks
     else error("usage retained history is invalid") end;
   def coverageRegressed($old; $new):
-    ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens", "cost"] as $fields
-    | any(($old // [])[]; .modelName as $model
+    ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens"] as $fields
+    | (([($new // [])[].cost // 0] | add // 0) + 0.000001
+        < ([($old // [])[].cost // 0] | add // 0))
+      or any(($old // [])[]; .modelName as $model
         | any($fields[]; . as $field
           | ([($new // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0) + 0.000001
             < ([($old // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0)));
@@ -423,6 +425,12 @@ HISTORY='
         | reduce (localSources(($oldDay.bySource // {}) | keys)[]) as $source (.;
             {period: $oldDay.period, source: $source} as $identity
             | historyKey($identity) as $key
+            | .blocks[$key] as $block
+            | if $block != null and ($block.candidates | length) > 0
+                and ($block.baseline | baselineIdentity($source)) == ($oldDay | baselineIdentity($source))
+                and all(([$newDay] + $block.candidates)[];
+                  coverageRegressed($oldDay.bySource[$source]; .bySource[$source]) | not)
+              then del(.blocks[$key]) else . end
             | if .blocks[$key] != null
                 or coverageRegressed($oldDay.bySource[$source]; $newDay.bySource[$source])
               then trimDay($oldDay; [$source]) as $baseline
@@ -446,7 +454,7 @@ HISTORY='
     | $fresh
     | .daily = [(.daily // [])[]
         | trimDay(.; ((.bySource // {} | keys) - ($retention.excluded[.period] // [])))]
-    | if ($blocks | length) > 0 then .historyRetention = {version: 1, blocks: $blocks} else . end;
+    | .historyRetention = {version: 1, blocks: $blocks};
   def mergeDay($old; $new):
     localSources(($old.bySource // {}) | keys) as $oldSources
     | (($new.bySource // {}) | keys) as $newSources
