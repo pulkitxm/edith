@@ -93,7 +93,11 @@ actor NetworkDiagnosticsService {
             running = nil
             runningID = nil
         }
-        let snapshot = await task.value
+        let snapshot = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         try Task.checkCancellation()
         if task.isCancelled { throw CancellationError() }
         let data = try AgentPayload.encode(snapshot)
