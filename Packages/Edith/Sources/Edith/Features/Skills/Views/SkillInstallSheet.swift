@@ -65,8 +65,6 @@ struct SkillInstallSheet: View {
                     ProgressView().controlSize(.small)
                     Text("Installing for \(targetCount)…")
                         .font(.callout).foregroundStyle(.secondary)
-                } else {
-                    Text("Included with Edith").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(model.installationSucceeded ? "Done" : "Cancel") { dismiss() }
