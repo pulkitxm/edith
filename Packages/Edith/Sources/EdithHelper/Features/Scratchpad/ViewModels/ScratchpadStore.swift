@@ -22,6 +22,7 @@ final class ScratchpadStore {
     private var editRevision = 0
     private var stopped = false
     private(set) var ready = false
+    private(set) var selectionChanges = 0
 
     init() {
         reload()
@@ -66,14 +67,14 @@ final class ScratchpadStore {
     func select(_ id: UUID) {
         flushSave()
         previewing = false
-        enqueue { try await AgentScratchpadClient.select(id.uuidString) }
+        enqueue(changesSelection: true) { try await AgentScratchpadClient.select(id.uuidString) }
     }
 
     func create() {
         flushSave()
         query = ""
         previewing = false
-        enqueue { try await AgentScratchpadClient.create() }
+        enqueue(changesSelection: true) { try await AgentScratchpadClient.create() }
     }
 
     func renameSelected(to name: String) {
@@ -87,14 +88,18 @@ final class ScratchpadStore {
         flushSave()
         query = ""
         previewing = false
-        enqueue { try await AgentScratchpadClient.duplicate(selectedPad.id.uuidString) }
+        enqueue(changesSelection: true) {
+            try await AgentScratchpadClient.duplicate(selectedPad.id.uuidString)
+        }
     }
 
     func removeSelected() {
         guard let selectedPad else { return }
         flushSave()
         previewing = false
-        enqueue { try await AgentScratchpadClient.remove(selectedPad.id.uuidString) }
+        enqueue(changesSelection: true) {
+            try await AgentScratchpadClient.remove(selectedPad.id.uuidString)
+        }
     }
 
     func clearSelected() {
@@ -110,14 +115,21 @@ final class ScratchpadStore {
         enqueue { try await AgentScratchpadClient.clear(selectedPad.id.uuidString) }
     }
 
-    private func enqueue(_ operation: @escaping @MainActor () async throws -> ScratchpadDocument) {
+    private func enqueue(
+        changesSelection: Bool = false,
+        _ operation: @escaping @MainActor () async throws -> ScratchpadDocument
+    ) {
+        if changesSelection { selectionChanges += 1 }
         let previous = operationTail
         let id = UUID()
         operationID = id
         let revision = editRevision
         operationTail = Task { [self] in
             await previous?.value
-            defer { if operationID == id { operationTail = nil } }
+            defer {
+                if changesSelection { selectionChanges -= 1 }
+                if operationID == id { operationTail = nil }
+            }
             do {
                 var updated = try await operation()
                 if revision != editRevision, let current = selectedPad,
@@ -125,6 +137,7 @@ final class ScratchpadStore {
                 {
                     updated.pads[index].text = current.text
                     updated.pads[index].modifiedAt = current.modifiedAt
+                    if savePending { updated.selectedID = current.id }
                 }
                 document = updated
                 ready = true
