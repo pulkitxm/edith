@@ -60,6 +60,48 @@ import Testing
         #expect(remote.progress == 0)
     }
 
+    @Test func folderMenusArePreloadedOffMainThread() async {
+        let root = URL(fileURLWithPath: "/tmp/music-menu-fixture")
+        let folder = MusicFolder(url: root.appendingPathComponent("Albums"), relativePath: "Albums")
+        let remote = MusicRemote(
+            listSubfolders: { _ in
+                #expect(!Thread.isMainThread)
+                return [folder]
+            },
+            listFolder: { path in
+                #expect(!Thread.isMainThread)
+                return MusicLibraryContentListing(
+                    folder: MusicFolder(url: root.appendingPathComponent(path), relativePath: path),
+                    folders: [], tracks: [])
+            })
+        #expect(remote.subfolders(of: "") == nil)
+        remote.navigate(to: "Albums/Focus")
+        #expect(await waitUntil { remote.entriesLoaded })
+        #expect(remote.subfolders(of: "")?.map(\.relativePath) == ["Albums"])
+        #expect(remote.subfolders(of: "Albums")?.map(\.relativePath) == ["Albums"])
+        #expect(remote.subfolders(of: "Albums/Focus")?.isEmpty == true)
+    }
+
+    @Test func favouritesLoadOffMainThreadAndDoNotPublishAfterStop() async {
+        let fixture = MusicRemoteLoadFixture()
+        let remote = MusicRemote(scanFavourites: {
+            #expect(!Thread.isMainThread)
+            return fixture.scan()
+        })
+        remote.openFavourites()
+        #expect(!remote.favouritesLoaded)
+        #expect(await fixture.waitForFirstStart())
+        remote.stop()
+        fixture.releaseFirst()
+        #expect(await fixture.waitForFirstFinish())
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!remote.favouritesLoaded)
+        #expect(remote.favourites.isEmpty)
+        remote.openFavourites()
+        #expect(await waitUntil { remote.favouritesLoaded })
+        #expect(remote.favourites.map(\.relativePath) == ["new.mp3"])
+    }
+
     @Test func emptyFolderOnlyBecomesEmptyAfterItsListingFinishes() async {
         let root = URL(fileURLWithPath: "/tmp/music-loading-fixture")
         let remote = MusicRemote(listFolder: { path in
