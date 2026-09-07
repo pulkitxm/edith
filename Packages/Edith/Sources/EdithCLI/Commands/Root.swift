@@ -2,7 +2,9 @@ import ArgumentParser
 import EdithKit
 import Foundation
 
-public let edithCLIVersion = EdithCLIVersion.resolve(Bundle.main.infoDictionary)
+public let edithCLIVersion = EdithCLIVersion.resolve(
+    CLIEnvironment.installedAppURL().flatMap { Bundle(url: $0)?.infoDictionary }
+        ?? Bundle.main.infoDictionary)
 
 enum EdithCLIVersion {
     static func resolve(_ infoDictionary: [String: Any]?) -> String {
@@ -47,6 +49,8 @@ public struct EdRoot: AsyncParsableCommand {
             UninstallCommand.self,
             ConfigCommand.self,
             AppCommand.self,
+            AgentCommand.self,
+            MCPCommand.self,
             ExtensionsCommand.self,
             LidAwakeCLICommand.self,
             PermissionsCommand.self,
@@ -62,9 +66,13 @@ public struct EdRoot: AsyncParsableCommand {
             AppsCommand.self,
             ToolsCommand.self,
             ColorCommand.self,
+            EmojiCommand.self,
             ShelfCommand.self,
             CleanerCommand.self,
+            HomebrewCommand.self,
+            MaintenanceCommand.self,
             QuinjetCommand.self,
+            DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
             CompleteCommand.self,
@@ -360,7 +368,7 @@ struct CompletionsInstallCommand: AsyncParsableCommand {
 struct InstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
-        abstract: "Link ed, edh and edith into a directory on PATH.")
+        abstract: "Link ed and edith into a directory on PATH.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -402,7 +410,7 @@ struct InstallCommand: AsyncParsableCommand {
 
 struct UninstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "uninstall", abstract: "Remove the ed, edh and edith links.")
+        commandName: "uninstall", abstract: "Remove the ed and edith links.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

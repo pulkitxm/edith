@@ -19,6 +19,7 @@ public final class MachineSession {
     public nonisolated var id: UUID { machine.id }
 
     public private(set) var state: MachineConnectionState = .disconnected
+    public private(set) var remotePlatform: RemoteMachinePlatform?
     public private(set) var hello: MachineHello?
     public private(set) var slow: MachineSlow?
     private var liveMetrics = MachineLiveMetrics()
@@ -38,8 +39,14 @@ public final class MachineSession {
     public private(set) var isLocal: Bool
     public private(set) var isApplyingPlatformProfile = false
     public private(set) var platformProfileRevertsAt: Date?
+    public private(set) var internetSpeed: InternetSpeedMeasurement?
+    public private(set) var internetSpeedError: String?
+    public private(set) var isTestingInternetSpeed = false
+    public private(set) var internetDownloadHistory: [Double] = []
+    public private(set) var internetUploadHistory: [Double] = []
 
     public static let historyLength = 60
+    public nonisolated static let internetSpeedRefreshInterval: TimeInterval = 30 * 60
 
     public var sample: MachineSample? { liveMetrics.sample }
     public var cpuHistory: [Double] { liveMetrics.cpuHistory }
@@ -51,7 +58,11 @@ public final class MachineSession {
 
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
+    private let taskClient: AgentTaskClient?
+    private let metricsClient: AgentClient?
+    @ObservationIgnored private nonisolated(unsafe) var agentMetrics: AgentMachineMetricObservation?
     private var metricsStream: SSHLineStream?
+    private var metricsStreamGeneration = 0
     private var supervisor: Task<Void, Never>?
     private var dockerTask: Task<Void, Never>?
     private var latencyTask: Task<Void, Never>?
@@ -63,23 +74,38 @@ public final class MachineSession {
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
     private var platformProfileTask: Task<Void, Never>?
+    private var internetSpeedScheduleTask: Task<Void, Never>?
+    private var internetSpeedRunTask: Task<Void, Never>?
+    private var internetSpeedObserverCount = 0
     @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
     private var dockerObserverCount = 0
     private var dockerRefreshRunning = false
     private var dockerInventoryRefreshRunning = false
+    private var foregroundObservers: Set<UUID> = []
+    public private(set) var isCollecting = false
 
-    public init(machine: Machine, local: Bool = false, observesWakeRequests: Bool = true) {
+    public init(
+        machine: Machine, local: Bool = false, observesWakeRequests: Bool = true,
+        taskClient: AgentTaskClient? = nil, metricsClient: AgentClient? = nil
+    ) {
         self.machine = machine
+        self.taskClient = taskClient
+        self.metricsClient = metricsClient
         isLocal = local
         connection =
-            local ? nil : SSHConnection(machine: machine, controlSocketMode: .shared)
-        localSampler = local ? LocalMachineSampler() : nil
+            local
+            ? nil
+            : SSHConnection(machine: machine, controlSocketMode: .shared, taskClient: taskClient)
+        localSampler =
+            local && metricsClient == nil && !AgentCommandRouting.isEnabled
+            ? LocalMachineSampler() : nil
         if observesWakeRequests { observeWake() }
     }
 
     deinit {
+        if let agentMetrics { Task { @MainActor in agentMetrics.stop() } }
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
@@ -87,11 +113,149 @@ public final class MachineSession {
 
     public var connectionRef: SSHConnection? { connection }
 
+    public var collectsMetricsLocally: Bool { !usesAgentMetrics && isCollecting }
+
+    private var usesAgentMetrics: Bool {
+        metricsClient != nil || AgentCommandRouting.isEnabled
+    }
+
+    private func updateAgentObservation() {
+        guard usesAgentMetrics else { return }
+        if agentMetrics == nil {
+            agentMetrics = AgentMachineMetricObservation(
+                client: metricsClient ?? .shared, machineID: machine.id,
+                receive: { [weak self] in self?.apply(agentSnapshot: $0) },
+                failed: { [weak self] message in
+                    self?.state = .failed(message: message, recoverable: true)
+                })
+        }
+        var interests: Set<AgentMachineMetricInterest> = []
+        if !foregroundObservers.isEmpty {
+            interests.insert(.metrics)
+            if dockerObserverCount > 0 { interests.insert(.docker) }
+            if internetSpeedObserverCount > 0 { interests.insert(.speed) }
+        }
+        isCollecting = !interests.isEmpty
+        agentMetrics?.update(interests)
+    }
+
+    private func apply(agentSnapshot snapshot: AgentMachineMetricsSnapshot) {
+        guard snapshot.machineID == machine.id else { return }
+        if state != snapshot.state { state = snapshot.state }
+        if remotePlatform != snapshot.platform {
+            remotePlatform = snapshot.platform
+            if let platform = snapshot.platform, let connection {
+                Task { await connection.acceptPlatform(platform) }
+            }
+        }
+        if hello != snapshot.hello { hello = snapshot.hello }
+        if slow != snapshot.slow { slow = snapshot.slow }
+        if let sample = snapshot.sample, sample != liveMetrics.sample { apply(sample: sample) }
+        if docker != snapshot.docker { docker = snapshot.docker }
+        if containersLoaded != snapshot.containersLoaded {
+            containersLoaded = snapshot.containersLoaded
+        }
+        if containers != snapshot.containers { containers = snapshot.containers }
+        if images != snapshot.images { images = snapshot.images }
+        if volumes != snapshot.volumes { volumes = snapshot.volumes }
+        if diskUsage != snapshot.diskUsage { diskUsage = snapshot.diskUsage }
+        if networks != snapshot.networks { networks = snapshot.networks }
+        if facts != snapshot.facts { facts = snapshot.facts }
+        if mount != snapshot.mount { mount = snapshot.mount }
+        if mountHealth != snapshot.mountHealth { mountHealth = snapshot.mountHealth }
+        if let speed = snapshot.internetSpeed, speed != internetSpeed {
+            apply(internetSpeed: speed)
+        }
+        if internetSpeedError != snapshot.internetSpeedError {
+            internetSpeedError = snapshot.internetSpeedError
+        }
+        if isTestingInternetSpeed != snapshot.isTestingInternetSpeed {
+            isTestingInternetSpeed = snapshot.isTestingInternetSpeed
+        }
+    }
+
+    private func refreshAgentMetrics(_ action: AgentMachineMetricsRefresh.Action) async {
+        let request = AgentMachineMetricsRefresh(machineID: machine.id, action: action)
+        do {
+            _ = try await (metricsClient ?? .shared).performInternalAsync(
+                AgentMachineMetricsRefresh.operation, payload: AgentPayload.encode(request))
+        } catch {
+            if action == .speed { internetSpeedError = error.localizedDescription }
+        }
+    }
+
+    public func setForegroundObservation(_ token: UUID, active: Bool) {
+        if active {
+            foregroundObservers.insert(token)
+            if case .disconnected = state { start() }
+            resumeCollection()
+        } else {
+            foregroundObservers.remove(token)
+            if foregroundObservers.isEmpty {
+                pauseCollection()
+                supervisor?.cancel()
+                supervisor = nil
+                if state.isBusy { state = .disconnected }
+            }
+        }
+    }
+
+    private func resumeCollection() {
+        if usesAgentMetrics {
+            updateAgentObservation()
+            return
+        }
+        guard state.isConnected, !foregroundObservers.isEmpty, !isCollecting else { return }
+        isCollecting = true
+        if isLocal {
+            startLocalSampling()
+        } else {
+            startMetricsStream()
+            startDockerPolling()
+            startLatencyProbe()
+            startMountWatch()
+            probeTask = Task { [weak self] in await self?.loadFacts() }
+        }
+        if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
+    }
+
+    private func pauseCollection() {
+        isCollecting = false
+        agentMetrics?.stop()
+        metricsStreamGeneration &+= 1
+        dockerTask?.cancel()
+        dockerTask = nil
+        latencyTask?.cancel()
+        latencyTask = nil
+        localTask?.cancel()
+        localTask = nil
+        metricsRestartTask?.cancel()
+        metricsRestartTask = nil
+        metricsWatchdog?.cancel()
+        metricsWatchdog = nil
+        probeTask?.cancel()
+        probeTask = nil
+        mountTask?.cancel()
+        mountTask = nil
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = nil
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = nil
+        isTestingInternetSpeed = false
+        metricsStream?.cancel()
+        metricsStream = nil
+    }
+
     public func start() {
         guard !state.isConnected, !state.isBusy else { return }
         guard !machine.isMissing else {
             state = .failed(
                 message: "This machine is no longer configured.", recoverable: false)
+            return
+        }
+        if usesAgentMetrics {
+            state = .connecting
+            updateAgentObservation()
             return
         }
         if isLocal {
@@ -107,12 +271,22 @@ public final class MachineSession {
         cancelWork()
         rememberedForwards.removeAll()
         activeForwards.removeAll()
+        if usesAgentMetrics {
+            state = .disconnected
+            return
+        }
         let connection = connection
         Task { await connection?.disconnect() }
         state = .disconnected
     }
 
     public func retry() {
+        if usesAgentMetrics {
+            state = .connecting
+            updateAgentObservation()
+            Task { await refreshAgentMetrics(.reconnect) }
+            return
+        }
         guard !isLocal else {
             stop()
             start()
@@ -129,26 +303,11 @@ public final class MachineSession {
     }
 
     private func cancelWork() {
+        pauseCollection()
         supervisor?.cancel()
         supervisor = nil
-        dockerTask?.cancel()
-        dockerTask = nil
-        latencyTask?.cancel()
-        latencyTask = nil
-        localTask?.cancel()
-        localTask = nil
-        metricsRestartTask?.cancel()
-        metricsRestartTask = nil
-        metricsWatchdog?.cancel()
-        metricsWatchdog = nil
-        probeTask?.cancel()
-        probeTask = nil
-        mountTask?.cancel()
-        mountTask = nil
         platformProfileTask?.cancel()
         platformProfileTask = nil
-        metricsStream?.cancel()
-        metricsStream = nil
     }
 
     private func connect(afterFailures failures: Int, closingFirst: Bool) {
@@ -168,14 +327,11 @@ public final class MachineSession {
                 do {
                     try await connection.connect()
                     guard !Task.isCancelled else { return }
+                    remotePlatform = await connection.remotePlatform
                     await replayForwards(on: connection)
                     guard !Task.isCancelled else { return }
                     state = .connected(latencyMillis: nil)
-                    startMetricsStream()
-                    startDockerPolling()
-                    startLatencyProbe()
-                    startMountWatch()
-                    await loadFacts()
+                    resumeCollection()
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -215,6 +371,7 @@ public final class MachineSession {
     }
 
     private func reconnectAfterWake() {
+        if usesAgentMetrics { return }
         guard reconnects, !machine.isMissing else { return }
         Task { await restoreMount() }
         switch state {
@@ -239,7 +396,12 @@ public final class MachineSession {
 
     private func startLocal() {
         state = .connected(latencyMillis: 0)
+        remotePlatform = .darwin
         hello = localSampler?.hello()
+        resumeCollection()
+    }
+
+    private func startLocalSampling() {
         localTask = Task { [weak self] in
             var tick = 0
             while !Task.isCancelled {
@@ -282,18 +444,28 @@ public final class MachineSession {
     }
 
     private func startMetricsStream() {
-        guard let connection, let script = MachineCollector.script() else { return }
-        let process = connection.streamProcess(command: MachineCollector.streamCommand)
+        guard isCollecting, metricsStream == nil, let connection, let remotePlatform,
+            let invocation = MachineCollector.invocation(for: remotePlatform, follow: true)
+        else { return }
+        metricsStreamGeneration &+= 1
+        let generation = metricsStreamGeneration
+        let process = connection.streamProcess(command: invocation.command)
         let stream = SSHLineStream(
-            process: process, stdinData: script,
+            process: process, stdinData: invocation.stdinData,
             onLine: { [weak self] line, isStderr in
                 guard !isStderr, let record = MachineMetricsDecoder.decode(line: line) else {
                     return
                 }
-                Task { @MainActor in self?.apply(record: record) }
+                Task { @MainActor in
+                    guard let self, generation == self.metricsStreamGeneration else { return }
+                    self.apply(record: record)
+                }
             },
             onExit: { [weak self] _ in
-                Task { @MainActor in self?.handleMetricsStreamEnded() }
+                Task { @MainActor in
+                    guard let self, generation == self.metricsStreamGeneration else { return }
+                    self.handleMetricsStreamEnded()
+                }
             })
         do {
             try stream.start()
@@ -306,7 +478,7 @@ public final class MachineSession {
     }
 
     private func handleMetricsStreamEnded() {
-        guard state.isConnected else { return }
+        guard state.isConnected, isCollecting else { return }
         metricsStream = nil
         metricsWatchdog?.cancel()
         metricsWatchdog = nil
@@ -359,6 +531,82 @@ public final class MachineSession {
         return next
     }
 
+    public func refreshInternetSpeed() {
+        if usesAgentMetrics {
+            Task { await refreshAgentMetrics(.speed) }
+            return
+        }
+        guard state.isConnected, !isTestingInternetSpeed else { return }
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = Task { [weak self] in
+            await self?.performInternetSpeedTest()
+        }
+    }
+
+    private func performInternetSpeedTest() async {
+        isTestingInternetSpeed = true
+        internetSpeedError = nil
+        do {
+            let value: InternetSpeedMeasurement
+            if isLocal {
+                value = try await InternetSpeedTester.measureLocal()
+            } else if let connection, let remotePlatform {
+                value = try await InternetSpeedTester.measureRemote(
+                    connection: connection, platform: remotePlatform)
+            } else {
+                throw InternetSpeedTestError.unavailable(
+                    "The selected machine is not connected.")
+            }
+            guard !Task.isCancelled else { return }
+            apply(internetSpeed: value)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            internetSpeedError = error.localizedDescription
+        }
+        isTestingInternetSpeed = false
+    }
+
+    public func beginInternetSpeedObservation() {
+        internetSpeedObserverCount += 1
+        if usesAgentMetrics { updateAgentObservation(); return }
+        if internetSpeedObserverCount == 1, isCollecting { startInternetSpeedSchedule() }
+    }
+
+    public func endInternetSpeedObservation() {
+        internetSpeedObserverCount = max(0, internetSpeedObserverCount - 1)
+        if usesAgentMetrics { updateAgentObservation(); return }
+        guard internetSpeedObserverCount == 0 else { return }
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = nil
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = nil
+        isTestingInternetSpeed = false
+    }
+
+    func apply(internetSpeed value: InternetSpeedMeasurement) {
+        internetSpeed = value
+        internetDownloadHistory = Self.appending(
+            value.downloadBitsPerSecond, to: internetDownloadHistory)
+        internetUploadHistory = Self.appending(
+            value.uploadBitsPerSecond, to: internetUploadHistory)
+        internetSpeedError = nil
+    }
+
+    private func startInternetSpeedSchedule() {
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = Task { [weak self] in
+            guard let self else { return }
+            refreshInternetSpeed()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.internetSpeedRefreshInterval))
+                guard !Task.isCancelled else { return }
+                refreshInternetSpeed()
+            }
+        }
+    }
+
     private func startLatencyProbe() {
         latencyTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -383,11 +631,13 @@ public final class MachineSession {
 
     public func beginDockerObservation() {
         dockerObserverCount += 1
-        refreshDockerNow()
+        if usesAgentMetrics { updateAgentObservation(); return }
+        if state.isConnected { refreshDockerNow() }
     }
 
     public func endDockerObservation() {
         dockerObserverCount = max(0, dockerObserverCount - 1)
+        if usesAgentMetrics { updateAgentObservation() }
     }
 
     var currentDockerPollInterval: TimeInterval {
@@ -397,14 +647,15 @@ public final class MachineSession {
     private func startDockerPolling() {
         dockerTask = Task { [weak self] in
             guard let self, let connection else { return }
-            let version = try? await connection.run(DockerCommands.version(), timeout: 20)
+            let version = try? await connection.run(
+                DockerCommands.version(platform: remotePlatform ?? .linux), timeout: 20)
             guard !Task.isCancelled else { return }
             var availability = DockerParsing.availability(
                 versionOutput: version?.stdoutText ?? "", versionStderr: version?.stderrText ?? "",
                 status: version?.status ?? 1)
             if case let .available(serverVersion, _) = availability.status {
                 let compose = try? await connection.run(
-                    DockerCommands.composeVersion(), timeout: 15)
+                    DockerCommands.composeVersion(platform: remotePlatform ?? .linux), timeout: 15)
                 availability = DockerAvailability(
                     status: .available(
                         serverVersion: serverVersion, hasCompose: compose?.succeeded == true))
@@ -424,12 +675,14 @@ public final class MachineSession {
     }
 
     private func refreshDocker() async {
+        if usesAgentMetrics { await refreshAgentMetrics(.docker); return }
         guard let connection, docker.isAvailable, !dockerRefreshRunning else { return }
         dockerRefreshRunning = true
         defer { dockerRefreshRunning = false }
         guard
             let result = try? await connection.run(
-                DockerCommands.containersWithStats(), timeout: 30), result.succeeded
+                DockerCommands.containersWithStats(platform: remotePlatform ?? .linux), timeout: 30),
+            result.succeeded
         else { return }
         let sections = result.stdoutText.components(separatedBy: DockerCommands.listSeparator)
         let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
@@ -440,19 +693,25 @@ public final class MachineSession {
     }
 
     public func refreshImagesAndVolumes() async {
+        if usesAgentMetrics { await refreshAgentMetrics(.inventory); return }
         guard let connection, docker.isAvailable, !dockerInventoryRefreshRunning else { return }
         dockerInventoryRefreshRunning = true
         defer { dockerInventoryRefreshRunning = false }
-        async let imagesResult = try? connection.run(DockerCommands.images(), timeout: 30)
-        async let volumesResult = try? connection.run(DockerCommands.volumes(), timeout: 30)
-        async let usageResult = try? connection.run(DockerCommands.diskUsage(), timeout: 30)
+        async let imagesResult = try? connection.run(
+            DockerCommands.images(platform: remotePlatform ?? .linux), timeout: 30)
+        async let volumesResult = try? connection.run(
+            DockerCommands.volumes(platform: remotePlatform ?? .linux), timeout: 30)
+        async let usageResult = try? connection.run(
+            DockerCommands.diskUsage(platform: remotePlatform ?? .linux), timeout: 30)
         async let verboseResult = try? connection.run(
-            DockerCommands.diskUsageVerbose(), timeout: 60)
+            DockerCommands.diskUsageVerbose(platform: remotePlatform ?? .linux), timeout: 60)
         let (imagesOut, volumesOut, usageOut, verboseOut) = await (
             imagesResult, volumesResult, usageResult, verboseResult
         )
         images = DockerParsing.images(imagesOut?.stdoutText ?? "")
-        if let networksOut = try? await connection.run(DockerCommands.networks(), timeout: 20) {
+        if let networksOut = try? await connection.run(
+            DockerCommands.networks(platform: remotePlatform ?? .linux), timeout: 20)
+        {
             networks = DockerParsing.networks(networksOut.stdoutText)
         }
         let details = DockerParsing.volumeDetails(
@@ -478,7 +737,14 @@ public final class MachineSession {
                     command: command, status: 1, stderr: "Not connected."))
         }
         do {
-            let result = try await connection.run(command, timeout: timeout)
+            let result: SSHExecResult
+            if AgentCommandRouting.isEnabled || taskClient != nil {
+                result = try await (taskClient ?? AgentTaskClient()).runMachineCommand(
+                    AgentMachineCommandRequest(machine: machine, command: command, timeout: timeout)
+                )
+            } else {
+                result = try await connection.run(command, timeout: timeout)
+            }
             guard result.succeeded else {
                 let message = result.stderrText.isEmpty ? result.stdoutText : result.stderrText
                 return .failure(
@@ -495,12 +761,27 @@ public final class MachineSession {
     public func runCommand(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
+        if AgentCommandRouting.isEnabled || taskClient != nil {
+            do {
+                let result = try await (taskClient ?? AgentTaskClient()).runMachineCommand(
+                    AgentMachineCommandRequest(
+                        machine: isLocal ? nil : machine, command: command,
+                        standardInput: stdin, timeout: timeout))
+                guard result.succeeded else {
+                    return .failure(
+                        SSHConnectionError.commandFailed(
+                            command: command, status: result.status,
+                            stderr: result.successfulCommandText))
+                }
+                return .success(result.successfulCommandText)
+            } catch { return .failure(error) }
+        }
         guard let connection else {
             return await runLocalCommand(command, stdin: stdin, timeout: timeout)
         }
         do {
             let result = try await connection.run(command, stdin: stdin, timeout: timeout)
-            let output = result.stdoutText + result.stderrText
+            let output = result.successfulCommandText
             guard result.succeeded else {
                 return .failure(
                     SSHConnectionError.commandFailed(
@@ -518,7 +799,8 @@ public final class MachineSession {
         isApplyingPlatformProfile = true
         defer { isApplyingPlatformProfile = false }
         let result = await MachineThermalOperationExecution.set(
-            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id
+            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id,
+            platform: remotePlatform ?? .linux
         ) { [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(
@@ -552,7 +834,9 @@ public final class MachineSession {
     }
 
     public func refreshPlatformProfile() async {
-        let result = await MachineThermalOperationExecution.status(timeout: 10) {
+        let result = await MachineThermalOperationExecution.status(
+            timeout: 10, platform: remotePlatform ?? .linux
+        ) {
             [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(
@@ -581,21 +865,28 @@ public final class MachineSession {
     }
 
     public func refreshServices() async {
-        guard !isLocal, let connection else { return }
-        guard let result = try? await connection.run(ServiceCommands.list(), timeout: 30) else {
+        guard !isLocal, let connection, let remotePlatform else { return }
+        guard
+            let result = try? await connection.run(
+                ServiceCommands.list(platform: remotePlatform), timeout: 30)
+        else {
             return
         }
-        services = ServiceCommands.parse(result.stdoutText)
+        services = ServiceCommands.parse(result.stdoutText, platform: remotePlatform)
     }
 
     private func loadFacts() async {
-        guard let connection else { return }
-        async let whoResult = try? connection.run(MachineFacts.whoCommand, timeout: 15)
-        async let macResult = try? connection.run(MachineFacts.macAddressCommand, timeout: 15)
-        async let updatesResult = try? connection.run(MachineFacts.updatesCommand, timeout: 45)
+        guard let connection, let remotePlatform else { return }
+        async let whoResult = try? connection.run(
+            MachineFacts.whoCommand(for: remotePlatform), timeout: 15)
+        async let macResult = try? connection.run(
+            MachineFacts.macAddressCommand(for: remotePlatform), timeout: 15)
+        async let updatesResult = try? connection.run(
+            MachineFacts.updatesCommand(for: remotePlatform), timeout: 45)
         let (who, mac, updates) = await (whoResult, macResult, updatesResult)
         facts = MachineSessionSummary(
-            who: MachineFacts.parseWho(who?.stdoutText ?? ""),
+            who: MachineFacts.parseWho(
+                who?.stdoutText ?? "", platform: remotePlatform),
             updatesAvailable: MachineFacts.parseUpdates(updates?.stdoutText ?? ""),
             macAddress: MachineFacts.parseMACAddress(mac?.stdoutText ?? ""))
     }
@@ -684,6 +975,15 @@ public final class MachineSession {
         }
     }
 
+    public func homeDirectory() async -> Result<String, Error> {
+        if isLocal { return .success(FileManager.default.homeDirectoryForCurrentUser.path) }
+        do {
+            return .success(try await directoryEndpoint.homeDirectory())
+        } catch {
+            return .failure(error)
+        }
+    }
+
     public func createDirectory(path: String) async -> Result<RemoteDirectoryCreation, Error> {
         if isLocal {
             do {
@@ -724,7 +1024,7 @@ public final class MachineSession {
         else { return [] }
         var found: [RemoteFileEntry] = []
         for case let url as URL in walker {
-            guard found.count < limit else { break }
+            guard !Task.isCancelled, found.count < limit else { break }
             guard url.lastPathComponent.localizedCaseInsensitiveContains(query) else { continue }
             let values = try? url.resourceValues(forKeys: Set(keys))
             let path = FilePathKey.anchor(url.path, to: root)

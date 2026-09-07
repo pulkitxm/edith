@@ -11,32 +11,6 @@ struct SystemView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 12) {
-                eyebrow("POWER")
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Prevent sleep")
-                            .font(.system(size: 13))
-                        Text("Keeps the display awake; closing the lid still sleeps")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer()
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { store.preventingSleep },
-                            set: { store.setPreventSleep($0) }
-                        )
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .tint(theme)
-                }
-            }
-            .card()
-
-            VStack(alignment: .leading, spacing: 12) {
                 eyebrow("KEYBOARD")
                 Text(
                     "Blocks every key - letters, shortcuts, volume, brightness - so you can wipe the keyboard. The trackpad stays live; exit with the Done button or the 60s auto-restore."

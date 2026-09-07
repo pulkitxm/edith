@@ -253,19 +253,28 @@ struct AddMachineSheet: View {
                 Button {
                     runTest()
                 } label: {
-                    if testState == .testing {
-                        HStack(spacing: UIScale.pt(6)) {
-                            ProgressView().controlSize(.small).scaleEffect(0.7)
-                            Text("Testing…")
-                        }
-                    } else {
-                        Text("Test connection")
-                    }
+                    Text("Test connection")
                 }
                 .disabled(!isValid || testState == .testing)
                 Spacer(minLength: 0)
             }
             switch testState {
+            case .testing:
+                SkeletonGroup {
+                    HStack(alignment: .top, spacing: UIScale.pt(7)) {
+                        SkeletonBlock(width: 15, height: 15, corner: 7.5)
+                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                            SkeletonBlock(width: 116, height: 10, corner: 2)
+                            SkeletonBlock(width: 208, height: 9, corner: 2)
+                        }
+                    }
+                    .padding(UIScale.pt(10))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        DashSkin.accent(dark).opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                }
+                .accessibilityLabel("Testing connection")
             case let .success(message):
                 statusLine(message, symbol: "checkmark.circle.fill", color: DashSkin.ok)
             case let .failure(message):
@@ -417,16 +426,22 @@ struct AddMachineSheet: View {
             let connection = SSHConnection(machine: machine)
             do {
                 try await connection.connect()
+                let platform = await connection.remotePlatform ?? .linux
                 let result = try await connection.run(
-                    "uname -sr; id -un; command -v docker >/dev/null 2>&1 && echo docker-yes",
-                    timeout: 20)
+                    MachineConnectionProbe.command(platform: platform), timeout: 20)
                 await connection.disconnect()
                 guard !Task.isCancelled else { return }
-                let lines = result.stdoutText.split(separator: "\n").map(String.init)
+                guard result.succeeded else {
+                    let detail = result.stderrText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    testState = .failure(detail.isEmpty ? "The connection probe failed." : detail)
+                    return
+                }
+                let facts = MachineConnectionProbe.parse(result.stdoutText)
                 var message = "Connected"
-                if let kernel = lines.first { message += " to \(kernel)" }
-                if lines.count > 1 { message += " as \(lines[1])" }
-                if lines.contains("docker-yes") { message += ". Docker found." }
+                if !facts.system.isEmpty { message += " to \(facts.system)" }
+                if !facts.user.isEmpty { message += " as \(facts.user)" }
+                if facts.dockerAvailable { message += ". Docker found." }
                 testState = .success(message)
             } catch {
                 await connection.disconnect()

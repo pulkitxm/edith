@@ -101,7 +101,7 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let source = try await CLIEnvironment.remoteTransferTarget(machine)
-            let remoteName = (remote as NSString).lastPathComponent
+            let remoteName = FileListing.name(of: remote)
             let requested = URL(
                 fileURLWithPath: (local ?? remoteName).expandingTilde()
             ).standardizedFileURL
@@ -164,8 +164,10 @@ struct MachineFilesPreviewCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let result = try await runner.run(
-                RemoteFileOperationExecution.previewCommand(path: path), timeout: 45)
+                RemoteFileOperationExecution.previewCommand(
+                    path: path, platform: platform), timeout: 45)
             guard result.succeeded else {
                 throw CLIFailure(
                     "could not preview \(path) on \(runner.machine.name)",
@@ -317,7 +319,7 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
             let destination =
                 remoteIsDirectory
                 ? FileListing.join(parent: trimmed, name: source.lastPathComponent) : remote
-            let rawDirectory = (destination as NSString).deletingLastPathComponent
+            let rawDirectory = FileListing.parentPath(of: destination) ?? ""
             let directory = rawDirectory.isEmpty ? "." : rawDirectory
             let existing = try await target.endpoint.list(directory)
             let plan = RemoteTransferOperationExecution.plan(
@@ -352,13 +354,8 @@ struct MachinesFilesOpenCommand: AsyncParsableCommand {
         commandName: "open",
         abstract: "Open Edith's Files window on a machine directory.",
         discussion: """
-            The window belongs to Edith Files, a separate app that holds nothing but
-            these windows: no dashboard, no menu bar item, and it quits when you close
-            the last one. `ed` starts it when it is not already up, and asks the running
-            one for another window when it is.
-
-            With no path it opens the directory this terminal is in, the one
-            `ed <machine> cd` remembers, so browsing carries on where the shell left off.
+            Opens a Files window in the main Edith application, starting it if needed.
+            With no path, browsing continues in this terminal's remembered directory.
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -372,26 +369,21 @@ struct MachinesFilesOpenCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let target = try MachineResolver.machine(machine)
+            let target = machine.lowercased() == "local" ? Machine.local : try MachineResolver.machine(machine)
             let directory =
                 path ?? MachineWorkingDirectory.load(machineID: target.id)
             let progress = CLIProgress.forCommand(json: json)
-            guard AppBridge.filesAppIsRunning else {
-                progress.begin("starting Edith Files")
-                do {
-                    try await AppBridge.startFilesApp(machineID: target.id, path: directory)
-                } catch {
-                    progress.end()
-                    throw error
+            if !AppBridge.mainAppIsRunning {
+                guard let bundle = CLIEnvironment.installedAppURL() else {
+                    throw CLIFailure.unavailable("Edith is not installed", hint: "install Edith and retry")
                 }
-                progress.end()
-                report(machine: target, directory: directory)
-                return
+                try await EdithProcesses.launch(bundle)
             }
+            let requestID = UUID().uuidString
             var answer: [AnyHashable: Any]?
             for _ in 0..<4 {
-                answer = await AppBridge.awaitReply(IPC.Name.finderOpenResult, timeout: 3) {
-                    var info: [String: Any] = ["machine": target.id.uuidString]
+                answer = await AppBridge.awaitReply(IPC.Name.finderOpenResult, timeout: 3, matching: { $0["requestID"] as? String == requestID }) {
+                    var info: [String: Any] = ["machine": target.id.uuidString, "requestID": requestID]
                     if let directory { info["path"] = directory }
                     AppBridge.post(IPC.Name.requestFinderOpen, userInfo: info)
                 }
@@ -403,7 +395,7 @@ struct MachinesFilesOpenCommand: AsyncParsableCommand {
             }
             guard reply["opened"] as? Bool == true else {
                 throw CLIFailure.unavailable(
-                    "Edith Files would not open a window for \(target.name)",
+                    "Edith would not open a window for \(target.name)",
                     hint: reply["reason"] as? String)
             }
             report(machine: target, directory: directory)

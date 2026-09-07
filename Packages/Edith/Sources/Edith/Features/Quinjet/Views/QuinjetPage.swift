@@ -348,9 +348,7 @@ private struct QuinjetTerminalWorkspace: View {
     @ViewBuilder
     private var worktreePopover: some View {
         if tab.loadingWorktrees {
-            ProgressView("Loading worktrees")
-                .padding(UIScale.pt(28))
-                .frame(width: UIScale.pt(300))
+            QuinjetWorktreePickerSkeleton(dark: dark)
         } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
             ContentUnavailableView(
                 "Worktrees unavailable", systemImage: "exclamationmark.triangle",

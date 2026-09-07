@@ -28,6 +28,12 @@ final class DockerDetailModel {
 
     var inspectFailed = false
     var processesFailed = false
+    private(set) var inspectLoading = false
+    private(set) var processesLoading = false
+    private(set) var processesLoaded = false
+    private(set) var filesLoading = false
+    private(set) var filesLoaded = false
+    private(set) var filesFailed = false
 
     private var stream: SSHLineStream?
     private var nextLogID = 0
@@ -39,10 +45,38 @@ final class DockerDetailModel {
     private var detailContainerID: String?
     private var inspectRequest = 0
     private var processesRequest = 0
+    private var logsSuspended = false
+    private let logProcess: @MainActor (MachineSession, DockerContainer) -> Process?
 
-    func activate(session: MachineSession, container: DockerContainer) -> Bool {
-        guard detailContainerID != container.id else { return false }
-        startLogs(session: session, container: container)
+    init(
+        logProcess: @escaping @MainActor (MachineSession, DockerContainer) -> Process? = {
+            session, container in
+            session.connectionRef?.streamProcess(
+                command: DockerCommands.logs(
+                    container.id, tail: 400, follow: true,
+                    platform: session.remotePlatform ?? .linux))
+        }
+    ) {
+        self.logProcess = logProcess
+    }
+
+    func activate(session: MachineSession, container: DockerContainer, streamLogs: Bool = true)
+        -> Bool
+    {
+        guard detailContainerID != container.id else {
+            if streamLogs, logsSuspended {
+                logsSuspended = false
+                logs = []
+                nextLogID = 0
+                reattempts = 0
+                attachLogs(session: session, container: container, generation: logGeneration)
+            } else if !streamLogs, !logsSuspended {
+                stopLogs()
+                logsSuspended = true
+            }
+            return false
+        }
+        startLogs(session: session, container: container, streamLogs: streamLogs)
         return true
     }
 
@@ -59,7 +93,7 @@ final class DockerDetailModel {
         return logs.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
     }
 
-    func startLogs(session: MachineSession, container: DockerContainer) {
+    func startLogs(session: MachineSession, container: DockerContainer, streamLogs: Bool = true) {
         stopLogs()
         logs = []
         nextLogID = 0
@@ -71,6 +105,12 @@ final class DockerDetailModel {
         inspect = nil
         inspectFailed = false
         processesFailed = false
+        inspectLoading = false
+        processesLoading = false
+        processesLoaded = false
+        filesLoading = false
+        filesLoaded = false
+        filesFailed = false
         detailContainerID = container.id
         inspectRequest &+= 1
         processesRequest &+= 1
@@ -78,15 +118,16 @@ final class DockerDetailModel {
         streamEnded = false
         reattempts = 0
         logGeneration += 1
-        attachLogs(session: session, container: container, generation: logGeneration)
+        logsSuspended = !streamLogs
+        if streamLogs {
+            attachLogs(session: session, container: container, generation: logGeneration)
+        }
     }
 
     private func attachLogs(
         session: MachineSession, container: DockerContainer, generation: Int
     ) {
-        guard let connection = session.connectionRef else { return }
-        let process = connection.streamProcess(
-            command: DockerCommands.logs(container.id, tail: 400, follow: true))
+        guard let process = logProcess(session, container) else { return }
         let stream = SSHLineStream(
             process: process,
             onLine: { [weak self] text, isStderr in
@@ -129,11 +170,19 @@ final class DockerDetailModel {
     }
 
     func stop() {
-        stopLogs()
+        suspend()
         detailContainerID = nil
+    }
+
+    func suspend() {
+        stopLogs()
+        logsSuspended = true
         inspectRequest &+= 1
         processesRequest &+= 1
         fileToken &+= 1
+        inspectLoading = false
+        processesLoading = false
+        filesLoading = false
     }
 
     private func enqueue(_ line: DockerLogLine) {
@@ -155,23 +204,28 @@ final class DockerDetailModel {
     }
 
     func loadInspect(session: MachineSession, container: DockerContainer) async {
-        await loadInspect(container: container) { command, timeout in
+        await loadInspect(
+            container: container, platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadInspect(
-        container: DockerContainer, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         inspectRequest &+= 1
         let request = inspectRequest
         inspectFailed = false
+        inspectLoading = true
         let result = await DockerDetailOperationExecution.inspect(
-            containerID: container.id, using: run)
+            containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, inspectRequest == request
         else { return }
+        inspectLoading = false
         guard case let .success(summary) = result else {
             inspect = nil
             inspectFailed = true
@@ -181,23 +235,30 @@ final class DockerDetailModel {
     }
 
     func loadProcesses(session: MachineSession, container: DockerContainer) async {
-        await loadProcesses(container: container) { command, timeout in
+        await loadProcesses(
+            container: container, platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadProcesses(
-        container: DockerContainer, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         processesRequest &+= 1
         let request = processesRequest
         processesFailed = false
+        processesLoading = true
+        processesLoaded = false
         let result = await DockerDetailOperationExecution.processes(
-            containerID: container.id, using: run)
+            containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, processesRequest == request
         else { return }
+        processesLoading = false
+        processesLoaded = true
         guard case let .success(rows) = result else {
             processes = []
             processesFailed = true
@@ -207,25 +268,37 @@ final class DockerDetailModel {
     }
 
     func loadFiles(session: MachineSession, container: DockerContainer, path: String) async {
-        await loadFiles(container: container, path: path) { command, timeout in
+        await loadFiles(
+            container: container, path: path,
+            platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadFiles(
-        container: DockerContainer, path: String, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, path: String,
+        platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         fileToken &+= 1
         let token = fileToken
         filePath = path
+        filesLoading = true
+        filesLoaded = false
+        filesFailed = false
         let result = await run(
-            DockerCommands.listFiles(containerID: container.id, path: path), 30)
+            DockerCommands.listFiles(
+                containerID: container.id, path: path, platform: platform), 30)
         guard !Task.isCancelled, detailContainerID == container.id, token == fileToken else {
             return
         }
+        filesLoading = false
+        filesLoaded = true
         guard case let .success(output) = result else {
             files = []
+            filesFailed = true
             return
         }
         files = FileListing.parse(output: output, parent: path)
@@ -283,9 +356,11 @@ private struct DockerDetailLoadRequest: Equatable {
     let tab: DockerDetailTab
     let filePath: String
     let generation: Int
+    let presented: Bool
 }
 
 struct DockerContainerDetail: View {
+    @Environment(\.machineViewPresented) private var presented
     let session: MachineSession
     let container: DockerContainer
     let dark: Bool
@@ -313,7 +388,7 @@ struct DockerContainerDetail: View {
     private var loadRequest: DockerDetailLoadRequest {
         DockerDetailLoadRequest(
             containerID: container.id, tab: tab, filePath: requestedFilePath,
-            generation: loadGeneration)
+            generation: loadGeneration, presented: presented)
     }
 
     private var browserPorts: [DockerPortMapping] {
@@ -330,7 +405,12 @@ struct DockerContainerDetail: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: loadRequest) {
-            let switched = model.activate(session: session, container: container)
+            guard presented else {
+                model.suspend()
+                return
+            }
+            let switched = model.activate(
+                session: session, container: container, streamLogs: tab == .logs)
             if switched, requestedFilePath != "/" {
                 requestedFilePath = "/"
                 return
@@ -339,7 +419,9 @@ struct DockerContainerDetail: View {
                 session: session, container: container, tab: tab, filePath: requestedFilePath)
         }
         .onDisappear { model.stop() }
-        .onChange(of: session.containers) { _, _ in model.record(container: live) }
+        .onChange(of: session.containers) { _, _ in
+            if presented { model.record(container: live) }
+        }
     }
 
     private var header: some View {
@@ -582,7 +664,7 @@ struct DockerContainerDetail: View {
                         .font(.system(size: UIScale.pt(11), weight: .medium))
                     }
                 } else {
-                    ProgressView().controlSize(.small)
+                    DockerInspectSkeleton()
                 }
             }
             .padding(UIScale.pt(16))
@@ -690,7 +772,9 @@ struct DockerContainerDetail: View {
 
     private var processesView: some View {
         ScrollView {
-            if model.processesFailed {
+            if model.processesLoading || !model.processesLoaded && !model.processesFailed {
+                DockerProcessRowsSkeleton()
+            } else if model.processesFailed {
                 HStack(spacing: UIScale.pt(8)) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(DashSkin.warn)
@@ -704,7 +788,11 @@ struct DockerContainerDetail: View {
                 }
                 .padding(UIScale.pt(16))
             } else if model.processes.isEmpty {
-                ProgressView().controlSize(.small).padding(UIScale.pt(16))
+                Text("No processes are running in this container.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(16))
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(model.processes) { process in
@@ -757,6 +845,26 @@ struct DockerContainerDetail: View {
             Divider().opacity(0.3)
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if model.filesLoading || !model.filesLoaded && !model.filesFailed {
+                        DockerFileRowsSkeleton()
+                    } else if model.filesFailed {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundStyle(DashSkin.warn)
+                            Text("Could not read this folder.")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                            Button("Retry") { loadGeneration &+= 1 }
+                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                        }
+                        .padding(UIScale.pt(16))
+                    } else if model.files.isEmpty {
+                        Text("This folder is empty.")
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(16))
+                    }
                     ForEach(model.files) { entry in
                         HStack(spacing: UIScale.pt(10)) {
                             Image(systemName: entry.isDirectory ? "folder" : "doc")

@@ -119,8 +119,18 @@ struct ProjectDrilldownView: View {
                         query: debouncedQuery, revision: model.revision,
                         sortKey: model.projSortKey, ascending: model.projSortAscending)
                 ) {
-                    displayNodes = ProjectDrilldownNodes.build(
-                        tree: model.projectTree, query: debouncedQuery)
+                    let tree = model.projectTree
+                    let query = debouncedQuery
+                    let worker = Task.detached(priority: .userInitiated) {
+                        ProjectDrilldownNodes.build(tree: tree, query: query)
+                    }
+                    let nodes = await withTaskCancellationHandler {
+                        await worker.value
+                    } onCancel: {
+                        worker.cancel()
+                    }
+                    guard !Task.isCancelled else { return }
+                    displayNodes = nodes
                 }
             }
         }
@@ -219,17 +229,22 @@ private enum ProjectDrilldownNodes {
     static let chatsPerGroup = 20
 
     static func build(tree: [ProjTreeRow], query: String) -> [ProjNode] {
-        let matched = query.isEmpty ? tree : tree.filter { $0.matches(query) }
-        return matched.map { repository in
+        var nodes: [ProjNode] = []
+        nodes.reserveCapacity(tree.count)
+        for repository in tree {
+            guard !Task.isCancelled else { return [] }
+            guard query.isEmpty || repository.matches(query) else { continue }
             let folders = repository.folders.map(folderNode)
-            return ProjNode(
-                id: repository.id, kind: .repository, label: repository.name,
-                tokens: repository.tokens, cost: repository.cost, share: repository.share,
-                days: repository.days, dur: repository.dur,
-                lastActive: repository.lastActive, chatId: nil,
-                repositoryURL: repository.repositoryURL, badge: repository.nestedCount,
-                children: folders.isEmpty ? nil : folders)
+            nodes.append(
+                ProjNode(
+                    id: repository.id, kind: .repository, label: repository.name,
+                    tokens: repository.tokens, cost: repository.cost, share: repository.share,
+                    days: repository.days, dur: repository.dur,
+                    lastActive: repository.lastActive, chatId: nil,
+                    repositoryURL: repository.repositoryURL, badge: repository.nestedCount,
+                    children: folders.isEmpty ? nil : folders))
         }
+        return nodes
     }
 
     private static func folderNode(_ folder: ProjFolder) -> ProjNode {

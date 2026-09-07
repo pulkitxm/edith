@@ -10,7 +10,7 @@ private final class LineSplitter: @unchecked Sendable {
         defer { lock.unlock() }
         pending += text
         var lines: [String] = []
-        while let newline = pending.firstIndex(of: "\n") {
+        while let newline = pending.firstIndex(where: \.isNewline) {
             lines.append(String(pending[..<newline]))
             pending.removeSubrange(...newline)
         }
@@ -58,6 +58,39 @@ private final class StreamCompletion: @unchecked Sendable {
     }
 }
 
+private final class StreamOutputCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private let queue = DispatchQueue(label: "com.pulkit.edith.ssh-line-stream.output")
+    private let reads = DispatchGroup()
+    private var finishing = false
+
+    func beginRead() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finishing else { return false }
+        reads.enter()
+        return true
+    }
+
+    func completeRead(_ work: @escaping @Sendable () -> Void) {
+        queue.async {
+            work()
+            self.reads.leave()
+        }
+    }
+
+    func finish(_ work: @escaping @Sendable () -> Void) {
+        lock.lock()
+        guard !finishing else {
+            lock.unlock()
+            return
+        }
+        finishing = true
+        lock.unlock()
+        reads.notify(queue: queue, execute: work)
+    }
+}
+
 public final class SSHLineStream: @unchecked Sendable {
     private let process: Process
     private let stdinData: Data?
@@ -68,7 +101,7 @@ public final class SSHLineStream: @unchecked Sendable {
     private let stdoutSplitter = LineSplitter()
     private let stderrSplitter = LineSplitter()
     private let completion = StreamCompletion()
-    private let outputQueue = DispatchQueue(label: "com.pulkit.edith.ssh-line-stream.output")
+    private let output = StreamOutputCoordinator()
 
     public init(
         process: Process, stdinData: Data? = nil,
@@ -81,25 +114,39 @@ public final class SSHLineStream: @unchecked Sendable {
         self.onExit = onExit
     }
 
+    deinit {
+        cancel()
+    }
+
     public func start() throws {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         let stdout = stdoutSplitter
         let stderr = stderrSplitter
         let deliver = onLine
-        let outputQueue = outputQueue
+        let deliverFiltered: @Sendable (String, Bool) -> Void = { line, isStderr in
+            guard !isStderr || !SSHTransportDiagnostics.isMultiplexingWarning(line) else {
+                return
+            }
+            deliver(line, isStderr)
+        }
+        let output = output
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stdout.receive(data) { deliver(line, false) }
-                }
+            guard output.beginRead() else { return }
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stdout.receive($0) }
+            let deliveredLines = lines
+            output.completeRead {
+                for line in deliveredLines { deliverFiltered(line, false) }
             }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stderr.receive(data) { deliver(line, true) }
-                }
+            guard output.beginRead() else { return }
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stderr.receive($0) }
+            let deliveredLines = lines
+            output.completeRead {
+                for line in deliveredLines { deliverFiltered(line, true) }
             }
         }
         let finish = onExit
@@ -107,31 +154,30 @@ public final class SSHLineStream: @unchecked Sendable {
         process.terminationHandler = { [stdoutPipe, stderrPipe, completion] finished in
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            outputQueue.async {
+            let status = finished.terminationStatus
+            output.finish {
                 for line in stdout.receive(
                     stdoutPipe.fileHandleForReading.readDataToEndOfFile())
                 {
-                    deliver(line, false)
+                    deliverFiltered(line, false)
                 }
-                for line in stdout.flush() { deliver(line, false) }
+                for line in stdout.flush() { deliverFiltered(line, false) }
                 for line in stderr.receive(
                     stderrPipe.fileHandleForReading.readDataToEndOfFile())
                 {
-                    deliver(line, true)
+                    deliverFiltered(line, true)
                 }
-                for line in stderr.flush() { deliver(line, true) }
-                completion.finish(finished.terminationStatus)
-                finish(finished.terminationStatus)
+                for line in stderr.flush() { deliverFiltered(line, true) }
+                completion.finish(status)
+                finish(status)
             }
         }
         if let stdinData {
             let stdinPipe = Pipe()
             process.standardInput = stdinPipe
             try process.run()
-            DispatchQueue.global(qos: .utility).async {
-                stdinPipe.fileHandleForWriting.write(stdinData)
-                try? stdinPipe.fileHandleForWriting.close()
-            }
+            stdinPipe.fileHandleForWriting.write(stdinData)
+            try? stdinPipe.fileHandleForWriting.close()
         } else {
             process.standardInput = FileHandle.nullDevice
             try process.run()
@@ -162,9 +208,49 @@ public final class SSHLineStream: @unchecked Sendable {
     }
 }
 
+public struct MachineCollectorInvocation: Sendable {
+    public let command: String
+    public let stdinData: Data?
+
+    public init(command: String, stdinData: Data?) {
+        self.command = command
+        self.stdinData = stdinData
+    }
+}
+
 public enum MachineCollector {
     public static let streamCommand = "sh -s -- --stream -i 2"
     public static let onceCommand = "sh -s -- --once"
+    public static let windowsScriptTerminator = "@EDITH_SCRIPT_END@"
+
+    public static func invocation(
+        for platform: RemoteMachinePlatform, follow: Bool, interval: Int = 2
+    ) -> MachineCollectorInvocation? {
+        guard let source = script(for: platform, follow: follow, interval: interval) else {
+            return nil
+        }
+        switch platform {
+        case .darwin, .linux:
+            let command = follow ? "sh -s -- --stream -i \(max(1, interval))" : onceCommand
+            return MachineCollectorInvocation(command: command, stdinData: source)
+        case .windows:
+            var input = source
+            guard let terminator = "\n\(windowsScriptTerminator)\n".data(using: .utf8) else {
+                return nil
+            }
+            input.append(terminator)
+            let command = PowerShell.command(
+                """
+                $lines = [Collections.Generic.List[string]]::new()
+                while ($null -ne ($line = [Console]::In.ReadLine()) -and
+                    $line -ne '\(windowsScriptTerminator)') {
+                    $lines.Add($line)
+                }
+                & ([ScriptBlock]::Create([string]::Join("`n", $lines)))
+                """)
+            return MachineCollectorInvocation(command: command, stdinData: input)
+        }
+    }
 
     public static func script() -> Data? {
         guard
@@ -172,5 +258,23 @@ public enum MachineCollector {
                 forResource: "machine-collector", withExtension: "sh")
         else { return nil }
         return try? Data(contentsOf: url)
+    }
+
+    public static func script(
+        for platform: RemoteMachinePlatform, follow: Bool = true, interval: Int = 2
+    ) -> Data? {
+        switch platform {
+        case .darwin, .linux:
+            return script()
+        case .windows:
+            guard
+                let url = BundledResources.url(
+                    forResource: "windows-machine-collector", withExtension: "ps1"),
+                let source = try? String(contentsOf: url, encoding: .utf8)
+            else { return nil }
+            let mode = follow ? "stream" : "once"
+            return "$EdithMode = '\(mode)'\n$EdithInterval = \(max(1, interval))\n\(source)"
+                .data(using: .utf8)
+        }
     }
 }

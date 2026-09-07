@@ -14,7 +14,7 @@ final class FinderModel {
     typealias FreeSpaceLoader = @MainActor @Sendable (String) async -> Int64?
 
     var path: String
-    var entries: [RemoteFileEntry] = []
+    var entries: [RemoteFileEntry] = [] { didSet { updateEntryProjection() } }
     private(set) var loading = false
     var errorMessage: String?
     var statusMessage: String?
@@ -26,7 +26,7 @@ final class FinderModel {
     var quickLookPath: String?
     var freeSpaceKB: Int64?
     var searchQuery = ""
-    var searchResults: [RemoteFileEntry]?
+    var searchResults: [RemoteFileEntry]? { didSet { updateEntryProjection() } }
     var places: [FilePlaceSection] = []
     var infoTarget: RemoteFileEntry?
     var showSidebar = true
@@ -46,19 +46,21 @@ final class FinderModel {
         didSet { FinderDefaults.viewMode = viewModeRaw }
     }
     var sortKeyRaw = FinderDefaults.sortKey {
-        didSet { FinderDefaults.sortKey = sortKeyRaw }
+        didSet { FinderDefaults.sortKey = sortKeyRaw; updateEntryProjection() }
     }
     var sortAscending = FinderDefaults.sortAscending {
-        didSet { FinderDefaults.sortAscending = sortAscending }
+        didSet { FinderDefaults.sortAscending = sortAscending; updateEntryProjection() }
     }
     var showHidden = FinderDefaults.showHidden {
-        didSet { FinderDefaults.showHidden = showHidden }
+        didSet { FinderDefaults.showHidden = showHidden; updateEntryProjection() }
     }
     var iconSize = FinderDefaults.iconSize {
         didSet { FinderDefaults.iconSize = iconSize }
     }
 
     let session: MachineSession
+    private let entryProjection = FinderEntryProjection()
+    private var shallowSearchTask: Task<[RemoteFileEntry], Never>?
     private var history: [String] = []
     private var future: [String] = []
     private var anchor: String?
@@ -92,17 +94,34 @@ final class FinderModel {
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
+    private var transferTask: Task<RemoteTransferOutcome, Error>?
+    private var transferCommandTask: Task<Result<String, Error>, Never>?
+    private let transferClient: AgentTaskClient?
+
+    var canCancelTransfer: Bool { transferTask != nil || transferCommandTask != nil }
+
+    func cancelTransfer() {
+        transferTask?.cancel()
+        transferCommandTask?.cancel()
+    }
 
     init(
         session: MachineSession, path: String? = nil,
         localSearch: @escaping @Sendable (String, String) async -> [RemoteFileEntry] = {
             root, query in
-            await Task.detached(priority: .userInitiated) {
+            let worker = Task.detached(priority: .userInitiated) {
                 MachineSession.searchLocalFiles(root: root, query: query)
-            }.value
-        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil
+            }
+            return await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil,
+        transferClient: AgentTaskClient? = nil
     ) {
         self.session = session
+        self.transferClient = transferClient
         self.localSearch = localSearch
         self.directoryLoader = directoryLoader ?? { await session.listFiles(path: $0) }
         self.freeSpaceLoader =
@@ -112,8 +131,9 @@ final class FinderModel {
                         forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     return (values?.volumeAvailableCapacityForImportantUsage).map { $0 / 1024 }
                 }
+                let platform = session.remotePlatform ?? .linux
                 let result = await session.runCommand(
-                    FileOperations.freeSpaceCommand(path: path), timeout: 20)
+                    FileOperations.freeSpaceCommand(path: path, platform: platform), timeout: 20)
                 guard case let .success(output) = result else { return nil }
                 return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
             }
@@ -136,11 +156,16 @@ final class FinderModel {
     var canGoForward: Bool { !future.isEmpty }
     var canGoUp: Bool { FileListing.parentPath(of: path) != nil }
 
-    var visibleEntries: [RemoteFileEntry] {
-        if let searchResults { return searchResults }
-        let base = showHidden ? entries : entries.filter { !$0.isHidden }
-        return FileSorting.sort(base, by: sortKey, ascending: sortAscending)
+    var visibleEntries: [RemoteFileEntry] { entryProjection.entries }
+    var projectingEntries: Bool { entryProjection.isUpdating }
+
+    private func updateEntryProjection() {
+        entryProjection.update(
+            entries: entries, searchResults: searchResults, showHidden: showHidden,
+            key: sortKey, ascending: sortAscending)
     }
+
+    func waitForEntryProjection() async { await entryProjection.wait() }
 
     var selectedEntries: [RemoteFileEntry] {
         visibleEntries.filter { selection.contains($0.path) }
@@ -191,10 +216,13 @@ final class FinderModel {
             places = FilePlaces.localSections(volumes: external)
             return
         }
-        let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
+        let platform = session.remotePlatform ?? .linux
+        let result = await session.runCommand(
+            FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
         let home =
             (try? result.get())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "~"
-        places = FilePlaces.remoteSections(home: home.isEmpty ? "~" : home)
+        places = FilePlaces.remoteSections(
+            home: home.isEmpty ? "~" : home, platform: platform)
     }
 
     func copySelection(operation: FileClipboardOperation) {
@@ -210,7 +238,11 @@ final class FinderModel {
     func paste() async {
         guard let clipboard = Self.clipboard else { return }
         guard clipboard.machineID == session.machine.id else {
-            errorMessage = "Copying between machines is not supported yet."
+            await perform(
+                intent: .transferBetweenMachines(
+                    from: clipboard.machineID, paths: clipboard.paths,
+                    moving: clipboard.operation == .move),
+                destination: path)
             return
         }
         let isCopy = clipboard.operation == .copy
@@ -296,11 +328,13 @@ final class FinderModel {
     private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
         var resolvedPath = requestedPath
         if !session.isLocal, requestedPath == "~" || requestedPath.isEmpty {
-            let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
+            let platform = session.remotePlatform ?? .linux
+            let result = await session.runCommand(
+                FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
             guard !Task.isCancelled else { return nil }
             if case let .success(output) = result {
                 let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                if home.hasPrefix("/") { resolvedPath = home }
+                if home.hasPrefix("/") || FileListing.isWindowsPath(home) { resolvedPath = home }
             }
         }
         let result = await directoryLoader(resolvedPath)
@@ -329,6 +363,8 @@ final class FinderModel {
     }
 
     func stopLoading() {
+        entryProjection.cancel()
+        invalidateSearch()
         loadGeneration += 1
         loadWorkerGeneration += 1
         pendingLoad = nil
@@ -469,7 +505,9 @@ final class FinderModel {
             guard !Task.isCancelled else { return }
             folderCounts[entry.path] = count ?? 0
         }
-        let result = await MachineFileOperationExecution.info(path: entry.path) {
+        let result = await MachineFileOperationExecution.info(
+            path: entry.path, platform: session.remotePlatform ?? .linux
+        ) {
             [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -594,7 +632,9 @@ final class FinderModel {
             flash("Nothing to undo")
             return
         }
-        let result = await MachineFileOperationExecution.undo(step) {
+        let result = await MachineFileOperationExecution.undo(
+            step, platform: session.remotePlatform ?? .linux
+        ) {
             [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -644,7 +684,8 @@ final class FinderModel {
         self.renaming = nil
         let target = FileListing.join(parent: parent, name: trimmed)
         let result = await MachineFileOperationExecution.rename(
-            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase
+            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase,
+            platform: session.remotePlatform ?? .linux
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -692,7 +733,8 @@ final class FinderModel {
             taken.append(
                 RemoteFileEntry(name: name, path: target, kind: .file, sizeBytes: 0))
             let result = await MachineFileOperationExecution.duplicate(
-                path: source, destination: target
+                path: source, destination: target,
+                platform: session.remotePlatform ?? .linux
             ) { [session] command, timeout in
                 await session.runCommand(command, timeout: timeout)
             }
@@ -722,7 +764,8 @@ final class FinderModel {
                 }
             } : nil
         let result = await MachineFileOperationExecution.remove(
-            plan, confirmed: true, trash: nativeTrash
+            plan, confirmed: true, platform: session.remotePlatform ?? .linux,
+            trash: nativeTrash
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -795,6 +838,7 @@ final class FinderModel {
     }
 
     func download(to destination: URL) async {
+        guard progress == nil else { return }
         let sources = selectedEntries.filter { !$0.isDirectory }
         guard !sources.isEmpty else { return }
         guard let source = transferEndpoint(for: session) else {
@@ -809,13 +853,8 @@ final class FinderModel {
             let plan = RemoteTransferOperationExecution.plan(
                 paths: sources.map(\.path), destination: destination.path,
                 existing: existing)
-            progress = FileOperationProgress(title: "Downloading", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
-                plan, from: source, to: local, confirmsReplacement: false
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Downloading", processed: processed, total: total)
-            }
+            let outcome = try await executeTransfer(
+                plan, from: source, to: local, title: "Downloading", confirmsReplacement: false)
             finishTransfer(outcome, verb: "Downloaded")
         } catch is CancellationError {
         } catch {
@@ -835,18 +874,46 @@ final class FinderModel {
             searchResults = nil
             return
         }
-        searchResults = entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
         let token = searchToken
+        let needsBackground = entries.count > FinderEntryProjection.backgroundThreshold
+        let shallow =
+            needsBackground
+            ? [] : entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+        searchResults = shallow
         searchTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(350))
-            guard let self, token == searchToken, searchQuery == trimmed || !searchQuery.isEmpty
-            else { return }
-            await runDeepSearch(trimmed, token: token)
+            guard let self else { return }
+            defer { if token == searchToken { searchTask = nil } }
+            let matches = needsBackground ? await shallowMatches(trimmed) : shallow
+            guard !Task.isCancelled, token == searchToken else { return }
+            if needsBackground { searchResults = matches }
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard !Task.isCancelled, token == searchToken else { return }
+            await runDeepSearch(trimmed, token: token, shallow: matches)
         }
     }
 
-    private func runDeepSearch(_ query: String, token: Int) async {
-        let shallow = entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    private func shallowMatches(_ query: String) async -> [RemoteFileEntry] {
+        let snapshot = entries
+        let token = searchToken
+        shallowSearchTask = Task.detached(priority: .userInitiated) {
+            var matches: [RemoteFileEntry] = []
+            for (index, entry) in snapshot.enumerated() {
+                if index % 256 == 0, Task.isCancelled { return [] }
+                if entry.name.localizedCaseInsensitiveContains(query) { matches.append(entry) }
+            }
+            return matches
+        }
+        guard let worker = shallowSearchTask else { return [] }
+        let matches = await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        if token == searchToken { shallowSearchTask = nil }
+        return matches
+    }
+
+    private func runDeepSearch(_ query: String, token: Int, shallow: [RemoteFileEntry]) async {
         let localAdapter: MachineFileOperationExecution.LocalSearch? =
             session.isLocal
             ? { [localSearch] root, query, limit in
@@ -857,7 +924,8 @@ final class FinderModel {
                     })
             } : nil
         let result = await MachineFileOperationExecution.search(
-            path: path, query: query, localSearch: localAdapter
+            path: path, query: query, platform: session.remotePlatform ?? .linux,
+            localSearch: localAdapter
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -879,6 +947,8 @@ final class FinderModel {
     private func invalidateSearch() {
         searchTask?.cancel()
         searchTask = nil
+        shallowSearchTask?.cancel()
+        shallowSearchTask = nil
         searchToken += 1
     }
 
@@ -955,6 +1025,7 @@ final class FinderModel {
         intent: DropIntent, destination: String,
         resolutions: [String: NameConflictResolution]
     ) async {
+        guard progress == nil else { return }
         switch intent {
         case .moveWithinMachine, .copyWithinMachine:
             errorMessage = nil
@@ -964,11 +1035,19 @@ final class FinderModel {
                 resolutions: resolutions)
             guard
                 let command = RemoteTransferOperationExecution.withinMachineCommand(
-                    plan, moving: intent.isMove)
+                    plan, moving: intent.isMove,
+                    platform: session.remotePlatform ?? .linux)
             else { return }
             progress = FileOperationProgress(
                 title: intent.isMove ? "Moving" : "Copying", total: plan.items.count)
-            let result = await session.runCommand(command, timeout: 120)
+            let task = Task { await session.runCommand(command, timeout: 120) }
+            transferCommandTask = task
+            let result = await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            transferCommandTask = nil
             progress = nil
             let operationError: String?
             switch result {
@@ -997,16 +1076,16 @@ final class FinderModel {
             await uploadPaths(
                 paths.map { URL(fileURLWithPath: $0) }, into: destination,
                 resolutions: resolutions)
-        case let .transferBetweenMachines(from, paths):
+        case let .transferBetweenMachines(from, paths, moving):
             await transfer(
                 paths: paths, fromMachine: from, into: destination,
-                resolutions: resolutions)
+                resolutions: resolutions, moving: moving)
         }
     }
 
     private func transfer(
         paths: [String], fromMachine: UUID, into destination: String,
-        resolutions: [String: NameConflictResolution]
+        resolutions: [String: NameConflictResolution], moving: Bool
     ) async {
         guard let sourceSession = MachinesModel.shared.sessions[fromMachine] else {
             errorMessage = "The source machine is unavailable."
@@ -1030,15 +1109,16 @@ final class FinderModel {
                 flash("Nothing transferred")
                 return
             }
-            progress = FileOperationProgress(title: "Transferring", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
+            let outcome = try await executeTransfer(
                 plan, from: source, to: target,
-                confirmsReplacement: !plan.replacements.isEmpty
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Transferring", processed: processed, total: total)
+                title: "Transferring", confirmsReplacement: !plan.replacements.isEmpty,
+                moving: moving)
+            if errorMessage == nil {
+                finishTransfer(outcome, verb: moving ? "Moved" : "Transferred")
             }
-            finishTransfer(outcome, verb: "Transferred")
+            if moving, errorMessage == nil {
+                Self.clipboard = nil
+            }
         } catch is CancellationError {
         } catch {
             errorMessage = error.localizedDescription
@@ -1062,6 +1142,33 @@ final class FinderModel {
             title: title, completed: processed, total: total)
     }
 
+    private func executeTransfer(
+        _ plan: RemoteTransferPlan, from source: RemoteTransferEndpoint,
+        to destination: RemoteTransferEndpoint, title: String,
+        confirmsReplacement: Bool, moving: Bool = false
+    ) async throws -> RemoteTransferOutcome {
+        guard transferTask == nil, transferCommandTask == nil else {
+            throw AgentError(.refused, "Another file transfer is already running.")
+        }
+        progress = FileOperationProgress(title: title, total: plan.items.count)
+        let client = transferClient
+        let task = Task { [weak self] in
+            try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: destination, confirmsReplacement: confirmsReplacement,
+                moving: moving, taskClient: client
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(title: title, processed: processed, total: total)
+            }
+        }
+        transferTask = task
+        defer { transferTask = nil; progress = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     private func finishTransfer(_ outcome: RemoteTransferOutcome, verb: String) {
         let completed = outcome.completed.count
         guard let first = outcome.failures.first else {
@@ -1080,7 +1187,7 @@ final class FinderModel {
         _ urls: [URL], into destination: String,
         resolutions: [String: NameConflictResolution]
     ) async {
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty, progress == nil else { return }
         errorMessage = nil
         guard let target = transferEndpoint(for: session) else {
             errorMessage = FinderTransferError.notConnected.localizedDescription
@@ -1097,14 +1204,9 @@ final class FinderModel {
                 flash("Nothing uploaded")
                 return
             }
-            progress = FileOperationProgress(title: "Uploading", total: plan.items.count)
-            let outcome = try await RemoteTransferOperationExecution.execute(
+            let outcome = try await executeTransfer(
                 plan, from: source, to: target,
-                confirmsReplacement: !plan.replacements.isEmpty
-            ) { [weak self] processed, total in
-                await self?.setTransferProgress(
-                    title: "Uploading", processed: processed, total: total)
-            }
+                title: "Uploading", confirmsReplacement: !plan.replacements.isEmpty)
             finishTransfer(outcome, verb: "Uploaded")
         } catch is CancellationError {
         } catch {
@@ -1210,6 +1312,7 @@ private struct FinderRevealProjection: Sendable {
 extension DropIntent {
     var isMove: Bool {
         if case .moveWithinMachine = self { return true }
+        if case let .transferBetweenMachines(_, _, moving) = self { return moving }
         return false
     }
 }

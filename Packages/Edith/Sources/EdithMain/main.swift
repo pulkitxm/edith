@@ -1,8 +1,14 @@
+import Darwin
 import Edith
+import EdithCLI
+import EdithDatabase
 import Foundation
 
-if ProcessInfo.processInfo.environment["EDITH_APPLICATION_ROLE"] == "files" {
-    EdithFilesApp.main()
-} else {
+switch ExecutableLaunch.destination(environment: ProcessInfo.processInfo.environment) {
+case .application:
     EdithApp.main()
+case .commandLine:
+    await EdithCLIMain.run()
+case .databaseBroker:
+    Darwin.exit(await DatabaseBrokerProcess.run())
 }

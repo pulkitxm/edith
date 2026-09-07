@@ -90,4 +90,32 @@ import Testing
             try UsageDataTransaction.withExclusiveAccess(dataDirectory: directory) {}
         }
     }
+
+    @Test func cancellingAContendedLockStopsWaitingAndKeepsTheOwner() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = try UsageDataLock.acquire(dataDirectory: directory)
+        defer { owner.release() }
+        let waiting = Task.detached { try UsageDataLock.acquire(dataDirectory: directory) }
+        try await Task.sleep(for: .milliseconds(60))
+        let cancelledAt = ContinuousClock.now
+        waiting.cancel()
+        do {
+            let unexpected = try await waiting.value
+            unexpected.release()
+            Issue.record("A cancelled waiter acquired the owned lock.")
+        } catch is CancellationError {
+            #expect(cancelledAt.duration(to: .now) < .seconds(1))
+        }
+        #expect(
+            throws: UsageDataLockError.unavailable(
+                UsageDataLock.lockURL(dataDirectory: directory).path)
+        ) {
+            try UsageDataLock.acquire(
+                at: UsageDataLock.lockURL(dataDirectory: directory), nonblocking: true)
+        }
+        owner.release()
+        let next = try UsageDataLock.acquire(dataDirectory: directory)
+        next.release()
+    }
 }
