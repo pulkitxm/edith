@@ -105,8 +105,11 @@ import Testing
         #expect(try await asset.load(.duration).seconds > 1)
         #expect(FileManager.default.fileExists(atPath: source.path))
         let frameGenerator = AVAssetImageGenerator(asset: asset)
+        frameGenerator.requestedTimeToleranceBefore = .zero
+        frameGenerator.requestedTimeToleranceAfter = .zero
         let frame = try await frameGenerator.image(
             at: CMTime(seconds: 0.6, preferredTimescale: 600))
+        #expect(abs(frame.actualTime.seconds - 0.6) < 0.05)
         let recognition = try CaptureRecognizer.recognize(frame.image, detectCodes: false)
         #expect(recognition.text.contains("Release preview"))
         if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
