@@ -201,18 +201,26 @@ import Testing
         let agents = Array(SkillAgentCatalog.agents.prefix(2))
         let model = SkillsModel(detectAgents: {
             #expect(!Thread.isMainThread)
-            gate.wait()
+            #expect(gate.wait(timeout: .now() + 5) == .success)
             return agents
         })
         let first = Task { await model.discoverAgents() }
-        while !model.isDiscovering { await Task.yield() }
+        for _ in 0..<1_000 {
+            if model.isDiscovering { break }
+            await Task.yield()
+        }
+        #expect(model.isDiscovering)
         #expect(!model.agentsLoaded)
         var secondStarted = false
         let second = Task {
             secondStarted = true
             await model.discoverAgents()
         }
-        while !secondStarted { await Task.yield() }
+        for _ in 0..<1_000 {
+            if secondStarted { break }
+            await Task.yield()
+        }
+        #expect(secondStarted)
         gate.signal()
         await first.value
         await second.value
