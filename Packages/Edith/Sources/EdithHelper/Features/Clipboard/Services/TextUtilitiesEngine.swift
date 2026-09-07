@@ -48,6 +48,8 @@ final class TextUtilitiesEngine: FeatureModule {
     }
 
     func pastePlainText() -> PlainTextPasteState {
+        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true
+        else { return .unavailable }
         guard let text = NSPasteboard.general.string(forType: .string) else {
             return .clipboardEmpty
         }
