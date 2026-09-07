@@ -122,7 +122,7 @@ jobs:
           path: |
             Packages/Edith/vendor/GhosttyKit.xcframework
             Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
 
       - name: Build libghostty
         run: |
@@ -134,6 +134,11 @@ jobs:
               make ghostty
             fi
           fi
+
+      - name: Cache Swift build products
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: app-release
 
       - name: Stamp the release version
         run: |
@@ -268,6 +273,7 @@ jobs:
         if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-macos
+          compression-level: 0
           path: release-macos/*
           if-no-files-found: error
           retention-days: 1
