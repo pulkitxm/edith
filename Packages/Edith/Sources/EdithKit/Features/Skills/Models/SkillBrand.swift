@@ -1,6 +1,7 @@
 import AppKit
 
 @MainActor public enum SkillBrand {
+    private static var menuImages: [String: NSImage] = [:]
     private static var images: [String: NSImage] = [:]
     private static let names = [
         "amp": "amp", "antigravity": "antigravity", "claude-code": "claude",
@@ -12,6 +13,26 @@ import AppKit
         "droid": "plugin-droid", "mistral-vibe": "plugin-mistral",
         "warp": "plugin-warp", "zed": "plugin-zed",
     ]
+
+    public static func menuImage(for id: String) -> NSImage? {
+        if let image = menuImages[id] { return image }
+        guard let source = image(for: id), source.size.width > 0, source.size.height > 0 else {
+            return nil
+        }
+        let size = NSSize(width: 16, height: 16)
+        let scale = min(size.width / source.size.width, size.height / source.size.height)
+        let fitted = NSSize(width: source.size.width * scale, height: source.size.height * scale)
+        let image = NSImage(size: size, flipped: false) { bounds in
+            source.draw(
+                in: NSRect(
+                    x: bounds.midX - fitted.width / 2, y: bounds.midY - fitted.height / 2,
+                    width: fitted.width, height: fitted.height))
+            return true
+        }
+        image.isTemplate = source.isTemplate
+        menuImages[id] = image
+        return image
+    }
 
     public static func image(for id: String) -> NSImage? {
         if let image = images[id] { return image }

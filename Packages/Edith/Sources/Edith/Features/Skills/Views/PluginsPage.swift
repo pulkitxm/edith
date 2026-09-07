@@ -104,8 +104,9 @@ private struct SkillCatalogRow: View {
                             Label {
                                 Text("Install for \(agent.name)…")
                             } icon: {
-                                if let image = SkillBrand.image(for: agent.id) {
+                                if let image = SkillBrand.menuImage(for: agent.id) {
                                     Image(nsImage: image)
+                                        .renderingMode(image.isTemplate ? .template : .original)
                                 }
                             }
                         }

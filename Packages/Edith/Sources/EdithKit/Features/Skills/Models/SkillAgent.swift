@@ -13,8 +13,18 @@ public struct SkillAgent: Identifiable, Equatable, Sendable {
         self.detectionPaths = detectionPaths
     }
 
-    public func resolvedDirectory(home: URL, environment: [String: String]) -> URL {
-        URL(fileURLWithPath: Self.resolve(directory, home: home, environment: environment))
+    public func resolvedDirectory(
+        home: URL, environment: [String: String],
+        exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> URL {
+        if id == "openclaw",
+            let root = [".openclaw", ".clawdbot", ".moltbot"].first(where: {
+                exists(home.appendingPathComponent($0).path)
+            })
+        {
+            return home.appendingPathComponent(root).appendingPathComponent("skills")
+        }
+        return URL(fileURLWithPath: Self.resolve(directory, home: home, environment: environment))
     }
 
     public func isDetected(

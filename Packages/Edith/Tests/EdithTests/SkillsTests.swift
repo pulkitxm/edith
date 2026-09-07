@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -7,6 +8,17 @@ import Testing
 
 @Suite struct SkillsTests {
     private let skill = EdithSkillLibrary.skills[0]
+
+    @MainActor @Test func menuLogosHaveConsistentIntrinsicSizeAndTemplateAppearance() throws {
+        for id in [
+            "amp", "claude-code", "codex", "command-code", "droid", "mistral-vibe", "warp", "zed",
+            "kimi-code-cli",
+        ] {
+            let image = try #require(SkillBrand.menuImage(for: id))
+            #expect(image.size == NSSize(width: 16, height: 16))
+            #expect(image.isTemplate == SkillBrand.image(for: id)?.isTemplate)
+        }
+    }
 
     @Test func libraryContainsOnlyTheRequestedBundledSkill() throws {
         #expect(EdithSkillLibrary.skills.map(\.id) == ["edith-remote-work"])
@@ -51,6 +63,24 @@ import Testing
             ).path == "/custom/config/skills")
         #expect(!agent.isDetected(home: home, environment: [:], exists: { _ in false }))
         #expect(Set(SkillAgentCatalog.agents.map(\.id)).count == SkillAgentCatalog.agents.count)
+    }
+
+    @Test func openClawUsesTheExistingConfigurationRoot() throws {
+        let home = URL(fileURLWithPath: "/temporary/home")
+        let agent = try #require(SkillAgentCatalog.agents.first { $0.id == "openclaw" })
+        let roots = [".openclaw", ".clawdbot", ".moltbot"]
+        for root in roots {
+            #expect(
+                agent.resolvedDirectory(
+                    home: home, environment: [:],
+                    exists: {
+                        $0 == home.appendingPathComponent(root).path
+                    }
+                ).path == home.appendingPathComponent(root + "/skills").path)
+        }
+        #expect(
+            agent.resolvedDirectory(home: home, environment: [:], exists: { _ in true })
+                .path == home.appendingPathComponent(".openclaw/skills").path)
     }
 
     @MainActor @Test func selectionPersistsAcrossSkillsAndNewModelsIncludingAllOff() throws {
