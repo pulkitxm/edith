@@ -133,6 +133,33 @@ import Testing
         #expect(loaded.first!.createdAt >= loaded.last!.createdAt)
     }
 
+    @Test func cancellingTheDaemonJobStopsItsProcessAndSkipsHistory() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            await NetworkProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["2"], timeout: 5)
+        }
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        let started = Date()
+        let run = Task {
+            try await service.diagnose(
+                NetworkDiagnosticRequest(
+                    configuration: .init(), keepHistory: true, saveBaseline: false))
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        run.cancel()
+        await #expect(throws: CancellationError.self) { try await run.value }
+        #expect(Date().timeIntervalSince(started) < 1)
+        let history = try AgentPayload.decode(
+            [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 10))
+        #expect(history.isEmpty)
+    }
+
     @Test func engineExplainsLocalPathWithoutRemoteTargets() async {
         let engine = NetworkDiagnosticsEngine { executable, arguments, _ in
             switch (executable.lastPathComponent, arguments) {
