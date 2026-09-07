@@ -326,7 +326,8 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
-        let windowToolsOn = ExtensionRegistry.entry("windowTools")?.isEnabled(in: SharedDefaults.store) == true
+        let windowToolsOn =
+            ExtensionRegistry.entry("windowTools")?.isEnabled(in: SharedDefaults.store) == true
         if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
         if !windowToolsOn, let engine = windowTools {
             engine.shutdown()

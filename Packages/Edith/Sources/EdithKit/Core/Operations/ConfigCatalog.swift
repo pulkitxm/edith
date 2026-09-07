@@ -53,7 +53,8 @@ public enum ConfigCatalog {
         "music",
         "calendar",
         "clipboard", "keystrokes",
-        "notch", "focusdim", "windowtools", "workspacerestorer", "presenter", "colorpicker", "emoji", "micmute",
+        "notch", "focusdim", "windowtools", "workspacerestorer", "presenter", "colorpicker",
+        "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 

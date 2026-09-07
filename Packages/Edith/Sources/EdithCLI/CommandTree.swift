@@ -154,7 +154,9 @@ public enum CommandTree {
         "ed window workspace ls": Spec(options: ["--json"]),
         "ed window workspace capture": Spec(options: ["--json"]),
         "ed window workspace preview": Spec(options: ["--json", "--launch-missing"]),
-        "ed window workspace restore": Spec(options: ["--json", "--launch-missing", "--timeout", "--concurrency"]),
+        "ed window workspace restore": Spec(options: [
+            "--json", "--launch-missing", "--timeout", "--concurrency",
+        ]),
         "ed window workspace cancel": Spec(options: ["--json"]),
         "ed window workspace recover": Spec(options: ["--json"]),
         "ed window workspace rename": Spec(options: ["--json"]),

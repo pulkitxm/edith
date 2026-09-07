@@ -86,13 +86,15 @@ public enum HotKeyCatalog {
             codeKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyCode,
             modsKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyMods,
             labelKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyLabel, defaultCode: kVK_ANSI_S,
-            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧S", abilityID: "workspaceRestorer"),
+            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧S",
+            abilityID: "workspaceRestorer"),
         HotKeyBinding(
             id: workspaceRestore, title: "Workspace restore", carbonID: 47,
             codeKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyCode,
             modsKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyMods,
             labelKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyLabel, defaultCode: kVK_ANSI_W,
-            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧W", abilityID: "workspaceRestorer"),
+            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧W",
+            abilityID: "workspaceRestorer"),
 
         HotKeyBinding(
             id: windowLeft, title: "WindowTools left", carbonID: 42,
