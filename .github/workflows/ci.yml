@@ -259,13 +259,29 @@ jobs:
           key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
 
       - name: Cache Swift build products
+        id: swift-cache
         uses: ./.github/actions/cache-swift
         with:
           variant: tests-debug
       - name: Verify test isolation
         run: python3 -B scripts/test-swift-test-isolation.py
+      - name: Build tests
+        timeout-minutes: 20
+        run: ./test.sh --build-only
+        working-directory: Packages/Edith
+      - name: Save compiled tests
+        if: steps.swift-cache.outputs.compiled-cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/.build/*-apple-macosx
+            Packages/Edith/.build/plugins
+            Packages/Edith/.build/*.db
+            Packages/Edith/.build/*.yaml
+          key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
-        run: ./test.sh
+        timeout-minutes: 10
+        run: ./test.sh --skip-build
         working-directory: Packages/Edith
         env:
           EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
