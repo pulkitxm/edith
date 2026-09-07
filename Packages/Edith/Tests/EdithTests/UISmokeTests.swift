@@ -52,6 +52,8 @@ private func descendantViews(of view: NSView) -> [NSView] {
     @Test func loadingSkeletonsRender() {
         #expect(renders(MachineOverviewSkeleton(dark: true)))
         #expect(renders(FleetHomeSkeleton(dark: true)))
+        #expect(renders(MusicLibrarySkeleton(grid: false)))
+        #expect(renders(MusicLibrarySkeleton(grid: true)))
         #expect(renders(ListRowsSkeleton(rows: 4, dark: true)))
         #expect(renders(FinderSkeleton(mode: .list, dark: true)))
         #expect(renders(FinderSkeleton(mode: .icon, dark: true)))

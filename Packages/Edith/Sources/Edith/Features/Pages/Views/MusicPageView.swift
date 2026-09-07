@@ -82,6 +82,8 @@ final class MusicRemote {
     static let shared = MusicRemote()
 
     private(set) var tracks: [Track] = []
+    private(set) var entriesLoaded = false
+    private(set) var searchLoaded = false
     private(set) var folderPath = ""
     private(set) var folders: [MusicFolder] = []
     private(set) var folderTracks: [Track] = []
@@ -253,6 +255,7 @@ final class MusicRemote {
         }
         visibilityObserver = nil
         tracks = []
+        entriesLoaded = false
         currentFile = nil
         isPlaying = false
         duration = 0
@@ -268,11 +271,13 @@ final class MusicRemote {
         entriesTask = nil
         entriesGeneration &+= 1
         folderCache.removeAll()
+        let refreshSearch = searchScopePath != nil
         invalidateSearchScope()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
             folderPath = ""
+            entriesLoaded = false
         }
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
         rescanTask = Task { [weak self] in
@@ -285,6 +290,7 @@ final class MusicRemote {
             self.favourites = scanned.favourites
             self.favouritePaths = Set(scanned.favourites.map(\.relativePath))
             self.refreshEntries()
+            if refreshSearch { self.loadSearchScope() }
         }
     }
 
@@ -302,6 +308,7 @@ final class MusicRemote {
             self.entriesTask = nil
             self.folders = entries.folders
             self.folderTracks = entries.tracks
+            self.entriesLoaded = true
         }
     }
 
@@ -312,6 +319,7 @@ final class MusicRemote {
         searchGeneration &+= 1
         let generation = searchGeneration
         searchScopePath = path
+        searchLoaded = false
         let searchFolder = searchFolder
         searchTask = Task { [weak self] in
             let found = await Task.detached { searchFolder(path) }.value
@@ -321,6 +329,7 @@ final class MusicRemote {
             self.searchTask = nil
             self.searchTracks = found.tracks
             self.searchFolders = found.folders
+            self.searchLoaded = true
         }
     }
 
@@ -329,6 +338,7 @@ final class MusicRemote {
         searchTask = nil
         searchGeneration &+= 1
         searchScopePath = nil
+        searchLoaded = false
         searchTracks = []
         searchFolders = []
     }
@@ -344,6 +354,10 @@ final class MusicRemote {
 
     func navigate(to path: String) {
         showingFavourites = false
+        if folderPath != path {
+            entriesLoaded = false
+            invalidateSearchScope()
+        }
         folderPath = path
         refreshEntries()
     }
@@ -1027,7 +1041,14 @@ struct MusicPage: View {
     }
 
     @ViewBuilder private var trackList: some View {
-        if filteredFolders.isEmpty && filteredTracks.isEmpty {
+        if !remote.showingFavourites
+            && (search.isEmpty ? !remote.entriesLoaded : !remote.searchLoaded)
+        {
+            ScrollView {
+                MusicLibrarySkeleton(grid: gridView)
+                    .pageContent(compact)
+            }
+        } else if filteredFolders.isEmpty && filteredTracks.isEmpty {
             VStack(spacing: UIScale.pt(8)) {
                 Text(emptyMessage)
                     .font(.system(size: UIScale.pt(13)))
@@ -1466,6 +1487,50 @@ private func trackMenu(
         }
     }
     Button("Move to Trash", role: .destructive, action: onDelete)
+}
+
+struct MusicLibrarySkeleton: View {
+    let grid: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            if grid {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: MusicTile.width), alignment: .top)],
+                    alignment: .leading, spacing: UIScale.pt(16)
+                ) {
+                    ForEach(0..<12, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                            SkeletonBlock(width: MusicTile.art, height: MusicTile.art, corner: 8)
+                            SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 78, height: 12)
+                            SkeletonBlock(width: 64, height: 10)
+                        }
+                        .padding(UIScale.pt(MusicTile.inset))
+                    }
+                }
+            } else {
+                LazyVStack(spacing: UIScale.pt(2)) {
+                    ForEach(0..<8, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(10)) {
+                            SkeletonBlock(width: 38, height: 38, corner: 6)
+                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 164 : 132, height: 13)
+                                SkeletonBlock(width: 92, height: 10.5)
+                            }
+                            Spacer()
+                            SkeletonBlock(width: 32, height: 10)
+                            SkeletonBlock(width: 22, height: 22, corner: 11)
+                        }
+                        .padding(.vertical, UIScale.pt(6))
+                        .padding(.horizontal, UIScale.pt(8))
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading music library")
+    }
 }
 
 private enum MusicTile {

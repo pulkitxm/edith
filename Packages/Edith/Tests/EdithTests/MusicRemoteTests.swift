@@ -63,8 +63,10 @@ import Testing
     @Test func newestSameFolderListingWinsAfterTheOlderTaskFinishes() async {
         let fixture = MusicRemoteLoadFixture()
         let remote = MusicRemote(listFolder: { fixture.list($0) })
+        #expect(!remote.entriesLoaded)
         remote.navigate(to: "Focus")
         #expect(await fixture.waitForFirstStart())
+        #expect(!remote.entriesLoaded)
 
         remote.navigate(to: "Focus")
         #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["Focus/new.mp3"] })
@@ -73,6 +75,7 @@ import Testing
         try? await Task.sleep(for: .milliseconds(50))
 
         #expect(remote.folderTracks.map(\.relativePath) == ["Focus/new.mp3"])
+        #expect(remote.entriesLoaded)
     }
 
     @Test func newestRescanWinsAndStopRejectsAStaleScan() async {
@@ -136,6 +139,7 @@ import Testing
         try? await Task.sleep(for: .milliseconds(50))
 
         #expect(remote.searchTracks.map(\.relativePath) == ["A/new.mp3"])
+        #expect(remote.searchLoaded)
     }
 
     @Test func failedMutationPublishesAReadableError() {
