@@ -110,6 +110,13 @@ so restarting the daemon cannot truncate older entries.
 
 ## Live diagnostics in the app
 
+The clipboard panel retries background history reads and captures with bounded backoff.
+While synchronization is unavailable, a status icon beside Search exposes the error
+without opening a modal. Successful synchronization clears that status. User-requested
+copy, pin, and delete failures still show an alert, and failed optimistic mutations
+restore confirmed history. A successful background capture does not dismiss an unrelated
+user-action error.
+
 Settings contains a Background Agent pane backed by the same XPC snapshots used by the
 CLI. It shows:
 

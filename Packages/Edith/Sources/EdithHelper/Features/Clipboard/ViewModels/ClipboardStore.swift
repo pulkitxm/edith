@@ -9,6 +9,8 @@ final class ClipboardStore: FeatureModule {
     private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
     private(set) var mutationError: String?
+    private(set) var refreshError: String?
+    private(set) var captureError: String?
     @ObservationIgnored private var timer: DispatchSourceTimer?
     @ObservationIgnored private nonisolated(unsafe) var refreshTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var captureTask: Task<Void, Never>?
@@ -152,7 +154,7 @@ final class ClipboardStore: FeatureModule {
         guard captures.count < 8,
             captures.reduce(0, { $0 + $1.data.count }) + payload.data.count <= 32 << 20
         else {
-            mutationError =
+            captureError =
                 "Clipboard storage is unavailable and the pending capture queue is full."
             return
         }
@@ -174,12 +176,12 @@ final class ClipboardStore: FeatureModule {
                     _ = try await self.client.capture(capture)
                     guard !Task.isCancelled else { return }
                     self.captures.removeFirst()
-                    self.mutationError = nil
+                    self.captureError = nil
                     failures = 0
                     self.reload()
                 } catch {
                     guard !Task.isCancelled else { return }
-                    self.mutationError = error.localizedDescription
+                    self.captureError = error.localizedDescription
                     if let error = error as? AgentError, error.kind == .refused {
                         self.captures.removeFirst()
                         continue
@@ -208,10 +210,11 @@ final class ClipboardStore: FeatureModule {
                     guard !Task.isCancelled, let self, self.visibility.enabled else { return }
                     self.history.replace(entries)
                     self.adopt(self.history.entries)
+                    self.refreshError = nil
                     failures = 0
                 } catch {
                     guard !Task.isCancelled else { return }
-                    self?.mutationError = error.localizedDescription
+                    self?.refreshError = error.localizedDescription
                     failures += 1
                     self?.refreshPending = true
                     do { try await Task.sleep(for: .seconds(min(30, 1 << min(5, failures)))) } catch
