@@ -98,8 +98,13 @@ struct CommandBarView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             if model.loadingApplications || model.searchingFiles {
-                ProgressView()
-                    .controlSize(.small)
+                SkeletonReplica(
+                    model.searchingFiles ? "Searching selected folders" : "Loading applications"
+                ) {
+                    Image(systemName: model.searchingFiles ? "folder.fill" : "app.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.tertiary)
+                }
             } else {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 22))
