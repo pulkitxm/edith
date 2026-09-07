@@ -16,7 +16,7 @@ enum FocusCLI {
     static var storage: FocusStorage {
         let root =
             ProcessInfo.processInfo.environment["EDITH_FOCUS_ROOT"]
-            .map(URL.init(fileURLWithPath:)) ?? AppDirectories.current.data
+            .map(URL.init(fileURLWithPath:))
         return FocusStorage(root: root)
     }
 

@@ -370,8 +370,14 @@ struct CompanionSetupSheet: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             ScrollView {
                 VStack(spacing: UIScale.pt(8)) {
-                    if model.hosts.isEmpty {
-                        ListRowsSkeleton(rows: 2, showsLeadingDot: true, dark: dark)
+                    if model.hosts.isEmpty, model.probing {
+                        hostCardsSkeleton
+                    } else if model.hosts.isEmpty {
+                        Text("No machines were found. Check your machine settings and probe again.")
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(12))
                     }
                     ForEach(model.hosts) { host in
                         hostCard(host)
@@ -441,6 +447,44 @@ struct CompanionSetupSheet: View {
         .buttonStyle(.edith(.borderless))
     }
 
+    private var hostCardsSkeleton: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(8)) {
+                ForEach(0..<2, id: \.self) { index in
+                    HStack(alignment: .top, spacing: UIScale.pt(10)) {
+                        SkeletonBlock(width: 18, height: 18, corner: 5)
+                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                SkeletonBlock(
+                                    width: index == 0 ? 96 : 126,
+                                    height: 10)
+                                if index == 1 {
+                                    SkeletonBlock(width: 66, height: 16, corner: 8)
+                                }
+                            }
+                            SkeletonBlock(width: 246, height: 8)
+                            if index == 0 {
+                                SkeletonBlock(width: 188, height: 8)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        SkeletonBlock(width: 38, height: 8)
+                    }
+                    .padding(UIScale.pt(12))
+                    .background(
+                        DashSkin.paper2(dark),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(10))
+                            .strokeBorder(DashSkin.line(dark))
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Probing machines")
+    }
+
     private var deployChecklist: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("Setting up on \(model.selectedHost?.name ?? "the machine")")
@@ -498,7 +542,9 @@ struct CompanionSetupSheet: View {
                     Circle()
                         .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1.5))
                 case .running:
-                    ProgressView().controlSize(.small).scaleEffect(0.75)
+                    SkeletonGroup {
+                        SkeletonBlock(width: 18, height: 18, corner: 9)
+                    }
                 case .done:
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(DashSkin.ok)

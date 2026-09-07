@@ -111,7 +111,7 @@ struct FocusView: View {
                     runtime.start(profile, durationMinutes: 50, origin: .menuPanel)
                 }
                 Button("Until stopped") {
-                    runtime.start(profile, durationMinutes: nil, origin: .menuPanel)
+                    runtime.start(profile, untilStopped: true, origin: .menuPanel)
                 }
             }
             .menuStyle(.borderlessButton)

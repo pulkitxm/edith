@@ -1,6 +1,6 @@
 cask "edith" do
-  version "0.0.197"
-  sha256 "f0a6075717ec7154ee5057ee4e6774cc8c09ffcb970607ce28fd034d5e385558"
+  version "0.0.242"
+  sha256 "d73afd5277c422feb58322dc0b522f2c8f0d1377423e946801c984068d23a2cf"
 
   url "https://github.com/pulkitxm/edith/releases/download/v#{version}/Edith.dmg",
       verified: "github.com/pulkitxm/edith/"
@@ -24,6 +24,7 @@ cask "edith" do
   uninstall quit: [
     "com.pulkit.edith",
     "com.pulkit.edith.files",
+    "com.pulkit.edith.helper.v2",
     "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
   ]
@@ -35,6 +36,7 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.v2.plist",
     "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",

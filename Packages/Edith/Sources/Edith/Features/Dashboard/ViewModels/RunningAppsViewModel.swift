@@ -62,6 +62,8 @@ final class RunningAppsModel {
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
     private(set) var actionStatus: RunningAppActionStatus?
+    private(set) var loaded = false
+    private(set) var refreshing = false
 
     private var resourceBaseline: RunningAppResourceBaseline?
     private let operations: RunningAppOperationCenter
@@ -115,6 +117,11 @@ final class RunningAppsModel {
     }
 
     func refresh() async {
+        refreshing = true
+        defer {
+            refreshing = false
+            loaded = true
+        }
         var icons: [pid_t: NSImage] = [:]
         let snapshots = operations.list()
         let operations = self.operations

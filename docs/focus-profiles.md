@@ -1,6 +1,6 @@
 # Focus Profiles and Meeting Mode
 
-Focus Profiles is an optional, local extension for turning reusable Edith scenes into a session that can be started, timed, and safely restored. It uses the Automations planner and executor for every action.
+Focus Profiles is an optional, local extension for turning reusable Edith scenes into a session that can be started, timed, and safely restored. It requires the Desk suite and Automations ability. The daemon runs every scene through its shared planner and task queue. The helper owns session, Calendar, shortcut, and app-state interactions.
 
 ## Profiles
 
@@ -18,7 +18,7 @@ Explicit rollback scenes run before the captured state is restored. This makes t
 
 ## Starting and stopping
 
-Profiles can start from the menu panel, settings, a global shortcut, the Command Bar action catalog, the CLI, or an Automations scene.
+Profiles can start from the menu panel, settings, a global shortcut, the CLI, or an Automations scene.
 
 ```bash
 ed focus ls
@@ -31,7 +31,7 @@ ed focus history
 
 `--for` accepts minutes or hours. `--until` accepts a future ISO 8601 date or a local 24-hour time. A profile with no duration runs until it is stopped.
 
-To schedule a profile, add `focus.start` to a scene and use an Automations schedule trigger for that scene. This keeps scheduling in one engine.
+To schedule a profile, add `focus.start` to a scene and use an Automations schedule trigger for that scene. This keeps scheduling in one engine. Focus composition uses a separate serial task queue so a scheduled profile can run its component scenes without waiting on its own parent task.
 
 ## Meeting Mode
 
@@ -51,7 +51,7 @@ macOS does not expose a supported API for changing the user's system Focus mode.
 
 ## Recovery and privacy
 
-The active session and bounded 30-day history are local files. The profile document is included in Edith settings backup, while active sessions and history are device-local. Meeting titles, locations, notes, and attendees are not written to focus history.
+The daemon is the only writer of profile documents, active sessions, and bounded 30-day history. App and CLI clients read and write that state through XPC. The profile document is included in Edith settings backup, while active sessions and history are device-local. Meeting titles, locations, notes, and attendees are not written to focus history.
 
 Stopping a session, disabling the extension, quitting Edith, or recovering an expired session runs meeting end scenes, rollback scenes, and the generated restoration scene. Restoration continues after individual failures, and any failure is recorded locally.
 

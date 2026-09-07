@@ -6,7 +6,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
 
-  --install      copy to /Applications and launch from there
+  --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
   --release      Release configuration, Developer ID signing required
   --pr N         build PR N's branch from its worktree, creating one if needed
@@ -60,6 +60,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+if [ "$INSTALL" = 1 ] && [ "$RELEASE" != 1 ]; then
+  echo "Development builds cannot replace /Applications/Edith.app. Use --release --install, or launch dist/Edith.app." >&2
+  exit 1
+fi
+
 SIGN_FLAGS=""
 if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
@@ -97,7 +102,6 @@ if [ -n "$PR" ]; then
 fi
 
 if [ -n "$BRANCH" ]; then
-  INSTALL=1
   if [ "$BRANCH" != "$(git branch --show-current)" ]; then
     ROOT="$(git worktree list --porcelain \
       | awk -v b="branch refs/heads/$BRANCH" '/^worktree /{w=substr($0,10)} $0==b{print w; exit}')"
@@ -111,7 +115,11 @@ if [ -n "$BRANCH" ]; then
       git worktree add "$ROOT" "$BRANCH"
     fi
     echo "building from $ROOT"
-    exec "$ROOT/build.sh" --install
+    BUILD_ARGUMENTS=()
+    [ "$INSTALL" = 0 ] || BUILD_ARGUMENTS+=(--install)
+    [ "$NO_OPEN" = 0 ] || BUILD_ARGUMENTS+=(--no-open)
+    [ "$RELEASE" = 0 ] || BUILD_ARGUMENTS+=(--release)
+    exec "$ROOT/build.sh" "${BUILD_ARGUMENTS[@]}"
   fi
 fi
 
@@ -124,6 +132,7 @@ TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
 
 DERIVED=build
+python3 scripts/approve-package-plugins.py
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
   -destination 'platform=macOS,arch=arm64' \
@@ -144,37 +153,85 @@ test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exi
 
 SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
-[ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+SWIFT_FLAGS=(--disable-index-store --force-resolved-versions)
+if [ "$CONFIG" = Release ]; then
+  SWIFT_CONFIGURATION=release
+  SWIFT_FLAGS+=(-Xswiftc -Osize)
+fi
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
   --product EdithLidAwakeHelper
-PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
-  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)/EdithLidAwakeHelper"
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
+  --product edithd
+SWIFT_BIN_PATH="$($SWIFT_BIN build --package-path Packages/Edith \
+  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)"
+PRIVILEGED_HELPER_BUILD="$SWIFT_BIN_PATH/EdithLidAwakeHelper"
+AGENT_BUILD="$SWIFT_BIN_PATH/edithd"
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
 PRIVILEGED_HELPER="$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
 LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
+LAUNCH_AGENTS="$APP/Contents/Library/LaunchAgents"
+AGENT="$APP/Contents/MacOS/edithd"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 rm -f "$APP/Contents/MacOS/edh"
+rm -f "$APP/Contents/MacOS/ed"
+install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"
+ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"
 
 rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"
 mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
+rm -f "$HELPER/Contents/Resources/AppIcon.icns"
+ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
+rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
+ln -s ../../../../../Resources/Edith_EdithKit.bundle \
+  "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
+mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" "$LAUNCH_AGENTS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
+cp "$AGENT_BUILD" "$AGENT"
+cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
+AGENT_IDENTIFIER=com.pulkit.edith.agent
+if [ "$CONFIG" = Debug ]; then
+  AGENT_IDENTIFIER=com.pulkit.edith.development.agent
+  python3 - "$LAUNCH_AGENTS" <<'PY'
+import pathlib
+import plistlib
+import sys
 
-if [ "$RELEASE" = 1 ]; then
-  find "$APP" -type f -perm -u+x -print0 \
-    | while IFS= read -r -d '' binary; do
-        case "$(file -b "$binary")" in
-          *Mach-O*) strip -rSTx "$binary" 2>/dev/null || true ;;
-        esac
-      done
+root = pathlib.Path(sys.argv[1])
+original = root / 'com.pulkit.edith.agent.plist'
+value = plistlib.loads(original.read_bytes())
+value['Label'] = 'com.pulkit.edith.development.agent'
+value['MachServices'] = {'com.pulkit.edith.development.agent': True}
+value['AssociatedBundleIdentifiers'] = ['com.pulkit.edith.development']
+destination = root / 'com.pulkit.edith.development.agent.plist'
+destination.write_bytes(plistlib.dumps(value))
+original.unlink()
+PY
 fi
+
+find "$APP" -type f -perm -u+x -print0 \
+  | while IFS= read -r -d '' binary; do
+      case "$(file -b "$binary")" in
+        *"universal binary"*)
+          lipo "$binary" -thin arm64 -output "$binary.arm64"
+          mv "$binary.arm64" "$binary"
+          if [ "$RELEASE" = 1 ]; then
+            strip -rSTx "$binary" 2>/dev/null || true
+          fi
+          ;;
+        *Mach-O*)
+          if [ "$RELEASE" = 1 ]; then
+            strip -rSTx "$binary" 2>/dev/null || true
+          fi
+          ;;
+      esac
+    done
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
@@ -200,50 +257,21 @@ sign_tool() {
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
 }
 
-sign_tool "$APP/Contents/MacOS/ed"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier "$AGENT_IDENTIFIER" "$AGENT"
+for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do
+  [ -e "$library" ] || continue
+  sign_tool "$library"
+done
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$APP"
 
-process_is_running() {
-  pgrep -f -x "$1" >/dev/null 2>&1
-}
-
-wait_for_process_exit() {
-  local executable="$1"
-  local attempt
-  for attempt in {1..50}; do
-    process_is_running "$executable" || return 0
-    sleep 0.1
-  done
-  return 1
-}
-
-stop_process() {
-  local executable="$1"
-  process_is_running "$executable" || return 0
-  pkill -TERM -f -x "$executable" 2>/dev/null || true
-  wait_for_process_exit "$executable" || pkill -KILL -f -x "$executable" 2>/dev/null || true
-}
-
-stop_installed_app() {
-  local installed_main="/Applications/Edith.app/Contents/MacOS/Edith"
-  local installed_helper="/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith"
-  if process_is_running "$installed_main"; then
-    osascript -e 'tell application id "com.pulkit.edith" to quit' >/dev/null 2>&1 || true
-    wait_for_process_exit "$installed_main" || stop_process "$installed_main"
-  fi
-  stop_process "$installed_helper"
-  stop_process "com.pulkit.edith.helper"
-}
-
 if [ "$INSTALL" = 1 ]; then
-  stop_installed_app
-  rm -rf "/Applications/Edith.app"
-  cp -R "$APP" /Applications/
-  [ "$NO_OPEN" = 1 ] || open "/Applications/Edith.app"
+  python3 scripts/install_app.py "$APP" "/Applications/Edith.app"
+  [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
 else
   [ "$NO_OPEN" = 1 ] || open "$APP"
 fi

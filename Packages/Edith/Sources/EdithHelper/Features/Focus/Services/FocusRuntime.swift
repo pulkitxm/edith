@@ -55,7 +55,8 @@ final class FocusRuntime: NSObject {
 
     func start(
         _ profile: FocusProfile, durationMinutes: Int? = nil, until: Date? = nil,
-        origin: FocusActivationOrigin, meeting: EKEvent? = nil, requestID: String? = nil
+        untilStopped: Bool = false, origin: FocusActivationOrigin, meeting: EKEvent? = nil,
+        requestID: String? = nil
     ) {
         guard transitionWork == nil else {
             postResult(
@@ -68,8 +69,9 @@ final class FocusRuntime: NSObject {
             guard let self else { return }
             do {
                 try await activate(
-                    profile, durationMinutes: durationMinutes, until: until, origin: origin,
-                    meeting: meeting)
+                    profile, durationMinutes: durationMinutes, until: until,
+                    untilStopped: untilStopped,
+                    origin: origin, meeting: meeting)
                 guard !Task.isCancelled, transitionGeneration == generation else { return }
                 postResult(requestID: requestID, succeeded: true)
             } catch {
@@ -150,7 +152,7 @@ final class FocusRuntime: NSObject {
     }
 
     private func activate(
-        _ profile: FocusProfile, durationMinutes: Int?, until: Date?,
+        _ profile: FocusProfile, durationMinutes: Int?, until: Date?, untilStopped: Bool,
         origin: FocusActivationOrigin, meeting: EKEvent?
     ) async throws {
         guard profile.isEnabled else { throw FocusRuntimeError.disabled }
@@ -171,7 +173,7 @@ final class FocusRuntime: NSObject {
         if let appScene { startScenes.insert(appScene, at: 0) }
         let restorationScene = captureRestoration(profile: profile, scenes: startScenes)
         let now = Date()
-        let duration = durationMinutes ?? profile.defaultDurationMinutes
+        let duration = untilStopped ? nil : durationMinutes ?? profile.defaultDurationMinutes
         let endsAt =
             meeting?.endDate ?? until
             ?? duration.map {
@@ -233,7 +235,8 @@ final class FocusRuntime: NSObject {
                 continue
             }
             do {
-                let record = try await automations.executeScene(scene, origin: .app)
+                let record = try await automations.executeScene(
+                    scene, origin: .app, restoring: true)
                 if !record.succeeded { errors.append("\(scene.name) did not finish cleanly.") }
             } catch {
                 errors.append(error.localizedDescription)
@@ -242,7 +245,7 @@ final class FocusRuntime: NSObject {
         if !session.restorationScene.actions.isEmpty {
             do {
                 let record = try await automations.executeScene(
-                    session.restorationScene, origin: .app)
+                    session.restorationScene, origin: .app, restoring: true)
                 if !record.succeeded { errors.append("Automatic state restoration failed.") }
             } catch {
                 errors.append(error.localizedDescription)
@@ -367,7 +370,7 @@ final class FocusRuntime: NSObject {
         installShortcuts()
         installIPC()
         if document.meeting.isEnabled,
-            SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.calendarEnabled),
+            ExtensionRegistry.entry("calendar")?.isEnabled(in: SharedDefaults.store) == true,
             EKEventStore.authorizationStatus(for: .event) == .fullAccess
         {
             installCalendar()

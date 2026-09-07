@@ -8,11 +8,14 @@ public struct FocusStorage: Sendable {
     public let historyLimit: Int
     public let historyMaxAge: TimeInterval
     private let settingsBackupEnabled: Bool
+    private let usesAgent: Bool
 
     public init(
-        root: URL = AppDirectories.current.data, historyLimit: Int = 200,
+        root: URL? = nil, historyLimit: Int = 200,
         historyMaxAge: TimeInterval = 60 * 60 * 24 * 30
     ) {
+        usesAgent = root == nil
+        let root = root ?? AppDirectories.current.data
         documentURL = root.appendingPathComponent("focus-profiles.json")
         sessionURL = root.appendingPathComponent("focus-session.json")
         historyURL = root.appendingPathComponent("focus-history.json")
@@ -23,6 +26,12 @@ public struct FocusStorage: Sendable {
     }
 
     public func load() throws -> FocusDocument {
+        if usesAgent {
+            return try AgentPayload.decode(
+                FocusDocument.self,
+                from: AgentClient.shared.performInternal(AgentFocusStorageOperation.load)
+            )
+        }
         guard FileManager.default.fileExists(atPath: documentURL.path) else {
             if settingsBackupEnabled,
                 let data = SharedDefaults.store.data(forKey: AppStorageKeys.Focus.documentBackup)
@@ -35,6 +44,11 @@ public struct FocusStorage: Sendable {
     }
 
     public func save(_ document: FocusDocument) throws {
+        if usesAgent {
+            _ = try AgentClient.shared.performInternal(
+                AgentFocusStorageOperation.save, payload: AgentPayload.encode(document));
+            return
+        }
         guard document.version == 1 else {
             throw FocusStorageError.unsupportedVersion(document.version)
         }
@@ -46,11 +60,23 @@ public struct FocusStorage: Sendable {
     }
 
     public func session() throws -> FocusSession? {
+        if usesAgent {
+            return try AgentPayload.decode(
+                FocusSession?.self,
+                from: AgentClient.shared.performInternal(
+                    AgentFocusStorageOperation.session))
+        }
         guard FileManager.default.fileExists(atPath: sessionURL.path) else { return nil }
         return try decoder.decode(FocusSession.self, from: Data(contentsOf: sessionURL))
     }
 
     public func saveSession(_ session: FocusSession?) throws {
+        if usesAgent {
+            _ = try AgentClient.shared.performInternal(
+                AgentFocusStorageOperation.saveSession,
+                payload: AgentPayload.encode(session));
+            return
+        }
         guard let session else {
             if FileManager.default.fileExists(atPath: sessionURL.path) {
                 try FileManager.default.removeItem(at: sessionURL)
@@ -61,6 +87,12 @@ public struct FocusStorage: Sendable {
     }
 
     public func history(now: Date = Date()) throws -> [FocusHistoryRecord] {
+        if usesAgent {
+            return try AgentPayload.decode(
+                [FocusHistoryRecord].self,
+                from: AgentClient.shared.performInternal(
+                    AgentFocusStorageOperation.history))
+        }
         guard FileManager.default.fileExists(atPath: historyURL.path) else { return [] }
         let records = try decoder.decode(
             [FocusHistoryRecord].self, from: Data(contentsOf: historyURL))
@@ -68,6 +100,11 @@ public struct FocusStorage: Sendable {
     }
 
     public func append(_ record: FocusHistoryRecord, now: Date = Date()) throws {
+        if usesAgent {
+            _ = try AgentClient.shared.performInternal(
+                AgentFocusStorageOperation.append, payload: AgentPayload.encode(record));
+            return
+        }
         let records = bounded(((try? history(now: now)) ?? []) + [record], now: now)
         try write(encoder.encode(records), to: historyURL)
     }

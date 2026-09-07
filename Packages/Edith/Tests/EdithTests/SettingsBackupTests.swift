@@ -486,7 +486,12 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
                 atPath: data.appendingPathComponent("limits-history.jsonl").path))
     }
 
-    @Test func validCloudUsageRepairsMalformedLocalUsage() throws {
+    @Test(
+        arguments: [
+            "malformed-local", "empty-local", "unsupported-retention-local",
+            "malformed-cloud", "empty-cloud", "unsupported-retention-cloud",
+        ], [false, true])
+    func invalidUsageTransferPreservesBothFiles(kind: String, shouldRestore: Bool) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-settings-backup-\(UUID().uuidString)")
         let data = root.appendingPathComponent("data")
@@ -496,13 +501,47 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(
             at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(#"{"daily":[]}"#.utf8).write(to: local)
-        try usage(period: "2026-08-20", source: "cloud").write(to: cloud)
+        let valid = try usage(period: "2026-08-20", source: "history")
+        var document = try #require(
+            JSONSerialization.jsonObject(with: valid) as? [String: Any])
+        document["historyRetention"] = ["version": 99, "blocks": []]
+        let invalid: Data
+        if kind.hasPrefix("unsupported-retention") {
+            invalid = try JSONSerialization.data(withJSONObject: document)
+        } else {
+            invalid = Data((kind.hasPrefix("empty") ? "" : "{\"daily\":").utf8)
+        }
+        let localBytes = kind.hasSuffix("local") ? invalid : valid
+        let cloudBytes = kind.hasSuffix("cloud") ? invalid : valid
+        try localBytes.write(to: local)
+        try cloudBytes.write(to: cloud)
+
+        #expect(
+            !settingsBackupTransferUsage(
+                localURL: local, cloudURL: cloud,
+                shouldRestore: shouldRestore, shouldExport: true))
+        #expect(try Data(contentsOf: local) == localBytes)
+        #expect(try Data(contentsOf: cloud) == cloudBytes)
+    }
+
+    @Test func missingLocalUsageCanRestoreFromCloud() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let cloudBytes = try usage(period: "2026-08-20", source: "cloud")
+        try cloudBytes.write(to: cloud)
 
         #expect(
             settingsBackupTransferUsage(
                 localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false))
         #expect(UsageHistory.isValidDocument(try Data(contentsOf: local)))
+        #expect(try Data(contentsOf: cloud) == cloudBytes)
     }
 
     @Test func cloudTransferRereadsTheCoordinatedRevisionAfterWaitingForLocalData() async throws {
@@ -878,5 +917,57 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
         task.cancel()
 
         #expect(await task.value == intents)
+    }
+
+    @Test func timedOutTransferStopsWaitingForTheOwnedUsageLock() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let local = directory.appendingPathComponent("usage.json")
+        let cloud = directory.appendingPathComponent("cloud.json")
+        let original = try usage(period: "2026-09-01", source: "fixture")
+        try original.write(to: local)
+        let owner = try UsageDataLock.acquire(dataDirectory: directory)
+        defer { owner.release() }
+        let started = ContinuousClock.now
+        let outcome = await settingsBackupBoundedTransfer(timeout: .milliseconds(50)) {
+            await SettingsBackupUsageWorker.shared.transferUsageOutcome(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                backupEnabled: true, requireCloudAvailability: false)
+        }
+        #expect(outcome == .unavailable)
+        #expect(started.duration(to: .now) < .seconds(1))
+        #expect(try Data(contentsOf: local) == original)
+        #expect(!FileManager.default.fileExists(atPath: cloud.path))
+        let transaction = try UsageDataLock.acquire(
+            at: directory.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        transaction.release()
+    }
+
+    @Test func cancellationUnblocksNativeFileCoordinationBeforeTheOtherWriterFinishes() async throws
+    {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("{}".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let probe = SettingsBackupBlockingReaderProbe()
+        let writer = Task.detached {
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var error: NSError?
+            coordinator.coordinate(writingItemAt: file, error: &error) { _ in
+                probe.entered.signal()
+                _ = probe.release.wait(timeout: .now() + 2)
+            }
+        }
+        #expect(await waitForSignal(probe.entered))
+        let started = ContinuousClock.now
+        let outcome = await settingsBackupBoundedTransfer(timeout: .milliseconds(50)) {
+            await settingsBackupReadCloudSettingsFileAsync(at: file) == nil ? .retryable : .done
+        }
+        #expect(outcome == .unavailable)
+        #expect(started.duration(to: .now) < .seconds(1))
+        probe.release.signal()
+        await writer.value
+        #expect(try Data(contentsOf: file) == Data("{}".utf8))
     }
 }

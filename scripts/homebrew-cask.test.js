@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const cask = readFileSync("Casks/edith.rb", "utf8");
-const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
+const releaseWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const releaseStateScript = readFileSync(
   "scripts/publish-release-state.sh",
   "utf8",
@@ -39,6 +39,7 @@ test("uninstalling quits every bundle and zapping clears Edith's own state", () 
   for (const bundleID of [
     "com.pulkit.edith",
     "com.pulkit.edith.helper",
+    "com.pulkit.edith.helper.v2",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]) {

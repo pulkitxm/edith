@@ -8,10 +8,9 @@ detail to those totals. Reach for it when you want a spend figure in a script,
 a repository breakdown without opening the window, or a gate on how much
 session budget is left.
 
-Both files live in `Repo.dataDir`, which is
-`~/Library/Application Support/Edith/data` unless the `repoPath` setting names a
-confirmed development checkout, in which case it is `apps/dashboard/data` inside
-that checkout. Every read verb here works whether or not Edith is running. Two
+Both files live in `~/Library/Application Support/Edith/data`. A development
+build can point the whole data root somewhere else with the `EDITH_DATA_ROOT`
+environment variable; there is no setting for it. Every read verb here works whether or not Edith is running. Two
 invocations go further. `ed usage refresh` runs the collection pipeline itself,
 in this process, and rewrites `usage.json` with the app open or closed.
 `ed usage limits --refresh` asks the app to poll the providers first, which
@@ -34,6 +33,7 @@ closed.
 | `ed usage projects copy-link` | Copy a repository link from the drilldown |
 | `ed usage projects copy-chat` | Copy a chat identifier from the drilldown |
 | `ed usage sources` | The agents that produced the history, with their ids |
+| `ed usage export` | Branded activity and milestone cards as PNG images |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
 | `ed usage machines ls` | Every configured machine, whether it is counted, and what it adds up to |
 | `ed usage machines collect` | Runs the collector on a machine over SSH and brings its numbers back |
@@ -55,6 +55,7 @@ closed.
 - [`ed usage projects copy-link`](./projects-copy-link.md)
 - [`ed usage projects copy-chat`](./projects-copy-chat.md)
 - [`ed usage sources`](./sources.md)
+- [`ed usage export`](./export.md)
 - [`ed usage machines`](./machines.md)
 - [`ed usage refresh`](./refresh.md)
 
@@ -133,9 +134,8 @@ machines so the same repository still groups into one row.
 
 ## Where to go next
 
-- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`,
-  `codexLimitsEnabled` and `repoPath`, which decide what gets collected and
-  where it lands
+- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`
+  and `codexLimitsEnabled`, which decide what gets collected
 - [`ed extensions`](../extensions/README.md) for turning the Agent Usage extension on
   and off by id
 - [`ed permissions`](../permissions/README.md) for the grants the app needs before it

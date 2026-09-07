@@ -7,11 +7,16 @@ import EdithCore
 @testable import EdithKit
 
 @Suite struct ExtensionLiveAdapterTests {
+    @Test func keepAwakeReadinessDoesNotDependOnSystem() async {
+        let result = await ExtensionLiveAdapters.readiness(for: "keepAwake")
+        #expect(result == .ready("Keep Awake is ready to prevent idle sleep without System."))
+    }
+
     @Test func catalogCoversEveryPreviouslyDeferredExtension() {
         #expect(
             ExtensionLiveAdapters.extensionIDs
                 == ExtensionRegistry.entries.map(\.id).filter {
-                    !["companion", "herdr"].contains($0)
+                    !["companion", "database", "herdr"].contains($0)
                 })
     }
 
@@ -35,6 +40,44 @@ import EdithCore
                 .loading("The extension runtime is loading."), .unsupported("unsupported"),
                 .failed("failed"), .ready("ready"),
             ])
+    }
+
+    @Test func keystrokeHighlightReportsRuntimeState() {
+        let suite = "test.extension-adapter.keystrokes.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .uninstalled("Keystroke Highlight is off."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⌥⌘K to start it."))
+        defaults.set("⌃⇧K", forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⇧K to start it."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .loading("The keystroke overlay is starting."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready("Key presses are being monitored and the overlay is ready."))
+        defaults.set("monitor failed", forKey: AppStorageKeys.KeystrokeHighlight.runtimeError)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .failed("monitor failed"))
+    }
+
+    @Test func siteAuditIsReadyWithoutExternalSetup() {
+        #expect(
+            ExtensionLiveAdapters.siteAuditReadiness()
+                == .ready("Site Audit is ready to store projects and run history locally."))
     }
 
     @Test func attentionRequiresAnEnabledTrackingSource() {
@@ -292,43 +335,6 @@ import EdithCore
             return
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
-    }
-
-    @Test func clipboardAdapterReportsEmptyReadyDegradedAndCorruptStorage() throws {
-        let root = try temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let index = root.appendingPathComponent("index.jsonl")
-        let blobs = root.appendingPathComponent("blobs")
-        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
-
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .empty("Clipboard history is ready and empty."))
-
-        let entry = ClipboardEntry(
-            sha256: "abc", types: ["public.utf8-plain-text"], ext: "txt",
-            sourceApp: nil, sourceBundleID: nil, size: 4, preview: "text")
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        try (encoder.encode(entry) + Data("\n".utf8)).write(to: index)
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .degraded("Clipboard entries missing payloads: 1."))
-
-        try Data("text".utf8).write(to: blobs.appendingPathComponent("abc.txt"))
-        #expect(
-            ExtensionLiveAdapters.clipboardReadiness(index: index, blobs: blobs)
-                == .ready("Clipboard history entries: 1."))
-
-        try Data("broken".utf8).write(to: index)
-        guard
-            case .failed = ExtensionLiveAdapters.clipboardReadiness(
-                index: index, blobs: blobs
-            )
-        else {
-            Issue.record("corrupt clipboard data did not fail")
-            return
-        }
     }
 
     @Test func preferenceAdaptersValidateStoredConfiguration() async {

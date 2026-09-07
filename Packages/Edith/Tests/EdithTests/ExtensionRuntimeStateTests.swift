@@ -54,7 +54,8 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("ForEach(filteredEntries)"))
+        #expect(source.contains("ForEach(visibleSuites, id: \\.suite.id)"))
+        #expect(source.contains("ForEach(group.abilities)"))
         #expect(source.contains("if filteredEntries.isEmpty"))
         #expect(source.contains("ExtensionMarketplaceFilter.emptyState"))
         #expect(source.contains("ContentUnavailableView"))
@@ -76,7 +77,7 @@ import Testing
         #expect(
             source.components(
                 separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
-            ).count == 3)
+            ).count == 4)
         #expect(
             source.components(
                 separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
@@ -113,14 +114,15 @@ import Testing
         #expect(
             pane.components(
                 separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
-            ).count == 3)
+            ).count == 4)
         #expect(
             pane.components(
                 separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
             ).count == 3)
         #expect(pane.contains("case .attention: AttentionRows()"))
         #expect(pane.contains("private struct AttentionRows: View"))
-        #expect(navigation.contains("case .attention: attentionEnabled"))
+        #expect(navigation.contains("NavigationCatalog.rows()"))
+        #expect(navigation.contains("private var sidebarRows: [SidebarRow]"))
         #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
         #expect(
             helper.contains(
@@ -259,9 +261,13 @@ import Testing
             ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
+            ("seoAudit", "SEOAuditRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
-            ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
+            ("keepAwake", "KeepAwakeRows", "enabled", "ExtensionsPane.swift"),
+            ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
+            ("database", "DatabaseRows", "enabled", "ExtensionsPane.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
+            ("plugins", "PluginsRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
@@ -269,10 +275,18 @@ import Testing
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
+            (
+                "keystrokeHighlight", "KeystrokeHighlightRows", "enabled",
+                "KeystrokeHighlightRows.swift"
+            ),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
+            ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
+            ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
+            ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
+            ("audioMixer", "AudioMixerRows", "enabled", "ExtensionsPane.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))
@@ -386,7 +400,7 @@ import Testing
         #expect(tools.contains("mutationCenter().install"))
     }
 
-    @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
+    @Test func homeQuickActionsStretchEnabledActionsAcrossOneRow() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -394,8 +408,13 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Pages/Views/HomePageView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("count: 4"))
+        #expect(source.contains("private var actionCount: Int"))
+        #expect(source.contains("count: max(1, actionCount)"))
+        #expect(!source.contains("count: 4"))
         #expect(source.contains("title: \"Lid awake\""))
+        #expect(source.contains("title: \"Keystrokes\""))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.enabled"))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.active"))
         #expect(source.contains("lidAwakeOperations.perform(.on"))
         #expect(source.contains("lidAwakeOperations.perform(.off)"))
         #expect(!source.contains("IPC.Name.toggleLidAwake"))

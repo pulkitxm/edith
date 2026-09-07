@@ -233,6 +233,14 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             } else {
                 browserServerReady = false
             }
+            let delivery: AttentionDeliveryHealth?
+            if repository.resolvedEventSink is AgentAttentionSink {
+                delivery = try? await AttentionDeliveryClient.health()
+            } else {
+                delivery = try? await AttentionDeliverySpool(
+                    file: repository.directory.appendingPathComponent("delivery-spool.json")
+                ).health()
+            }
             if json {
                 CLIOut.json(
                     .object([
@@ -245,6 +253,17 @@ struct AttentionStatusCommand: AsyncParsableCommand {
                         "iCloudBackupEnabled": .bool(settings.iCloudBackupEnabled),
                         "eventsLast24Hours": .int(events.count),
                         "historySites": .int(repository.historyVisits().count),
+                        "delivery": delivery.map { value in
+                            .object([
+                                "pendingEvents": .int(value.pendingEvents),
+                                "committedSequence": .int(Int(value.committedSequence)),
+                                "rejectedEvents": .int(Int(value.rejectedEvents)),
+                                "rejectedSeconds": .double(value.rejectedDuration),
+                                "degraded": .bool(
+                                    value.lastFailure != nil || value.rejectedEvents > 0),
+                                "error": .optional(value.lastFailure),
+                            ])
+                        } ?? .null,
                         "helperRunning": .bool(AppBridge.helperIsRunning),
                         "focus": focus.map(focusJSON) ?? .null,
                     ]))
@@ -260,6 +279,14 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             CLIOut.out("privacy: \(settings.privacyLevel.rawValue)")
             CLIOut.out("events in last 24h: \(events.count)")
             CLIOut.out("history inventory: \(repository.historyVisits().count) sites")
+            if let delivery {
+                CLIOut.out(
+                    "delivery: \(delivery.pendingEvents) pending, \(delivery.rejectedEvents) not retained"
+                )
+                if let failure = delivery.lastFailure { CLIOut.out(failure) }
+            } else {
+                CLIOut.out("delivery: status unavailable")
+            }
             CLIOut.out("focus: \(focus?.name ?? "none")")
         }
     }

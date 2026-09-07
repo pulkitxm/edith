@@ -13,6 +13,7 @@ struct HerdrCommand: AsyncParsableCommand {
             """,
         subcommands: [
             HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
+            HerdrBridgeCommand.self,
         ],
         defaultSubcommand: HerdrListCommand.self)
 }
@@ -168,8 +169,10 @@ struct HerdrAttachCommandCLI: AsyncParsableCommand {
                     for: agent, environment: environment)
             } else {
                 let runner = try await MachineResolver.runner(agent.machineID)
+                let platform = await runner.ssh.remotePlatform ?? .linux
                 request = HerdrOperationExecution.remoteAttachRequest(
-                    for: agent, connection: runner.ssh, environment: environment)
+                    for: agent, connection: runner.ssh, environment: environment,
+                    platform: platform)
             }
             guard !json else {
                 CLIOut.json(
