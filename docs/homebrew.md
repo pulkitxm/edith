@@ -86,7 +86,7 @@ brew untap pulkitxm/tap
 ## Releasing
 
 Nothing about the cask is hand-edited. The `publish` job in
-`.github/workflows/release.yml` hashes the built `Edith.dmg`, rewrites the
+`.github/workflows/ci.yml` hashes the built `Edith.dmg`, rewrites the
 `version` and `sha256` lines, and commits the cask together with the versioned
 plists and release tag. It then publishes the assets and pushes the same cask to
 the tap repository. CI ignores that release commit, so it cannot loop.

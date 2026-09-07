@@ -11,10 +11,12 @@ Files pane. The CLI and app therefore resolve home directories, parse entries,
 filter hidden files, create parents, and report transport failures from one
 operation contract.
 
-Everything here except `undo` is plain shell sent over the SSH connection Edith
-already holds, so nothing is installed on the machine and Edith does not have to
-be running. Undo is the exception because the history it reverses lives in the
-running app.
+Everything here except `undo` is a native remote command sent over the SSH
+connection Edith already holds. macOS and Linux use POSIX tools, while Windows
+uses encoded PowerShell commands and Windows paths such as
+`C:\Users\Pulkit\Documents`. Nothing is installed on the machine and Edith does
+not have to be running. Undo is the exception because the history it reverses
+lives in the running app.
 
 ## At a glance
 
@@ -34,7 +36,7 @@ running app.
 | `ed machines files mkdir` | Make a directory, parents included. |
 | `ed machines files rm` | Move paths to the machine's trash, or delete them outright. |
 | `ed machines files search` | Find files by name under a directory. |
-| `ed machines files info` | Measure a path with `du`, directories included. |
+| `ed machines files info` | Measure a file or directory recursively. |
 | `ed machines files duplicate` | Copy a file beside itself, the way the window does. |
 | `ed machines files undo` | Undo the last move or rename an open Files pane made. |
 
@@ -64,12 +66,12 @@ shorthand for `ed machines exec`, so that line runs `files ls` as a command on
 the machine and the machine says it does not exist.
 
 Paths are quoted individually before they are sent, so spaces and shell
-metacharacters survive intact. The other side of that is that the machine never
-expands a glob for you: `ed machines files cp tuf '/var/log/*.log' /tmp` looks
-for a file literally named `*.log`. Quote the whole line through
-`ed tuf 'cp /var/log/*.log /tmp'` when you want the remote shell to expand it.
-The exception is `search`, whose text is handed to `find -iname`, which does its
-own matching.
+metacharacters survive intact. Windows uses PowerShell literal path operations,
+which also avoid wildcard expansion. The machine never expands a glob for you:
+`ed machines files cp tuf '/var/log/*.log' /tmp` looks for a file literally
+named `*.log`. Quote the whole line through `ed tuf 'cp /var/log/*.log /tmp'`
+when you want a POSIX remote shell to expand it. The `search` operation performs
+its own case-insensitive name matching on every supported platform.
 
 A relative path is resolved by the machine against the SSH login directory,
 normally the home directory. The working directory `ed tuf cd` remembers belongs

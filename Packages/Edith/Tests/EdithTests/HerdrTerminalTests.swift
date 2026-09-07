@@ -77,6 +77,20 @@ import Testing
         #expect(request.environment.contains("TERM=xterm-256color"))
     }
 
+    @Test func WindowsMachineTerminalRunsHerdrOnTheRemoteHost() {
+        let machine = Machine(name: "Box", host: "box.example", username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrMachineTerminal.windowsLaunchRequest(
+            connection: connection, environment: ["TERM=xterm-256color", "HERDR_ENV=1"])
+
+        #expect(request.executable == SSHConnection.executable.path)
+        #expect(request.arguments.contains("-tt"))
+        #expect(request.arguments.last?.hasPrefix("powershell.exe ") == true)
+        #expect(request.arguments.last?.contains("--remote") == false)
+        #expect(request.environment.contains("HERDR_ENV="))
+        #expect(!request.environment.contains("HERDR_ENV=1"))
+    }
+
     @Test func anAgentStillAttachesToItsOwnPane() {
         let agent = HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
@@ -86,6 +100,107 @@ import Testing
         #expect(
             HerdrAttachCommand.line(for: agent)
                 == "herdr --session default agent attach w2:p1 --takeover")
+    }
+
+    @Test func agentControllerUsesTheRawTerminalSessionProtocol() throws {
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "work session", pane: "w2:p1", kind: "OpenCode", status: .working,
+            title: "Work", workspace: "edith", cwd: "/repo")
+        let controller = HerdrOperationExecution.localControlRequest(
+            for: agent, environment: ["TERM=xterm-256color"],
+            executable: URL(fileURLWithPath: "/usr/local/bin/herdr"))
+
+        #expect(controller.executable == "/usr/local/bin/herdr")
+        #expect(
+            controller.arguments == [
+                "--session", "work session", "terminal", "session", "control", "w2:p1",
+                "--takeover", "--cols", "{columns}", "--rows", "{rows}",
+            ])
+
+        let specification = HerdrTerminalBridgeSpecification(controller: controller)
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: specification.encoded())
+        #expect(decoded == specification)
+        #expect(
+            decoded.request(columns: 144, rows: 52).arguments.suffix(4) == [
+                "--cols", "144", "--rows", "52",
+            ])
+    }
+
+    @Test func bridgeReplacesDimensionsInsideEncodedPowerShell() throws {
+        let command = PowerShell.command(
+            "$cols = '{columns}'; $rows = '{rows}'; Write-Output \"$cols x $rows\"")
+        let controller = TerminalLaunchRequest(
+            executable: "/usr/bin/ssh", arguments: ["win-lan", command], environment: [])
+
+        let request = HerdrTerminalBridgeSpecification(controller: controller)
+            .request(columns: 132, rows: 48)
+        let encoded = try #require(request.arguments.last?.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+
+        #expect(
+            String(data: data, encoding: .utf16LittleEndian)
+                == "$cols = '132'; $rows = '48'; Write-Output \"$cols x $rows\"")
+    }
+
+    @Test func embeddedBridgeLaunchesTheBundledCommand() throws {
+        let controller = TerminalLaunchRequest(
+            executable: "/usr/local/bin/herdr",
+            arguments: ["terminal", "session", "control", "w2:p1"],
+            environment: ["TERM=xterm-256color"])
+        let request = try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: URL(fileURLWithPath: "/Applications/Edith.app/Contents/MacOS/ed"),
+            controller: controller)
+
+        #expect(request.executable == "/Applications/Edith.app/Contents/MacOS/ed")
+        #expect(request.arguments.prefix(2) == ["herdr", "bridge"])
+        #expect(request.environment == controller.environment)
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        #expect(decoded == HerdrTerminalBridgeSpecification(controller: controller))
+    }
+
+    @Test func bridgeProtocolForwardsFramesAndInputBytes() throws {
+        let bytes = Data([0x1B, 0x5B, 0x3C, 0x30, 0x3B, 0x31, 0x3B, 0x31, 0x4D])
+        let frame = try JSONSerialization.data(withJSONObject: [
+            "type": "terminal.frame", "bytes": bytes.base64EncodedString(),
+        ])
+        #expect(try HerdrTerminalBridge.decodeRecord(frame) == .frame(bytes))
+
+        let input = try HerdrTerminalBridge.inputCommand(bytes)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: input) as? [String: String])
+        #expect(object["type"] == "terminal.input")
+        #expect(object["bytes"] == bytes.base64EncodedString())
+    }
+
+    @Test func bridgeProtocolEncodesWheelScrolls() throws {
+        let command = try HerdrTerminalBridge.scrollCommand(
+            direction: .down, lines: 3, column: 10, row: 5, modifiers: 7)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: command) as? [String: Any])
+        #expect(object["type"] as? String == "terminal.scroll")
+        #expect(object["direction"] as? String == "down")
+        #expect(object["source"] as? String == "wheel")
+        #expect(object["lines"] as? Int == 3)
+        #expect(object["column"] as? Int == 10)
+        #expect(object["row"] as? Int == 5)
+        #expect(object["modifiers"] as? Int == 7)
+    }
+
+    @Test func bridgeEnablesHoverAndButtonMouseReporting() {
+        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
+        let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
+        for mode in ["1000", "1002", "1003", "1006"] {
+            #expect(start.contains("\u{1B}[?\(mode)h"))
+            #expect(stop.contains("\u{1B}[?\(mode)l"))
+        }
+    }
+
+    @Test func bridgeLeavesFocusReportingOff() {
+        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
+        let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
+        #expect(!start.contains("?1004"))
+        #expect(!stop.contains("?1004"))
     }
 
     @Test func closingAnAgentInterruptsItWithoutClosingItsPane() {
@@ -101,6 +216,21 @@ import Testing
         #expect(line.contains("agent send-keys"))
         #expect(line.contains("ctrl+c ctrl+c"))
         #expect(!line.contains("pane close"))
+    }
+
+    @Test func closingAWindowsAgentUsesPowerShellInsteadOfUnixExports() {
+        let agent = HerdrAgent.make(
+            machineID: "windows", machineName: "Windows", machineIsLocal: false,
+            sshTarget: "windows", session: "work session", pane: "w2:p1",
+            kind: "Codex", status: .working, title: "Work", workspace: "edith",
+            cwd: "C:\\repo")
+        let line = HerdrAgentCloseCommand.shellLine(for: agent, platform: .windows)
+        let script = decodedPowerShell(line)
+
+        #expect(line.hasPrefix("powershell.exe "))
+        #expect(!line.contains("export PATH"))
+        #expect(script?.contains("agent', 'send-keys'") == true)
+        #expect(script?.contains("'ctrl+c', 'ctrl+c'") == true)
     }
 
     @Test func aPlainPaneIsNotListedAsAnAgent() {
@@ -145,4 +275,11 @@ import Testing
     private let host = HerdrHostSnapshot(
         id: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", name: "tuf-wired", isLocal: false,
         sshTarget: "tuf-wired", herdrPresent: true, reachable: true)
+}
+
+private func decodedPowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
 }

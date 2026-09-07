@@ -52,6 +52,11 @@ enum HerdrPaneSizing {
 @MainActor
 @Observable
 final class HerdrStore {
+    typealias UserCloseRequester =
+        @MainActor (
+            TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
+        ) -> Void
+
     static let shared = HerdrStore()
     static let boardID = "board"
 
@@ -148,7 +153,9 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
-    private let expectedHostCount: Int
+    private let machinesProvider: () -> [Machine]
+    private let requestUserClose: UserCloseRequester
+    private var expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
     private var agentsCollapsedCount: Int?
@@ -160,17 +167,23 @@ final class HerdrStore {
     private var pendingHosts: [HerdrHostSnapshot]?
     private var detachedTabs: [String: HerdrOpenTab] = [:]
     private var watchGeneration = 0
+    @ObservationIgnored nonisolated(unsafe) private var machinesObserver: NSObjectProtocol?
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
-        expectedHostCount: Int = MachineRegistry.machines().count + 1,
-        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
+        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
+        machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
+        requestUserClose: @escaping UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
-        self.expectedHostCount = expectedHostCount
         self.agentCloser = agentCloser
+        self.machinesProvider = machinesProvider
+        self.requestUserClose = requestUserClose
+        expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
@@ -194,6 +207,15 @@ final class HerdrStore {
         collapsedSpaceCounts = Self.spaceCounts(
             defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
         restoringDefaults = false
+        machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
+            Task { @MainActor in
+                await self?.machinesDidChange()
+            }
+        }
+    }
+
+    deinit {
+        if let machinesObserver { IPC.stopObserving(machinesObserver) }
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -332,6 +354,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
+        expectedHostCount = machinesProvider().count + 1
         if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
@@ -350,6 +373,12 @@ final class HerdrStore {
         }
     }
 
+    func adopt(_ snapshot: SessionsSnapshot) {
+        if watchTask != nil { stopWatching() }
+        settling = false
+        apply(snapshot.hosts)
+    }
+
     func stopWatching() {
         watchGeneration += 1
         watchTask?.cancel()
@@ -358,6 +387,12 @@ final class HerdrStore {
         settleTask = nil
         pendingHosts = nil
         settling = false
+    }
+
+    func machinesDidChange() async {
+        guard watchTask != nil else { return }
+        stopWatching()
+        await watch()
     }
 
     func refresh() async {
@@ -389,7 +424,32 @@ final class HerdrStore {
     private func flush() {
         guard let latest = pendingHosts else { return }
         pendingHosts = nil
-        apply(latest, collapseSnapshotComplete: latest.count >= expectedHostCount)
+        let complete = latest.count >= expectedHostCount
+        apply(
+            complete ? latest : retainingConfiguredHosts(in: latest),
+            collapseSnapshotComplete: complete)
+    }
+
+    private func retainingConfiguredHosts(
+        in snapshots: [HerdrHostSnapshot]
+    ) -> [HerdrHostSnapshot] {
+        var incoming: Set<String> = []
+        for snapshot in snapshots { incoming.insert(snapshot.id) }
+        var configured: Set<String> = [HerdrHostSnapshot.localID]
+        var order = [HerdrHostSnapshot.localID: 0]
+        for (index, machine) in machinesProvider().enumerated() {
+            let id = machine.id.uuidString
+            configured.insert(id)
+            order[id] = index + 1
+        }
+        var merged = snapshots
+        for host in hosts where configured.contains(host.id) && !incoming.contains(host.id) {
+            merged.append(host)
+        }
+        merged.sort {
+            order[$0.id, default: Int.max] < order[$1.id, default: Int.max]
+        }
+        return merged
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {
@@ -449,14 +509,18 @@ final class HerdrStore {
 
     var detachedIDs: Set<String> { Set(detachedTabs.keys) }
 
+    func makeTab(for agent: HerdrAgent) -> HerdrOpenTab {
+        var resolved = HerdrAgentViews.view(for: agent.id, defaults)
+        if agent.isTerminal { resolved = .agent }
+        return HerdrOpenTab(
+            agent: agent, machine: machine(for: agent), view: resolved,
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+    }
+
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
         revealSpace(containing: agent)
         if let existing = detachedTabs[agent.id] { return existing }
-        var resolved = HerdrAgentViews.view(for: agent.id, defaults)
-        if agent.isTerminal { resolved = .agent }
-        let tab = HerdrOpenTab(
-            agent: agent, machine: machine(for: agent), view: resolved,
-            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+        let tab = makeTab(for: agent)
         detachedTabs[agent.id] = tab
         return tab
     }
@@ -488,13 +552,10 @@ final class HerdrStore {
             selectedTab = agent.id
             return
         }
-        let machine: Machine? = machine(for: agent)
-        var resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
-        if agent.isTerminal { resolved = .agent }
-        tabs.append(
-            HerdrOpenTab(
-                agent: agent, machine: machine, view: resolved,
-                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
+        var tab = makeTab(for: agent)
+        if let view, !agent.isTerminal { tab.view = view }
+        let resolved = tab.view
+        tabs.append(tab)
         if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
         if resolved == .split { detailOpen = false }
         selectedTab = agent.id
@@ -548,6 +609,10 @@ final class HerdrStore {
         selectedTab = id
     }
 
+    func closeAll() {
+        closeWhere { _, _ in true }
+    }
+
     func closeToTheRight(of id: String) {
         if id == Self.boardID {
             closeWhere { _, _ in true }
@@ -566,6 +631,10 @@ final class HerdrStore {
         id == Self.boardID ? !tabs.isEmpty : tabs.count > 1
     }
 
+    var canCloseAll: Bool {
+        !tabs.isEmpty
+    }
+
     func canCloseToTheRight(of id: String) -> Bool {
         if id == Self.boardID { return !tabs.isEmpty }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
@@ -582,16 +651,38 @@ final class HerdrStore {
             predicate(item.offset, item.element) ? item.element.id : nil
         }
         guard !ids.isEmpty else { return }
-        let selectedClosed = ids.contains(selectedTab)
-        for id in ids {
-            guard let index = tabs.firstIndex(where: { $0.id == id }) else { continue }
-            tabs[index].holder.stop()
-            tabs[index].quinjet.stop()
-            tabs.remove(at: index)
+        closeSequentially(ids[...])
+    }
+
+    private func closeSequentially(_ ids: ArraySlice<String>) {
+        guard let id = ids.first else { return }
+        let remaining = ids.dropFirst()
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+            closeSequentially(remaining)
+            return
         }
-        if selectedClosed {
-            selectedTab = tabs.last?.id ?? Self.boardID
+        if !tabs[index].agent.isTerminal {
+            let holder = tabs[index].holder
+            holder.stop()
+            removeClosedTab(id, holder: holder)
+            closeSequentially(remaining)
+            return
         }
+        let holder = tabs[index].holder
+        requestUserClose(holder) { [weak self, weak holder] confirmed in
+            guard let self else { return }
+            if confirmed, let holder { self.removeClosedTab(id, holder: holder) }
+            self.closeSequentially(remaining)
+        }
+    }
+
+    private func removeClosedTab(_ id: String, holder: TerminalSessionHolder) {
+        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+            return
+        }
+        tabs[index].quinjet.stop()
+        tabs.remove(at: index)
+        if selectedTab == id { selectedTab = tabs.last?.id ?? Self.boardID }
     }
 
     func selectBoard() {
@@ -645,9 +736,9 @@ final class HerdrStore {
             throw HerdrQuinjetError.machineUnavailable
         }
         let connection = try await connection(for: machine)
-        return QuinjetRemote(
+        return try await QuinjetRemote.connected(
             machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-            controlPath: connection.controlSocketPath)
+            connection: connection)
     }
 
     func quinjetConfiguration(appearance: QuinjetAppearance) -> QuinjetLaunchConfiguration {
@@ -661,9 +752,10 @@ final class HerdrStore {
     func uploadDroppedFiles(_ urls: [URL], for tab: HerdrOpenTab) async throws -> [String] {
         guard let machine = tab.machine else { throw HerdrQuinjetError.machineUnavailable }
         let connection = try await connection(for: machine)
+        let directory = try await connection.temporaryDirectory()
         var paths: [String] = []
         for url in urls {
-            let path = HerdrDropTransfer.remotePath(for: url)
+            let path = HerdrDropTransfer.remotePath(for: url, directory: directory)
             try await connection.upload(localURL: url, toRemotePath: path)
             paths.append(path)
         }
@@ -672,22 +764,42 @@ final class HerdrStore {
 
     func attachRequest(
         for tab: HerdrOpenTab, environment: [String],
-        localExecutable: URL? = HerdrCollector.executable()
+        localExecutable: URL? = HerdrCollector.executable(),
+        bridgeExecutable: URL? = HerdrTerminalBridge.executable()
     ) async throws -> TerminalLaunchRequest {
         if tab.agent.isTerminal {
+            if !tab.agent.machineIsLocal {
+                guard let machine = tab.machine else {
+                    throw HerdrQuinjetError.machineUnavailable
+                }
+                let connection = try await connection(for: machine)
+                if await connection.remotePlatform == .windows {
+                    return HerdrMachineTerminal.windowsLaunchRequest(
+                        connection: connection, environment: environment)
+                }
+            }
             return HerdrMachineTerminal.launchRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
         }
+        guard let bridgeExecutable else {
+            throw HerdrTerminalBridgeError.executableUnavailable
+        }
+        let controller: TerminalLaunchRequest
         if tab.agent.machineIsLocal {
-            return HerdrOperationExecution.localAttachRequest(
+            controller = HerdrOperationExecution.localControlRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
+        } else {
+            guard let machine = tab.machine else {
+                throw HerdrQuinjetError.machineUnavailable
+            }
+            let connection = try await connection(for: machine)
+            let platform = await connection.remotePlatform ?? .linux
+            controller = HerdrOperationExecution.remoteControlRequest(
+                for: tab.agent, connection: connection, environment: environment,
+                platform: platform)
         }
-        guard let machine = tab.machine else {
-            throw HerdrQuinjetError.machineUnavailable
-        }
-        let connection = try await connection(for: machine)
-        return HerdrOperationExecution.remoteAttachRequest(
-            for: tab.agent, connection: connection, environment: environment)
+        return try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: bridgeExecutable, controller: controller)
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {

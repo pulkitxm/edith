@@ -1,8 +1,26 @@
+import AppKit
+import EdithKit
 import Foundation
 import Testing
 @testable import Edith
 
 @Suite struct MainDestinationTests {
+    @Test func everySuiteHasALandingPageInTheSidebar() {
+        for suite in SuiteID.allCases {
+            let landing = NavigationCatalog.landing(for: suite)
+            #expect(landing != nil, "\(suite.rawValue) has no sidebar landing page")
+            #expect(landing?.expansionKey == SuiteExpansion.key(for: suite))
+        }
+    }
+
+    @Test func everyPageBearingAbilitySitsUnderItsSuite() {
+        for page in NavigationCatalog.pages where page.parentID != nil {
+            let parent = NavigationCatalog.byID[page.parentID!]
+            #expect(parent?.isSuiteLanding == true, "\(page.id) is not under a suite landing")
+            #expect(parent?.suite == page.suite, "\(page.id) sits under the wrong suite")
+        }
+    }
+
     @Test func sidebarSectionsAreDisjointAndCoverAllDestinations() {
         let listed = MainDestination.homeItems + MainDestination.appItems
         #expect(Set(listed).count == listed.count)
@@ -27,14 +45,36 @@ import Testing
         #expect(icons.allSatisfy { !$0.isEmpty })
     }
 
+    @Test func everySidebarIconResolvesToASystemSymbol() {
+        for destination in MainDestination.allCases where destination.logoName == nil {
+            #expect(
+                NSImage(systemSymbolName: destination.icon, accessibilityDescription: nil) != nil,
+                "\(destination.rawValue) has an invalid symbol")
+        }
+    }
+
     @Test func appItemsUseInformationArchitectureOrder() {
         #expect(MainDestination.appItems == [.extensions, .settings, .about])
+    }
+
+    @Test func homeItemsUseInformationArchitectureOrder() {
+        #expect(
+            MainDestination.homeItems == [
+                .home, .machines,
+                .agents, .dashboard, .herdr, .quinjet, .companion, .plugins,
+                .appMaintenance,
+                .system, .network, .runningApps,
+                .desk,
+                .media, .music, .calendar,
+                .data, .database, .attention, .seoAudit,
+            ])
     }
 
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [
-                .general, .permissions, .shortcuts, .terminal, .icloud, .updates,
+                .general, .permissions, .agent, .data, .shortcuts, .terminal, .icloud,
+                .updates,
             ])
     }
 
@@ -78,17 +118,40 @@ import Testing
 
     @Test func everyExtensionBackedUtilityKeepsTheFooterVisible() {
         #expect(
-            !SidebarUtilityVisibility(system: false, presenter: false, lidAwake: false)
-                .hasActions)
+            !SidebarUtilityVisibility(
+                system: false, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: true, presenter: false, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, keepAwake: true, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
+            ).hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: true, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: true, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: false, lidAwake: true)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, keepAwake: false, presenter: true, lidAwake: false,
+                keystrokeHighlight: false
+            )
+            .hasActions)
+        #expect(
+            SidebarUtilityVisibility(
+                system: false, keepAwake: false, presenter: false, lidAwake: true,
+                keystrokeHighlight: false
+            )
+            .hasActions)
+        #expect(
+            SidebarUtilityVisibility(
+                system: false, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: true
+            )
+            .hasActions)
     }
 
     @Test func extensionBackedUtilitiesShareOneAnimatedVisibilityState() throws {
@@ -100,6 +163,6 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("value: sidebarUtilityVisibility"))
-        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 5)
+        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 6)
     }
 }

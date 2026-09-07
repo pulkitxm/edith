@@ -19,6 +19,10 @@ enum HerdrAgentWindow {
         return true
     }
 
+    static func close(_ id: String) {
+        windows[id]?.performClose(nil)
+    }
+
     static func open(agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
         if raise(agent.id) { return }
         let tab = store.detachedTab(for: agent)

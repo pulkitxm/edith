@@ -25,8 +25,8 @@ final class NetworkDiagnosticsModel {
 
     func activate() {
         Task {
-            timeline = await NetworkDiagnosticsTimelineStore.shared.load(
-                limit: configuration.timelineLimit)
+            timeline = (try? await NetworkDiagnosticsClient.timeline(
+                limit: configuration.timelineLimit)) ?? []
         }
     }
 
@@ -41,10 +41,16 @@ final class NetworkDiagnosticsModel {
         running = true
         errorMessage = nil
         let config = configuration.normalized
-        let baseline = NetworkDiagnosticsPreferences.baseline()
         activeRun = Task {
-            let snapshot = await NetworkDiagnosticsEngine().diagnose(
-                configuration: config, baseline: baseline)
+            let snapshot: NetworkDiagnosticSnapshot
+            do {
+                snapshot = try await NetworkDiagnosticsClient.diagnose(configuration: config)
+            } catch {
+                errorMessage = error.localizedDescription
+                running = false
+                activeRun = nil
+                return
+            }
             guard !Task.isCancelled else {
                 running = false
                 activeRun = nil
@@ -104,8 +110,12 @@ final class NetworkDiagnosticsModel {
 
     func saveBaseline() {
         guard let latest else { return }
-        NetworkDiagnosticsPreferences.saveBaseline(latest)
-        self.latest = latest.compared(with: latest)
+        Task {
+            do {
+                try await NetworkDiagnosticsClient.saveBaseline(latest)
+                self.latest = latest.compared(with: latest)
+            } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     func copyReport() {
@@ -136,8 +146,7 @@ final class NetworkDiagnosticsModel {
         let previous = latest ?? timeline.first
         latest = snapshot
         do {
-            timeline = try await NetworkDiagnosticsTimelineStore.shared.append(
-                snapshot, limit: configuration.timelineLimit)
+            timeline = try await NetworkDiagnosticsClient.timeline(limit: configuration.timelineLimit)
         } catch {
             errorMessage = error.localizedDescription
         }

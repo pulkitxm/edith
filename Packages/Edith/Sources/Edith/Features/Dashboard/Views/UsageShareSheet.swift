@@ -63,9 +63,28 @@ struct UsageShareSheet: View {
                         .id(card)
                         .transition(cardTransition)
                 } else {
-                    ProgressView("Preparing your cards…")
-                        .controlSize(.small)
-                        .foregroundStyle(modalInk.opacity(0.58))
+                    SkeletonGroup {
+                        VStack(alignment: .leading, spacing: 20) {
+                            HStack {
+                                SkeletonBlock(width: 170, height: 18)
+                                Spacer()
+                                SkeletonBlock(width: 86, height: 10)
+                            }
+                            HStack(spacing: 12) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    SkeletonBlock(height: 76, corner: 12)
+                                }
+                            }
+                            SkeletonBlock(height: 180, corner: 14)
+                            HStack {
+                                SkeletonBlock(width: 140, height: 10)
+                                Spacer()
+                                SkeletonBlock(width: 96, height: 10)
+                            }
+                        }
+                        .padding(34)
+                    }
+                    .accessibilityLabel("Preparing your cards")
                 }
             }
             .frame(width: 600, height: 400)

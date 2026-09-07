@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithKit
+@testable import EdithAgent
 
 @Suite struct NetworkDiagnosticsTests {
     @Test func configurationClampsAndFiltersUnsafeValues() {
@@ -75,20 +76,23 @@ import Testing
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = NetworkDiagnosticsTimelineStore(
-            file: directory.appendingPathComponent("timeline.json"))
-        for index in 0..<15 {
-            _ = try await store.append(
-                NetworkDiagnosticSnapshot(
-                    createdAt: Date(timeIntervalSince1970: Double(index)), durationMS: 1,
-                    state: .healthy, path: NetworkPathSummary(), checks: []),
-                limit: 10)
+        let store = try AgentStore(url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            NetworkCommandResult(status: 0, output: "")
         }
-        let loaded = await store.load(limit: 100)
-
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        var configuration = NetworkDiagnosticsConfiguration()
+        configuration.timelineLimit = 10
+        for _ in 0..<15 {
+            _ = try await service.diagnose(NetworkDiagnosticRequest(
+                configuration: configuration, keepHistory: true, saveBaseline: false))
+        }
+        let loaded = try AgentPayload.decode(
+            [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 100))
         #expect(loaded.count == 10)
-        #expect(loaded.first?.createdAt == Date(timeIntervalSince1970: 14))
-        #expect(loaded.last?.createdAt == Date(timeIntervalSince1970: 5))
+        #expect(Set(loaded.map(\.id)).count == 10)
+        #expect(loaded.first!.createdAt >= loaded.last!.createdAt)
     }
 
     @Test func engineExplainsLocalPathWithoutRemoteTargets() async {

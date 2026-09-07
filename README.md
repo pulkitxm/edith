@@ -68,12 +68,13 @@ and platform details.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
 - **Emoji picker** - every emoji this Mac can draw on a hotkey, with search, categories, skin tones and your most-used pinned to the top.
+- **Keystroke Highlight** - toggle clear keycaps for demos with a global shortcut, then let each key press fade automatically.
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
 - **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.
 - **Mic mute** - system-wide microphone kill switch with a menu bar indicator.
 - **Focus dim** - dims every screen except the window you are working in.
-- **System tools** - prevent-sleep toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
+- **System tools** - independent Keep Awake toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
 - **Lid awake** - keeps the Mac running with the lid shut and unplugged, with timed or lid-cycle sessions, battery floors and automatic sleep restoration.
 - **Disk cleaner** - scans build caches, package managers and old logs.
 - **Global shortcut** - toggle the panel from anywhere, ⌥⌘E by default and re-recordable.
@@ -84,6 +85,7 @@ Installing Edith installs `ed`, a first-class CLI that reaches everything the UI
 does. `edith` is the same binary under its full name.
 
 ```
+ed extensions enable keepAwake      enable independent sleep prevention
 ed config set preventSleep true     every setting the UI exposes, applied live
 ed lid-awake on --for 30m           keep running with the lid shut for 30 minutes
 ed usage limits --json              the same numbers the rings show

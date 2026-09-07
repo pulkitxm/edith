@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Edith</string>
+	<string>$(EDITH_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>Edith</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.pulkit.edith</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleName</key>
 	<string>Edith</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.200</string>
+	<string>0.0.242</string>
 	<key>CFBundleVersion</key>
-	<string>211</string>
+	<string>253</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
@@ -30,6 +30,8 @@
 	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Edith connects to the machines, databases, and Companion servers you select on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Edith records voice memories in the Companion capture screen.</string>
 	<key>NSRemovableVolumesUsageDescription</key>

@@ -13,73 +13,6 @@ extension EnvironmentValues {
     }
 }
 
-enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, network, machines,
-        companion
-    case extensions, settings, about
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .home: return "Home"
-        case .attention: return "Attention"
-        case .dashboard: return "Agent Usage"
-        case .herdr: return "Herdr"
-        case .quinjet: return "Quinjet"
-        case .music: return "Music"
-        case .calendar: return "Calendar"
-        case .system: return "System"
-        case .network: return "Network Diagnostics"
-        case .machines: return "Machines"
-        case .companion: return "Companion"
-        case .extensions: return "Extensions"
-        case .settings: return "Settings"
-        case .about: return "About"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .home: return "house.fill"
-        case .attention: return "hourglass"
-        case .dashboard: return "chart.bar.fill"
-        case .herdr: return "rectangle.split.3x1.fill"
-        case .quinjet: return "arrow.triangle.branch"
-        case .music: return "music.note"
-        case .calendar: return "calendar"
-        case .system: return "cpu"
-        case .network: return "network"
-        case .machines: return "server.rack"
-        case .companion: return "brain.head.profile"
-        case .extensions: return "puzzlepiece.extension"
-        case .settings: return "gearshape"
-        case .about: return "info.circle"
-        }
-    }
-
-    var logoName: String? {
-        switch self {
-        case .herdr: return "herdr"
-        default: return nil
-        }
-    }
-
-    static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system, .network,
-        .machines,
-        .companion,
-    ]
-    static let appItems: [MainDestination] = [
-        .extensions, .settings, .about,
-    ]
-
-    static func resolve(_ raw: String) -> MainDestination {
-        MainDestination(rawValue: raw) ?? .home
-    }
-
-}
-
 struct MainNavigationSelection: Equatable {
     let mainWindowSection: String
     let settingsTab: String
@@ -94,7 +27,8 @@ enum MainNavigationFallback {
         }
         let section = MainDestination(rawValue: mainWindowSection)?.rawValue ?? "home"
         let validSettingsTabs = [
-            "general", "permissions", "shortcuts", "terminal", "icloud", "updates",
+            "general", "permissions", "agent", "data", "shortcuts", "terminal", "icloud",
+            "updates",
         ]
         let resolvedSettingsTab =
             validSettingsTabs.contains(settingsTab) ? settingsTab : "general"
@@ -153,11 +87,15 @@ private struct SidebarNavRow: View {
     let item: MainDestination
     let selected: Bool
     let theme: Color
+    var indented = false
+    var emphasised = false
+    var badge: SidebarBadge?
     let shortcutHint: String?
     let action: () -> Void
     var detach: (() -> Void)?
     var disclosureExpanded: Bool? = nil
     var disclosureAction: (() -> Void)?
+    var disclosureLabel = "categories"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rowHovered = false
 
@@ -177,21 +115,31 @@ private struct SidebarNavRow: View {
                         .foregroundStyle(selected ? .primary : .secondary)
                         .frame(width: UIScale.pt(22))
                     Text(item.title)
-                        .font(.system(size: UIScale.pt(13.5), weight: .medium))
-                        .foregroundStyle(selected ? .primary : .secondary)
+                        .font(
+                            .system(
+                                size: UIScale.pt(13.5),
+                                weight: emphasised ? .semibold : .medium)
+                        )
+                        .foregroundStyle(selected || emphasised ? .primary : .secondary)
                         .lineLimit(1)
-                    Spacer(
-                        minLength: disclosureExpanded == nil
-                            ? 0 : UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
+                    Spacer(minLength: 0)
+                    if let badge {
+                        SidebarBadgeLabel(badge: badge, theme: theme)
+                    }
                     if let shortcutHint {
                         Text(shortcutHint)
                             .font(.system(size: UIScale.pt(11), weight: .medium))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
+                    if disclosureExpanded != nil {
+                        Color.clear.frame(
+                            width: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
+                    }
                 }
             }
             .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+            .padding(.leading, indented ? UIScale.pt(18) : 0)
             .accessibilityValue(
                 disclosureExpanded.map { $0 ? "Expanded" : "Collapsed" } ?? ""
             )
@@ -223,11 +171,11 @@ private struct SidebarNavRow: View {
                 .zIndex(1)
                 .accessibilityLabel(
                     disclosureExpanded
-                        ? "Collapse settings categories" : "Expand settings categories"
+                        ? "Collapse \(disclosureLabel)" : "Expand \(disclosureLabel)"
                 )
                 .help(
                     disclosureExpanded
-                        ? "Collapse settings categories" : "Expand settings categories"
+                        ? "Collapse \(disclosureLabel)" : "Expand \(disclosureLabel)"
                 )
             }
         }
@@ -254,11 +202,13 @@ enum SidebarDisclosureGeometry {
 
 struct SidebarUtilityVisibility: Equatable {
     let system: Bool
+    let keepAwake: Bool
     let presenter: Bool
     let lidAwake: Bool
+    let keystrokeHighlight: Bool
 
     var hasActions: Bool {
-        system || presenter || lidAwake
+        system || keepAwake || presenter || lidAwake || keystrokeHighlight
     }
 }
 
@@ -293,10 +243,33 @@ private struct CollapsibleSidebarLayout: Layout {
     }
 }
 
-private struct SettingsSidebarRow: View {
-    let category: SettingsPane.Tab
-    let selected: Bool
+private struct SidebarBadgeLabel: View {
+    let badge: SidebarBadge
     let theme: Color
+
+    private var tint: Color {
+        switch badge.tone {
+        case .neutral: .secondary
+        case .accent: theme
+        case .warning: .orange
+        }
+    }
+
+    var body: some View {
+        Text(badge.text)
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
+private struct SidebarSectionRow: View {
+    let child: SidebarChild
+    let indented: Bool
+    let theme: Color
+    var badge: SidebarBadge?
+    let selected: Bool
     let action: () -> Void
     let detach: () -> Void
 
@@ -309,22 +282,39 @@ private struct SettingsSidebarRow: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: category.symbol)
+                Image(systemName: child.symbolName)
                     .frame(width: UIScale.pt(18))
-                Text(category.label)
+                Text(child.title)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if let badge {
+                    SidebarBadgeLabel(badge: badge, theme: theme)
+                }
             }
             .font(.system(size: UIScale.pt(12.5), weight: .medium))
             .foregroundStyle(selected ? .primary : .secondary)
         }
         .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
-        .padding(.leading, UIScale.pt(18))
-        .accessibilityHint(category.summary)
-        .help("\(category.label) (⌘-click to open in its own window)")
+        .padding(.leading, indented ? UIScale.pt(18) : 0)
+        .accessibilityHint(child.summary)
+        .help("\(child.title) (⌘-click to open in its own window)")
         .contextMenu {
             Button("Open in New Window", action: detach)
         }
+    }
+}
+
+private struct CollapsibleRow: ViewModifier {
+    let expanded: Bool
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        CollapsibleSidebarLayout(progress: expanded ? 1 : 0) {
+            content
+        }
+        .clipped()
+        .allowsHitTesting(expanded)
+        .accessibilityHidden(!expanded)
     }
 }
 
@@ -389,12 +379,19 @@ struct MainWindowView: View {
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
     ) private var settingsCategoriesExpanded = true
+    @AppStorage(
+        AppStorageKeys.AppMaintenance.categoriesExpanded, store: SharedDefaults.store
+    ) private var appMaintenanceSectionsExpanded = true
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
+        var appMaintenanceSection = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
+        var keepAwakeEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.networkDiagnosticsEnabled, store: SharedDefaults.store) private
-        var networkDiagnosticsEnabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
+        var appMaintenanceEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
@@ -403,12 +400,48 @@ struct MainWindowView: View {
         var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
+        var seoAuditEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
-    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
-        var machinesEnabled =
+    @AppStorage(AppStorageKeys.Homebrew.enabled, store: SharedDefaults.store) private
+        var homebrewEnabled = false
+    @AppStorage(AppStorageKeys.Cleaner.enabled, store: SharedDefaults.store) private
+        var cleanerEnabled = false
+    @AppStorage(AppStorageKeys.Suites.agents, store: SharedDefaults.store) private
+        var agentsSuite = false
+    @AppStorage(AppStorageKeys.Suites.maintenance, store: SharedDefaults.store) private
+        var maintenanceSuite = false
+    @AppStorage(AppStorageKeys.Suites.system, store: SharedDefaults.store) private
+        var systemSuite = false
+    @AppStorage(AppStorageKeys.Suites.desk, store: SharedDefaults.store) private
+        var deskSuite = false
+    @AppStorage(AppStorageKeys.Suites.media, store: SharedDefaults.store) private
+        var mediaSuite = false
+    @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
+        var musicBarAutoHide = false
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var musicBarCollapsed = false
+    @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
+        var dataSuite = false
+    @AppStorage(SuiteExpansion.key(for: .agents), store: SharedDefaults.store) private
+        var agentsExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .maintenance), store: SharedDefaults.store) private
+        var maintenanceExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .system), store: SharedDefaults.store) private
+        var systemExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .desk), store: SharedDefaults.store) private
+        var deskExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .media), store: SharedDefaults.store) private
+        var mediaExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .data), store: SharedDefaults.store) private
+        var dataExpanded = true
+    @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
+        var databaseEnabled =
         false
+    @AppStorage(AppStorageKeys.Tabs.pluginsEnabled, store: SharedDefaults.store) private
+        var pluginsEnabled = false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
         var companionEnabled =
         false
@@ -416,6 +449,10 @@ struct MainWindowView: View {
         var preventSleep = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var keystrokeHighlightActive = false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
         var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -452,7 +489,7 @@ struct MainWindowView: View {
     @State private var musicFolderPath = ""
     @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
-    @State private var permissionsProbe: Task<Void, Never>?
+    @State private var permissionsObserverID = UUID()
     @State private var presenterQuickActionsPresented = false
     @State private var hoveredPresenterQuickAction: String?
     @State private var keyboardCleanTrigger = 0
@@ -481,19 +518,8 @@ struct MainWindowView: View {
 
     private var destination: MainDestination {
         let requested = MainDestination.resolve(navigationSelection.mainWindowSection)
-        return switch requested {
-        case .attention: attentionEnabled ? requested : .home
-        case .dashboard: usageEnabled ? requested : .home
-        case .herdr: herdrEnabled ? requested : .home
-        case .quinjet: quinjetEnabled ? requested : .home
-        case .music: musicEnabled ? requested : .home
-        case .calendar: calendarEnabled ? requested : .home
-        case .system: systemEnabled ? requested : .home
-        case .network: networkDiagnosticsEnabled ? requested : .home
-        case .machines: machinesEnabled ? requested : .home
-        case .companion: companionEnabled ? requested : .home
-        default: requested
-        }
+        _ = extensionSelectionToken
+        return requested.page.isVisible(in: SharedDefaults.store) ? requested : .home
     }
 
     private var navigationSelection: MainNavigationSelection {
@@ -540,7 +566,7 @@ struct MainWindowView: View {
             let bandHeight = Self.chromeHeight + UIScale.pt(10)
             VStack(spacing: 0) {
                 mainArea(bandHeight)
-                if musicFooterVisible {
+                if musicFooterVisible, !musicBarCollapsed {
                     MusicFooter()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -554,7 +580,11 @@ struct MainWindowView: View {
             )
             .animation(
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
-                value: footerVisible)
+                value: footerVisible
+            )
+            .animation(
+                Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                value: musicBarCollapsed)
         }
         .background(historyShortcuts)
         .onExitCommand { InputFocus.resignEditing() }
@@ -578,6 +608,7 @@ struct MainWindowView: View {
             installCommandHintMonitor()
             syncMusicResources()
             PresenterState.shared.syncEnabled(presenterEnabled)
+            CalendarPermission.observe(permissionsObserverID)
             refreshPermissionsPill()
             if nav.entries.isEmpty { nav.record(currentLocation) }
         }
@@ -589,7 +620,7 @@ struct MainWindowView: View {
         }
         .onDisappear {
             guard automaticActionsEnabled else { return }
-            permissionsProbe?.cancel()
+            CalendarPermission.stopObserving(permissionsObserverID)
             removeWindowKeys()
             removeCommandHintMonitor()
             removeMusicKeys()
@@ -702,7 +733,8 @@ struct MainWindowView: View {
     }
 
     private var musicFooterVisible: Bool {
-        musicEnabled
+        guard musicEnabled, mediaSuite else { return false }
+        return !musicBarAutoHide || MusicRemote.shared.current != nil
     }
 
     private var detailShadow: Color {
@@ -743,12 +775,7 @@ struct MainWindowView: View {
 
     private func refreshPermissionsPill() {
         permissionsNeedAttention = PermissionsStatus.current
-        permissionsProbe?.cancel()
-        permissionsProbe = Task.detached(priority: .utility) {
-            guard !Task.isCancelled else { return }
-            CalendarPermission.mirror()
-            IPC.post(IPC.Name.requestPermissionsRefresh)
-        }
+        CalendarPermission.refresh(observer: permissionsObserverID)
     }
 
     private func chromeOverlay() -> some View {
@@ -784,14 +811,15 @@ struct MainWindowView: View {
 
     private var footerVisible: Bool {
         sidebarUtilityVisibility.hasActions || permissionsNeedAttention
-            || updater.updateReady != nil
+            || updater.updateReady != nil || (musicFooterVisible && musicBarCollapsed)
     }
 
     private var sidebarUtilityVisibility: SidebarUtilityVisibility {
         SidebarUtilityVisibility(
-            system: systemEnabled,
+            system: systemEnabled, keepAwake: keepAwakeEnabled,
             presenter: presenterEnabled,
-            lidAwake: lidAwakeEnabled)
+            lidAwake: lidAwakeEnabled,
+            keystrokeHighlight: keystrokeHighlightEnabled)
     }
 
     private var sidebarUtilityTransition: AnyTransition {
@@ -815,6 +843,7 @@ struct MainWindowView: View {
                         }
                         .transition(sidebarUtilityTransition)
                     }
+                    AgentStatusBar(theme: theme)
                     credit
                         .padding(.vertical, UIScale.pt(8))
                 }
@@ -825,59 +854,8 @@ struct MainWindowView: View {
     private var sidebarList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                ForEach(visibleHomeItems) { item in
-                    SidebarNavRow(
-                        item: item, selected: destination == item, theme: theme,
-                        shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
-                        detach: { detach(item) })
-                }
-                Text("App")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.top, UIScale.pt(14))
-                    .padding(.bottom, UIScale.pt(4))
-                ForEach(MainDestination.appItems) { item in
-                    SidebarNavRow(
-                        item: item, selected: destination == item, theme: theme,
-                        shortcutHint: shortcutHint(for: item),
-                        action: {
-                            if item == .settings, destination == .settings {
-                                settingsCategoriesExpanded.toggle()
-                            } else {
-                                select(item)
-                            }
-                        },
-                        detach: item == .about || item == .settings ? nil : { detach(item) },
-                        disclosureExpanded: item == .settings
-                            ? settingsCategoriesExpanded : nil,
-                        disclosureAction: item == .settings
-                            ? { settingsCategoriesExpanded.toggle() } : nil)
-                    if item == .settings {
-                        CollapsibleSidebarLayout(
-                            progress: settingsCategoriesExpanded ? 1 : 0
-                        ) {
-                            VStack(spacing: UIScale.pt(2)) {
-                                ForEach(SettingsPane.Tab.allCases, id: \.self) { category in
-                                    SettingsSidebarRow(
-                                        category: category,
-                                        selected: destination == .settings
-                                            && settingsTab == category.rawValue,
-                                        theme: theme,
-                                        action: {
-                                            settingsTab = category.rawValue
-                                            mainWindowSection = MainDestination.settings.rawValue
-                                        },
-                                        detach: { detachSettings(category) })
-                                }
-                            }
-                            .padding(.top, UIScale.pt(6))
-                        }
-                        .clipped()
-                        .allowsHitTesting(settingsCategoriesExpanded)
-                        .accessibilityHidden(!settingsCategoriesExpanded)
-                    }
+                ForEach(sidebarRows) { row in
+                    sidebarRow(row)
                 }
             }
             .padding(.horizontal, UIScale.pt(8))
@@ -892,7 +870,128 @@ struct MainWindowView: View {
         )
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-            value: settingsCategoriesExpanded)
+            value: settingsCategoriesExpanded
+        )
+        .animation(
+            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+            value: suiteExpansionToken
+        )
+    }
+
+    @ViewBuilder
+    private func sidebarRow(_ row: SidebarRow) -> some View {
+        switch row {
+        case let .page(page):
+            if page.band == .app, page.id == MainDestination.appItems.first?.rawValue {
+                Text("App")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, UIScale.pt(8))
+                    .padding(.top, UIScale.pt(14))
+                    .padding(.bottom, UIScale.pt(4))
+            }
+            pageRow(page)
+        case let .section(parent, child):
+            SidebarSectionRow(
+                child: child, indented: true, theme: theme,
+                badge: status.badge(childID: child.id, of: parent),
+                selected: destination.rawValue == parent
+                    && selectedChild(of: parent) == child.id,
+                action: { selectChild(child, of: parent) },
+                detach: { detachChild(child, of: parent) })
+        }
+    }
+
+    @ViewBuilder
+    private func pageRow(_ page: SidebarPage) -> some View {
+        let item = MainDestination.resolve(page.id)
+        let expandable = NavigationCatalog.hasDisclosure(page, in: SharedDefaults.store)
+        SidebarNavRow(
+            item: item, selected: destination == item, theme: theme,
+            indented: page.parentID != nil,
+            emphasised: page.isSuiteLanding,
+            badge: page.parentID == nil ? nil : status.badge(pageID: page.id),
+            shortcutHint: shortcutHint(for: item),
+            action: {
+                if expandable, destination == item {
+                    toggleExpansion(page.id)
+                } else {
+                    select(item)
+                }
+            },
+            detach: page.detachable ? { detach(item) } : nil,
+            disclosureExpanded: expandable ? isExpanded(page.id) : nil,
+            disclosureAction: expandable ? { toggleExpansion(page.id) } : nil,
+            disclosureLabel: "\(page.title) abilities")
+    }
+
+    private var sidebarRows: [SidebarRow] {
+        _ = extensionSelectionToken
+        _ = suiteExpansionToken
+        return NavigationCatalog.rows()
+    }
+
+    private var suiteExpansionToken: [Bool] {
+        [
+            agentsExpanded, maintenanceExpanded, systemExpanded, deskExpanded, mediaExpanded,
+            dataExpanded, settingsCategoriesExpanded,
+        ]
+    }
+
+    private var extensionSelectionToken: [Bool] {
+        [
+            usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, pluginsEnabled,
+            appMaintenanceEnabled,
+            homebrewEnabled, cleanerEnabled, systemEnabled, keepAwakeEnabled, musicEnabled,
+            calendarEnabled,
+            databaseEnabled, attentionEnabled, seoAuditEnabled, agentsSuite, maintenanceSuite,
+            systemSuite, mediaSuite, dataSuite,
+        ]
+    }
+
+    private func isExpanded(_ pageID: String) -> Bool {
+        if pageID == MainDestination.settings.rawValue { return settingsCategoriesExpanded }
+        guard let suite = NavigationCatalog.byID[pageID]?.suite else { return true }
+        return SuiteExpansion.isExpanded(suite, in: SharedDefaults.store)
+    }
+
+    private func toggleExpansion(_ pageID: String) {
+        if pageID == MainDestination.settings.rawValue {
+            settingsCategoriesExpanded.toggle()
+            return
+        }
+        guard let suite = NavigationCatalog.byID[pageID]?.suite else { return }
+        let key = SuiteExpansion.key(for: suite)
+        SharedDefaults.store.set(
+            !SuiteExpansion.isExpanded(suite, in: SharedDefaults.store), forKey: key)
+    }
+
+    private func selectedChild(of pageID: String) -> String? {
+        switch pageID {
+        case MainDestination.settings.rawValue: navigationSelection.settingsTab
+        case MainDestination.appMaintenance.rawValue: appMaintenanceSection
+        default: nil
+        }
+    }
+
+    private var status: SidebarStatusModel { SidebarStatus.shared }
+
+    private func selectChild(_ child: SidebarChild, of pageID: String) {
+        switch pageID {
+        case MainDestination.settings.rawValue: settingsTab = child.id
+        case MainDestination.appMaintenance.rawValue: appMaintenanceSection = child.id
+        default: return
+        }
+        mainWindowSection = pageID
+    }
+
+    private func detachChild(_ child: SidebarChild, of pageID: String) {
+        switch pageID {
+        case MainDestination.settings.rawValue: settingsTab = child.id
+        case MainDestination.appMaintenance.rawValue: appMaintenanceSection = child.id
+        default: return
+        }
+        SectionWindow.open(MainDestination.resolve(pageID))
     }
 
     private func select(_ item: MainDestination) {
@@ -904,27 +1003,9 @@ struct MainWindowView: View {
         SectionWindow.open(item)
     }
 
-    private func detachSettings(_ category: SettingsPane.Tab) {
-        settingsTab = category.rawValue
-        SectionWindow.open(.settings)
-    }
-
     private var visibleHomeItems: [MainDestination] {
-        MainDestination.homeItems.filter { item in
-            switch item {
-            case .attention: attentionEnabled
-            case .dashboard: usageEnabled
-            case .herdr: herdrEnabled
-            case .quinjet: quinjetEnabled
-            case .music: musicEnabled
-            case .calendar: calendarEnabled
-            case .system: systemEnabled
-            case .network: networkDiagnosticsEnabled
-            case .machines: machinesEnabled
-            case .companion: companionEnabled
-            default: true
-            }
-        }
+        _ = extensionSelectionToken
+        return NavigationCatalog.destinations().filter { $0.page.band != .app }
     }
 
     private var navigableItems: [MainDestination] {
@@ -946,6 +1027,9 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
+                guard NSApp.keyWindow?.identifier?.rawValue == MainWindowIdentifier.value else {
+                    return false
+                }
                 guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
                 guard
                     let command = WindowKeyCommand.resolve(
@@ -1012,6 +1096,16 @@ struct MainWindowView: View {
 
     private var sidebarFooter: some View {
         VStack(spacing: UIScale.pt(8)) {
+            if musicFooterVisible, musicBarCollapsed {
+                MusicSidebarPill(theme: theme) {
+                    withAnimation(
+                        Motion.animation(Motion.glide, reduceMotion: reduceMotion)
+                    ) {
+                        musicBarCollapsed = false
+                    }
+                }
+                .transition(sidebarUtilityTransition)
+            }
             if let version = updater.updateReady {
                 updateReadyPill(version)
             }
@@ -1067,14 +1161,35 @@ struct MainWindowView: View {
             },
         ]
         VStack(spacing: UIScale.pt(8)) {
-            if systemEnabled {
+            if systemEnabled || keepAwakeEnabled {
                 VStack(spacing: UIScale.pt(8)) {
-                    if clampedSidebarWidth < 220 {
-                        tiles[0]; tiles[1]
-                    } else {
+                    if systemEnabled && keepAwakeEnabled && clampedSidebarWidth >= 220 {
                         HStack(spacing: UIScale.pt(8)) {
                             tiles[0]; tiles[1]
                         }
+                    } else {
+                        if systemEnabled { tiles[0] }
+                        if keepAwakeEnabled { tiles[1] }
+                    }
+                }
+                .transition(sidebarUtilityTransition)
+            }
+            if lidAwakeEnabled || keystrokeHighlightEnabled {
+                VStack(spacing: UIScale.pt(8)) {
+                    if lidAwakeEnabled && keystrokeHighlightEnabled {
+                        if clampedSidebarWidth < 220 {
+                            lidAwakeQuickActionTile
+                            keystrokeHighlightQuickActionTile
+                        } else {
+                            HStack(spacing: UIScale.pt(8)) {
+                                lidAwakeQuickActionTile
+                                keystrokeHighlightQuickActionTile
+                            }
+                        }
+                    } else if lidAwakeEnabled {
+                        lidAwakeQuickActionTile
+                    } else {
+                        keystrokeHighlightQuickActionTile
                     }
                 }
                 .transition(sidebarUtilityTransition)
@@ -1083,24 +1198,36 @@ struct MainWindowView: View {
                 presenterQuickActionTile
                     .transition(sidebarUtilityTransition)
             }
-            if lidAwakeEnabled {
-                quickActionTile(
-                    icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
-                    trigger: lidAwakeActive ? 1 : 0,
-                    help: "Keep this Mac running with the lid closed"
-                ) {
-                    if lidAwakeActive {
-                        lidAwakeOperations.perform(.off)
-                    } else {
-                        confirmingLidAwake = true
-                    }
-                }
-                .transition(sidebarUtilityTransition)
-            }
         }
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion),
             value: sidebarUtilityVisibility)
+    }
+
+    private var lidAwakeQuickActionTile: some View {
+        quickActionTile(
+            icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
+            trigger: lidAwakeActive ? 1 : 0,
+            help: "Keep this Mac running with the lid closed"
+        ) {
+            if lidAwakeActive {
+                lidAwakeOperations.perform(.off)
+            } else {
+                confirmingLidAwake = true
+            }
+        }
+    }
+
+    private var keystrokeHighlightQuickActionTile: some View {
+        quickActionTile(
+            icon: "keyboard.badge.ellipsis", title: "Keystrokes",
+            active: keystrokeHighlightActive,
+            trigger: keystrokeHighlightActive ? 1 : 0,
+            help: "Show keyboard input on screen"
+        ) {
+            $keystrokeHighlightActive
+                .configured(AppStorageKeys.KeystrokeHighlight.active).wrappedValue.toggle()
+        }
     }
 
     private var presenterQuickActionTile: some View {
@@ -1334,23 +1461,7 @@ struct MainWindowView: View {
         .buttonStyle(.edith(.borderless))
     }
 
-    @ViewBuilder
     private var detail: some View {
-        switch destination {
-        case .home: HomePage()
-        case .attention: AttentionPage()
-        case .dashboard: DashboardView()
-        case .herdr: HerdrPage()
-        case .quinjet: QuinjetPage()
-        case .music: MusicPage()
-        case .calendar: CalendarPage()
-        case .system: SystemPage()
-        case .network: NetworkDiagnosticsPage()
-        case .machines: MachinesPage()
-        case .companion: CompanionPage()
-        case .extensions: ExtensionsPane()
-        case .settings: SettingsPane(updater: updater)
-        case .about: AboutPane()
-        }
+        PageContent(destination, updater: updater)
     }
 }

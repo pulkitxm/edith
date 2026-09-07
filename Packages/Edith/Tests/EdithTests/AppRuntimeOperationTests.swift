@@ -208,7 +208,7 @@ import Testing
         #expect(!system.contains("NSApp.terminate"))
         #expect(!menu.contains("NSApp.terminate"))
         #expect(!helper.contains("NSApp.terminate"))
-        #expect(updater.contains("AppRuntimeCenter().updateHistory(url: logURL)"))
+        #expect(updater.contains("checkHistory = AppRuntimeCenter().updateHistory(url: logURL)"))
         #expect(!updater.contains("checkHistory = UpdateCheckLog.load"))
     }
 

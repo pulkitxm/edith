@@ -8,8 +8,23 @@ public enum UsageCollector {
     }
 
     public static func script() -> Data? {
-        guard let url = scriptURL() else { return nil }
-        return try? Data(contentsOf: url)
+        guard let url = scriptURL(),
+            let runtimeURL = BundledResources.locate(
+                "usage-billing-archive.mjs", in: BundledResources.kitBundleName),
+            let source = try? String(contentsOf: url, encoding: .utf8),
+            let runtime = try? String(contentsOf: runtimeURL, encoding: .utf8)
+        else { return nil }
+        let marker = #"BILLING_ARCHIVE_SCRIPT="${BASH_SOURCE[0]%/*}/usage-billing-archive.mjs""#
+        guard source.components(separatedBy: marker).count == 2, runtime.hasSuffix("\n") else {
+            return nil
+        }
+        let embedded = """
+            BILLING_ARCHIVE_SCRIPT="$TMP/usage-billing-archive.mjs"
+            cat >"$BILLING_ARCHIVE_SCRIPT" <<'EDITH_BILLING_RUNTIME'
+            \(runtime.dropLast())
+            EDITH_BILLING_RUNTIME
+            """
+        return Data(source.replacingOccurrences(of: marker, with: embedded).utf8)
     }
 
     public static var machinesDirectory: URL {

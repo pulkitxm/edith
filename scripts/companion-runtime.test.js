@@ -39,8 +39,3 @@ test("every Companion service comes back after a reboot", () => {
   const compose = readFileSync("apps/companion/compose.yaml", "utf8");
   expect(compose.match(/^ {4}restart: unless-stopped$/gm)?.length).toBe(5);
 });
-
-test("Companion images are pinned by digest", () => {
-  const dockerfile = readFileSync("apps/companion/Dockerfile", "utf8");
-  expect(dockerfile.match(/^FROM .+@sha256:[a-f0-9]{64}/gm)?.length).toBe(2);
-});

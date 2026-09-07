@@ -1,4 +1,5 @@
 import Carbon.HIToolbox
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -30,7 +31,7 @@ func migratedServices() -> AppServices {
     let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
     defer { PerformanceTrace.end(launchTrace) }
     let d = UserDefaults.standard
-    if !d.bool(forKey: "migratedFromControlCenter"),
+    if !AppBuildIdentity.isDevelopment, !d.bool(forKey: "migratedFromControlCenter"),
         let old = d.persistentDomain(forName: "com.pulkit.control-center")
     {
         for (key, value) in old where !key.hasPrefix("NSStatusItem") {
@@ -112,6 +113,10 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
+        AttentionRepository.sink = AgentAttentionSink()
+        IPCTransport.enable()
+        AgentCommandRouting.enable()
+        AgentNotificationPresentationBridge.shared.start()
         AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -120,17 +125,9 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         guard !termination.started else { return .terminateLater }
         AppState.services.cancelStartup()
         AppState.services.usage?.prepareForTermination()
-        SettingsBackup.shared.prepareForTermination()
         termination.begin {
             await AppState.services.prepareForTermination()
         } persistence: {
-            let usage = AppState.services.usage
-            let backup = SettingsBackup.shared
-            async let historyDrain: Void? = usage?.drainHistoryPersistence(
-                syncLimitsAfterDrain: false)
-            async let backupFlush: Void = backup.flushForTermination()
-            _ = await historyDrain
-            await backupFlush
         } finish: {
             sender.reply(toApplicationShouldTerminate: true)
         }
@@ -146,15 +143,23 @@ private func anEarlierInstanceIsRunning() -> Bool {
 }
 
 @main
-struct EdithApp: App {
-    @NSApplicationDelegateAdaptor(MenuBarAppDelegate.self) private var appDelegate
+struct EdithApp {
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        let appDelegate = MenuBarAppDelegate()
+        application.delegate = appDelegate
+        application.setActivationPolicy(.accessory)
+        configure()
+        withExtendedLifetime(appDelegate) {
+            application.run()
+        }
+    }
 
-    init() {
+    @MainActor
+    private static func configure() {
         _ = AppProcessUptime.launchedAt
         HotKey.register()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            SettingsBackup.shared.start()
-        }
         DispatchQueue.global(qos: .utility).async {
             CLIInstaller.installIfNeeded()
         }
@@ -163,7 +168,6 @@ struct EdithApp: App {
         let services = AppState.services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
-            SettingsBackup.shared.settingsDidChange()
             applyAppearance(
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
@@ -230,6 +234,16 @@ struct EdithApp: App {
                     IPC.Name.keyboardCleanResult,
                     userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
             })
+        _ = IPC.observe(
+            IPC.Name.presentNotification,
+            info: { info in
+                guard let notification = AgentNotification(userInfo: info) else { return }
+                NotificationReplacementQueue.shared.submit(
+                    NotificationReplacement(
+                        identifier: notification.identifier, title: notification.title,
+                        body: notification.body,
+                        failureContext: "Edith notifications: agent alert failed"))
+            })
         _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
             IPC.post(
                 IPC.Name.appDiagnostics,
@@ -285,18 +299,13 @@ struct EdithApp: App {
             })
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             AppRuntimeCenter().perform(.testNotification) {
-                _ = Task<Void, Never> { _ = await services.usage?.notifier.sendTest() }
+                _ = Task<Void, Never> { _ = await LimitNotifier.shared.sendTest() }
             }
         }
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
     }
 
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-    }
 }
 
 private func dispatchGlobalHotKey(_ id: UInt32) {
@@ -308,17 +317,6 @@ private func dispatchGlobalHotKey(_ id: UInt32) {
 }
 
 enum GlobalHotKey {
-    enum ID {
-        static let panel: UInt32 = 1
-        static let clipboard: UInt32 = 2
-        static let notchShelf: UInt32 = 3
-        static let focusDim: UInt32 = 4
-        static let colorPicker: UInt32 = 5
-        static let micMute: UInt32 = 6
-        static let presenterToggle: UInt32 = 7
-        static let emoji: UInt32 = 8
-    }
-
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
     fileprivate static var actions: [UInt32: () -> Void] = [:]
     private static var handlerInstalled = false
@@ -362,163 +360,130 @@ enum GlobalHotKey {
 }
 
 enum HotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyCode) as? Int
-            ?? kVK_ANSI_E
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyMods) as? Int
-            ?? (cmdKey | optionKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: AppStorageKeys.General.hotKeyLabel) ?? "⌥⌘E"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.panel)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        GlobalHotKey.set(id: GlobalHotKey.ID.panel, keyCode: code, modifiers: mods) {
-            showPanel()
-        }
+        HotKeyRegistrar.install(HotKeyCatalog.panel) { showPanel() }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.panel)
+        HotKeyRegistrar.clear(HotKeyCatalog.panel)
     }
 
+    @MainActor
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: AppStorageKeys.General.hotKeyCode)
-        SharedDefaults.store.set(mods, forKey: AppStorageKeys.General.hotKeyMods)
-        SharedDefaults.store.set(label, forKey: AppStorageKeys.General.hotKeyLabel)
+        HotKeyRegistrar.save(HotKeyCatalog.panel, code: code, mods: mods, label: label)
     }
 }
 
 enum ClipboardHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: "clipboardHotKeyCode") as? Int ?? kVK_ANSI_C
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: "clipboardHotKeyMods") as? Int
-            ?? (controlKey | shiftKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.clipboard)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        let enabled =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
-        guard enabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.clipboard, keyCode: code, modifiers: mods) {
+        HotKeyRegistrar.install(HotKeyCatalog.clipboard) {
             MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
         }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
+        HotKeyRegistrar.clear(HotKeyCatalog.clipboard)
     }
 
+    @MainActor
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
-        SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
-        SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
+        HotKeyRegistrar.save(HotKeyCatalog.clipboard, code: code, mods: mods, label: label)
     }
 }
 
 enum EmojiHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyCode) as? Int
-            ?? kVK_ANSI_E
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyMods) as? Int
-            ?? (controlKey | shiftKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: AppStorageKeys.Emoji.hotKeyLabel) ?? "⌃⇧E"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.emoji)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        let enabled =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.enabled) as? Bool ?? false
-        guard enabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.emoji, keyCode: code, modifiers: mods) {
+        HotKeyRegistrar.install(HotKeyCatalog.emoji) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
+        HotKeyRegistrar.clear(HotKeyCatalog.emoji)
     }
 
+    @MainActor
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: AppStorageKeys.Emoji.hotKeyCode)
-        SharedDefaults.store.set(mods, forKey: AppStorageKeys.Emoji.hotKeyMods)
-        SharedDefaults.store.set(label, forKey: AppStorageKeys.Emoji.hotKeyLabel)
+        HotKeyRegistrar.save(HotKeyCatalog.emoji, code: code, mods: mods, label: label)
     }
 }
 
 enum MicHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: "micHotKeyCode") as? Int ?? kVK_ANSI_M
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: "micHotKeyMods") as? Int ?? (cmdKey | shiftKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: "micHotKeyLabel") ?? "⌘⇧M"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.micMute)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        let enabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Mic.muteEnabled)
-        guard enabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.micMute)
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.micMute, keyCode: code, modifiers: mods) {
+        HotKeyRegistrar.install(HotKeyCatalog.micMute) {
             MainActor.assumeIsolated { AppState.services.micMute?.toggle() }
         }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.micMute)
+        HotKeyRegistrar.clear(HotKeyCatalog.micMute)
     }
 
+    @MainActor
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: "micHotKeyCode")
-        SharedDefaults.store.set(mods, forKey: "micHotKeyMods")
-        SharedDefaults.store.set(label, forKey: "micHotKeyLabel")
+        HotKeyRegistrar.save(HotKeyCatalog.micMute, code: code, mods: mods, label: label)
     }
 }
 
 enum FocusDimHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: "focusDimHotKeyCode") as? Int ?? kVK_ANSI_F
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: "focusDimHotKeyMods") as? Int ?? (cmdKey | optionKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: "focusDimHotKeyLabel") ?? "⌥⌘F"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.focusDim)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        guard SharedDefaults.store.bool(forKey: FocusDimState.enabledKey) else {
-            unregister()
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.focusDim, keyCode: code, modifiers: mods) {
-            toggleFocusDim()
-        }
+        HotKeyRegistrar.install(HotKeyCatalog.focusDim) { toggleFocusDim() }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.focusDim)
+        HotKeyRegistrar.clear(HotKeyCatalog.focusDim)
     }
+
+    @MainActor
+    static func save(code: Int, mods: Int, label: String) {
+        HotKeyRegistrar.save(HotKeyCatalog.focusDim, code: code, mods: mods, label: label)
+    }
+}
+
+func togglePresenter() {
+    let operation: PresenterRuntimeOperation =
+        PresenterRuntimeOperationExecution.status().manual ? .stop : .start
+    _ = PresenterRuntimeOperationExecution.perform(operation)
 }
 
 func toggleFocusDim() {
@@ -528,34 +493,60 @@ func toggleFocusDim() {
 }
 
 enum PresenterHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: "presenterHotKeyCode") as? Int ?? kVK_ANSI_P
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: "presenterHotKeyMods") as? Int
-            ?? (cmdKey | optionKey | shiftKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: "presenterHotKeyLabel") ?? "⇧⌥⌘P"
-    }
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.presenter)! }
 
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
     static func register() {
-        let enabled =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false
-        guard enabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.presenterToggle, keyCode: code, modifiers: mods) {
-            let operation: PresenterRuntimeOperation =
-                PresenterRuntimeOperationExecution.status().manual ? .stop : .start
-            _ = PresenterRuntimeOperationExecution.perform(operation)
-        }
+        HotKeyRegistrar.install(HotKeyCatalog.presenter) { togglePresenter() }
     }
 
+    @MainActor
     static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
+        HotKeyRegistrar.clear(HotKeyCatalog.presenter)
     }
+
+    @MainActor
+    static func save(code: Int, mods: Int, label: String) {
+        HotKeyRegistrar.save(HotKeyCatalog.presenter, code: code, mods: mods, label: label)
+    }
+}
+
+enum KeystrokeHighlightHotKey {
+    private static var binding: HotKeyBinding {
+        HotKeyCatalog.binding(HotKeyCatalog.keystrokeHighlight)!
+    }
+
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
+    static func register() {
+        HotKeyRegistrar.install(HotKeyCatalog.keystrokeHighlight) { toggleKeystrokeHighlight() }
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.keystrokeHighlight)
+    }
+
+    @MainActor
+    static func save(code: Int, mods: Int, label: String) {
+        HotKeyRegistrar.save(HotKeyCatalog.keystrokeHighlight, code: code, mods: mods, label: label)
+    }
+}
+
+func toggleKeystrokeHighlight() {
+    guard SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
+        return
+    }
+    let active = !SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active)
+    SharedDefaults.store.set(active, forKey: AppStorageKeys.KeystrokeHighlight.active)
+    IPC.post(IPC.Name.settingsChanged)
 }
 
 func showPanel() {
@@ -569,7 +560,10 @@ func dismissPanel() {
 }
 
 func removeRetiredStatusItemDefaults(_ defaults: UserDefaults = .standard) {
-    let retiredNames = ["edithGlasses", "limits"]
+    let retiredNames = [
+        "edithGlasses", "limits", "agentUsage", "agentUsage.v2", "systemStats",
+        "systemStats.v2", "micMute", "micMute.v2",
+    ]
     for key in defaults.dictionaryRepresentation().keys
     where key.hasPrefix("NSStatusItem") && retiredNames.contains(where: key.hasSuffix) {
         defaults.removeObject(forKey: key)
@@ -592,7 +586,7 @@ let allTabs: [TabInfo] = [
         subtitle: "player, media keys", enabledKey: AppStorageKeys.Tabs.musicEnabled),
     TabInfo(
         id: "system", title: "System",
-        subtitle: "prevent sleep, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
+        subtitle: "running apps, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
         id: "network", title: "Network",
         subtitle: "diagnostic snapshots", enabledKey: AppStorageKeys.Tabs.networkDiagnosticsEnabled),

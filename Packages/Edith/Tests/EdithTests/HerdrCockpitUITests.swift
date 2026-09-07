@@ -333,7 +333,8 @@ import Testing
     }
 
     @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {
-        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let store = HerdrStore(
+            defaults: defaults(), liveWatcher: { _ in }, machinesProvider: { [] })
         store.settle([host])
         store.settle([host, remote])
         store.settle([remote])

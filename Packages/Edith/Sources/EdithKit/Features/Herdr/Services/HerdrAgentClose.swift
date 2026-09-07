@@ -5,9 +5,10 @@ public enum HerdrAgentCloseCommand {
         ["--session", agent.session, "agent", "send-keys", agent.pane, "ctrl+c", "ctrl+c"]
     }
 
-    public static func shellLine(for agent: HerdrAgent) -> String {
-        let arguments = arguments(for: agent).map(ShellQuote.quote).joined(separator: " ")
-        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; herdr \(arguments)"
+    public static func shellLine(
+        for agent: HerdrAgent, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        remoteHerdrCommand(arguments: arguments(for: agent), platform: platform)
     }
 }
 
@@ -65,7 +66,9 @@ public enum HerdrAgentCloseExecution {
         let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
         do {
             try await connection.connect()
-            let result = try await connection.run(HerdrAgentCloseCommand.shellLine(for: agent))
+            let platform = await connection.remotePlatform ?? .linux
+            let command = HerdrAgentCloseCommand.shellLine(for: agent, platform: platform)
+            let result = try await connection.run(command)
             guard result.status == 0 else {
                 throw HerdrAgentCloseError.commandFailed(clean(result.stderrText))
             }

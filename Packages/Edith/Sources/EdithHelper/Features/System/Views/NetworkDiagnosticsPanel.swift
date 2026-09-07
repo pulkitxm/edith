@@ -7,6 +7,11 @@ struct NetworkDiagnosticsPanel: View {
     @State private var running = false
     @State private var task: Task<Void, Never>?
 
+    init(snapshot: NetworkDiagnosticSnapshot? = nil, openWorkspace: @escaping () -> Void) {
+        self.openWorkspace = openWorkspace
+        self._snapshot = State(initialValue: snapshot)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -63,12 +68,9 @@ struct NetworkDiagnosticsPanel: View {
         running = true
         let configuration = NetworkDiagnosticsPreferences.configuration()
         task = Task {
-            let result = await NetworkDiagnosticsEngine().diagnose(
-                configuration: configuration, baseline: NetworkDiagnosticsPreferences.baseline())
+            let result = try? await NetworkDiagnosticsClient.diagnose(configuration: configuration)
             guard !Task.isCancelled else { return }
             snapshot = result
-            _ = try? await NetworkDiagnosticsTimelineStore.shared.append(
-                result, limit: configuration.timelineLimit)
             running = false
             task = nil
         }

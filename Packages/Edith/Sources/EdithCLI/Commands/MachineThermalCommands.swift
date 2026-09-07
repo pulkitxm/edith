@@ -12,7 +12,9 @@ struct MachinesThermalCommand: AsyncParsableCommand {
 
 enum MachineThermalBridge {
     static func status(runner: RemoteRunner) async throws -> MachinePlatformProfile {
-        let result = await MachineThermalOperationExecution.status { command, _, timeout in
+        let platform = await runner.ssh.remotePlatform ?? .linux
+        let result = await MachineThermalOperationExecution.status(platform: platform) {
+            command, _, timeout in
             do {
                 let output = try await runner.run(command, timeout: timeout)
                 guard output.succeeded else {
@@ -28,7 +30,7 @@ enum MachineThermalBridge {
             return profile
         case .failure(MachineThermalOperationError.unavailable):
             throw CLIFailure.unavailable(
-                "\(runner.machine.name) does not expose Linux platform profiles")
+                "\(runner.machine.name) does not expose platform power profiles")
         case let .failure(error):
             throw error
         }
@@ -95,6 +97,7 @@ struct MachinesThermalSetCommand: AsyncParsableCommand {
                     hint: "zero keeps the profile until it is changed again")
             }
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let available = try await MachineThermalBridge.status(runner: runner)
             guard available.choices.contains(profile) else {
                 throw CLIFailure.notFound(
@@ -103,7 +106,7 @@ struct MachinesThermalSetCommand: AsyncParsableCommand {
             }
             let result = await MachineThermalOperationExecution.set(
                 profile: profile, durationSeconds: minutes * 60,
-                machineID: runner.machine.id
+                machineID: runner.machine.id, platform: platform
             ) { command, stdin, timeout in
                 do {
                     let output = try await runner.run(

@@ -349,7 +349,7 @@ struct CompanionChatScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     if !model.loaded, model.loadError == nil {
-                        ListRowsSkeleton(rows: 5, showsLeadingDot: false, dark: dark)
+                        ConversationRailSkeleton(dark: dark)
                     } else if let loadError = model.loadError, model.conversations.isEmpty {
                         CompanionStatusLine(text: loadError, tone: .error)
                             .padding(.horizontal, UIScale.pt(10))
@@ -676,20 +676,10 @@ struct CompanionChatScreen: View {
     @ViewBuilder
     private var councilPanel: some View {
         if model.councilRunning, model.council == nil {
-            HStack(spacing: UIScale.pt(8)) {
-                ProgressView().controlSize(.small)
-                Text(
-                    "Analyst, coach and skeptic are each answering \"\(model.councilQuestion ?? "")\""
-                )
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .lineLimit(2)
-            }
-            .padding(UIScale.pt(12))
-            .frame(maxWidth: columnWidth, alignment: .leading)
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-            .padding(.horizontal, PageMetrics.gutter(compact))
-            .padding(.bottom, UIScale.pt(8))
+            CouncilPanelSkeleton(dark: dark)
+                .frame(maxWidth: columnWidth, alignment: .leading)
+                .padding(.horizontal, PageMetrics.gutter(compact))
+                .padding(.bottom, UIScale.pt(8))
         } else if let council = model.council {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ScrollView {
@@ -891,20 +881,77 @@ enum ChatBucketing {
 private struct StreamingCaret: View {
     let dark: Bool
     var waiting = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dim = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(1))
-            .fill(DashSkin.accent(dark))
-            .frame(width: UIScale.pt(7), height: UIScale.pt(14))
-            .opacity(dim ? 0.15 : 1)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: waiting ? 0.8 : 0.5).repeatForever()) {
-                    dim = true
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                SkeletonBlock(width: waiting ? nil : 84, height: 9)
+                if waiting {
+                    SkeletonBlock(width: 224, height: 9)
+                    SkeletonBlock(width: 142, height: 9)
                 }
             }
+        }
+        .accessibilityLabel("Companion is responding")
+    }
+}
+
+private struct ConversationRailSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                SkeletonBlock(width: 48, height: 7)
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.top, UIScale.pt(10))
+                ForEach(0..<5, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 142 : 176,
+                            height: 9)
+                        SkeletonBlock(width: 82, height: 7)
+                    }
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.vertical, UIScale.pt(7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        DashSkin.paper2(dark).opacity(0.35),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                }
+            }
+        }
+        .accessibilityLabel("Loading conversations")
+    }
+}
+
+private struct CouncilPanelSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                ForEach(0..<3, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 70, height: 9)
+                        SkeletonBlock(height: 8)
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 248 : 196,
+                            height: 8)
+                    }
+                }
+                Divider()
+                SkeletonBlock(width: 96, height: 9)
+                SkeletonBlock(height: 8)
+                SkeletonBlock(width: 164, height: 8)
+            }
+            .padding(UIScale.pt(12))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                DashSkin.paper2(dark),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        }
+        .accessibilityLabel("Gathering second opinions")
     }
 }
 

@@ -18,7 +18,7 @@ struct NetworkBaselineCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard let snapshot = NetworkDiagnosticsPreferences.baseline() else {
+            guard let snapshot = try await AgentClient.shared.performAsync(NetworkDiagnosticSnapshot?.self, operation: NetworkDiagnosticOperation.baseline.descriptor.id) else {
                 throw CLIFailure.notFound(
                     "no network baseline has been saved",
                     hint: "run `ed network diagnose --save-baseline`")
@@ -98,21 +98,8 @@ struct NetworkDiagnoseCommand: AsyncParsableCommand {
             if let retries { configuration.retries = retries }
             if let count { configuration.pingCount = count }
             configuration = configuration.normalized
-            let baseline = NetworkDiagnosticsPreferences.baseline()
-            let snapshot = await NetworkDiagnosticsEngine().diagnose(
-                configuration: configuration, baseline: baseline)
-            if !noHistory {
-                _ = try? await NetworkDiagnosticsTimelineStore.shared.append(
-                    snapshot, limit: configuration.timelineLimit)
-            }
-            if saveBaseline {
-                guard snapshot.state == .healthy else {
-                    throw CLIFailure(
-                        "only a healthy network snapshot can be saved as the baseline")
-                }
-                NetworkDiagnosticsPreferences.saveBaseline(snapshot)
-                AppBridge.post(IPC.Name.settingsChanged)
-            }
+            let snapshot = try await NetworkDiagnosticsClient.diagnose(
+                configuration: configuration, keepHistory: !noHistory, saveBaseline: saveBaseline)
             if json {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
