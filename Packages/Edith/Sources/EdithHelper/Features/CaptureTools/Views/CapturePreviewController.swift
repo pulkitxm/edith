@@ -104,7 +104,7 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
     }
 }
 
-private struct CapturePreviewView: View {
+struct CapturePreviewView: View {
     let image: NSImage
     let recognition: CaptureRecognition
     let operation: CaptureToolOperation

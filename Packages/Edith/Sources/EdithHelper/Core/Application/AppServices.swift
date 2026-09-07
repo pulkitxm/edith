@@ -290,7 +290,7 @@ final class AppServices {
         colorPicker?.registerHotKey()
 
         let captureToolsOn =
-            ExtensionRegistry.entry("captureTools")?.isEnabled() ?? false
+            ExtensionRegistry.entry("captureTools")?.isEnabled(in: SharedDefaults.store) ?? false
         if captureToolsOn, captureTools == nil { captureTools = CaptureToolsStore() }
         if !captureToolsOn, let store = captureTools {
             store.shutdown()
