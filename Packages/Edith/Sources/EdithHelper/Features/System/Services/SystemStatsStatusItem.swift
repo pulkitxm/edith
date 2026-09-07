@@ -12,6 +12,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var latest: SystemMonitorSnapshot?
     private var subscription: AgentSubscription?
     private var refreshTask: Task<Void, Never>?
+    private var subscriptionGeneration = UUID()
     private var cpuAlert = SustainedThresholdGate()
     private var memoryAlert = SustainedThresholdGate()
     private var diskAlert = SustainedThresholdGate()
@@ -71,6 +72,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private func stopTimer() {
+        subscriptionGeneration = UUID()
         timer?.invalidate()
         timer = nil
         refreshTask?.cancel()
@@ -109,23 +111,36 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         }
     }
 
-    private func update() {
-        if refreshTask == nil, subscription == nil {
-            refreshTask = Task { [weak self] in
-                defer { self?.refreshTask = nil }
-                self?.latest = try? await SystemMonitorClient.snapshot()
-                guard !Task.isCancelled else { return }
-                let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) {
-                    [weak self] data in
-                    guard
-                        let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data)
-                    else { return }
-                    Task { @MainActor in self?.latest = value }
-                }
-                guard !Task.isCancelled else { subscription?.cancel(); return }
-                self?.subscription = subscription
+    private func startSubscription() {
+        guard refreshTask == nil else { return }
+        guard subscription == nil else { return }
+        let generation = subscriptionGeneration
+        refreshTask = Task { [weak self] in
+            defer {
+                if self?.subscriptionGeneration == generation { self?.refreshTask = nil }
             }
+            let snapshot = try? await SystemMonitorClient.snapshot()
+            guard !Task.isCancelled, self?.subscriptionGeneration == generation else { return }
+            self?.latest = snapshot
+            let subscription = try? await AgentClient.shared.subscribeAsync(.systemMonitor) {
+                [weak self] data in
+                guard let value = try? AgentPayload.decode(SystemMonitorSnapshot.self, from: data)
+                else { return }
+                Task { @MainActor in
+                    guard self?.subscriptionGeneration == generation else { return }
+                    self?.latest = value
+                }
+            }
+            guard !Task.isCancelled, self?.subscriptionGeneration == generation else {
+                subscription?.cancel()
+                return
+            }
+            self?.subscription = subscription
         }
+    }
+
+    private func update() {
+        startSubscription()
         guard let monitor = latest else { return }
         snapshot.cpu = monitor.cpuPercent
         snapshot.memory = monitor.memoryPercent
