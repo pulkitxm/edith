@@ -86,6 +86,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     @objc private func clicked() {
         StatusItemMenu.handleClick(on: item) {
+            let snapshot = snapshot
             panel.toggle(from: item) {
                 StatusPanel(
                     title: "System",

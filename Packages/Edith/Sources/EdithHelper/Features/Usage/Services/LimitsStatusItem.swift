@@ -11,7 +11,7 @@ final class LimitsStatusItem {
     private var item: NSStatusItem?
     private var stackedView: StackedLimitsView?
 
-    init(store: UsageStore? = nil) {
+    init(store: UsageStore) {
         self.store = store
         showUnavailable()
     }
@@ -480,10 +480,11 @@ struct LimitsMenuPanel: View {
                 .disabled(store.refreshingLimits)
                 Spacer()
                 if let updated = store.limitsUpdatedAt {
-                    Text(updated, style: .relative).font(.caption).foregroundStyle(.secondary)
+                    Text("Updated \(updated, style: .relative) ago")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Button("Usage settings…", action: open)
+            Button("View usage details…", action: open)
         }
     }
 }
