@@ -7,8 +7,8 @@ public enum SystemMonitorClient {
         summary: "Read the background agent's system metrics.",
         cli: ["system", "stats"], effect: .read)
 
-    public static func snapshot() async throws -> SystemMonitorSnapshot {
-        try await AgentClient.shared.performAsync(
+    public static func snapshot(client: AgentClient = .shared) async throws -> SystemMonitorSnapshot {
+        try await client.performAsync(
             SystemMonitorSnapshot.self, operation: descriptor.id)
     }
 }

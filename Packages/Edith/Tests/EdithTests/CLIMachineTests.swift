@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithAgent
 @testable import EdithKit
 
 @Suite struct CLIMachineTests {
@@ -155,7 +156,17 @@ import Testing
     }
 
     @Test func systemStatsCommandPublishesTheMonitorContract() async {
-        let result = await CLIProbe.run(["system", "stats", "--json"])
+        let runtime = AgentRuntime(build: "test", store: nil)
+        await runtime.register(operation: SystemMonitorClient.descriptor.id.rawValue) { _ in
+            try AgentPayload.encode(SystemMonitorSnapshot(sampledAt: 1, cpuPercent: 23.5, memoryPercent: 42.5))
+        }
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        await CLIProbe.inWorld { _ in
+        let original = CLIEnvironment.systemMonitorClient
+        CLIEnvironment.systemMonitorClient = listener.client()
+        defer { CLIEnvironment.systemMonitorClient = original }
+        let result = await CLIProbe.capture(["system", "stats", "--json"])
         let monitor = result.object?["monitor"] as? [String: Any]
         let network = monitor?["network"] as? [String: Any]
         let disk = monitor?["disk"] as? [String: Any]
@@ -170,6 +181,7 @@ import Testing
         #expect(disk?["writeBps"] is Double)
         #expect(disk?.keys.contains("rootUsedPercent") == true)
         #expect(monitor?.keys.contains("power") == true)
+        }
     }
 
     @Test func dockerAvailabilityIsReportedAsAState() {

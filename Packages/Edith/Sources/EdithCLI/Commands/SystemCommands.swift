@@ -30,7 +30,7 @@ struct SystemStatsCommand: AsyncParsableCommand {
         try await execute {
             let interval = try ArgumentChecks.positive(self.interval, "--interval")
             let processes = try ArgumentChecks.nonNegative(self.processes, "--processes")
-            let subscription = follow ? try await AgentClient.shared.subscribeAsync(.systemMonitor) { _ in } : nil
+            let subscription = follow ? try await CLIEnvironment.systemMonitorClient.subscribeAsync(.systemMonitor) { _ in } : nil
             defer { subscription?.cancel() }
             let sampler = LocalMachineSampler()
             let hello = sampler.hello()
@@ -40,7 +40,7 @@ struct SystemStatsCommand: AsyncParsableCommand {
             repeat {
                 if !first { try await Task.sleep(for: .seconds(max(0.5, interval))) }
                 let sample = await sampler.sample()
-                let monitorSample = try await SystemMonitorClient.snapshot()
+                let monitorSample = try await SystemMonitorClient.snapshot(client: CLIEnvironment.systemMonitorClient)
                 let payload = JSONValue.object([
                     "host": MachineReports.hello(hello),
                     "sample": MachineReports.sample(sample, processes: processes),
