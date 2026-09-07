@@ -47,7 +47,7 @@ final class NetworkDiagnosticsModel {
             do {
                 snapshot = try await NetworkDiagnosticsClient.diagnose(configuration: config)
             } catch {
-                errorMessage = error.localizedDescription
+                if !(error is CancellationError) { errorMessage = error.localizedDescription }
                 running = false
                 activeRun = nil
                 return

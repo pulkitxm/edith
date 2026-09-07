@@ -5,6 +5,7 @@ struct NetworkDiagnosticsPanel: View {
     let openWorkspace: () -> Void
     @State private var snapshot: NetworkDiagnosticSnapshot?
     @State private var running = false
+    @State private var errorMessage: String?
     @State private var task: Task<Void, Never>?
 
     init(snapshot: NetworkDiagnosticSnapshot? = nil, openWorkspace: @escaping () -> Void) {
@@ -47,6 +48,7 @@ struct NetworkDiagnosticsPanel: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
             }
+            if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.secondary) }
             Button {
                 running ? task?.cancel() : run()
             } label: {
@@ -67,12 +69,16 @@ struct NetworkDiagnosticsPanel: View {
     private func run() {
         running = true
         let configuration = NetworkDiagnosticsPreferences.configuration()
+        errorMessage = nil
         task = Task {
-            let result = try? await NetworkDiagnosticsClient.diagnose(configuration: configuration)
-            guard !Task.isCancelled else { return }
-            snapshot = result
-            running = false
-            task = nil
+            defer { running = false; task = nil }
+            do {
+                let result = try await NetworkDiagnosticsClient.diagnose(
+                    configuration: configuration)
+                guard !Task.isCancelled else { return }
+                snapshot = result
+            } catch is CancellationError {
+            } catch { errorMessage = error.localizedDescription }
         }
     }
 

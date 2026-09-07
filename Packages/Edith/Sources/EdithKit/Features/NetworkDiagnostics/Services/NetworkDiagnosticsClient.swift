@@ -1,6 +1,7 @@
 import Foundation
 
 public struct NetworkDiagnosticRequest: Codable, Sendable {
+    public let id: UUID
     public var configuration: NetworkDiagnosticsConfiguration
     public var keepHistory: Bool
     public var saveBaseline: Bool
@@ -8,6 +9,7 @@ public struct NetworkDiagnosticRequest: Codable, Sendable {
     public init(
         configuration: NetworkDiagnosticsConfiguration, keepHistory: Bool, saveBaseline: Bool
     ) {
+        self.id = UUID()
         self.configuration = configuration
         self.keepHistory = keepHistory
         self.saveBaseline = saveBaseline
@@ -15,6 +17,7 @@ public struct NetworkDiagnosticRequest: Codable, Sendable {
 }
 
 public enum NetworkDiagnosticsClient {
+    public static let cancelOperation = "network.cancel"
     public static let timelineOperation = "network.timeline"
     public static let saveBaselineOperation = "network.baseline.save"
 
@@ -24,10 +27,17 @@ public enum NetworkDiagnosticsClient {
     ) async throws -> NetworkDiagnosticSnapshot {
         let request = NetworkDiagnosticRequest(
             configuration: configuration, keepHistory: keepHistory, saveBaseline: saveBaseline)
-        return try await client.performAsync(
-            NetworkDiagnosticSnapshot.self,
-            operation: NetworkDiagnosticOperation.diagnose.descriptor.id,
-            payload: AgentPayload.encode(request), timeout: 180)
+        return try await withTaskCancellationHandler {
+            try await client.performAsync(
+                NetworkDiagnosticSnapshot.self,
+                operation: NetworkDiagnosticOperation.diagnose.descriptor.id,
+                payload: AgentPayload.encode(request), timeout: 180)
+        } onCancel: {
+            Task {
+                _ = try? await client.performInternalAsync(
+                    cancelOperation, payload: AgentPayload.encode(request.id))
+            }
+        }
     }
 
     public static func timeline(limit: Int = 100) async throws -> [NetworkDiagnosticSnapshot] {

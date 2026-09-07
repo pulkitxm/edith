@@ -7,6 +7,7 @@ actor NetworkDiagnosticsService {
     private let engine: NetworkDiagnosticsEngine
     private var lastScheduled: Date?
     private var lastState: NetworkDiagnosticState?
+    private var runningID: UUID?
     private var running: Task<NetworkDiagnosticSnapshot, Never>?
 
     init(store: AgentStore, engine: NetworkDiagnosticsEngine = NetworkDiagnosticsEngine()) {
@@ -38,10 +39,20 @@ actor NetworkDiagnosticsService {
             NetworkDiagnosticsPreferences.saveBaseline(snapshot)
             return Data()
         }
+        await runtime.register(operation: NetworkDiagnosticsClient.cancelOperation) { payload in
+            let id = try AgentPayload.decode(UUID.self, from: payload)
+            await self.cancel(id)
+            return Data()
+        }
         await runtime.registerShutdown(id: "network.diagnostics") { await self.stop() }
     }
 
     func stop() { running?.cancel() }
+
+    func cancel(_ id: UUID) {
+        guard runningID == id else { return }
+        running?.cancel()
+    }
 
     func scheduled() async throws -> Data? {
         let configuration = NetworkDiagnosticsPreferences.configuration()
@@ -77,7 +88,11 @@ actor NetworkDiagnosticsService {
         let baseline = NetworkDiagnosticsPreferences.baseline()
         let task = Task { await engine.diagnose(configuration: configuration, baseline: baseline) }
         running = task
-        defer { running = nil }
+        runningID = request.id
+        defer {
+            running = nil
+            runningID = nil
+        }
         let snapshot = await task.value
         try Task.checkCancellation()
         if task.isCancelled { throw CancellationError() }
