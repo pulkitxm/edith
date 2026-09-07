@@ -2,12 +2,14 @@ import AppKit
 import CoreAudio
 import EdithKit
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
 final class MicMuteEngine: NSObject, FeatureModule {
     private(set) var muted = false
 
+    private let panel = StatusItemPanel()
     private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
@@ -21,6 +23,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        panel.close()
         MicHotKey.unregister()
         if muted { apply(false) }
         if let listener = deviceListListener {
@@ -58,6 +61,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
             statusItem = item
             updateIcon()
         } else if !wanted, let item = statusItem {
+            panel.close()
             NSStatusBar.system.removeStatusItem(item)
             statusItem = nil
         }
@@ -65,7 +69,19 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     @objc private func statusClicked() {
         guard let statusItem else { return }
-        StatusItemMenu.handleClick(on: statusItem) { toggle() }
+        StatusItemMenu.handleClick(on: statusItem) {
+            panel.toggle(from: statusItem) {
+                StatusPanel(
+                    title: "Microphone",
+                    open: { [weak self] in
+                        self?.panel.close()
+                        MainApp.openDashboard()
+                    }
+                ) {
+                    MicrophoneMenuControls(engine: self)
+                }
+            }
+        }
     }
 
     private func updateIcon() {
@@ -178,5 +194,19 @@ final class MicMuteEngine: NSObject, FeatureModule {
                     device, &volume, 0, nil, UInt32(MemoryLayout<Float>.size), &restore)
             }
         }
+    }
+}
+
+struct MicrophoneMenuControls: View {
+    let engine: MicMuteEngine
+
+    var body: some View {
+        Label(
+            engine.muted ? "Microphone muted" : "Microphone on",
+            systemImage: engine.muted ? "mic.slash.fill" : "mic.fill")
+        Button(engine.muted ? "Unmute microphone" : "Mute microphone") {
+            engine.toggle()
+        }
+        .buttonStyle(.bordered)
     }
 }

@@ -1,8 +1,12 @@
 import AppKit
 import EdithKit
+import SwiftUI
+import Observation
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
+    private let panel = StatusItemPanel()
+    private let snapshot = SystemMenuSnapshot()
     private var item: NSStatusItem!
     private var timer: Timer?
     private var previous: CPUTicks?
@@ -67,6 +71,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        panel.close()
         stopTimer()
         for observer in sleepObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -80,7 +85,22 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     @objc private func clicked() {
-        StatusItemMenu.handleClick(on: item) { MainApp.open(section: "system") }
+        StatusItemMenu.handleClick(on: item) {
+            panel.toggle(from: item) {
+                StatusPanel(
+                    title: "System",
+                    open: { [weak self] in
+                        self?.panel.close()
+                        MainApp.open(section: "system")
+                    }
+                ) {
+                    StatusProgressRow(title: "CPU", percent: snapshot.cpu)
+                    StatusProgressRow(title: "Memory", percent: snapshot.memory)
+                    Text("Updates every 2 seconds")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func update() {
@@ -92,6 +112,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             previous = SystemStatsReader.readCPUTicks()
         }
         let memory = SystemStatsReader.memoryUsedPercent()
+        snapshot.cpu = cpu
+        snapshot.memory = memory
         ensureStyleCache()
         let title = title(cpu: cpu, memory: memory)
         item.length = StatusItemSizing.titleLength(title)
@@ -153,4 +175,11 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             NSAttributedString(string: "\(Int(value.rounded()))", attributes: numberAttributes))
         out.append(NSAttributedString(string: "%", attributes: percentAttributes))
     }
+}
+
+@MainActor
+@Observable
+final class SystemMenuSnapshot {
+    var cpu = 0.0
+    var memory = 0.0
 }
