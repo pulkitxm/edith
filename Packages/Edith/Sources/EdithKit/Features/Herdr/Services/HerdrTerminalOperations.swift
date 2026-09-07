@@ -54,4 +54,15 @@ public enum HerdrMachineTerminal {
             executable: executable.path, arguments: arguments(for: agent),
             environment: clean)
     }
+
+    public static func windowsLaunchRequest(
+        connection: SSHConnection, environment: [String]
+    ) -> TerminalLaunchRequest {
+        TerminalLaunchRequest(
+            executable: SSHConnection.executable.path,
+            arguments: connection.terminalArguments(
+                remoteCommand: remoteHerdrCommand(
+                    arguments: [], platform: .windows, interactive: true)),
+            environment: unnested(environment) + connection.terminalEnvironment())
+    }
 }

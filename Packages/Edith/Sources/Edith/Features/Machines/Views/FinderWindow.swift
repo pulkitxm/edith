@@ -31,6 +31,7 @@ struct FinderWindowView: View {
 }
 
 struct FinderBody: View {
+    @Environment(\.machineViewPresented) private var presented
     @Bindable var model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
@@ -58,15 +59,18 @@ struct FinderBody: View {
             statusBar
         }
         .background(DashSkin.paper(dark))
-        .task {
-            guard connectionsEnabled else { return }
+        .task(id: presented) {
+            guard connectionsEnabled, presented else {
+                model.stopLoading()
+                return
+            }
             model.connectIfNeeded()
             await model.waitForConnection()
             await model.loadPlaces()
             await model.load()
         }
         .onChange(of: model.session.state.isConnected) { _, connected in
-            if connectionsEnabled, connected { model.refresh() }
+            if connectionsEnabled, presented, connected { model.refresh() }
         }
         .onDisappear { model.stopLoading() }
         .overlay {
@@ -136,6 +140,8 @@ struct FinderBody: View {
                 model.quickLookPath = nil
             } else if model.renaming != nil {
                 model.renaming = nil
+            } else if model.canCancelTransfer {
+                model.cancelTransfer()
             } else {
                 model.selection = []
             }
@@ -315,9 +321,9 @@ struct FinderBody: View {
             } else {
                 FinderListView(model: model)
             }
-            if model.loading, model.entries.isEmpty {
-                FinderSkeleton(mode: model.viewMode, dark: dark)
-            } else if model.visibleEntries.isEmpty, !model.loading {
+            if model.projectingEntries || (model.loading && model.entries.isEmpty) {
+                FinderSkeleton(mode: model.viewMode, iconSize: model.iconSize, dark: dark)
+            } else if model.visibleEntries.isEmpty, !model.loading, !model.projectingEntries {
                 Text(model.errorMessage ?? "This folder is empty.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -372,7 +378,24 @@ struct FinderBody: View {
 
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            if let message = model.statusMessage ?? model.errorMessage {
+            if let progress = model.progress {
+                ProgressView(value: progress.fraction)
+                    .frame(width: UIScale.pt(90))
+                Text(progress.description)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(1)
+                if model.canCancelTransfer {
+                    Button {
+                        model.cancelTransfer()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.edith(.iconOnly))
+                    .help("Cancel transfer")
+                    .accessibilityLabel("Cancel transfer")
+                }
+            } else if let message = model.statusMessage ?? model.errorMessage {
                 Text(message)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(
@@ -386,7 +409,10 @@ struct FinderBody: View {
             }
             Spacer(minLength: 0)
             if model.loading {
-                ProgressView().controlSize(.small).scaleEffect(0.6)
+                SkeletonGroup {
+                    SkeletonBlock(width: 12, height: 12, corner: 6)
+                }
+                .accessibilityLabel("Loading folder")
             }
             if model.viewMode == .icon {
                 Slider(value: $model.iconSize, in: 40...128)

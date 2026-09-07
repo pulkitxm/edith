@@ -104,6 +104,17 @@ import Testing
         #expect(result.stderr.contains("Quick Actions extension is off"))
     }
 
+    @Test func selectedActionsCannotRunWhenTheirSuiteIsDisabled() async {
+        await CLIProbe.inWorld { world in
+            let state = State()
+            configure(world, state: state)
+            world.shared.set(false, forKey: AppStorageKeys.Suites.system)
+            let result = await CLIProbe.capture(["quick-actions", "hidden-files", "--json"])
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(!state.hiddenFiles)
+        }
+    }
+
     @Test func parserAndCommandTreeCoverEveryOperation() throws {
         #expect(
             try EdRoot.parseAsRoot(["quick-actions", "appearance"])
@@ -123,6 +134,7 @@ import Testing
     }
 
     private func configure(_ world: CLIWorld, state: State) {
+        world.shared.set(true, forKey: AppStorageKeys.Suites.system)
         world.shared.set(true, forKey: AppStorageKeys.Tabs.quickActionsEnabled)
         CLIEnvironment.quickActionCenter = {
             QuickActionCenter(

@@ -7,23 +7,31 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case cameraPreview
     case clipboardHistory
     case companionService
+    case databaseBroker
+    case diskCleaning
+    case emojiInsertion
     case externalMediaControl
     case fileShelf
     case globalPaste
     case herdrSessions
     case globalShortcuts
     case inputSuppression
+    case keystrokeObservation
     case localMusicPlayback
     case localTerminal
     case machineManagement
     case mediaControls
+    case mediaDownloads
     case microphoneControl
     case notifications
+    case packageManagement
     case preventSleep
     case runningApplications
     case screenColorSampling
     case screenShareDetection
     case systemActions
+    case skillInstallation
+    case siteAuditing
     case systemMetrics
     case usageCollection
     case windowDimming
@@ -90,8 +98,10 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .bluetoothMonitoring: .permissionRequired,
                     .calendarEvents: .permissionRequired,
                     .cameraPreview: .permissionRequired,
+                    .emojiInsertion: .permissionRequired,
                     .globalPaste: .permissionRequired,
                     .inputSuppression: .permissionRequired,
+                    .keystrokeObservation: .permissionRequired,
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,

@@ -7,6 +7,7 @@ struct MarkdownBody: View {
     var size: CGFloat = 12.5
     var bodyInk = false
     var cacheKey: String?
+    var documentStyle = false
 
     fileprivate enum Block {
         case heading(Int, AttributedString)
@@ -20,7 +21,7 @@ struct MarkdownBody: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(documentStyle ? 18 : 7)) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
@@ -38,14 +39,18 @@ struct MarkdownBody: View {
         case let .heading(level, title):
             Text(title)
                 .font(
-                    DashSkin.serif(
-                        level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1,
-                        weight: .semibold)
+                    documentStyle
+                        ? .system(
+                            size: UIScale.pt(level == 1 ? 24 : level == 2 ? 18 : 15),
+                            weight: .semibold)
+                        : DashSkin.serif(
+                            level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1,
+                            weight: .semibold)
                 )
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, UIScale.pt(3))
+                .padding(.top, UIScale.pt(documentStyle ? 12 : 3))
         case let .items(items):
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(documentStyle ? 8 : 3)) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
                         Text(item.0)
@@ -63,7 +68,7 @@ struct MarkdownBody: View {
                 .font(DashSkin.mono(size - 1.5))
                 .foregroundStyle(bodyColor)
                 .textSelection(.enabled)
-                .padding(UIScale.pt(8))
+                .padding(UIScale.pt(documentStyle ? 16 : 8))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         case let .paragraph(content):
@@ -71,6 +76,7 @@ struct MarkdownBody: View {
                 .font(.system(size: UIScale.pt(size)))
                 .foregroundStyle(bodyColor)
                 .textSelection(.enabled)
+                .lineSpacing(UIScale.pt(documentStyle ? 4 : 0))
         }
     }
 }

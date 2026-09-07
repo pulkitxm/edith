@@ -206,6 +206,19 @@ public enum DownloadOperationError: LocalizedError, Equatable {
 }
 
 public enum DownloadOperationExecution {
+    private static func isDaemonQueue(_ file: URL) -> Bool {
+        file.standardizedFileURL == DownloadQueue.file.standardizedFileURL
+    }
+
+    public static func liveRecords(
+        file: URL = DownloadQueue.file, client: AgentDownloadClient = AgentDownloadClient()
+    ) async -> [DownloadRecord] {
+        if isDaemonQueue(file), let snapshot = try? await client.snapshot() {
+            return snapshot.records
+        }
+        return DownloadQueue.load(from: file)
+    }
+
     public static func list(
         activeOnly: Bool = false, limit: Int = 25, file: URL = DownloadQueue.file
     ) -> [DownloadRecord] {
@@ -234,7 +247,12 @@ public enum DownloadOperationExecution {
         now: Date = Date(), file: URL = DownloadQueue.file,
         outputDirectory: URL = Repo.musicDir
     ) throws -> [DownloadRecord] {
-        try DownloadQueue.enqueue(
+        if isDaemonQueue(file) {
+            return try AgentDownloadClient().mutate(
+                .enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: outputDirectory)
+            ).added
+        }
+        return try DownloadQueue.enqueue(
             urls: urls, prefix: prefix, kind: kind, now: now, file: file,
             outputDirectory: outputDirectory)
     }
@@ -242,6 +260,9 @@ public enum DownloadOperationExecution {
     public static func retry(
         id: UUID? = nil, all: Bool = false, file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
+        if isDaemonQueue(file) {
+            return try AgentDownloadClient().mutate(.retry(id: id, all: all)).mutation
+        }
         let changed = try DownloadQueue.retry(
             { record in all ? record.canRetry : record.id == id }, file: file)
         return DownloadMutationResult(changed: changed, records: DownloadQueue.load(from: file))
@@ -261,6 +282,11 @@ public enum DownloadOperationExecution {
         id: UUID? = nil, includeQueued: Bool = true, reason: String = "Cancelled",
         file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
+        if isDaemonQueue(file) {
+            return try AgentDownloadClient().mutate(
+                .cancel(id: id, includeQueued: includeQueued, reason: reason)
+            ).mutation
+        }
         var records = DownloadQueue.load(from: file)
         var changed = 0
         for index in records.indices where id == nil || records[index].id == id {
@@ -291,6 +317,9 @@ public enum DownloadOperationExecution {
     public static func remove(
         id: UUID, file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
+        if isDaemonQueue(file) {
+            return try AgentDownloadClient().mutate(.remove(id: id)).mutation
+        }
         let changed = try DownloadQueue.remove({ $0.id == id }, file: file)
         return DownloadMutationResult(changed: changed, records: DownloadQueue.load(from: file))
     }
@@ -304,6 +333,9 @@ public enum DownloadOperationExecution {
     public static func clear(
         includeActive: Bool = false, file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
+        if isDaemonQueue(file) {
+            return try AgentDownloadClient().mutate(.clear(includeActive: includeActive)).mutation
+        }
         let changed = try DownloadQueue.remove(
             { includeActive || $0.isFinished }, file: file)
         return DownloadMutationResult(changed: changed, records: DownloadQueue.load(from: file))
@@ -321,8 +353,13 @@ public enum DownloadOperationExecution {
         guard case .done(let output) = records[index].status else {
             throw DownloadOperationError.noResult(position)
         }
-        let urls = output.components(separatedBy: ", ").filter { !$0.isEmpty }.map {
-            root.appendingPathComponent(($0 as NSString).lastPathComponent)
+        let urls: [URL]
+        if let paths = records[index].resultPaths {
+            urls = paths.map { URL(fileURLWithPath: $0) }
+        } else {
+            urls = output.components(separatedBy: ", ").filter { !$0.isEmpty }.map {
+                root.appendingPathComponent(($0 as NSString).lastPathComponent)
+            }
         }
         guard !urls.isEmpty else { throw DownloadOperationError.noResult(position) }
         if let missing = urls.first(where: { !exists($0.path) }) {

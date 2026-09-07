@@ -25,6 +25,10 @@ struct QuickActionsRows: View {
         GridItem(.adaptive(minimum: UIScale.pt(180)), spacing: UIScale.pt(8))
     ]
 
+    init(center: QuickActionCenter = .live) {
+        _model = State(initialValue: QuickActionsModel(center: center))
+    }
+
     var body: some View {
         Group {
             Section("Actions") {

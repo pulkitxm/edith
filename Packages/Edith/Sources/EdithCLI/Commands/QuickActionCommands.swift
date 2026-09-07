@@ -15,8 +15,8 @@ struct QuickActionsCommand: AsyncParsableCommand {
 enum QuickActionsCLI {
     static func requireEnabled() throws {
         guard
-            CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.Tabs.quickActionsEnabled)
-                as? Bool == true
+            ExtensionRegistry.entry("quickActions")?.isEnabled(in: CLIEnvironment.sharedDefaults)
+                == true
         else {
             throw CLIFailure.unavailable(
                 "the Quick Actions extension is off",
@@ -94,8 +94,8 @@ struct QuickActionsStatusCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let enabled =
-                CLIEnvironment.sharedDefaults.object(
-                    forKey: AppStorageKeys.Tabs.quickActionsEnabled) as? Bool ?? false
+                ExtensionRegistry.entry("quickActions")?.isEnabled(
+                    in: CLIEnvironment.sharedDefaults) ?? false
             let snapshot = CLIEnvironment.quickActionCenter().snapshot()
             if json {
                 CLIOut.json(QuickActionsCLI.statusJSON(snapshot, enabled: enabled))

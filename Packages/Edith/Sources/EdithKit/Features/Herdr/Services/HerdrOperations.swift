@@ -36,6 +36,37 @@ public struct TerminalLaunchRequest: Equatable, Sendable {
 }
 
 public enum HerdrOperationExecution {
+    public static func localControlRequest(
+        for agent: HerdrAgent, environment: [String], executable: URL? = HerdrCollector.executable()
+    ) -> TerminalLaunchRequest {
+        let arguments = HerdrTerminalControlCommand.arguments(
+            session: agent.session, pane: agent.pane)
+        guard let executable else {
+            return TerminalLaunchRequest(
+                executable: "/bin/zsh",
+                arguments: [
+                    "-c",
+                    HerdrTerminalControlCommand.remoteShellLine(
+                        session: agent.session, pane: agent.pane),
+                ],
+                environment: environment)
+        }
+        return TerminalLaunchRequest(
+            executable: executable.path, arguments: arguments, environment: environment)
+    }
+
+    public static func remoteControlRequest(
+        for agent: HerdrAgent, connection: SSHConnection, environment: [String],
+        platform: RemoteMachinePlatform = .linux
+    ) -> TerminalLaunchRequest {
+        TerminalLaunchRequest(
+            executable: SSHConnection.executable.path,
+            arguments: connection.execArguments(
+                command: HerdrTerminalControlCommand.remoteShellLine(
+                    session: agent.session, pane: agent.pane, platform: platform)),
+            environment: environment + connection.terminalEnvironment())
+    }
+
     public static func localAttachRequest(
         for agent: HerdrAgent, environment: [String], executable: URL? = HerdrCollector.executable()
     ) -> TerminalLaunchRequest {
@@ -56,13 +87,14 @@ public enum HerdrOperationExecution {
     }
 
     public static func remoteAttachRequest(
-        for agent: HerdrAgent, connection: SSHConnection, environment: [String]
+        for agent: HerdrAgent, connection: SSHConnection, environment: [String],
+        platform: RemoteMachinePlatform = .linux
     ) -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(
                 remoteCommand: HerdrAttachCommand.remoteShellLine(
-                    session: agent.session, pane: agent.pane)),
+                    session: agent.session, pane: agent.pane, platform: platform)),
             environment: environment + connection.terminalEnvironment())
     }
 }

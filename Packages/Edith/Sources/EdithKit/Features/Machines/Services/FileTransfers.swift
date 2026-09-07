@@ -25,14 +25,14 @@ public struct MachineItemsPayload: Codable, Equatable, Sendable {
 public enum DropIntent: Equatable, Sendable {
     case moveWithinMachine([String])
     case copyWithinMachine([String])
-    case transferBetweenMachines(from: UUID, paths: [String])
+    case transferBetweenMachines(from: UUID, paths: [String], moving: Bool)
     case uploadLocalFiles([String])
 
     public var paths: [String] {
         switch self {
         case let .moveWithinMachine(paths), let .copyWithinMachine(paths):
             return paths
-        case let .transferBetweenMachines(_, paths):
+        case let .transferBetweenMachines(_, paths, _):
             return paths
         case let .uploadLocalFiles(paths):
             return paths
@@ -50,7 +50,8 @@ public enum DropResolver {
                 return optionHeld
                     ? .copyWithinMachine(payload.paths) : .moveWithinMachine(payload.paths)
             }
-            return .transferBetweenMachines(from: payload.machineID, paths: payload.paths)
+            return .transferBetweenMachines(
+                from: payload.machineID, paths: payload.paths, moving: false)
         }
         guard !fileURLPaths.isEmpty else { return nil }
         return .uploadLocalFiles(fileURLPaths)
@@ -63,7 +64,7 @@ public enum DropResolver {
             if path == normalizedDestination { return false }
             if path == "/" || path == "." { return false }
             if normalizedDestination.hasPrefix(path + "/") { return false }
-            let rawParent = (path as NSString).deletingLastPathComponent
+            let rawParent = FileListing.parentPath(of: path) ?? ""
             let parent = rawParent.isEmpty ? "." : rawParent
             if parent == normalizedDestination { return false }
         }
@@ -71,6 +72,7 @@ public enum DropResolver {
     }
 
     private static func normalizedPath(_ path: String) -> String {
+        let path = path.replacingOccurrences(of: "\\", with: "/")
         let absolute = path.hasPrefix("/")
         var components: [Substring] = []
         for component in path.split(separator: "/", omittingEmptySubsequences: true) {
