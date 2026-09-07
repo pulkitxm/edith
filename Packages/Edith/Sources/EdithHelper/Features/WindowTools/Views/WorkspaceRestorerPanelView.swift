@@ -76,7 +76,10 @@ struct WorkspaceRestorerPanelView: View {
             }
             HStack {
                 if running {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica("Updating workspace") {
+                        Image(systemName: "rectangle.3.group")
+                            .foregroundStyle(.secondary)
+                    }
                     Button("Cancel") { request(.cancel) }
                 }
                 if library.recoveryProfile != nil {
