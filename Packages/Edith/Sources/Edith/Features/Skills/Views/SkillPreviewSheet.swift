@@ -58,10 +58,6 @@ struct SkillPreviewSheet: View {
                 .labelsHidden()
                 .frame(width: UIScale.pt(210))
                 Spacer()
-                if mode == .markdown {
-                    Label("Read-only", systemImage: "lock")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
                 Button {
                     guard let document else { return }
                     NSPasteboard.general.clearContents()
