@@ -258,6 +258,7 @@ import Testing
             ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
             ("database", "DatabaseRows", "enabled", "ExtensionsPane.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
+            ("plugins", "PluginsRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),

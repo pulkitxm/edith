@@ -39,3 +39,10 @@ The skill's source is
 It is packaged into Edith's resource bundle, so installation does not need to
 clone the Edith repository. The same folder uses the standard SKILL.md format
 accepted by the [Skills installer](https://github.com/vercel-labs/skills).
+
+Agent marks reuse the bundled provider artwork. Additional official artwork comes
+from [Command Code](https://commandcode.ai/favicon/2024/safari-pinned-tab.svg),
+[Factory](https://factory.ai/favicon.svg),
+[Warp](https://warp.dev/img/logos/warp-pixel-icon.svg),
+[Mistral](https://mistral.ai) and
+[Zed](https://github.com/zed-industries/zed/blob/main/assets/images/zed_logo.svg).

@@ -13,12 +13,9 @@ struct SkillInstallSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(alignment: .top, spacing: UIScale.pt(14)) {
-                Image(
-                    systemName: model.installationSucceeded
-                        ? "checkmark.circle.fill" : "square.stack.3d.up"
-                )
-                .font(.system(size: UIScale.pt(28), weight: .light))
-                .foregroundStyle(model.installationSucceeded ? Color.green : Color.accentColor)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable().scaledToFit()
+                    .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text(model.installationSucceeded ? "Plugin installed" : "Install plugin")
                         .font(.system(size: UIScale.pt(21), weight: .semibold))
@@ -88,16 +85,18 @@ struct SkillInstallSheet: View {
             }
         }
         .padding(UIScale.pt(28))
-        .frame(width: UIScale.pt(540))
+        .frame(width: UIScale.pt(600))
         .interactiveDismissDisabled(model.isInstalling)
     }
 
     private var targets: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack {
-                Text("Install for").font(.system(size: UIScale.pt(13), weight: .semibold))
+                Text("Agents on this Mac").font(.system(size: UIScale.pt(13), weight: .semibold))
                 Spacer()
-                Text("This Mac · All projects").font(.caption).foregroundStyle(.secondary)
+                Text("\(model.selectedAgentIDs.count) of \(model.agents.count) selected").font(
+                    .caption
+                ).foregroundStyle(.secondary)
             }
             if model.agents.isEmpty {
                 Text(
@@ -108,15 +107,11 @@ struct SkillInstallSheet: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(model.agents) { agent in
-                            Toggle(
-                                isOn: Binding(
-                                    get: { model.selectedAgentIDs.contains(agent.id) },
-                                    set: { model.setSelected(agent.id, enabled: $0) }
-                                )
-                            ) {
-                                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                                    Text(agent.name).font(
-                                        .system(size: UIScale.pt(13), weight: .medium))
+                            HStack(spacing: UIScale.pt(12)) {
+                                SkillAgentLogo(agent: agent)
+                                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                    Text(agent.name)
+                                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                                     Text(
                                         agent.resolvedDirectory(
                                             home: FileManager.default.homeDirectoryForCurrentUser,
@@ -127,21 +122,28 @@ struct SkillInstallSheet: View {
                                             with: "~")
                                     )
                                     .font(.system(size: UIScale.pt(10), design: .monospaced))
-                                    .foregroundStyle(.secondary).lineLimit(1)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Toggle(
+                                    agent.name,
+                                    isOn: Binding(
+                                        get: { model.selectedAgentIDs.contains(agent.id) },
+                                        set: { model.setSelected(agent.id, enabled: $0) }
+                                    )
+                                )
+                                .labelsHidden()
+                                .accessibilityLabel(agent.name)
+                                .toggleStyle(.switch).controlSize(.small).fixedSize()
                             }
-                            .accessibilityLabel(agent.name)
-                            .accessibilityValue(
-                                model.selectedAgentIDs.contains(agent.id) ? "On" : "Off"
-                            )
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
+                            .padding(.horizontal, UIScale.pt(12))
                             .padding(.vertical, UIScale.pt(10))
                             Divider()
                         }
                     }
                 }
-                .frame(height: UIScale.pt(CGFloat(min(model.agents.count, 5)) * 57))
+                .frame(height: UIScale.pt(CGFloat(min(model.agents.count, 5)) * 61))
                 .disabled(model.isInstalling)
             }
             Text(

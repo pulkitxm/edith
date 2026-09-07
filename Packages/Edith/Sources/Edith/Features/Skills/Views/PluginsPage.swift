@@ -66,13 +66,12 @@ private struct SkillCatalogRow: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(16)) {
-            Image(systemName: skill.symbol)
-                .font(.system(size: UIScale.pt(19), weight: .light))
-                .foregroundStyle(.secondary)
-                .frame(width: UIScale.pt(28))
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable().scaledToFit()
+                .frame(width: UIScale.pt(52), height: UIScale.pt(52))
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 Text(skill.name)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.system(size: UIScale.pt(17), weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(skill.summary)
@@ -94,12 +93,22 @@ private struct SkillCatalogRow: View {
                         .frame(height: UIScale.pt(30))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 Divider().frame(height: UIScale.pt(18))
                 Menu {
                     if agents.isEmpty { Text("No agents found on this Mac") }
                     ForEach(agents) { agent in
-                        Button("Install for \(agent.name)…") { install(agent.id) }
+                        Button {
+                            install(agent.id)
+                        } label: {
+                            Label {
+                                Text("Install for \(agent.name)…")
+                            } icon: {
+                                if let image = SkillBrand.image(for: agent.id) {
+                                    Image(nsImage: image)
+                                }
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: "chevron.down")
@@ -124,5 +133,24 @@ private struct SkillCatalogRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(
                 DashSkin.line(scheme == .dark)))
+    }
+}
+
+struct SkillAgentLogo: View {
+    let agent: SkillAgent
+
+    var body: some View {
+        Group {
+            if let image = SkillBrand.image(for: agent.id) {
+                Image(nsImage: image).resizable().scaledToFit()
+            } else {
+                Text(String(agent.name.prefix(1)))
+                    .font(.system(size: UIScale.pt(17), weight: .semibold))
+            }
+        }
+        .frame(width: UIScale.pt(25), height: UIScale.pt(25))
+        .frame(width: UIScale.pt(40), height: UIScale.pt(40))
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        .accessibilityHidden(true)
     }
 }
