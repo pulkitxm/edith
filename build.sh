@@ -243,13 +243,17 @@ fi
 
 sign() {
   local identifier
+  local signing_args=()
+  if [ "$1" = "$HELPER" ]; then
+    signing_args=(--entitlements Resources/Helper.entitlements)
+  fi
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
   if [ -n "$TEAM_ID" ]; then
-    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS --requirements \
+    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS ${signing_args[@]+"${signing_args[@]}"} --requirements \
       "=designated => identifier \"$identifier\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
       "$1"
   else
-    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
+    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS ${signing_args[@]+"${signing_args[@]}"} "$1"
   fi
 }
 

@@ -4,6 +4,20 @@ import Testing
 @testable import EdithKit
 
 @Suite struct ScreenRecordingTests {
+    @Test func recordingHelperDeclaresMicrophoneAccess() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        func plist(_ name: String) throws -> [String: Any] {
+            let data = try Data(contentsOf: root.appendingPathComponent("Resources/" + name))
+            return try #require(
+                PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        }
+        let info = try plist("HelperInfo.plist")
+        let entitlements = try plist("Helper.entitlements")
+        #expect((info["NSMicrophoneUsageDescription"] as? String)?.isEmpty == false)
+        #expect(entitlements["com.apple.security.device.audio-input"] as? Bool == true)
+    }
+
     @Test func cancellationBeforeExportDoesNotStartReadingOrWriting() async throws {
         let exporter = ScreenRecordingExporter()
         exporter.cancel()

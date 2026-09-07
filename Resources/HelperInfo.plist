@@ -32,6 +32,8 @@
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Edith records microphone audio in screen recordings when you enable it.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>
