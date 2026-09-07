@@ -195,6 +195,34 @@ import Testing
         #expect(snapshot?.phase == .failed)
     }
 
+    @Test func failedCollectorSnapshotsPublishButDoNotReportSuccess() async throws {
+        let limits = LimitsTopicSnapshot(
+            refreshedAt: Date(),
+            providers: [
+                LimitsProviderSnapshot(
+                    provider: .codex, session: nil, week: nil, error: "provider unavailable")
+            ], failure: nil)
+        let usage = UsageTopicSnapshot(
+            refreshedAt: Date(), seconds: 1, days: 0, totalCostCents: 0,
+            failure: "usage collection failed")
+        for (topic, payload, message) in [
+            (AgentTopic.limits, try AgentPayload.encode(limits), "provider unavailable"),
+            (AgentTopic.usage, try AgentPayload.encode(usage), "usage collection failed"),
+        ] {
+            let box = PayloadBox()
+            let scheduler = JobScheduler(publish: { box.record($0, $1) })
+            await scheduler.register(
+                AgentJob(descriptor: descriptor("fixture.refresh", topic: topic)) { payload })
+            #expect(await scheduler.runNow("fixture.refresh") == payload)
+            let snapshot = await scheduler.snapshots.first
+            #expect(snapshot?.phase == .failed)
+            #expect(snapshot?.lastError == message)
+            #expect(snapshot?.runCount == 0)
+            #expect(box.topics.contains(topic))
+            await scheduler.shutdown()
+        }
+    }
+
     @Test func aDisabledJobNeverRuns() async {
         let scheduler = JobScheduler()
         await scheduler.register(
