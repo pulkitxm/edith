@@ -103,6 +103,11 @@ import Testing
         let asset = AVURLAsset(url: result)
         #expect(try await asset.load(.duration).seconds > 1)
         #expect(FileManager.default.fileExists(atPath: source.path))
+        let frameGenerator = AVAssetImageGenerator(asset: asset)
+        let frame = try await frameGenerator.image(
+            at: CMTime(seconds: 0.6, preferredTimescale: 600))
+        let recognition = try CaptureRecognizer.recognize(frame.image, detectCodes: false)
+        #expect(recognition.text.contains("Release preview"))
         if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
             let destination = URL(fileURLWithPath: directory).appendingPathComponent(
                 "screen-recorder.mp4")

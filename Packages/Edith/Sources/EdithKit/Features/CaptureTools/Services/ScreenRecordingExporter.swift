@@ -321,6 +321,8 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
                 opacity.keyTimes = [0, 0.2, 1]
                 opacity.beginTime = AVCoreAnimationBeginTimeAtZero + time
                 opacity.duration = 0.5
+                opacity.isRemovedOnCompletion = false
+                opacity.fillMode = .both
                 ring.add(opacity, forKey: "click")
                 parent.addSublayer(ring)
             }
@@ -391,6 +393,8 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
             opacity.keyTimes = [0, 0.05, 0.95, 1]
             opacity.beginTime = AVCoreAnimationBeginTimeAtZero + start
             opacity.duration = end - start
+            opacity.isRemovedOnCompletion = false
+            opacity.fillMode = .both
             layer.add(opacity, forKey: "visibility")
             parent.addSublayer(layer)
         }
