@@ -8,7 +8,14 @@ public enum RecordingExportWorkflow {
         ) { payload, context in
             guard
                 ExtensionRegistry.entry("captureTools")?.isEnabled(in: SharedDefaults.store) == true
-            else { throw ScreenRecordingError.disabled }
+            else {
+                throw NSError(
+                    domain: "RecordingExport", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Enable Capture Tools in the Media suite before exporting recordings."
+                    ])
+            }
             let request = try AgentPayload.decode(RecordingExportRequest.self, from: payload)
             let exporter = ScreenRecordingExporter()
             exporter.onProgress = { context.report(String($0)) }
