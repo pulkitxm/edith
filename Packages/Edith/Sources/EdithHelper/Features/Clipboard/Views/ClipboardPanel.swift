@@ -43,13 +43,12 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         p.setContentSize(NSSize(width: Self.width, height: height))
         let position = PopupPosition.stored(forKey: AppStorageKeys.Clipboard.popupAt)
         let size = p.frame.size
-        let statusItemFrame = PanelController.shared?.statusItemFrame
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
         showTask = Task.detached { [weak self] in
             let origin = await position.origin(
-                size: size, statusItemFrame: statusItemFrame, anchors: .clipboard)
+                size: size, statusItemFrame: nil, anchors: .clipboard)
             guard !Task.isCancelled else { return }
             await self?.finishShow(origin: origin, generation: generation)
         }

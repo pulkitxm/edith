@@ -1,5 +1,5 @@
 import Darwin
-import EdithKit
+@testable import EdithKit
 import Foundation
 import Testing
 
@@ -32,6 +32,28 @@ private final class CommandLineRecorder: @unchecked Sendable {
         }
     }
 
+    @Test func nativeCompletionWinsWhenTheObserverResumesAfterItsDeadline() async throws {
+        let observed = DispatchSemaphore(value: 0)
+        let completion = DispatchSemaphore(value: 0)
+        let process = try CLIChildProcess(
+            request: CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+                environment: [:],
+                terminatesProcessGroup: true),
+            input: -1, output: -1, error: -1,
+            onExit: {
+                completion.signal(); observed.signal()
+            })
+        #expect(await waitForSignal(observed))
+        #expect(!process.isRunning)
+        let deadline = ProcessInfo.processInfo.systemUptime
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(CLICommandRunner.pollForExit(completion, deadline: deadline) == .finished)
+        #expect(
+            CLICommandRunner.pollForExit(DispatchSemaphore(value: 0), deadline: deadline)
+                == .timedOut)
+    }
+
     @Test func separatedStreamsKeepPartialFinalLinesOnTheirOwnChannels() async throws {
         let standardOutput = CommandLineRecorder()
         let standardError = CommandLineRecorder()
@@ -46,6 +68,9 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(result.terminationStatus == 0)
         #expect(standardOutput.snapshot == ["event"])
         #expect(standardError.snapshot == ["diagnostic"])
+        #expect(result.standardOutput == "event")
+        #expect(result.standardError == "diagnostic")
+        #expect(result.output == "eventdiagnostic")
     }
 
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
@@ -144,6 +169,105 @@ private final class CommandLineRecorder: @unchecked Sendable {
         }
 
         try await expectGone(try processIdentifiers(fixture))
+    }
+
+    @Test func nativeExitReleasesItsProcessSourceOwnership() async throws {
+        let finished = DispatchSemaphore(value: 0)
+        weak var released: CLIChildProcess?
+        do {
+            let process = try CLIChildProcess(
+                request: CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "exit 7"],
+                    environment: [:], terminatesProcessGroup: true),
+                input: -1, output: -1, error: -1, onExit: { finished.signal() })
+            released = process
+            #expect(await waitForSignal(finished))
+            #expect(process.terminationStatus == 7)
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while released != nil, Date() < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(released == nil)
+    }
+
+    @Test func nativeLaunchPreservesArgumentsEnvironmentDirectoryAndBinaryInput() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let input = Data([0, 1, 127, 128, 255, 10])
+        let result = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: [
+                    "-c",
+                    "printf '%s|%s|%s|%s\\n' \"$PPID\" \"$TEST_VALUE\" \"$PWD\" \"$1\" >&2; exec /bin/cat",
+                    "native-test", "literal \"quoted\" value",
+                ],
+                environment: ["PATH": "/usr/bin:/bin", "TEST_VALUE": "native value"],
+                currentDirectoryURL: fixture.directory, timeout: 3,
+                standardInputData: input, terminatesProcessGroup: true),
+            onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+        #expect(result.terminationStatus == 0)
+        #expect(result.standardOutputData == input)
+        let fields = result.standardError.trimmingCharacters(in: .newlines).split(separator: "|")
+            .map(String.init)
+        #expect(fields.count == 4)
+        #expect(fields.first == String(getpid()))
+        #expect(fields.dropFirst().first == "native value")
+        let returnedDirectory = try #require(fields.dropFirst(2).first)
+        #expect(
+            URL(fileURLWithPath: String(returnedDirectory)).resolvingSymlinksInPath()
+                == fixture.directory.resolvingSymlinksInPath())
+        #expect(fields.last == "literal \"quoted\" value")
+    }
+
+    @Test func concurrentCommandsHaveDistinctOwnedGroupsAndCancelIndependently() async throws {
+        let first = try makeFixture()
+        let second = try makeFixture()
+        defer {
+            try? FileManager.default.removeItem(at: first.directory)
+            try? FileManager.default.removeItem(at: second.directory)
+        }
+        let left = Task {
+            try await CLICommandRunner.runLocal(request(first, mode: "wait", timeout: 10)) { _ in }
+        }
+        let right = Task {
+            try await CLICommandRunner.runLocal(request(second, mode: "wait", timeout: 10)) { _ in }
+        }
+        defer {
+            left.cancel()
+            right.cancel()
+        }
+        let leftIDs = try await processIdentifiers(first)
+        let rightIDs = try await processIdentifiers(second)
+        #expect(getpgid(leftIDs[0]) == leftIDs[0])
+        #expect(getpgid(leftIDs[1]) == leftIDs[0])
+        #expect(getpgid(rightIDs[0]) == rightIDs[0])
+        #expect(getpgid(rightIDs[1]) == rightIDs[0])
+        #expect(leftIDs[0] != rightIDs[0])
+        left.cancel()
+        await #expect(throws: CancellationError.self) { try await left.value }
+        try await expectGone(leftIDs)
+        #expect(rightIDs.allSatisfy(isPresent))
+        right.cancel()
+        await #expect(throws: CancellationError.self) { try await right.value }
+        try await expectGone(rightIDs)
+    }
+
+    @Test func successfulParentExitStillTerminatesItsBackgroundDescendant() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let result = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: [
+                    "-c", "sleep 30 & printf '%s\\n' \"$!\" > \"$1\"", "native-test",
+                    fixture.child.path,
+                ],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 3, terminatesProcessGroup: true),
+            onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+        #expect(result.terminationStatus == 0)
+        #expect(result.standardError.isEmpty)
+        let child = try #require(identifier(at: fixture.child))
+        try await expectGone([child])
     }
 
     private struct Fixture {

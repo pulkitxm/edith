@@ -76,18 +76,11 @@ final class CaptureToolsStore: FeatureModule {
     }
 
     func registerHotKeys() {
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.captureRead, keyCode: CaptureToolsHotKeys.readCode,
-            modifiers: CaptureToolsHotKeys.readMods
-        ) { [weak self] in self?.start(.read) }
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.captureScreenshot, keyCode: CaptureToolsHotKeys.screenshotCode,
-            modifiers: CaptureToolsHotKeys.screenshotMods
-        ) { [weak self] in self?.start(.area) }
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.captureRecording, keyCode: CaptureToolsHotKeys.recordingCode,
-            modifiers: CaptureToolsHotKeys.recordingMods
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.captureRead) { [weak self] in self?.start(.read) }
+        HotKeyRegistrar.install(HotKeyCatalog.captureScreenshot) { [weak self] in
+            self?.start(.area)
+        }
+        HotKeyRegistrar.install(HotKeyCatalog.captureRecording) { [weak self] in
             if self?.recorder.status.state == .recording || self?.recorder.status.state == .paused {
                 self?.recorder.stop()
             } else {
@@ -160,9 +153,9 @@ final class CaptureToolsStore: FeatureModule {
         pins.forEach { $0.close() }
         pins = []
         recorder.shutdown()
-        GlobalHotKey.clear(id: GlobalHotKey.ID.captureRead)
-        GlobalHotKey.clear(id: GlobalHotKey.ID.captureScreenshot)
-        GlobalHotKey.clear(id: GlobalHotKey.ID.captureRecording)
+        HotKeyRegistrar.clear(HotKeyCatalog.captureRead)
+        HotKeyRegistrar.clear(HotKeyCatalog.captureScreenshot)
+        HotKeyRegistrar.clear(HotKeyCatalog.captureRecording)
         observers.forEach(IPC.stopObserving)
         observers = []
         inProgress = false
@@ -346,10 +339,10 @@ enum CaptureToolsHotKeys {
     }
     static var recordingMods: Int {
         SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingHotKeyMods) as? Int
-            ?? (controlKey | optionKey | cmdKey)
+            ?? (shiftKey | optionKey | cmdKey)
     }
     static var recordingLabel: String {
         SharedDefaults.store.string(forKey: AppStorageKeys.Capture.recordingHotKeyLabel)
-            ?? "⌃⌥⌘V"
+            ?? "⇧⌥⌘V"
     }
 }

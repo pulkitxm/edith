@@ -125,7 +125,7 @@ struct CaptureToolsRows: View {
                 }
                 LabeledContent("Record or stop shortcut") {
                     HotKeyRecorderControl(
-                        keyPrefix: "captureRecordingHotKey", defaultLabel: "⌃⌥⌘V")
+                        keyPrefix: "captureRecordingHotKey", defaultLabel: "⇧⌥⌘V")
                 }
                 Text(
                     "Controls stay outside the finished media. Interrupted takes remain recoverable in Recent Recordings."

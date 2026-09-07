@@ -150,8 +150,8 @@ enum CaptureCommandBridge {
     static func request(_ operation: CaptureToolOperation, json: Bool) async throws {
         try await execute {
             guard
-                CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.Capture.enabled)
-                    as? Bool == true
+                ExtensionRegistry.entry("captureTools")?.isEnabled(
+                    in: CLIEnvironment.sharedDefaults) == true
             else {
                 throw CLIFailure.unavailable(
                     "the Capture Tools extension is off",
