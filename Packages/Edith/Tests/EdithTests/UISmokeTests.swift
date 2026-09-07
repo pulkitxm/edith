@@ -66,6 +66,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
                 renderedBitmap(
                     SkillTargetsSkeleton()
                         .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .background(scheme == .dark ? Color.black : Color.white)
                         .environment(\.colorScheme, scheme),
                     width: 600, height: 240))
@@ -88,6 +89,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
                 renderedBitmap(
                     MusicLibrarySkeleton(grid: grid)
                         .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .background(Color.white)
                         .environment(\.colorScheme, .light),
                     width: 900, height: 520))
