@@ -14,12 +14,6 @@ public struct EdithSkill: Identifiable, Equatable, Sendable {
         )!
     }
 
-    public var githubURL: URL {
-        URL(
-            string:
-                "https://github.com/pulkitxm/edith/blob/main/Packages/Edith/skills/\(id)/SKILL.md")!
-    }
-
 }
 
 public enum EdithSkillLibrary {
