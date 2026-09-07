@@ -13,7 +13,7 @@ import Testing
     @Test func identifiersMatchCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "usage", "herdr", "quinjet", "companion",
+                "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",

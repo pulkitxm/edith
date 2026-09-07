@@ -1050,6 +1050,7 @@ private struct ExtensionDetailRows: View {
             case .cleaner: CleanerRows()
             case .database: DatabaseRows()
             case .companion: CompanionRows()
+            case .plugins: PluginsRows()
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
@@ -2231,5 +2232,23 @@ private struct LimitWindowChipsRow: View {
                 raw = MenuBarLimits.encodeSelection(
                     MenuBarLimits.slots(for: provider).filter(current.contains))
             })
+    }
+}
+
+private struct PluginsRows: View {
+    @AppStorage(AppStorageKeys.Tabs.pluginsEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Plugins") {
+            LabeledContent("Library", value: "Edith Remote Work")
+            Text(
+                "Install Edith skills for your agents. Your agent selections are remembered for every plugin."
+            )
+            .settingsCaption()
+            Button("Open Plugins") { SectionWindow.open(.plugins) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }

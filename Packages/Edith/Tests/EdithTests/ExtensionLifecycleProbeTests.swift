@@ -34,6 +34,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "plugins", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "appMaintenance", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["homebrew"]),

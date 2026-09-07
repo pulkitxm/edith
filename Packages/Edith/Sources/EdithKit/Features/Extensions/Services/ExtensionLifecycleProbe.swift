@@ -176,6 +176,8 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     static let policies: [String: Policy] = [
+        "plugins": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "attention": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "usage": Policy(

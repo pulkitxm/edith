@@ -82,6 +82,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case cleaner
     case database
     case companion
+    case plugins
     case systemStats
     case micMute
     case lidAwake

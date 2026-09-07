@@ -65,7 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "usage", "quinjet", "appMaintenance", "homebrew", "cleaner", "system", "lidAwake",
+        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
+        "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
         "attention", "seoAudit",
@@ -92,6 +93,11 @@ public enum ExtensionLiveAdapters {
         }
     ) async -> ExtensionAdapterReadiness? {
         switch id {
+        case "plugins":
+            executableNamed("npx") == nil
+                ? .needsSetup(
+                    "Install Node.js 22.20 or later to install plugins. Browsing is available now.")
+                : .ready("Install bundled Edith skills for detected agents.")
         case "attention": attentionReadiness()
         case "usage": usageReadiness()
         case "quinjet":

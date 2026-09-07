@@ -61,7 +61,7 @@ import Testing
         #expect(
             MainDestination.homeItems == [
                 .home, .machines,
-                .agents, .dashboard, .herdr, .quinjet, .companion,
+                .agents, .dashboard, .herdr, .quinjet, .companion, .plugins,
                 .appMaintenance,
                 .system, .runningApps,
                 .desk,
