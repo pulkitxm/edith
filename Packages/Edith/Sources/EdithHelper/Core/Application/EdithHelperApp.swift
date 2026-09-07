@@ -586,7 +586,7 @@ let allTabs: [TabInfo] = [
         subtitle: "player, media keys", enabledKey: AppStorageKeys.Tabs.musicEnabled),
     TabInfo(
         id: "system", title: "System",
-        subtitle: "prevent sleep, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
+        subtitle: "running apps, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
         id: "calendar", title: "Calendar",
         subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),

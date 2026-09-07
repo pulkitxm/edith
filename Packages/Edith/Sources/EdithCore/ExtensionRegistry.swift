@@ -166,10 +166,15 @@ public enum ExtensionRegistry {
             requiredCapabilities: [.diskCleaning]),
         ExtensionRegistryEntry(
             id: "system", title: "System",
-            subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
+            subtitle: "Running apps and the keyboard-cleaning lock.",
             symbolName: "switch.2", suite: .system, host: .bar, featured: true,
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
-            optionalCapabilities: [.preventSleep, .inputSuppression]),
+            optionalCapabilities: [.inputSuppression]),
+        ExtensionRegistryEntry(
+            id: "keepAwake", title: "Keep Awake",
+            subtitle: "Keep the Mac and display awake until you turn it off.",
+            symbolName: "moon.zzz", suite: .system, host: .bar, featured: true,
+            defaultsKey: "keepAwakeEnabled", requiredCapabilities: [.preventSleep]),
         ExtensionRegistryEntry(
             id: "lidAwake", title: "Lid Awake",
             subtitle: "Keeps this Mac running with the lid shut, on battery and unplugged.",

@@ -9,8 +9,8 @@ public enum FeatureGates {
         presenterEnabled && autoEnabled
     }
 
-    public static func preventSleepPersisted(systemOn: Bool, current: Bool) -> Bool {
-        systemOn && current
+    public static func preventSleepPersisted(keepAwakeOn: Bool, current: Bool) -> Bool {
+        keepAwakeOn && current
     }
 
     public static func keystrokeHighlightMonitorWanted(enabled: Bool, active: Bool) -> Bool {

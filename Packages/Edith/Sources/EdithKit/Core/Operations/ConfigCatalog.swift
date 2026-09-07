@@ -498,7 +498,7 @@ public enum ConfigCatalog {
             scope: .standard),
         SettingDefinition(
             AppStorageKeys.Tabs.systemEnabled, .bool, group: "system",
-            summary: "System extension: running apps, prevent sleep and the cleaning lock.",
+            summary: "System extension: running apps and the cleaning lock.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
@@ -525,6 +525,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.AppMaintenance.updateRetries, .int, group: "system",
             summary: "Retries after an update fails.", fallback: .int(1)),
+        SettingDefinition(
+            AppStorageKeys.General.keepAwakeEnabled, .bool, group: "system",
+            summary: "Keep Awake ability: prevent idle sleep independently of System.",
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),

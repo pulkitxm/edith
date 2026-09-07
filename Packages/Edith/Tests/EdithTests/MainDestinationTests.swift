@@ -119,27 +119,37 @@ import Testing
     @Test func everyExtensionBackedUtilityKeepsTheFooterVisible() {
         #expect(
             !SidebarUtilityVisibility(
-                system: false, presenter: false, lidAwake: false, keystrokeHighlight: false
+                system: false, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
             )
             .hasActions)
         #expect(
             SidebarUtilityVisibility(
-                system: true, presenter: false, lidAwake: false, keystrokeHighlight: false
+                system: false, keepAwake: true, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
+            ).hasActions)
+        #expect(
+            SidebarUtilityVisibility(
+                system: true, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: false
             )
             .hasActions)
         #expect(
             SidebarUtilityVisibility(
-                system: false, presenter: true, lidAwake: false, keystrokeHighlight: false
+                system: false, keepAwake: false, presenter: true, lidAwake: false,
+                keystrokeHighlight: false
             )
             .hasActions)
         #expect(
             SidebarUtilityVisibility(
-                system: false, presenter: false, lidAwake: true, keystrokeHighlight: false
+                system: false, keepAwake: false, presenter: false, lidAwake: true,
+                keystrokeHighlight: false
             )
             .hasActions)
         #expect(
             SidebarUtilityVisibility(
-                system: false, presenter: false, lidAwake: false, keystrokeHighlight: true
+                system: false, keepAwake: false, presenter: false, lidAwake: false,
+                keystrokeHighlight: true
             )
             .hasActions)
     }

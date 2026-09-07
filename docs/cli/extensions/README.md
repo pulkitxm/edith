@@ -61,7 +61,8 @@ walks, and its order is the order `ls` prints. Twenty-two entries, in this order
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
 | `seoAudit` | Site Audit | Utilities | Crawl sitemaps, inspect page metadata, and keep every run local |
-| `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
+| `system` | System | System | Running apps and the keyboard-cleaning lock |
+| `keepAwake` | Keep Awake | System | Prevent idle sleep independently of running apps and keyboard cleaning |
 | `appMaintenance` | App Maintenance | System | Packages, verified installs, updates, and review-first removal |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
 | `database` | Database | Utilities | Guarded database exploration and production mutations |
@@ -119,7 +120,8 @@ the current platform, and which missing implementations merely degrade it:
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |
 | `seoAudit` | `siteAuditing` | none |
-| `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
+| `system` | `runningApplications` | `inputSuppression` |
+| `keepAwake` | `preventSleep` | none |
 | `appMaintenance` | `runningApplications` | `packageManagement` |
 | `machines` | `machineManagement` | `notifications` |
 | `database` | `databaseBroker` | none |
@@ -215,7 +217,8 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - Every extension is also an ordinary `ed config` boolean, and both paths write
   the same primary key in the same store. The extension verbs also preserve
   lifecycle dependencies: enabling Agent Usage restores the selected provider
-  when both providers are off, and disabling System turns Prevent Sleep off.
+  when both providers are off. Disabling Keep Awake restores normal idle sleep;
+  disabling System leaves Keep Awake unchanged.
   Only the extension verbs know to mention a missing permission.
   Related settings sit in that extension's own config group, so
   `ed config ls --group clipboard` and `--group notch`, `--group focusdim` or

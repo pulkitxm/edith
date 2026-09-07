@@ -7,6 +7,7 @@ final class AppServices {
     private(set) var usage: UsageStore?
     private(set) var music: MusicPlayer?
     private(set) var system: SystemStore?
+    private(set) var keepAwake: KeepAwakeStore?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
@@ -102,6 +103,7 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
         stopAttentionService()
         await attentionStopTask?.value
@@ -229,16 +231,22 @@ final class AppServices {
         }
     }
 
-    private func reconcileSystemServices() {
+    func reconcileSystemServices() {
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {
             store.shutdown()
             system = nil
         }
+        let keepAwakeOn = Self.extensionEnabled(AppStorageKeys.General.keepAwakeEnabled)
+        if keepAwakeOn, keepAwake == nil { keepAwake = KeepAwakeStore() }
+        if !keepAwakeOn, let store = keepAwake {
+            store.shutdown()
+            keepAwake = nil
+        }
         let sleepKeyOn = SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep)
         if sleepKeyOn,
-            !FeatureGates.preventSleepPersisted(systemOn: systemOn, current: sleepKeyOn)
+            !FeatureGates.preventSleepPersisted(keepAwakeOn: keepAwakeOn, current: sleepKeyOn)
         {
             SharedDefaults.store.set(false, forKey: AppStorageKeys.General.preventSleep)
         }
@@ -449,7 +457,7 @@ final class AppServices {
         usage?.refreshMenuBarItem()
         notchShelf?.syncAlerts()
         notchShelf?.rebuildPanels()
-        system?.syncPreventSleep()
+        keepAwake?.syncPreventSleep()
         lidAwake?.refreshFromSystem()
         lidAwake?.syncSettings()
         focusDim?.applySettings()
