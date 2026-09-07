@@ -583,6 +583,7 @@ private final class DockToolsPreviewPanel: NSPanel {
 private final class DockToolsPreviewController {
     private let store = DockToolsPreviewStore()
     private var panel: DockToolsPreviewPanel?
+    private var imageTask: Task<Void, Never>?
 
     var isVisible: Bool { panel?.isVisible == true }
     var applicationPID: pid_t? { store.application?.processIdentifier }
@@ -609,6 +610,8 @@ private final class DockToolsPreviewController {
     }
 
     func close() {
+        imageTask?.cancel()
+        imageTask = nil
         panel?.orderOut(nil)
         store.windows = []
         store.images = [:]
@@ -648,7 +651,7 @@ private final class DockToolsPreviewController {
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         panel.contentViewController = NSHostingController(
-            rootView: DockToolsPreviewView(store: store, move: move))
+            rootView: DockToolsPreviewPresentation(store: store, move: move))
         return panel
     }
 
@@ -676,11 +679,15 @@ private final class DockToolsPreviewController {
     }
 
     private func loadImages(for windows: [DockToolsRuntimeWindow], applicationPID: pid_t) {
+        imageTask?.cancel()
+        imageTask = nil
         guard CGPreflightScreenCaptureAccess() else { return }
-        Task { [weak self] in
+        imageTask = Task { [weak self] in
             guard let self else { return }
             let images = await captureImages(for: windows)
-            guard store.application?.processIdentifier == applicationPID else { return }
+            guard !Task.isCancelled, store.application?.processIdentifier == applicationPID else {
+                return
+            }
             store.images = images
         }
     }
@@ -695,6 +702,7 @@ private final class DockToolsPreviewController {
         }
         var result: [String: NSImage] = [:]
         for window in windows.prefix(8) {
+            guard !Task.isCancelled else { return [:] }
             let sharedIndex: Int?
             if let windowID = window.windowID {
                 sharedIndex = available.firstIndex { $0.windowID == windowID }
@@ -715,6 +723,7 @@ private final class DockToolsPreviewController {
                     contentFilter: SCContentFilter(desktopIndependentWindow: sharedWindow),
                     configuration: configuration)
             else { continue }
+            guard !Task.isCancelled else { return [:] }
             result[window.value.id] = NSImage(cgImage: image, size: .zero)
         }
         return result
@@ -746,8 +755,30 @@ private final class DockToolsPreviewController {
     }
 }
 
-private struct DockToolsPreviewView: View {
+private struct DockToolsPreviewPresentation: View {
     @ObservedObject var store: DockToolsPreviewStore
+    let move: (Int) -> Void
+
+    var body: some View {
+        DockToolsPreviewView(
+            applicationName: store.application?.localizedName ?? "Windows",
+            icon: store.application?.icon, windows: store.windows.map(\.value),
+            images: store.images, selectedID: store.selectedID,
+            activate: { value in
+                if let window = store.windows.first(where: { $0.value.id == value.id }) {
+                    store.activate?(window)
+                }
+            }, move: move)
+    }
+}
+
+struct DockToolsPreviewView: View {
+    let applicationName: String
+    let icon: NSImage?
+    let windows: [DockToolsWindow]
+    let images: [String: NSImage]
+    let selectedID: String?
+    let activate: (DockToolsWindow) -> Void
     let move: (Int) -> Void
 
     var body: some View {
@@ -755,9 +786,9 @@ private struct DockToolsPreviewView: View {
             HStack(spacing: 8) {
                 appIcon
                     .frame(width: 22, height: 22)
-                Text(store.application?.localizedName ?? "Windows")
+                Text(applicationName)
                     .font(.system(size: 13, weight: .semibold))
-                Text("\(store.windows.count)")
+                Text("\(windows.count)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
@@ -784,17 +815,17 @@ private struct DockToolsPreviewView: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    ForEach(store.windows, id: \.value.id) { window in
+                    ForEach(windows, id: \.id) { window in
                         Button {
-                            store.activate?(window)
+                            activate(window)
                         } label: {
                             DockToolsWindowCard(
-                                window: window.value, image: store.images[window.value.id],
-                                icon: store.application?.icon,
-                                selected: store.selectedID == window.value.id)
+                                window: window, image: images[window.id],
+                                icon: icon,
+                                selected: selectedID == window.id)
                         }
                         .buttonStyle(.edith(.borderless))
-                        .accessibilityLabel("Open \(window.value.displayTitle)")
+                        .accessibilityLabel("Open \(window.displayTitle)")
                     }
                 }
                 .padding(.horizontal, 12)
@@ -811,7 +842,7 @@ private struct DockToolsPreviewView: View {
 
     private var appIcon: some View {
         let image =
-            store.application?.icon
+            icon
             ?? NSImage(systemSymbolName: "macwindow", accessibilityDescription: nil)!
         return Image(nsImage: image).resizable()
     }
