@@ -23,11 +23,11 @@ short `brew tap pulkitxm/edith` form for repositories named `homebrew-<name>`, a
 because cloning a few kilobytes of cask beats cloning this repository.
 
 The cask installs `Edith.app` into `/Applications` and links the two command line
-tools that ship inside the bundle:
+names that ship inside the bundle:
 
 ```
 ed      the full CLI, everything the UI can do
-edh     the same binary under its short name
+edith   the same binary under its full name
 ```
 
 Both land in Homebrew's `bin` directory, which sits ahead of `/usr/bin` on the
@@ -86,7 +86,7 @@ brew untap pulkitxm/tap
 ## Releasing
 
 Nothing about the cask is hand-edited. The `publish` job in
-`.github/workflows/release.yml` hashes the built `Edith.dmg`, rewrites the
+`.github/workflows/ci.yml` hashes the built `Edith.dmg`, rewrites the
 `version` and `sha256` lines, and commits the cask together with the versioned
 plists and release tag. It then publishes the assets and pushes the same cask to
 the tap repository. CI ignores that release commit, so it cannot loop.

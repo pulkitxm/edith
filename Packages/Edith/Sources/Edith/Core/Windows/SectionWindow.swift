@@ -29,23 +29,8 @@ struct DetachedSectionView: View {
         }
     }
 
-    @ViewBuilder
     private var detail: some View {
-        switch controller.destination {
-        case .home: HomePage()
-        case .attention: AttentionPage()
-        case .dashboard: DashboardView()
-        case .herdr: HerdrPage()
-        case .quinjet: QuinjetPage()
-        case .music: MusicPage()
-        case .calendar: CalendarPage()
-        case .system: SystemPage()
-        case .machines: MachinesPage()
-        case .companion: CompanionPage()
-        case .extensions: ExtensionsPane()
-        case .settings: SettingsPane(updater: UpdaterModel())
-        case .about: AboutPane()
-        }
+        PageContent(controller.destination, updater: UpdaterModel())
     }
 }
 
@@ -69,6 +54,12 @@ enum SectionWindow {
 
     static func isShowingSomewhere(_ destination: MainDestination) -> Bool {
         entries.contains { $0.controller.destination == destination }
+    }
+
+    static func focusOrSelect(_ destination: MainDestination) {
+        if focusExisting(destination) { return }
+        SharedDefaults.store.set(
+            destination.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
     }
 
     @discardableResult

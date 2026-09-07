@@ -4,6 +4,13 @@ import Testing
 
 @testable import EdithKit
 
+private func decodedPowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
+}
+
 private final class MachineSessionUpdateCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
@@ -254,6 +261,21 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         let command = DockerCommands.logs("web", tail: 200, follow: true)
         #expect(command == "docker logs --timestamps --tail 200 --follow web")
     }
+
+    @Test func windowsCommandsRunThroughPowerShell() {
+        let script = decodedPowerShell(
+            DockerCommands.containersWithStats(platform: .windows))
+        #expect(script?.contains("docker ps -a --no-trunc") == true)
+        #expect(script?.contains("Write-Output '@EDITHSPLIT@'") == true)
+        #expect(script?.contains("2>$null") == true)
+        #expect(script?.contains("/dev/null") == false)
+    }
+
+    @Test func windowsLifecycleQuotesPowerShellIdentifiers() {
+        let script = decodedPowerShell(
+            DockerCommands.lifecycle("rm", id: "customer's app", platform: .windows))
+        #expect(script == "docker rm -f 'customer''s app'")
+    }
 }
 
 @Suite struct FileListingTests {
@@ -272,6 +294,18 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(entries[1].linkTarget == "/etc/hosts")
         #expect(entries[2].sizeBytes == 2048)
         #expect(entries[2].modified == Date(timeIntervalSince1970: 1_754_000_100.5))
+    }
+
+    @Test func parsesWindowsLineEndings() {
+        let sep = FileListing.separator
+        let output =
+            [
+                "d\(sep)0\(sep)1754000000\(sep)Directory\(sep)Projects\(sep)",
+                "f\(sep)42\(sep)1754000100\(sep)Archive\(sep)notes.txt\(sep)",
+            ].joined(separator: "\r\n") + "\r\n"
+        let entries = FileListing.parse(output: output, parent: "C:\\Users\\pulkit")
+        #expect(entries.map(\.name) == ["Projects", "notes.txt"])
+        #expect(entries.map(\.linkTarget) == [nil, nil])
     }
 
     @Test func sortsDirectoriesFirstThenCaseInsensitively() {
@@ -312,6 +346,20 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         let crumbs = FileListing.breadcrumbs(for: "/home/pulkit/code")
         #expect(crumbs.map(\.name) == ["/", "home", "pulkit", "code"])
         #expect(crumbs.map(\.path) == ["/", "/home", "/home/pulkit", "/home/pulkit/code"])
+    }
+
+    @Test func joinsAndWalksWindowsPaths() {
+        #expect(FileListing.join(parent: "C:\\Users", name: "Pulkit") == "C:\\Users\\Pulkit")
+        #expect(FileListing.join(parent: "~\\Desktop", name: "repo") == "~\\Desktop\\repo")
+        #expect(FileListing.parentPath(of: "C:\\Users\\Pulkit") == "C:\\Users")
+        #expect(FileListing.parentPath(of: "C:\\Users") == "C:\\")
+        #expect(FileListing.parentPath(of: "C:\\") == nil)
+        #expect(FileListing.parentPath(of: "~\\Desktop\\repo") == "~\\Desktop")
+        #expect(FileListing.name(of: "C:\\Users\\Pulkit\\report.txt") == "report.txt")
+        #expect(FileListing.name(of: "~\\Desktop\\repo") == "repo")
+        let crumbs = FileListing.breadcrumbs(for: "C:\\Users\\Pulkit")
+        #expect(crumbs.map(\.name) == ["C:", "Users", "Pulkit"])
+        #expect(crumbs.map(\.path) == ["C:\\", "C:\\Users", "C:\\Users\\Pulkit"])
     }
 
     @Test func quotesPathsWithSpaces() {
@@ -373,6 +421,12 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(who[0].hasPrefix("pulkit on pts/0 since 2026-08-06 10:11"))
     }
 
+    @Test func parsesWindowsSessions() {
+        let sessions = MachineFacts.parseWho(
+            "pulkit on Windows\nadministrator on Windows\n", platform: .windows)
+        #expect(sessions == ["pulkit on Windows", "administrator on Windows"])
+    }
+
     @Test func parsesUpdateCountsAndSentinel() {
         #expect(MachineFacts.parseUpdates("12\n") == 12)
         #expect(MachineFacts.parseUpdates("0") == 0)
@@ -400,6 +454,23 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(command.contains("apt list --upgradable"))
         #expect(command.contains("dnf -q check-update"))
         #expect(command.contains("pacman -Qu"))
+    }
+
+    @Test func windowsFactsUseNativeSystemProviders() throws {
+        func script(_ command: String) throws -> String {
+            let encoded = try #require(command.split(separator: " ").last)
+            let data = try #require(Data(base64Encoded: String(encoded)))
+            return try #require(String(data: data, encoding: .utf16LittleEndian))
+        }
+        #expect(
+            try script(MachineFacts.systemCommand(for: .windows)).contains("Win32_OperatingSystem"))
+        #expect(try script(MachineFacts.whoCommand(for: .windows)).contains("Win32_LoggedOnUser"))
+        #expect(
+            try script(MachineFacts.macAddressCommand(for: .windows))
+                .contains("Win32_NetworkAdapterConfiguration"))
+        #expect(
+            try script(MachineFacts.updatesCommand(for: .windows))
+                .contains("Microsoft.Update.Session"))
     }
 
     @Test func buildsWakeOnLANMagicPacket() {
@@ -443,6 +514,38 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
             ServiceCommands.journal(unit: "ssh.service", lines: 300, follow: true)
                 == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
     }
+
+    @Test func parsesWindowsServices() {
+        let separator = WindowsSystemCommands.serviceSeparator
+        let output = [
+            "Spooler\(separator)Running\(separator)Auto\(separator)Print Spooler",
+            "WSearch\(separator)Stopped\(separator)Manual\(separator)Windows Search",
+        ].joined(separator: "\n")
+        let services = ServiceCommands.parse(output, platform: .windows)
+        #expect(services.count == 2)
+        #expect(services[0].unit == "Spooler")
+        #expect(services[0].isRunning)
+        #expect(!services[1].isRunning)
+    }
+
+    @Test func parsesWindowsServicesWithNativeLineEndings() {
+        let separator = WindowsSystemCommands.serviceSeparator
+        let output =
+            [
+                "Spooler\(separator)Running\(separator)Auto\(separator)Print Spooler",
+                "WSearch\(separator)Stopped\(separator)Manual\(separator)Windows Search",
+            ].joined(separator: "\r\n") + "\r\n"
+        let services = ServiceCommands.parse(output, platform: .windows)
+        #expect(services.map(\.unit) == ["Spooler", "WSearch"])
+    }
+
+    @Test func buildsWindowsServiceCommands() {
+        let list = decodedPowerShell(ServiceCommands.list(platform: .windows))
+        let restart = decodedPowerShell(
+            ServiceCommands.action("restart", unit: "Spooler", platform: .windows))
+        #expect(list?.contains("Get-CimInstance Win32_Service") == true)
+        #expect(restart == "Restart-Service -Name 'Spooler' -Force -ErrorAction Stop")
+    }
 }
 
 @Suite struct PowerCommandsTests {
@@ -460,6 +563,14 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
             #expect(command.contains("sudo -S"))
             #expect(command.contains("-p ''"))
         }
+    }
+
+    @Test func windowsPowerCommandsUsePowerShell() {
+        #expect(
+            decodedPowerShell(PowerCommands.reboot(platform: .windows)) == "Restart-Computer -Force"
+        )
+        #expect(
+            decodedPowerShell(PowerCommands.shutdown(platform: .windows)) == "Stop-Computer -Force")
     }
 }
 

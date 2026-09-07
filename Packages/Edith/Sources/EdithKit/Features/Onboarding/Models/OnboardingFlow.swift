@@ -11,6 +11,48 @@ public struct OnboardingPermission: Equatable, Sendable {
     }
 }
 
+public struct OnboardingSuitePick: Identifiable, Equatable, Sendable {
+    public let suite: SuiteDescriptor
+    public let abilities: [ExtensionRegistryEntry]
+
+    public var id: SuiteID { suite.id }
+
+    public init(suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry]) {
+        self.suite = suite
+        self.abilities = abilities
+    }
+}
+
+public enum OnboardingPreset: String, CaseIterable, Sendable {
+    case developer
+    case everything
+    case nothing
+
+    public var title: String {
+        switch self {
+        case .developer: "Developer"
+        case .everything: "Everything"
+        case .nothing: "Nothing yet"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .developer: "Agents, Maintenance and System"
+        case .everything: "Every suite, tune it later"
+        case .nothing: "Core only, add suites when you need them"
+        }
+    }
+
+    public var suites: [SuiteID] {
+        switch self {
+        case .developer: [.agents, .maintenance, .system]
+        case .everything: SuiteID.allCases
+        case .nothing: []
+        }
+    }
+}
+
 public enum OnboardingFlow {
     public static let completionKey = "onboardingCompleted"
     public static let iCloudBackupKey = AppStorageKeys.Backup.icloud
@@ -104,6 +146,49 @@ public enum OnboardingFlow {
             return nil
         }
         return enabledExtensionIDs(settings: dict, entries: entries)
+    }
+
+    public static func suitePicks(
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> [OnboardingSuitePick] {
+        SuiteRegistry.suites.map { suite in
+            OnboardingSuitePick(
+                suite: suite, abilities: entries.filter { $0.suite == suite.id })
+        }
+    }
+
+    public static func abilityIDs(
+        forSuites suites: Set<SuiteID>,
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> Set<String> {
+        Set(entries.filter { suites.contains($0.suite) }.map(\.id))
+    }
+
+    public static func suites(
+        forAbilities ids: Set<String>,
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> Set<SuiteID> {
+        Set(entries.filter { ids.contains($0.id) }.map(\.suite))
+    }
+
+    public static func permissionsBySuite(
+        selectedIDs: Set<String>,
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries,
+        granted: [ExtensionPermission: Bool]
+    ) -> [(suite: SuiteDescriptor, permissions: [OnboardingPermission])] {
+        SuiteRegistry.suites.compactMap { suite in
+            let abilities = entries.filter {
+                $0.suite == suite.id && selectedIDs.contains($0.id)
+            }
+            let required = Set(abilities.flatMap(\.requiredPermissions))
+            let optional = Set(abilities.flatMap(\.optionalPermissions)).subtracting(required)
+            let items =
+                ExtensionPermission.allCases
+                .filter { required.contains($0) || optional.contains($0) }
+                .filter { granted[$0] != true }
+                .map { OnboardingPermission(permission: $0, required: required.contains($0)) }
+            return items.isEmpty ? nil : (suite, items)
+        }
     }
 
     public static func seenKey(for entry: ExtensionRegistryEntry) -> String {

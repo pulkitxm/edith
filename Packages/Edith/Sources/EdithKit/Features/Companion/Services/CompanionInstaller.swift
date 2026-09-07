@@ -186,10 +186,13 @@ public enum CompanionTunnel {
                 title: "companion")
             MachineRegistry.addForward(forward)
         }
-        let session = MachineSession(machine: machine, local: false)
-        guard case .success = await session.runCommand("true", timeout: 10) else {
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        do {
+            try await connection.connect()
+            try await connection.addForward(forward)
+            return true
+        } catch {
             return false
         }
-        return await session.setForward(forward, active: true) == nil
     }
 }

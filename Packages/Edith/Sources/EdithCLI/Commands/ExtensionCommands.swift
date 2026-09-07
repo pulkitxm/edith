@@ -47,7 +47,9 @@ enum ExtensionLookup {
             "id": .string(entry.id),
             "title": .string(entry.title),
             "summary": .string(entry.subtitle),
-            "group": .string(entry.group.rawValue),
+            "suite": .string(entry.suite.rawValue),
+            "host": .string(entry.host.rawValue),
+            "requires": .strings(entry.requires),
             "featured": .bool(entry.featured),
             "key": .string(entry.defaultsKey),
             "enabled": .bool(enabled ?? isEnabled(entry)),
@@ -251,10 +253,10 @@ struct ExtensionsListCommand: AsyncParsableCommand {
         let rows = result.items.map { item in
             [
                 item.entry.id, item.enabled ? "on" : "off",
-                item.entry.group.rawValue, item.entry.title,
+                item.entry.suite.rawValue, item.entry.title,
             ]
         }
-        CLIOut.out(TextTable.render(headers: ["ID", "STATE", "GROUP", "NAME"], rows: rows))
+        CLIOut.out(TextTable.render(headers: ["ID", "STATE", "SUITE", "NAME"], rows: rows))
     }
 }
 
@@ -347,7 +349,8 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
             CLIOut.out("  " + (lifecycle?.value ?? entry.subtitle))
             CLIOut.out("  id       \(entry.id)")
             CLIOut.out("  key      \(entry.defaultsKey)")
-            CLIOut.out("  group    \(entry.group.rawValue)")
+            CLIOut.out("  suite    \(entry.suite.rawValue)")
+            CLIOut.out("  host     \(entry.host.rawValue)")
             CLIOut.out("  state    \(report.state.phase.title)")
             CLIOut.out("  runtime  \(report.state.runtimePhase.title)")
             if !entry.requiredPermissions.isEmpty {

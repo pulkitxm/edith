@@ -7,7 +7,9 @@ import Testing
     @Test func everyRegistryEntryHasOneDescriptorInRegistryOrder() {
         #expect(
             ExtensionLifecycleCatalog.descriptors.map(\.id) == ExtensionRegistry.entries.map(\.id))
-        #expect(ExtensionLifecycleCatalog.byID.count == ExtensionRegistry.entries.count)
+        #expect(
+            Set(ExtensionLifecycleCatalog.byID.keys)
+                .isSuperset(of: ExtensionRegistry.entries.map(\.id)))
     }
 
     @Test func everyDescriptorExplainsTheWholeLifecycle() {

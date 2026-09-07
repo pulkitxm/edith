@@ -1,7 +1,8 @@
+import EdithCore
 import Foundation
 
 public enum SharedDefaults {
-    public static let suiteName = "com.pulkit.edith.shared"
+    public static let suiteName = AppBuildIdentity.sharedDefaults
     private static var activeSuiteName: String {
         ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? suiteName
     }

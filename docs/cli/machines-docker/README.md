@@ -12,6 +12,12 @@ app: this is `/usr/bin/ssh` over the ControlMaster socket the app shares, so
 these commands work with Edith closed. What they need is docker on the machine
 and a user who can reach its socket.
 
+The same commands work on Windows when Docker Desktop or Docker Engine is
+running and `docker` is available to the SSH account. Edith wraps Windows host
+commands in encoded PowerShell, while commands executed inside Linux containers
+still use the container's `sh`. No change to the Windows OpenSSH default shell
+is required.
+
 There are two ways into docker on a machine, and the difference matters.
 `ed machines <machine> docker ps` is this page: parsed, `--json`, stable keys.
 `ed <machine> docker ps` is the raw shorthand, which sends the line to the

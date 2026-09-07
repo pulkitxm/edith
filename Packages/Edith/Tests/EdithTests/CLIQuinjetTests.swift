@@ -499,7 +499,8 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
 
     private static let remote = QuinjetRemote(
         machineID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-        machineName: "build", target: "pulkit@build", controlPath: "/tmp/edith.sock")
+        machineName: "build", target: "pulkit@build", controlPath: "/tmp/edith.sock",
+        executablePath: "/usr/local/bin/quinjet")
 
     private static let projectsJSON = """
         [{"name":"edith","commonDir":"/work/edith/.git","worktrees":\(worktreesJSON)}]

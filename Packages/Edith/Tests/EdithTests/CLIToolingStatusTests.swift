@@ -100,6 +100,18 @@ import Testing
         #expect(status.onPath)
     }
 
+    @Test func sanitizedToolEnvironmentRemovesNoColor() {
+        let environment = CLIToolEnvironment.sanitized(
+            processEnvironment: [
+                "PATH": "/usr/bin",
+                "NO_COLOR": "1",
+                "PRESERVED": "value",
+            ])
+
+        #expect(environment["NO_COLOR"] == nil)
+        #expect(environment["PRESERVED"] == "value")
+    }
+
     @Test func terminalToolingDescriptorsAreRegisteredAndExact() {
         let descriptors = TerminalToolingOperation.allCases.map(\.descriptor)
         #expect(
@@ -131,12 +143,10 @@ import Testing
         let tools = root.appendingPathComponent("tools")
         let target = root.appendingPathComponent("bin")
         try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
-        for name in ["ed", "edh"] {
-            let file = tools.appendingPathComponent(name)
-            try Data("#!/bin/sh\n".utf8).write(to: file)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o755], ofItemAtPath: file.path)
-        }
+        let file = tools.appendingPathComponent("ed")
+        try Data("#!/bin/sh\n".utf8).write(to: file)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: file.path)
 
         let installed = TerminalToolingOperationExecution.install(
             toolsDirectory: tools, into: target,

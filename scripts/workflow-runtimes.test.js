@@ -7,6 +7,7 @@ const expectedActions = new Map([
     "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff",
   ],
   ["actions/cache", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
+  ["actions/cache/save", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
   ["actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"],
   ["actions/configure-pages", "45bfe0192ca1faeb007ade9deae92b16b8254a0d"],
   [
