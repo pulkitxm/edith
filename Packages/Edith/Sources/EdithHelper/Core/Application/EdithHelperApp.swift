@@ -458,6 +458,7 @@ enum TextUtilitiesHotKey {
         SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V"
     }
 
+    @MainActor
     static func register() {
         guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true
         else {
@@ -469,6 +470,7 @@ enum TextUtilitiesHotKey {
         }
     }
 
+    @MainActor
     static func unregister() {
         HotKeyRegistrar.clear(HotKeyCatalog.textUtilities)
     }
