@@ -430,6 +430,7 @@ enum ScratchpadHotKey {
         SharedDefaults.store.string(forKey: AppStorageKeys.Scratchpad.hotKeyLabel) ?? "⌃⌥N"
     }
 
+    @MainActor
     static func register() {
         guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true
         else {
@@ -441,6 +442,7 @@ enum ScratchpadHotKey {
         }
     }
 
+    @MainActor
     static func unregister() {
         HotKeyRegistrar.clear(HotKeyCatalog.scratchpad)
     }
