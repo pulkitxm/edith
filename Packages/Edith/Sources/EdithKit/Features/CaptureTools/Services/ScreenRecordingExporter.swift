@@ -228,21 +228,24 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         videoComposition.renderSize = renderSize
         videoComposition.frameDuration = CMTime(
             value: 1, timescale: CMTimeScale(min(max(document.preset.frameRate, 15), 60)))
-        let parent = CALayer()
-        parent.frame = CGRect(origin: .zero, size: renderSize)
-        parent.backgroundColor = color(document.backgroundHex ?? "#111827").cgColor
-        let videoLayer = CALayer()
-        videoLayer.frame = parent.bounds
-        parent.addSublayer(videoLayer)
-        addZooms(document.zooms, mappings: mappings, duration: outputCursor.seconds, to: videoLayer)
-        addTexts(document.texts, mappings: mappings, duration: outputCursor.seconds, to: parent)
-        if document.showsPointer {
-            addPointer(
-                pointerTrack, document: document, mappings: mappings,
-                duration: outputCursor.seconds, size: renderSize, to: parent)
+        videoComposition.animationTool = await MainActor.run {
+            let parent = CALayer()
+            parent.frame = CGRect(origin: .zero, size: renderSize)
+            parent.backgroundColor = color(document.backgroundHex ?? "#111827").cgColor
+            let videoLayer = CALayer()
+            videoLayer.frame = parent.bounds
+            parent.addSublayer(videoLayer)
+            addZooms(
+                document.zooms, mappings: mappings, duration: outputCursor.seconds, to: videoLayer)
+            addTexts(document.texts, mappings: mappings, duration: outputCursor.seconds, to: parent)
+            if document.showsPointer {
+                addPointer(
+                    pointerTrack, document: document, mappings: mappings,
+                    duration: outputCursor.seconds, size: renderSize, to: parent)
+            }
+            return AVVideoCompositionCoreAnimationTool(
+                postProcessingAsVideoLayer: videoLayer, in: parent)
         }
-        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
-            postProcessingAsVideoLayer: videoLayer, in: parent)
         let audioMix = makeAudioMix(
             audioTracks, systemVolume: document.systemAudioVolume,
             microphoneVolume: document.microphoneVolume)
