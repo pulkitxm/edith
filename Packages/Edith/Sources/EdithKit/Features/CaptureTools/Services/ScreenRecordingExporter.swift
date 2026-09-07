@@ -1,6 +1,5 @@
 import AVFoundation
 import AppKit
-import CoreText
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -376,8 +375,11 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
                 !text.text.isEmpty
             else { continue }
             let (start, end) = span
-            let layer = CALayer()
-            layer.contents = textImage(text)
+            let layer = CATextLayer()
+            layer.string = text.text
+            layer.alignmentMode = .center
+            layer.fontSize = CGFloat(min(max(text.fontSize, 10), 160))
+            layer.foregroundColor = color(text.colorHex).cgColor
             layer.shadowColor = NSColor.black.cgColor
             layer.shadowOpacity = 0.7
             layer.shadowRadius = 3
@@ -397,30 +399,6 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
             layer.add(opacity, forKey: "visibility")
             parent.addSublayer(layer)
         }
-    }
-
-    private static func textImage(_ text: ScreenRecordingTextOverlay) -> CGImage? {
-        guard
-            let context = CGContext(
-                data: nil, width: 1040, height: 160, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
-        context.scaleBy(x: 2, y: 2)
-        let font = CTFontCreateWithName(
-            "Helvetica" as CFString, CGFloat(min(max(text.fontSize, 10), 160)), nil)
-        let string = NSAttributedString(
-            string: text.text,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                    color(text.colorHex).cgColor,
-            ])
-        let line = CTLineCreateWithAttributedString(string)
-        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
-        context.textPosition = CGPoint(x: (520 - width) / 2, y: 20)
-        CTLineDraw(line, context)
-        return context.makeImage()
     }
 
     private static func outputSpan(
