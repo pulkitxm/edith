@@ -7,11 +7,13 @@ final class AppServices {
     private(set) var usage: UsageStore?
     private(set) var music: MusicPlayer?
     private(set) var system: SystemStore?
-    private(set) var machines: MachineMonitor?
+    private(set) var keepAwake: KeepAwakeStore?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var emoji: EmojiStore?
+    private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -24,6 +26,7 @@ final class AppServices {
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
     private var terminating = false
+    private var attentionStopTask: Task<Void, Never>?
 
     init(
         lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
@@ -101,6 +104,13 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        keepAwake?.shutdown()
+        PermissionsModel.shared.shutdown()
+        stopAttentionService()
+        await attentionStopTask?.value
+        await PermissionsModel.shared.waitForShutdown()
+        shutDownEmojiRuntime()
+        keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         commandBar?.shutdown()
         commandBar = nil
@@ -206,8 +216,8 @@ final class AppServices {
         let musicOn = Self.extensionEnabled(AppStorageKeys.Tabs.musicEnabled)
 
         if usageOn, usage == nil {
-            SettingsBackup.shared.restoreDataOnEnable(for: .limits)
-            SettingsBackup.shared.restoreDataOnEnable(for: .usage)
+            BackgroundBackupClient.restoreDataOnEnable(for: .limits)
+            BackgroundBackupClient.restoreDataOnEnable(for: .usage)
             usage = UsageStore()
         }
         if !usageOn, let store = usage {
@@ -215,7 +225,7 @@ final class AppServices {
             usage = nil
         }
         if musicOn, music == nil {
-            SettingsBackup.shared.restoreDataOnEnable(for: .music)
+            BackgroundBackupClient.restoreDataOnEnable(for: .music)
             music = MusicPlayer()
         }
         if !musicOn, let player = music {
@@ -224,25 +234,24 @@ final class AppServices {
         }
     }
 
-    private func reconcileSystemServices() {
+    func reconcileSystemServices() {
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {
             store.shutdown()
             system = nil
         }
+        let keepAwakeOn = Self.extensionEnabled(AppStorageKeys.General.keepAwakeEnabled)
+        if keepAwakeOn, keepAwake == nil { keepAwake = KeepAwakeStore() }
+        if !keepAwakeOn, let store = keepAwake {
+            store.shutdown()
+            keepAwake = nil
+        }
         let sleepKeyOn = SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep)
         if sleepKeyOn,
-            !FeatureGates.preventSleepPersisted(systemOn: systemOn, current: sleepKeyOn)
+            !FeatureGates.preventSleepPersisted(keepAwakeOn: keepAwakeOn, current: sleepKeyOn)
         {
             SharedDefaults.store.set(false, forKey: AppStorageKeys.General.preventSleep)
-        }
-
-        let machinesOn = Self.extensionEnabled(AppStorageKeys.Tabs.machinesEnabled)
-        if machinesOn, machines == nil { machines = MachineMonitor() }
-        if !machinesOn, let monitor = machines {
-            monitor.shutdown()
-            machines = nil
         }
 
         let calendarOn = Self.extensionEnabled(AppStorageKeys.Tabs.calendarEnabled)
@@ -284,7 +293,7 @@ final class AppServices {
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         if clipboardOn {
             if clipboard == nil {
-                SettingsBackup.shared.restoreDataOnEnable(for: .clipboard)
+                BackgroundBackupClient.restoreDataOnEnable(for: .clipboard)
                 clipboard = ClipboardStore()
             }
             ClipboardHotKey.register()
@@ -297,20 +306,56 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
-        let commandBarOn = Self.extensionEnabled(AppStorageKeys.CommandBar.enabled)
+        let commandBarOn =
+            ExtensionRegistry.entry("commandBar")?.isEnabled(in: SharedDefaults.store) == true
         if commandBarOn, commandBar == nil { commandBar = CommandBarController(services: self) }
         if !commandBarOn, let controller = commandBar {
             controller.shutdown()
             commandBar = nil
         }
 
+        let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
+        if emojiOn {
+            if emoji == nil { emoji = EmojiStore() }
+            EmojiHotKey.register()
+        } else {
+            shutDownEmojiRuntime()
+        }
+        EmojiPanel.shared.store = emoji
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
     }
 
+    private func shutDownEmojiRuntime() {
+        EmojiHotKey.unregister()
+        emoji?.shutdown()
+        emoji = nil
+        EmojiPanel.shared.store = nil
+    }
+
     private func reconcilePresentationServices() {
+        let keystrokeHighlightEnabled = Self.extensionEnabled(
+            AppStorageKeys.KeystrokeHighlight.enabled)
+        if keystrokeHighlightEnabled {
+            KeystrokeHighlightHotKey.register()
+        } else {
+            KeystrokeHighlightHotKey.unregister()
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        }
+        let keystrokeHighlightWanted = FeatureGates.keystrokeHighlightMonitorWanted(
+            enabled: keystrokeHighlightEnabled,
+            active: SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active))
+        if keystrokeHighlightWanted, keystrokeHighlight == nil {
+            keystrokeHighlight = KeystrokeHighlightRuntime()
+        }
+        if !keystrokeHighlightWanted, let runtime = keystrokeHighlight {
+            runtime.shutdown()
+            keystrokeHighlight = nil
+        }
+        keystrokeHighlight?.syncSettings()
+
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -392,25 +437,38 @@ final class AppServices {
     }
 
     private func reconcileAttentionService() {
+        guard !terminating else { return }
         let attentionSettings = AttentionRepository().loadSettings()
         let attentionOn = Self.attentionEnabled(
             extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
             settings: attentionSettings)
-        if attentionOn, attention == nil { attention = AttentionTrackingService() }
+        if attentionOn, attention == nil, attentionStopTask == nil {
+            attention = AttentionTrackingService()
+        }
         if attentionOn { attention?.sync(attentionSettings) }
-        if !attentionOn, let service = attention {
-            service.shutdown()
-            attention = nil
+        if !attentionOn { stopAttentionService() }
+    }
+
+    private func stopAttentionService() {
+        guard attentionStopTask == nil else { return }
+        guard let service = attention else { return }
+        attention = nil
+        service.shutdown()
+        attentionStopTask = Task { [weak self] in
+            await service.shutdown().value
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            attentionStopTask = nil
+            reconcileAttentionService()
         }
     }
 
     private func refreshServices() {
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()
-        usage?.notifier.clearStateIfMasterOff()
         notchShelf?.syncAlerts()
         notchShelf?.rebuildPanels()
-        system?.syncPreventSleep()
+        keepAwake?.syncPreventSleep()
         lidAwake?.refreshFromSystem()
         lidAwake?.syncSettings()
         focusDim?.applySettings()

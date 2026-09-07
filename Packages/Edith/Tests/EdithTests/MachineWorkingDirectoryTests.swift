@@ -64,6 +64,15 @@ import Testing
         #expect(command == "cd '/tmp/a b'\\''c' 2>/dev/null || cd; ls")
     }
 
+    @Test func appliesAWindowsDirectoryInsidePowerShell() throws {
+        let command = MachineWorkingDirectory.prefixed(
+            "Get-ChildItem", directory: "C:\\Users\\Ada's Files", platform: .windows)
+        let script = try #require(powerShellScript(command))
+        #expect(script.contains("$location = 'C:\\Users\\Ada''s Files'"))
+        #expect(script.contains("Set-Location -LiteralPath $location"))
+        #expect(script.hasSuffix("Get-ChildItem"))
+    }
+
     @Test func resolvesARelativeTargetAgainstTheCurrentDirectory() {
         #expect(
             MachineWorkingDirectory.resolveCommand(target: "Desktop", from: "/home/pulkit")
@@ -74,6 +83,14 @@ import Testing
         #expect(
             MachineWorkingDirectory.resolveCommand(target: nil, from: nil)
                 == "pwd; cd && pwd")
+    }
+
+    @Test func resolvesAWindowsTargetWithNativeLocations() throws {
+        let command = MachineWorkingDirectory.resolveCommand(
+            target: "Desktop", from: "C:\\Users\\Ada", platform: .windows)
+        let script = try #require(powerShellScript(command))
+        #expect(script.contains("Set-Location -LiteralPath 'Desktop'"))
+        #expect(script.contains("[Console]::Out.WriteLine((Get-Location).Path)"))
     }
 
     @Test func spotsAChangeDirectoryCommand() {
@@ -119,5 +136,12 @@ import Testing
         #expect(
             MachineWorkingDirectory.resolvedDirectory(fromOutput: reply)
                 == "/home/pulkit/Desktop")
+    }
+
+    private func powerShellScript(_ command: String) -> String? {
+        guard let encoded = command.split(separator: " ").last,
+            let data = Data(base64Encoded: String(encoded))
+        else { return nil }
+        return String(data: data, encoding: .utf16LittleEndian)
     }
 }

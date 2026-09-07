@@ -1,0 +1,12 @@
+#!/bin/sh
+edith_launcher=$0
+while [ -L "$edith_launcher" ]; do
+    edith_launcher_directory=$(CDPATH= cd "$(dirname "$edith_launcher")" && pwd)
+    edith_launcher_target=$(readlink "$edith_launcher")
+    case "$edith_launcher_target" in
+        /*) edith_launcher=$edith_launcher_target ;;
+        *) edith_launcher=$edith_launcher_directory/$edith_launcher_target ;;
+    esac
+done
+edith_launcher_directory=$(CDPATH= cd "$(dirname "$edith_launcher")" && pwd)
+EDITH_CLI=1 exec "$edith_launcher_directory/../MacOS/Edith" "$@"

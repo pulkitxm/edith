@@ -16,11 +16,13 @@ order:
 ```
 $ ed extensions ls
 ID           STATE  GROUP      NAME
+attention    off    Utilities  Attention
 usage        on     Agent      Agent Usage
 herdr        off    Agent      Herdr
 quinjet      off    Agent      Quinjet
 system       on     System     System
 machines     on     System     Machines
+database     off    Utilities  Database
 companion    off    Agent      Companion
 systemStats  off    System     CPU & Memory in menu bar
 micMute      off    System     Mic Mute
@@ -31,6 +33,7 @@ notchShelf   off    Media      Notch Shelf
 clipboard    on     Utilities  Clipboard
 focusDim     off    Utilities  Focus Dim
 presenter    off    Utilities  Presenter
+emoji        off    Utilities  Emoji Picker
 colorPicker  on     Utilities  Color Picker
 ```
 

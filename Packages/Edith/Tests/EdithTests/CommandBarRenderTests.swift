@@ -22,7 +22,7 @@ import Testing
         model.query = "extensions"
 
         for _ in 0..<100 where model.items.first?.id != "action.openExtensions" {
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(10))
         }
 
         #expect(model.items.first?.id == "action.openExtensions")
@@ -32,7 +32,7 @@ import Testing
         let model = CommandBarModel(services: AppServices())
         model.query = "settings"
         for _ in 0..<100 where model.items.first?.id != "action.openGeneralSettings" {
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(10))
         }
 
         let view = ZStack {

@@ -20,6 +20,7 @@ final class CommandBarModel {
     @ObservationIgnored weak var services: AppServices?
     @ObservationIgnored var dismiss: () -> Void = {}
     @ObservationIgnored private var applications: [CommandBarApplication] = []
+    @ObservationIgnored private var applicationsLoadedAt: Date?
     @ObservationIgnored private var applicationTask: Task<Void, Never>?
     @ObservationIgnored private var searchWork: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
@@ -96,13 +97,15 @@ final class CommandBarModel {
     }
 
     private func loadApplications() {
-        guard applicationTask == nil else { return }
+        guard showsApplications, applicationTask == nil else { return }
+        if let applicationsLoadedAt, Date().timeIntervalSince(applicationsLoadedAt) < 60 { return }
         loadingApplications = true
         applicationTask = Task.detached(priority: .utility) {
             let applications = CommandBarApplicationCatalog.load()
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 self?.applications = applications
+                self?.applicationsLoadedAt = Date()
                 self?.loadingApplications = false
                 self?.applicationTask = nil
                 self?.refresh()
@@ -188,6 +191,7 @@ final class CommandBarModel {
     private func actionItems() -> [CommandBarItem] {
         var items = [
             action(.openHome, "Open Edith", "Home", "house.fill"),
+            action(.openMachines, "Open Fleet", "SSH computers and files", "server.rack"),
             action(
                 .openExtensions, "Open Extensions", "Manage Edith features",
                 "puzzlepiece.extension.fill"),
@@ -204,15 +208,16 @@ final class CommandBarModel {
                 "Activity and focus", "hourglass"
             ),
             (
-                AppStorageKeys.Tabs.usageEnabled, .openUsage, "Open Agent Usage",
+                AppStorageKeys.Tabs.usageEnabled, .openUsage, "Open Usage",
                 "Limits, tokens, and cost", "chart.bar.fill"
             ),
             (
-                AppStorageKeys.Tabs.herdrEnabled, .openHerdr, "Open Herdr", "Live agent sessions",
+                AppStorageKeys.Tabs.herdrEnabled, .openHerdr, "Open Sessions",
+                "Live agent sessions",
                 "rectangle.split.3x1.fill"
             ),
             (
-                AppStorageKeys.Tabs.quinjetEnabled, .openQuinjet, "Open Quinjet",
+                AppStorageKeys.Tabs.quinjetEnabled, .openQuinjet, "Open Review",
                 "Review workspaces", "arrow.triangle.branch"
             ),
             (
@@ -228,11 +233,7 @@ final class CommandBarModel {
                 "Apps, sleep, and controls", "cpu"
             ),
             (
-                AppStorageKeys.Tabs.machinesEnabled, .openMachines, "Open Machines",
-                "SSH computers and files", "server.rack"
-            ),
-            (
-                AppStorageKeys.Tabs.companionEnabled, .openCompanion, "Open Companion",
+                AppStorageKeys.Tabs.companionEnabled, .openCompanion, "Open Memory",
                 "Notes, voice, and memory", "brain.head.profile"
             ),
         ]
@@ -284,7 +285,7 @@ final class CommandBarModel {
         case .openQuinjet: MainApp.open(section: "quinjet")
         case .openMusic: MainApp.open(section: "music")
         case .openCalendar: MainApp.open(section: "calendar")
-        case .openSystem: MainApp.open(section: "system")
+        case .openSystem: MainApp.open(section: "runningApps")
         case .openMachines: MainApp.open(section: "machines")
         case .openCompanion: MainApp.open(section: "companion")
         case .openCommandBarSettings: openExtension("commandBar")
@@ -318,7 +319,8 @@ final class CommandBarModel {
     }
 
     private func enabled(_ key: String) -> Bool {
-        SharedDefaults.store.bool(forKey: key)
+        return ExtensionRegistry.entries.first { $0.defaultsKey == key }?.isEnabled(
+            in: SharedDefaults.store) == true
     }
 
     private var showsApplications: Bool {

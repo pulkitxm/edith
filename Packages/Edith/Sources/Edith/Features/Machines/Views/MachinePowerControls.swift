@@ -142,6 +142,7 @@ struct MachinePowerControls: View {
             let outcome = await MachinePowerOperationExecution.perform(
                 operation, machine: session.machine,
                 learnedMACAddress: session.facts.macAddress,
+                platform: session.remotePlatform ?? .linux,
                 run: { command, stdin, timeout in
                     await session.runCommand(command, stdin: stdin, timeout: timeout)
                 })

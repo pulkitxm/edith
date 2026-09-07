@@ -65,7 +65,7 @@ struct CommandBarConvertCommand: AsyncParsableCommand {
             let input = "\(value) \(source) to \(destination)"
             guard let answer = CommandBarEvaluator.conversion(input) else {
                 throw CLIFailure.usage(
-                    "could not convert (source) to (destination)",
+                    "could not convert \(source) to \(destination)",
                     hint:
                         "use compatible length, mass, temperature, data, duration, or volume units")
             }

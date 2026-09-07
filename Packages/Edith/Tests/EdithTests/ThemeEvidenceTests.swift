@@ -33,7 +33,7 @@ private struct ThemeEvidenceView: View {
                 Text("Edith theme system")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                 Text(
-                    "Constant app surfaces with dynamic accents, Quinjet themes, and terminal palettes"
+                    "Neutral app surfaces with theme-aware database workspaces and terminals"
                 )
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(DashSkin.inkSoft(true))
@@ -64,6 +64,10 @@ private struct ThemeEvidenceCard: View {
         DashSkin.accent(true, theme: theme)
     }
 
+    private var databasePalette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: true, theme: theme)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
@@ -86,6 +90,17 @@ private struct ThemeEvidenceCard: View {
                     SurfaceSample(title: "Page", color: DashSkin.paper(true))
                     SurfaceSample(title: "Card", color: DashSkin.paper2(true))
                     SurfaceSample(title: "Accent", color: accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Database workspace")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(databasePalette.inkSoft)
+                HStack(spacing: 10) {
+                    SurfaceSample(title: "Canvas", color: databasePalette.canvas)
+                    SurfaceSample(title: "Panel", color: databasePalette.panel)
+                    SurfaceSample(title: "Grid", color: databasePalette.grid)
                 }
             }
 
