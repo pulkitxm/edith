@@ -53,6 +53,7 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         let built = try await Self.composition(
             asset: asset, ranges: ranges, document: normalized,
             pointerTrack: pointerTrack)
+        defer { withExtendedLifetime(built.animationLayer) {} }
         try Task.checkCancellation()
         guard !lock.withLock({ cancelled }) else { throw CancellationError() }
         try? FileManager.default.removeItem(at: destination)
@@ -158,6 +159,7 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         let asset: AVMutableComposition
         let videoComposition: AVMutableVideoComposition
         let audioMix: AVMutableAudioMix?
+        let animationLayer: CALayer
     }
 
     private static func composition(
@@ -228,29 +230,27 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         videoComposition.renderSize = renderSize
         videoComposition.frameDuration = CMTime(
             value: 1, timescale: CMTimeScale(min(max(document.preset.frameRate, 15), 60)))
-        videoComposition.animationTool = await MainActor.run {
-            let parent = CALayer()
-            parent.frame = CGRect(origin: .zero, size: renderSize)
-            parent.backgroundColor = color(document.backgroundHex ?? "#111827").cgColor
-            let videoLayer = CALayer()
-            videoLayer.frame = parent.bounds
-            parent.addSublayer(videoLayer)
-            addZooms(
-                document.zooms, mappings: mappings, duration: outputCursor.seconds, to: videoLayer)
-            addTexts(document.texts, mappings: mappings, duration: outputCursor.seconds, to: parent)
-            if document.showsPointer {
-                addPointer(
-                    pointerTrack, document: document, mappings: mappings,
-                    duration: outputCursor.seconds, size: renderSize, to: parent)
-            }
-            return AVVideoCompositionCoreAnimationTool(
-                postProcessingAsVideoLayer: videoLayer, in: parent)
+        let parent = CALayer()
+        parent.frame = CGRect(origin: .zero, size: renderSize)
+        parent.backgroundColor = color(document.backgroundHex ?? "#111827").cgColor
+        let videoLayer = CALayer()
+        videoLayer.frame = parent.bounds
+        parent.addSublayer(videoLayer)
+        addZooms(document.zooms, mappings: mappings, duration: outputCursor.seconds, to: videoLayer)
+        addTexts(document.texts, mappings: mappings, duration: outputCursor.seconds, to: parent)
+        if document.showsPointer {
+            addPointer(
+                pointerTrack, document: document, mappings: mappings,
+                duration: outputCursor.seconds, size: renderSize, to: parent)
         }
+        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+            postProcessingAsVideoLayer: videoLayer, in: parent)
         let audioMix = makeAudioMix(
             audioTracks, systemVolume: document.systemAudioVolume,
             microphoneVolume: document.microphoneVolume)
         return BuiltComposition(
-            asset: composition, videoComposition: videoComposition, audioMix: audioMix)
+            asset: composition, videoComposition: videoComposition, audioMix: audioMix,
+            animationLayer: parent)
     }
 
     private static func resolvedCrop(_ crop: CGRect?, sourceSize: CGSize) -> CGRect {
