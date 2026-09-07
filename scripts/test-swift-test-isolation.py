@@ -26,7 +26,7 @@ class SwiftTestIsolationTests(unittest.TestCase):
         self.tool('swift', """#!/usr/bin/env python3
 import json, os, sys
 keys = ['EDITH_DATA_ROOT', 'EDITH_CLOUD_ROOT', 'EDITH_DATABASE_HOME', 'EDITH_AGENT_MACH_SERVICE', 'EDITH_SHARED_DEFAULTS_SUITE', 'EDITH_HELPER_DEFAULTS_SUITE', 'EDITH_TEST_RUNTIME_ROOT', 'EDITH_DATABASE_KEYCHAIN_SERVICE']
-print(json.dumps({key: os.environ.get(key) for key in keys}))
+print(json.dumps(dict({key: os.environ.get(key) for key in keys}, arguments=sys.argv[1:])))
 sys.exit(int(os.environ.get('WRAPPER_SWIFT_EXIT', '0')))
 """)
         self.tool('xcode-select', '#!/bin/sh\nprintf "/missing-test-developer\\n"\n')
@@ -44,13 +44,32 @@ with pathlib.Path(os.environ['WRAPPER_DEFAULTS_CALLS']).open('a') as stream:
         path.write_text(contents)
         path.chmod(0o700)
 
-    def run_wrapper(self, **environment):
-        return subprocess.run([str(WRAPPER), '--filter', 'IsolationProbe'],
+    def run_wrapper(self, arguments=None, **environment):
+        return subprocess.run([str(WRAPPER), *(arguments if arguments is not None else ['--filter', 'IsolationProbe'])],
                               cwd=REPO, env=dict(self.environment, **environment),
                               text=True, capture_output=True, timeout=10)
 
     def defaults_calls(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
+
+    def test_build_only_compiles_the_test_graph_without_running_tests(self):
+        result = self.run_wrapper(arguments=['--build-only', '--scratch-path', '/tmp/edith-build-probe'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = json.loads(result.stdout)
+        self.assertEqual(values['arguments'], [
+            'build', '--build-tests', '--disable-index-store', '--scratch-path', '/tmp/edith-build-probe'])
+        self.assertFalse(pathlib.Path(values['EDITH_TEST_RUNTIME_ROOT']).exists())
+
+    def test_skip_build_runs_tests_serially_with_the_requested_filter(self):
+        result = self.run_wrapper(arguments=['--skip-build', '--filter', 'IsolationProbe'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['arguments'], [
+            'test', '--no-parallel', '--disable-index-store', '--skip-build', '--filter', 'IsolationProbe'])
+
+    def test_build_failure_preserves_its_exit_status(self):
+        result = self.run_wrapper(arguments=['--build-only'], WRAPPER_SWIFT_EXIT='9')
+        self.assertEqual(result.returncode, 9)
+        self.assertIn('Isolated test artifacts retained:', result.stderr)
 
     def test_defaults_are_private_and_only_owned_state_is_cleaned(self):
         result = self.run_wrapper()
