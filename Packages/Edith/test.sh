@@ -97,4 +97,4 @@ if [[ -d "$FW/Testing.framework" ]]; then
         -Xlinker -rpath -Xlinker "$FW"
         -Xlinker -rpath -Xlinker "$LIB")
 fi
-swift test --no-parallel ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
