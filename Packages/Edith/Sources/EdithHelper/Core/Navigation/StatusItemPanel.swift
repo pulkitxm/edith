@@ -34,6 +34,7 @@ final class StatusItemPanel {
                 .padding(.vertical, 8)
                 .frame(width: 310))
         view.frame.size = view.fittingSize
+        readings.isEnabled = false
         readings.view = view
         menu.addItem(readings)
         menu.addItem(.separator())
@@ -75,22 +76,50 @@ struct StatusProgressRow: View {
     var resetsAt: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(percent.map { "\(Int(max(0, min(100, $0))))%" } ?? "Unavailable")
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).lineLimit(1)
+                Spacer(minLength: 8)
+                if let resetsAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(MenuCountdown.remaining(until: resetsAt, now: context.date))
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Time until reset")
+                            .accessibilityValue(
+                                MenuCountdown.remaining(until: resetsAt, now: context.date))
+                    }
+                    .fixedSize()
+                }
+            }
+            HStack(spacing: 10) {
+                ProgressView(value: percent.map { max(0, min(100, $0)) } ?? 0, total: 100)
+                    .accessibilityLabel(title)
+                Text(percent.map { "\(Int(max(0, min(100, $0))))%" } ?? "N/A")
                     .monospacedDigit()
-            }
-            if let percent {
-                ProgressView(value: max(0, min(100, percent)), total: 100)
-            }
-            if let resetsAt {
-                Text("Resets in \(resetsAt, style: .relative)")
-                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+                    .accessibilityLabel(percent == nil ? "Usage unavailable" : "Usage")
             }
         }
+    }
+}
+
+enum MenuCountdown {
+    static func remaining(until reset: Date, now: Date) -> String {
+        let interval = reset.timeIntervalSince(now)
+        guard interval.isFinite, interval > 0 else { return "0s" }
+        let total = Int(min(interval.rounded(.up), Double(Int.max / 2)))
+        let days = total / 86400
+        let hours = total % 86400 / 3600
+        let minutes = total % 3600 / 60
+        let seconds = total % 60
+        var parts: [String] = []
+        if days > 0 { parts.append("\(days)d") }
+        if days > 0 || hours > 0 { parts.append("\(hours)h") }
+        if days > 0 || hours > 0 || minutes > 0 { parts.append("\(minutes)m") }
+        parts.append("\(seconds)s")
+        return parts.joined(separator: " ")
     }
 }

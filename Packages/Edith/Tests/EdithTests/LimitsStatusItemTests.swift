@@ -5,6 +5,21 @@ import Testing
 
 @MainActor
 @Suite struct LimitsStatusItemTests {
+    @Test func resetCountdownFormatsEveryUnitAndRollover() {
+        let now = Date(timeIntervalSince1970: 0)
+        let cases: [(TimeInterval, String)] = [
+            (-1, "0s"), (0, "0s"), (0.1, "1s"), (9, "9s"), (59, "59s"),
+            (60, "1m 0s"), (3599, "59m 59s"), (3600, "1h 0m 0s"),
+            (86399, "23h 59m 59s"), (86400, "1d 0h 0m 0s"),
+            (183845, "2d 3h 4m 5s"),
+        ]
+        for (interval, expected) in cases {
+            #expect(
+                MenuCountdown.remaining(until: now.addingTimeInterval(interval), now: now)
+                    == expected)
+        }
+    }
+
     @Test func menuBarProvidersKeepEveryEnabledSlotReserved() {
         let suite = "menu-bar-provider-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
