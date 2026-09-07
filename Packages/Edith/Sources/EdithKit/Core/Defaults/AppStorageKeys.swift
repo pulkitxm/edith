@@ -277,10 +277,15 @@ public enum AppStorageKeys {
         public static let mode = "presenterMode"
     }
 
+    public enum Skills {
+        public static let agentSelections = "skillsAgentSelections"
+    }
+
     public enum Tabs {
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
+        public static let pluginsEnabled = "tabPluginsEnabled"
         public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let musicEnabled = "tabMusicEnabled"
