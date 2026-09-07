@@ -2,9 +2,6 @@ import AppKit
 import EdithKit
 import EventKit
 import Foundation
-import IOKit.ps
-import Network
-import UserNotifications
 
 @MainActor
 @Observable
@@ -16,29 +13,16 @@ final class AutomationRuntime {
     private(set) var subscribedKinds: Set<AutomationTriggerKind> = []
 
     private let storage: AutomationStorage
-    private let executor: AutomationExecutor
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var distributedObservers: [NSObjectProtocol] = []
-    private var scheduleTimer: Timer?
     private var calendarTimer: Timer?
-    private var networkMonitor: NWPathMonitor?
-    private var powerSource: CFRunLoopSource?
     private var calendarStore: EKEventStore?
     private var runTasks: [UUID: Task<Void, Never>] = [:]
-    private var activeRunIDs: [UUID: UUID] = [:]
     private var shortcutIDs: Set<UInt32> = []
-    private var lastPower: AutomationPowerSource?
-    private var lastBattery: Int?
     private var lastDisplayCount = NSScreen.screens.count
-    private var lastNetwork: AutomationNetworkState?
 
     init(storage: AutomationStorage = AutomationStorage()) {
         self.storage = storage
-        let executable = Self.edExecutable()
-        executor = AutomationExecutor(
-            runner: { command in
-                try await AutomationCommandProcess.run(executable: executable, arguments: command)
-            }, storage: storage)
         reload()
     }
 
@@ -50,6 +34,7 @@ final class AutomationRuntime {
             kinds.insert(automation.trigger.kind)
         }
         if !calendarEnabled { kinds.remove(.calendar) }
+        kinds.subtract([.schedule, .network, .power, .battery])
         return kinds
     }
 
@@ -80,22 +65,16 @@ final class AutomationRuntime {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let runID = try await executor.start(
-                    scene: scene, automationID: automationID, origin: origin,
-                    grantedPermissions: grantedPermissions())
-                activeRunIDs[scene.id] = runID
                 activeSceneIDs.insert(scene.id)
-                guard let record = await executor.wait(for: runID) else {
-                    throw AutomationExecutionError.alreadyRunning
-                }
-                activeRunIDs[scene.id] = nil
+                let record = try await AgentAutomationClient.run(
+                    AgentAutomationRunRequest(
+                        sceneID: scene.id, origin: origin, automationID: automationID,
+                        grantedPermissions: grantedPermissions()))
                 activeSceneIDs.remove(scene.id)
                 history = (try? storage.history()) ?? history
-                if scene.notifiesOnCompletion { notify(record) }
                 postResult(record, requestID: requestID)
                 runTasks[scene.id] = nil
             } catch {
-                activeRunIDs[scene.id] = nil
                 activeSceneIDs.remove(scene.id)
                 lastError = error.localizedDescription
                 postFailure(error.localizedDescription, scene: scene, requestID: requestID)
@@ -122,40 +101,32 @@ final class AutomationRuntime {
 
     func cancel(sceneID: UUID) {
         runTasks[sceneID]?.cancel()
-        if let runID = activeRunIDs[sceneID] {
-            Task { await executor.cancel(runID) }
-        }
+
     }
 
     func shutdown() {
         stopSubscriptions()
         for task in runTasks.values { task.cancel() }
         runTasks.removeAll()
-        activeRunIDs.removeAll()
         activeSceneIDs.removeAll()
-        Task { await executor.cancelAll() }
     }
 
     private func syncSubscriptions() {
         stopSubscriptions()
-        let calendarEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.calendarEnabled)
+        let calendarEnabled =
+            ExtensionRegistry.entry("calendar")?.isEnabled(in: SharedDefaults.store) == true
         subscribedKinds = Self.requiredSubscriptions(
             for: document, calendarEnabled: calendarEnabled)
-        if subscribedKinds.contains(.schedule) { installSchedule() }
         if subscribedKinds.contains(.application) { installApplications() }
-        if subscribedKinds.contains(.power) || subscribedKinds.contains(.battery) { installPower() }
         if subscribedKinds.contains(.display) { installDisplays() }
         if subscribedKinds.contains(.screen) { installScreen() }
         if subscribedKinds.contains(.wake) { installWake() }
-        if subscribedKinds.contains(.network) { installNetwork() }
         if subscribedKinds.contains(.calendar) { installCalendar() }
         installShortcuts()
         installIPC()
     }
 
     private func stopSubscriptions() {
-        scheduleTimer?.invalidate()
-        scheduleTimer = nil
         calendarTimer?.invalidate()
         calendarTimer = nil
         for (center, token) in observers { center.removeObserver(token) }
@@ -164,73 +135,10 @@ final class AutomationRuntime {
             DistributedNotificationCenter.default().removeObserver(token)
         }
         distributedObservers.removeAll()
-        networkMonitor?.cancel()
-        networkMonitor = nil
-        if let powerSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSource, .defaultMode)
-            self.powerSource = nil
-        }
         calendarStore = nil
         for id in shortcutIDs { GlobalHotKey.clear(id: id) }
         shortcutIDs.removeAll()
         subscribedKinds.removeAll()
-    }
-
-    private func installSchedule() {
-        let now = Date()
-        let calendar = Calendar.current
-        let dates = document.automations.compactMap { automation -> Date? in
-            guard automation.isEnabled,
-                case let .schedule(hour, minute, weekdays) = automation.trigger
-            else { return nil }
-            return calendar.nextDate(
-                after: now,
-                matching: DateComponents(hour: hour, minute: minute),
-                matchingPolicy: .nextTime
-            ).flatMap { date in
-                weekdays.isEmpty
-                    || weekdays.contains(
-                        AutomationWeekday(rawValue: calendar.component(.weekday, from: date))!)
-                    ? date
-                    : nextWeekdayDate(after: date, hour: hour, minute: minute, weekdays: weekdays)
-            }
-        }
-        guard let fireDate = dates.min() else { return }
-        scheduleTimer = Timer(fire: fireDate, interval: 0, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                self?.fireSchedules(at: fireDate)
-                self?.installSchedule()
-            }
-        }
-        RunLoop.main.add(scheduleTimer!, forMode: .common)
-    }
-
-    private func nextWeekdayDate(
-        after date: Date, hour: Int, minute: Int, weekdays: Set<AutomationWeekday>
-    ) -> Date? {
-        let calendar = Calendar.current
-        for offset in 1...7 {
-            guard let candidate = calendar.date(byAdding: .day, value: offset, to: date) else {
-                continue
-            }
-            let weekday = AutomationWeekday(rawValue: calendar.component(.weekday, from: candidate))
-            if let weekday, weekdays.contains(weekday) {
-                return calendar.date(
-                    bySettingHour: hour, minute: minute, second: 0, of: candidate)
-            }
-        }
-        return nil
-    }
-
-    private func fireSchedules(at date: Date) {
-        let calendar = Calendar.current
-        fireRules { trigger in
-            guard case let .schedule(hour, minute, weekdays) = trigger else { return false }
-            let weekday = AutomationWeekday(rawValue: calendar.component(.weekday, from: date))
-            return calendar.component(.hour, from: date) == hour
-                && calendar.component(.minute, from: date) == minute
-                && (weekdays.isEmpty || weekday.map(weekdays.contains) == true)
-        }
     }
 
     private func installApplications() {
@@ -252,59 +160,6 @@ final class AutomationRuntime {
             guard case .application(let expected, let expectedEvent) = trigger else { return false }
             return expectedEvent == event && expected == bundleIdentifier
         }
-    }
-
-    private func installPower() {
-        let snapshot = powerSnapshot()
-        lastPower = snapshot.source
-        lastBattery = snapshot.battery
-        let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        powerSource = IOPSNotificationCreateRunLoopSource(
-            { context in
-                guard let context else { return }
-                let runtime = Unmanaged<AutomationRuntime>.fromOpaque(context).takeUnretainedValue()
-                Task { @MainActor in runtime.powerChanged() }
-            }, context)?.takeRetainedValue()
-        if let powerSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), powerSource, .defaultMode)
-        }
-    }
-
-    private func powerChanged() {
-        let current = powerSnapshot()
-        if current.source != lastPower {
-            fireRules { trigger in
-                guard case .powerSource(let source) = trigger else { return false }
-                return source == current.source
-            }
-        }
-        if let previous = lastBattery, let battery = current.battery {
-            fireRules { trigger in
-                guard case .battery(let level, let direction) = trigger else { return false }
-                switch direction {
-                case .fallsBelow: return previous > level && battery <= level
-                case .risesAbove: return previous < level && battery >= level
-                }
-            }
-        }
-        lastPower = current.source
-        lastBattery = current.battery
-    }
-
-    private func powerSnapshot() -> (source: AutomationPowerSource?, battery: Int?) {
-        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-            let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
-        else { return (nil, nil) }
-        for source in sources {
-            guard
-                let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue()
-                    as? [String: Any]
-            else { continue }
-            let state = description[kIOPSPowerSourceStateKey as String] as? String
-            let percent = description[kIOPSCurrentCapacityKey as String] as? Int
-            return (state == kIOPSACPowerValue ? .adapter : .battery, percent)
-        }
-        return (nil, nil)
     }
 
     private func installDisplays() {
@@ -348,25 +203,6 @@ final class AutomationRuntime {
             [weak self] _ in
             self?.fireRules { if case .wake = $0 { true } else { false } }
         }
-    }
-
-    private func installNetwork() {
-        let monitor = NWPathMonitor()
-        networkMonitor = monitor
-        monitor.pathUpdateHandler = { [weak self] path in
-            let state: AutomationNetworkState =
-                path.status == .satisfied ? .reachable : .unreachable
-            Task { @MainActor in
-                guard let self else { return }
-                defer { self.lastNetwork = state }
-                guard self.lastNetwork != nil, self.lastNetwork != state else { return }
-                self.fireRules {
-                    if case .network(let value) = $0 { return value == state }
-                    return false
-                }
-            }
-        }
-        monitor.start(queue: DispatchQueue(label: "com.pulkit.edith.automations.network"))
     }
 
     private func installCalendar() {
@@ -480,16 +316,6 @@ final class AutomationRuntime {
             })
     }
 
-    private func notify(_ record: AutomationRunRecord) {
-        guard SharedDefaults.store.bool(forKey: AppStorageKeys.Permissions.notificationsGranted)
-        else { return }
-        let content = UNMutableNotificationContent()
-        content.title = record.sceneName
-        content.body = record.succeeded ? "Scene completed." : "Scene finished with an error."
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: record.id.uuidString, content: content, trigger: nil))
-    }
-
     private func postResult(_ record: AutomationRunRecord, requestID: String?) {
         guard let requestID else { return }
         IPC.post(
@@ -510,14 +336,4 @@ final class AutomationRuntime {
             ])
     }
 
-    private static func edExecutable() -> URL {
-        let bundleRoot = Bundle.main.bundleURL
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let bundled = bundleRoot.appendingPathComponent("Contents/MacOS/ed")
-        if FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
-        let sibling = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(
-            "ed")
-        return sibling ?? URL(fileURLWithPath: "/usr/local/bin/ed")
-    }
 }

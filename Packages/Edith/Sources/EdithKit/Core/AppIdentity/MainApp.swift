@@ -1,10 +1,10 @@
+import EdithCore
 import AppKit
 
 @MainActor
 public enum MainApp {
-    public nonisolated static let bundleIdentifier = "com.pulkit.edith"
-    public nonisolated static let statusBarBundleIdentifier = "com.pulkit.edith.helper"
-    public nonisolated static let filesBundleIdentifier = "com.pulkit.edith.files"
+    public nonisolated static let bundleIdentifier = AppBuildIdentity.application
+    public nonisolated static let statusBarBundleIdentifier = AppBuildIdentity.helper
     public nonisolated static let creatorSiteURLString = "https://pulkit.page"
 
     public static func openDashboard() {

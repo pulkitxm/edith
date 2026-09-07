@@ -14,7 +14,7 @@
 | `ed automations export <path>` | Writes the configuration document as JSON. |
 | `ed automations import <path>` | Validates with `--dry-run` or replaces local configuration with `--yes`. |
 
-The extension itself is controlled independently with `ed extensions enable automations` and `ed extensions disable automations`. Manual CLI planning and configuration remain available while the extension is off, but background triggers and shortcuts do not run.
+The extension itself is controlled independently with `ed extensions enable automations` and `ed extensions disable automations`. Manual CLI planning and configuration remain available while the extension is off, but execution, background triggers and shortcuts do not run. Scene execution uses the background agent task queue and remains observable through `ed agent tasks ls`.
 
 Every action must resolve to `UserOperationCatalog`. Automation control operations are excluded from scene steps to prevent recursive process chains. The executor also prevents the same scene from running twice, applies its cooldown, checks permissions, enforces each step timeout, honors cancellation, and records ordered results.
 

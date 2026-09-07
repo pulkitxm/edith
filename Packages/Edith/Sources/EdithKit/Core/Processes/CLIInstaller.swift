@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public struct CLIInstallResult: Equatable, Sendable {
@@ -137,6 +138,7 @@ public enum CLIInstaller {
     }
 
     public static func installIfNeeded(fileManager: FileManager = .default) {
+        guard !AppBuildIdentity.isDevelopment else { return }
         guard let tools = bundledToolsDirectory(fileManager: fileManager) else { return }
         let target = preferredDirectory(fileManager: fileManager)
         let current = toolNames.compactMap {

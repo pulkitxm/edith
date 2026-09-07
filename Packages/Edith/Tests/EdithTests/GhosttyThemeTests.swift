@@ -4,6 +4,17 @@ import Testing
 @testable import GhosttyTerminal
 
 @Suite struct GhosttyThemeTests {
+    @Test func launchQuotesEveryShellArgument() {
+        let launch = GhosttyLaunch(
+            executable: "/usr/bin/ssh",
+            arguments: ["win-lan", #"C:\Users\kpulk\Desktop\mono-volt"#, "it's ready"],
+            environment: [])
+
+        #expect(
+            launch.command
+                == #"'/usr/bin/ssh' 'win-lan' 'C:\Users\kpulk\Desktop\mono-volt' 'it'\''s ready'"#)
+    }
+
     @Test func coloursBecomeHexTheConfigUnderstands() {
         let theme = GhosttyTheme(
             background: NSColor(srgbRed: 0x17 / 255, green: 0x14 / 255, blue: 0x12 / 255, alpha: 1),
@@ -30,12 +41,25 @@ import Testing
         #expect(text.contains("palette = 1=#ff0000"))
         #expect(text.contains("palette = 2=#00ff00"))
         #expect(text.contains("font-size = 13"))
-        #expect(text.contains("copy-on-select = clipboard"))
         #expect(text.contains("mouse-shift-capture = false"))
+        #expect(text.contains("link-url = true"))
+        #expect(text.contains("link-osc8 = true"))
+        #expect(text.contains("link-previews = true"))
+        #expect(text.contains(#"selection-word-chars = "\t '\"│`|;,()[]{}<>$""#))
         #expect(text.contains("font-codepoint-map = U+E000-U+F8FF=Symbols Nerd Font Mono"))
         #expect(text.contains("font-codepoint-map = U+F0000-U+FFFFD=Symbols Nerd Font Mono"))
         #expect(text.contains("font-codepoint-map = U+100000-U+10FFFD=Symbols Nerd Font Mono"))
         #expect(text.contains(#"keybind = shift+enter=text:\x1b\r"#))
+    }
+
+    @Test func theConfigLeavesClipboardAndClosePoliciesAtGhosttyDefaults() {
+        let theme = GhosttyTheme(background: "#000000", foreground: "#ffffff", cursor: "#ffffff")
+        let text = theme.configuration
+
+        #expect(!text.contains("confirm-close-surface"))
+        #expect(!text.contains("clipboard-read"))
+        #expect(!text.contains("clipboard-write"))
+        #expect(!text.contains("copy-on-select"))
     }
 
     @Test func bundledSymbolsAreAvailableToTerminalRenderers() {

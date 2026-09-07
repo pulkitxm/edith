@@ -85,7 +85,11 @@ public struct RemoteDirectoryEndpoint: Sendable {
         RemoteDirectoryEndpoint(
             machineName: machine.name,
             home: {
-                let result = try await connection.run("printf %s \"$HOME\"", timeout: 15)
+                let platform = await connection.remotePlatform ?? .linux
+                let command =
+                    platform == .windows
+                    ? WindowsFileCommands.home() : "printf %s \"$HOME\""
+                let result = try await connection.run(command, timeout: 15)
                 guard result.succeeded else {
                     throw SSHConnectionError.commandFailed(
                         command: "home", status: result.status, stderr: result.stderrText)
@@ -93,13 +97,17 @@ public struct RemoteDirectoryEndpoint: Sendable {
                 return result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
             },
             list: { path in
+                let platform = await connection.remotePlatform ?? .linux
                 let result = try await connection.run(
-                    FileListing.command(path: path, showHidden: true), timeout: 45)
+                    FileListing.command(
+                        path: path, showHidden: true, platform: platform), timeout: 45)
                 return try decodedListing(result, path: path)
             },
             create: { path in
+                let platform = await connection.remotePlatform ?? .linux
                 _ = try await connection.runChecked(
-                    FileOperations.makeDirectoryCommand(path: path), timeout: 300)
+                    FileOperations.makeDirectoryCommand(
+                        path: path, platform: platform), timeout: 300)
             })
     }
 
@@ -132,7 +140,7 @@ public enum RemoteDirectoryOperationExecution {
         let resolved: String
         if path == "." {
             let home = try await endpoint.homeDirectory()
-            guard home.hasPrefix("/") else {
+            guard home.hasPrefix("/") || FileListing.isWindowsPath(home) else {
                 throw RemoteDirectoryOperationError.invalidHomeDirectory
             }
             resolved = home

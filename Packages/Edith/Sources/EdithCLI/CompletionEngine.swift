@@ -232,6 +232,7 @@ public enum CompletionEngine {
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups
         case .usageRange: return UsageRange.allCases.map(\.rawValue)
+        case .usageShareCard: return UsageShareCard.allCases.map(\.rawValue) + ["all"]
         case .attentionRange:
             return ["today", "yesterday", "24h", "7d", "30d", "week", "month", "all"]
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
@@ -239,6 +240,7 @@ public enum CompletionEngine {
         case .appAction: return AppActions.all.map(\.name)
         case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
+        case .homebrewKind: return HomebrewPackageKind.allCases.map(\.rawValue)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .colorIndex:
             return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {

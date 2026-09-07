@@ -412,7 +412,7 @@ binary ships.
 
 Edith is two processes with two bundle ids, and the distinction matters because
 different commands need different ones. The menu bar helper is
-`com.pulkit.edith.helper` and the main window is `com.pulkit.edith`. `ed`
+`com.pulkit.edith.helper.v2` and the main window is `com.pulkit.edith`. `ed`
 detects each by asking macOS for running applications with that bundle id, which
 is a local question that needs no permission and no round trip.
 

@@ -19,7 +19,7 @@ enum AutomationCLI {
     static var storage: AutomationStorage {
         let root =
             ProcessInfo.processInfo.environment["EDITH_AUTOMATIONS_ROOT"]
-            .map(URL.init(fileURLWithPath:)) ?? AppDirectories.current.data
+            .map(URL.init(fileURLWithPath:))
         return AutomationStorage(root: root)
     }
 
@@ -216,18 +216,31 @@ struct AutomationRunCommand: AsyncParsableCommand {
                     "scene \(scene.name) contains previewed or destructive steps",
                     hint: "inspect `ed automations plan \(scene.name)`, then rerun with --yes")
             }
-            let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
-            let executor = AutomationExecutor(
-                runner: {
-                    try await AutomationCommandProcess.run(executable: executable, arguments: $0)
-                },
-                storage: AutomationCLI.storage)
-            let runID = try await executor.start(
-                scene: scene, origin: .commandLine, grantedPermissions: permissions)
-            guard let record = await executor.wait(for: runID) else {
-                throw CLIFailure("the scene result was not available")
+            let record: AutomationRunRecord
+            if AutomationCLI.storage.usesAgent {
+                record = try await AgentAutomationClient.run(
+                    AgentAutomationRunRequest(
+                        sceneID: scene.id, origin: .commandLine, grantedPermissions: permissions))
+            } else {
+                let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+                let executor = AutomationExecutor(
+                    runner: {
+                        try await AutomationCommandProcess.run(
+                            executable: executable, arguments: $0)
+                    },
+                    storage: AutomationCLI.storage)
+                let runID = try await executor.start(
+                    scene: scene, origin: .commandLine, grantedPermissions: permissions)
+                guard let localRecord = await executor.wait(for: runID) else {
+                    throw CLIFailure("the scene result was not available")
+                }
+                record = localRecord
             }
-            if json { try AutomationCLI.printJSON(record); return }
+            if json {
+                try AutomationCLI.printJSON(record)
+                if !record.succeeded { throw ExitCode.failure }
+                return
+            }
             for step in record.steps {
                 CLIOut.out("\(step.state.rawValue)  \(step.operationID)  \(step.output)")
             }

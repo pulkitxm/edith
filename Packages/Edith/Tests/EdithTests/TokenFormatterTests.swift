@@ -19,4 +19,26 @@ import Testing
                 DonutSlice(id: "two", label: "two", value: 3, color: .blue),
             ]) == 5)
     }
+
+    @Test func denseDonutsKeepTheLargestSlicesAndPreserveTheTotal() {
+        let slices = (1...12).map {
+            DonutSlice(id: "\($0)", label: "model-\($0)", value: Double($0), color: .red)
+        }
+        let compact = compactDonutSlices(slices, limit: 8, otherColor: .gray)
+
+        #expect(compact.count == 9)
+        #expect(compact.last?.label == "Other")
+        #expect(donutTotal(compact) == donutTotal(slices))
+    }
+
+    @Test func chartDomainsContainOnlyRenderedSeriesInFirstSeenOrder() {
+        let bars = [
+            StackDatum(id: "1", x: "day-1", series: "b", value: 1),
+            StackDatum(id: "2", x: "day-1", series: "a", value: 2),
+            StackDatum(id: "3", x: "day-2", series: "b", value: 3),
+            StackDatum(id: "4", x: "day-2", series: "Other", value: 4),
+        ]
+
+        #expect(chartSeriesDomain(bars) == ["b", "a", "Other"])
+    }
 }

@@ -2,6 +2,8 @@
 
 Automations & Scenes is an opt-in local extension. A scene is an ordered list of existing Edith operations. An automation connects one trigger to one reusable scene. Edith resolves every step through its operation catalog and runs the corresponding `ed` command, so an action has the same validation and behavior whether it comes from the app, menu panel, Command Bar, shortcut, CLI, or trigger.
 
+The background agent owns scene execution, cancellation, configuration and bounded history. The window and CLI use the same XPC operations. The agent scheduler checks schedule and power triggers every 30 seconds and owns network reachability monitoring; the menu bar companion observes application, display, screen, wake and Calendar events that need the user session.
+
 Supported triggers are schedules with weekday selection, app launch and termination, adapter or battery power, battery threshold crossings, display attach and detach, screen lock and unlock, wake, network reachability changes, and Calendar event starts or ends. Calendar subscriptions are active only while both Calendar and Automations are enabled.
 
 Each action stores an operation id, typed argument list, required permissions, and a timeout. Preview shows the resolved command, effect, confirmation requirement, missing permissions, and timeout before execution. Scenes run in order with either stop or continue-on-error behavior. Active-scene recursion, non-positive timeouts, nested automation control actions, and cooldown violations are rejected.

@@ -23,9 +23,9 @@ import Testing
 
         #expect(
             AutomationRuntime.requiredSubscriptions(for: document, calendarEnabled: false)
-                == [.wake, .network])
+                == [.wake])
         #expect(
             AutomationRuntime.requiredSubscriptions(for: document, calendarEnabled: true)
-                == [.wake, .network, .calendar])
+                == [.wake, .calendar])
     }
 }

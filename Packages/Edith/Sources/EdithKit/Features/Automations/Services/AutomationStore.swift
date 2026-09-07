@@ -7,11 +7,14 @@ public struct AutomationStorage: Sendable {
     public let historyLimit: Int
     public let historyMaxAge: TimeInterval
     private let settingsBackupEnabled: Bool
+    public let usesAgent: Bool
 
     public init(
-        root: URL = AppDirectories.current.data, historyLimit: Int = 200,
+        root: URL? = nil, historyLimit: Int = 200,
         historyMaxAge: TimeInterval = 60 * 60 * 24 * 30
     ) {
+        usesAgent = root == nil
+        let root = root ?? AppDirectories.current.data
         documentURL = root.appendingPathComponent("automations.json")
         historyURL = root.appendingPathComponent("automation-history.json")
         self.historyLimit = max(1, historyLimit)
@@ -21,6 +24,11 @@ public struct AutomationStorage: Sendable {
     }
 
     public func load() throws -> AutomationDocument {
+        if usesAgent {
+            return try AgentPayload.decode(
+                AutomationDocument.self,
+                from: AgentClient.shared.performInternal(AgentAutomationOperation.load))
+        }
         guard FileManager.default.fileExists(atPath: documentURL.path) else {
             if settingsBackupEnabled,
                 let data = SharedDefaults.store.data(
@@ -43,6 +51,11 @@ public struct AutomationStorage: Sendable {
     }
 
     public func save(_ document: AutomationDocument) throws {
+        if usesAgent {
+            _ = try AgentClient.shared.performInternal(
+                AgentAutomationOperation.save, payload: AgentPayload.encode(document))
+            return
+        }
         guard document.version == 1 else {
             throw AutomationStorageError.unsupportedVersion(document.version)
         }
@@ -70,6 +83,11 @@ public struct AutomationStorage: Sendable {
     }
 
     public func history(now: Date = Date()) throws -> [AutomationRunRecord] {
+        if usesAgent {
+            return try AgentPayload.decode(
+                [AutomationRunRecord].self,
+                from: AgentClient.shared.performInternal(AgentAutomationOperation.history))
+        }
         guard FileManager.default.fileExists(atPath: historyURL.path) else { return [] }
         let records = try decoder.decode(
             [AutomationRunRecord].self, from: Data(contentsOf: historyURL))
@@ -77,6 +95,9 @@ public struct AutomationStorage: Sendable {
     }
 
     public func append(_ record: AutomationRunRecord, now: Date = Date()) throws {
+        guard !usesAgent else {
+            throw AgentError(.refused, "Only the agent records automation history.")
+        }
         let records = bounded(((try? history(now: now)) ?? []) + [record], now: now)
         try prepare(historyURL)
         try encoder.encode(records).write(to: historyURL, options: .atomic)

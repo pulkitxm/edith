@@ -13,7 +13,7 @@ public enum AutomationCommandProcessError: LocalizedError {
 
 public enum AutomationCommandProcess {
     public static func run(executable: URL, arguments: [String]) async throws -> String {
-        let result = try await CLICommandRunner.run(
+        let result = try await CLICommandRunner.runLocal(
             CLICommandRequest(
                 executableURL: executable, arguments: arguments,
                 environment: ProcessInfo.processInfo.environment,
