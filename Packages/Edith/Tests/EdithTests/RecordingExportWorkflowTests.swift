@@ -115,6 +115,7 @@ import Testing
                 .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark))
         let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760))
+        window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .darkAqua)
         defer { window.close() }
         window.contentView = hosting
