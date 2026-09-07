@@ -46,7 +46,9 @@ final class StatusItemPanel {
         menu.addItem(.separator())
         menu.addItem(StatusPanelAction(title: "Quit Edith") { AppRuntimeCenter().quitCompletely() })
         self.menu = menu
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+        item.menu = menu
+        button.performClick(nil)
+        item.menu = nil
         self.menu = nil
     }
 }
@@ -100,7 +102,9 @@ struct StatusProgressRow: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .frame(width: 40, alignment: .trailing)
-                    .accessibilityLabel(percent == nil ? "Usage unavailable" : "Usage")
+                    .accessibilityLabel(
+                        percent.map { "\(Int(max(0, min(100, $0)))) percent used" }
+                            ?? "Usage unavailable")
             }
         }
     }
