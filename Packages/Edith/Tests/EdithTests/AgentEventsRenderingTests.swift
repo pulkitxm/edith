@@ -34,7 +34,9 @@ import Testing
             rootView:
                 view
                 .environment(\.automaticViewActionsEnabled, false)
-                .environment(\.colorScheme, .light))
+                .environment(\.colorScheme, .light)
+                .background(Color(nsColor: .windowBackgroundColor)))
+        host.appearance = NSAppearance(named: .aqua)
         host.frame = NSRect(x: 0, y: 0, width: 840, height: 620)
         let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
