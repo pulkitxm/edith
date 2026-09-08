@@ -1152,10 +1152,12 @@ private enum DatabaseManagementFixtures {
             await Task.yield()
         }
         #expect(await executor.managementRetainedCoordinationCount() == 0)
-        #expect(
-            await executor.deleteConnection(
-                DatabaseConnectionDeleteRequest(connectionID: connections[128].id)
-            ).payload?.deleted == true)
+        let recoveredExecutor = try fixture.makeExecutor(adapters: [adapter])
+        let recoveredDeletion = await recoveredExecutor.deleteConnection(
+            DatabaseConnectionDeleteRequest(connectionID: connections[128].id))
+        #expect(recoveredDeletion.payload?.deleted == true)
+        #expect(await sessions[128].snapshot().disconnectCount == 1)
+        #expect(try await fixture.store.connection(id: connections[128].id) == nil)
     }
     @Test func editAndRenameExcludeOperationsAdmittedByAnotherExecutor() async throws {
         for mutation in DatabaseManagementConnectionMutation.allCases {

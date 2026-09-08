@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var mouseControls: MouseControlsEngine?
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
@@ -85,6 +86,9 @@ final class AppServices {
             StartupPhase(name: "helper.services.presentation") { [weak self] in
                 self?.reconcilePresentationServices()
             },
+            StartupPhase(name: "helper.services.input") { [weak self] in
+                self?.reconcileInputServices()
+            },
             StartupPhase(name: "helper.services.hardware") { [weak self] in
                 self?.reconcileHardwareServices()
             },
@@ -111,6 +115,7 @@ final class AppServices {
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        mouseControls?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -193,6 +198,7 @@ final class AppServices {
         reconcileSystemServices()
         reconcilePanelServices()
         reconcilePresentationServices()
+        reconcileInputServices()
         reconcileHardwareServices()
         reconcileStatusServices()
         reconcileAttentionService()
@@ -368,6 +374,17 @@ final class AppServices {
             detector.shutdown()
             presenter = nil
         }
+    }
+
+    private func reconcileInputServices() {
+        let mouseOn =
+            ExtensionRegistry.entry("mouseControls")?.isEnabled(in: SharedDefaults.store) ?? false
+        if mouseOn, mouseControls == nil { mouseControls = MouseControlsEngine() }
+        if !mouseOn, let engine = mouseControls {
+            engine.shutdown()
+            mouseControls = nil
+        }
+        mouseControls?.syncSettings()
     }
 
     private func reconcileHardwareServices() {

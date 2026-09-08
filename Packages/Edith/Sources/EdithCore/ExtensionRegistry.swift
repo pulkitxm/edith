@@ -198,6 +198,11 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "mouseControls", title: "Mouse Controls",
+            subtitle: "Smooth wheel scrolling, pointer focus, and programmable buttons.",
+            symbolName: "computermouse.fill", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "mouseControlsEnabled", requiredCapabilities: [.pointerControl]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

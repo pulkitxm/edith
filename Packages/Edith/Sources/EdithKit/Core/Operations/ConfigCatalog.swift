@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "mouse", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -61,7 +61,7 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + calendar + clipboard + mouse + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -726,6 +726,63 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let mouse: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Mouse.enabled, .bool, group: "mouse",
+            summary: "Mouse Controls extension: wheel, focus, and extra-button handling.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.smoothScroll, .bool, group: "mouse",
+            summary: "Turn discrete mouse-wheel steps into a short glide.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.scrollStep, .int, group: "mouse",
+            summary: "Pixel distance added by one mouse-wheel step.", integerRange: 20...100,
+            fallback: .int(40)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.reverseVertical, .bool, group: "mouse",
+            summary: "Reverse vertical mouse-wheel movement.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.reverseHorizontal, .bool, group: "mouse",
+            summary: "Reverse horizontal mouse-wheel movement.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.focusFollowsPointer, .bool, group: "mouse",
+            summary: "Activate the application beneath a settled pointer.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.focusDelay, .int, group: "mouse",
+            summary: "Milliseconds the pointer must settle before focus changes.",
+            integerRange: 100...1_000, fallback: .int(300)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.sideNavigation, .bool, group: "mouse",
+            summary: "Use the standard side buttons for Back and Forward.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.middleClick, .bool, group: "mouse",
+            summary: "Turn a three-finger physical trackpad press into a middle click.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mouse.button4Action, .string, group: "mouse",
+            summary: "Action assigned to mouse button 4.",
+            allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("automatic")),
+        SettingDefinition(
+            AppStorageKeys.Mouse.button5Action, .string, group: "mouse",
+            summary: "Action assigned to mouse button 5.",
+            allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("automatic")),
+        SettingDefinition(
+            AppStorageKeys.Mouse.button6Action, .string, group: "mouse",
+            summary: "Action assigned to mouse button 6.",
+            allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("passThrough")),
+        SettingDefinition(
+            AppStorageKeys.Mouse.button7Action, .string, group: "mouse",
+            summary: "Action assigned to mouse button 7.",
+            allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("passThrough")),
+        SettingDefinition(
+            AppStorageKeys.Mouse.button8Action, .string, group: "mouse",
+            summary: "Action assigned to mouse button 8.",
+            allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("passThrough")),
+        SettingDefinition(
+            AppStorageKeys.Mouse.excludedApps, .csv, group: "mouse",
+            summary: "Bundle identifiers where Mouse Controls leaves input unchanged."),
     ]
 
     private static let notch: [SettingDefinition] = [

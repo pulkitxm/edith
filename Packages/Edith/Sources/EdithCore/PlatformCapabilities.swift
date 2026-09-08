@@ -24,6 +24,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case mediaDownloads
     case microphoneControl
     case notifications
+    case pointerControl
     case packageManagement
     case preventSleep
     case runningApplications
