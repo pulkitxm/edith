@@ -226,6 +226,12 @@ public enum ExtensionRegistry {
             symbolName: "theatermasks.fill", suite: .desk, host: .bar, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
         ExtensionRegistryEntry(
+            id: "windowTools", title: "Window Tools",
+            subtitle: "Snap, center, restore, and maximize windows without another Space.",
+            symbolName: "rectangle.3.group", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "windowToolsEnabled", requiredCapabilities: [.windowManagement],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys and a player bar.",
             symbolName: "music.note", suite: .media, host: .bar, featured: false,

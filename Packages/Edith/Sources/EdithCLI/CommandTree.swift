@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -135,6 +136,21 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed window": Spec(options: ["--json"]),
+        "ed window status": Spec(options: ["--json"]),
+        "ed window left-half": Spec(options: ["--json"]),
+        "ed window right-half": Spec(options: ["--json"]),
+        "ed window top-half": Spec(options: ["--json"]),
+        "ed window bottom-half": Spec(options: ["--json"]),
+        "ed window top-left": Spec(options: ["--json"]),
+        "ed window top-right": Spec(options: ["--json"]),
+        "ed window bottom-left": Spec(options: ["--json"]),
+        "ed window bottom-right": Spec(options: ["--json"]),
+        "ed window center": Spec(options: ["--json"]),
+        "ed window maximize": Spec(options: ["--json"]),
+        "ed window next-display": Spec(options: ["--json"]),
+        "ed window restore": Spec(options: ["--json"]),
+
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

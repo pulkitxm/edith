@@ -41,6 +41,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed window status            Window Tools settings and available layouts
+        ed window left-half         snap the active window to the left
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed usage export             branded PNG cards for sharing your activity

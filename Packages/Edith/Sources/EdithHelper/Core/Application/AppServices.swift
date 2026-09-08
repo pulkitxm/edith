@@ -20,6 +20,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var windowTools: WindowToolsEngine?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -325,6 +326,13 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
+        let windowToolsOn =
+            ExtensionRegistry.entry("windowTools")?.isEnabled(in: SharedDefaults.store) == true
+        if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
+        if !windowToolsOn, let engine = windowTools {
+            engine.shutdown()
+            windowTools = nil
+        }
         let keystrokeHighlightEnabled = Self.extensionEnabled(
             AppStorageKeys.KeystrokeHighlight.enabled)
         if keystrokeHighlightEnabled {
@@ -462,6 +470,7 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
+        windowTools?.applySettings()
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

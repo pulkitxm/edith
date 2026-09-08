@@ -317,6 +317,7 @@ private func dispatchGlobalHotKey(_ id: UInt32) {
 }
 
 enum GlobalHotKey {
+
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
     fileprivate static var actions: [UInt32: () -> Void] = [:]
     private static var handlerInstalled = false

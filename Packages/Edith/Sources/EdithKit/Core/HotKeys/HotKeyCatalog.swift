@@ -69,7 +69,40 @@ public enum HotKeyCatalog {
     public static let emoji = "emoji"
     public static let keystrokeHighlight = "keystrokeHighlight"
 
+    public static let windowLeft = "windowLeft"
+
+    public static let windowRight = "windowRight"
+
+    public static let windowMaximize = "windowMaximize"
+
+    public static let windowRestore = "windowRestore"
+
     public static let bindings: [HotKeyBinding] = [
+        HotKeyBinding(
+            id: windowLeft, title: "WindowTools left", carbonID: 42,
+            codeKey: AppStorageKeys.WindowTools.leftHotKeyCode,
+            modsKey: AppStorageKeys.WindowTools.leftHotKeyMods,
+            labelKey: AppStorageKeys.WindowTools.leftHotKeyLabel, defaultCode: kVK_LeftArrow,
+            defaultMods: controlKey | optionKey, defaultLabel: "⌃⌥←", abilityID: "windowTools"),
+        HotKeyBinding(
+            id: windowRight, title: "WindowTools right", carbonID: 43,
+            codeKey: AppStorageKeys.WindowTools.rightHotKeyCode,
+            modsKey: AppStorageKeys.WindowTools.rightHotKeyMods,
+            labelKey: AppStorageKeys.WindowTools.rightHotKeyLabel, defaultCode: kVK_RightArrow,
+            defaultMods: controlKey | optionKey, defaultLabel: "⌃⌥→", abilityID: "windowTools"),
+        HotKeyBinding(
+            id: windowMaximize, title: "WindowTools maximize", carbonID: 44,
+            codeKey: AppStorageKeys.WindowTools.maximizeHotKeyCode,
+            modsKey: AppStorageKeys.WindowTools.maximizeHotKeyMods,
+            labelKey: AppStorageKeys.WindowTools.maximizeHotKeyLabel, defaultCode: kVK_ANSI_M,
+            defaultMods: controlKey | optionKey, defaultLabel: "⌃⌥M", abilityID: "windowTools"),
+        HotKeyBinding(
+            id: windowRestore, title: "WindowTools restore", carbonID: 45,
+            codeKey: AppStorageKeys.WindowTools.restoreHotKeyCode,
+            modsKey: AppStorageKeys.WindowTools.restoreHotKeyMods,
+            labelKey: AppStorageKeys.WindowTools.restoreHotKeyLabel, defaultCode: kVK_ANSI_R,
+            defaultMods: controlKey | optionKey, defaultLabel: "⌃⌥R", abilityID: "windowTools"),
+
         HotKeyBinding(
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
             modsKey: "hotKeyMods", labelKey: "hotKeyLabel", defaultCode: kVK_ANSI_E,

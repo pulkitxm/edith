@@ -106,6 +106,8 @@ public enum IPC {
         public static let revealResult = IPC.scopedName("com.pulkit.edith.revealResult")
         public static let requestWindowSnapshot = IPC.scopedName(
             "com.pulkit.edith.requestWindowSnapshot")
+        public static let requestWindowLayout = IPC.scopedName(
+            "com.pulkit.edith.requestWindowLayout")
         public static let windowSnapshotResult = IPC.scopedName(
             "com.pulkit.edith.windowSnapshotResult")
         public static let requestAppDiagnostics = IPC.scopedName(

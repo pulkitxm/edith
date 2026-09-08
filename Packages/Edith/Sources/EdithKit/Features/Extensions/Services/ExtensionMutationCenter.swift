@@ -97,6 +97,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case focusDim
     case presenter
     case colorPicker
+    case windowTools
     case emoji
 }
 
