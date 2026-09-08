@@ -20,7 +20,12 @@ final class CommandBarController: NSObject, NSWindowDelegate {
         model = CommandBarModel(services: services)
         super.init()
         model.dismiss = { [weak self] in self?.hide() }
+        model.shortcutsChanged = { [weak self] in
+            guard let self else { return }
+            CommandBarResultHotKeys.sync(controller: self)
+        }
         makePanel()
+        CommandBarResultHotKeys.sync(controller: self)
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -31,9 +36,10 @@ final class CommandBarController: NSObject, NSWindowDelegate {
 
     func show() {
         guard let panel else { return }
+        let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         ClipboardPanel.shared.hide()
         dismissPanel()
-        model.prepare()
+        model.prepare(frontmostPID: frontmostPID)
         NotificationCenter.default.post(name: Self.willShow, object: nil)
         panel.setFrameOrigin(origin(for: panel.frame.size))
         NSApp.activate(ignoringOtherApps: true)
@@ -49,17 +55,23 @@ final class CommandBarController: NSObject, NSWindowDelegate {
 
     func syncSettings() {
         CommandBarHotKey.register()
+        CommandBarResultHotKeys.sync(controller: self)
         if isVisible { model.prepare() }
     }
 
     func shutdown() {
         CommandBarHotKey.unregister()
+        CommandBarResultHotKeys.clear()
         hide()
         model.shutdown()
         panel?.delegate = nil
         panel?.contentView = nil
         hosting = nil
         panel = nil
+    }
+
+    func executeShortcut(id: String) {
+        model.executeShortcut(id: id)
     }
 
     private func makePanel() {

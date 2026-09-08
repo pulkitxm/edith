@@ -373,7 +373,7 @@ import Testing
             "emoji": [.accessibility],
             "colorPicker": [],
             "keystrokeHighlight": [],
-            "commandBar": [],
+            "commandBar": [.accessibility],
             "focusDim": [],
             "presenter": [],
             "music": [],

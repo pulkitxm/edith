@@ -167,6 +167,9 @@ public enum CommandTree {
         "ed agent jobs": Spec(options: common),
         "ed agent restart": Spec(options: common),
         "ed agent logs": Spec(options: ["--json", "--last"]),
+        "ed command-bar copy": Spec(options: common, arguments: [.free], repeatingArgument: .free),
+        "ed command-bar transform": Spec(
+            options: common, arguments: [.free], repeatingArgument: .free),
         "ed command-bar calculate": Spec(options: common, repeatingArgument: .free),
         "ed command-bar convert": Spec(options: common, arguments: [.free, .free, .free]),
         "ed agent events": Spec(options: common),

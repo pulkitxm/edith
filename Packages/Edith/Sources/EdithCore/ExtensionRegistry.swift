@@ -217,7 +217,7 @@ public enum ExtensionRegistry {
             requiredCapabilities: [.keystrokeObservation]),
         ExtensionRegistryEntry(
             id: "commandBar", title: "Command Bar",
-            subtitle: "Search Edith actions and apps, calculate, and convert from anywhere.",
+            subtitle: "Search actions, apps, files, settings, clipboard, text, and emoji.",
             symbolName: "command", suite: .desk, host: .bar, featured: true,
             defaultsKey: "commandBarEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.globalShortcuts]),
