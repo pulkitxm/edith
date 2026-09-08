@@ -64,8 +64,6 @@ public enum IPC {
             "com.pulkit.edith.requestRecordingLibrary")
         public static let recordingStatusChanged = IPC.scopedName(
             "com.pulkit.edith.recordingStatusChanged")
-        public static let requestScreenshot = IPC.scopedName(
-            "com.pulkit.edith.requestScreenshot")
         public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(
