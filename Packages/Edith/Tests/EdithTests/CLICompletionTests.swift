@@ -149,7 +149,7 @@ import Testing
             recorder.candidates
                 == [
                     "area", "window", "display", "pause", "resume", "stop", "cancel", "status",
-                    "library",
+                    "library", "export",
                 ])
     }
 
