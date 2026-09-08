@@ -87,6 +87,7 @@ public enum AgentBoot {
             await runtime.attach(scheduler: scheduler)
             let metrics = await AgentMachineMetricsService()
             await metrics.register(on: runtime)
+            await FocusStorageService().register(on: runtime)
             await AgentOperations.register(
                 on: runtime, store: store, scheduler: scheduler, downloads: downloads,
                 attention: attention)

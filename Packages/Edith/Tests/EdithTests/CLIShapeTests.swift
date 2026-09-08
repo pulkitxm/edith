@@ -238,7 +238,7 @@ enum CommandCrawler {
             "ed machines terminal",
             "ed lid-awake",
             "ed attention", "ed attention categories", "ed attention focus",
-            "ed quinjet", "ed automations",
+            "ed quinjet", "ed automations", "ed focus",
             "ed database", "ed database connections", "ed database saved-queries",
             "ed database mutations", "ed database operations", "ed database mcp",
         ]

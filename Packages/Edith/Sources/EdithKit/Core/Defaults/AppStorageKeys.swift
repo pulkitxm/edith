@@ -5,6 +5,11 @@ public enum AppStorageKeys {
         public static let documentBackup = "automationsDocumentBackup"
     }
 
+    public enum Focus {
+        public static let documentBackup = "focusProfilesDocumentBackup"
+        public static let enabled = "focusProfilesEnabled"
+    }
+
     public enum Suites {
         public static let agents = "suiteAgentsEnabled"
         public static let maintenance = "suiteMaintenanceEnabled"

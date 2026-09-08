@@ -125,6 +125,9 @@ import EdithDatabase
             id: "automations", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "focusProfiles", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "seoAudit", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),

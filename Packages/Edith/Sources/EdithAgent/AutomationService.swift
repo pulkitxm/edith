@@ -47,10 +47,11 @@ public actor AutomationService {
         await runtime.register(operation: AgentAutomationOperation.history) { _ in
             try await AgentPayload.encode(self.history())
         }
-        await tasks.register(operation: AgentAutomationOperation.run, concurrency: 1) {
-            payload, _ in
-            let request = try AgentPayload.decode(AgentAutomationRunRequest.self, from: payload)
-            return try await AgentPayload.encode(self.execute(request))
+        for operation in [AgentAutomationOperation.run, AgentAutomationOperation.focusRun] {
+            await tasks.register(operation: operation, concurrency: 1) { payload, _ in
+                let request = try AgentPayload.decode(AgentAutomationRunRequest.self, from: payload)
+                return try await AgentPayload.encode(self.execute(request))
+            }
         }
         await runtime.registerShutdown(id: "automations") { await self.shutdown() }
     }
@@ -63,13 +64,21 @@ public actor AutomationService {
     }
 
     public func execute(_ request: AgentAutomationRunRequest) async throws -> AutomationRunRecord {
-        guard isEnabled()
-        else {
+        guard isEnabled() || request.restoresFocusState else {
             throw AutomationExecutionError.disabled
         }
-        guard let scene = try storage.load().scenes.first(where: { $0.id == request.sceneID })
-        else {
-            throw AgentError(.refused, "The scene no longer exists.")
+        let scene: AutomationScene
+        if let transient = request.transientScene {
+            guard
+                request.restoresFocusState
+                    || ExtensionRegistry.entry("focusProfiles")?.isEnabled(in: SharedDefaults.store)
+                        == true
+            else { throw AgentError(.refused, "Focus Profiles is disabled.") }
+            scene = transient
+        } else {
+            guard let stored = try storage.load().scenes.first(where: { $0.id == request.sceneID })
+            else { throw AgentError(.refused, "The scene no longer exists.") }
+            scene = stored
         }
         let runID = try await executor.start(
             scene: scene, automationID: request.automationID,
@@ -93,7 +102,7 @@ public actor AutomationService {
     public func tick(now: Date = Date()) async throws -> Data? {
         guard isEnabled()
         else {
-            await shutdown()
+            stopTriggers()
             return nil
         }
         let document = try storage.load()
@@ -177,13 +186,17 @@ public actor AutomationService {
     }
 
     public func shutdown() async {
+        stopTriggers()
+        await executor.cancelAll()
+    }
+
+    private func stopTriggers() {
         networkMonitor?.cancel()
         networkMonitor = nil
         lastNetwork = nil
         lastPower = nil
         lastBattery = nil
         scheduledMinutes.removeAll()
-        await executor.cancelAll()
     }
 
     private static func powerSnapshot() -> (source: AutomationPowerSource?, battery: Int?) {

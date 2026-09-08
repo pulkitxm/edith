@@ -572,7 +572,7 @@ enum UIParity {
 
     @Test func everyRunningAppLeafDeclaresItsSharedOperation() {
         let declared = Set(RunningAppOperation.allCases.map(\.descriptor.cli))
-        #expect(declared == [["apps", "ls"], ["apps", "quit"]])
+        #expect(declared == [["apps", "ls"], ["apps", "open"], ["apps", "quit"]])
     }
 
     @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {

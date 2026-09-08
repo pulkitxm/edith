@@ -579,6 +579,9 @@ struct TabInfo {
 
 let allTabs: [TabInfo] = [
     TabInfo(
+        id: "focus", title: "Focus",
+        subtitle: "profiles and Meeting Mode", enabledKey: AppStorageKeys.Focus.enabled),
+    TabInfo(
         id: "automations", title: "Scenes",
         subtitle: "local automations", enabledKey: AppStorageKeys.Tabs.automationsEnabled),
     TabInfo(
@@ -626,6 +629,8 @@ struct RootView: View {
         false
     @AppStorage(AppStorageKeys.Tabs.automationsEnabled, store: SharedDefaults.store) private
         var automationsEnabled = false
+    @AppStorage(AppStorageKeys.Focus.enabled, store: SharedDefaults.store) private
+        var focusEnabled = false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -645,6 +650,7 @@ struct RootView: View {
             guard let info = allTabs.first(where: { $0.id == id }) else { return nil }
             let on =
                 switch id {
+                case "focus": focusEnabled
                 case "automations": automationsEnabled
                 case "usage": usageEnabled
                 case "music": musicEnabled
@@ -797,6 +803,7 @@ struct RootView: View {
         .onChange(of: systemEnabled) { pinTab() }
         .onChange(of: calendarEnabled) { pinTab() }
         .onChange(of: automationsEnabled) { pinTab() }
+        .onChange(of: focusEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
         .background(PanelBackground())
@@ -807,6 +814,8 @@ struct RootView: View {
     private var tabBody: some View {
         if tab == "usage", let store = services.usage {
             UsageView(store: store)
+        } else if tab == "focus", let runtime = services.focus {
+            FocusView(runtime: runtime)
         } else if tab == "automations", let runtime = services.automations {
             AutomationView(runtime: runtime)
         } else if tab == "music", let player = services.music {

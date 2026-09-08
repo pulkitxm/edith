@@ -168,6 +168,13 @@ public enum CommandTree {
         "ed agent restart": Spec(options: common),
         "ed agent logs": Spec(options: ["--json", "--last"]),
         "ed automations operations": Spec(options: common),
+        "ed focus ls": Spec(options: common),
+        "ed focus status": Spec(options: common),
+        "ed focus start": Spec(
+            options: ["--json", "--help", "--for", "--until"], arguments: [.free]),
+        "ed focus stop": Spec(options: common),
+        "ed focus history": Spec(options: ["--json", "--help", "--limit"]),
+        "ed apps open": Spec(options: common, arguments: [.free]),
         "ed automations ls": Spec(options: common),
         "ed automations plan": Spec(options: common, arguments: [.free]),
         "ed automations run": Spec(

@@ -24,6 +24,7 @@ public enum AgentOperationCatalog {
         + SEOAuditTaskOperation.internalOperations
         + AgentClipboardOperation.internalOperations
         + AgentAutomationOperation.internalOperations
+        + AgentFocusStorageOperation.internalOperations
 
     public static func serves(_ id: UserOperationID) -> Bool {
         served.contains(id)

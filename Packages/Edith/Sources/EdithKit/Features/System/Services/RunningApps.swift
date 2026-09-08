@@ -105,6 +105,7 @@ public enum RunningAppIPC {
 
 public enum RunningAppOperation: String, CaseIterable, Equatable, Sendable {
     case list
+    case open
     case quit
 
     public var descriptor: UserOperationDescriptor {
@@ -114,6 +115,11 @@ public enum RunningAppOperation: String, CaseIterable, Equatable, Sendable {
                 id: UserOperationID(rawValue: "apps.list"),
                 summary: "List the applications running on this Mac.",
                 cli: ["apps", "ls"], effect: .read)
+        case .open:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "apps.open"),
+                summary: "Open an installed application by bundle identifier.",
+                cli: ["apps", "open"], effect: .interactive)
         case .quit:
             UserOperationDescriptor(
                 id: UserOperationID(rawValue: "apps.quit"),

@@ -69,7 +69,7 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
-        "attention", "automations", "seoAudit",
+        "attention", "automations", "focusProfiles", "seoAudit",
     ]
 
     public static func provider(
@@ -100,6 +100,7 @@ public enum ExtensionLiveAdapters {
                 : .ready("Install bundled Edith skills for detected agents.")
         case "attention": attentionReadiness()
         case "automations": automationsReadiness()
+        case "focusProfiles": focusProfilesReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
@@ -137,6 +138,22 @@ public enum ExtensionLiveAdapters {
             }
             return .ready(
                 "\(document.scenes.count) scenes and \(document.automations.count) automations are readable."
+            )
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    static func focusProfilesReadiness(
+        storage: FocusStorage = FocusStorage()
+    ) -> ExtensionAdapterReadiness {
+        do {
+            let document = try storage.load()
+            guard !document.profiles.isEmpty else {
+                return .empty("Create a profile and connect it to reusable scenes.")
+            }
+            return .ready(
+                "\(document.profiles.count) focus profiles are readable; Meeting Mode is \(document.meeting.isEnabled ? "enabled" : "off")."
             )
         } catch {
             return .failed(error.localizedDescription)

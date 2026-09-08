@@ -37,6 +37,10 @@ import Testing
             actions.map { [$0.surface, $0.action] + $0.cli }
                 == [
                     ["System page", "inspect running applications", "apps", "ls"],
+                    [
+                        "Focus Profiles", "launch an application", "apps", "open",
+                        "com.apple.Safari",
+                    ],
                     ["System page", "quit one app", "apps", "quit", "Safari", "--yes"],
                     ["System page", "quit all apps", "apps", "quit", "--all", "--yes"],
                 ])

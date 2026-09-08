@@ -159,6 +159,11 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
+    private static let focusRegistrations: [RegisteredUserOperation] =
+        FocusProfileOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+
     private static let agentRegistrations: [RegisteredUserOperation] =
         AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
@@ -214,7 +219,7 @@ public enum UserOperationCatalog {
 
     public static let registrations =
         machineRegistrations + applicationRegistrations + featureRegistrations
-        + automationRegistrations
+        + automationRegistrations + focusRegistrations
         + agentRegistrations + remoteFileRegistrations + remoteActionRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)
@@ -331,6 +336,39 @@ private extension AutomationOperation {
             userInterface(
                 "Automations & Scenes", "import automation configuration",
                 ["/tmp/edith-automations.json", "--dry-run"])
+        }
+    }
+}
+
+private extension FocusProfileOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list, .status, .history:
+            userInterface("Focus Profiles", "inspect local focus state")
+        case .start:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Focus Profiles", action: "start a profile",
+                    exampleArguments: ["Deep work"]),
+                UserInterfaceActionPlacement(
+                    surface: "Menu panel", action: "start a profile",
+                    exampleArguments: ["Deep work"]),
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "start a profile",
+                    exampleArguments: ["Deep work"]),
+                UserInterfaceActionPlacement(
+                    surface: "Global shortcut", action: "start a profile",
+                    exampleArguments: ["Deep work"]),
+            ])
+        case .stop:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Focus Profiles", action: "end focus and restore state"),
+                UserInterfaceActionPlacement(
+                    surface: "Menu bar", action: "end focus and restore state"),
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "end focus and restore state"),
+            ])
         }
     }
 }
@@ -1116,6 +1154,8 @@ private extension RunningAppOperation {
         switch self {
         case .list:
             userInterface("System page", "inspect running applications")
+        case .open:
+            userInterface("Focus Profiles", "launch an application", ["com.apple.Safari"])
         case .quit:
             .userInterface([
                 UserInterfaceActionPlacement(

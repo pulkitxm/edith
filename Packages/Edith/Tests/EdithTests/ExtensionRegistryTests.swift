@@ -8,6 +8,7 @@ import Testing
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
         "automationsEnabled",
+        "focusProfilesEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -50,7 +51,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
-                "database", "attention", "automations", "seoAudit",
+                "database", "attention", "automations", "focusProfiles", "seoAudit",
             ])
     }
 
@@ -326,6 +327,7 @@ import Testing
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
             "automations": [],
+            "focusProfiles": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -356,6 +358,7 @@ import Testing
         ]
         let optional: [String: [ExtensionPermission]] = [
             "automations": [.calendar, .notifications],
+            "focusProfiles": [.calendar, .notifications],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],

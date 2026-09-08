@@ -21,10 +21,12 @@ final class AppServices {
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
     private(set) var automations: AutomationRuntime?
+    private(set) var focus: FocusRuntime?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
+    private var focusShutdownInFlight = false
     private var terminating = false
     private var attentionStopTask: Task<Void, Never>?
 
@@ -114,6 +116,7 @@ final class AppServices {
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
+        await focus?.prepareForTermination()
         automations?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
@@ -459,11 +462,25 @@ final class AppServices {
     }
 
     private func reconcileAutomationService() {
-        let enabled =
+        let automationsEnabled =
             ExtensionRegistry.entry("automations")?.isEnabled(in: SharedDefaults.store) == true
-        if enabled, automations == nil { automations = AutomationRuntime() }
-        if enabled { automations?.reload() }
-        if !enabled, let runtime = automations {
+        let focusEnabled =
+            ExtensionRegistry.entry("focusProfiles")?.isEnabled(in: SharedDefaults.store) == true
+        if automationsEnabled, automations == nil { automations = AutomationRuntime() }
+        if automationsEnabled { automations?.reload() }
+        if focusEnabled, !focusShutdownInFlight, focus == nil, let automations {
+            focus = FocusRuntime(automations: automations)
+        }
+        if focusEnabled { focus?.reload() }
+        if !focusEnabled, let runtime = focus {
+            focus = nil
+            focusShutdownInFlight = true
+            runtime.shutdownForDisable { [weak self] in
+                self?.focusShutdownInFlight = false
+                self?.reconcileAutomationService()
+            }
+        }
+        if !automationsEnabled, !focusShutdownInFlight, focus == nil, let runtime = automations {
             runtime.shutdown()
             automations = nil
         }

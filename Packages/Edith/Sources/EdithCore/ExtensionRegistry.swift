@@ -273,6 +273,13 @@ public enum ExtensionRegistry {
             defaultsKey: "automationsEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
         ExtensionRegistryEntry(
+            id: "focusProfiles", title: "Focus Profiles & Meeting Mode",
+            subtitle: "Compose scenes into restorable work and meeting sessions.",
+            symbolName: "moon.stars.fill", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "focusProfilesEnabled", requires: ["automations"],
+            requiredCapabilities: [.runningApplications],
+            optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
+        ExtensionRegistryEntry(
             id: "seoAudit", title: "Site Audit",
             subtitle: "Crawl sitemaps, inspect page metadata, and keep every run local.",
             symbolName: "doc.text.magnifyingglass", suite: .data, host: .agent, featured: false,

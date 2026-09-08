@@ -84,6 +84,30 @@ final class AutomationRuntime {
         runTasks[scene.id] = task
     }
 
+    func scene(id: UUID) -> AutomationScene? {
+        document.scenes.first { $0.id == id }
+    }
+
+    func executeScene(
+        _ scene: AutomationScene, origin: AutomationRunOrigin,
+        automationID: UUID? = nil, restoring: Bool = false
+    ) async throws -> AutomationRunRecord {
+        guard !activeSceneIDs.contains(scene.id) else {
+            throw AutomationExecutionError.alreadyRunning
+        }
+        activeSceneIDs.insert(scene.id)
+        defer { activeSceneIDs.remove(scene.id) }
+        let record = try await AgentAutomationClient.run(
+            AgentAutomationRunRequest(
+                sceneID: scene.id, origin: origin, automationID: automationID,
+                grantedPermissions: grantedPermissions(),
+                transientScene: document.scenes.contains(where: { $0.id == scene.id })
+                    ? nil : scene,
+                restoresFocusState: restoring), forFocus: true)
+        history = (try? storage.history()) ?? history
+        return record
+    }
+
     func runScene(
         matching query: String, origin: AutomationRunOrigin, requestID: String? = nil
     ) {

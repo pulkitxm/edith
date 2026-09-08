@@ -5,10 +5,13 @@ public enum AgentAutomationOperation {
     public static let save = "automations.document.save"
     public static let history = "automations.history.load"
     public static let run = "automations.scene.execute"
+    public static let focusRun = "focus.scene.execute"
     public static let internalOperations = [load, save, history]
 }
 
 public struct AgentAutomationRunRequest: Codable, Sendable {
+    public let transientScene: AutomationScene?
+    public let restoresFocusState: Bool
     public let sceneID: UUID
     public let origin: AutomationRunOrigin
     public let automationID: UUID?
@@ -16,8 +19,11 @@ public struct AgentAutomationRunRequest: Codable, Sendable {
 
     public init(
         sceneID: UUID, origin: AutomationRunOrigin, automationID: UUID? = nil,
-        grantedPermissions: Set<AutomationPermission> = []
+        grantedPermissions: Set<AutomationPermission> = [],
+        transientScene: AutomationScene? = nil, restoresFocusState: Bool = false
     ) {
+        self.transientScene = transientScene
+        self.restoresFocusState = restoresFocusState
         self.sceneID = sceneID
         self.origin = origin
         self.automationID = automationID
@@ -26,10 +32,11 @@ public struct AgentAutomationRunRequest: Codable, Sendable {
 }
 
 public enum AgentAutomationClient {
-    public static func run(_ request: AgentAutomationRunRequest) async throws -> AutomationRunRecord
+    public static func run(_ request: AgentAutomationRunRequest, forFocus: Bool = false)
+        async throws -> AutomationRunRecord
     {
         let submission = AgentTaskSubmission(
-            operation: AgentAutomationOperation.run,
+            operation: forFocus ? AgentAutomationOperation.focusRun : AgentAutomationOperation.run,
             title: "Run automation scene", payload: try AgentPayload.encode(request))
         return try AgentPayload.decode(
             AutomationRunRecord.self, from: await AgentTaskClient().run(submission))

@@ -14,11 +14,13 @@ execution stays in the same app-owned path as the System page.
 | Command | What it does |
 | --- | --- |
 | `ed apps ls` | Lists every app with a Dock presence, with its pid, CPU, memory and bundle id. Runs when you type `ed apps` with no subcommand, and answers to `ed apps list`. |
+| `ed apps open` | Opens an installed app by its exact bundle identifier. |
 | `ed apps quit` | Previews or applies an exact plan for one app by name, bundle id or prefix, or everything except Finder and Edith with `--all`. |
 
 ## Commands
 
 - [`ed apps ls`](./ls.md)
+- [`ed apps open`](./open.md)
 - [`ed apps quit`](./quit.md)
 
 ## Exit codes
