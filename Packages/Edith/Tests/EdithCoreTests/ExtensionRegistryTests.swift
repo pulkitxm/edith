@@ -18,7 +18,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
-                "database", "attention", "seoAudit",
+                "database", "attention", "automations", "seoAudit",
             ])
     }
 

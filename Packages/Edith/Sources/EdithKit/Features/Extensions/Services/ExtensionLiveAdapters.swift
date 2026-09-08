@@ -69,7 +69,7 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
-        "attention", "seoAudit",
+        "attention", "automations", "seoAudit",
     ]
 
     public static func provider(
@@ -99,6 +99,7 @@ public enum ExtensionLiveAdapters {
                     "Install Node.js 22.20 or later to install plugins. Browsing is available now.")
                 : .ready("Install bundled Edith skills for detected agents.")
         case "attention": attentionReadiness()
+        case "automations": automationsReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
@@ -123,6 +124,22 @@ public enum ExtensionLiveAdapters {
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
+        }
+    }
+
+    static func automationsReadiness(
+        storage: AutomationStorage = AutomationStorage()
+    ) -> ExtensionAdapterReadiness {
+        do {
+            let document = try storage.load()
+            guard !document.scenes.isEmpty else {
+                return .empty("Create or import a scene to begin automating Edith operations.")
+            }
+            return .ready(
+                "\(document.scenes.count) scenes and \(document.automations.count) automations are readable."
+            )
+        } catch {
+            return .failed(error.localizedDescription)
         }
     }
 

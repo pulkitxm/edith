@@ -20,6 +20,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var automations: AutomationRuntime?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -94,6 +95,9 @@ final class AppServices {
             StartupPhase(name: "helper.services.attention") { [weak self] in
                 self?.reconcileAttentionService()
             },
+            StartupPhase(name: "helper.services.automations") { [weak self] in
+                self?.reconcileAutomationService()
+            },
             StartupPhase(name: "helper.services.refresh") { [weak self] in
                 self?.refreshServices()
             },
@@ -110,6 +114,7 @@ final class AppServices {
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
+        automations?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -196,6 +201,7 @@ final class AppServices {
         reconcileHardwareServices()
         reconcileStatusServices()
         reconcileAttentionService()
+        reconcileAutomationService()
         refreshServices()
     }
 
@@ -449,6 +455,17 @@ final class AppServices {
             guard let self else { return }
             attentionStopTask = nil
             reconcileAttentionService()
+        }
+    }
+
+    private func reconcileAutomationService() {
+        let enabled =
+            ExtensionRegistry.entry("automations")?.isEnabled(in: SharedDefaults.store) == true
+        if enabled, automations == nil { automations = AutomationRuntime() }
+        if enabled { automations?.reload() }
+        if !enabled, let runtime = automations {
+            runtime.shutdown()
+            automations = nil
         }
     }
 

@@ -21,16 +21,18 @@ public struct UserOperationDescriptor: Equatable, Sendable {
     public let cli: [String]
     public let effect: UserOperationEffect
     public let requiresPreview: Bool
+    public let requiredPermissions: [String]
 
     public init(
         id: UserOperationID, summary: String, cli: [String], effect: UserOperationEffect,
-        requiresPreview: Bool = false
+        requiresPreview: Bool = false, requiredPermissions: [String] = []
     ) {
         self.id = id
         self.summary = summary
         self.cli = cli
         self.effect = effect
         self.requiresPreview = requiresPreview
+        self.requiredPermissions = requiredPermissions
     }
 }
 

@@ -1,6 +1,10 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Automations {
+        public static let documentBackup = "automationsDocumentBackup"
+    }
+
     public enum Suites {
         public static let agents = "suiteAgentsEnabled"
         public static let maintenance = "suiteMaintenanceEnabled"
@@ -283,6 +287,7 @@ public enum AppStorageKeys {
     }
 
     public enum Tabs {
+        public static let automationsEnabled = "automationsEnabled"
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"

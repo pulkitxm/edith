@@ -74,6 +74,7 @@ public enum AgentBoot {
             pauseAmbientOnBattery: SharedDefaults.store.bool(
                 forKey: AgentSettingsKeys.pauseAmbientOnBattery),
             observe: { await runtime.record($0) })
+        let automations = AutomationService()
         let hub = AgentHub(runtime: runtime)
         let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
             Task { await scheduler.enqueueIfDue("usage.refresh") }
@@ -97,6 +98,7 @@ public enum AgentBoot {
                         }
                     }, record: { await runtime.record($0) })
                 await tasks.registerCommand()
+                await automations.register(on: runtime, tasks: tasks)
                 await StorageInspectionWorkflow().register(on: tasks)
                 await AgentMachineOperations.register(on: tasks)
                 await downloads.registerEstimate(on: tasks)
@@ -117,7 +119,7 @@ public enum AgentBoot {
             }
             for job in AgentJobCatalog.jobs(
                 store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
-                attention: attention)
+                attention: attention, automations: automations)
             {
                 await scheduler.register(job)
             }
@@ -140,6 +142,7 @@ public enum AgentBoot {
         _ = IPC.observe(IPC.Name.settingsChanged) {
             Task {
                 await downloads.refresh()
+                _ = try? await automations.tick()
                 await scheduler.setPauseAmbientOnBattery(
                     SharedDefaults.store.bool(
                         forKey: AgentSettingsKeys.pauseAmbientOnBattery))

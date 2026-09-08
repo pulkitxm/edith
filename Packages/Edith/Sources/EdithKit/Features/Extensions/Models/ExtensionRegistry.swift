@@ -138,6 +138,7 @@ public extension ExtensionRegistryEntry {
 
     var optionalPermissions: [ExtensionPermission] {
         switch id {
+        case "automations": [.calendar, .notifications]
         case "usage", "appMaintenance": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.bluetooth, .camera, .automation]

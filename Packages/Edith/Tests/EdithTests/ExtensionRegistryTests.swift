@@ -7,6 +7,7 @@ import Testing
 
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
+        "automationsEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -49,7 +50,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
-                "database", "attention", "seoAudit",
+                "database", "attention", "automations", "seoAudit",
             ])
     }
 
@@ -291,7 +292,7 @@ import Testing
             entries: ExtensionRegistry.entries, query: "attention", category: .all)
 
         #expect(titleMatches.map(\.id) == ["audioMixer"])
-        #expect(subtitleMatches.map(\.id) == ["calendar"])
+        #expect(subtitleMatches.map(\.id) == ["calendar", "automations"])
         #expect(categoryMatches.allSatisfy { $0.suite == .desk })
         #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
         #expect(attentionMatches.map(\.id) == ["attention"])
@@ -324,6 +325,7 @@ import Testing
 
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
+            "automations": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -353,6 +355,7 @@ import Testing
             "seoAudit": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
+            "automations": [.calendar, .notifications],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],

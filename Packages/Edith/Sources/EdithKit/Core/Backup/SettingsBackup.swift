@@ -709,6 +709,7 @@ final class SettingsBackup {
 
     private nonisolated static let baseBackedKeys = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.Automations.documentBackup,
         AppStorageKeys.General.theme, AppStorageKeys.General.panelTab,
         AppStorageKeys.Presenter.mode,
         AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
@@ -718,7 +719,8 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.detectRecording,
         AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
+        AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.automationsEnabled,
+        AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled, "usageMachines",
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
         AppStorageKeys.Tabs.seoAuditEnabled,
@@ -835,6 +837,7 @@ final class SettingsBackup {
 
     private nonisolated static let baseSharedKeys: Set<String> = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.Automations.documentBackup,
         AppStorageKeys.General.theme, AppStorageKeys.General.lastPaletteTheme,
         AppStorageKeys.General.appearance, AppStorageKeys.Music.downloadKind,
         AppStorageKeys.Presenter.mode, AppStorageKeys.Presenter.enabled,
@@ -844,7 +847,8 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.detectRecording,
         AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
+        AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.automationsEnabled,
+        AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled,
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
         AppStorageKeys.Tabs.seoAuditEnabled,

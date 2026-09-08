@@ -51,6 +51,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP |
 | [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
 | [Keystroke Highlight](./keystroke-highlight/README.md) | Showing key presses on screen for demos and recordings |
+| [`ed automations`](./automations/README.md) | Reusable scenes, local triggers, dry-run plans, history, and import or export |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |

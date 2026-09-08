@@ -8,11 +8,12 @@ public enum AgentJobCatalog {
 
     public static func jobs(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil,
+        automations: AutomationService? = nil
     ) -> [AgentJob] {
         let bodies = collectors(
             store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
-            attention: attention)
+            attention: attention, automations: automations)
         return descriptors().map { descriptor in
             let empty: @Sendable () async throws -> Data? = { nil }
             let body = bodies[descriptor.id] ?? empty
@@ -25,7 +26,8 @@ public enum AgentJobCatalog {
 
     static func collectors(
         store: AgentStore?, scheduler: JobScheduler? = nil, downloads: DownloadWorker? = nil,
-        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil
+        metrics: AgentMachineMetricsService? = nil, attention: AttentionBackgroundService? = nil,
+        automations: AutomationService? = nil
     ) -> [String: @Sendable () async throws -> Data?] {
         let limits = LimitsCollectorJob()
         let usage = UsageCollectorJob(store: store)
@@ -39,6 +41,7 @@ public enum AgentJobCatalog {
             return await scheduler.subscriberCount(topic: .sessions) > 0
         }
         return [
+            "automations.triggers": { try await automations?.tick() },
             "usage.refresh": { try await usage.run() },
             "usage.limits": { try await limits.run() },
             "machines.health": { try await machines.run() },
