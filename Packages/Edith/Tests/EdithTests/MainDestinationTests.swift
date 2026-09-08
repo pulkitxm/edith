@@ -65,7 +65,7 @@ import Testing
                 .appMaintenance,
                 .system, .runningApps,
                 .desk,
-                .media, .music, .calendar,
+                .media, .mediaToolkit, .music, .calendar,
                 .data, .database, .attention, .seoAudit,
             ])
     }
