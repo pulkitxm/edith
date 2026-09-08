@@ -730,7 +730,6 @@ final class SettingsBackup {
         AppStorageKeys.Music.downloadKind,
         AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
         AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
-        AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
         AppStorageKeys.Tabs.networkDiagnosticsEnabled,
         AppStorageKeys.NetworkDiagnostics.configuration,
         AppStorageKeys.NetworkDiagnostics.baseline,
