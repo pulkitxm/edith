@@ -198,6 +198,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "windowSwitcher", title: "Window Switcher",
+            subtitle: "Search every window or cycle through the front app.",
+            symbolName: "rectangle.stack.fill", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "windowSwitcherEnabled", requiredCapabilities: [.windowManagement],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

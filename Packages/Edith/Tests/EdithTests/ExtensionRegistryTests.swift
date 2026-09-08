@@ -21,6 +21,7 @@ import Testing
         "menuBarSystemStats",
         "micMuteEnabled",
         "clipboardEnabled",
+        "windowSwitcherEnabled",
         "emojiEnabled",
         "colorPickerEnabled",
         "keystrokeHighlightEnabled",
@@ -47,7 +48,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "clipboard", "windowSwitcher", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -202,6 +204,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "windowSwitcher",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
@@ -338,6 +341,7 @@ import Testing
             "systemStats": [],
             "micMute": [],
             "clipboard": [],
+            "windowSwitcher": [.accessibility],
             "emoji": [],
             "colorPicker": [.screenRecording],
             "keystrokeHighlight": [.inputMonitoring],
@@ -367,6 +371,7 @@ import Testing
             "systemStats": [],
             "micMute": [],
             "clipboard": [.accessibility],
+            "windowSwitcher": [],
             "emoji": [.accessibility],
             "colorPicker": [],
             "keystrokeHighlight": [],
@@ -515,6 +520,7 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
+            "windowSwitcherEnabled": false,
             "keystrokeHighlightEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,

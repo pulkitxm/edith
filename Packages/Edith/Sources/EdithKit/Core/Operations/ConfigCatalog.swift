@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "windowswitcher", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -63,6 +63,7 @@ public enum ConfigCatalog {
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
+        + windowSwitcher
         + micMute
         + backup + permissions + terminal
 
@@ -776,6 +777,40 @@ public enum ConfigCatalog {
             AppStorageKeys.Notch.audioMixerEnabled, .bool, group: "notch",
             summary: "Audio Mixer ability: per-app volume in the notch shelf.",
             fallback: .bool(false)),
+    ]
+
+    private static let windowSwitcher: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.enabled, .bool, group: "windowswitcher",
+            summary: "Window Switcher extension: search and activate application windows.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.grouped, .bool, group: "windowswitcher",
+            summary: "Group switcher results by application.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.includedApps, .csv, group: "windowswitcher",
+            summary: "Bundle identifiers always included in the switcher."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.hiddenApps, .csv, group: "windowswitcher",
+            summary: "Bundle identifiers hidden from the switcher."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.showHotKeyCode, .int, group: "windowswitcher",
+            summary: "Virtual key code of the switcher shortcut."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.showHotKeyMods, .int, group: "windowswitcher",
+            summary: "Carbon modifier mask of the switcher shortcut."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.showHotKeyLabel, .string, group: "windowswitcher",
+            summary: "Printable label for the switcher shortcut."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.cycleHotKeyCode, .int, group: "windowswitcher",
+            summary: "Virtual key code of the front-app window cycle shortcut."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.cycleHotKeyMods, .int, group: "windowswitcher",
+            summary: "Carbon modifier mask of the front-app cycle shortcut."),
+        SettingDefinition(
+            AppStorageKeys.WindowSwitcher.cycleHotKeyLabel, .string, group: "windowswitcher",
+            summary: "Printable label for the front-app cycle shortcut."),
     ]
 
     private static let focusDim: [SettingDefinition] = [

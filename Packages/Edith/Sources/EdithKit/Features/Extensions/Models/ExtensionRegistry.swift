@@ -54,7 +54,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .calendar: "Required to read and show your schedule in Calendar."
         case .notifications: "Asked when you enable usage limit, pacing, or reset alerts."
         case .accessibility:
-            "Asked when you first use Clean keys, clipboard instant paste, or emoji insertion."
+            "Asked when you first use Clean keys, clipboard instant paste, emoji insertion, or window controls."
         case .inputMonitoring:
             "Asked when you first use Clean keys to block key presses during cleaning."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
@@ -130,6 +130,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "windowSwitcher": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         case "keystrokeHighlight": [.inputMonitoring]
         default: []

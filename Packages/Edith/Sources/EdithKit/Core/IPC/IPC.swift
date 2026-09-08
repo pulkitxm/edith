@@ -112,6 +112,10 @@ public enum IPC {
             "com.pulkit.edith.requestAppDiagnostics")
         public static let appDiagnostics = IPC.scopedName(
             "com.pulkit.edith.appDiagnostics")
+        public static let requestWindowSwitcherOperation = IPC.scopedName(
+            "com.pulkit.edith.requestWindowSwitcherOperation")
+        public static let windowSwitcherOperationResult = IPC.scopedName(
+            "com.pulkit.edith.windowSwitcherOperationResult")
         public static let requestQuinjetSessionOperation = IPC.scopedName(
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = IPC.scopedName(

@@ -135,6 +135,12 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed windows": Spec(options: ["--json"]),
+        "ed windows ls": Spec(options: ["--json"]),
+        "ed windows show": Spec(options: ["--json"]),
+        "ed windows activate": Spec(options: ["--json"]),
+        "ed windows cycle": Spec(options: ["--json"]),
+
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

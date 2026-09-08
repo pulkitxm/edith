@@ -263,6 +263,9 @@ struct EdithApp {
                         RunningAppIPC.changedKey: outcome.changed,
                     ])
             })
+        _ = IPC.observe(
+            IPC.Name.requestWindowSwitcherOperation,
+            info: { info in services.performWindowSwitcherOperation(info) })
         _ = IPC.observe(IPC.Name.openPanel) {
             AppRuntimeCenter().perform(.open) { showPanel() }
         }

@@ -607,6 +607,16 @@ enum UIParity {
                 ])
     }
 
+    @Test func everyWindowSwitcherLeafDeclaresItsSharedOperation() {
+        let declared = Set(WindowSwitcherOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["windows", "ls"], ["windows", "show"],
+                    ["windows", "activate"], ["windows", "cycle"],
+                ])
+    }
+
     @Test func everyDockerLifecycleLeafDeclaresItsSharedOperation() {
         let declared = Set(DockerLifecycleOperation.allCases.map(\.descriptor.cli))
         #expect(

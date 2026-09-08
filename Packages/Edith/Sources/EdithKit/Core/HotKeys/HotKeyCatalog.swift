@@ -69,7 +69,24 @@ public enum HotKeyCatalog {
     public static let emoji = "emoji"
     public static let keystrokeHighlight = "keystrokeHighlight"
 
+    public static let windowSwitcher = "windowSwitcher"
+
+    public static let windowCycle = "windowCycle"
+
     public static let bindings: [HotKeyBinding] = [
+        HotKeyBinding(
+            id: windowSwitcher, title: "WindowSwitcher show", carbonID: 40,
+            codeKey: AppStorageKeys.WindowSwitcher.showHotKeyCode,
+            modsKey: AppStorageKeys.WindowSwitcher.showHotKeyMods,
+            labelKey: AppStorageKeys.WindowSwitcher.showHotKeyLabel, defaultCode: kVK_Tab,
+            defaultMods: optionKey, defaultLabel: "⌥⇥", abilityID: "windowSwitcher"),
+        HotKeyBinding(
+            id: windowCycle, title: "WindowSwitcher cycle", carbonID: 41,
+            codeKey: AppStorageKeys.WindowSwitcher.cycleHotKeyCode,
+            modsKey: AppStorageKeys.WindowSwitcher.cycleHotKeyMods,
+            labelKey: AppStorageKeys.WindowSwitcher.cycleHotKeyLabel, defaultCode: kVK_ANSI_Grave,
+            defaultMods: optionKey, defaultLabel: "⌥`", abilityID: "windowSwitcher"),
+
         HotKeyBinding(
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
             modsKey: "hotKeyMods", labelKey: "hotKeyLabel", defaultCode: kVK_ANSI_E,

@@ -65,11 +65,31 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
-        "keepAwake", "lidAwake",
-        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
-        "attention", "seoAudit",
+        "usage",
+        "quinjet",
+        "plugins",
+        "appMaintenance",
+        "homebrew",
+        "cleaner",
+        "system",
+        "keepAwake",
+        "lidAwake",
+        "systemStats",
+        "micMute",
+        "clipboard",
+        "windowSwitcher",
+        "emoji",
+        "colorPicker",
+        "keystrokeHighlight",
+        "focusDim",
+        "presenter",
+        "music",
+        "downloads",
+        "notchShelf",
+        "audioMixer",
+        "calendar",
+        "attention",
+        "seoAudit",
     ]
 
     public static func provider(
@@ -118,12 +138,22 @@ public enum ExtensionLiveAdapters {
         case "notchShelf": shelfReadiness()
         case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
+        case "windowSwitcher": windowSwitcherReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func windowSwitcherReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let granted = defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        return ExtensionAdapterFacts(
+            configured: granted,
+            readyDetail: "Window enumeration and activation are available.",
+            setupDetail: "Grant Accessibility access to inspect and activate windows."
+        ).readiness
     }
 
     static func attentionReadiness(
