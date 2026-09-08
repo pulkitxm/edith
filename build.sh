@@ -242,6 +242,7 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
 fi
 
 sign() {
+  dot_clean -m "$1"
   local identifier
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
   if [ -n "$TEAM_ID" ]; then
@@ -254,8 +255,13 @@ sign() {
 }
 
 sign_tool() {
+  if [ -d "$1" ]; then
+    dot_clean -m "$1"
+  fi
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
 }
+
+dot_clean -m "$APP"
 
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
