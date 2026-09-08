@@ -70,6 +70,15 @@ public enum ExtensionMarketplaceFilter {
     }
 }
 
+public enum RadialLauncherPreferenceKeys {
+    public static let enabled = "radialLauncherEnabled"
+    public static let profile = "radialLauncherProfile"
+    public static let atPointer = "radialLauncherAtPointer"
+    public static let hotKeyCode = "radialLauncherHotKeyCode"
+    public static let hotKeyMods = "radialLauncherHotKeyMods"
+    public static let hotKeyLabel = "radialLauncherHotKeyLabel"
+}
+
 public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -225,6 +234,12 @@ public enum ExtensionRegistry {
             subtitle: "Blurs sensitive numbers while sharing your screen.",
             symbolName: "theatermasks.fill", suite: .desk, host: .bar, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
+        ExtensionRegistryEntry(
+            id: "radialLauncher", title: "Radial Launcher",
+            subtitle: "Your favorite actions in a pointer-centered wheel.",
+            symbolName: "circle.hexagongrid.fill", suite: .desk, host: .bar, featured: true,
+            defaultsKey: RadialLauncherPreferenceKeys.enabled,
+            requiredCapabilities: [.globalShortcuts], optionalCapabilities: [.mediaControls]),
         ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys and a player bar.",

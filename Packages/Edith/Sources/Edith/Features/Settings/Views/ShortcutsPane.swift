@@ -20,6 +20,9 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(RadialLauncherPreferenceKeys.enabled, store: SharedDefaults.store) private
+        var radialLauncherEnabled = false
+
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var keystrokeHighlightEnabled = false
 
@@ -27,7 +30,8 @@ struct ShortcutsSettingsPane: View {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, emoji: emojiEnabled, micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled)
+            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled,
+            radialLauncher: radialLauncherEnabled)
     }
 
     var body: some View {
@@ -129,6 +133,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .radialLauncher:
+            shortcutRow(
+                "Radial Launcher", subtitle: "Opens the action wheel at the pointer",
+                keyPrefix: "radialLauncherHotKey", defaultLabel: "⌥⌘Space")
         case .keystrokeHighlight:
             shortcutRow(
                 "Keystroke highlight", subtitle: "Starts or pauses the on-screen keycaps",

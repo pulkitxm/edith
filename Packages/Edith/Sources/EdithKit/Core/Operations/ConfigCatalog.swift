@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "radial", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -63,7 +63,7 @@ public enum ConfigCatalog {
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
-        + micMute
+        + micMute + radialLauncher
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
@@ -978,6 +978,28 @@ public enum ConfigCatalog {
         SettingDefinition(
             "micHotKeyLabel", .string, group: "micmute",
             summary: "Printable label for the mic mute shortcut."),
+    ]
+
+    private static let radialLauncher: [SettingDefinition] = [
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.enabled, .bool, group: "radial",
+            summary: "Radial Launcher extension: pointer-centered action wheel.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.profile, .string, group: "radial",
+            summary: "JSON document for the active launcher profile."),
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.atPointer, .bool, group: "radial",
+            summary: "Center the launcher on the pointer.", fallback: .bool(true)),
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.hotKeyCode, .int, group: "radial",
+            summary: "Virtual key code of the launcher shortcut.", fallback: .int(49)),
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.hotKeyMods, .int, group: "radial",
+            summary: "Carbon modifier mask of the launcher shortcut.", fallback: .int(2304)),
+        SettingDefinition(
+            RadialLauncherPreferenceKeys.hotKeyLabel, .string, group: "radial",
+            summary: "Printable label for the launcher shortcut.", fallback: .string("⌥⌘Space")),
     ]
 
     private static let terminal: [SettingDefinition] = [

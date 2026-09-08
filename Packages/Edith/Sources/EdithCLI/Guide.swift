@@ -41,6 +41,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed radial profile --json    inspect the active Radial Launcher wheel
+        ed radial show              open the wheel at the pointer
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed usage export             branded PNG cards for sharing your activity

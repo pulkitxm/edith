@@ -58,6 +58,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
+| [`ed radial`](./radial/README.md) | Pointer-centered launcher actions |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
 | [`ed database`](./database/README.md) | Saved database connections and capability reports through the authenticated local broker |

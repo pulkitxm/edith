@@ -22,6 +22,8 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed radial profile", ["radial", "profile", "--json"]),
+        JSONCase("ed radial show", ["radial", "show", "--json"]),
         JSONCase("ed brew status", ["brew", "status", "--json"]),
         JSONCase("ed brew ls", ["brew", "ls", "--json"]),
         JSONCase("ed brew search", ["brew", "search", "edith", "--json"]),

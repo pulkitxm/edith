@@ -26,6 +26,7 @@ import Testing
         "keystrokeHighlightEnabled",
         "focusDimEnabled",
         "presenterEnabled",
+        "radialLauncherEnabled",
         "tabMusicEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
@@ -48,6 +49,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "radialLauncher",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -202,7 +204,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
-                "keystrokeHighlight", "notchShelf", "database", "attention",
+                "keystrokeHighlight", "radialLauncher", "notchShelf", "database", "attention",
             ])
     }
 
@@ -343,6 +345,7 @@ import Testing
             "keystrokeHighlight": [.inputMonitoring],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
+            "radialLauncher": [],
             "music": [],
             "downloads": [],
             "notchShelf": [],
@@ -372,6 +375,7 @@ import Testing
             "keystrokeHighlight": [],
             "focusDim": [],
             "presenter": [],
+            "radialLauncher": [.accessibility],
             "music": [],
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],

@@ -4,9 +4,11 @@ import Foundation
 
 @MainActor
 enum HotKeyRegistrar {
+    private static var releases: [String: () -> Void] = [:]
     private static var actions: [String: () -> Void] = [:]
 
-    static func install(_ id: String, action: @escaping () -> Void) {
+    static func install(_ id: String, release: (() -> Void)? = nil, action: @escaping () -> Void) {
+        releases[id] = release
         actions[id] = action
         apply(id)
     }
@@ -19,7 +21,7 @@ enum HotKeyRegistrar {
         }
         GlobalHotKey.set(
             id: binding.carbonID, keyCode: binding.code(), modifiers: binding.mods(),
-            action: action)
+            action: action, release: releases[id])
     }
 
     static func applyAll() {

@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import Foundation
 
@@ -20,6 +21,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var radialLauncher: RadialLauncherService?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -111,6 +113,7 @@ final class AppServices {
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        radialLauncher?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -315,6 +318,38 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+
+        let radialOn =
+            ExtensionRegistry.entry("radialLauncher")?.isEnabled(in: SharedDefaults.store) ?? false
+        if radialOn, radialLauncher == nil {
+            radialLauncher = RadialLauncherService { [weak self] action in
+                self?.performRadialAction(action)
+            }
+        }
+        if !radialOn, let launcher = radialLauncher {
+            launcher.shutdown()
+            radialLauncher = nil
+        }
+        radialLauncher?.syncSettings()
+    }
+
+    private func performRadialAction(_ action: RadialLauncherEdithAction) {
+        switch action {
+        case .openPanel:
+            showPanel()
+        case .clipboard:
+            guard clipboard != nil else { return NSSound.beep() }
+            ClipboardPanel.shared.toggle()
+        case .colorPicker:
+            guard let colorPicker else { return NSSound.beep() }
+            colorPicker.pick()
+        case .micMute:
+            guard let micMute else { return NSSound.beep() }
+            micMute.toggle()
+        case .cleanKeys:
+            guard let system else { return NSSound.beep() }
+            system.beginCleaning()
+        }
     }
 
     private func shutDownEmojiRuntime() {

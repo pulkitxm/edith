@@ -68,7 +68,8 @@ public enum ExtensionLiveAdapters {
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "focusDim", "presenter", "radialLauncher", "music", "downloads", "notchShelf", "audioMixer",
+        "calendar",
         "attention", "seoAudit",
     ]
 
@@ -121,9 +122,30 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "radialLauncher": radialLauncherReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func radialLauncherReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let storedProfile = defaults.string(forKey: RadialLauncherPreferenceKeys.profile)
+        let decodedProfile = storedProfile.flatMap(RadialLauncherProfileStore.decodeIfValid)
+        let profile = decodedProfile ?? .starter
+        let profileIsValid = storedProfile == nil || decodedProfile != nil
+        let storedCode = defaults.object(forKey: RadialLauncherPreferenceKeys.hotKeyCode)
+        let storedModifiers = defaults.object(forKey: RadialLauncherPreferenceKeys.hotKeyMods)
+        let codeIsValid =
+            storedCode == nil || (storedCode as? Int).map { (0...127).contains($0) } == true
+        let modifiersAreValid =
+            storedModifiers == nil || (storedModifiers as? Int).map { $0 != 0 } == true
+        let count = profile.items.filter(\.isConfigured).count
+        return ExtensionAdapterFacts(
+            configured: profileIsValid && codeIsValid && modifiersAreValid, contentCount: count,
+            readyDetail: "Configured radial actions: \(count).",
+            setupDetail: "The stored profile or global shortcut is invalid.",
+            emptyDetail: "Add at least one complete action to the radial profile."
+        ).readiness
     }
 
     static func attentionReadiness(

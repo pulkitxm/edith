@@ -67,6 +67,7 @@ public enum HotKeyCatalog {
     public static let micMute = "micMute"
     public static let presenter = "presenter"
     public static let emoji = "emoji"
+    public static let radialLauncher = "radialLauncher"
     public static let keystrokeHighlight = "keystrokeHighlight"
 
     public static let bindings: [HotKeyBinding] = [
@@ -104,6 +105,12 @@ public enum HotKeyCatalog {
             modsKey: "presenterHotKeyMods", labelKey: "presenterHotKeyLabel",
             defaultCode: kVK_ANSI_P, defaultMods: cmdKey | optionKey | shiftKey,
             defaultLabel: "⇧⌥⌘P", abilityID: "presenter"),
+        HotKeyBinding(
+            id: radialLauncher, title: "Radial launcher", carbonID: 50,
+            codeKey: RadialLauncherPreferenceKeys.hotKeyCode,
+            modsKey: RadialLauncherPreferenceKeys.hotKeyMods,
+            labelKey: RadialLauncherPreferenceKeys.hotKeyLabel, defaultCode: kVK_Space,
+            defaultMods: cmdKey | optionKey, defaultLabel: "⌥⌘Space", abilityID: "radialLauncher"),
         HotKeyBinding(
             id: keystrokeHighlight, title: "Keystroke highlight", carbonID: 9,
             codeKey: AppStorageKeys.KeystrokeHighlight.hotKeyCode,
