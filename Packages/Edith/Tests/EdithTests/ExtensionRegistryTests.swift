@@ -27,6 +27,7 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "windowToolsEnabled",
+        "workspaceRestorerEnabled",
         "tabMusicEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
@@ -49,7 +50,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
-                "windowTools",
+                "windowTools", "workspaceRestorer",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -354,6 +355,7 @@ import Testing
             "attention": [],
             "seoAudit": [],
             "windowTools": [.accessibility],
+            "workspaceRestorer": [.accessibility],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
@@ -384,6 +386,7 @@ import Testing
             "attention": [],
             "seoAudit": [],
             "windowTools": [],
+            "workspaceRestorer": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

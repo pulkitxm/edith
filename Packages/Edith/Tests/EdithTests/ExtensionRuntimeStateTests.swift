@@ -275,6 +275,10 @@ import Testing
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("windowTools", "WindowToolsRows", "enabled", "WindowToolsRows.swift"),
+            (
+                "workspaceRestorer", "WorkspaceRestorerRows", "enabled",
+                "WorkspaceRestorerRows.swift"
+            ),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
             ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),

@@ -17,7 +17,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
-                "windowTools",
+                "windowTools", "workspaceRestorer",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -49,6 +49,7 @@ import Testing
         #expect(requiredByExtension["downloads"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
         #expect(requiredByExtension["windowTools"]?.isEmpty == true)
+        #expect(requiredByExtension["workspaceRestorer"]?.isEmpty == true)
         #expect(requiredByExtension["homebrew"] == ["homebrew"])
         #expect(optionalByExtension["appMaintenance"] == ["homebrew"])
     }

@@ -232,6 +232,13 @@ public enum ExtensionRegistry {
             defaultsKey: "windowToolsEnabled", requiredCapabilities: [.windowManagement],
             optionalCapabilities: [.globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "workspaceRestorer", title: "Workspace Restorer",
+            subtitle:
+                "Capture named app and window layouts, then restore them on any display setup.",
+            symbolName: "rectangle.3.group.bubble.left", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "workspaceRestorerEnabled", requires: ["windowTools"],
+            requiredCapabilities: [.windowManagement], optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys and a player bar.",
             symbolName: "music.note", suite: .media, host: .bar, featured: false,

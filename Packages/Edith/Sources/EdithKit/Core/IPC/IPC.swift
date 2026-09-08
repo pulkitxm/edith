@@ -108,6 +108,12 @@ public enum IPC {
             "com.pulkit.edith.requestWindowSnapshot")
         public static let requestWindowLayout = IPC.scopedName(
             "com.pulkit.edith.requestWindowLayout")
+        public static let requestWorkspaceRestorer = IPC.scopedName(
+            "com.pulkit.edith.requestWorkspaceRestorer")
+        public static let workspaceRestorerResult = IPC.scopedName(
+            "com.pulkit.edith.workspaceRestorerResult")
+        public static let workspaceRestorerChanged = IPC.scopedName(
+            "com.pulkit.edith.workspaceRestorerChanged")
         public static let windowSnapshotResult = IPC.scopedName(
             "com.pulkit.edith.windowSnapshotResult")
         public static let requestAppDiagnostics = IPC.scopedName(

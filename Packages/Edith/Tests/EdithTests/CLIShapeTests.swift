@@ -242,6 +242,7 @@ enum CommandCrawler {
             "ed database", "ed database connections", "ed database saved-queries",
             "ed database mutations", "ed database operations", "ed database mcp",
             "ed window",
+            "ed window workspace",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {
             #expect(

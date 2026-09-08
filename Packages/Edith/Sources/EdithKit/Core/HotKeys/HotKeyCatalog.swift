@@ -77,7 +77,25 @@ public enum HotKeyCatalog {
 
     public static let windowRestore = "windowRestore"
 
+    public static let workspaceCapture = "workspaceCapture"
+    public static let workspaceRestore = "workspaceRestore"
+
     public static let bindings: [HotKeyBinding] = [
+        HotKeyBinding(
+            id: workspaceCapture, title: "Workspace capture", carbonID: 46,
+            codeKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyCode,
+            modsKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyMods,
+            labelKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyLabel, defaultCode: kVK_ANSI_S,
+            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧S",
+            abilityID: "workspaceRestorer"),
+        HotKeyBinding(
+            id: workspaceRestore, title: "Workspace restore", carbonID: 47,
+            codeKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyCode,
+            modsKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyMods,
+            labelKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyLabel, defaultCode: kVK_ANSI_W,
+            defaultMods: controlKey | optionKey | shiftKey, defaultLabel: "⌃⌥⇧W",
+            abilityID: "workspaceRestorer"),
+
         HotKeyBinding(
             id: windowLeft, title: "WindowTools left", carbonID: 42,
             codeKey: AppStorageKeys.WindowTools.leftHotKeyCode,

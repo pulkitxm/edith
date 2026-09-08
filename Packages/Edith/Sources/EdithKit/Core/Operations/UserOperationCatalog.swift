@@ -129,6 +129,9 @@ public enum UserOperationCatalog {
         registrations += WindowLayoutAction.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += WorkspaceRestorerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += EmojiOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1169,6 +1172,24 @@ private extension WindowLayoutAction {
                     surface: "Window Tools shortcut", action: title.lowercased()))
         }
         return .userInterface(placements)
+    }
+}
+
+private extension WorkspaceRestorerOperation {
+    var interfaceExposure: UserOperationExposure {
+        let exampleArguments: [String] =
+            switch self {
+            case .capture, .preview, .restore: ["Workspace"]
+            case .cancel, .recover: []
+            }
+        return .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Workspace Restorer settings", action: title.lowercased(),
+                exampleArguments: exampleArguments),
+            UserInterfaceActionPlacement(
+                surface: "Command Bar", action: title.lowercased(),
+                exampleArguments: exampleArguments),
+        ])
     }
 }
 

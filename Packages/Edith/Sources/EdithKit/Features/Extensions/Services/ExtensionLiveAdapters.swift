@@ -83,6 +83,7 @@ public enum ExtensionLiveAdapters {
         "focusDim",
         "presenter",
         "windowTools",
+        "workspaceRestorer",
         "music",
         "downloads",
         "notchShelf",
@@ -142,6 +143,7 @@ public enum ExtensionLiveAdapters {
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "windowTools": windowToolsReadiness(defaults: defaults)
+        case "workspaceRestorer": workspaceRestorerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
@@ -605,6 +607,23 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
+    static func workspaceRestorerReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let launchPolicy = defaults.string(forKey: AppStorageKeys.WorkspaceRestorer.launchPolicy)
+        let timeout = defaults.object(forKey: AppStorageKeys.WorkspaceRestorer.timeout) as? Double
+        let concurrency =
+            defaults.object(forKey: AppStorageKeys.WorkspaceRestorer.concurrency) as? Int
+        let configured =
+            (launchPolicy == nil || WorkspaceLaunchPolicy(rawValue: launchPolicy!) != nil)
+            && (timeout == nil || (1...120).contains(timeout!))
+            && (concurrency == nil || (1...4).contains(concurrency!))
+        let count = WorkspaceRestorerStore.load(defaults: defaults).profiles.count
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: count,
+            readyDetail: "Saved workspace profiles: \(count).",
+            setupDetail: "The launch policy, timeout, or concurrency setting is invalid.",
+            emptyDetail: "Workspace Restorer is ready for its first capture."
+        ).readiness
+    }
     static func emojiReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
         let catalog = EmojiCatalog.shared
         guard !catalog.emoji.isEmpty else {

@@ -591,6 +591,10 @@ let allTabs: [TabInfo] = [
     TabInfo(
         id: "calendar", title: "Calendar",
         subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),
+    TabInfo(
+        id: "workspace", title: "Workspaces",
+        subtitle: "capture and restore windows",
+        enabledKey: AppStorageKeys.WorkspaceRestorer.enabled),
 ]
 
 func orderedTabIDs(_ raw: String) -> [String] {
@@ -622,6 +626,8 @@ struct RootView: View {
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
+    @AppStorage(AppStorageKeys.WorkspaceRestorer.enabled, store: SharedDefaults.store) private
+        var workspaceRestorerEnabled = false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -645,6 +651,7 @@ struct RootView: View {
                 case "music": musicEnabled
                 case "system": systemEnabled
                 case "calendar": calendarEnabled
+                case "workspace": workspaceRestorerEnabled
                 default: false
                 }
             return on ? (info.id, info.title) : nil
@@ -791,6 +798,7 @@ struct RootView: View {
         .onChange(of: musicEnabled) { pinTab() }
         .onChange(of: systemEnabled) { pinTab() }
         .onChange(of: calendarEnabled) { pinTab() }
+        .onChange(of: workspaceRestorerEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
         .background(PanelBackground())
@@ -807,6 +815,8 @@ struct RootView: View {
             SystemView().environment(system)
         } else if tab == "calendar", let calendar = services.calendar {
             CalendarView().environment(calendar)
+        } else if tab == "workspace", workspaceRestorerEnabled {
+            WorkspaceRestorerPanelView()
         } else if enabledTabs.isEmpty {
             Text("All tabs are off - enable one in Edith's settings (⚙)")
                 .font(.system(size: 12))
