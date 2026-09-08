@@ -76,7 +76,8 @@ import Testing
                 == [.keystrokeHighlight])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, emoji: true, micMute: true, focusDim: true, presenter: true,
+                commandBar: true, clipboard: true, emoji: true, micMute: true, focusDim: true,
+                presenter: true,
                 colorPicker: true, keystrokeHighlight: true)
                 == ExtensionShortcut.allCases)
     }

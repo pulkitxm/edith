@@ -17,9 +17,13 @@ enum HotKeyRegistrar {
             GlobalHotKey.clear(id: binding.carbonID)
             return
         }
-        GlobalHotKey.set(
+        let status = GlobalHotKey.set(
             id: binding.carbonID, keyCode: binding.code(), modifiers: binding.mods(),
             action: action)
+        if id == HotKeyCatalog.commandBar {
+            SharedDefaults.store.set(
+                Int(status), forKey: AppStorageKeys.CommandBar.registrationStatus)
+        }
     }
 
     static func applyAll() {

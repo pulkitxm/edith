@@ -267,6 +267,7 @@ import Testing
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
+            ("commandBar", "CommandBarRows", "enabled", "CommandBarRows.swift"),
             (
                 "keystrokeHighlight", "KeystrokeHighlightRows", "enabled",
                 "KeystrokeHighlightRows.swift"

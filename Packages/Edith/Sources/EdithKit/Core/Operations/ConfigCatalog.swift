@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "commandbar", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -61,7 +61,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + calendar + clipboard + commandBar + keystrokeHighlight + notch + focusDim
+        + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -136,7 +137,7 @@ public enum ConfigCatalog {
             AppStorageKeys.Skills.agentSelections, .map, group: "panel",
             summary: "Remember agent selections when installing plugins.", fallback: .object([:])),
         SettingDefinition(
-            "extensionsExpand", .string, group: "panel",
+            AppStorageKeys.General.extensionsExpand, .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
         SettingDefinition(
             AppStorageKeys.General.settingsSection, .string, group: "panel",
@@ -726,6 +727,31 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let commandBar: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.CommandBar.enabled, .bool, group: "commandbar",
+            summary: "Command Bar extension: actions, apps, calculations, and conversions.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.hotKeyCode, .int, group: "commandbar",
+            summary: "Virtual key code of the Command Bar shortcut.", fallback: .int(49)),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.hotKeyMods, .int, group: "commandbar",
+            summary: "Carbon modifier mask of the Command Bar shortcut.", fallback: .int(2048)),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.hotKeyLabel, .string, group: "commandbar",
+            summary: "Printable label for the Command Bar shortcut.",
+            fallback: .string("⌥Space")),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.showApplications, .bool, group: "commandbar",
+            summary: "Include installed applications in Command Bar results.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.learnRanking, .bool, group: "commandbar",
+            summary: "Rank frequently used results higher without saving query text.",
+            fallback: .bool(true)),
     ]
 
     private static let notch: [SettingDefinition] = [

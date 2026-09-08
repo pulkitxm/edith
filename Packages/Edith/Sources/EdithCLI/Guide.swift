@@ -41,6 +41,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed command-bar '2 + 3 * 4'  calculate with the Command Bar engine
+        ed command-bar convert 5 km mi
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed usage export             branded PNG cards for sharing your activity

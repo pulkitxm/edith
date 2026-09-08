@@ -68,7 +68,8 @@ public enum ExtensionLiveAdapters {
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "commandBar", "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer",
+        "calendar",
         "attention", "seoAudit",
     ]
 
@@ -118,12 +119,23 @@ public enum ExtensionLiveAdapters {
         case "notchShelf": shelfReadiness()
         case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
+        case "commandBar": commandBarReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func commandBarReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let registrationStatus = defaults.integer(
+            forKey: AppStorageKeys.CommandBar.registrationStatus)
+        return ExtensionAdapterFacts(
+            configured: registrationStatus == 0,
+            readyDetail: "The Command Bar shortcut is registered and ready.",
+            setupDetail: "The Command Bar shortcut is already in use. Record another shortcut."
+        ).readiness
     }
 
     static func attentionReadiness(

@@ -24,6 +24,7 @@ import Testing
         "emojiEnabled",
         "colorPickerEnabled",
         "keystrokeHighlightEnabled",
+        "commandBarEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "tabMusicEnabled",
@@ -47,7 +48,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "commandBar", "focusDim",
+                "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -202,7 +204,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
-                "keystrokeHighlight", "notchShelf", "database", "attention",
+                "commandBar", "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
 
@@ -341,6 +343,7 @@ import Testing
             "emoji": [],
             "colorPicker": [.screenRecording],
             "keystrokeHighlight": [.inputMonitoring],
+            "commandBar": [],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "music": [],
@@ -370,6 +373,7 @@ import Testing
             "emoji": [.accessibility],
             "colorPicker": [],
             "keystrokeHighlight": [],
+            "commandBar": [],
             "focusDim": [],
             "presenter": [],
             "music": [],

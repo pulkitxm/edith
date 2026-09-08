@@ -20,6 +20,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var commandBar: CommandBarController?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -111,6 +112,8 @@ final class AppServices {
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        commandBar?.shutdown()
+        commandBar = nil
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -303,6 +306,14 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
+        let commandBarOn =
+            ExtensionRegistry.entry("commandBar")?.isEnabled(in: SharedDefaults.store) == true
+        if commandBarOn, commandBar == nil { commandBar = CommandBarController(services: self) }
+        if !commandBarOn, let controller = commandBar {
+            controller.shutdown()
+            commandBar = nil
+        }
+
         let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
         if emojiOn {
             if emoji == nil { emoji = EmojiStore() }
@@ -462,6 +473,7 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
+        commandBar?.syncSettings()
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

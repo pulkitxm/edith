@@ -216,6 +216,12 @@ public enum ExtensionRegistry {
             defaultsKey: "keystrokeHighlightEnabled",
             requiredCapabilities: [.keystrokeObservation]),
         ExtensionRegistryEntry(
+            id: "commandBar", title: "Command Bar",
+            subtitle: "Search Edith actions and apps, calculate, and convert from anywhere.",
+            symbolName: "command", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "commandBarEnabled", requiredCapabilities: [.runningApplications],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", suite: .desk, host: .bar, featured: false,

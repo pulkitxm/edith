@@ -59,6 +59,7 @@ public struct HotKeyBinding: Identifiable, Equatable, Sendable {
 }
 
 public enum HotKeyCatalog {
+    public static let commandBar = "commandBar"
     public static let panel = "panel"
     public static let clipboard = "clipboard"
     public static let notchShelf = "notchShelf"
@@ -70,6 +71,12 @@ public enum HotKeyCatalog {
     public static let keystrokeHighlight = "keystrokeHighlight"
 
     public static let bindings: [HotKeyBinding] = [
+        HotKeyBinding(
+            id: commandBar, title: "Command Bar", carbonID: 20,
+            codeKey: AppStorageKeys.CommandBar.hotKeyCode,
+            modsKey: AppStorageKeys.CommandBar.hotKeyMods,
+            labelKey: AppStorageKeys.CommandBar.hotKeyLabel, defaultCode: kVK_Space,
+            defaultMods: optionKey, defaultLabel: "⌥Space", abilityID: "commandBar"),
         HotKeyBinding(
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
             modsKey: "hotKeyMods", labelKey: "hotKeyLabel", defaultCode: kVK_ANSI_E,

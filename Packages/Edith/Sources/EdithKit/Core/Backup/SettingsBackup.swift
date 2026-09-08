@@ -783,6 +783,9 @@ final class SettingsBackup {
         AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
         AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
         "clipboardHotKeyLabel",
+        AppStorageKeys.CommandBar.enabled, AppStorageKeys.CommandBar.hotKeyCode,
+        AppStorageKeys.CommandBar.hotKeyMods, AppStorageKeys.CommandBar.hotKeyLabel,
+        AppStorageKeys.CommandBar.showApplications, AppStorageKeys.CommandBar.learnRanking,
         AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
         AppStorageKeys.Clipboard.maxAgeDays,
         AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
@@ -909,6 +912,9 @@ final class SettingsBackup {
         AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
         AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
         "clipboardHotKeyLabel",
+        AppStorageKeys.CommandBar.enabled, AppStorageKeys.CommandBar.hotKeyCode,
+        AppStorageKeys.CommandBar.hotKeyMods, AppStorageKeys.CommandBar.hotKeyLabel,
+        AppStorageKeys.CommandBar.showApplications, AppStorageKeys.CommandBar.learnRanking,
         AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
         AppStorageKeys.Clipboard.maxAgeDays,
         AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
@@ -957,6 +963,7 @@ final class SettingsBackup {
     nonisolated static let sharedKeys = baseSharedKeys.union(registryV2Keys)
 
     nonisolated static let deviceLocalKeys: Set<String> = [
+        AppStorageKeys.CommandBar.usage, AppStorageKeys.CommandBar.registrationStatus,
         AgentService.stateKey,
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
         AppStorageKeys.Music.lastBackupAt,

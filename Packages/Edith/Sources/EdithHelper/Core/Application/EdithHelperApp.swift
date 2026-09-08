@@ -340,15 +340,20 @@ enum GlobalHotKey {
         handlerInstalled = true
     }
 
-    static func set(id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
+    @discardableResult
+    static func set(
+        id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void
+    ) -> OSStatus {
         installHandlerOnce()
         clear(id: id)
-        actions[id] = action
         let hotKeyID = EventHotKeyID(signature: OSType(0x4544_4954), id: id)
         var ref: EventHotKeyRef?
-        RegisterEventHotKey(
+        let status = RegisterEventHotKey(
             UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, let ref else { return status }
         refs[id] = ref
+        actions[id] = action
+        return status
     }
 
     static func clear(id: UInt32) {
@@ -356,6 +361,23 @@ enum GlobalHotKey {
             UnregisterEventHotKey(ref)
         }
         actions.removeValue(forKey: id)
+    }
+}
+
+enum CommandBarHotKey {
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.commandBar)! }
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+    @MainActor
+    static func register() {
+        HotKeyRegistrar.install(HotKeyCatalog.commandBar) {
+            MainActor.assumeIsolated { AppState.services.commandBar?.toggle() }
+        }
+    }
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.commandBar)
     }
 }
 
