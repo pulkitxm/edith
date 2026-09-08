@@ -24,6 +24,7 @@ struct DatabaseObjectNavigatorView: View {
             content
         }
         .background(palette.panel)
+        .disclosureGroupStyle(.automatic)
         .onChange(of: explorer.groups) { _, _ in
             expandActiveGroup()
         }

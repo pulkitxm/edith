@@ -43,7 +43,7 @@ struct MarkdownBody: View {
                         ? .system(
                             size: UIScale.pt(level == 1 ? 24 : level == 2 ? 18 : 15),
                             weight: .semibold)
-                        : DashSkin.serif(
+                        : DashSkin.heading(
                             level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1,
                             weight: .semibold)
                 )

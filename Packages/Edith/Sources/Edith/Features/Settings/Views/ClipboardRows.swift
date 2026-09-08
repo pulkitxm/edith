@@ -108,7 +108,7 @@ struct ClipboardRows: View {
             refreshObserver = nil
         }
         .sheet(isPresented: $showHistory) {
-            ClipboardHistoryView()
+            ClipboardHistoryView().transientPresentation()
         }
     }
 

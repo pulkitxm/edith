@@ -107,7 +107,7 @@ struct AddMachineSheet: View {
     private var headerBar: some View {
         HStack {
             Text(editing == nil ? "Add a machine" : "Edit machine")
-                .font(DashSkin.serif(20))
+                .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
         }

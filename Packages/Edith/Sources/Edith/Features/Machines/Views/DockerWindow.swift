@@ -315,7 +315,7 @@ struct DockerConsoleView: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             Text(screen.title)
-                .font(DashSkin.serif(20))
+                .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer(minLength: 0)
             SearchField(placeholder: "Filter", text: $query)
@@ -500,7 +500,7 @@ struct DockerUnavailableView: View {
                 .font(.system(size: UIScale.pt(30)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(title)
-                .font(DashSkin.serif(18))
+                .font(DashSkin.heading(18))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(detail)
                 .font(.system(size: UIScale.pt(12)))

@@ -298,7 +298,7 @@ private struct AttentionSetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 9) {
                 Text("See where your attention actually goes")
-                    .font(DashSkin.serif(28))
+                    .font(DashSkin.heading(28))
                 Text(
                     "Edith records real foreground activity on this Mac. Start with applications, add browser detail if you want it, and change every rule later. Nothing leaves this Mac unless you enable iCloud backup."
                 )
@@ -408,7 +408,7 @@ private struct AttentionCollectingView: View {
                     model.settings.isEnabled
                         ? "Collecting your first real activity" : "Attention is disabled"
                 )
-                .font(DashSkin.serif(24))
+                .font(DashSkin.heading(24))
                 Text(
                     model.settings.isEnabled
                         ? "Use your Mac normally. The overview appears after the first genuine foreground heartbeat arrives."
@@ -796,7 +796,7 @@ private struct AttentionFocusView: View {
                         VStack(spacing: 14) {
                             Image(systemName: "scope")
                                 .font(.system(size: 28)).foregroundStyle(.green)
-                            Text(focus.name).font(DashSkin.serif(25))
+                            Text(focus.name).font(DashSkin.heading(25))
                             Text(
                                 remaining >= 0
                                     ? attentionClock(remaining)

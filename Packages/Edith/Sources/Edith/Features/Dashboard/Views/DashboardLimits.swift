@@ -54,7 +54,7 @@ struct RateLimitsDialsView: View {
                 ProviderSwitchButton(
                     selection: Binding(get: { selected }, set: { selected = $0 }),
                     providers: providers, color: DashSkin.ink(dark), size: 16)
-                Text("Rate limits").font(DashSkin.serif(18)).foregroundStyle(DashSkin.ink(dark))
+                Text("Rate limits").font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text("session · weekly").font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -116,7 +116,7 @@ struct RateLimitsDialsView: View {
                     .animation(
                         Motion.animation(Motion.settle, reduceMotion: reduceMotion), value: p)
                 Text(pct != nil ? "\(Int(p))%" : "-")
-                    .font(DashSkin.serif(30)).foregroundStyle(DashSkin.ink(dark))
+                    .font(DashSkin.heading(30)).foregroundStyle(DashSkin.ink(dark))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(

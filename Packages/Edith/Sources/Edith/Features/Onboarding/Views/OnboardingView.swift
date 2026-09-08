@@ -151,7 +151,7 @@ struct OnboardingView: View {
                 .frame(width: UIScale.pt(92), height: UIScale.pt(92))
                 .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(18), y: 9)
             Text("Welcome to Edith")
-                .font(DashSkin.serif(36, weight: .bold))
+                .font(DashSkin.heading(36, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .padding(.top, UIScale.pt(24))
             Text("Your Mac's useful details and everyday tools, gathered in one place.")
@@ -205,7 +205,7 @@ struct OnboardingView: View {
                         .foregroundStyle(DashSkin.accent(dark))
                 }
                 Text(restoreTitle)
-                    .font(DashSkin.serif(34, weight: .bold))
+                    .font(DashSkin.heading(34, weight: .bold))
                     .foregroundStyle(DashSkin.ink(dark))
                     .padding(.top, UIScale.pt(22))
                 Text(restoreDetail)
@@ -450,7 +450,7 @@ struct OnboardingView: View {
                     .foregroundStyle(DashSkin.accent(dark))
             }
             Text("You're ready")
-                .font(DashSkin.serif(34, weight: .bold))
+                .font(DashSkin.heading(34, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .padding(.top, UIScale.pt(22))
             Text(readySummary)
@@ -634,7 +634,7 @@ struct OnboardingView: View {
     private func stepHeading(_ title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
-                .font(DashSkin.serif(27, weight: .bold))
+                .font(DashSkin.heading(27, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(detail)
                 .font(.system(size: UIScale.pt(12.5)))

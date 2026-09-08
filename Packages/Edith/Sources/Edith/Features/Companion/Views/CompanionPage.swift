@@ -268,7 +268,7 @@ struct CompanionPage: View {
                     .font(.system(size: UIScale.pt(26)))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")
-                    .font(DashSkin.serif(20, weight: .semibold))
+                    .font(DashSkin.heading(20, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Notes, recordings, photos, video, PDFs")
                     .font(.system(size: UIScale.pt(12)))

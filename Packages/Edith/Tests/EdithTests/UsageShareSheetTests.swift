@@ -16,11 +16,9 @@ import Testing
             contentsOf: Self.root.appendingPathComponent(
                 "Sources/Edith/Features/Dashboard/Views/DashboardView.swift"),
             encoding: .utf8)
-        #expect(source.contains("Image(systemName: \"square.and.arrow.up\")"))
-        #expect(source.contains("OrbitingShareButton"))
-        #expect(source.contains("CircularShareText"))
-        #expect(source.contains(".linear(duration: 14).repeatForever(autoreverses: false)"))
-        #expect(source.contains(".scaleEffect(hovering ? 1.07 : 1)"))
+        #expect(source.contains("systemImage: \"square.and.arrow.up\""))
+        #expect(source.contains("helperText: \"Share usage cards\""))
+        #expect(!source.contains("repeatForever"))
         #expect(source.contains("shareOverlay"))
         #expect(source.contains("Button(action: closeShare)"))
         #expect(source.contains(".move(edge: .top).combined(with: .opacity)"))

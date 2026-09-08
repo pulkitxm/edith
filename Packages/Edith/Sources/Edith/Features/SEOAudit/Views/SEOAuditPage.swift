@@ -97,7 +97,7 @@ private struct SEOAuditProjectsView: View {
                     .font(.system(size: UIScale.pt(28), weight: .light))
                     .foregroundStyle(.tertiary)
                 Text("No projects yet")
-                    .font(DashSkin.serif(20))
+                    .font(DashSkin.heading(20))
                 Text("Your first completed crawl will stay here with its full history.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
@@ -155,7 +155,7 @@ private struct SEOAuditNewProjectSheet: View {
                     .background(DashSkin.accent(dark).opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("New audit project")
-                        .font(DashSkin.serif(23))
+                        .font(DashSkin.heading(23))
                     Text("Add the site once. Every audit run stays attached to this project.")
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(.secondary)
@@ -452,7 +452,7 @@ private struct SEOAuditRenameProjectSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Rename project")
-                    .font(DashSkin.serif(22))
+                    .font(DashSkin.heading(22))
                 Text(project.baseURL)
                     .font(DashSkin.mono(10.5))
                     .foregroundStyle(.secondary)

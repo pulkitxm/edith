@@ -147,6 +147,7 @@ struct CompanionMindScreen: View {
             MindDetailSheet(detail: detail, dark: dark, openEpisode: openEpisode) {
                 self.detail = nil
             }
+            .transientPresentation()
         }
     }
 
@@ -722,7 +723,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func beliefDetail(_ belief: CompanionBelief) -> some View {
         Text(belief.statement)
-            .font(DashSkin.serif(18, weight: .semibold))
+            .font(DashSkin.heading(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -748,7 +749,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func claimDetail(_ claim: CompanionClaim) -> some View {
         Text(claim.statement)
-            .font(DashSkin.serif(18, weight: .semibold))
+            .font(DashSkin.heading(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -791,7 +792,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func observationDetail(_ observation: CompanionObservation) -> some View {
         Text(observation.summary)
-            .font(DashSkin.serif(17, weight: .semibold))
+            .font(DashSkin.heading(17, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)

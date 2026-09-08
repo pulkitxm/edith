@@ -227,7 +227,7 @@ struct CompanionSetupSheet: View {
                     .font(.system(size: UIScale.pt(17)))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Companion")
-                    .font(DashSkin.serif(19, weight: .semibold))
+                    .font(DashSkin.heading(19, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             .padding(.bottom, UIScale.pt(24))
@@ -305,7 +305,7 @@ struct CompanionSetupSheet: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Text("Meet the companion")
-                .font(DashSkin.serif(26, weight: .semibold))
+                .font(DashSkin.heading(26, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(
                 "A private memory that lives on your own hardware. It reads what you give "
@@ -346,7 +346,7 @@ struct CompanionSetupSheet: View {
     private func planRow(_ index: Int, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text("\(index)")
-                .font(DashSkin.serif(14, weight: .semibold))
+                .font(DashSkin.heading(14, weight: .semibold))
                 .foregroundStyle(DashSkin.accent(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(title)
@@ -363,7 +363,7 @@ struct CompanionSetupSheet: View {
     private var machinePicker: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("Where should it live?")
-                .font(DashSkin.serif(22, weight: .semibold))
+                .font(DashSkin.heading(22, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text("Every machine below was just probed. Grayed reasons say what is missing.")
                 .font(.system(size: UIScale.pt(11.5)))
@@ -488,7 +488,7 @@ struct CompanionSetupSheet: View {
     private var deployChecklist: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("Setting up on \(model.selectedHost?.name ?? "the machine")")
-                .font(DashSkin.serif(22, weight: .semibold))
+                .font(DashSkin.heading(22, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                 ForEach(CompanionDeployStage.allCases, id: \.self) { stage in
@@ -573,7 +573,7 @@ struct CompanionSetupSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(spacing: UIScale.pt(8)) {
                 Text("Connect intelligence")
-                    .font(DashSkin.serif(22, weight: .semibold))
+                    .font(DashSkin.heading(22, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("OPTIONAL")
                     .font(.system(size: UIScale.pt(9), weight: .semibold))
@@ -638,7 +638,7 @@ struct CompanionSetupSheet: View {
                     .font(.system(size: UIScale.pt(28)))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("The companion is live")
-                    .font(DashSkin.serif(26, weight: .semibold))
+                    .font(DashSkin.heading(26, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             if let deployment = model.deployed ?? CompanionDeploymentStore.load() {

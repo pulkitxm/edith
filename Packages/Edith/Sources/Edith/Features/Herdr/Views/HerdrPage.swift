@@ -861,7 +861,7 @@ struct HerdrPage: View {
     private func emptyState(title: String, detail: String) -> some View {
         VStack(spacing: UIScale.pt(8)) {
             Text(title)
-                .font(DashSkin.serif(22))
+                .font(DashSkin.heading(22))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(detail)
                 .font(.system(size: UIScale.pt(13)))

@@ -87,7 +87,7 @@ struct FinderBody: View {
         }
         .background(shortcuts)
         .sheet(item: $model.infoTarget) { entry in
-            FinderInfoSheet(model: model, entry: entry)
+            FinderInfoSheet(model: model, entry: entry).transientPresentation()
         }
         .sheet(item: $model.pendingConflict) { conflict in
             FinderConflictSheet(model: model, conflict: conflict)
