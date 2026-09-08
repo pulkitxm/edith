@@ -127,6 +127,18 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.digest(source / install_app.EXECUTABLES[2]), source_hash)
         install_app.verify_bundle(installed)
 
+    def test_install_ignores_appledouble_metadata_from_external_volumes(self):
+        source = self.bundle('Build.app', 'new')
+        installed = self.directory / 'Edith.app'
+        metadata = (Path('Contents/MacOS/._Edith'), Path('Contents/.__CodeSignature'))
+        for relative in metadata:
+            (source / relative).write_bytes(b'fixture metadata')
+        install_app.install(source, installed)
+        install_app.verify_bundle(installed)
+        for relative in metadata:
+            self.assertTrue((source / relative).exists())
+            self.assertFalse((installed / relative).exists())
+
     def test_invalid_stage_preserves_original_app_and_running_daemon(self):
         installed = self.bundle('Edith.app', 'old')
         source = self.bundle('Build.app', 'new')

@@ -174,7 +174,8 @@ def install_locked(source, destination, quit_application, verify):
     published = False
     completed = False
     try:
-        shutil.copytree(source, staged, symlinks=True, copy_function=copy_fixture_file)
+        shutil.copytree(source, staged, symlinks=True, copy_function=copy_fixture_file,
+                        ignore=shutil.ignore_patterns('._*'))
         verify(staged)
         if existing_identity(destination) != original:
             raise RuntimeError('The installed application changed while staging; retry installation.')
