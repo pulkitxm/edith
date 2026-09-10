@@ -52,7 +52,7 @@ struct DatabaseWorkbenchRenderTests {
             kind: .table, path: ["relation_filters", "organization"])
         let explorer = DatabaseObjectExplorerModel(
             sender: DatabaseWorkbenchScriptedSender(responses: [
-                Self.schemaResponse(),
+                Self.schemaResponse(name: "relation_filters"),
                 Self.browseResponse(
                     DatabasePage(
                         records: [member, organization].map { object in
@@ -61,7 +61,8 @@ struct DatabaseWorkbenchRenderTests {
                                     name: "name", value: .string(object.path.last!)),
                                 DatabaseObjectField(name: "kind", value: .string("table")),
                                 DatabaseObjectField(
-                                    name: "estimatedRows", value: .signedInteger(5)),
+                                    name: "estimatedRows",
+                                    value: .signedInteger(object == member ? 5 : 3)),
                                 DatabaseObjectField(name: "columnCount", value: .signedInteger(3)),
                             ])
                         }, metadata: Self.pageMetadata(count: 2))),
@@ -94,9 +95,14 @@ struct DatabaseWorkbenchRenderTests {
         for mode in [DatabaseWorkbenchMode.browse, .query] {
             if mode == .query { tabs.data.prepareQuery(member, connection: connection) }
             tabs.selected?.mode = mode
+            let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"]
+            let captureURL = directory.map {
+                URL(fileURLWithPath: $0).appendingPathComponent("\(mode.rawValue)-window.png")
+            }
             let image = try #require(
-                renderWorkbench(view, width: 1_180, height: 640, scheme: .dark))
-            if let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"] {
+                renderWorkbench(
+                    view, width: 1_180, height: 640, scheme: .dark, captureURL: captureURL))
+            if let directory {
                 try FileManager.default.createDirectory(
                     atPath: directory, withIntermediateDirectories: true)
                 let bytes = try #require(image.representation(using: .png, properties: [:]))
@@ -393,7 +399,8 @@ private func renderWorkbench(
     _ view: some View,
     width: CGFloat,
     height: CGFloat,
-    scheme: ColorScheme
+    scheme: ColorScheme,
+    captureURL: URL? = nil
 ) -> NSBitmapImageRep? {
     let host = NSHostingView(
         rootView:
@@ -419,6 +426,28 @@ private func renderWorkbench(
         view.displayIfNeeded()
     }
     redraw(host)
+    if let captureURL {
+        window.setFrameOrigin(NSPoint(x: 100, y: 100))
+        window.orderFrontRegardless()
+        window.display()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), captureURL.path]
+        do {
+            try FileManager.default.createDirectory(
+                at: captureURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try capture.run()
+            capture.waitUntilExit()
+            if capture.terminationStatus == 0, let bytes = try? Data(contentsOf: captureURL) {
+                return NSBitmapImageRep(data: bytes)
+            }
+        } catch {
+            Issue.record("Unable to capture the synthetic database window: \(error)")
+        }
+        return nil
+    }
     guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: image)
     return image
@@ -435,13 +464,14 @@ private actor DatabaseWorkbenchLiveFixtureSender: DatabaseBrokerCommandSending {
         -> DatabaseWorkbenchLiveFixtureSender
     {
         let values = ProcessInfo.processInfo.environment
+        let database = try #require(values["EDITH_DATABASE_POSTGRESQL_DATABASE"])
         let client = try await PostgresNIODatabaseClient.connect(
             PostgreSQLDatabaseConnectionPlan(
                 host: try #require(values["EDITH_DATABASE_POSTGRESQL_HOST"]),
                 port: try #require(Int(values["EDITH_DATABASE_POSTGRESQL_PORT"] ?? "")),
                 username: try #require(values["EDITH_DATABASE_POSTGRESQL_USERNAME"]),
                 password: values["EDITH_DATABASE_POSTGRESQL_PASSWORD"],
-                database: try #require(values["EDITH_DATABASE_POSTGRESQL_DATABASE"]),
+                database: database,
                 tls: .disabled, tlsServerName: nil,
                 connectTimeoutMilliseconds: 5_000, statementTimeoutMilliseconds: 15_000,
                 readOnly: true))

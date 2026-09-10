@@ -573,7 +573,7 @@ private func relationshipRows(ids: [String] = ["fk_organization"]) -> PostgreSQL
     #expect(plans[1].parameters.last == .string("organization"))
     #expect(
         plan.sql.contains(
-            #"(SELECT "_edith_related_0"."slug" FROM "tenant"."organization" AS "_edith_related_0" WHERE "_edith_relation"."id" = "_edith_related_0"."id") = $1"#
+            #"(SELECT "_edith_related_0"."slug" FROM "tenant"."organization" AS "_edith_related_0" WHERE "_edith_relation"."id" = "_edith_related_0"."id") = ($1::text)::text"#
         ))
     #expect(plan.sql.contains(" OR (NOT ("))
     #expect(!plan.sql.contains("sample'"))

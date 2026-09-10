@@ -106,7 +106,6 @@ struct DatabasePage: View {
     @State private var actionConfirmation: DatabaseConnectionActionConfirmation?
     @State private var managementMessage: DatabaseConnectionManagementMessage?
     @State private var tableTabs = DatabaseTableTabsModel()
-    private var dataWorkspace: DatabaseDataWorkspaceModel { tableTabs.data }
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
@@ -153,7 +152,7 @@ struct DatabasePage: View {
             guard case .succeeded = phase,
                 let connection = connectionWorkspace.selectedConnection
             else { return }
-            dataWorkspace.finishMutation(connection)
+            tableTabs.finishMutation(target: workspace.mutationTarget, connection: connection)
         }
         .onChange(of: connectionWorkspace.selectedConnectionID) { _, connectionID in
             guard let focusedConnectionID, focusedConnectionID != connectionID else { return }

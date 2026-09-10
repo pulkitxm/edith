@@ -82,6 +82,13 @@ final class DatabaseTableTabsModel {
         selectedID = id
     }
 
+    func finishMutation(target: DatabaseTargetIdentifier?, connection: DatabaseConnectionSummary) {
+        guard let target, target.connectionID == connection.id,
+            let tab = tabs.first(where: { $0.object == target.object })
+        else { return }
+        tab.data.finishMutation(connection)
+    }
+
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs.remove(at: index)

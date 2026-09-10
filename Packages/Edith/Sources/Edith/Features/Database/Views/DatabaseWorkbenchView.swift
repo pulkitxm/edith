@@ -155,6 +155,12 @@ struct DatabaseWorkbenchView: View {
             }
             .id(tabs.selectedID)
         }
+        .onChange(of: data.fields, initial: true) { _, _ in
+            synchronizeColumns(connection)
+        }
+        .onChange(of: data.selectedObject) { _, _ in
+            synchronizeColumns(connection)
+        }
     }
 
     private var tableTabBar: some View {
@@ -209,12 +215,7 @@ struct DatabaseWorkbenchView: View {
             controls(connection)
             results(connection)
         }
-        .onChange(of: data.fields, initial: true) { _, _ in
-            synchronizeColumns(connection)
-        }
-        .onChange(of: data.selectedObject) { _, _ in
-            synchronizeColumns(connection)
-        }
+
     }
 
     private func controls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -278,6 +279,7 @@ struct DatabaseWorkbenchView: View {
                         || explorer.selectedObject == nil)
             }
             TextEditor(text: queryTextBinding)
+                .disabled(data.isLoading)
                 .font(.system(size: UIScale.pt(11.5), design: .monospaced))
                 .foregroundStyle(palette.ink)
                 .scrollContentBackground(.hidden)

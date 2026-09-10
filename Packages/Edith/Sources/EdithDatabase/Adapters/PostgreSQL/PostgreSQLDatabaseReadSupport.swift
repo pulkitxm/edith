@@ -48,6 +48,11 @@ private struct PostgreSQLDatabaseReadRelation: Sendable {
     let keyKind: DatabaseRecordIdentityKind?
 }
 
+private struct PostgreSQLDatabaseReadRelatedField: Sendable {
+    let expression: String
+    let typeName: String
+}
+
 private struct PostgreSQLDatabaseReadSelectedColumn: Sendable {
     let source: PostgreSQLDatabaseReadColumn
     let outputName: String
@@ -515,7 +520,7 @@ extension PostgreSQLDatabaseReadSupport {
         relation: PostgreSQLDatabaseReadRelation,
         sourceAlias: String,
         client: any PostgreSQLDatabaseClient
-    ) async throws -> [DatabaseFieldPath: String] {
+    ) async throws -> [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] {
         var paths = Set<DatabaseFieldPath>()
         var count = 0
         func collect(_ filter: DatabaseFilter, depth: Int) throws {
@@ -537,7 +542,7 @@ extension PostgreSQLDatabaseReadSupport {
             }
         }
         if let filter { try collect(filter, depth: 0) }
-        var expressions: [DatabaseFieldPath: String] = [:]
+        var expressions: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] = [:]
         for path in paths.sorted(by: { $0.segments.lexicographicallyPrecedes($1.segments) }) {
             guard (2...9).contains(path.segments.count) else {
                 throw relationshipFailure("Related field paths support up to eight relationships.")
@@ -609,8 +614,10 @@ extension PostgreSQLDatabaseReadSupport {
             guard filterable(column) else {
                 throw relationshipFailure("This related field does not support filtering.")
             }
-            expressions[path] =
-                "(SELECT \(qualified(previousAlias, column.name)) FROM \(sources.joined(separator: ", ")) WHERE \(joins.joined(separator: " AND ")))"
+            expressions[path] = PostgreSQLDatabaseReadRelatedField(
+                expression:
+                    "(SELECT \(qualified(previousAlias, column.name)) FROM \(sources.joined(separator: ", ")) WHERE \(joins.joined(separator: " AND ")))",
+                typeName: column.typeName)
         }
         return expressions
     }
@@ -1437,7 +1444,7 @@ extension PostgreSQLDatabaseReadSupport {
         _ filter: DatabaseFilter?,
         available: [PostgreSQLDatabaseReadColumn]?,
         sourceAlias: String,
-        relatedFields: [DatabaseFieldPath: String] = [:],
+        relatedFields: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] = [:],
         firstParameter: Int,
         failure: DatabaseAdapterFailure
     ) throws -> PostgreSQLDatabaseReadSQLFragment {
@@ -1461,7 +1468,7 @@ extension PostgreSQLDatabaseReadSupport {
         _ filter: DatabaseFilter,
         available: [PostgreSQLDatabaseReadColumn]?,
         sourceAlias: String,
-        relatedFields: [DatabaseFieldPath: String],
+        relatedFields: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField],
         depth: Int,
         predicateCount: inout Int,
         nextParameter: inout Int,
@@ -1474,7 +1481,7 @@ extension PostgreSQLDatabaseReadSupport {
             guard predicateCount <= 100 else { throw failure }
             let field: String
             if let related = relatedFields[predicate.field] {
-                field = related
+                field = related.expression
             } else if let available {
                 field = qualified(
                     sourceAlias,
@@ -1483,6 +1490,13 @@ extension PostgreSQLDatabaseReadSupport {
                     ).name)
             } else {
                 field = qualified(sourceAlias, try fieldName(predicate.field, failure: failure))
+            }
+            func parameterMarker(_ number: Int, value: DatabaseValue) -> String {
+                let marker = "$\(number)"
+                guard let related = relatedFields[predicate.field], case .string = value else {
+                    return marker
+                }
+                return "(\(marker)::text)::\(related.typeName)"
             }
             let insensitive = predicate.caseSensitivity == .insensitive
             let sensitive = predicate.caseSensitivity != .insensitive
@@ -1508,7 +1522,7 @@ extension PostgreSQLDatabaseReadSupport {
                     .lessThan: "<",
                     .lessThanOrEqual: "<=",
                 ]
-                let marker = "$\(nextParameter)"
+                let marker = parameterMarker(nextParameter, value: predicate.values[0])
                 nextParameter += 1
                 return PostgreSQLDatabaseReadSQLFragment(
                     sql: "\(field) \(operators[predicate.operation]!) \(marker)",
@@ -1518,7 +1532,8 @@ extension PostgreSQLDatabaseReadSupport {
                 let first = nextParameter
                 nextParameter += 2
                 return PostgreSQLDatabaseReadSQLFragment(
-                    sql: "\(field) BETWEEN $\(first) AND $\(first + 1)",
+                    sql:
+                        "\(field) BETWEEN \(parameterMarker(first, value: predicate.values[0])) AND \(parameterMarker(first + 1, value: predicate.values[1]))",
                     parameters: predicate.values)
             case .in, .notIn:
                 guard !predicate.values.isEmpty,
@@ -1528,7 +1543,7 @@ extension PostgreSQLDatabaseReadSupport {
                     throw failure
                 }
                 let markers = predicate.values.indices.map { index in
-                    "$\(nextParameter + index)"
+                    parameterMarker(nextParameter + index, value: predicate.values[index])
                 }
                 nextParameter += predicate.values.count
                 let operation = predicate.operation == .in ? "IN" : "NOT IN"

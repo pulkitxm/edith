@@ -1420,6 +1420,34 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(tabs.data.records.isEmpty)
     }
 
+    @Test func mutationRefreshesItsTableAfterSwitchingTabs() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+            Self.response(records: [Self.record(3)]),
+        ])
+        let connection = try Self.connection(product: .postgresql)
+        let tabs = DatabaseTableTabsModel(makeData: {
+            DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        })
+        let firstObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let first = try #require(tabs.selected)
+        tabs.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"]),
+            connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let selectedID = tabs.selectedID
+        tabs.finishMutation(
+            target: DatabaseTargetIdentifier(connectionID: connection.id, object: firstObject),
+            connection: connection)
+        await Self.waitUntil { first.data.state == .loaded }
+        #expect(first.data.records == [Self.record(3)])
+        #expect(tabs.selectedID == selectedID)
+        #expect(tabs.data.records == [Self.record(2)])
+    }
+
     @Test func changingTablesClearsFiltersAndSorts() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
             Self.response(records: [Self.record(1)]),

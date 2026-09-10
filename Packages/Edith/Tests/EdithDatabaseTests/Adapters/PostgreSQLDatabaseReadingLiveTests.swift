@@ -583,6 +583,8 @@ func postgresqlRelatedFiltersLive() async throws {
         let cases: [(String, [String], DatabaseFilterOperator, String, Int)] = [
             ("member", ["organization", "slug"], .equal, "sample-studio", 2),
             ("member", ["organizationId", "slug"], .equal, "sample-studio", 2),
+            ("member", ["organization", "id"], .equal, "10", 2),
+            ("member", ["organization", "active"], .equal, "true", 2),
             ("member", ["organization", "account", "slug"], .equal, "north", 3),
             ("member", ["organization", "slug"], .contains, "50%_off\\offer", 1),
             ("assignment", ["ownerId", "slug"], .equal, "sample-studio", 1),

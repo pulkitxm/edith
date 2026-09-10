@@ -123,7 +123,7 @@ struct DatabaseFilterRibbon: View {
     private var relatedFieldControl: some View {
         if supportsRelatedFields {
             Button("Related field…") {
-                editorID = data.addFilterClause(field: "", operation: .equal)
+                presentEditor(data.addFilterClause(field: "", operation: .equal))
             }
             Divider()
         }
@@ -663,6 +663,10 @@ struct DatabaseFilterRibbon: View {
     private func addFilter(_ field: DatabaseFieldDescriptor) {
         let id = data.addFilterClause(
             field: field.path.segments.joined(separator: "."))
+        presentEditor(id)
+    }
+
+    private func presentEditor(_ id: UUID) {
         Task { @MainActor in
             await Task.yield()
             guard data.filterClauses.contains(where: { $0.id == id }) else { return }
