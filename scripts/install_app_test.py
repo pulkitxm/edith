@@ -1,4 +1,5 @@
 import hashlib
+import os
 from pathlib import Path
 import plistlib
 import signal
@@ -56,11 +57,12 @@ class InstallerTests(unittest.TestCase):
                            check=True, capture_output=True, timeout=10)
         return path
 
-    def spawn(self, executable, ignore_term=False):
+    def spawn(self, executable, ignore_term=False, environment=None):
         prepare = (lambda: signal.signal(signal.SIGTERM, signal.SIG_IGN)) if ignore_term else None
         child = subprocess.Popen([str(executable), '60'], stdin=subprocess.DEVNULL,
                                  preexec_fn=prepare,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 env=environment)
         self.children.append(child)
         for _ in range(100):
             identity = self.native.identity(child.pid)
@@ -176,6 +178,34 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([item.pid for item in calls], [child.pid])
         self.assertEqual((installed / 'Contents/Resources/version').read_text(), 'old')
         self.assertIsNone(child.poll())
+
+    def test_cli_client_does_not_block_gui_quit_and_retires_after_publication(self):
+        installed = self.bundle('Edith.app', 'old')
+        source = self.bundle('Build.app', 'new')
+        child, identity = self.spawn(installed / install_app.EXECUTABLES[0],
+                                     environment=dict(os.environ, EDITH_CLI='1'))
+        self.assertTrue(self.native.is_command_line(identity))
+        real_exchange = install_app.exchange
+
+        def exchange_while_client_runs(staged, destination, replacing):
+            self.assertIsNone(child.poll())
+            real_exchange(staged, destination, replacing)
+
+        def quit_gui(destination, identities, processes):
+            self.assertEqual(identities, [])
+            self.assertIsNone(child.poll())
+
+        with patch.object(install_app, 'exchange', side_effect=exchange_while_client_runs):
+            install_app.install(source, installed, quit_application=quit_gui)
+        self.assertEqual(child.wait(timeout=1), -15)
+        self.assertEqual((installed / 'Contents/Resources/version').read_text(), 'new')
+
+    def test_gui_process_is_not_classified_as_cli(self):
+        installed = self.bundle('Edith.app', 'old')
+        environment = dict(os.environ)
+        environment.pop('EDITH_CLI', None)
+        _, identity = self.spawn(installed / install_app.EXECUTABLES[0], environment=environment)
+        self.assertFalse(self.native.is_command_line(identity))
 
     def test_first_install_publishes_verified_bundle(self):
         source = self.bundle('Build.app', 'new')
