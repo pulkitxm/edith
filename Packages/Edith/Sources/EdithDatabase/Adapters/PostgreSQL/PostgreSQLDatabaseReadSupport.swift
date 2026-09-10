@@ -38,6 +38,8 @@ private struct PostgreSQLDatabaseReadColumn: Sendable {
     let isNullable: Bool
     let ordinal: Int
     let enumValues: [String]?
+    let isGenerated: Bool
+    let hasDefault: Bool
 }
 
 private struct PostgreSQLDatabaseReadRelation: Sendable {
@@ -497,7 +499,9 @@ extension PostgreSQLDatabaseReadSupport {
                 isNullable: selected.source.isNullable,
                 isSortable: sortable(selected.source),
                 isFilterable: filterable(selected.source),
-                enumValues: selected.source.enumValues)
+                enumValues: selected.source.enumValues,
+                isGenerated: selected.source.isGenerated,
+                hasDefault: selected.source.hasDefault)
         }
         let hasMore = result.rows.count > request.pageSize.value
         let warnings = mode == .offset ? [offsetWarning(target: request.target)] : []
@@ -644,6 +648,8 @@ extension PostgreSQLDatabaseReadSupport {
                 a.atttypid::int8 AS type_oid,
                 NOT a.attnotnull AS is_nullable,
                 a.attnum::int8 AS ordinal,
+                (a.attgenerated <> '' OR a.attidentity = 'a') AS is_generated,
+                (a.atthasdef OR a.attidentity <> '') AS has_default,
                 (SELECT json_agg(e.enumlabel ORDER BY e.enumsortorder)::text
                  FROM pg_catalog.pg_enum AS e
                  WHERE e.enumtypid = a.atttypid) AS enum_values,
@@ -725,7 +731,11 @@ extension PostgreSQLDatabaseReadSupport {
                         guard cell.bytes != nil else { return nil }
                         let json = try cell.decode(String.self)
                         return try JSONDecoder().decode([String].self, from: Data(json.utf8))
-                    })
+                    },
+                isGenerated: try row.cells.first(where: { $0.columnName == "is_generated" })?
+                    .decode(Bool.self) ?? false,
+                hasDefault: try row.cells.first(where: { $0.columnName == "has_default" })?.decode(
+                    Bool.self) ?? false)
             columns.append(column)
             if try requiredBool("is_key", in: row) {
                 guard keyName == nil else {

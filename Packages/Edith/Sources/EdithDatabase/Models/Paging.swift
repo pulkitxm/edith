@@ -145,6 +145,8 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
     public let isSortable: Bool
     public let isFilterable: Bool
     public let enumValues: [String]?
+    public let isGenerated: Bool?
+    public let hasDefault: Bool?
 
     public init(
         path: DatabaseFieldPath,
@@ -153,7 +155,9 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
         isNullable: Bool,
         isSortable: Bool,
         isFilterable: Bool,
-        enumValues: [String]? = nil
+        enumValues: [String]? = nil,
+        isGenerated: Bool? = nil,
+        hasDefault: Bool? = nil
     ) {
         self.path = path
         self.displayName = displayName
@@ -162,6 +166,8 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
         self.isSortable = isSortable
         self.isFilterable = isFilterable
         self.enumValues = enumValues
+        self.isGenerated = isGenerated
+        self.hasDefault = hasDefault
     }
 }
 

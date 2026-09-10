@@ -121,6 +121,13 @@ struct DatabaseWorkbenchRenderTests {
         tabs.data.beginInsert(connection)
         tabs.data.updateEditorField("name", text: "Taylor Demo")
         tabs.data.updateEditorField("role", text: "editor")
+        tabs.data.updateEditorField("active", text: "false")
+        tabs.data.updateEditorField("settings", text: "{\"notifications\":true}")
+        #expect(
+            tabs.data.editorFields.first(where: { $0.id == "active" })?.choiceValues == [
+                "true", "false",
+            ])
+        #expect(tabs.data.editorFields.first(where: { $0.id == "id" })?.isGenerated == true)
         #expect(
             tabs.data.editorFields.first(where: { $0.id == "role" })?.enumValues == [
                 "viewer", "editor", "admin",

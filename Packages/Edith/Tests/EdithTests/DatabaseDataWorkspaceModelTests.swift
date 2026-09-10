@@ -843,6 +843,87 @@ struct DatabaseDataWorkspaceModelTests {
                 == "INSERT INTO \"public\".\"members\" (\"role\") VALUES ($1) RETURNING 1")
     }
 
+    @Test("Row forms use schema choices, generated fields, explicit nulls, and validated JSON")
+    func typedRowEditor() async throws {
+        func field(
+            _ name: String, _ type: String, nullable: Bool = true, generated: Bool = false,
+            hasDefault: Bool = false
+        ) -> DatabaseFieldDescriptor {
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath(name), displayName: name, typeName: type,
+                isNullable: nullable, isSortable: true, isFilterable: true, isGenerated: generated,
+                hasDefault: hasDefault)
+        }
+        let fields = [
+            field("id", "bigint", nullable: false, generated: true, hasDefault: true),
+            field("active", "boolean", nullable: false, hasDefault: true),
+            field("nickname", "text"),
+            field("settings", "jsonb"), field("price", "numeric"),
+            field("name", "text", nullable: false),
+        ]
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+                ]),
+            fields: [
+                DatabaseObjectField(name: "id", value: .signedInteger(1)),
+                DatabaseObjectField(name: "active", value: .boolean(false)),
+                DatabaseObjectField(name: "nickname", value: .null),
+                DatabaseObjectField(
+                    name: "settings",
+                    value: .productSpecific(
+                        DatabaseProductValue(
+                            product: .postgresql, typeName: "jsonb", textRepresentation: "{}"))),
+                DatabaseObjectField(
+                    name: "price", value: .decimal(DatabaseDecimalValue(rawValue: "1.25"))),
+            ])
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [record], fields: fields)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.members"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(
+            model.editorFields.first(where: { $0.id == "active" })?.choiceValues == [
+                "true", "false",
+            ])
+        #expect(model.usesStructuredEditor(field: "active", connection: connection))
+        #expect(model.usesStructuredEditor(field: "settings", connection: connection))
+        model.updateEditorField("active", text: "true")
+        model.setEditorFieldNull("active")
+        #expect(model.editorFields.first(where: { $0.id == "active" })?.isNull == false)
+        model.updateEditorField("nickname", text: "NULL")
+        let update = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, parameters) = update.payload else { return }
+        #expect(parameters.first(where: { $0.name == "active" })?.value == .boolean(true))
+        #expect(parameters.first(where: { $0.name == "nickname" })?.value == .string("NULL"))
+        model.updateEditorField("nickname", text: "")
+        let empty = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, emptyParameters) = empty.payload else { return }
+        #expect(emptyParameters.first(where: { $0.name == "nickname" })?.value == .string(""))
+        model.updateEditorField("settings", text: "invalid json")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.updateEditorField("settings", text: "{\"enabled\":true}")
+        #expect(model.editorMutationRequest(connection) != nil)
+        model.updateEditorField("price", text: "12not-a-number")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.updateEditorField("price", text: "12345678901234567890.123456789")
+        #expect(model.editorMutationRequest(connection) != nil)
+        model.beginInsert(connection)
+        #expect(model.editorFields.first(where: { $0.id == "id" })?.isEditable == false)
+        #expect(model.editorFields.first(where: { $0.id == "name" })?.isIncluded == true)
+        #expect(model.editorFields.first(where: { $0.id == "active" })?.isIncluded == false)
+        model.updateEditorField("id", text: "5")
+        #expect(model.editorFields.first(where: { $0.id == "id" })?.isIncluded == false)
+    }
+
     @Test("Row editor creates canonical update, insert, and delete requests")
     func rowMutationRequests() async throws {
         let sender = DatabaseDataScriptedSender(responses: [

@@ -39,6 +39,8 @@ CREATE TYPE relation_filters.member_role AS ENUM ('viewer', 'editor', 'admin');
 CREATE TABLE relation_filters.enrollment (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name text NOT NULL DEFAULT 'Sample Member',
-    role relation_filters.member_role DEFAULT 'viewer'
+    role relation_filters.member_role DEFAULT 'viewer',
+    active boolean NOT NULL DEFAULT true,
+    settings jsonb DEFAULT '{}'::jsonb
 );
 INSERT INTO relation_filters.enrollment (name, role) VALUES ('Alex Sample', 'viewer');

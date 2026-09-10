@@ -131,6 +131,14 @@ struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
     var enumValues: [String]? = nil
     var isNullable: Bool = true
     var isNull: Bool = false
+    var isGenerated: Bool = false
+    var hasDefault: Bool = false
+    var isJSON: Bool = false
+
+    var choiceValues: [String]? {
+        enumValues
+            ?? (["bool", "boolean"].contains(typeName.lowercased()) ? ["true", "false"] : nil)
+    }
 }
 
 @MainActor
@@ -605,12 +613,18 @@ final class DatabaseDataWorkspaceModel {
                     typeName: field.typeName,
                     originalValue: nil,
                     isIdentity: false,
-                    isEditable: field.enumValues != nil
-                        || Self.supportsEditing(typeName: field.typeName),
+                    isEditable: field.isGenerated != true
+                        && (field.enumValues != nil
+                            || Self.supportsEditing(typeName: field.typeName)
+                            || isJSONField(field, connection: connection)),
                     text: "",
-                    isIncluded: false,
+                    isIncluded: !field.isNullable && field.hasDefault == false
+                        && field.isGenerated != true,
                     enumValues: field.enumValues,
-                    isNullable: field.isNullable)
+                    isNullable: field.isNullable,
+                    isGenerated: field.isGenerated == true,
+                    hasDefault: field.hasDefault == true,
+                    isJSON: isJSONField(field, connection: connection))
             }
         }
     }
@@ -666,8 +680,9 @@ final class DatabaseDataWorkspaceModel {
                     || (field.name == "value" && redisString && Self.supportsEditing(field.value))
             } else {
                 isEditable =
-                    !isIdentity
-                    && (descriptor?.enumValues != nil || Self.supportsEditing(field.value))
+                    !isIdentity && descriptor?.isGenerated != true
+                    && (descriptor?.enumValues != nil || Self.supportsEditing(field.value)
+                        || descriptor.map { isJSONField($0, connection: connection) } == true)
             }
             return DatabaseRowFieldDraft(
                 id: field.name,
@@ -679,7 +694,10 @@ final class DatabaseDataWorkspaceModel {
                 isIncluded: false,
                 enumValues: descriptor?.enumValues,
                 isNullable: descriptor?.isNullable ?? true,
-                isNull: field.value == .null)
+                isNull: field.value == .null,
+                isGenerated: descriptor?.isGenerated == true,
+                hasDefault: descriptor?.hasDefault == true,
+                isJSON: descriptor.map { isJSONField($0, connection: connection) } == true)
         }
     }
 
@@ -712,7 +730,23 @@ final class DatabaseDataWorkspaceModel {
             return name == "value" && Self.isRedisString(records[index])
                 && Self.supportsEditing(value(named: name, in: records[index]))
         }
-        return Self.supportsEditing(typeName: field.typeName)
+        return field.isGenerated != true
+            && (Self.supportsEditing(typeName: field.typeName)
+                || isJSONField(field, connection: connection))
+    }
+
+    func usesStructuredEditor(field name: String, connection: DatabaseConnectionSummary) -> Bool {
+        guard let field = fields.first(where: { $0.path.segments.joined(separator: ".") == name })
+        else { return false }
+        return field.enumValues != nil || ["bool", "boolean"].contains(field.typeName.lowercased())
+            || isJSONField(field, connection: connection)
+    }
+
+    private func isJSONField(
+        _ field: DatabaseFieldDescriptor, connection: DatabaseConnectionSummary
+    ) -> Bool {
+        connection.product == .postgresql
+            && ["json", "jsonb"].contains(field.typeName.lowercased())
     }
 
     func inlineMutationRequest(
@@ -1789,17 +1823,25 @@ final class DatabaseDataWorkspaceModel {
     private static func value(
         from field: DatabaseRowFieldDraft
     ) throws -> DatabaseValue {
+        if field.isNull {
+            guard field.isNullable else {
+                throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+            }
+            return .null
+        }
+        if field.isJSON {
+            guard let data = field.text.data(using: .utf8),
+                (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
+            else { throw DatabaseRowEditorError.invalidValue(field.id, field.typeName) }
+            return .string(field.text)
+        }
         if let enumValues = field.enumValues {
-            if field.isNull, field.isNullable { return .null }
             guard enumValues.contains(field.text) else {
                 throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
             }
             return .string(field.text)
         }
         let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.uppercased() == "NULL" {
-            return .null
-        }
         if let original = field.originalValue {
             switch original {
             case .boolean:
@@ -1818,7 +1860,7 @@ final class DatabaseDataWorkspaceModel {
                 }
                 return .unsignedInteger(value)
             case .decimal:
-                return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+                return try decimalValue(trimmed, fieldName: field.id, typeName: field.typeName)
             case .floatingPoint:
                 guard let value = Double(trimmed), value.isFinite else {
                     throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
@@ -1888,7 +1930,7 @@ final class DatabaseDataWorkspaceModel {
             return .signedInteger(value)
         }
         if type.contains("numeric") || type.contains("decimal") {
-            return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+            return try decimalValue(trimmed, fieldName: fieldName, typeName: typeName)
         }
         if type.contains("real") || type.contains("double") {
             guard let value = Double(trimmed), value.isFinite else {
@@ -1918,6 +1960,19 @@ final class DatabaseDataWorkspaceModel {
             return .time(DatabaseTimeValue(text: trimmed))
         }
         return .string(text)
+    }
+
+    private static func decimalValue(_ value: String, fieldName: String, typeName: String) throws
+        -> DatabaseValue
+    {
+        guard
+            value.range(
+                of: #"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"#,
+                options: .regularExpression) != nil
+        else {
+            throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+        }
+        return .decimal(DatabaseDecimalValue(rawValue: value))
     }
 
     private static func isMongoDBObjectID(_ value: String) -> Bool {

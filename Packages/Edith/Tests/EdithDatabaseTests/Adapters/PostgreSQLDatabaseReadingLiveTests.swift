@@ -666,6 +666,8 @@ func postgresqlEnumRowsLive() async throws {
             "CREATE TABLE \(schema).members (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text DEFAULT 'Sample Member', role \(schema).member_role DEFAULT 'viewer')"
         )
         let empty = try await browse()
+        #expect(empty.fields.first(where: { $0.displayName == "id" })?.isGenerated == true)
+        #expect(empty.fields.first(where: { $0.displayName == "name" })?.hasDefault == true)
         #expect(
             empty.fields.first(where: { $0.displayName == "role" })?.enumValues == [
                 "viewer", "editor", "NULL", "admin's role",
