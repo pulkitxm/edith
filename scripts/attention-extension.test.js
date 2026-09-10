@@ -51,6 +51,10 @@ function fixture() {
     crypto: { randomUUID: () => `fixture-${++sequence}` },
     navigator: { userAgent: "Chrome/" },
     fetch: async (_url, options) => {
+      if (!options.body) {
+        if (offline) throw new Error("Offline fixture");
+        return { ok: true };
+      }
       const event = JSON.parse(options.body);
       sent.push(event);
       if (offline) throw new Error("Offline fixture");
@@ -207,4 +211,12 @@ test("disabling tracking resets the interval boundary", async () => {
   f.advance(10);
   await f.tick();
   expect(f.sent[0].duration).toBe(10);
+});
+
+test("an empty queue cannot report a stopped daemon as connected", async () => {
+  const f = fixture();
+  f.offline(true);
+  await f.tick();
+  expect(f.local.connectionStatus).toBe("offline");
+  expect(f.sent).toHaveLength(0);
 });

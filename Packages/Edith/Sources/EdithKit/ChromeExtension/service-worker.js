@@ -87,6 +87,12 @@ async function capture() {
 
 async function flush(settings) {
   const { attentionQueue = [] } = await chrome.storage.local.get("attentionQueue")
+  if (!attentionQueue.length) {
+    const response = await fetch(`http://127.0.0.1:${settings.port}/v1/health`, {
+      signal: AbortSignal.timeout(5000)
+    })
+    if (!response.ok) throw new Error(`Edith returned ${response.status}`)
+  }
   for (let count = 0; attentionQueue.length && count < 32; count++) {
     const response = await fetch(`http://127.0.0.1:${settings.port}/v1/heartbeat`, {
       method: "POST",
@@ -100,7 +106,7 @@ async function flush(settings) {
   }
   const { attentionDroppedEvents = 0 } = await chrome.storage.local.get("attentionDroppedEvents")
   await chrome.storage.local.set({
-    connectionStatus: attentionQueue.length ? "offline" : "connected",
+    connectionStatus: "connected",
     lastConnectedAt: new Date().toISOString(),
     lastError: attentionDroppedEvents ? `${attentionDroppedEvents} intervals were not retained because storage was full.` : ""
   })
