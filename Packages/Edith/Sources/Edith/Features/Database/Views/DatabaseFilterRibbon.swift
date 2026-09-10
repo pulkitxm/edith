@@ -481,13 +481,25 @@ struct DatabaseFilterRibbon: View {
                 }
                 if operationNeedsValue(clause.operation) {
                     filterEditorControl("Value") {
-                        TextField(valuePlaceholder(clause.operation), text: clauseValueBinding(id))
+                        if let choices = valueChoices(for: clause) {
+                            Picker("Value", selection: clauseValueBinding(id)) {
+                                if !choices.contains(clause.valueText) {
+                                    Text("Choose a value").tag(clause.valueText).disabled(true)
+                                }
+                                ForEach(choices, id: \.self) { value in Text(value).tag(value) }
+                            }
+                            .labelsHidden()
+                        } else {
+                            TextField(
+                                valuePlaceholder(clause.operation), text: clauseValueBinding(id)
+                            )
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: UIScale.pt(11), design: .monospaced))
                             .onSubmit {
                                 editorID = nil
                                 apply()
                             }
+                        }
                     }
                 }
                 if operationSupportsCaseSensitivity(clause) {
@@ -672,6 +684,15 @@ struct DatabaseFilterRibbon: View {
             guard data.filterClauses.contains(where: { $0.id == id }) else { return }
             editorID = id
         }
+    }
+
+    private func valueChoices(for clause: DatabaseWorkspaceFilterClause) -> [String]? {
+        guard [.equal, .notEqual].contains(clause.operation),
+            let field = data.fields.first(where: {
+                $0.path.segments.joined(separator: ".") == clause.field
+            })
+        else { return nil }
+        return DatabaseFilterOperatorPolicy.valueChoices(for: field)
     }
 
     private func operators(

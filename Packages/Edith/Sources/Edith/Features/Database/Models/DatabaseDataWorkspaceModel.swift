@@ -1283,6 +1283,7 @@ final class DatabaseDataWorkspaceModel {
         default:
             break
         }
+        let descriptor = fields.first { $0.path.segments.joined(separator: ".") == fieldName }
         let valueTexts: [String]
         switch clause.operation {
         case .in, .notIn, .between:
@@ -1291,7 +1292,8 @@ final class DatabaseDataWorkspaceModel {
                 fieldName: fieldName)
         default:
             let value = clause.valueText.trimmingCharacters(in: .whitespacesAndNewlines)
-            valueTexts = value.isEmpty ? [] : [value]
+            valueTexts =
+                descriptor?.enumValues != nil ? [clause.valueText] : (value.isEmpty ? [] : [value])
         }
         if clause.operation == .between, valueTexts.count != 2 {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
@@ -1306,10 +1308,14 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
                 "Enter a value for the \(fieldName) filter.")
         }
-        let typeName =
-            fields.first {
-                $0.path.segments.joined(separator: ".") == fieldName
-            }?.typeName ?? "text"
+        let typeName = descriptor?.typeName ?? "text"
+        if let choices = descriptor?.enumValues {
+            guard valueTexts.allSatisfy(choices.contains) else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Choose a declared enum value for the \(fieldName) filter.")
+            }
+            return valueTexts.map(DatabaseValue.string)
+        }
         do {
             return try valueTexts.map {
                 try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
