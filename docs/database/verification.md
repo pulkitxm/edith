@@ -197,7 +197,6 @@ Integration and performance runs write redacted JSON result documents under an i
 
 A claim is complete only when its exact result exists and the corresponding automated contract is green.
 
-
 ### Related filters and table tabs
 
 Load `scripts/fixtures/database-relation-filters.sql` into an empty, isolated PostgreSQL database. Set `EDITH_DATABASE_POSTGRESQL_HOST`, `EDITH_DATABASE_POSTGRESQL_PORT`, `EDITH_DATABASE_POSTGRESQL_DATABASE`, `EDITH_DATABASE_POSTGRESQL_USERNAME`, and `EDITH_DATABASE_POSTGRESQL_PASSWORD` for that fixture, plus `EDITH_DATABASE_RELATION_FILTERS=1`. Run `Packages/Edith/test.sh --filter 'postgresqlRelated|relatedFiltersAndTableTabsRender'` to verify relationship traversal, typed values, composite keys, SQL replay, and the workbench using synthetic data.
