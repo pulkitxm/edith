@@ -11,6 +11,7 @@ public struct AttentionRuntimeSnapshot: Codable, Sendable {
 public actor AttentionBackgroundService {
     private let events: AttentionEventStore
     private let repository: AttentionRepository
+    private let tracking: AttentionTrackingRuntime
     private let cloudDirectory: URL
     private let defaults: UserDefaults
     private let cloudAvailable: @Sendable () -> Bool
@@ -32,7 +33,9 @@ public actor AttentionBackgroundService {
     ) {
         let events = AttentionEventStore(store: store)
         self.events = events
-        repository = AttentionRepository(root: root, eventSink: events)
+        let repository = AttentionRepository(root: root, eventSink: events)
+        self.repository = repository
+        tracking = AttentionTrackingRuntime(repository: repository) { try events.deliver($0) }
         self.cloudDirectory = cloudDirectory
         self.defaults = defaults
         self.cloudAvailable = cloudAvailable
@@ -72,6 +75,10 @@ public actor AttentionBackgroundService {
         let report = try await importSpoolWhenAvailable(now: now)
         let settings = repository.loadSettings()
         let enabled = defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled)
+        var trackingSettings = settings
+        trackingSettings.isEnabled = enabled && settings.isEnabled
+        await tracking.sync(trackingSettings)
+        guard !stopped else { throw CancellationError() }
         if enabled && settings.isEnabled && settings.browserTrackingEnabled {
             if serverSettings != settings || server?.state == .stopped || server == nil {
                 server?.stop()
@@ -102,6 +109,7 @@ public actor AttentionBackgroundService {
 
     public func stop() async {
         stopped = true
+        await tracking.stop()
         let backup = backupTask
         let restore = restoreTask
         let refresh = refreshTask

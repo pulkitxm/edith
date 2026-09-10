@@ -136,13 +136,17 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         guard request.headers["x-edith-token"] == settings.serverToken else {
             return .init(status: 401, body: ["error": "unauthorized"])
         }
+        let heartbeat: AttentionBrowserHeartbeat
         do {
-            let heartbeat = try Self.decoder.decode(
-                AttentionBrowserHeartbeat.self, from: request.body)
+            heartbeat = try Self.decoder.decode(AttentionBrowserHeartbeat.self, from: request.body)
+        } catch {
+            return .init(status: 422, body: ["error": "invalid heartbeat"])
+        }
+        do {
             try ingest(heartbeat)
             return .init(status: 202, body: ["status": "accepted"])
         } catch {
-            return .init(status: 422, body: ["error": "invalid heartbeat"])
+            return .init(status: 503, body: ["error": "event storage unavailable"])
         }
     }
 
@@ -184,15 +188,20 @@ public final class AttentionIngestionServer: @unchecked Sendable {
 
     private func ingest(_ heartbeat: AttentionBrowserHeartbeat) throws {
         let event = Self.browserEvent(from: heartbeat, privacyLevel: settings.privacyLevel)
-        try repository.append(event)
-        for media in heartbeat.media where media.playing {
-            try repository.append(
+        guard let sink = repository.resolvedEventSink else {
+            throw AgentError(.unavailable, "The Attention event store is unavailable.")
+        }
+        var events = [event]
+        for (index, media) in heartbeat.media.enumerated() where media.playing {
+            events.append(
                 AttentionEvent(
+                    id: "\(event.id):media:\(index)",
                     startedAt: event.startedAt, duration: event.duration, source: .media,
                     presence: heartbeat.presence, appName: heartbeat.appName,
                     bundleID: heartbeat.bundleID, domain: event.domain,
                     browserProfile: heartbeat.browserProfile, media: media))
         }
+        try sink.record(AttentionBatch(events: events))
     }
 
     public static func browserEvent(
@@ -207,6 +216,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             sanitizedURL = components.string
         }
         return AttentionEvent(
+            id: "browser:\(heartbeat.id.uuidString)",
             startedAt: heartbeat.timestamp, duration: max(0, min(heartbeat.duration, 120)),
             source: .browser, presence: heartbeat.presence, appName: heartbeat.appName,
             bundleID: heartbeat.bundleID,
@@ -285,6 +295,7 @@ public struct AttentionHTTPResponse: Equatable, Sendable {
             case 401: "Unauthorized"
             case 404: "Not Found"
             case 422: "Unprocessable Content"
+            case 503: "Service Unavailable"
             default: "Error"
             }
         let payload =

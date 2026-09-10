@@ -3,7 +3,6 @@ import GRDB
 import Testing
 
 @testable import EdithAgent
-@testable import EdithHelper
 @testable import EdithKit
 
 private struct AttentionDeliveryFixture {

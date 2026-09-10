@@ -37,6 +37,10 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
             guard event.duration.isFinite, event.duration > 0, event.duration <= 172_800 else {
                 continue
             }
+            if event.id.hasPrefix("browser:") {
+                try insert(event, into: database, preservingExisting: true)
+                continue
+            }
             let last = try Data.fetchOne(
                 database,
                 sql:

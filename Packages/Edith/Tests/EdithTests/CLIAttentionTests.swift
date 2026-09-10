@@ -1,10 +1,49 @@
 import Foundation
 import Testing
 
+@testable import EdithAgent
 @testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct CLIAttentionTests {
+    @Test func daemonEventsReachStatusSummaryAndTimelineWithoutTheHelper() async throws {
+        try await CLIProbe.inWorld { world in
+            let store = try AgentStore(
+                url: world.sandbox.appendingPathComponent("daemon.sqlite"), build: "test")
+            let sink = AttentionEventStore(store: store)
+            AttentionCLIEnvironment.eventSink = sink
+            try sink.record(
+                AttentionBatch(events: [
+                    AttentionEvent(
+                        startedAt: Date().addingTimeInterval(-60), duration: 30,
+                        source: .application, appName: "Writing", bundleID: "fixture.writing")
+                ]))
+            let status = await CLIProbe.capture(["attention", "status", "--json"])
+            #expect(status.object?["eventsLast24Hours"] as? Int == 1)
+            let summary = await CLIProbe.capture([
+                "attention", "summary", "--range", "24h", "--json",
+            ])
+            #expect((summary.object?["activeSeconds"] as? NSNumber)?.doubleValue == 30)
+            let timeline = await CLIProbe.capture([
+                "attention", "timeline", "--range", "24h", "--json",
+            ])
+            #expect(timeline.array?.count == 1)
+        }
+    }
+
+    @Test func unavailableDaemonDoesNotMasqueradeAsEmptyHistory() async {
+        await CLIProbe.inWorld { _ in
+            AttentionCLIEnvironment.eventSink = UnavailableAttentionSink()
+            let summary = await CLIProbe.capture(["attention", "summary", "--json"])
+            #expect(summary.code != 0)
+            let doctor = await CLIProbe.capture(["attention", "doctor", "--json"])
+            let checks = doctor.object?["checks"] as? [[String: Any]]
+            #expect(
+                checks?.first { $0["name"] as? String == "event store" }?["ok"] as? Bool == false)
+            #expect(doctor.object?["ok"] as? Bool == false)
+        }
+    }
+
     @Test func rangeParserSupportsHumanAndCompactWindows() throws {
         let now = Date(timeIntervalSince1970: 1_775_000_000)
         #expect(try AttentionCLI.interval("24h", now: now).duration == 86_400)
@@ -84,4 +123,14 @@ import Testing
                 browser?["detail"] as? String == "enabled but local server is unavailable")
         }
     }
+}
+
+private struct UnavailableAttentionSink: AttentionEventSink {
+    func record(_ batch: AttentionBatch) throws {
+        throw AgentError(.unavailable, "Unavailable fixture")
+    }
+    func events(from: Date, to: Date) throws -> [AttentionEvent] {
+        throw AgentError(.unavailable, "Unavailable fixture")
+    }
+    func hasEvents() throws -> Bool { throw AgentError(.unavailable, "Unavailable fixture") }
 }

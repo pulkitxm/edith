@@ -15,14 +15,14 @@ import urllib.error
 import urllib.request
 import uuid
 
+from edith_test_environment import isolated_test_environment
+
 repo = pathlib.Path(__file__).resolve().parents[1]
 root = pathlib.Path(tempfile.mkdtemp(prefix='edith-attention-e2e-'))
 label = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 suite = label + '.defaults'
 helper_suite = label + '.helper'
-env = dict(os.environ, EDITH_AGENT_MACH_SERVICE=label, EDITH_SHARED_DEFAULTS_SUITE=suite,
-           EDITH_HELPER_DEFAULTS_SUITE=helper_suite, EDITH_DATA_ROOT=str(root / 'data'),
-           EDITH_AGENT_BUILD='attention-e2e')
+env = dict(isolated_test_environment(root, label), EDITH_AGENT_BUILD='attention-e2e')
 target = 'gui/' + str(os.getuid()) + '/' + label
 results = []
 booted = False
@@ -80,7 +80,7 @@ def health():
 
 
 def heartbeat(token):
-    body = dict(timestamp=timestamp(-15), duration=15, presence='active', appName='Fixture Browser',
+    body = dict(id=str(uuid.uuid4()), timestamp=timestamp(-15), duration=15, presence='active', appName='Fixture Browser',
                 url='https://example.com/private?token=hidden', media=[])
     request = urllib.request.Request(address + '/v1/heartbeat', data=json.dumps(body).encode(),
                                      headers={'X-Edith-Token': token}, method='POST')
@@ -162,6 +162,13 @@ try:
     assert event['domain'] == 'example.com' and not event.get('url'), event
     assert summary['summary']['activeDuration'] == 15, summary
     record('03 authenticated heartbeat is stored and summarized with domain privacy')
+    cli_summary = json.loads(call([str(root / 'ed'), 'attention', 'summary', '--range', '24h', '--json']).stdout)
+    cli_status = json.loads(call([str(root / 'ed'), 'attention', 'status', '--json']).stdout)
+    cli_timeline = json.loads(call([str(root / 'ed'), 'attention', 'timeline', '--range', '24h', '--json']).stdout)
+    assert cli_summary['activeSeconds'] == 15, cli_summary
+    assert cli_status['eventsLast24Hours'] == 1, cli_status
+    assert len(cli_timeline) == 1, cli_timeline
+    record('CLI summary, status and timeline read daemon events without either UI')
     cli('restart', '--json')
     wait_for(lambda: cli('status', '--json'), lambda value: value['pid'] != initial['pid'])
     wait_for(health, bool)

@@ -64,7 +64,7 @@ ci-lint:
 	bun run lint
 
 ci-scripts:
-	bun test ./scripts
+	bun test ./scripts --path-ignore-patterns '**/._*'
 
 ci-performance:
 	bun scripts/check-performance-audit.mjs
@@ -99,7 +99,7 @@ ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
 ci-swift-lint:
-	cd $(PKG) && swift format lint --strict --parallel --recursive Sources Tests Package.swift
+	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 
 ci-swift-build: approve-package-plugins
 	@test -n "$(DEVELOPER_DIR)" \

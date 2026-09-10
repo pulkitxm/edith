@@ -19,13 +19,11 @@ final class AppServices {
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
-    private(set) var attention: AttentionTrackingService?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
     private var terminating = false
-    private var attentionStopTask: Task<Void, Never>?
 
     init(
         lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
@@ -37,13 +35,6 @@ final class AppServices {
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
-    }
-
-    static func attentionEnabled(
-        extensionEnabled: Bool, settings: AttentionSettings
-    ) -> Bool {
-        extensionEnabled && settings.isEnabled
-            && (settings.trackingEnabled || settings.browserTrackingEnabled)
     }
 
     static func extensionEnabled(_ key: String) -> Bool {
@@ -91,9 +82,6 @@ final class AppServices {
             StartupPhase(name: "helper.services.status") { [weak self] in
                 self?.reconcileStatusServices()
             },
-            StartupPhase(name: "helper.services.attention") { [weak self] in
-                self?.reconcileAttentionService()
-            },
             StartupPhase(name: "helper.services.refresh") { [weak self] in
                 self?.refreshServices()
             },
@@ -105,8 +93,6 @@ final class AppServices {
         terminating = true
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
-        stopAttentionService()
-        await attentionStopTask?.value
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
@@ -195,7 +181,6 @@ final class AppServices {
         reconcilePresentationServices()
         reconcileHardwareServices()
         reconcileStatusServices()
-        reconcileAttentionService()
         refreshServices()
     }
 
@@ -422,33 +407,6 @@ final class AppServices {
         if !statsOn, let stats = systemStats {
             stats.shutdown()
             systemStats = nil
-        }
-    }
-
-    private func reconcileAttentionService() {
-        guard !terminating else { return }
-        let attentionSettings = AttentionRepository().loadSettings()
-        let attentionOn = Self.attentionEnabled(
-            extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
-            settings: attentionSettings)
-        if attentionOn, attention == nil, attentionStopTask == nil {
-            attention = AttentionTrackingService()
-        }
-        if attentionOn { attention?.sync(attentionSettings) }
-        if !attentionOn { stopAttentionService() }
-    }
-
-    private func stopAttentionService() {
-        guard attentionStopTask == nil else { return }
-        guard let service = attention else { return }
-        attention = nil
-        service.shutdown()
-        attentionStopTask = Task { [weak self] in
-            await service.shutdown().value
-            guard !Task.isCancelled else { return }
-            guard let self else { return }
-            attentionStopTask = nil
-            reconcileAttentionService()
         }
     }
 

@@ -5,6 +5,12 @@ uses the same identity and category rules as the UI, and emits bounded JSON suit
 for scripts and agents. Initial tracking and browser permissions are configured in
 the guided Attention screen in Edith.
 
+The background agent owns both native application collection and the browser
+listener. Closing the dashboard or quitting the menu bar app leaves Attention
+tracking active while `edithd` is enabled. Turn off Attention tracking in its
+settings to stop collection. Window titles require Accessibility permission for
+the collecting process; application duration does not.
+
 ## Commands
 
 - [`ed attention status`](./status.md)
@@ -15,9 +21,11 @@ the guided Attention screen in Edith.
 - [`ed attention focus`](./focus/README.md)
 - [`ed attention doctor`](./doctor.md)
 
-A bare `ed attention` runs `status`. Data stays under
-`~/Library/Application Support/Edith/attention` unless the app's data directory is
-relocated by the test or development environment.
+A bare `ed attention` runs `status`. Events live in the background agent's
+`~/Library/Application Support/Edith/edith.sqlite` database. Settings, focus sessions,
+and pending delivery files live in its `attention` directory. These paths follow
+the app's data directory in test or development environments. CLI event queries
+report agent failures instead of returning an empty summary.
 
 Summaries resolve overlap before totaling time. A browser heartbeat replaces the
 enclosing browser application for that interval, so Chrome and the active site are

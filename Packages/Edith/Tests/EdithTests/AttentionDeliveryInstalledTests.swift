@@ -1,12 +1,12 @@
 import Foundation
 import Testing
 
-@testable import EdithHelper
+@testable import EdithAgent
 @testable import EdithKit
 
 @MainActor @Suite struct AttentionDeliveryInstalledTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_ATTENTION_DELIVERY_LIVE"] == "1"))
-    func installedDaemonReconnectPreservesAndDeduplicatesTheHelperQueue() async throws {
+    func daemonRestartsDrainTheDurableQueueWithoutTheHelper() async throws {
         let environment = ProcessInfo.processInfo.environment
         let rootPath = try #require(environment["EDITH_ATTENTION_DELIVERY_ROOT"])
         let service = try #require(environment["EDITH_AGENT_MACH_SERVICE"])
@@ -37,61 +37,46 @@ import Testing
         }
         let client = AgentClient()
         switch stage {
-        case "offline":
+        case "offline", "offline-next":
             let writer = AttentionHeartbeatWriter(
                 retryDelay: .seconds(3600), prepare: { $0.event },
                 deliver: { try await AttentionDeliveryClient.deliver($0, client: client) })
-            writer.submit(sample(-60))
-            writer.submit(sample(-55))
+            if stage == "offline" {
+                writer.submit(sample(-60))
+                writer.submit(sample(-55))
+            } else {
+                writer.submit(sample(-50))
+            }
             await writer.flush()
             await writer.stop()
             #expect(writer.isStopped)
             let health = try await writer.health()
-            #expect(health.pendingEvents == 2)
+            #expect(health.pendingEvents == (stage == "offline" ? 2 : 1))
             #expect(health.lastFailure != nil)
             try await saveHealth(stage, writer: writer, root: root)
-        case "recover":
-            let before = try await AttentionDeliverySpool(file: file).health()
-            #expect(before.pendingEvents == 2)
-            let ambiguity = AttentionDeliveryAmbiguity()
-            let writer = AttentionHeartbeatWriter(
-                retryDelay: .milliseconds(100), prepare: { $0.event },
-                deliver: { request in
-                    try await AttentionDeliveryClient.deliver(request, client: client)
-                    if await ambiguity.first() {
-                        throw AgentError(.unavailable, "Reply was not observed.")
-                    }
-                })
-            await writer.flush()
-            #expect(try await writer.health().pendingEvents == 2)
+        case "recover", "restart":
             let deadline = ContinuousClock.now.advanced(by: .seconds(15))
-            while try await writer.health().pendingEvents > 0 {
+            var health = try await AttentionDeliverySpool(file: file).health()
+            while health.pendingEvents > 0 {
                 guard ContinuousClock.now < deadline else {
-                    await writer.stop()
-                    throw AgentError(.failed, "The saved queue did not drain after reconnect.")
+                    throw AgentError(.failed, "The daemon did not drain its saved queue.")
                 }
                 try await Task.sleep(for: .milliseconds(25))
+                health = try await AttentionDeliverySpool(file: file).health()
             }
-            await writer.stop()
+            let saved = try AgentPayload.decode(
+                AttentionPendingFixture.self,
+                from: Data(contentsOf: root.appendingPathComponent("queued-requests.json")))
+            for request in saved.pending {
+                try await AttentionDeliveryClient.deliver(request, client: client)
+                try await AttentionDeliveryClient.deliver(request, client: client)
+            }
             let result = try await read(now: now, client: client)
             #expect(result.events.count == 1)
-            #expect(result.events.first?.duration == 10)
-            try await saveHealth(stage, writer: writer, root: root)
-        case "restart":
-            let before = try await AttentionDeliverySpool(file: file).health()
-            #expect(before.pendingEvents == 0)
-            #expect(before.committedSequence == 2)
-            let writer = AttentionHeartbeatWriter(
-                prepare: { $0.event },
-                deliver: { try await AttentionDeliveryClient.deliver($0, client: client) })
-            writer.submit(sample(-50))
-            await writer.flush()
-            await writer.stop()
-            let result = try await read(now: now, client: client)
-            #expect(result.events.count == 1)
-            #expect(result.events.first?.duration == 15)
-            #expect(try await writer.health().committedSequence == 3)
-            try await saveHealth(stage, writer: writer, root: root)
+            #expect(result.events.first?.duration == (stage == "recover" ? 10 : 15))
+            #expect(health.committedSequence == (stage == "recover" ? 2 : 3))
+            try AgentPayload.encode(health).write(
+                to: root.appendingPathComponent(stage + ".json"), options: .atomic)
         default:
             throw AgentError(.refused, "Unknown private Attention delivery stage.")
         }
@@ -113,11 +98,6 @@ import Testing
     }
 }
 
-private actor AttentionDeliveryAmbiguity {
-    var delivered = false
-    func first() -> Bool {
-        guard !delivered else { return false }
-        delivered = true
-        return true
-    }
+private struct AttentionPendingFixture: Decodable {
+    let pending: [AttentionDeliveryRequest]
 }

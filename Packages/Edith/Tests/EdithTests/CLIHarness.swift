@@ -183,6 +183,7 @@ final class CLIWorld: @unchecked Sendable {
             at: sandbox, withIntermediateDirectories: true)
         ClipboardPaths.root = sandbox
         AttentionPaths.root = sandbox
+        AttentionCLIEnvironment.eventSink = nil
         MachinePaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         let historyURL = sandbox.appendingPathComponent("update-checks.json")
@@ -401,6 +402,7 @@ final class CLIWorld: @unchecked Sendable {
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
         pasteboard.clearContents()
+        AttentionCLIEnvironment.eventSink = AgentAttentionSink()
         CLIEnvironment.reset()
         AttentionPaths.root = AppData.supportDir
     }
