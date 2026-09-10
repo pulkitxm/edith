@@ -71,7 +71,7 @@ class NativeProcesses:
                 identities.append(identity)
         return identities
 
-    def is_command_line(self, identity):
+    def is_background(self, identity):
         if self.identity(identity.pid) != identity:
             return False
         sysctl = ctypes.CDLL(None, use_errno=True).sysctl
@@ -101,7 +101,8 @@ class NativeProcesses:
             if end < 0:
                 return False
             offset = end + 1
-        return b'EDITH_CLI=1' in data[offset:].split(b'\0')
+        environment = data[offset:].split(b'\0')
+        return b'EDITH_CLI=1' in environment or b'EDITH_DATABASE_BROKER=1' in environment
 
     def alive(self, identity):
         fields = self.process_info(identity.pid)
@@ -217,7 +218,7 @@ def install_locked(source, destination, quit_application, verify):
         main_path = destination / EXECUTABLES[0]
         main_processes = processes.matching({main_path: installed_files.get(main_path)})
         gui_processes = [identity for identity in main_processes
-                         if not processes.is_command_line(identity)]
+                         if not processes.is_background(identity)]
         quit_application(destination, gui_processes, processes)
         retired_processes = processes.matching(installed_files)
         if existing_identity(destination) != original:
