@@ -152,23 +152,28 @@ try:
     offline = stage('offline')
     assert offline['pendingEvents'] == 2 and offline['committedSequence'] == 0, offline
     assert offline['lastFailure'], offline
-    record('01 helper writer exits with two durable samples while the daemon is unavailable',
+    record('01 collector writer exits with two durable samples while the daemon is unavailable',
            pendingEvents=offline['pendingEvents'])
     spool_file = root / 'data/attention/delivery-spool.json'
     queued = json.loads(spool_file.read_text())
+    (root / 'queued-requests.json').write_text(json.dumps(queued))
     start()
     recovered = stage('recover')
     assert recovered['pendingEvents'] == 0 and recovered['committedSequence'] == 2, recovered
-    record('02 a new writer process drains saved samples and retries an ambiguous reply without double-counting',
+    record('02 the daemon drains saved samples without a helper and ignores replayed receipts',
            pendingEvents=recovered['pendingEvents'], recordedSeconds=10)
     before = status()
     call([str(root / 'ed'), 'agent', 'restart', '--json'])
     wait_ready(previous_pid=before['pid'])
+    stop()
+    next_sample = stage('offline-next')
+    assert next_sample['pendingEvents'] == 1 and next_sample['committedSequence'] == 2, next_sample
+    start()
     restarted = stage('restart')
     assert restarted['pendingEvents'] == 0 and restarted['committedSequence'] == 3, restarted
     final = json.loads(spool_file.read_text())
     assert final['producerID'] == queued['producerID'] and final['nextSequence'] == 4, final
-    record('03 daemon and writer restart preserve receipt identity and continue the durable sequence',
+    record('03 daemon restarts preserve receipt identity and continue the durable sequence',
            committedSequence=restarted['committedSequence'], recordedSeconds=15)
     delivery = json.loads(call([str(root / 'ed'), 'attention', 'status', '--json']).stdout)['delivery']
     assert delivery['pendingEvents'] == 0 and not delivery['degraded'], delivery
