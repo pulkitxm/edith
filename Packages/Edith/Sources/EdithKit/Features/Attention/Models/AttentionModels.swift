@@ -49,6 +49,7 @@ public struct AttentionMedia: Codable, Equatable, Sendable {
 }
 
 public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
+    public var id: UUID
     public var timestamp: Date
     public var duration: TimeInterval
     public var presence: AttentionPresence
@@ -62,11 +63,12 @@ public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
     public var media: [AttentionMedia]
 
     public init(
-        timestamp: Date, duration: TimeInterval, presence: AttentionPresence,
+        id: UUID = UUID(), timestamp: Date, duration: TimeInterval, presence: AttentionPresence,
         appName: String, bundleID: String? = nil, url: String? = nil,
         domain: String? = nil, title: String? = nil, faviconURL: String? = nil,
         browserProfile: String? = nil, media: [AttentionMedia] = []
     ) {
+        self.id = id
         self.timestamp = timestamp
         self.duration = duration
         self.presence = presence

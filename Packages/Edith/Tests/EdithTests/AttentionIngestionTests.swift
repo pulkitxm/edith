@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithAgent
 @testable import EdithKit
 
 @Suite struct AttentionIngestionTests {
@@ -61,7 +62,9 @@ import Testing
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-attention-server-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let repository = AttentionRepository(root: root)
+        let store = try AgentStore(url: root.appendingPathComponent("store.sqlite"), build: "test")
+        let sink = AttentionEventStore(store: store)
+        let repository = AttentionRepository(root: root, eventSink: sink)
         let settings = AttentionSettings(
             browserTrackingEnabled: true, serverPort: 0, serverToken: "local-secret")
         let server = AttentionIngestionServer(repository: repository, settings: settings)
@@ -82,15 +85,33 @@ import Testing
         request.setValue("local-secret", forHTTPHeaderField: "X-Edith-Token")
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        request.httpBody = try encoder.encode(sampleHeartbeat())
+        var heartbeat = sampleHeartbeat()
+        heartbeat.media = [
+            AttentionMedia(title: "Fixture track", service: "Fixture", kind: "audio", playing: true)
+        ]
+        request.httpBody = try encoder.encode(heartbeat)
+        try store.write { database in
+            try database.execute(
+                sql:
+                    "CREATE TRIGGER fail_media BEFORE INSERT ON attention_event WHEN NEW.kind = 'media' BEGIN SELECT RAISE(FAIL, 'fixture failure'); END"
+            )
+        }
+        let (_, failedResponse) = try await URLSession.shared.data(for: request)
+        #expect((failedResponse as? HTTPURLResponse)?.statusCode == 503)
+        #expect(try !sink.hasEvents())
+        try store.write { try $0.execute(sql: "DROP TRIGGER fail_media") }
         let (_, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 202)
+        let (_, replayedResponse) = try await URLSession.shared.data(for: request)
+        #expect((replayedResponse as? HTTPURLResponse)?.statusCode == 202)
 
         let events = repository.events(
             from: now.addingTimeInterval(-1), to: now.addingTimeInterval(1))
-        #expect(events.count == 1)
-        #expect(events.first?.domain == "music.youtube.com")
-        #expect(events.first?.browserProfile == "Default")
+        #expect(events.count == 2)
+        let browser = events.first { $0.source == .browser }
+        #expect(browser?.domain == "music.youtube.com")
+        #expect(browser?.browserProfile == "Default")
+        #expect(events.filter { $0.source == .media }.count == 1)
     }
 
     private func sampleHeartbeat() -> AttentionBrowserHeartbeat {

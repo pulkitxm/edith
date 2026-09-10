@@ -41,6 +41,29 @@ private struct AttentionDaemonFixture {
 }
 
 @Suite struct AttentionDaemonIntegrationTests {
+    @Test func browserRetriesCannotDuplicateTimeOrBridgeUnobservedGaps() async throws {
+        let fixture = try AttentionDaemonFixture()
+        defer { Task { await fixture.close() } }
+        let now = Date()
+        let first = AttentionIngestionServer.browserEvent(
+            from: AttentionBrowserHeartbeat(
+                timestamp: now.addingTimeInterval(-60), duration: 10,
+                presence: .active, appName: "Browser", domain: "example.com"),
+            privacyLevel: .domains)
+        let second = AttentionIngestionServer.browserEvent(
+            from: AttentionBrowserHeartbeat(
+                timestamp: now.addingTimeInterval(-30), duration: 10,
+                presence: .active, appName: "Browser", domain: "example.com"),
+            privacyLevel: .domains)
+        try fixture.events.record(AttentionBatch(events: [first, second, first]))
+        let rows = try fixture.events.events(from: now.addingTimeInterval(-120), to: now)
+        #expect(rows.count == 2)
+        let summary = AttentionAnalyzer().summary(
+            events: rows, settings: AttentionSettings(),
+            from: now.addingTimeInterval(-120), to: now)
+        #expect(summary.activeDuration == 20)
+    }
+
     @Test func duplicateCategoryIdentifiersCannotCrashTheDaemonSummary() async throws {
         let fixture = try AttentionDaemonFixture()
         let now = Date()

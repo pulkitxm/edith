@@ -7,9 +7,7 @@ const defaults = {
   mediaEnabled: false
 }
 
-let sending = false
-let queued = false
-let lastSentAt = Date.now()
+let work = Promise.resolve()
 
 async function config() {
   return { ...defaults, ...(await chrome.storage.local.get(defaults)) }
@@ -39,57 +37,89 @@ async function mediaFor(tabId, enabled) {
   return Array.isArray(stored[key]) ? stored[key] : []
 }
 
-async function heartbeat() {
-  if (sending) {
-    queued = true
-    return
-  }
-  sending = true
-  try {
-    const settings = await config()
-    if (!settings.enabled || !settings.token) {
-      await chrome.storage.local.set({ connectionStatus: "setup", lastError: "Finish setup in extension settings." })
-      return
-    }
-    const tab = await activeTab()
-    if (!tab || !tab.url || !/^https?:/.test(tab.url)) return
-    const idle = await chrome.idle.queryState(Number(settings.idleThreshold))
-    const now = Date.now()
-    const duration = Math.max(1, Math.min(120, (now - lastSentAt) / 1000))
-    lastSentAt = now
-    const parsed = new URL(tab.url)
-    const payload = {
-      timestamp: new Date(now - duration * 1000).toISOString(),
-      duration,
-      presence: idle === "active" ? "active" : idle === "locked" ? "locked" : "idle",
-      appName: browserName(),
-      url: tab.url,
-      domain: parsed.hostname,
-      title: tab.title || null,
-      faviconURL: tab.favIconUrl || null,
-      browserProfile: settings.profile,
-      media: await mediaFor(tab.id, settings.mediaEnabled)
-    }
-    const response = await fetch(`http://127.0.0.1:${settings.port}/v1/heartbeat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Edith-Token": settings.token },
-      body: JSON.stringify(payload)
-    })
-    if (!response.ok) throw new Error(`Edith returned ${response.status}`)
-    await chrome.storage.local.set({ connectionStatus: "connected", lastConnectedAt: new Date().toISOString(), lastError: "" })
-  } catch (error) {
-    await chrome.storage.local.set({ connectionStatus: "offline", lastError: String(error.message || error) })
-  } finally {
-    sending = false
-    if (queued) {
-      queued = false
-      setTimeout(heartbeat, 250)
-    }
+async function observe(settings) {
+  const tab = await activeTab()
+  if (!tab?.url || !/^https?:/.test(tab.url)) return null
+  const idle = await chrome.idle.queryState(Number(settings.idleThreshold))
+  return {
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    presence: idle === "active" ? "active" : idle === "locked" ? "locked" : "idle",
+    appName: browserName(),
+    url: tab.url,
+    domain: new URL(tab.url).hostname,
+    title: tab.title || null,
+    faviconURL: tab.favIconUrl || null,
+    browserProfile: settings.profile,
+    media: await mediaFor(tab.id, settings.mediaEnabled)
   }
 }
 
+async function capture() {
+  const settings = await config()
+  if (!settings.enabled || !settings.token) {
+    await chrome.storage.session.set({ attentionPrevious: null })
+    await chrome.storage.local.set({ connectionStatus: "setup", lastError: "Finish setup in extension settings." })
+    return
+  }
+  const current = await observe(settings)
+  const now = Date.now()
+  const { attentionPrevious: previous } = await chrome.storage.session.get("attentionPrevious")
+  const { attentionQueue = [], attentionDroppedEvents = 0 } = await chrome.storage.local.get({ attentionQueue: [], attentionDroppedEvents: 0 })
+  const elapsed = previous ? (now - previous.timestamp) / 1000 : 0
+  if (previous && elapsed > 0 && elapsed <= 60) {
+    const payload = {
+      ...previous,
+      id: previous.id,
+      timestamp: new Date(previous.timestamp).toISOString(),
+      duration: elapsed
+    }
+    const next = [...attentionQueue, payload]
+    if (next.length <= 4096 && new TextEncoder().encode(JSON.stringify(next)).length <= 4 * 1024 * 1024) {
+      await chrome.storage.local.set({ attentionQueue: next })
+    } else {
+      await chrome.storage.local.set({ attentionDroppedEvents: attentionDroppedEvents + 1 })
+    }
+  }
+  await chrome.storage.session.set({ attentionPrevious: current })
+  return settings
+}
+
+async function flush(settings) {
+  const { attentionQueue = [] } = await chrome.storage.local.get("attentionQueue")
+  for (let count = 0; attentionQueue.length && count < 32; count++) {
+    const response = await fetch(`http://127.0.0.1:${settings.port}/v1/heartbeat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Edith-Token": settings.token },
+      body: JSON.stringify(attentionQueue[0]),
+      signal: AbortSignal.timeout(5000)
+    })
+    if (!response.ok) throw new Error(`Edith returned ${response.status}`)
+    attentionQueue.shift()
+    await chrome.storage.local.set({ attentionQueue })
+  }
+  const { attentionDroppedEvents = 0 } = await chrome.storage.local.get("attentionDroppedEvents")
+  await chrome.storage.local.set({
+    connectionStatus: attentionQueue.length ? "offline" : "connected",
+    lastConnectedAt: new Date().toISOString(),
+    lastError: attentionDroppedEvents ? `${attentionDroppedEvents} intervals were not retained because storage was full.` : ""
+  })
+}
+
+function heartbeat() {
+  work = work.catch(() => {}).then(async () => {
+    try {
+      const settings = await capture()
+      if (settings) await flush(settings)
+    } catch (error) {
+      await chrome.storage.local.set({ connectionStatus: "offline", lastError: String(error.message || error) })
+    }
+  })
+  return work
+}
+
 function scheduleHeartbeat() {
-  setTimeout(heartbeat, 200)
+  void heartbeat()
 }
 
 function ensureHeartbeatAlarm() {
