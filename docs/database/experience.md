@@ -24,6 +24,8 @@ The object explorer fetches only roots and expanded children. Selecting a data o
 
 Selecting a row, key, document, or search hit opens a detail inspector. Edits are staged locally, preserving original and proposed values. Apply opens the canonical mutation preview. A successful apply returns changed values when the product supports them and refreshes only affected scope.
 
+PostgreSQL enum columns expose their declared labels as choices in the row editor. Nullable enums distinguish a label named `NULL` from a database null. Double-clicking an enum cell opens the row editor. New rows omit unchecked fields so database defaults and generated identities apply, including inserts that use only defaults. Inserts and updates use the existing mutation review flow.
+
 For a relation without a stable key, implicit row editing is disabled. The user can create an explicit predicate operation with a stronger preview.
 
 PostgreSQL filters accept related paths such as `organization.slug` through declared foreign keys. Use the referenced table name, foreign key column, or constraint name for each relationship segment. Paths can follow up to eight relationships, including composite keys; ambiguous paths require an explicit column or constraint name.

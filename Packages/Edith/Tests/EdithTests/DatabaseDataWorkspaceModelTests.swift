@@ -784,6 +784,65 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.state == .loaded)
     }
 
+    @Test("Enum editing distinguishes labels from null and inserts omit defaults")
+    func enumRowEditor() async throws {
+        let values = ["viewer", "editor", "NULL", "admin's role"]
+        let descriptor = DatabaseFieldDescriptor(
+            path: DatabaseFieldPath("role"), displayName: "role", typeName: "member_role",
+            isNullable: true, isSortable: true, isFilterable: true, enumValues: values)
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+                ]),
+            fields: [
+                DatabaseObjectField(
+                    name: "role",
+                    value: .productSpecific(
+                        DatabaseProductValue(
+                            product: .postgresql, typeName: "member_role",
+                            textRepresentation: "viewer")))
+            ])
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [record], fields: [descriptor])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.members"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.editorFields.first?.enumValues == values)
+        #expect(model.editorFields.first?.isEditable == true)
+        model.updateEditorField("role", text: "NULL")
+        let label = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, labelParameters) = label.payload else {
+            Issue.record("Expected relational enum update")
+            return
+        }
+        #expect(labelParameters.first?.value == .string("NULL"))
+        model.setEditorFieldNull("role")
+        let null = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, nullParameters) = null.payload else { return }
+        #expect(nullParameters.first?.value == .null)
+        model.updateEditorField("role", text: "invalid")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.beginInsert(connection)
+        #expect(model.editorFields.first?.enumValues == values)
+        let defaults = try #require(model.editorMutationRequest(connection))
+        #expect(
+            defaults.payload.command
+                == "INSERT INTO \"public\".\"members\" DEFAULT VALUES RETURNING 1")
+        model.updateEditorField("role", text: "editor")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"public\".\"members\" (\"role\") VALUES ($1) RETURNING 1")
+    }
+
     @Test("Row editor creates canonical update, insert, and delete requests")
     func rowMutationRequests() async throws {
         let sender = DatabaseDataScriptedSender(responses: [

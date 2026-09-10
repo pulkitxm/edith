@@ -128,6 +128,9 @@ struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
     let isEditable: Bool
     var text: String
     var isIncluded: Bool
+    var enumValues: [String]? = nil
+    var isNullable: Bool = true
+    var isNull: Bool = false
 }
 
 @MainActor
@@ -207,6 +210,9 @@ final class DatabaseDataWorkspaceModel {
                 includesValue = includesValue || field.id == "value"
             }
             return includesKey && includesValue
+        }
+        if editorMode == .insert, activeProduct == .postgresql {
+            return !editorFields.isEmpty
         }
         return editorFields.contains(where: { $0.isEditable && $0.isIncluded })
     }
@@ -599,9 +605,12 @@ final class DatabaseDataWorkspaceModel {
                     typeName: field.typeName,
                     originalValue: nil,
                     isIdentity: false,
-                    isEditable: Self.supportsEditing(typeName: field.typeName),
+                    isEditable: field.enumValues != nil
+                        || Self.supportsEditing(typeName: field.typeName),
                     text: "",
-                    isIncluded: false)
+                    isIncluded: false,
+                    enumValues: field.enumValues,
+                    isNullable: field.isNullable)
             }
         }
     }
@@ -645,10 +654,10 @@ final class DatabaseDataWorkspaceModel {
         }
         let redisString = Self.isRedisString(record)
         editorFields = record.fields.map { field in
-            let typeName =
-                fields.first {
-                    $0.path.segments.joined(separator: ".") == field.name
-                }?.typeName ?? "text"
+            let descriptor = fields.first {
+                $0.path.segments.joined(separator: ".") == field.name
+            }
+            let typeName = descriptor?.typeName ?? "text"
             let isIdentity = identityNames.contains(field.name)
             let isEditable: Bool
             if connection.product == .redis || connection.product == .valkey {
@@ -656,7 +665,9 @@ final class DatabaseDataWorkspaceModel {
                     field.name == "ttlMilliseconds"
                     || (field.name == "value" && redisString && Self.supportsEditing(field.value))
             } else {
-                isEditable = !isIdentity && Self.supportsEditing(field.value)
+                isEditable =
+                    !isIdentity
+                    && (descriptor?.enumValues != nil || Self.supportsEditing(field.value))
             }
             return DatabaseRowFieldDraft(
                 id: field.name,
@@ -665,7 +676,10 @@ final class DatabaseDataWorkspaceModel {
                 isIdentity: isIdentity,
                 isEditable: isEditable,
                 text: Self.text(for: field.value),
-                isIncluded: false)
+                isIncluded: false,
+                enumValues: descriptor?.enumValues,
+                isNullable: descriptor?.isNullable ?? true,
+                isNull: field.value == .null)
         }
     }
 
@@ -719,8 +733,10 @@ final class DatabaseDataWorkspaceModel {
             editorFields[index].isEditable
         else { return }
         editorFields[index].text = text
+        editorFields[index].isNull = false
         if let originalValue = editorFields[index].originalValue {
-            editorFields[index].isIncluded = text != Self.text(for: originalValue)
+            editorFields[index].isIncluded =
+                originalValue == .null || text != Self.text(for: originalValue)
         } else {
             editorFields[index].isIncluded = true
         }
@@ -741,7 +757,13 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func setEditorFieldNull(_ id: String) {
-        updateEditorField(id, text: "NULL")
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable, editorFields[index].isNullable
+        else { return }
+        editorFields[index].text = "NULL"
+        editorFields[index].isNull = true
+        editorFields[index].isIncluded = editorFields[index].originalValue != .null
+        editorError = nil
     }
 
     func resetEditorField(_ id: String) {
@@ -750,6 +772,7 @@ final class DatabaseDataWorkspaceModel {
         else { return }
         editorFields[index].text = editorFields[index].originalValue.map(Self.text(for:)) ?? ""
         editorFields[index].isIncluded = false
+        editorFields[index].isNull = editorFields[index].originalValue == .null
         editorError = nil
     }
 
@@ -1766,6 +1789,13 @@ final class DatabaseDataWorkspaceModel {
     private static func value(
         from field: DatabaseRowFieldDraft
     ) throws -> DatabaseValue {
+        if let enumValues = field.enumValues {
+            if field.isNull, field.isNullable { return .null }
+            guard enumValues.contains(field.text) else {
+                throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+            }
+            return .string(field.text)
+        }
         let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.uppercased() == "NULL" {
             return .null

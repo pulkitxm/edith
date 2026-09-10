@@ -35,3 +35,10 @@ CREATE TABLE relation_filters.composite_member (
 );
 INSERT INTO relation_filters.composite_org VALUES (1, 10, 'sample'), (2, 10, 'other');
 INSERT INTO relation_filters.composite_member VALUES (1, 1, 10), (2, 2, 10);
+CREATE TYPE relation_filters.member_role AS ENUM ('viewer', 'editor', 'admin');
+CREATE TABLE relation_filters.enrollment (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name text NOT NULL DEFAULT 'Sample Member',
+    role relation_filters.member_role DEFAULT 'viewer'
+);
+INSERT INTO relation_filters.enrollment (name, role) VALUES ('Alex Sample', 'viewer');

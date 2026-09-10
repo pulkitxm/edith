@@ -50,12 +50,14 @@ struct DatabaseWorkbenchRenderTests {
         let member = DatabaseObjectIdentifier(kind: .table, path: ["relation_filters", "member"])
         let organization = DatabaseObjectIdentifier(
             kind: .table, path: ["relation_filters", "organization"])
+        let enrollment = DatabaseObjectIdentifier(
+            kind: .table, path: ["relation_filters", "enrollment"])
         let explorer = DatabaseObjectExplorerModel(
             sender: DatabaseWorkbenchScriptedSender(responses: [
                 Self.schemaResponse(name: "relation_filters"),
                 Self.browseResponse(
                     DatabasePage(
-                        records: [member, organization].map { object in
+                        records: [member, organization, enrollment].map { object in
                             DatabaseRecord(fields: [
                                 DatabaseObjectField(
                                     name: "name", value: .string(object.path.last!)),
@@ -65,7 +67,7 @@ struct DatabaseWorkbenchRenderTests {
                                     value: .signedInteger(object == member ? 5 : 3)),
                                 DatabaseObjectField(name: "columnCount", value: .signedInteger(3)),
                             ])
-                        }, metadata: Self.pageMetadata(count: 2))),
+                        }, metadata: Self.pageMetadata(count: 3))),
             ]))
         explorer.load(connection)
         await Self.waitUntil { explorer.selectedObject != nil }
@@ -113,6 +115,51 @@ struct DatabaseWorkbenchRenderTests {
         }
         #expect(tabs.data.queryText.contains("sample-studio"))
         #expect(tabs.data.queryText.contains("DESC"))
+        tabs.open(enrollment, connection: connection)
+        explorer.select(enrollment)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        tabs.data.beginInsert(connection)
+        tabs.data.updateEditorField("name", text: "Taylor Demo")
+        tabs.data.updateEditorField("role", text: "editor")
+        #expect(
+            tabs.data.editorFields.first(where: { $0.id == "role" })?.enumValues == [
+                "viewer", "editor", "admin",
+            ])
+        let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"]
+        let captureURL = directory.map {
+            URL(fileURLWithPath: $0).appendingPathComponent("new-row.png")
+        }
+        #expect(
+            renderWorkbench(view, width: 1_180, height: 640, scheme: .dark, captureURL: captureURL)
+                != nil)
+        let insert = try #require(tabs.data.editorMutationRequest(connection))
+        try await sender.apply(insert)
+        tabs.data.finishMutation(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let inserted = try #require(
+            tabs.data.records.first(where: { record in
+                record.fields.contains { $0.name == "name" && $0.value == .string("Taylor Demo") }
+            }))
+        let insertedIdentity = try #require(inserted.identity)
+        let insertedIndex = try #require(tabs.data.records.firstIndex(of: inserted))
+        tabs.data.selectRecord(at: insertedIndex)
+        tabs.data.beginEditingSelectedRow(connection)
+        tabs.data.updateEditorField("role", text: "admin")
+        let update = try #require(tabs.data.editorMutationRequest(connection))
+        try await sender.apply(update)
+        tabs.data.finishMutation(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let savedURL = directory.map {
+            URL(fileURLWithPath: $0).appendingPathComponent("saved-row.png")
+        }
+        #expect(
+            renderWorkbench(view, width: 1_180, height: 640, scheme: .dark, captureURL: savedURL)
+                != nil)
+        try await sender.apply(
+            DatabaseRowMutationRequests.postgreSQLDelete(
+                target: DatabaseTargetIdentifier(
+                    connectionID: definition.id, object: enrollment,
+                    record: insertedIdentity)))
         await sender.disconnect()
     }
 
@@ -474,7 +521,7 @@ private actor DatabaseWorkbenchLiveFixtureSender: DatabaseBrokerCommandSending {
                 database: database,
                 tls: .disabled, tlsServerName: nil,
                 connectTimeoutMilliseconds: 5_000, statementTimeoutMilliseconds: 15_000,
-                readOnly: true))
+                readOnly: false))
         let identity = try await client.discoverIdentity()
         return DatabaseWorkbenchLiveFixtureSender(
             session: PostgreSQLDatabaseAdapterSession(
@@ -498,6 +545,16 @@ private actor DatabaseWorkbenchLiveFixtureSender: DatabaseBrokerCommandSending {
                     page: DatabasePage(
                         records: page.records, fields: page.fields, metadata: page.metadata)),
                 metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    func apply(_ request: DatabaseDestructiveRequest) async throws {
+        let context = DatabaseAdapterOperationContext(
+            operation: DatabaseOperationContext(), cancellation: DatabaseAdapterCancellationSignal()
+        )
+        let plan = try await session.normalizeMutation(request, context: context)
+        let result = try await session.executeMutation(plan, context: context)
+        #expect(result.effect == .applied)
+        #expect(result.affectedRecords.value == 1)
     }
 
     func disconnect() async { await session.disconnect() }

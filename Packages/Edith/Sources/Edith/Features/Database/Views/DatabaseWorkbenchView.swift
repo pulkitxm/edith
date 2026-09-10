@@ -741,7 +741,9 @@ struct DatabaseWorkbenchView: View {
                         }
                 },
                 canEdit: { index, field in
-                    workbenchMode == .browse
+                    data.fields.first(where: { $0.path.segments.joined(separator: ".") == field })?
+                        .enumValues == nil
+                        && workbenchMode == .browse
                         && canUpdateData(connection)
                         && !mutations.hasTrackedMutation
                         && data.canEdit(recordAt: index, field: field, connection: connection)
@@ -1093,6 +1095,13 @@ struct DatabaseWorkbenchView: View {
                                 .foregroundStyle(DashSkin.danger)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
+                        if data.editorMode == .insert, connection.product.family == .relational {
+                            Text(
+                                "Unchecked fields use database defaults. Required fields without a default need a value."
+                            )
+                            .font(.system(size: UIScale.pt(10.5)))
+                            .foregroundStyle(.secondary)
+                        }
                         ForEach(data.editorFields) { field in
                             editorField(field, connection: connection)
                         }
@@ -1146,17 +1155,41 @@ struct DatabaseWorkbenchView: View {
                             .buttonStyle(.edith(.borderless))
                             .font(.system(size: UIScale.pt(9.5), weight: .medium))
                         }
-                    } else {
+                    } else if field.isNullable {
                         Button("NULL") { data.setEditorFieldNull(field.id) }
                             .buttonStyle(.edith(.borderless))
                             .font(.system(size: UIScale.pt(9.5), weight: .medium))
                     }
                 }
             }
-            TextField("Value", text: editorTextBinding(field.id))
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+            if let values = field.enumValues {
+                Picker(
+                    field.id,
+                    selection: Binding(
+                        get: { field.isNull ? -1 : (values.firstIndex(of: field.text) ?? -2) },
+                        set: { index in
+                            if index == -1 {
+                                data.setEditorFieldNull(field.id)
+                            } else if values.indices.contains(index) {
+                                data.updateEditorField(field.id, text: values[index])
+                            }
+                        }
+                    )
+                ) {
+                    Text("Choose a value").tag(-2)
+                    if field.isNullable { Text("NULL (no value)").tag(-1) }
+                    ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                        Text(value).tag(index)
+                    }
+                }
+                .labelsHidden()
                 .disabled(!field.isEditable)
+            } else {
+                TextField("Value", text: editorTextBinding(field.id))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                    .disabled(!field.isEditable)
+            }
         }
         .opacity(field.isEditable ? 1 : 0.62)
     }
