@@ -46,7 +46,6 @@ private actor AppServicesCallProbe {
         #expect(services.micMute == nil)
         #expect(services.lidAwake == nil)
         #expect(services.systemStats == nil)
-        #expect(services.attention == nil)
     }
 
     @Test func extensionDefaultsToDisabledWhenUnset() {
@@ -98,24 +97,6 @@ private actor AppServicesCallProbe {
         SharedDefaults.store.set(true, forKey: probe)
         defer { SharedDefaults.store.removeObject(forKey: probe) }
         #expect(AppServices.preferenceOnByDefault(probe))
-    }
-
-    @Test func attentionRuntimeRequiresTheExtensionAndATrackingSource() {
-        #expect(
-            !AppServices.attentionEnabled(
-                extensionEnabled: false,
-                settings: AttentionSettings(isEnabled: true, trackingEnabled: true)))
-        #expect(
-            !AppServices.attentionEnabled(
-                extensionEnabled: true, settings: AttentionSettings(isEnabled: true)))
-        #expect(
-            AppServices.attentionEnabled(
-                extensionEnabled: true,
-                settings: AttentionSettings(isEnabled: true, trackingEnabled: true)))
-        #expect(
-            AppServices.attentionEnabled(
-                extensionEnabled: true,
-                settings: AttentionSettings(isEnabled: true, browserTrackingEnabled: true)))
     }
 
     @Test func failedLidAwakeDisableRequiresRecovery() {

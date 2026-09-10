@@ -10,24 +10,32 @@ final class AttentionTrackingService {
     private var settings: AttentionSettings
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
-    private var lastHeartbeatAt = Date()
+    private var previous: AttentionHeartbeatSample?
+    private let capture: @MainActor (Date, AttentionSettings, Bool) -> AttentionHeartbeatSample?
     private var locked = false
     private let writer: AttentionHeartbeatWriter
     nonisolated(unsafe) private var shutdownTask: Task<Void, Never>?
 
     init(
         repository: AttentionRepository = AttentionRepository(),
-        writer: AttentionHeartbeatWriter? = nil
+        writer: AttentionHeartbeatWriter? = nil, settings initialSettings: AttentionSettings? = nil,
+        observe: Bool = true, now: Date = Date(),
+        capture: @escaping @MainActor (Date, AttentionSettings, Bool) -> AttentionHeartbeatSample? =
+            AttentionTrackingService.capture
     ) {
         self.writer =
             writer
             ?? AttentionHeartbeatWriter(
                 spool: AttentionDeliverySpool(
                     file: repository.directory.appendingPathComponent("delivery-spool.json")))
+        self.capture = capture
         self.repository = repository
-        settings = repository.loadSettings()
-        installObservers()
-        startTimer()
+        settings = initialSettings ?? repository.loadSettings()
+        previous = capture(now, settings, locked)
+        if observe {
+            installObservers()
+            startTimer()
+        }
     }
 
     deinit { shutdownTask?.cancel() }
@@ -50,11 +58,10 @@ final class AttentionTrackingService {
     func sync(_ nextSettings: AttentionSettings) {
         writeHeartbeat()
         settings = nextSettings
-
+        previous = capture(Date(), settings, locked)
     }
 
     private func startTimer() {
-        lastHeartbeatAt = Date()
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.writeHeartbeat() }
         }
@@ -94,28 +101,68 @@ final class AttentionTrackingService {
             locked = false
         default: break
         }
-        lastHeartbeatAt = Date()
+        previous = capture(Date(), settings, locked)
     }
 
-    private func writeHeartbeat(now: Date = Date()) {
-        let duration = min(30, max(0, now.timeIntervalSince(lastHeartbeatAt)))
-        guard settings.isEnabled, settings.trackingEnabled, duration > 0.2,
+    func writeHeartbeat(now: Date = Date()) {
+        let current = capture(now, settings, locked)
+        defer { previous = current }
+        guard var sample = previous else { return }
+        let duration = now.timeIntervalSince(sample.event.startedAt)
+        guard duration > 0, duration <= 30 else { return }
+        sample.event.duration = duration
+        writer.submit(sample)
+    }
+
+    private static func capture(
+        now: Date, settings: AttentionSettings, locked: Bool
+    ) -> AttentionHeartbeatSample? {
+        guard settings.isEnabled, settings.trackingEnabled,
             let app = NSWorkspace.shared.frontmostApplication
-        else {
-            lastHeartbeatAt = now
-            return
-        }
+        else { return nil }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
         let presence: AttentionPresence =
             locked ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
-        let event = AttentionEvent(
-            startedAt: lastHeartbeatAt, duration: duration, source: .application,
-            presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier)
-        lastHeartbeatAt = now
-        writer.submit(
-            AttentionHeartbeatSample(
-                event: event, processID: app.processIdentifier,
-                captureWindowTitle: settings.windowTitlesEnabled))
+        return AttentionHeartbeatSample(
+            event: AttentionEvent(
+                startedAt: now, duration: 0, source: .application,
+                presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier),
+            processID: app.processIdentifier, captureWindowTitle: settings.windowTitlesEnabled)
+    }
+}
+
+@MainActor
+final class AttentionTrackingRuntime {
+    private let repository: AttentionRepository
+    private let deliver: AttentionHeartbeatWriter.Deliver
+    private var collector: AttentionTrackingService?
+    private var stopped = false
+
+    nonisolated init(
+        repository: AttentionRepository, deliver: @escaping AttentionHeartbeatWriter.Deliver
+    ) {
+        self.repository = repository
+        self.deliver = deliver
+    }
+
+    func sync(_ settings: AttentionSettings) {
+        guard !stopped else { return }
+        if collector == nil {
+            let writer = AttentionHeartbeatWriter(
+                spool: AttentionDeliverySpool(
+                    file: repository.directory.appendingPathComponent("delivery-spool.json")),
+                deliver: deliver)
+            collector = AttentionTrackingService(
+                repository: repository, writer: writer, settings: settings)
+        } else {
+            collector?.sync(settings)
+        }
+    }
+
+    func stop() async {
+        stopped = true
+        await collector?.shutdown().value
+        collector = nil
     }
 }

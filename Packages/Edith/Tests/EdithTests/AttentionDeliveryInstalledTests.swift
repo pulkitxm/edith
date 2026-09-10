@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import EdithHelper
+@testable import EdithAgent
 @testable import EdithKit
 
 @MainActor @Suite struct AttentionDeliveryInstalledTests {
