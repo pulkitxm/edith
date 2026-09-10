@@ -88,7 +88,8 @@ private enum PostgreSQLDatabaseReadingFixtures {
     }
 
     static func descriptor(
-        key: Bool = true
+        key: Bool = true,
+        textColumn: String = "notes"
     ) -> PostgreSQLDatabaseReadResult {
         PostgreSQLDatabaseReadResult(
             rows: [
@@ -103,7 +104,7 @@ private enum PostgreSQLDatabaseReadingFixtures {
                     bool("key_is_primary", key),
                 ]),
                 row([
-                    string("column_name", "notes"),
+                    string("column_name", textColumn),
                     string("type_name", "text"),
                     int64("type_oid", 25),
                     bool("is_nullable", true),
@@ -270,7 +271,7 @@ private actor PostgreSQLDatabaseReadingClient: PostgreSQLDatabaseClient {
         context: PostgreSQLDatabaseReadingFixtures.context())
 
     let plan = try #require(await client.capturedPlans().last)
-    #expect(plan.sql.contains(#""_edith_relation"."notes" ILIKE $1 ESCAPE '\'"#))
+    #expect(plan.sql.contains(#""_edith_relation"."notes" ILIKE $1 ESCAPE chr(92)"#))
     #expect(plan.parameters == [.string("%50\\%\\_off\\\\%")])
 }
 
@@ -525,4 +526,88 @@ private actor PostgreSQLDatabaseReadingClient: PostgreSQLDatabaseClient {
         request,
         context: PostgreSQLDatabaseReadingFixtures.context())
     #expect(page.records.count == 1)
+}
+
+private func relationshipRows(ids: [String] = ["fk_organization"]) -> PostgreSQLDatabaseReadResult {
+    PostgreSQLDatabaseReadResult(
+        rows: ids.map { id in
+            PostgreSQLDatabaseReadingFixtures.row([
+                PostgreSQLDatabaseReadingFixtures.string("constraint_id", id),
+                PostgreSQLDatabaseReadingFixtures.string("target_schema", "tenant"),
+                PostgreSQLDatabaseReadingFixtures.string("target_table", "organization"),
+                PostgreSQLDatabaseReadingFixtures.string("source_column", "id"),
+                PostgreSQLDatabaseReadingFixtures.string("target_column", "id"),
+            ])
+        }, bytesReceived: 64)
+}
+
+@Test func postgresqlRelatedFiltersResolveForeignKeysAndBindValues() async throws {
+    let definition = try PostgreSQLDatabaseReadingFixtures.definition()
+    let client = PostgreSQLDatabaseReadingClient(outputs: [
+        PostgreSQLDatabaseReadingFixtures.descriptor(),
+        relationshipRows(),
+        PostgreSQLDatabaseReadingFixtures.descriptor(textColumn: "slug"),
+        PostgreSQLDatabaseReadingFixtures.dataRows([(1, "matched")]),
+    ])
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition, productIdentity: PostgreSQLDatabaseReadingFixtures.identity,
+        client: client)
+    let filter = DatabaseFilter.any([
+        .predicate(
+            DatabaseFilterPredicate(
+                field: DatabaseFieldPath(["organization", "slug"]),
+                operation: .equal, values: [.string("sample' $1 org")])),
+        .not(
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("notes"),
+                    operation: .contains, values: [.string("excluded")]))),
+    ])
+    let page = try await session.readPage(
+        PostgreSQLDatabaseReadingFixtures.pageRequest(
+            connectionID: definition.id, pageSize: 2, filter: filter),
+        context: PostgreSQLDatabaseReadingFixtures.context())
+    let plans = await client.capturedPlans()
+    let plan = try #require(plans.last)
+    #expect(page.records.count == 1)
+    #expect(plans[1].parameters.last == .string("organization"))
+    #expect(
+        plan.sql.contains(
+            #"(SELECT "_edith_related_0"."slug" FROM "tenant"."organization" AS "_edith_related_0" WHERE "_edith_relation"."id" = "_edith_related_0"."id") = $1"#
+        ))
+    #expect(plan.sql.contains(" OR (NOT ("))
+    #expect(!plan.sql.contains("sample'"))
+    #expect(plan.parameters == [.string("sample' $1 org"), .string("%excluded%")])
+}
+
+@Test(arguments: [[], ["first", "second"]])
+func postgresqlRelatedFiltersRejectMissingOrAmbiguousRelationships(ids: [String]) async throws {
+    let definition = try PostgreSQLDatabaseReadingFixtures.definition()
+    let client = PostgreSQLDatabaseReadingClient(outputs: [
+        PostgreSQLDatabaseReadingFixtures.descriptor(), relationshipRows(ids: ids),
+    ])
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition, productIdentity: PostgreSQLDatabaseReadingFixtures.identity,
+        client: client)
+    await #expect(throws: DatabaseAdapterFailure.self) {
+        try await session.readPage(
+            PostgreSQLDatabaseReadingFixtures.pageRequest(
+                connectionID: definition.id, pageSize: 2,
+                filter: .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath(["organization", "slug"]), operation: .equal,
+                        values: [.string("sample")]))),
+            context: PostgreSQLDatabaseReadingFixtures.context())
+    }
+    #expect(await client.capturedPlans().count == 2)
+}
+
+@Test func postgresqlBrowseQueryPreservesValuesAndQuotedIdentifiers() throws {
+    let rendered = try PostgreSQLBrowseQuery.render(
+        #"SELECT "$1", 'literal $2' FROM "member" WHERE "name" = $1 AND "id" > $2"#,
+        parameters: [.string("D'Angelo\\team $2"), .signedInteger(10)])
+    #expect(
+        rendered
+            == #"SELECT "$1", 'literal $2' FROM "member" WHERE "name" = ('D''Angelo' || chr(92) || 'team $2') AND "id" > 10"#
+    )
 }

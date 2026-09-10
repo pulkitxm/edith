@@ -226,6 +226,7 @@ public struct DatabaseQueryTiming: Codable, Hashable, Sendable {
 }
 
 public struct DatabasePageMetadata: Codable, Hashable, Sendable {
+    public let browseQuery: String?
     public let completeness: DatabaseResultCompleteness
     public let count: DatabaseCountMetadata
     public let timing: DatabaseQueryTiming?
@@ -239,8 +240,10 @@ public struct DatabasePageMetadata: Codable, Hashable, Sendable {
         timing: DatabaseQueryTiming? = nil,
         bytesReceived: UInt64? = nil,
         warnings: [DatabaseWarning] = [],
-        partialFailures: [DatabasePartialFailure] = []
+        partialFailures: [DatabasePartialFailure] = [],
+        browseQuery: String? = nil
     ) {
+        self.browseQuery = browseQuery
         self.completeness = completeness
         self.count = count
         self.timing = timing

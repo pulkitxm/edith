@@ -567,3 +567,55 @@ struct PostgreSQLDatabaseReadingLiveTests {
         )
     }
 }
+
+@Test(
+    .enabled(
+        if: PostgreSQLDatabaseReadingLiveEnvironment.values["EDITH_DATABASE_RELATION_FILTERS"]
+            == "1"))
+func postgresqlRelatedFiltersLive() async throws {
+    let definition = try PostgreSQLDatabaseReadingLiveEnvironment.definition()
+    let client = try await PostgresNIODatabaseClient.connect(
+        PostgreSQLDatabaseReadingLiveEnvironment.plan())
+    let identity = try await client.discoverIdentity()
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition, productIdentity: identity, client: client)
+    do {
+        let cases: [(String, [String], DatabaseFilterOperator, String, Int)] = [
+            ("member", ["organization", "slug"], .equal, "sample-studio", 2),
+            ("member", ["organizationId", "slug"], .equal, "sample-studio", 2),
+            ("member", ["organization", "account", "slug"], .equal, "north", 3),
+            ("member", ["organization", "slug"], .contains, "50%_off\\offer", 1),
+            ("assignment", ["ownerId", "slug"], .equal, "sample-studio", 1),
+            ("composite_member", ["composite_org", "slug"], .equal, "sample", 1),
+        ]
+        for (table, path, operation, value, count) in cases {
+            let request = try DatabaseAdapterPageRequest(
+                target: DatabaseTargetIdentifier(
+                    connectionID: definition.id,
+                    object: DatabaseObjectIdentifier(
+                        kind: .table, path: ["relation_filters", table])),
+                page: DatabasePageRequest(
+                    pageSize: try DatabasePageSize(10),
+                    filter: .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath(path),
+                            operation: operation, values: [.string(value)]))),
+                continuation: nil)
+            let page = try await session.readPage(
+                request,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(page.records.count == count)
+            let query = try #require(page.metadata.browseQuery)
+            let replay = try await session.query(
+                PostgreSQLDatabaseReadingLiveEnvironment.query(
+                    connectionID: definition.id, command: query),
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(replay.records.map(\.fields) == page.records.map(\.fields))
+            #expect(!query.contains("__edith_postgresql_key"))
+        }
+        await session.disconnect()
+    } catch {
+        await session.disconnect()
+        throw error
+    }
+}
