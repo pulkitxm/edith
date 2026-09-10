@@ -38,7 +38,7 @@ full list as the hint.
 | `inputMonitoring` | Privacy & Security > Input Monitoring | Block key presses while Clean keys is locking the keyboard | optional for `system` |
 | `fullDisk` | Privacy & Security > Full Disk Access | Reach local service credentials and usage data | nothing declares it |
 | `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, and sample colours from the screen | required by `focusDim`, `presenter`, `colorPicker` |
-| `applicationAudio` | Privacy & Security > Screen & System Audio Recording, granted on first use | Notch Shelf per-app volume mixing | optional for `notchShelf` |
+| `applicationAudio` | Privacy & Security > Screen & System Audio Recording, granted on first use | Audio Controls per-app output routing and Notch Shelf per-app volume mixing | optional for `audioControls`, `notchShelf` |
 | `camera` | Privacy & Security > Camera | The Notch Shelf camera preview | optional for `notchShelf` |
 | `bluetooth` | Privacy & Security > Bluetooth, granted on first use | Notch Shelf device connection alerts | optional for `notchShelf` |
 | `automation` | Edith opens no pane, granted on first use | Notch Shelf controlling external playback | optional for `notchShelf` |

@@ -17,7 +17,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
-                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "music", "audioControls", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
     }

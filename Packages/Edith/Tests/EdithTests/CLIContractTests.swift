@@ -22,6 +22,16 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed audio", ["audio", "--json"]),
+        JSONCase("ed audio status", ["audio", "status", "--json"]),
+        JSONCase(
+            "ed audio input", ["audio", "input", "system", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed audio output", ["audio", "output", "missing", "--json"]),
+        JSONCase(
+            "ed audio route",
+            ["audio", "route", "com.example.Player", "system", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed brew status", ["brew", "status", "--json"]),
         JSONCase("ed brew ls", ["brew", "ls", "--json"]),
         JSONCase("ed brew search", ["brew", "search", "edith", "--json"]),

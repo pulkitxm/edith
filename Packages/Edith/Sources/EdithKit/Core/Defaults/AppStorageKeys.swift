@@ -1,6 +1,14 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Audio {
+        public static let enabled = "audioControlsEnabled"
+        public static let preferredInputUID = "audioPreferredInputUID"
+        public static let lowerOnHeadphoneDisconnect = "audioLowerOnHeadphoneDisconnect"
+        public static let safeOutputPercent = "audioSafeOutputPercent"
+        public static let appOutputRoutes = "audioAppOutputRoutes"
+        public static let blockMusicLaunch = "audioBlockMusicLaunch"
+    }
     public enum Suites {
         public static let agents = "suiteAgentsEnabled"
         public static let maintenance = "suiteMaintenanceEnabled"

@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-two |
+| `ed extensions status [id]` | Summarises readiness for one extension or the whole registry |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-two, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or the whole registry, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithCore is the single list every command here
-walks, and its order is the order `ls` prints. Twenty-two entries, in this order:
+walks, and its order is the order `ls` prints:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -68,6 +68,7 @@ walks, and its order is the order `ls` prints. Twenty-two entries, in this order
 | `database` | Database | Utilities | Guarded database exploration and production mutations |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
+| `audioControls` | Audio Controls | Media | Preferred devices, safe headphone fallback, and per-app output routing |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
 | `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `music` | Music | Media | Plays your local music folder, with media keys |
@@ -80,7 +81,7 @@ walks, and its order is the order `ls` prints. Twenty-two entries, in this order
 | `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same twenty-two, with what each one is made of. `Key` is the preference the app
+The same registry, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 eleven the welcome tour shows before you ask it for all of them.
 
@@ -97,6 +98,7 @@ eleven the welcome tour shows before you ask it for all of them.
 | `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
+| `audioControls` | `audioControlsEnabled` | yes | none | `applicationAudio` | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
@@ -127,6 +129,7 @@ the current platform, and which missing implementations merely degrade it:
 | `database` | `databaseBroker` | none |
 | `companion` | `companionService` | none |
 | `systemStats` | `systemMetrics` | none |
+| `audioControls` | `microphoneControl` | `applicationAudio`, `globalShortcuts`, `mediaControls` |
 | `micMute` | `microphoneControl` | `globalShortcuts` |
 | `lidAwake` | `preventSleep` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |

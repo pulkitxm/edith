@@ -236,7 +236,7 @@ enum CommandCrawler {
             "ed companion hypotheses", "ed companion discrepancies", "ed companion standup",
             "ed companion connectors", "ed companion db", "ed companion stack",
             "ed machines terminal",
-            "ed lid-awake",
+            "ed lid-awake", "ed audio",
             "ed attention", "ed attention categories", "ed attention focus",
             "ed quinjet",
             "ed database", "ed database connections", "ed database saved-queries",

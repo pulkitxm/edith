@@ -316,6 +316,17 @@ not here cannot be set, and `import` skips it.
 | `notchAlertBluetooth` | bool | none | shared | Alert on Bluetooth connections. |
 | `notchAudioMixerEnabled` | bool | none | shared | Per-app audio mixer in the notch shelf. |
 
+### `audio`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `audioControlsEnabled` | bool | `false` | shared | Audio Controls extension: preferred devices, safe fallback, routing, and Music launch behavior. |
+| `audioPreferredInputUID` | string | none | shared | Preferred Core Audio input device UID. |
+| `audioLowerOnHeadphoneDisconnect` | bool | `true` | shared | Lower a non-headphone output after headphones disconnect. |
+| `audioSafeOutputPercent` | int | `25` | shared | Safe output volume percentage from 0 to 50. |
+| `audioAppOutputRoutes` | map | `{}` | shared | Bundle identifier to Core Audio output device UID routes. |
+| `audioBlockMusicLaunch` | bool | `false` | shared | Block Apple Music launches caused by media keys. |
+
 ### `focusdim`
 
 | Key | Type | Default | Scope | What it controls |

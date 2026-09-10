@@ -98,6 +98,9 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "audioControls", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "downloads", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: ["yt-dlp"], optionalTools: []),

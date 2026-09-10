@@ -232,6 +232,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabMusicEnabled", requiredCapabilities: [.localMusicPlayback],
             optionalCapabilities: [.mediaControls]),
         ExtensionRegistryEntry(
+            id: "audioControls", title: "Audio Controls",
+            subtitle: "Pin devices, protect speaker volume, and route each app independently.",
+            symbolName: "speaker.wave.3.fill", suite: .media, host: .bar, featured: true,
+            defaultsKey: "audioControlsEnabled", requiredCapabilities: [.microphoneControl],
+            optionalCapabilities: [.applicationAudio, .globalShortcuts, .mediaControls]),
+        ExtensionRegistryEntry(
             id: "downloads", title: "Downloads",
             subtitle: "Queue audio and video downloads that survive quitting the app.",
             symbolName: "arrow.down.circle", suite: .media, host: .agent, featured: false,

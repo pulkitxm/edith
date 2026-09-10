@@ -16,6 +16,7 @@ final class AppServices {
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
+    private(set) var audioControls: AudioControlsEngine?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
@@ -91,6 +92,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        audioControls?.shutdown()
+        audioControls = nil
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
         await PermissionsModel.shared.waitForShutdown()
@@ -214,6 +217,7 @@ final class AppServices {
             player.shutdown()
             music = nil
         }
+        audioControls?.attachMusic(music)
     }
 
     func reconcileSystemServices() {
@@ -249,8 +253,10 @@ final class AppServices {
         let audioMixerOn = SharedDefaults.store.bool(
             forKey: AppStorageKeys.Notch.audioMixerEnabled)
         if #available(macOS 14.4, *),
+            !Self.extensionEnabled(AppStorageKeys.Audio.enabled),
             !Self.audioMixerRuntimeEnabled(
-                notchShelfEnabled: notchShelfOn, mixerEnabled: audioMixerOn)
+                notchShelfEnabled: notchShelfOn, mixerEnabled: audioMixerOn),
+            ExtensionRegistry.entry("audioControls")?.isEnabled(in: SharedDefaults.store) != true
         {
             MixerEngine.shared.shutdown()
         }
@@ -356,6 +362,16 @@ final class AppServices {
     }
 
     private func reconcileHardwareServices() {
+        let audioOn =
+            ExtensionRegistry.entry("audioControls")?.isEnabled(in: SharedDefaults.store) ?? false
+        if audioOn, audioControls == nil { audioControls = AudioControlsEngine() }
+        if !audioOn, let engine = audioControls {
+            engine.shutdown()
+            audioControls = nil
+        }
+        audioControls?.attachMusic(music)
+        audioControls?.syncSettings()
+
         let micOn = Self.extensionEnabled(AppStorageKeys.Mic.muteEnabled)
         if micOn, micMute == nil { micMute = MicMuteEngine() }
         if !micOn, let engine = micMute {

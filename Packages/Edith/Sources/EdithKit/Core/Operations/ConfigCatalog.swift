@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music",
+        "music", "audio",
         "calendar",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
@@ -61,7 +61,7 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + audio + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -660,6 +660,31 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.calendarEnabled, .bool, group: "calendar",
             summary: "Calendar extension: your schedule in the panel and the app.",
             fallback: .bool(false))
+    ]
+
+    private static let audio: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Audio.enabled, .bool, group: "audio",
+            summary:
+                "Audio Controls extension: device pinning, safety, routing, and launch blocking.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Audio.preferredInputUID, .string, group: "audio",
+            summary: "Audio input device UID kept as the system default."),
+        SettingDefinition(
+            AppStorageKeys.Audio.lowerOnHeadphoneDisconnect, .bool, group: "audio",
+            summary: "Lower speaker volume automatically when headphones disconnect.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Audio.safeOutputPercent, .int, group: "audio",
+            summary: "Speaker volume used after headphones disconnect.", integerRange: 0...100,
+            fallback: .int(25)),
+        SettingDefinition(
+            AppStorageKeys.Audio.appOutputRoutes, .map, group: "audio",
+            summary: "Output device UID saved for each application bundle identifier."),
+        SettingDefinition(
+            AppStorageKeys.Audio.blockMusicLaunch, .bool, group: "audio",
+            summary: "Stop Apple Music opening in response to media keys.", fallback: .bool(false)),
     ]
 
     private static let clipboard: [SettingDefinition] = [

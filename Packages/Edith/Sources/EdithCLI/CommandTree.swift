@@ -44,6 +44,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case quinjetTheme
     case localPath
     case musicPlayer
+    case audioInput
+    case audioOutput
     case remotePath
     case container
     case tool
@@ -255,6 +257,10 @@ public enum CommandTree {
         "ed usage machines disable": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage machines forget": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage refresh": Spec(options: ["--json", "--follow", "--machines", "--no-machines"]),
+        "ed audio status": Spec(options: common),
+        "ed audio input": Spec(options: common, arguments: [.audioInput]),
+        "ed audio output": Spec(options: common, arguments: [.audioOutput]),
+        "ed audio route": Spec(options: common, arguments: [.free, .audioOutput]),
         "ed system stats": Spec(options: ["--json", "-f", "--follow", "--interval", "--processes"]),
         "ed system disks": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed music": Spec(

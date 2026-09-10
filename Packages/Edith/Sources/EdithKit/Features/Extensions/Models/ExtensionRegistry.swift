@@ -140,6 +140,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "usage", "appMaintenance": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
+        case "audioControls": [.applicationAudio]
         case "notchShelf": [.bluetooth, .camera, .automation]
         case "audioMixer": [.applicationAudio]
         case "clipboard", "emoji": [.accessibility]

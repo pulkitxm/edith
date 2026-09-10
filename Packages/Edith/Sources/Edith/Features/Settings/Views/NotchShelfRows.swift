@@ -145,13 +145,13 @@ struct NotchShelfRows: View {
                     }
                 }
                 Toggle(
-                    "Per-app volume mixer (beta)",
+                    "Per-app audio mixer",
                     isOn: $audioMixer.configured(AppStorageKeys.Notch.audioMixerEnabled)
                 )
                 .disabled(!audioMixerAvailable && !audioMixer)
                 if audioMixerAvailable {
                     Text(
-                        "Adds an Audio tab to set each app's volume. macOS asks for application audio access the first time. Off by default."
+                        "Adds an Audio tab for each app's volume and output route. Audio Controls keeps saved routes active when the shelf is closed."
                     )
                     .settingsCaption()
                 } else {

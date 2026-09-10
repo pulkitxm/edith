@@ -19,6 +19,7 @@ import Testing
         "keepAwakeEnabled",
         "lidAwakeEnabled",
         "menuBarSystemStats",
+        "audioControlsEnabled",
         "micMuteEnabled",
         "clipboardEnabled",
         "emojiEnabled",
@@ -48,7 +49,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
-                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "music", "audioControls", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
     }
@@ -202,7 +203,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
-                "keystrokeHighlight", "notchShelf", "database", "attention",
+                "keystrokeHighlight", "audioControls", "notchShelf", "database", "attention",
             ])
     }
 
@@ -336,6 +337,7 @@ import Testing
             "keepAwake": [],
             "lidAwake": [],
             "systemStats": [],
+            "audioControls": [],
             "micMute": [],
             "clipboard": [],
             "emoji": [],
@@ -365,6 +367,7 @@ import Testing
             "keepAwake": [],
             "lidAwake": [],
             "systemStats": [],
+            "audioControls": [.applicationAudio],
             "micMute": [],
             "clipboard": [.accessibility],
             "emoji": [.accessibility],

@@ -34,6 +34,7 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed audio status             input, output, and saved application routes
         ed database connections     saved database connection summaries
         ed database capabilities <id>  detected support for one connection id
         ed database mcp             read-only database tools over MCP stdio

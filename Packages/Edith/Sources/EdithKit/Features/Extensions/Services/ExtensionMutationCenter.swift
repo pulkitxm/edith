@@ -88,6 +88,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case micMute
     case lidAwake
     case music
+    case audioControls
     case downloads
     case calendar
     case notchShelf

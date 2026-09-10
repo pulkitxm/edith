@@ -68,7 +68,8 @@ public enum ExtensionLiveAdapters {
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "focusDim", "presenter", "music", "audioControls", "downloads", "notchShelf", "audioMixer",
+        "calendar",
         "attention", "seoAudit",
     ]
 
@@ -114,6 +115,7 @@ public enum ExtensionLiveAdapters {
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
         case "music": musicReadiness()
+        case "audioControls": audioControlsReadiness()
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": await clipboardReadiness()
@@ -213,6 +215,20 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
+    static func audioControlsReadiness() -> ExtensionAdapterReadiness {
+        do {
+            let snapshot = try AudioDeviceOperations.snapshot()
+            guard !snapshot.inputs.isEmpty, !snapshot.outputs.isEmpty else {
+                return .needsSetup("Connect at least one input and one output device.")
+            }
+            let details =
+                "Found \(snapshot.inputs.count) inputs and \(snapshot.outputs.count) outputs."
+            if #available(macOS 14.4, *) { return .ready(details) }
+            return .degraded("\(details) Per-app routing requires macOS 14.4 or later.")
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
     static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
         let roots = AppMaintenanceInventory.defaultApplicationRoots
         let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }
