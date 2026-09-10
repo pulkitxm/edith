@@ -100,9 +100,9 @@ import Testing
         let navigation = try String(
             contentsOf: sourceRoot.appendingPathComponent(
                 "Edith/Core/Navigation/MainNavigationView.swift"), encoding: .utf8)
-        let helper = try String(
+        let agent = try String(
             contentsOf: sourceRoot.appendingPathComponent(
-                "EdithHelper/Core/Application/AppServices.swift"), encoding: .utf8)
+                "EdithAgent/Collectors/AttentionBackgroundService.swift"), encoding: .utf8)
 
         let entry = try #require(ExtensionRegistry.entries.first { $0.id == "attention" })
         #expect(
@@ -123,10 +123,9 @@ import Testing
         #expect(pane.contains("private struct AttentionRows: View"))
         #expect(navigation.contains("NavigationCatalog.rows()"))
         #expect(navigation.contains("private var sidebarRows: [SidebarRow]"))
-        #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
-        #expect(
-            helper.contains(
-                "extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)"))
+        #expect(agent.contains("AppStorageKeys.Tabs.attentionEnabled"))
+        #expect(agent.contains("trackingSettings.isEnabled = enabled && settings.isEnabled"))
+        #expect(agent.contains("await tracking.sync(trackingSettings)"))
     }
 
     @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {
