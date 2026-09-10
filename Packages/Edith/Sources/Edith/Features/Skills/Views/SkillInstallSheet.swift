@@ -35,7 +35,7 @@ struct SkillInstallSheet: View {
                 .font(.callout)
             } else {
                 targets
-                if !model.installerAvailable {
+                if !model.isDiscovering, !model.installerAvailable {
                     Label(
                         "Install Node.js 22.20 or later, then reopen this sheet to enable installation.",
                         systemImage: "exclamationmark.circle"
@@ -65,8 +65,6 @@ struct SkillInstallSheet: View {
                     ProgressView().controlSize(.small)
                     Text("Installing for \(targetCount)…")
                         .font(.callout).foregroundStyle(.secondary)
-                } else {
-                    Text("Included with Edith").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(model.installationSucceeded ? "Done" : "Cancel") { dismiss() }
@@ -79,7 +77,7 @@ struct SkillInstallSheet: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(
-                        model.isInstalling || model.selectedAgentIDs.isEmpty
+                        model.isInstalling || model.isDiscovering || model.selectedAgentIDs.isEmpty
                             || !model.installerAvailable)
                 }
             }
@@ -94,11 +92,16 @@ struct SkillInstallSheet: View {
             HStack {
                 Text("Agents on this Mac").font(.system(size: UIScale.pt(13), weight: .semibold))
                 Spacer()
-                Text("\(model.selectedAgentIDs.count) of \(model.agents.count) selected").font(
-                    .caption
-                ).foregroundStyle(.secondary)
+                if model.isDiscovering {
+                    SkeletonGroup { SkeletonBlock(width: 84, height: 11) }
+                } else {
+                    Text("\(model.selectedAgentIDs.count) of \(model.agents.count) selected")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
-            if model.agents.isEmpty {
+            if model.isDiscovering {
+                SkillTargetsSkeleton()
+            } else if model.agents.isEmpty {
                 Text(
                     "No supported agents found. Install and open an agent, then reopen this sheet."
                 )
@@ -157,5 +160,30 @@ struct SkillInstallSheet: View {
             )
             .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
         }
+    }
+}
+
+struct SkillTargetsSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: 0) {
+                ForEach(0..<3, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(12)) {
+                        SkeletonBlock(width: 40, height: 40, corner: 9)
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: index == 1 ? 116 : 84, height: 13)
+                            SkeletonBlock(width: index == 1 ? 192 : 152, height: 10)
+                        }
+                        Spacer()
+                        SkeletonBlock(width: 32, height: 18, corner: 9)
+                    }
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(10))
+                    Divider()
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Discovering installed agents")
     }
 }

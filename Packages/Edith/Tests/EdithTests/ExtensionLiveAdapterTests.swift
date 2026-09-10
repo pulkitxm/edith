@@ -7,6 +7,11 @@ import EdithCore
 @testable import EdithKit
 
 @Suite struct ExtensionLiveAdapterTests {
+    @Test func keepAwakeReadinessDoesNotDependOnSystem() async {
+        let result = await ExtensionLiveAdapters.readiness(for: "keepAwake")
+        #expect(result == .ready("Keep Awake is ready to prevent idle sleep without System."))
+    }
+
     @Test func catalogCoversEveryPreviouslyDeferredExtension() {
         #expect(
             ExtensionLiveAdapters.extensionIDs

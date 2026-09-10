@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BillingArchive } from "../Packages/Edith/Sources/EdithKit/Resources/usage-billing-archive.mjs";
+
 const inheritedGitVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
   "GIT_COMMON_DIR",
@@ -110,6 +112,7 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  archivedBaseline,
   missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
 }) {
@@ -278,6 +281,14 @@ exec "$REAL_JQ" "$@"
 `,
     );
     chmodSync(jqPath, 0o755);
+  }
+  if (archivedBaseline) {
+    const archive = new BillingArchive(join(output, "billing-history", "cli"));
+    archive.bootstrap({
+      generatedAt: "2026-09-01T00:00:00Z",
+      blocks: [archivedBaseline],
+    });
+    archive.close();
   }
   const process = Bun.spawnSync(["bash", scriptPath, output], {
     env: {
@@ -2906,6 +2917,149 @@ describe("retained history coverage", () => {
       "fresh",
       JSON.stringify([fresh]),
     ])[0];
+
+  test("resolved archive baselines do not freeze newer published usage", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = doc([day("2026-09-05", { cli: [row("one", 150)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [day(baseline.period, { cli: [row("one", 150)] })],
+        },
+      ],
+    };
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.historyRetention.blocks).toEqual([]);
+    expect(merge(result, fresh).totals.tokens).toBe(200);
+
+    fresh.daily[0] = day(baseline.period, { cli: [row("one", 125)] });
+    const regressed = merge(previous, fresh);
+    expect(regressed.totals.tokens).toBe(150);
+    expect(regressed.historyRetention.blocks).toHaveLength(1);
+    expect(
+      regressed.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      regressed.historyRetention.blocks[0].candidates[0].bySource.cli[0]
+        .inputTokens,
+    ).toBe(125);
+  });
+
+  test("full collection publishes new usage after an archived baseline was resolved", () => {
+    const baseline = day("2026-09-05", { cli: [row("one", 100)] });
+    const previous = merge(
+      doc([]),
+      doc([day(baseline.period, { cli: [row("one", 150)] })]),
+    );
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      archivedBaseline: baseline,
+      existingUsage: JSON.stringify(previous),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const saved = JSON.parse(result.output);
+    expect(saved.totals.tokens).toBe(151);
+    expect(
+      saved.daily.find((value) => value.period === baseline.period).bySource
+        .cli[0].inputTokens,
+    ).toBe(150);
+    expect(
+      saved.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens,
+    ).toBe(150);
+    expect(result.stdout).toContain("summary");
+  }, 15_000);
+
+  test("an uncovered incoming archive baseline still refuses publication", () => {
+    const previous = doc([day("2026-09-05", { cli: [row("one", 100)] })]);
+    const fresh = doc([day("2026-09-05", { cli: [row("one", 200)] })]);
+    fresh.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: "2026-09-05",
+          source: "cli",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline: day("2026-09-05", { cli: [row("one", 150)] }),
+          candidates: [],
+        },
+      ],
+    };
+    expect(
+      jqExit(HISTORY, "null", [
+        "--argjson",
+        "previous",
+        JSON.stringify([previous]),
+        "--argjson",
+        "fresh",
+        JSON.stringify([fresh]),
+      ]),
+    ).not.toBe(0);
+  });
+
+  test("moving model costs into an aggregate does not freeze growing token totals", () => {
+    const previous = doc([day("2026-09-07", { codex: [row("one", 100)] })]);
+    const fresh = doc([
+      day("2026-09-07", {
+        codex: [
+          { ...row("one", 150), cost: 0 },
+          { ...row("two", 50), cost: 0 },
+          { ...row("unattributed-cost", 0), cost: 2 },
+        ],
+      }),
+    ]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(200);
+    expect(result.totals.cost).toBe(2);
+    expect(result.historyRetention.blocks).toEqual([]);
+  });
+
+  test("previous cost-attribution freezes recover without losing other historical days", () => {
+    const baseline = day("2026-09-07", { codex: [row("one", 100)] });
+    const candidate = day("2026-09-07", {
+      codex: [
+        { ...row("one", 150), cost: 0 },
+        { ...row("unattributed-cost", 0), cost: 1.5 },
+      ],
+    });
+    const previous = doc([
+      day("2026-08-01", { cli: [row("old", 500)] }),
+      baseline,
+    ]);
+    previous.historyRetention = {
+      version: 1,
+      blocks: [
+        {
+          period: baseline.period,
+          source: "codex",
+          state: "partial-overlap",
+          provenance: { kind: "published-aggregate" },
+          baseline,
+          candidates: [candidate],
+        },
+      ],
+    };
+    const fresh = doc([candidate]);
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(650);
+    expect(result.daily[0]).toEqual(previous.daily[0]);
+    expect(result.historyRetention.blocks.map((block) => block.source)).toEqual(
+      ["cli"],
+    );
+    expect(merge(result, fresh).totals.tokens).toBe(650);
+    const reduced = structuredClone(candidate);
+    reduced.bySource.codex[0].inputTokens = 90;
+    previous.historyRetention.blocks[0].candidates.unshift(reduced);
+    expect(merge(previous, fresh).totals.tokens).toBe(600);
+  });
 
   const retainedWithDerivedCostRoundTrip = () => {
     const source = (tokens, cost) => ({

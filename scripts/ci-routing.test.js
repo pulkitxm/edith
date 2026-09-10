@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
-const swiftTestScript = readFileSync("Packages/Edith/test.sh", "utf8");
+const swiftCache = Bun.YAML.parse(
+  readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
+);
+const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
 
@@ -42,7 +45,10 @@ test("every change area covers its repository inputs", () => {
       ".swift-format",
     ],
     docs: ["docs/cli/README.md"],
-    workflows: [".github/workflows/ci.yml"],
+    workflows: [
+      ".github/workflows/ci.yml",
+      ".github/actions/cache-swift/action.yml",
+    ],
     promo: ["apps/promo-video/src/Promo.tsx"],
     site: ["apps/site/index.html"],
     scripts: [
@@ -88,9 +94,7 @@ test("every change area covers its repository inputs", () => {
 });
 
 test("a main push releases when the Swift area changed", () => {
-  const releaseBuildJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
-  );
+  const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
   expect(releaseBuildJob).toContain(
     "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
@@ -145,33 +149,91 @@ test("main releases skip the redundant debug app build", () => {
   );
   expect(swiftBuild).toContain("github.event_name != 'push'");
   const releaseBuild = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
+    ciWorkflow.indexOf("\n  dmg:"),
   );
   expect(releaseBuild).toContain("&& ((github.event_name == 'push'");
   expect(releaseBuild).not.toContain("needs.swift-build");
 });
 
 test("Swift tests build their CLI fixture in one package graph", () => {
-  expect(swiftTestScript).not.toMatch(/^swift build/gm);
-  expect(swiftTestScript.match(/^swift test/gm)?.length).toBe(1);
   const testTarget = packageManifest.slice(
     packageManifest.indexOf('name: "EdithTests"'),
   );
   expect(testTarget).toContain('"Highlighter", "ed"');
 });
 
-test("Swift tests have a bounded hosted runtime", () => {
-  const swiftTest = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  swift-test:"),
-    ciWorkflow.indexOf("\n  companion:"),
+test("Swift tests cache a successful build before bounded execution", () => {
+  const job = ciJobs["swift-test"];
+  const steps = job.steps;
+  const restore = steps.find((step) => step.id === "swift-cache");
+  const isolation = steps.find((step) => step.name === "Verify test isolation");
+  const build = steps.find((step) => step.name === "Build tests");
+  const save = steps.find((step) => step.name === "Save compiled tests");
+  const run = steps.find((step) => step.name === "Tests");
+  expect(job["timeout-minutes"]).toBe(45);
+  expect(restore.uses).toBe("./.github/actions/cache-swift");
+  expect(restore.with.variant).toBe("tests-debug");
+  expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
+  expect(build.run).toBe("./test.sh --build-only");
+  expect(build["working-directory"]).toBe("Packages/Edith");
+  expect(build["timeout-minutes"]).toBe(20);
+  expect(build.if).toBeUndefined();
+  expect(run.run).toBe("./test.sh --skip-build");
+  expect(run["working-directory"]).toBe(build["working-directory"]);
+  expect(run["timeout-minutes"]).toBe(10);
+  expect(run.if).toBeUndefined();
+  expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
+  expect(save.if).toBe(
+    "steps.swift-cache.outputs.compiled-cache-hit != 'true'",
   );
-  expect(swiftTest).toContain("timeout-minutes: 30");
-  expect(swiftTest).toContain(
-    "python3 -B scripts/test-swift-test-isolation.py",
+  expect(save.uses).toBe(
+    "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
   );
-  expect(swiftTest.indexOf("Verify test isolation")).toBeLessThan(
-    swiftTest.indexOf("run: ./test.sh"),
+  expect(save.with.key).toBe(
+    `\${{ steps.swift-cache.outputs.compiled-cache-key }}`,
   );
+  for (const [before, after] of [
+    [restore, build],
+    [isolation, build],
+    [build, save],
+    [save, run],
+  ]) {
+    expect(steps.indexOf(before)).toBeLessThan(steps.indexOf(after));
+  }
+  const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
+  expect(save.with.path).toBe(compiled.with.path);
+  expect(swiftCache.outputs["compiled-cache-key"].value).toBe(
+    compiled.with.key,
+  );
+  expect(swiftCache.outputs["compiled-cache-hit"].value).toBe(
+    `\${{ steps.compiled-tests.outputs.cache-hit || steps.compiled.outputs.cache-hit }}`,
+  );
+});
+
+test("Swift build consumers retain automatic compiled cache saves", () => {
+  const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
+  const tests = swiftCache.runs.steps.find(
+    (step) => step.id === "compiled-tests",
+  );
+  expect(tests.if).toBe("inputs.variant == 'tests-debug'");
+  expect(tests.uses).toBe(
+    "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  expect(tests.with).toEqual(compiled.with);
+  expect(compiled.if).toBe("inputs.variant != 'tests-debug'");
+  expect(compiled.uses).toBe(
+    "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  for (const [job, variant] of [
+    ["swift-build", "app-debug"],
+    ["dmg", "app-release"],
+  ]) {
+    const cache = ciJobs[job].steps.find(
+      (step) => step.uses === "./.github/actions/cache-swift",
+    );
+    expect(cache.with.variant).toBe(variant);
+  }
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
@@ -187,7 +249,9 @@ test("targeted publishing workflows watch every deployment input", () => {
 });
 
 test("every workflow change runs the runtime guard", () => {
-  expect(ciWorkflow).toContain("area workflows '^\\.github/workflows/'");
+  expect(ciWorkflow).toContain(
+    "area workflows '^\\.github/(workflows|actions)/'",
+  );
   expect(ciWorkflow).toContain(
     "needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'",
   );
@@ -199,7 +263,7 @@ test("every workflow change runs the runtime guard", () => {
   );
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),
-    ciWorkflow.indexOf("\n  release-build:"),
+    ciWorkflow.indexOf("\n  version:"),
   );
   expect(swiftTest).toContain("needs.changes.outputs.workflows == 'true'");
   expect(ciWorkflow).toContain(

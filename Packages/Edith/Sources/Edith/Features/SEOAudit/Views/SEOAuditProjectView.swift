@@ -588,7 +588,7 @@ private struct SEOAuditPageSelectionSheet: View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(12)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Choose pages").font(DashSkin.serif(22))
+                    Text("Choose pages").font(DashSkin.heading(22))
                     Text("\(model.selectedPageCount) of \(model.discoveredPageURLs.count) selected")
                         .font(DashSkin.mono(9.5))
                         .foregroundStyle(.secondary)

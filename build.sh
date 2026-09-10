@@ -153,10 +153,14 @@ test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exi
 
 SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
-[ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+SWIFT_FLAGS=(--disable-index-store --force-resolved-versions)
+if [ "$CONFIG" = Release ]; then
+  SWIFT_CONFIGURATION=release
+  SWIFT_FLAGS+=(-Xswiftc -Osize)
+fi
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
   --product EdithLidAwakeHelper
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
   --product edithd
 SWIFT_BIN_PATH="$($SWIFT_BIN build --package-path Packages/Edith \
   --configuration "$SWIFT_CONFIGURATION" --show-bin-path)"
@@ -241,6 +245,7 @@ fi
 
 sign() {
   find "$APP" -type f -name '._*' -delete
+  dot_clean -m "$1"
   local identifier
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
   if [ -n "$TEAM_ID" ]; then
@@ -255,9 +260,14 @@ sign() {
 
 sign_tool() {
   find "$APP" -type f -name '._*' -delete
+  if [ -d "$1" ]; then
+    dot_clean -m "$1"
+  fi
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
   find "$APP" -type f -name '._*' -delete
 }
+
+dot_clean -m "$APP"
 
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"

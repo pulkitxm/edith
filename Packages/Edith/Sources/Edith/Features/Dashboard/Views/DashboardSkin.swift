@@ -25,16 +25,16 @@ enum DashSkin {
         return shifted(base, toward: NSColor(theme.color), by: dark ? darkFraction : lightFraction)
     }
 
-    private static let paperPair = (DashPalette.color("#f7f3ec"), DashPalette.color("#1a1714"))
-    private static let paper2Pair = (DashPalette.color("#fffdf8"), DashPalette.color("#221d19"))
-    private static let inkPair = (DashPalette.color("#241f1a"), DashPalette.color("#f1e9dc"))
-    private static let inkSoftPair = (DashPalette.color("#5c5247"), DashPalette.color("#bcae9c"))
-    private static let inkFaintPair = (DashPalette.color("#8a7f72"), DashPalette.color("#8a7d6c"))
-    private static let linePair = (DashPalette.color("#e4dccf"), DashPalette.color("#332e27"))
-    private static let lineStrongPair = (DashPalette.color("#d6cbb8"), DashPalette.color("#423b32"))
+    private static let paperPair = (DashPalette.color("#f5f5f7"), DashPalette.color("#18181a"))
+    private static let paper2Pair = (DashPalette.color("#ffffff"), DashPalette.color("#242426"))
+    private static let inkPair = (DashPalette.color("#1d1d1f"), DashPalette.color("#f5f5f7"))
+    private static let inkSoftPair = (DashPalette.color("#636366"), DashPalette.color("#b0b0b5"))
+    private static let inkFaintPair = (DashPalette.color("#76767b"), DashPalette.color("#98989f"))
+    private static let linePair = (DashPalette.color("#e5e5ea"), DashPalette.color("#363639"))
+    private static let lineStrongPair = (DashPalette.color("#d2d2d7"), DashPalette.color("#48484a"))
     private static let accentPair = (DashPalette.color("#d97757"), DashPalette.color("#e08a6a"))
     private static let accentDeepPair = (DashPalette.color("#b3543a"), DashPalette.color("#eea486"))
-    private static let gridPair = (DashPalette.color("#ece5d8"), DashPalette.color("#2b2620"))
+    private static let gridPair = (DashPalette.color("#ebebef"), DashPalette.color("#303033"))
     private static let heatSteps: [(NSColor, CGFloat)] = [
         (.white, 0.55), (.white, 0.2), (.black, 0.05), (.black, 0.3),
     ]
@@ -119,8 +119,8 @@ enum DashSkin {
     static let warn = DashPalette.color("#FF9500")
     static let danger = DashPalette.color("#FF3B30")
 
-    static func serif(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .custom("Iowan Old Style", size: UIScale.pt(size)).weight(weight)
+    static func heading(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        .system(size: UIScale.pt(size), weight: weight)
     }
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: UIScale.pt(size), weight: weight, design: .monospaced)
@@ -149,7 +149,7 @@ struct SkinCard<Content: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(DashSkin.serif(18))
+                    .font(DashSkin.heading(18))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 if let note {
@@ -167,12 +167,7 @@ struct SkinCard<Content: View>: View {
                 bottom: UIScale.pt(14), trailing: UIScale.pt(16))
         )
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .widgetBar(
-            cornerRadius: 16,
-            fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark),
-            shadow: .black.opacity(dark ? 0.32 : 0.05)
-        )
+        .edithSurface(cornerRadius: 16)
     }
 }
 

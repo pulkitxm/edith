@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @State private var refresh = DashboardRefreshBridge()
-    @State private var model = DashboardModel.shared
+    @State private var model: DashboardModel
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -53,6 +53,10 @@ struct DashboardView: View {
         return formatter
     }()
 
+    @MainActor init(model: DashboardModel? = nil) {
+        _model = State(initialValue: model ?? DashboardModel.shared)
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { geo in
@@ -70,7 +74,7 @@ struct DashboardView: View {
                                 logView.pageGutter(compact)
                             }
                             if model.loaded {
-                                kpiGrid.pageGutter(compact)
+                                kpiGrid(compact: compact).pageGutter(compact)
                                 VStack(spacing: UIScale.pt(16)) {
                                     activityRow(compact: compact)
                                     LimitsCardView(theme: acc, dark: dark)
@@ -150,28 +154,12 @@ struct DashboardView: View {
     }
 
     private var background: some View {
-        DashSkin.paper(dark)
-            .overlay(alignment: .topTrailing) {
-                RadialGradient(
-                    colors: [acc.opacity(0.08), .clear], center: .topTrailing,
-                    startRadius: 0, endRadius: 620
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .overlay(alignment: .bottomLeading) {
-                RadialGradient(
-                    colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
-                    startRadius: 0, endRadius: 520
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .ignoresSafeArea(edges: .vertical)
+        DashSkin.paper(dark).ignoresSafeArea(edges: .vertical)
     }
 
     private var masthead: some View {
         PageHeader {
-            (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark)))
+            Text("Agent usage")
         } trailing: {
             mastheadButtons
         } accessory: {
@@ -211,7 +199,7 @@ struct DashboardView: View {
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
             if model.loaded {
-                OrbitingShareButton(
+                MastheadButton(
                     action: {
                         withAnimation(
                             Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
@@ -219,7 +207,8 @@ struct DashboardView: View {
                             showShare = true
                         }
                     },
-                    dark: dark)
+                    systemImage: "square.and.arrow.up",
+                    helperText: "Share usage cards")
             }
         }
     }
@@ -243,6 +232,7 @@ struct DashboardView: View {
         let helperText: String
         var isLoading = false
         var tint: Color?
+        @Environment(\.colorScheme) private var scheme
 
         var body: some View {
             Button(action: action) {
@@ -254,71 +244,18 @@ struct DashboardView: View {
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
-                        Image(systemName: systemImage)
+                        Image(systemName: systemImage).foregroundStyle(
+                            DashSkin.ink(scheme == .dark))
                     }
                 }
-                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+                .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.edith(.toolbar))
+            .buttonStyle(.edith(.borderless))
+            .edithGlass(interactive: true, in: RoundedRectangle(cornerRadius: 8))
             .disabled(isLoading)
             .help(helperText)
             .accessibilityLabel(helperText)
-        }
-    }
-
-    private struct OrbitingShareButton: View {
-        let action: () -> Void
-        let dark: Bool
-
-        @State private var hovering = false
-        @State private var rotation = 0.0
-
-        private var ink: Color { DashSkin.ink(dark) }
-
-        var body: some View {
-            Button(action: action) {
-                ZStack {
-                    Circle()
-                        .fill(ink.opacity(hovering ? 0.11 : 0.065))
-                    Circle()
-                        .strokeBorder(ink.opacity(0.14), lineWidth: 1)
-                    CircularShareText(color: ink.opacity(0.72))
-                        .rotationEffect(.degrees(rotation))
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        .foregroundStyle(ink)
-                }
-                .frame(width: UIScale.pt(50), height: UIScale.pt(50))
-                .scaleEffect(hovering ? 1.07 : 1)
-                .animation(.easeOut(duration: 0.18), value: hovering)
-            }
-            .buttonStyle(.edith(.borderless))
-            .onAppear {
-                rotation = 0
-                withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
-            .onHover { hovering = $0 }
-            .help("Share usage cards")
-            .accessibilityLabel("Share usage cards")
-        }
-    }
-
-    private struct CircularShareText: View {
-        let color: Color
-        private let letters = Array("SHARE • SHARE • ")
-
-        var body: some View {
-            ZStack {
-                ForEach(Array(letters.enumerated()), id: \.offset) { index, letter in
-                    Text(String(letter))
-                        .font(.system(size: UIScale.pt(5.4), weight: .bold, design: .rounded))
-                        .foregroundStyle(color)
-                        .offset(y: UIScale.pt(-19))
-                        .rotationEffect(.degrees(Double(index) * 360 / Double(letters.count)))
-                }
-            }
         }
     }
 
@@ -334,10 +271,7 @@ struct DashboardView: View {
         let m = model.meta
         let parts: [(String, Bool, Bool)] = [
             ("Updated \(m.updated)", false, false),
-            (m.totalCost, true, false),
             ("\(m.activeDays) active days", false, false),
-            ("\(m.totalTokens) tokens", false, true),
-            ("\(m.modelCount) models", false, false),
             (sourceMetaText, false, false),
         ]
         return parts.enumerated().map { index, part in
@@ -351,21 +285,33 @@ struct DashboardView: View {
         model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
-    private var kpiColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: UIScale.pt(158)), spacing: UIScale.pt(12))]
+    private func kpiGrid(compact: Bool) -> some View {
+        VStack(spacing: UIScale.pt(6)) {
+            metricGrid(Array(model.kpis.prefix(4)), compact: compact)
+            if model.kpis.count > 4 {
+                DisclosureGroup("More metrics") {
+                    metricGrid(Array(model.kpis.dropFirst(4)), compact: compact)
+                }
+                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .foregroundStyle(.secondary)
+                .disclosureGroupStyle(EdithDisclosureGroupStyle())
+            }
+        }
     }
 
-    private var kpiGrid: some View {
-        LazyVGrid(columns: kpiColumns, spacing: UIScale.pt(12)) {
-            ForEach(model.kpis) { kpi in
+    private func metricGrid(_ metrics: [KPI], compact: Bool) -> some View {
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
+            count: compact ? 2 : 4)
+        return LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+            ForEach(metrics) { kpi in
                 HStack(spacing: UIScale.pt(0)) {
-                    Rectangle().fill(kpi.hot ? acc : Color.clear).frame(width: UIScale.pt(3))
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text(kpi.label.uppercased())
                             .font(DashSkin.mono(10)).tracking(UIScale.pt(1.4))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Text(kpi.value)
-                            .font(DashSkin.serif(26))
+                            .font(DashSkin.heading(26))
                             .foregroundStyle(DashSkin.ink(dark))
                             .monospacedDigit()
                             .contentTransition(.numericText())
@@ -391,15 +337,7 @@ struct DashboardView: View {
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .widgetBar(
-                    cornerRadius: 14,
-                    fill: DashSkin.paper2(dark),
-                    stroke: DashSkin.line(dark),
-                    shadow: .black.opacity(dark ? 0.3 : 0.05),
-                    shadowRadius: 8,
-                    shadowY: 4,
-                    clipsContent: true
-                )
+                .edithSurface(cornerRadius: 14)
             }
         }
     }

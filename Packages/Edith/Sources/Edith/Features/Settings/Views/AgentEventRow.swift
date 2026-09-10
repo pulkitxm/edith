@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentEventRow: View {
     let event: AgentEvent
+    @State var expanded = false
 
     private var color: Color {
         switch event.level {
@@ -13,9 +14,10 @@ struct AgentEventRow: View {
     }
 
     var body: some View {
-        DisclosureGroup {
+        DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(event.message).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
                 LabeledContent("Category", value: event.category)
                 LabeledContent("Event", value: event.id.uuidString)
                 if let taskID = event.taskID {
@@ -27,14 +29,18 @@ struct AgentEventRow: View {
             }
             .font(.system(size: UIScale.pt(11), design: .monospaced))
             .foregroundStyle(.secondary)
-            .padding(.vertical, 6)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Image(
-                    systemName: event.level == .error
-                        ? "exclamationmark.circle.fill" : "circle.fill"
+                    systemName: event.level == .info
+                        ? "circle.fill"
+                        : event.level == .warning
+                            ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill"
                 )
-                .font(.system(size: event.level == .error ? 11 : 6))
+                .font(.system(size: event.level == .info ? 6 : 11))
                 .foregroundStyle(color)
                 .frame(width: 12)
                 Text(event.date, format: .dateTime.hour().minute().second())
@@ -42,7 +48,7 @@ struct AgentEventRow: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(event.name)
-                        .font(.system(size: UIScale.pt(11.5), weight: .medium, design: .monospaced))
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                     Text(event.message)
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(event.level == .error ? color : .secondary)

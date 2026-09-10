@@ -72,7 +72,7 @@ public actor AttentionBackgroundService {
     public func run(now: Date = Date()) async throws -> Data? {
         guard !stopped else { throw CancellationError() }
         guard restoreTask == nil else { return nil }
-        let report = try events.importLegacyFiles(directory: repository.eventsDirectory, now: now)
+        let report = try await importSpoolWhenAvailable(now: now)
         let settings = repository.loadSettings()
         let enabled = defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled)
         var trackingSettings = settings
@@ -192,6 +192,22 @@ public actor AttentionBackgroundService {
     public func importSpool() throws -> AttentionImportReport {
         guard !stopped else { throw CancellationError() }
         return try events.importLegacyFiles(directory: repository.eventsDirectory)
+    }
+
+    private func importSpoolWhenAvailable(now: Date) async throws -> AttentionImportReport {
+        for attempt in 0..<5 {
+            guard !stopped else { throw CancellationError() }
+            guard restoreTask == nil else {
+                throw AgentError(.unavailable, "Attention is restoring an archive.")
+            }
+            try Task.checkCancellation()
+            do {
+                return try events.importLegacyFiles(directory: repository.eventsDirectory, now: now)
+            } catch let error as CocoaError where error.code == .fileLocking && attempt < 4 {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        throw CocoaError(.fileLocking)
     }
 
     public func backup(now: Date = Date()) async throws {

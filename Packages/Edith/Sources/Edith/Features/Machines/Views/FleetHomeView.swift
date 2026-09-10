@@ -8,6 +8,7 @@ struct FleetHomeView: View {
     @Environment(\.compactLayout) private var compact
     @State private var cpuHistory: [Double] = []
     @State private var memHistory: [Double] = []
+    @State private var companionMachineID: UUID?
 
     private var dark: Bool { scheme == .dark }
 
@@ -33,6 +34,12 @@ struct FleetHomeView: View {
         .machineActivity(model.allMachines.map { model.session(for: $0.id) })
         .task {
             while !Task.isCancelled {
+                let host = await Task.detached(priority: .utility) { () -> UUID? in
+                    guard let deployment = CompanionDeploymentStore.load() else { return nil }
+                    return deployment.isLocal ? Machine.localID : deployment.machineID
+                }.value
+                guard !Task.isCancelled else { return }
+                if companionMachineID != host { companionMachineID = host }
                 let fleet = model.fleet
                 cpuHistory = MachineSession.appending(fleet.cpuPercent, to: cpuHistory)
                 memHistory = MachineSession.appending(fleet.memoryPercent, to: memHistory)
@@ -156,13 +163,17 @@ struct FleetHomeView: View {
     }
 
     private var machinesCard: some View {
-        SkinCard(title: "Machines", dark: dark) {
+        let snapshots = FleetMath.sortedByPressure(model.snapshots)
+        return SkinCard(title: "Machines", dark: dark) {
             VStack(spacing: UIScale.pt(0)) {
-                ForEach(FleetMath.sortedByPressure(model.snapshots), id: \.id) { snapshot in
-                    FleetMachineRow(snapshot: snapshot, dark: dark) {
+                ForEach(snapshots, id: \.id) { snapshot in
+                    FleetMachineRow(
+                        snapshot: snapshot, dark: dark,
+                        hostsCompanion: snapshot.id == companionMachineID
+                    ) {
                         onSelect(snapshot.id)
                     }
-                    if snapshot.id != FleetMath.sortedByPressure(model.snapshots).last?.id {
+                    if snapshot.id != snapshots.last?.id {
                         Divider().opacity(0.25)
                     }
                 }
@@ -174,13 +185,9 @@ struct FleetHomeView: View {
 private struct FleetMachineRow: View {
     let snapshot: MachineSnapshot
     let dark: Bool
+    let hostsCompanion: Bool
     let onOpen: () -> Void
     @State private var hovering = false
-
-    private var hostsCompanion: Bool {
-        guard let deployment = CompanionDeploymentStore.load() else { return false }
-        return deployment.isLocal ? snapshot.isLocal : deployment.machineID == snapshot.id
-    }
 
     var body: some View {
         Button(action: onOpen) {

@@ -7,9 +7,13 @@ public struct EdithSkill: Identifiable, Equatable, Sendable {
     public let detail: String
     public let symbol: String
 
-    public var directory: URL? {
-        Bundle.module.url(forResource: "skills", withExtension: nil)?.appendingPathComponent(id)
+    public var sourceURL: URL {
+        URL(
+            string:
+                "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/\(id)/SKILL.md"
+        )!
     }
+
 }
 
 public enum EdithSkillLibrary {

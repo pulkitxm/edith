@@ -252,18 +252,10 @@ extension View {
         font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
     }
 
-    @ViewBuilder
     public func card() -> some View {
-        if #available(macOS 26.0, *) {
-            padding(13)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        } else {
-            padding(13)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    .primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        }
+        padding(UIScale.pt(16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .edithSurface()
     }
 
     public func widgetBar<F: ShapeStyle>(

@@ -126,6 +126,20 @@ merges retained day and source blocks from the baseline, rebases any concurrent 
 replacement, folds machine snapshots, validates again, and atomically replaces
 `usage.json`. Failed staging or validation leaves the previous document intact.
 
+History protection compares each model's token counters and the total cost for each
+day and source. Moving costs from a model into an aggregate cost row does not freeze
+growing token totals. A previously frozen block is released only when every recorded
+candidate and the current collection cover its baseline counters and source cost.
+Any recorded loss of tokens or source cost keeps the block protected. Cloud merges
+apply the same rule so an older backup cannot freeze a repaired day again.
+
+Rate-limit collection keeps the provider subprocess input open through initialization
+and the complete response. Requests are newline-delimited and sequenced after the
+initialization reply. Collection selects the account's main limit bucket, classifies
+windows by duration, and bounds runtime, output size, and process cleanup. A missing
+weekly window remains unavailable. Collector failures still publish diagnostic
+snapshots but mark the scheduled job failed and produce an error event.
+
 Billing history is retained in SQLite by stable source identity. Generated links are not
 followed. Large numeric costs are normalized before comparison so native JSON spelling
 differences do not replace exact retained baselines. Clipboard persistence likewise

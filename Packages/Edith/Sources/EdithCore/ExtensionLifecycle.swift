@@ -383,12 +383,12 @@ public enum ExtensionLifecycleCatalog {
             ]),
         descriptor(
             "system",
-            "Control running apps, sleep prevention and keyboard cleaning from one panel.",
+            "Control running apps and keyboard cleaning from one panel.",
             workflows: [
                 instruction(
                     "apps", "Manage applications",
                     "Inspect and quit applications with open windows."),
-                instruction("sleep", "Prevent sleep", "Keep long-running work active when needed."),
+                instruction("clean", "Clean the keyboard", "Temporarily lock keys for cleaning."),
             ],
             prerequisites: [
                 instruction(
@@ -565,6 +565,31 @@ public enum ExtensionLifecycleCatalog {
                     "status", "Check the backend",
                     "Confirm the configured Companion endpoint is healthy.",
                     "ed companion status --json")
+            ]),
+        descriptor(
+            "keepAwake",
+            "Keep the Mac and display awake independently of running apps and keyboard cleaning.",
+            workflows: [
+                instruction(
+                    "sleep", "Keep awake", "Prevent idle sleep until you turn it off.",
+                    "ed config set preventSleep true")
+            ],
+            prerequisites: [
+                instruction(
+                    "enable", "Enable Keep Awake", "Enable the independent Keep Awake ability.",
+                    "ed extensions enable keepAwake")
+            ],
+            examples: ["ed extensions enable keepAwake", "ed config set preventSleep true"],
+            docs: [documentation("guide", "Keep Awake settings", "docs/cli/config/README.md")],
+            recovery: [
+                instruction(
+                    "off", "Restore idle sleep", "Turn Keep Awake off.",
+                    "ed config set preventSleep false")
+            ],
+            verification: [
+                instruction(
+                    "status", "Check Keep Awake", "Read the current Keep Awake setting.",
+                    "ed config get preventSleep --json")
             ]),
         descriptor(
             "systemStats", "Keep current CPU and memory pressure visible in the menu bar.",

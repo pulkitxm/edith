@@ -2,6 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct PluginsPage: View {
+    @State private var previewSkill: EdithSkill?
     @State private var model = SkillsModel.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -24,16 +25,27 @@ struct PluginsPage: View {
                         Text("Edith skills")
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
                         Spacer()
-                        Text("\(model.agents.count) agents found on this Mac")
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
+                        if model.agentsLoaded {
+                            Text("\(model.agents.count) agents found on this Mac")
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            SkeletonGroup {
+                                SkeletonBlock(width: 164, height: 11)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Discovering installed agents")
+                        }
                     }
                     ForEach(model.skills) { skill in
                         SkillCatalogRow(
                             skill: skill, agents: model.agents,
                             installed: model.installedAgents[skill.id]?.isEmpty == false,
-                            disabled: model.isInstalling
-                        ) { agent in model.present(skill, agentID: agent) }
+                            disabled: model.isInstalling || !model.agentsLoaded,
+                            preview: { previewSkill = skill },
+                            install: { agent in
+                                Task { await model.present(skill, agentID: agent) }
+                            })
                     }
                     Text(
                         "Install once for all your projects. Choose your agents at each install, with your preferences remembered."
@@ -48,7 +60,10 @@ struct PluginsPage: View {
         .background(DashSkin.paper(dark))
         .task {
             guard automaticActionsEnabled else { return }
-            model.discoverAgents()
+            await model.discoverAgents()
+        }
+        .sheet(item: $previewSkill) { skill in
+            SkillPreviewSheet(skill: skill).transientPresentation()
         }
         .sheet(item: $model.presentedSkill) { skill in
             SkillInstallSheet(model: model, skill: skill)
@@ -61,28 +76,41 @@ private struct SkillCatalogRow: View {
     let agents: [SkillAgent]
     let installed: Bool
     let disabled: Bool
+    let preview: () -> Void
     let install: (String?) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: UIScale.pt(16)) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable().scaledToFit()
-                .frame(width: UIScale.pt(52), height: UIScale.pt(52))
-            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Text(skill.name)
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text(skill.summary)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(.secondary)
-                Text(skill.detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Button(action: preview) {
+                HStack(spacing: UIScale.pt(16)) {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable().scaledToFit()
+                        .frame(width: UIScale.pt(52), height: UIScale.pt(52))
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        Text(skill.name)
+                            .font(.system(size: UIScale.pt(17), weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(skill.summary)
+                            .font(.system(size: UIScale.pt(13)))
+                            .foregroundStyle(.secondary)
+                        Text(skill.detail)
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: UIScale.pt(8))
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: UIScale.pt(16)))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: UIScale.pt(8))
+            .buttonStyle(.edith(.borderless))
+            .accessibilityLabel("Preview \(skill.name)")
+            .help("Preview skill instructions and copy Markdown")
             HStack(spacing: 0) {
                 Button {
                     install(nil)

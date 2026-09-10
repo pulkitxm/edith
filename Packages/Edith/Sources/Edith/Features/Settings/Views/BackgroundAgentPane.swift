@@ -10,30 +10,11 @@ final class BackgroundAgentModel {
     var jobs: [AgentJobSnapshot] = []
     var tasks: [AgentTaskSnapshot] = []
     var failure: String?
-    var events: [AgentEvent] = []
-    var search = ""
-    var errorsOnly = false
-    var timelinePaused = false
-    private var copyTask: Task<Void, Never>?
-
-    var visibleEvents: [AgentEvent] {
-        events.reversed().filter { event in
-            (!errorsOnly || event.level != .info)
-                && (search.isEmpty
-                    || [event.category, event.name, event.message, event.taskID?.uuidString ?? ""]
-                        .contains { $0.localizedCaseInsensitiveContains(search) })
-        }
-    }
+    var loading = true
+    var tasksLoading = true
 
     func observe() async {
-        defer { copyTask?.cancel(); copyTask = nil }
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { @MainActor in
-                for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
-                    guard !Task.isCancelled else { return }
-                    if !self.timelinePaused { self.events = events }
-                }
-            }
             group.addTask { @MainActor in
                 for await jobs in AgentTopicStream.values([AgentJobSnapshot].self, topic: .jobs) {
                     guard !Task.isCancelled else { return }
@@ -45,6 +26,7 @@ final class BackgroundAgentModel {
                 {
                     guard !Task.isCancelled else { return }
                     self.tasks = tasks
+                    self.tasksLoading = false
                 }
             }
             group.addTask { @MainActor in
@@ -66,42 +48,8 @@ final class BackgroundAgentModel {
         await refresh()
     }
 
-    func resumeTimeline() async {
-        timelinePaused.toggle()
-        if !timelinePaused,
-            let value = await AgentTopicStream.snapshot([AgentEvent].self, topic: .events)
-        {
-            events = value
-        }
-    }
-
-    func copyEvents() {
-        copyTask?.cancel()
-        let events = Array(visibleEvents.reversed())
-        copyTask = Task { [weak self] in
-            let worker = Task.detached(priority: .userInitiated) { Self.renderEvents(events) }
-            let value = await withTaskCancellationHandler {
-                await worker.value
-            } onCancel: {
-                worker.cancel()
-            }
-            guard !Task.isCancelled, let self else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(value, forType: .string)
-            self.copyTask = nil
-        }
-    }
-
-    nonisolated static func renderEvents(_ events: [AgentEvent]) -> String {
-        let lines: [String] = events.map { event in
-            let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
-            let prefix = "\(event.date.ISO8601Format()) [\(event.level.rawValue)]"
-            return "\(prefix) \(event.category).\(event.name)\(task): \(event.message)"
-        }
-        return lines.joined(separator: "\n")
-    }
-
     func refresh() async {
+        defer { loading = false }
         registration = .current
         let result = await AgentQuery.value {
             (try AgentClient.shared.runtimeSnapshot(), try AgentClient.shared.jobSnapshots())
@@ -134,7 +82,8 @@ final class BackgroundAgentModel {
 }
 
 struct BackgroundAgentPane: View {
-    @State private var model = BackgroundAgentModel()
+    @State private var model: BackgroundAgentModel
+    @State private var showingEvents = false
     @AppStorage(AgentSettingsKeys.pauseAmbientOnBattery, store: SharedDefaults.store) private
         var pauseAmbientOnBattery = false
     @AppStorage(AgentSettingsKeys.notifyWhenBlocked, store: SharedDefaults.store) private
@@ -144,15 +93,24 @@ struct BackgroundAgentPane: View {
 
     private var dark: Bool { scheme == .dark }
 
+    @MainActor init(model: BackgroundAgentModel? = nil) {
+        _model = State(initialValue: model ?? BackgroundAgentModel())
+    }
+
     var body: some View {
         Form {
             statusSection
             behaviourSection
             jobsSection
-            AgentTasksSection(tasks: model.tasks)
+            AgentTasksSection(
+                tasks: model.tasks, loading: model.tasksLoading && model.failure == nil)
             eventsSection
         }
         .formStyle(.grouped)
+        .disclosureGroupStyle(EdithDisclosureGroupStyle())
+        .sheet(isPresented: $showingEvents) {
+            AgentEventsScreen().transientPresentation()
+        }
         .task {
             guard automaticActionsEnabled else { return }
             await model.observe()
@@ -163,16 +121,28 @@ struct BackgroundAgentPane: View {
         Section("Status") {
             LabeledContent("Registration", value: model.registration.title)
             if let runtime = model.runtime {
-                LabeledContent("Build", value: runtime.build)
-                LabeledContent("Process", value: String(runtime.processIdentifier))
                 LabeledContent("Uptime", value: AgentDuration.text(runtime.uptime))
                 LabeledContent(
                     "Memory",
                     value: ByteCountFormatter.string(
                         fromByteCount: Int64(runtime.residentBytes), countStyle: .memory))
                 LabeledContent("CPU", value: String(format: "%.1f%%", runtime.cpuPercent))
-                LabeledContent("Subscribers", value: String(runtime.subscriberCount))
-                LabeledContent("Store schema", value: String(runtime.schemaVersion))
+                DisclosureGroup("Technical details") {
+                    LabeledContent("Build", value: runtime.build)
+                    LabeledContent("Process", value: String(runtime.processIdentifier))
+                    LabeledContent("Subscribers", value: String(runtime.subscriberCount))
+                    LabeledContent("Store schema", value: String(runtime.schemaVersion))
+                }
+            } else if model.loading {
+                SkeletonGroup {
+                    ForEach(
+                        [
+                            "Uptime", "Memory", "CPU",
+                        ], id: \.self
+                    ) { title in
+                        LabeledContent(title) { SkeletonBlock(width: 90, height: 12) }
+                    }
+                }
             } else if let failure = model.failure {
                 Text(failure)
                     .settingsCaption()
@@ -206,58 +176,37 @@ struct BackgroundAgentPane: View {
             Toggle(
                 "Notify when an agent blocks",
                 isOn: $notifyWhenBlocked.configured(AgentSettingsKeys.notifyWhenBlocked))
-            Text("Live jobs keep running while a page is open, whatever these say.")
+            Text("Jobs for open pages continue running on battery.")
                 .settingsCaption()
         }
     }
 
     private var eventsSection: some View {
-        Section {
-            HStack {
-                TextField("Search jobs and events", text: $model.search)
-                    .textFieldStyle(.roundedBorder)
-                Toggle("Failures", isOn: $model.errorsOnly)
-                    .toggleStyle(.button)
-                Button(model.timelinePaused ? "Resume" : "Pause") {
-                    Task { await model.resumeTimeline() }
+        Section("Diagnostics") {
+            Button {
+                showingEvents = true
+            } label: {
+                HStack {
+                    Label("Event timeline", systemImage: "waveform.path.ecg")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 20)
                 }
-                Button("Copy") { model.copyEvents() }
-                    .disabled(model.visibleEvents.isEmpty)
+                .padding(.vertical, 6)
+                .padding(.trailing, 8)
+                .contentShape(Rectangle())
             }
-            if model.visibleEvents.isEmpty {
-                ContentUnavailableView(
-                    model.events.isEmpty ? "Waiting for events" : "No matching events",
-                    systemImage: "waveform.path.ecg",
-                    description: Text(
-                        model.events.isEmpty
-                            ? "Run a job above to follow its activity here. Recent events remain available after a restart."
-                            : "Change the search or turn off the failures filter."))
-            } else {
-                ForEach(model.visibleEvents) { event in
-                    AgentEventRow(event: event)
-                }
-            }
-        } header: {
-            HStack {
-                Text("Event timeline")
-                Spacer()
-                Label(
-                    model.timelinePaused ? "Paused" : "Live",
-                    systemImage: model.timelinePaused
-                        ? "pause.circle" : "dot.radiowaves.left.and.right"
-                )
-                .foregroundStyle(model.timelinePaused ? .secondary : Color.accentColor)
-            }
-        } footer: {
-            Text(
-                "The most recent \(AgentDiagnostics.capacity) events are kept on this Mac. Request payloads and command environments are excluded."
-            )
+            .buttonStyle(.edith(.borderless))
         }
     }
 
     private var jobsSection: some View {
         Section("Jobs") {
-            if model.jobs.isEmpty {
+            if model.loading {
+                AgentRowsSkeleton(count: 4)
+            } else if model.jobs.isEmpty {
                 Text("The agent has not reported any jobs yet.")
                     .settingsCaption()
             } else {

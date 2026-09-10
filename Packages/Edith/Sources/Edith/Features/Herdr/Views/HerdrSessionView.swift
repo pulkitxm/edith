@@ -467,7 +467,7 @@ struct HerdrSessionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                     Text(agent.title)
-                        .font(DashSkin.serif(20))
+                        .font(DashSkin.heading(20))
                         .foregroundStyle(DashSkin.ink(dark))
                         .padding(.trailing, UIScale.pt(36))
                         .presenterTextBlur(hideAgents, fontSize: 20)

@@ -1045,6 +1045,7 @@ private struct ExtensionDetailRows: View {
             case .quinjet: QuinjetRows()
             case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
+            case .keepAwake: KeepAwakeRows()
             case .appMaintenance: AppMaintenanceRows()
             case .homebrew: HomebrewRows()
             case .cleaner: CleanerRows()
@@ -2127,25 +2128,33 @@ private struct MicMuteRows: View {
     }
 }
 
-private struct SystemRows: View {
-    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+private struct KeepAwakeRows: View {
+    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
         var enabled = false
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
         var preventSleep = false
-    @State private var cleaningStarted = false
 
     var body: some View {
         Section {
             Toggle(
-                isOn: $preventSleep.configured(AppStorageKeys.General.preventSleep)
-            ) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Keep awake")
-                    InfoDot(
-                        "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
-                    )
-                }
-            }
+                "Keep awake", isOn: $preventSleep.configured(AppStorageKeys.General.preventSleep))
+            Text(
+                "Keeps the Mac and display awake until turned off. Closing the lid still sleeps the Mac; use Lid Awake for that."
+            )
+            .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct SystemRows: View {
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @State private var cleaningStarted = false
+
+    var body: some View {
+        Section {
             HStack {
                 Text("Keyboard cleaning")
                 InfoDot(

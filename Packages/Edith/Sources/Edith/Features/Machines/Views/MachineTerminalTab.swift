@@ -951,7 +951,7 @@ struct ContainerTerminalSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Shell in \(container.displayName)")
-                    .font(DashSkin.serif(17))
+                    .font(DashSkin.heading(17))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 if let message = holder.exitMessage {

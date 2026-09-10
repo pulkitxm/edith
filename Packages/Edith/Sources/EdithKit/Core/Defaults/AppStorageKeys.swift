@@ -47,6 +47,7 @@ public enum AppStorageKeys {
         public static let hotKeyLabel = "hotKeyLabel"
         public static let hotKeyMods = "hotKeyMods"
         public static let panelTab = "tab"
+        public static let keepAwakeEnabled = "keepAwakeEnabled"
         public static let preventSleep = "preventSleep"
     }
 

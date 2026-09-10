@@ -406,7 +406,7 @@ enum RemoteImagePreview {
     }
 }
 
-private struct CodePreview: View {
+struct CodePreview: View {
     let text: String
     let language: String?
     let truncated: Bool

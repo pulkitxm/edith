@@ -67,6 +67,7 @@ public enum Guide {
 
         ```
         ed config get preventSleep
+        ed extensions enable keepAwake
         ed config set preventSleep true
         ed config set warnPercent 70
         ed config ls --group presenter

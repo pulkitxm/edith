@@ -7,8 +7,8 @@ enum PageMetrics {
     static let top = 18.0
     static let headerBottom = 16.0
     static let bottom = 28.0
-    static let titleSize = 34.0
-    static let compactTitleSize = 28.0
+    static let titleSize = 28.0
+    static let compactTitleSize = 24.0
     static let sectionSpacing = 16.0
     static let cardSpacing = 12.0
     static let readableWidth = 980.0
@@ -18,7 +18,7 @@ enum PageMetrics {
     }
 
     static func titleFont(_ compact: Bool) -> Font {
-        DashSkin.serif(compact ? compactTitleSize : titleSize)
+        DashSkin.heading(compact ? compactTitleSize : titleSize)
     }
 }
 

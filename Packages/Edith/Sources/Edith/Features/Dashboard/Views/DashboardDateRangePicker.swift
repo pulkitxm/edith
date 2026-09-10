@@ -129,7 +129,7 @@ struct DashboardDateRangePicker: View {
             calendarNavigation("chevron.left", offset: -1)
             Spacer()
             Text(Self.monthFormatter.string(from: visibleMonth))
-                .font(DashSkin.serif(UIScale.pt(15), weight: .semibold))
+                .font(DashSkin.heading(UIScale.pt(15), weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
             calendarNavigation("chevron.right", offset: 1)

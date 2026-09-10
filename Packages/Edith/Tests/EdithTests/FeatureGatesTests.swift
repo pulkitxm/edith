@@ -21,10 +21,10 @@ import Testing
         #expect(!FeatureGates.presenterDetectorWanted(presenterEnabled: false, autoEnabled: true))
     }
 
-    @Test func preventSleepClearsWhenSystemDisabled() {
-        #expect(!FeatureGates.preventSleepPersisted(systemOn: false, current: true))
-        #expect(FeatureGates.preventSleepPersisted(systemOn: true, current: true))
-        #expect(!FeatureGates.preventSleepPersisted(systemOn: true, current: false))
+    @Test func preventSleepClearsWhenKeepAwakeDisabled() {
+        #expect(!FeatureGates.preventSleepPersisted(keepAwakeOn: false, current: true))
+        #expect(FeatureGates.preventSleepPersisted(keepAwakeOn: true, current: true))
+        #expect(!FeatureGates.preventSleepPersisted(keepAwakeOn: true, current: false))
     }
 
     @Test func keystrokeMonitorNeedsBothExtensionAndActiveState() {

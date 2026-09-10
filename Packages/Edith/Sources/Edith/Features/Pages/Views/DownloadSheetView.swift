@@ -108,7 +108,7 @@ struct DownloadSheet: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             Text("Download YouTube Audio")
-                .font(DashSkin.serif(20))
+                .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
             Button {
@@ -203,7 +203,7 @@ struct DownloadSheet: View {
                 controlsRow
             }
             .sheet(item: $logItem) { item in
-                logSheet(item)
+                logSheet(item).transientPresentation()
             }
         }
     }
@@ -756,7 +756,7 @@ struct DownloadSheet: View {
         return VStack(spacing: UIScale.pt(0)) {
             HStack {
                 Text("Download Log")
-                    .font(DashSkin.serif(16))
+                    .font(DashSkin.heading(16))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Button {

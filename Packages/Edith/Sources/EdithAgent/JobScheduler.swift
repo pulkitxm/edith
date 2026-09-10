@@ -201,13 +201,15 @@ public actor JobScheduler {
         var payload: Data?
         switch result {
         case .success(let value):
-            states[id]?.lastError = nil
-            states[id]?.runCount += 1
+            let failure = Self.payloadFailure(value, topic: state.job.descriptor.topic)
+            states[id]?.lastError = failure
+            if failure == nil { states[id]?.runCount += 1 }
             payload = value
             if let value, let topic = state.job.descriptor.topic { publish(topic, value) }
             await observe(
                 AgentEvent(
-                    category: "job", name: id, message: "Completed", duration: duration))
+                    level: failure == nil ? .info : .error,
+                    category: "job", name: id, message: failure ?? "Completed", duration: duration))
         case .failure(let error):
             let cancelled = error is CancellationError
             states[id]?.lastError = cancelled ? nil : error.localizedDescription
@@ -263,6 +265,19 @@ public actor JobScheduler {
             enqueue(id)
         }
         refreshSchedule()
+    }
+
+    static func payloadFailure(_ payload: Data?, topic: AgentTopic?) -> String? {
+        guard let payload else { return nil }
+        switch topic {
+        case .usage:
+            return (try? AgentPayload.decode(UsageTopicSnapshot.self, from: payload))?.failure
+        case .limits:
+            guard let snapshot = try? AgentPayload.decode(LimitsTopicSnapshot.self, from: payload)
+            else { return nil }
+            return snapshot.failure ?? snapshot.providers.compactMap(\.error).first
+        default: return nil
+        }
     }
 
     private func phase(of state: State) -> AgentJobPhase {

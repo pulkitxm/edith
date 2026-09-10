@@ -77,6 +77,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case quinjet
     case seoAudit
     case system
+    case keepAwake
     case appMaintenance
     case homebrew
     case cleaner
@@ -479,7 +480,7 @@ public struct ExtensionMutationCenter: Sendable {
                 forKey: selected == .claude
                     ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled)
         }
-        if entry.id == "system", !enabled {
+        if entry.id == "keepAwake", !enabled {
             environment.defaults.set(false, forKey: AppStorageKeys.General.preventSleep)
         }
     }

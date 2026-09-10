@@ -52,10 +52,58 @@ private func descendantViews(of view: NSView) -> [NSView] {
     @Test func loadingSkeletonsRender() {
         #expect(renders(MachineOverviewSkeleton(dark: true)))
         #expect(renders(FleetHomeSkeleton(dark: true)))
+        #expect(renders(MusicLibrarySkeleton(grid: false)))
+        #expect(renders(MusicLibrarySkeleton(grid: true)))
         #expect(renders(ListRowsSkeleton(rows: 4, dark: true)))
         #expect(renders(FinderSkeleton(mode: .list, dark: true)))
         #expect(renders(FinderSkeleton(mode: .icon, dark: true)))
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
+    }
+
+    @Test func pluginTargetsSkeletonRendersInBothAppearances() throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    SkillTargetsSkeleton()
+                        .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .background(scheme == .dark ? Color.black : Color.white)
+                        .environment(\.colorScheme, scheme),
+                    width: 600, height: 240))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent(
+                        "plugin-targets-\(scheme == .dark ? "dark" : "light").png"))
+            }
+        }
+    }
+
+    @Test func musicLibrarySkeletonsRenderWithSyntheticEvidence() throws {
+        for grid in [false, true] {
+            let bitmap = try #require(
+                renderedBitmap(
+                    MusicLibrarySkeleton(grid: grid)
+                        .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .background(Color.white)
+                        .environment(\.colorScheme, .light),
+                    width: 900, height: 520))
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                try png.write(
+                    to: output.appendingPathComponent("music-library-\(grid ? "grid" : "list").png")
+                )
+            }
+        }
     }
 
     @Test func everyAppMaintenanceSkeletonRenders() {

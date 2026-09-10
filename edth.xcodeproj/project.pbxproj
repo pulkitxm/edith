@@ -298,7 +298,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nDEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app\"\nrm -rf \"$DEST\"\nmkdir -p \"$(dirname \"$DEST\")\"\nditto \"${BUILT_PRODUCTS_DIR}/EdithHelper.app\" \"$DEST\"\nmv \"$DEST/Contents/MacOS/EdithHelper\" \"$DEST/Contents/MacOS/Edith\"\n/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' \"$DEST/Contents/Info.plist\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$DEST\"\n";
+			shellScript = "set -euo pipefail\nDEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app\"\nrm -rf \"$DEST\"\nmkdir -p \"$(dirname \"$DEST\")\"\nditto \"${BUILT_PRODUCTS_DIR}/EdithHelper.app\" \"$DEST\"\nmv \"$DEST/Contents/MacOS/EdithHelper\" \"$DEST/Contents/MacOS/Edith\"\n/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' \"$DEST/Contents/Info.plist\"\ndot_clean -m \"$DEST\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

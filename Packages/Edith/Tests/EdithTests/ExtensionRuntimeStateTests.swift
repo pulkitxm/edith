@@ -254,6 +254,7 @@ import Testing
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
             ("seoAudit", "SEOAuditRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
+            ("keepAwake", "KeepAwakeRows", "enabled", "ExtensionsPane.swift"),
             ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
             ("database", "DatabaseRows", "enabled", "ExtensionsPane.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
