@@ -27,14 +27,6 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticViewActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
-    @State private var documentPresentation = DatabaseDocumentPresentation.tree
-    @State private var emptyColumns = DatabaseColumnsModel()
-    private var columns: DatabaseColumnsModel { tabs.selected?.columns ?? emptyColumns }
-    private var workbenchMode: DatabaseWorkbenchMode {
-        get { tabs.selected?.mode ?? .browse }
-        nonmutating set { tabs.selected?.mode = newValue }
-    }
-
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
@@ -58,11 +50,6 @@ struct DatabaseWorkbenchView: View {
             guard automaticViewActionsEnabled else { return }
             tabs.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
-            if let connection = connections.selectedConnection {
-                synchronizeColumns(connection)
-            } else {
-                columns.clear()
-            }
         }
     }
 
@@ -146,20 +133,25 @@ struct DatabaseWorkbenchView: View {
     private func activeRegion(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
             tableTabBar
-            Group {
-                if workbenchMode == .browse {
-                    dataRegion(connection)
-                } else {
-                    queryRegion(connection)
+            ZStack {
+                if tabs.tabs.isEmpty {
+                    DatabaseWorkbenchTabView(
+                        connections: connections, explorer: explorer, mutations: mutations,
+                        connection: connection, tab: nil, data: tabs.data, isActive: true)
+                }
+                ForEach(tabs.tabs) { tab in
+                    DatabaseWorkbenchTabView(
+                        connections: connections, explorer: explorer, mutations: mutations,
+                        connection: connection, tab: tab, data: tab.data,
+                        isActive: tabs.selectedID == tab.id
+                    )
+                    .opacity(tabs.selectedID == tab.id ? 1 : 0)
+                    .allowsHitTesting(tabs.selectedID == tab.id)
+                    .accessibilityHidden(tabs.selectedID != tab.id)
+                    .disabled(tabs.selectedID != tab.id)
                 }
             }
-            .id(tabs.selectedID)
-        }
-        .onChange(of: data.fields, initial: true) { _, _ in
-            synchronizeColumns(connection)
-        }
-        .onChange(of: data.selectedObject) { _, _ in
-            synchronizeColumns(connection)
+            .transaction { $0.animation = nil }
         }
     }
 
@@ -208,237 +200,6 @@ struct DatabaseWorkbenchView: View {
         }
         .frame(height: UIScale.pt(42))
         .background(palette.panel)
-    }
-
-    private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
-        VStack(spacing: 0) {
-            controls(connection)
-            results(connection)
-        }
-
-    }
-
-    private func controls(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(8)) {
-            modePicker(connection)
-            if !compact {
-                commandSeparator
-                objectControls(connection)
-            }
-            Spacer(minLength: UIScale.pt(6))
-            connectionActions(connection)
-        }
-        .padding(.horizontal, UIScale.pt(10))
-        .frame(height: UIScale.pt(44))
-        .background(palette.panel)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(palette.line.opacity(0.72))
-                .frame(height: 1)
-        }
-    }
-
-    private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
-        VStack(spacing: 0) {
-            queryControls(connection)
-            Divider().opacity(0.35)
-            results(connection)
-        }
-    }
-
-    private func queryControls(_ connection: DatabaseConnectionSummary) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
-            HStack(spacing: UIScale.pt(9)) {
-                modePicker(connection)
-                if !compact {
-                    Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
-                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if connection.product == .elasticsearch || connection.product == .openSearch {
-                    Picker("Query operation", selection: searchQueryOperationBinding(connection)) {
-                        ForEach(DatabaseSearchQueryOperation.allCases, id: \.self) { operation in
-                            Text(operation.title).tag(operation)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
-                Text("Read only")
-                    .font(.system(size: UIScale.pt(10), weight: .medium))
-                    .foregroundStyle(palette.inkFaint)
-                Button("Run") {
-                    data.runQuery(connection)
-                }
-                .buttonStyle(.edith(.primary, tint: theme))
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(
-                    data.isLoading
-                        || data.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || explorer.selectedObject == nil)
-            }
-            TextEditor(text: queryTextBinding)
-                .disabled(data.isLoading)
-                .font(.system(size: UIScale.pt(11.5), design: .monospaced))
-                .foregroundStyle(palette.ink)
-                .scrollContentBackground(.hidden)
-                .padding(UIScale.pt(7))
-                .frame(minHeight: UIScale.pt(86), maxHeight: UIScale.pt(150))
-                .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(8))
-                        .stroke(palette.line, lineWidth: 1)
-                }
-        }
-        .padding(UIScale.pt(10))
-        .background(palette.canvas)
-    }
-
-    private func modePicker(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(2)) {
-            ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { mode in
-                Button {
-                    workbenchModeBinding(connection).wrappedValue = mode
-                } label: {
-                    Text(mode.title)
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .foregroundStyle(
-                            workbenchMode == mode ? palette.ink : palette.inkSoft
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: UIScale.pt(24))
-                        .background(
-                            workbenchMode == mode
-                                ? palette.ink.opacity(dark ? 0.14 : 0.075) : .clear,
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
-                }
-                .buttonStyle(.edith(.borderless))
-                .accessibilityAddTraits(workbenchMode == mode ? .isSelected : [])
-            }
-        }
-        .padding(UIScale.pt(2))
-        .frame(width: UIScale.pt(118))
-        .background(palette.canvas.opacity(0.76), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(7))
-                .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Workspace mode")
-    }
-
-    private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(6)) {
-            connectionPolicy(connection)
-            Button {
-                data.browse(connection)
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(
-                DatabaseCommandButtonStyle(
-                    kind: .utility, dark: dark, palette: palette)
-            )
-            .disabled(data.isLoading || explorer.selectedObject == nil)
-            .help("Refresh data")
-            .accessibilityLabel("Refresh selected object")
-            if canInsertData(connection) {
-                Button {
-                    data.beginInsert(connection)
-                } label: {
-                    Label(newItemTitle(connection), systemImage: "plus")
-                }
-                .buttonStyle(
-                    DatabaseCommandButtonStyle(
-                        kind: .primary, dark: dark, palette: palette)
-                )
-                .disabled(
-                    (data.fields.isEmpty && !usesDocumentEditor(connection))
-                        || mutations.hasTrackedMutation
-                )
-                .help(newItemHelp(connection))
-            }
-            Menu {
-                Button {
-                    data.cancel()
-                    Task { await connections.disconnectSelected() }
-                } label: {
-                    Label("Disconnect", systemImage: "power")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
-                    .foregroundStyle(palette.inkSoft)
-                    .background(
-                        palette.canvas.opacity(0.72),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(7))
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: UIScale.pt(7))
-                            .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
-                    }
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More database actions")
-            .accessibilityLabel("More database actions")
-        }
-    }
-
-    @ViewBuilder
-    private func connectionPolicy(_ connection: DatabaseConnectionSummary) -> some View {
-        if connection.environmentKind == .production {
-            Label("Production", systemImage: "exclamationmark.shield.fill")
-                .font(.system(size: UIScale.pt(10), weight: .medium))
-                .foregroundStyle(DashSkin.warn)
-                .help("Production connection")
-                .accessibilityLabel("Production connection")
-        } else if connection.readOnlyPolicy != .disabled {
-            Label("Read only", systemImage: "lock.fill")
-                .font(.system(size: UIScale.pt(10), weight: .medium))
-                .foregroundStyle(palette.inkFaint)
-                .help("Read-only connection")
-                .accessibilityLabel("Read-only connection")
-        } else if !hasAnyDataMutation(connection) {
-            Label("Browse only", systemImage: "eye")
-                .font(.system(size: UIScale.pt(10), weight: .medium))
-                .foregroundStyle(palette.inkFaint)
-                .help(mutationUnavailableHelp(connection))
-                .accessibilityLabel("Browse-only connection")
-        }
-    }
-
-    private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
-            Image(systemName: selectedObjectSymbol)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(theme)
-                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
-                .background(theme.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(selectedObjectTitle)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                    .lineLimit(1)
-                if let selected = explorer.selectedObject, selected.path.count > 1 {
-                    Text(selected.path.dropLast().joined(separator: " / "))
-                        .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(palette.inkFaint)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .frame(maxWidth: UIScale.pt(220), alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var commandSeparator: some View {
-        Rectangle()
-            .fill(palette.line.opacity(0.72))
-            .frame(width: 1, height: UIScale.pt(18))
     }
 
     private func compactObjectPicker(_ connection: DatabaseConnectionSummary) -> some View {
@@ -540,6 +301,343 @@ struct DatabaseWorkbenchView: View {
                 explorer.loadGroup(group.identifier, connection: connection)
             }
         }
+    }
+
+    private func emptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        VStack(spacing: UIScale.pt(11)) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(32), weight: .light))
+                .foregroundStyle(.secondary)
+            Text(title).font(.system(size: UIScale.pt(17), weight: .semibold))
+            Text(detail)
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: UIScale.pt(410))
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.edith(.primary, tint: theme))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(UIScale.pt(26))
+    }
+
+    private func openObject(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        tabs.open(object, connection: connection)
+        explorer.select(object)
+    }
+
+    private var selectedObjectTitle: String {
+        explorer.selectedObject?.path.last ?? "Select an object"
+    }
+
+    private var selectedObjectContext: String? {
+        guard let selected = explorer.selectedObject, selected.path.count > 1 else { return nil }
+        return selected.path.dropLast().joined(separator: " / ")
+    }
+
+    private var selectedObjectSymbol: String {
+        switch explorer.selectedObject?.kind {
+        case .table: "tablecells"
+        case .view, .materializedView: "rectangle.stack"
+        case .index: "list.bullet.rectangle"
+        case .collection: "doc.on.doc"
+        case .keyspace: "key.horizontal"
+        default: "sidebar.left"
+        }
+    }
+
+    private func productSymbol(_ product: DatabaseProduct) -> String {
+        switch product.family {
+        case .relational: "tablecells"
+        case .keyValue: "key.horizontal"
+        case .document: "doc.text"
+        case .search: "magnifyingglass"
+        case .analytical: "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct DatabaseWorkbenchTabView: View {
+    let connections: DatabaseConnectionWorkspaceModel
+    let explorer: DatabaseObjectExplorerModel
+    let mutations: DatabaseWorkspaceModel
+    let connection: DatabaseConnectionSummary
+    let tab: DatabaseTableTab?
+    let data: DatabaseDataWorkspaceModel
+    let isActive: Bool
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+    @State private var documentPresentation = DatabaseDocumentPresentation.tree
+    @State private var emptyColumns = DatabaseColumnsModel()
+    private var columns: DatabaseColumnsModel { tab?.columns ?? emptyColumns }
+    private var workbenchMode: DatabaseWorkbenchMode {
+        get { tab?.mode ?? .browse }
+        nonmutating set { tab?.mode = newValue }
+    }
+    private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
+    }
+    private var theme: Color { palette.accent }
+
+    var body: some View {
+        Group {
+            if workbenchMode == .browse {
+                dataRegion(connection)
+            } else {
+                queryRegion(connection)
+            }
+        }
+        .onChange(of: data.fields, initial: true) { _, _ in
+            synchronizeColumns(connection)
+        }
+        .onChange(of: data.selectedObject) { _, _ in
+            synchronizeColumns(connection)
+        }
+    }
+
+    private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: 0) {
+            controls(connection)
+            results(connection)
+        }
+
+    }
+
+    private func controls(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            modePicker(connection)
+            if !compact {
+                commandSeparator
+                objectControls(connection)
+            }
+            Spacer(minLength: UIScale.pt(6))
+            connectionActions(connection)
+        }
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(height: UIScale.pt(44))
+        .background(palette.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.line.opacity(0.72))
+                .frame(height: 1)
+        }
+    }
+
+    private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: 0) {
+            queryControls(connection)
+            Divider().opacity(0.35)
+            results(connection)
+        }
+    }
+
+    private func queryControls(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            HStack(spacing: UIScale.pt(9)) {
+                modePicker(connection)
+                if !compact {
+                    Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if connection.product == .elasticsearch || connection.product == .openSearch {
+                    Picker("Query operation", selection: searchQueryOperationBinding(connection)) {
+                        ForEach(DatabaseSearchQueryOperation.allCases, id: \.self) { operation in
+                            Text(operation.title).tag(operation)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                Text("Read only")
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(palette.inkFaint)
+                Button("Run") {
+                    data.runQuery(connection)
+                }
+                .buttonStyle(.edith(.primary, tint: theme))
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(
+                    data.isLoading
+                        || data.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || data.selectedObject == nil)
+            }
+            TextEditor(text: queryTextBinding)
+                .disabled(data.isLoading)
+                .font(.system(size: UIScale.pt(11.5), design: .monospaced))
+                .foregroundStyle(palette.ink)
+                .scrollContentBackground(.hidden)
+                .padding(UIScale.pt(7))
+                .frame(minHeight: UIScale.pt(86), maxHeight: UIScale.pt(150))
+                .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        .stroke(palette.line, lineWidth: 1)
+                }
+        }
+        .padding(UIScale.pt(10))
+        .background(palette.canvas)
+    }
+
+    private func modePicker(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(2)) {
+            ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { mode in
+                Button {
+                    workbenchModeBinding(connection).wrappedValue = mode
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .foregroundStyle(
+                            workbenchMode == mode ? palette.ink : palette.inkSoft
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: UIScale.pt(24))
+                        .background(
+                            workbenchMode == mode
+                                ? palette.ink.opacity(dark ? 0.14 : 0.075) : .clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
+                }
+                .buttonStyle(.edith(.borderless))
+                .accessibilityAddTraits(workbenchMode == mode ? .isSelected : [])
+            }
+        }
+        .padding(UIScale.pt(2))
+        .frame(width: UIScale.pt(118))
+        .background(palette.canvas.opacity(0.76), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Workspace mode")
+    }
+
+    private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(6)) {
+            connectionPolicy(connection)
+            Button {
+                data.browse(connection)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(
+                DatabaseCommandButtonStyle(
+                    kind: .utility, dark: dark, palette: palette)
+            )
+            .disabled(data.isLoading || data.selectedObject == nil)
+            .help("Refresh data")
+            .accessibilityLabel("Refresh selected object")
+            if canInsertData(connection) {
+                Button {
+                    data.beginInsert(connection)
+                } label: {
+                    Label(newItemTitle(connection), systemImage: "plus")
+                }
+                .buttonStyle(
+                    DatabaseCommandButtonStyle(
+                        kind: .primary, dark: dark, palette: palette)
+                )
+                .disabled(
+                    (data.fields.isEmpty && !usesDocumentEditor(connection))
+                        || mutations.hasTrackedMutation
+                )
+                .help(newItemHelp(connection))
+            }
+            Menu {
+                Button {
+                    data.cancel()
+                    Task { await connections.disconnectSelected() }
+                } label: {
+                    Label("Disconnect", systemImage: "power")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+                    .foregroundStyle(palette.inkSoft)
+                    .background(
+                        palette.canvas.opacity(0.72),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(7))
+                            .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+                    }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More database actions")
+            .accessibilityLabel("More database actions")
+        }
+    }
+
+    @ViewBuilder
+    private func connectionPolicy(_ connection: DatabaseConnectionSummary) -> some View {
+        if connection.environmentKind == .production {
+            Label("Production", systemImage: "exclamationmark.shield.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(DashSkin.warn)
+                .help("Production connection")
+                .accessibilityLabel("Production connection")
+        } else if connection.readOnlyPolicy != .disabled {
+            Label("Read only", systemImage: "lock.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
+                .help("Read-only connection")
+                .accessibilityLabel("Read-only connection")
+        } else if !hasAnyDataMutation(connection) {
+            Label("Browse only", systemImage: "eye")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
+                .help(mutationUnavailableHelp(connection))
+                .accessibilityLabel("Browse-only connection")
+        }
+    }
+
+    private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(7)) {
+            Image(systemName: selectedObjectSymbol)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(theme)
+                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                .background(theme.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                Text(selectedObjectTitle)
+                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                if let selected = data.selectedObject, selected.path.count > 1 {
+                    Text(selected.path.dropLast().joined(separator: " / "))
+                        .font(.system(size: UIScale.pt(9.5)))
+                        .foregroundStyle(palette.inkFaint)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: UIScale.pt(220), alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var commandSeparator: some View {
+        Rectangle()
+            .fill(palette.line.opacity(0.72))
+            .frame(width: 1, height: UIScale.pt(18))
     }
 
     @ViewBuilder
@@ -766,8 +864,12 @@ struct DatabaseWorkbenchView: View {
                 resizeColumn: { field, width in
                     columns.setWidth(width, for: field)
                 },
-                scrollOffset: tabs.selected?.scrollOffset ?? .zero,
-                saveScrollOffset: { [tab = tabs.selected] point in
+                contentRevision: data.recordsRevision,
+                editingEnabled: workbenchMode == .browse && canUpdateData(connection)
+                    && !mutations.hasTrackedMutation,
+                isActive: isActive,
+                scrollOffset: tab?.scrollOffset ?? .zero,
+                saveScrollOffset: { [tab] point in
                     tab?.scrollOffset = point
                 }
             )
@@ -1279,14 +1381,6 @@ struct DatabaseWorkbenchView: View {
             })
     }
 
-    private func openObject(
-        _ object: DatabaseObjectIdentifier,
-        connection: DatabaseConnectionSummary
-    ) {
-        tabs.open(object, connection: connection)
-        explorer.select(object)
-    }
-
     private func editorTextBinding(_ id: String) -> Binding<String> {
         Binding(
             get: { data.editorFields.first(where: { $0.id == id })?.text ?? "" },
@@ -1424,7 +1518,7 @@ struct DatabaseWorkbenchView: View {
     private func selectedObjectAllowsMutation(
         _ connection: DatabaseConnectionSummary
     ) -> Bool {
-        guard let kind = explorer.selectedObject?.kind else { return false }
+        guard let kind = data.selectedObject?.kind else { return false }
         return switch connection.product.family {
         case .relational, .analytical: kind == .table
         case .keyValue: kind == .keyspace
@@ -1488,16 +1582,16 @@ struct DatabaseWorkbenchView: View {
     }
 
     private var selectedObjectTitle: String {
-        explorer.selectedObject?.path.last ?? "Select an object"
+        data.selectedObject?.path.last ?? "Select an object"
     }
 
     private var selectedObjectContext: String? {
-        guard let selected = explorer.selectedObject, selected.path.count > 1 else { return nil }
+        guard let selected = data.selectedObject, selected.path.count > 1 else { return nil }
         return selected.path.dropLast().joined(separator: " / ")
     }
 
     private var selectedObjectSymbol: String {
-        switch explorer.selectedObject?.kind {
+        switch data.selectedObject?.kind {
         case .table: "tablecells"
         case .view, .materializedView: "rectangle.stack"
         case .index: "list.bullet.rectangle"

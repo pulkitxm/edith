@@ -24,6 +24,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let edit: (Int, String, String) -> Void
     let sort: (String, Bool) -> Void
     let resizeColumn: (DatabaseFieldPath, CGFloat) -> Void
+    var contentRevision: Int? = nil
+    var editingEnabled = false
+    var isActive = true
     var scrollOffset = CGPoint.zero
     var saveScrollOffset: (CGPoint) -> Void = { _ in }
 
@@ -67,16 +70,22 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.isUpdating = true
+        let reload = context.coordinator.needsReload(self)
         context.coordinator.parent = self
         let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
         context.coordinator.applyColumnWidths()
-        context.coordinator.tableView?.reloadData()
+        if reload {
+            context.coordinator.tableView?.reloadData()
+            context.coordinator.hasLoadedData = true
+        }
         context.coordinator.reloadSelection()
-        scrollView.layoutSubtreeIfNeeded()
-        scrollView.contentView.scroll(to: scrollOffset)
-        scrollView.reflectScrolledClipView(scrollView.contentView)
+        if reload || scrollView.contentView.bounds.origin != scrollOffset {
+            scrollView.layoutSubtreeIfNeeded()
+            scrollView.contentView.scroll(to: scrollOffset)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
         context.coordinator.isUpdating = false
         if continuationChanged {
             let coordinator = context.coordinator
@@ -97,6 +106,18 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     {
         var parent: DatabaseNativeTableView
         var isUpdating = false
+        var hasLoadedData = false
+
+        func needsReload(_ next: DatabaseNativeTableView) -> Bool {
+            let recordsChanged =
+                next.contentRevision.map { $0 != parent.contentRevision }
+                ?? (next.records != parent.records)
+            return !hasLoadedData || recordsChanged || next.fields != parent.fields
+                || next.editingEnabled != parent.editingEnabled
+                || next.accent != parent.accent || next.background != parent.background
+                || next.ink != parent.ink || next.inkFaint != parent.inkFaint
+        }
+
         weak var tableView: NSTableView?
         private var fieldNames: [String] = []
         private var applyingSelection = false
@@ -157,7 +178,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         func loadMoreIfNeeded() {
-            guard let tableView else { return }
+            guard parent.isActive, let tableView else { return }
             guard
                 paginationGate.shouldLoadMore(
                     continuation: parent.nextContinuation,

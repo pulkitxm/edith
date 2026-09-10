@@ -152,7 +152,10 @@ final class DatabaseDataWorkspaceModel {
     private(set) var orderedSorts: [DatabaseWorkspaceSort] = []
     private(set) var state = DatabaseDataWorkspaceState.idle
     private(set) var resultMode = DatabaseDataResultMode.browse
-    private(set) var records: [DatabaseRecord] = []
+    private(set) var recordsRevision = 0
+    private(set) var records: [DatabaseRecord] = [] {
+        didSet { recordsRevision &+= 1 }
+    }
     private(set) var fields: [DatabaseFieldDescriptor] = []
     private(set) var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?

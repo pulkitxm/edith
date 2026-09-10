@@ -34,6 +34,80 @@ struct DatabaseWorkbenchRenderTests {
         }
     }
 
+    @Test func switchingLargeResultTabsRetainsNativeTablesAndScroll() async throws {
+        let fixture = try await Self.fixture(recordCount: 10_000)
+        let connection = try #require(fixture.connections.selectedConnection)
+        let firstTab = try #require(fixture.tabs.selected)
+        let host = NSHostingView(
+            rootView: DatabaseWorkbenchView(
+                connections: fixture.connections, explorer: fixture.explorer,
+                tabs: fixture.tabs, mutations: fixture.mutations
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = NSRect(x: 0, y: 0, width: 1180, height: 760)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+            host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+        }
+        func tables(_ view: NSView) -> [NSTableView] {
+            if let table = view as? NSTableView, table.accessibilityLabel() == "Database records" {
+                return [table]
+            }
+            return view.subviews.flatMap { tables($0) }
+        }
+        settle()
+        let first = try #require(tables(host).first)
+        let scroll = try #require(first.enclosingScrollView)
+        scroll.contentView.scroll(to: CGPoint(x: 120, y: 600))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        settle()
+        let offset = scroll.contentView.bounds.origin
+        #expect(offset.y == 600)
+        let cell = try #require(first.view(atColumn: 1, row: 25, makeIfNecessary: false))
+        let secondObject = DatabaseObjectIdentifier(
+            kind: .table, path: ["public", "archived_orders"])
+        fixture.tabs.open(secondObject, connection: connection)
+        fixture.explorer.select(secondObject)
+        await Self.waitUntil { fixture.tabs.data.state == .loaded }
+        settle()
+        let secondTab = try #require(fixture.tabs.selected)
+        let second = try #require(tables(host).first { $0 !== first })
+        let identities = Set(tables(host).map(ObjectIdentifier.init))
+        #expect(identities.count == 2)
+        var durations: [Double] = []
+        for index in 0..<20 {
+            let tab = index.isMultiple(of: 2) ? firstTab : secondTab
+            let started = ContinuousClock.now
+            fixture.tabs.select(tab.id)
+            fixture.explorer.select(tab.object)
+            settle()
+            durations.append(Double(started.duration(to: .now).components.attoseconds) / 1e15)
+            #expect(Set(tables(host).map(ObjectIdentifier.init)) == identities)
+            #expect(first.enclosingScrollView?.contentView.bounds.origin == offset)
+            #expect(first.view(atColumn: 1, row: 25, makeIfNecessary: false) === cell)
+            #expect(tab.data.records.count == 10_000)
+            #expect(tab.data.state == .loaded)
+        }
+        for table in [first, second] {
+            #expect(table.numberOfRows == 10_000)
+            #expect(table.subviews.filter { $0 is NSTableRowView }.count < 100)
+        }
+        let sorted = durations.sorted()
+        print(
+            "tab switching with 10,000 rows per tab: median \(sorted[10]) ms, p95 \(sorted[18]) ms, including a 20 ms UI settle"
+        )
+        fixture.tabs.close(secondTab.id)
+        settle()
+        #expect(tables(host).count == 1)
+        #expect(tables(host).first === first)
+    }
+
     @Test(
         .enabled(if: ProcessInfo.processInfo.environment["EDITH_DATABASE_RELATION_FILTERS"] == "1"))
     func relatedFiltersAndTableTabsRenderWithLiveSyntheticData() async throws {
@@ -170,7 +244,9 @@ struct DatabaseWorkbenchRenderTests {
         await sender.disconnect()
     }
 
-    private static func fixture() async throws -> DatabaseWorkbenchRenderFixture {
+    private static func fixture(recordCount: Int = 12) async throws
+        -> DatabaseWorkbenchRenderFixture
+    {
         let definition = try connection()
         let report = capabilityReport()
         let connectionSender = DatabaseWorkbenchScriptedSender(responses: [
@@ -195,7 +271,9 @@ struct DatabaseWorkbenchRenderTests {
         await waitUntil { explorer.selectedObject != nil }
         let object = try #require(explorer.selectedObject)
 
-        let dataSender = DatabaseWorkbenchScriptedSender(responses: [dataResponse()])
+        let dataSender = DatabaseWorkbenchScriptedSender(responses: [
+            dataResponse(count: recordCount), dataResponse(count: recordCount),
+        ])
         let data = DatabaseDataWorkspaceModel(sender: dataSender, announcement: { _ in })
         data.prepare(for: connection)
         data.open(object, connection: connection)
@@ -206,7 +284,11 @@ struct DatabaseWorkbenchRenderTests {
         data.setSort(field: "id", direction: .ascending, additive: true)
         data.selectRecord(at: 1)
 
-        let tabs = DatabaseTableTabsModel(data: data)
+        let tabs = DatabaseTableTabsModel(
+            data: data,
+            makeData: {
+                DatabaseDataWorkspaceModel(sender: dataSender, announcement: { _ in })
+            })
         tabs.prepare(for: connection)
         tabs.open(object, connection: connection)
         return DatabaseWorkbenchRenderFixture(
@@ -330,15 +412,16 @@ struct DatabaseWorkbenchRenderTests {
         return browseResponse(page)
     }
 
-    private static func dataResponse() -> DatabaseBrokerCommandResponse {
+    private static func dataResponse(count: Int = 12) -> DatabaseBrokerCommandResponse {
         let names = [
             "Ada Lovelace", "Grace Hopper", "Margaret Hamilton", "Barbara Liskov",
             "Radia Perlman", "Annie Easley", "Mary Jackson", "Karen Spärck Jones",
             "Frances Allen", "Evelyn Boyd Granville", "Jean Sammet", "Adele Goldberg",
         ]
-        let records = names.enumerated().map { index, name in
+        let records = (0..<count).map { index in
+            let name = names[index % names.count]
             let identifier = Int64(1_024 + index)
-            let day = String(format: "%02d", 18 + index)
+            let day = String(format: "%02d", 18 + index % names.count)
             return DatabaseRecord(
                 identity: DatabaseRecordIdentity(
                     kind: .primaryKey,
