@@ -229,6 +229,8 @@ find "$APP" -type f -perm -u+x -print0 \
       esac
     done
 
+find "$APP" -type f -name '._*' -delete
+
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
   echo "         changes every build, so macOS TCC permission grants (Screen" >&2
@@ -238,6 +240,7 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
 fi
 
 sign() {
+  find "$APP" -type f -name '._*' -delete
   local identifier
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
   if [ -n "$TEAM_ID" ]; then
@@ -247,10 +250,13 @@ sign() {
   else
     codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
   fi
+  find "$APP" -type f -name '._*' -delete
 }
 
 sign_tool() {
+  find "$APP" -type f -name '._*' -delete
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
+  find "$APP" -type f -name '._*' -delete
 }
 
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \

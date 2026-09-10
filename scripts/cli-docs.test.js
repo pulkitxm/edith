@@ -6,6 +6,7 @@ const root = "docs/cli";
 
 const markdownFiles = (directory) =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name.startsWith("._")) return [];
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return markdownFiles(path);
     return entry.name.endsWith(".md") ? [path] : [];
