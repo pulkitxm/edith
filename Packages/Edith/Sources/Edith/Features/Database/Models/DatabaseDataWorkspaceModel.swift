@@ -1317,11 +1317,11 @@ final class DatabaseDataWorkspaceModel {
                 throw DatabaseDataWorkspaceInputError.invalidFilter(
                     "Choose a declared enum value for the \(fieldName) filter.")
             }
-            return valueTexts.map(DatabaseValue.string)
         }
         do {
             return try valueTexts.map {
-                try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
+                if descriptor?.enumValues != nil { return DatabaseValue.string($0) }
+                return try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
             }
         } catch {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
