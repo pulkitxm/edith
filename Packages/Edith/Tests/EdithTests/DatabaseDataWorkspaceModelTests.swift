@@ -1364,6 +1364,127 @@ struct DatabaseDataWorkspaceModelTests {
         return (request, connection)
     }
 
+    @Test func tableTabsRetainIndependentStateAndReopenCleanly() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+            Self.response(records: [Self.record(3)]),
+        ])
+        let connection = try Self.connection(product: .postgresql)
+        let firstObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        let secondObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"])
+        let initial = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let tabs = DatabaseTableTabsModel(
+            data: initial,
+            makeData: {
+                DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+            })
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let first = try #require(tabs.selected)
+        first.data.addFilterClause(
+            field: "organization.slug", operation: .equal, valueText: "sample")
+        first.data.setSort(field: "id", direction: .descending, additive: false)
+        first.data.selectRecord(at: 0)
+        first.data.queryText = "SELECT 'saved draft'"
+        first.scrollOffset = CGPoint(x: 120, y: 450)
+        first.mode = .query
+
+        tabs.open(secondObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let second = try #require(tabs.selected)
+        #expect(second.id != first.id)
+        #expect(second.data.filterClauses.isEmpty)
+        #expect(second.data.orderedSorts.isEmpty)
+        #expect(second.scrollOffset == .zero)
+        #expect(second.mode == .browse)
+
+        tabs.open(firstObject, connection: connection)
+        #expect(tabs.tabs.count == 2)
+        #expect(tabs.selected === first)
+        #expect(tabs.data.filterClauses.first?.field == "organization.slug")
+        #expect(tabs.data.records == [Self.record(1)])
+        #expect(tabs.data.selectedRecordIndex == 0)
+        #expect(tabs.data.queryText == "SELECT 'saved draft'")
+        #expect(first.scrollOffset == CGPoint(x: 120, y: 450))
+        #expect(first.mode == .query)
+        #expect(await sender.recordedRequests().count == 2)
+
+        tabs.close(first.id)
+        #expect(tabs.selected === second)
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.filterClauses.isEmpty)
+        tabs.prepare(for: nil)
+        #expect(tabs.tabs.isEmpty)
+        #expect(tabs.data.records.isEmpty)
+    }
+
+    @Test func changingTablesClearsFiltersAndSorts() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"]),
+            connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "slug", valueText: "sample")
+        model.setSort(field: "slug", direction: .ascending, additive: false)
+        model.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "member"]),
+            connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        let request = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(request.page.filter == nil)
+        #expect(request.page.sorts.isEmpty)
+    }
+
+    @Test func queryModeUsesCurrentBrowseSQLAndRefreshesChangedFilters() async throws {
+        func response(_ query: String) -> DatabaseBrokerCommandResponse {
+            .browse(
+                .success(
+                    DatabaseBrowseResult(
+                        page: DatabasePage(
+                            records: [Self.record(1)],
+                            metadata: DatabasePageMetadata(
+                                completeness: .init(state: .complete),
+                                count: .init(value: 1, accuracy: .exact), browseQuery: query))),
+                    metadata: .init(completeness: .init(state: .complete))))
+        }
+        let firstSQL = "SELECT id FROM public.member ORDER BY id LIMIT 100"
+        let filteredSQL =
+            "SELECT id FROM public.member WHERE organization.slug = 'sample' ORDER BY id DESC LIMIT 100"
+        let sender = DatabaseDataScriptedSender(responses: [
+            response(firstSQL), response(filteredSQL),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        let object = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        model.prepare(for: connection)
+        model.open(object, connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.prepareQuery(object, connection: connection)
+        #expect(model.queryText == firstSQL)
+        #expect(await sender.recordedRequests().count == 1)
+        model.addFilterClause(field: "organization.slug", operation: .equal, valueText: "sample")
+        model.setSort(field: "id", direction: .descending, additive: false)
+        model.prepareQuery(object, connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        #expect(model.queryText == filteredSQL)
+        let request = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(
+            request.page.filter
+                == .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath(["organization", "slug"]), operation: .equal,
+                        values: [.string("sample")])))
+        #expect(request.page.sorts.first?.direction == .descending)
+    }
+
     private static func connection(
         id: DatabaseConnectionID = DatabaseConnectionID(
             rawValue: UUID(uuidString: "86DFA58A-C6A6-498C-AE13-C66BB49CF891")!),

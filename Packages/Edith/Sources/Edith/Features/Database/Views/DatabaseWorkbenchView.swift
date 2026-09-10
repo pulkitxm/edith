@@ -15,31 +15,25 @@ private enum DatabaseDocumentPresentation: CaseIterable {
     }
 }
 
-private enum DatabaseWorkbenchMode: String, CaseIterable {
-    case browse
-    case query
-
-    var title: String {
-        switch self {
-        case .browse: "Browse"
-        case .query: "Query"
-        }
-    }
-}
-
 struct DatabaseWorkbenchView: View {
     let connections: DatabaseConnectionWorkspaceModel
     let explorer: DatabaseObjectExplorerModel
-    let data: DatabaseDataWorkspaceModel
+    let tabs: DatabaseTableTabsModel
+    private var data: DatabaseDataWorkspaceModel { tabs.data }
     let mutations: DatabaseWorkspaceModel
     var showsObjectNavigator = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
+    @Environment(\.automaticViewActionsEnabled) private var automaticViewActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @State private var documentPresentation = DatabaseDocumentPresentation.tree
-    @State private var workbenchMode = DatabaseWorkbenchMode.browse
-    @State private var columns = DatabaseColumnsModel()
+    @State private var emptyColumns = DatabaseColumnsModel()
+    private var columns: DatabaseColumnsModel { tabs.selected?.columns ?? emptyColumns }
+    private var workbenchMode: DatabaseWorkbenchMode {
+        get { tabs.selected?.mode ?? .browse }
+        nonmutating set { tabs.selected?.mode = newValue }
+    }
 
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
@@ -61,7 +55,8 @@ struct DatabaseWorkbenchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
         .task(id: connections.selectedConnection) {
-            data.prepare(for: connections.selectedConnection)
+            guard automaticViewActionsEnabled else { return }
+            tabs.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
             if let connection = connections.selectedConnection {
                 synchronizeColumns(connection)
@@ -83,7 +78,7 @@ struct DatabaseWorkbenchView: View {
         case .connected:
             workspace(connection)
                 .task(id: connection.id) {
-                    workbenchMode = .browse
+                    guard automaticViewActionsEnabled else { return }
                     explorer.load(connection)
                 }
         case .disconnecting:
@@ -148,13 +143,65 @@ struct DatabaseWorkbenchView: View {
         }
     }
 
-    @ViewBuilder
     private func activeRegion(_ connection: DatabaseConnectionSummary) -> some View {
-        if workbenchMode == .browse {
-            dataRegion(connection)
-        } else {
-            queryRegion(connection)
+        VStack(spacing: 0) {
+            tableTabBar
+            Group {
+                if workbenchMode == .browse {
+                    dataRegion(connection)
+                } else {
+                    queryRegion(connection)
+                }
+            }
+            .id(tabs.selectedID)
         }
+    }
+
+    private var tableTabBar: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(3)) {
+                    ForEach(tabs.tabs) { tab in
+                        HStack(spacing: UIScale.pt(8)) {
+                            Button {
+                                tabs.select(tab.id)
+                                explorer.select(tab.object)
+                            } label: {
+                                Label(tab.object.path.last ?? "Table", systemImage: "tablecells")
+                                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .accessibilityAddTraits(tabs.selectedID == tab.id ? .isSelected : [])
+                            Button {
+                                tabs.close(tab.id)
+                                explorer.select(tabs.selected?.object)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .accessibilityLabel("Close \(tab.object.path.last ?? "table") tab")
+                        }
+                        .foregroundStyle(tabs.selectedID == tab.id ? palette.ink : palette.inkFaint)
+                        .padding(.horizontal, UIScale.pt(10))
+                        .frame(height: UIScale.pt(34))
+                        .background(
+                            tabs.selectedID == tab.id ? palette.canvas : palette.panel,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        )
+                        .help(tab.object.path.joined(separator: "."))
+                        .id(tab.id)
+                    }
+                }
+                .padding(.horizontal, UIScale.pt(6))
+                .padding(.vertical, UIScale.pt(4))
+            }
+            .onChange(of: tabs.selectedID) { _, id in
+                if let id { proxy.scrollTo(id) }
+            }
+        }
+        .frame(height: UIScale.pt(42))
+        .background(palette.panel)
     }
 
     private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
@@ -715,6 +762,10 @@ struct DatabaseWorkbenchView: View {
                 },
                 resizeColumn: { field, width in
                     columns.setWidth(width, for: field)
+                },
+                scrollOffset: tabs.selected?.scrollOffset ?? .zero,
+                saveScrollOffset: { [tab = tabs.selected] point in
+                    tab?.scrollOffset = point
                 }
             )
             .clipped()
@@ -1154,8 +1205,12 @@ struct DatabaseWorkbenchView: View {
             set: { mode in
                 guard workbenchMode != mode else { return }
                 workbenchMode = mode
-                guard let object = explorer.selectedObject else { return }
-                openObject(object, connection: connection)
+                guard let object = data.selectedObject else { return }
+                if mode == .query {
+                    data.prepareQuery(object, connection: connection)
+                } else {
+                    data.open(object, connection: connection)
+                }
             })
     }
 
@@ -1163,11 +1218,8 @@ struct DatabaseWorkbenchView: View {
         _ object: DatabaseObjectIdentifier,
         connection: DatabaseConnectionSummary
     ) {
-        if workbenchMode == .query {
-            data.prepareQuery(object, connection: connection)
-        } else {
-            data.open(object, connection: connection)
-        }
+        tabs.open(object, connection: connection)
+        explorer.select(object)
     }
 
     private func editorTextBinding(_ id: String) -> Binding<String> {

@@ -24,6 +24,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let edit: (Int, String, String) -> Void
     let sort: (String, Bool) -> Void
     let resizeColumn: (DatabaseFieldPath, CGFloat) -> Void
+    var scrollOffset = CGPoint.zero
+    var saveScrollOffset: (CGPoint) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -64,6 +66,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.isUpdating = true
         context.coordinator.parent = self
         let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
@@ -71,6 +74,10 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         context.coordinator.applyColumnWidths()
         context.coordinator.tableView?.reloadData()
         context.coordinator.reloadSelection()
+        scrollView.layoutSubtreeIfNeeded()
+        scrollView.contentView.scroll(to: scrollOffset)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        context.coordinator.isUpdating = false
         if continuationChanged {
             let coordinator = context.coordinator
             Task { @MainActor [weak coordinator] in
@@ -89,6 +96,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         NSTextFieldDelegate
     {
         var parent: DatabaseNativeTableView
+        var isUpdating = false
         weak var tableView: NSTableView?
         private var fieldNames: [String] = []
         private var applyingSelection = false
@@ -136,6 +144,10 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         @objc private func visibleBoundsChanged() {
+            guard !isUpdating else { return }
+            if let origin = tableView?.enclosingScrollView?.contentView.bounds.origin {
+                parent.saveScrollOffset(origin)
+            }
             loadMoreIfNeeded()
         }
 

@@ -1,5 +1,5 @@
 import AppKit
-import EdithDatabase
+@testable import EdithDatabase
 import SwiftUI
 import Testing
 
@@ -22,7 +22,7 @@ struct DatabaseWorkbenchRenderTests {
                         DatabaseWorkbenchView(
                             connections: fixture.connections,
                             explorer: fixture.explorer,
-                            data: fixture.data,
+                            tabs: fixture.tabs,
                             mutations: fixture.mutations),
                         width: width,
                         height: 760,
@@ -32,6 +32,82 @@ struct DatabaseWorkbenchRenderTests {
                 #expect(image.representation(using: .png, properties: [:])?.count ?? 0 > 18_000)
             }
         }
+    }
+
+    @Test(
+        .enabled(if: ProcessInfo.processInfo.environment["EDITH_DATABASE_RELATION_FILTERS"] == "1"))
+    func relatedFiltersAndTableTabsRenderWithLiveSyntheticData() async throws {
+        let definition = try Self.connection()
+        let report = Self.capabilityReport()
+        let connections = DatabaseConnectionWorkspaceModel(
+            sender: DatabaseWorkbenchScriptedSender(responses: [
+                Self.connectionListResponse(definition),
+                Self.connectionResponse(definition, report: report),
+            ]), prepareConnection: { _ in }, announcement: { _ in })
+        await connections.loadConnections()
+        await connections.connectSelected()
+        let connection = try #require(connections.selectedConnection)
+        let member = DatabaseObjectIdentifier(kind: .table, path: ["relation_filters", "member"])
+        let organization = DatabaseObjectIdentifier(
+            kind: .table, path: ["relation_filters", "organization"])
+        let explorer = DatabaseObjectExplorerModel(
+            sender: DatabaseWorkbenchScriptedSender(responses: [
+                Self.schemaResponse(),
+                Self.browseResponse(
+                    DatabasePage(
+                        records: [member, organization].map { object in
+                            DatabaseRecord(fields: [
+                                DatabaseObjectField(
+                                    name: "name", value: .string(object.path.last!)),
+                                DatabaseObjectField(name: "kind", value: .string("table")),
+                                DatabaseObjectField(
+                                    name: "estimatedRows", value: .signedInteger(5)),
+                                DatabaseObjectField(name: "columnCount", value: .signedInteger(3)),
+                            ])
+                        }, metadata: Self.pageMetadata(count: 2))),
+            ]))
+        explorer.load(connection)
+        await Self.waitUntil { explorer.selectedObject != nil }
+        explorer.select(member)
+        let sender = try await DatabaseWorkbenchLiveFixtureSender.make(definition)
+        let tabs = DatabaseTableTabsModel(makeData: {
+            DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        })
+        tabs.open(member, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let memberTab = try #require(tabs.selected)
+        tabs.data.addFilterClause(
+            field: "organization.slug", operation: .equal, valueText: "sample-studio")
+        tabs.data.setSort(field: "id", direction: .descending, additive: false)
+        tabs.data.browse(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.records.count == 2)
+        tabs.open(organization, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.filterClauses.isEmpty)
+        tabs.open(member, connection: connection)
+        #expect(tabs.selected === memberTab)
+        #expect(tabs.data.records.count == 2)
+        let view = DatabaseWorkbenchView(
+            connections: connections, explorer: explorer, tabs: tabs,
+            mutations: DatabaseWorkspaceModel())
+        for mode in [DatabaseWorkbenchMode.browse, .query] {
+            if mode == .query { tabs.data.prepareQuery(member, connection: connection) }
+            tabs.selected?.mode = mode
+            let image = try #require(
+                renderWorkbench(view, width: 1_180, height: 640, scheme: .dark))
+            if let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"] {
+                try FileManager.default.createDirectory(
+                    atPath: directory, withIntermediateDirectories: true)
+                let bytes = try #require(image.representation(using: .png, properties: [:]))
+                try bytes.write(
+                    to: URL(fileURLWithPath: directory).appendingPathComponent(
+                        "\(mode.rawValue).png"))
+            }
+        }
+        #expect(tabs.data.queryText.contains("sample-studio"))
+        #expect(tabs.data.queryText.contains("DESC"))
+        await sender.disconnect()
     }
 
     private static func fixture() async throws -> DatabaseWorkbenchRenderFixture {
@@ -70,10 +146,13 @@ struct DatabaseWorkbenchRenderTests {
         data.setSort(field: "id", direction: .ascending, additive: true)
         data.selectRecord(at: 1)
 
+        let tabs = DatabaseTableTabsModel(data: data)
+        tabs.prepare(for: connection)
+        tabs.open(object, connection: connection)
         return DatabaseWorkbenchRenderFixture(
             connections: connections,
             explorer: explorer,
-            data: data,
+            tabs: tabs,
             mutations: DatabaseWorkspaceModel())
     }
 
@@ -152,11 +231,11 @@ struct DatabaseWorkbenchRenderTests {
                 metadata: completeMetadata))
     }
 
-    private static func schemaResponse() -> DatabaseBrokerCommandResponse {
+    private static func schemaResponse(name: String = "public") -> DatabaseBrokerCommandResponse {
         let page = DatabasePage(
             records: [
                 DatabaseRecord(fields: [
-                    DatabaseObjectField(name: "name", value: .string("public")),
+                    DatabaseObjectField(name: "name", value: .string(name)),
                     DatabaseObjectField(name: "canUse", value: .boolean(true)),
                 ])
             ],
@@ -288,7 +367,7 @@ struct DatabaseWorkbenchRenderTests {
 private struct DatabaseWorkbenchRenderFixture {
     let connections: DatabaseConnectionWorkspaceModel
     let explorer: DatabaseObjectExplorerModel
-    let data: DatabaseDataWorkspaceModel
+    let tabs: DatabaseTableTabsModel
     let mutations: DatabaseWorkspaceModel
 }
 
@@ -334,7 +413,62 @@ private func renderWorkbench(
     host.layoutSubtreeIfNeeded()
     host.displayIfNeeded()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+    func redraw(_ view: NSView) {
+        for child in view.subviews { redraw(child) }
+        view.needsDisplay = true
+        view.displayIfNeeded()
+    }
+    redraw(host)
     guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: image)
     return image
+}
+
+private actor DatabaseWorkbenchLiveFixtureSender: DatabaseBrokerCommandSending {
+    let session: PostgreSQLDatabaseAdapterSession
+
+    init(session: PostgreSQLDatabaseAdapterSession) {
+        self.session = session
+    }
+
+    static func make(_ definition: DatabaseConnectionDefinition) async throws
+        -> DatabaseWorkbenchLiveFixtureSender
+    {
+        let values = ProcessInfo.processInfo.environment
+        let client = try await PostgresNIODatabaseClient.connect(
+            PostgreSQLDatabaseConnectionPlan(
+                host: try #require(values["EDITH_DATABASE_POSTGRESQL_HOST"]),
+                port: try #require(Int(values["EDITH_DATABASE_POSTGRESQL_PORT"] ?? "")),
+                username: try #require(values["EDITH_DATABASE_POSTGRESQL_USERNAME"]),
+                password: values["EDITH_DATABASE_POSTGRESQL_PASSWORD"],
+                database: try #require(values["EDITH_DATABASE_POSTGRESQL_DATABASE"]),
+                tls: .disabled, tlsServerName: nil,
+                connectTimeoutMilliseconds: 5_000, statementTimeoutMilliseconds: 15_000,
+                readOnly: true))
+        let identity = try await client.discoverIdentity()
+        return DatabaseWorkbenchLiveFixtureSender(
+            session: PostgreSQLDatabaseAdapterSession(
+                connection: definition, productIdentity: identity, client: client))
+    }
+
+    func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
+    {
+        guard case .browse(let request) = request else {
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        let page = try await session.readPage(
+            DatabaseAdapterPageRequest(
+                target: request.target, page: request.page, continuation: nil),
+            context: DatabaseAdapterOperationContext(
+                operation: DatabaseOperationContext(),
+                cancellation: DatabaseAdapterCancellationSignal()))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(
+                    page: DatabasePage(
+                        records: page.records, fields: page.fields, metadata: page.metadata)),
+                metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    func disconnect() async { await session.disconnect() }
 }

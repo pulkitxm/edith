@@ -161,6 +161,8 @@ final class DatabaseDataWorkspaceModel {
     private var activeConnectionID: DatabaseConnectionID?
     private var activeProduct: DatabaseProduct?
     private var lastQueryRequest: DatabaseQueryRequest?
+    private var browseQueryIsCurrent = false
+    private var preparesBrowseQuery = false
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -450,7 +452,17 @@ final class DatabaseDataWorkspaceModel {
         _ object: DatabaseObjectIdentifier,
         connection: DatabaseConnectionSummary
     ) {
-        prepareTarget(object, connection: connection, mode: .query)
+        if connection.product == .postgresql, selectedObject == object {
+            if browseQueryIsCurrent, let query = metadata?.browseQuery {
+                queryText = query
+            } else {
+                preparesBrowseQuery = true
+                queryText = ""
+                browse(connection)
+            }
+        } else {
+            prepareTarget(object, connection: connection, mode: .query)
+        }
     }
 
     func runQuery(_ connection: DatabaseConnectionSummary, appending: Bool = false) {
@@ -540,6 +552,7 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func cancel() {
+        preparesBrowseQuery = false
         activeTask?.cancel()
         activeTask = nil
         generation = UUID()
@@ -1036,6 +1049,12 @@ final class DatabaseDataWorkspaceModel {
                         operation: searchQueryOperation)
             } == true
         cancel()
+        if selectedObject != object {
+            clearFilters()
+            clearSorts()
+            cancelEditor()
+        }
+        browseQueryIsCurrent = false
         selectedObject = object
         targetText = object.path.joined(separator: ".")
         records = []
@@ -1247,10 +1266,14 @@ final class DatabaseDataWorkspaceModel {
     private func fieldPath(named name: String) -> DatabaseFieldPath {
         fields.first {
             $0.path.segments.joined(separator: ".") == name
-        }?.path ?? DatabaseFieldPath(name)
+        }?.path
+            ?? DatabaseFieldPath(
+                activeProduct == .postgresql
+                    ? name.components(separatedBy: ".") : [name])
     }
 
     private func resetBrowsePaging() {
+        browseQueryIsCurrent = false
         if isLoading {
             cancel()
         }
@@ -1404,6 +1427,11 @@ final class DatabaseDataWorkspaceModel {
         fields = page.fields
         nextContinuation = page.nextContinuation
         metadata = page.metadata
+        browseQueryIsCurrent = mode == .browse && page.metadata.browseQuery != nil
+        if preparesBrowseQuery {
+            preparesBrowseQuery = false
+            queryText = page.metadata.browseQuery ?? ""
+        }
         state = .loaded
         announcement("Loaded \(page.records.count) database records.")
     }
