@@ -15,9 +15,11 @@ the guided Attention screen in Edith.
 - [`ed attention focus`](./focus/README.md)
 - [`ed attention doctor`](./doctor.md)
 
-A bare `ed attention` runs `status`. Data stays under
-`~/Library/Application Support/Edith/attention` unless the app's data directory is
-relocated by the test or development environment.
+A bare `ed attention` runs `status`. Events live in the background agent's
+`~/Library/Application Support/Edith/edith.sqlite` database. Settings, focus sessions,
+and pending delivery files live in its `attention` directory. These paths follow
+the app's data directory in test or development environments. CLI event queries
+report agent failures instead of returning an empty summary.
 
 Summaries resolve overlap before totaling time. A browser heartbeat replaces the
 enclosing browser application for that interval, so Chrome and the active site are

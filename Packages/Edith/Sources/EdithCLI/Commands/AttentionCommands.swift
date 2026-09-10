@@ -15,8 +15,26 @@ struct AttentionCommand: AsyncParsableCommand {
         defaultSubcommand: AttentionStatusCommand.self)
 }
 
+enum AttentionCLIEnvironment {
+    nonisolated(unsafe) static var eventSink: AttentionEventSink? = AgentAttentionSink()
+}
+
 enum AttentionCLI {
-    static var repository: AttentionRepository { AttentionRepository() }
+    static var repository: AttentionRepository {
+        AttentionRepository(eventSink: AttentionCLIEnvironment.eventSink)
+    }
+
+    static func events(from: Date, to: Date) throws -> [AttentionEvent] {
+        if let sink = repository.resolvedEventSink {
+            return try sink.events(from: from, to: to)
+        }
+        return repository.events(from: from, to: to)
+    }
+
+    static func hasEvents() throws -> Bool {
+        if let sink = repository.resolvedEventSink { return try sink.hasEvents() }
+        return repository.hasEvents()
+    }
 
     static func interval(_ raw: String, now: Date = Date(), calendar: Calendar = .current) throws
         -> DateInterval
@@ -66,7 +84,7 @@ enum AttentionCLI {
         let interval = try interval(range, now: now)
         let repository = repository
         return AttentionAnalyzer().summary(
-            events: repository.events(from: interval.start, to: interval.end),
+            events: try events(from: interval.start, to: interval.end),
             settings: repository.loadSettings(), from: interval.start, to: interval.end)
     }
 
@@ -224,7 +242,7 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             let repository = AttentionCLI.repository
             let settings = repository.loadSettings()
             let focus = repository.activeFocus()
-            let events = repository.events(
+            let events = try AttentionCLI.events(
                 from: Date().addingTimeInterval(-86_400), to: Date())
             let browserServerReady: Bool
             if settings.isEnabled, settings.browserTrackingEnabled {
@@ -348,7 +366,7 @@ struct AttentionTimelineCommand: AsyncParsableCommand {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
             let interval = try AttentionCLI.interval(range)
-            let all = AttentionCLI.repository.events(from: interval.start, to: interval.end)
+            let all = try AttentionCLI.events(from: interval.start, to: interval.end)
                 .reversed()
             let events = limit == 0 ? Array(all) : Array(all.prefix(limit))
             if json {
@@ -571,8 +589,20 @@ struct AttentionDoctorCommand: AsyncParsableCommand {
             browserServerReady = false
         }
         let disabled = !settings.isEnabled
+        let storeCheck: (String, Bool, String)
+        do {
+            let present = try AttentionCLI.hasEvents()
+            storeCheck = (
+                "event store", true, present ? "recorded events available" : "ready, no events yet"
+            )
+        } catch {
+            storeCheck = ("event store", false, error.localizedDescription)
+        }
         let checks: [(String, Bool, String)] = [
-            ("helper", AppBridge.helperIsRunning, "Edith menu bar process"),
+            (
+                "agent", (try? CLIEnvironment.verifyAgentHandshake()) != nil,
+                "Edith background agent"
+            ),
             (
                 "attention", true,
                 disabled ? "disabled by master switch" : "enabled by master switch"
@@ -595,12 +625,12 @@ struct AttentionDoctorCommand: AsyncParsableCommand {
                 "extension bundle", AttentionExtensionInstaller.bundledDirectory != nil,
                 "packaged Chrome extension"
             ),
-            ("event store", repository.hasEvents(), repository.directory.path),
+            storeCheck,
         ]
         if json {
             CLIOut.json(
                 .object([
-                    "ok": .bool(checks.filter { $0.0 != "event store" }.allSatisfy(\.1)),
+                    "ok": .bool(checks.allSatisfy(\.1)),
                     "checks": .array(
                         checks.map {
                             .object([
