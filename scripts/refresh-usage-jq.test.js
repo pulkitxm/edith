@@ -3314,6 +3314,76 @@ describe("retained history coverage", () => {
     expect(result.stdout.length).toBe(0);
   });
 
+  test("older archive baselines cannot conflict with a newer published retention", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    previous.historyRetention.blocks[0].provenance.generatedAt =
+      "2026-09-10T08:40:08Z";
+    const fresh = structuredClone(previous);
+    const archived = fresh.historyRetention.blocks[0];
+    archived.provenance.generatedAt = "2026-09-06T00:37:47Z";
+    archived.baseline.projects[0].repositoryID = "github.com/example/fixture";
+    fresh.daily.push(day("2026-09-10", { cli: [row("one", 200)] }));
+    const result = merge(previous, fresh);
+    expect(result.totals.tokens).toBe(300);
+    expect(result.historyRetention).toEqual(previous.historyRetention);
+    expect(result.daily[0]).toEqual(previous.daily[0]);
+    expect(merge(result, fresh)).toEqual(result);
+    expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
+  });
+
+  for (const scenario of ["newer", "undated", "uncovered", "non-cli"]) {
+    test(`conflicting ${scenario} archive baselines still refuse publication`, () => {
+      const previous = retainedWithDerivedCostRoundTrip();
+      previous.historyRetention.blocks[0].provenance.generatedAt =
+        "2026-09-10T08:40:08Z";
+      const fresh = structuredClone(previous);
+      const archived = fresh.historyRetention.blocks[0];
+      archived.provenance.generatedAt = "2026-09-06T00:37:47Z";
+      archived.baseline.projects[0].repositoryID = "github.com/example/fixture";
+      if (scenario === "newer")
+        archived.provenance.generatedAt = "2026-09-11T00:00:00Z";
+      if (scenario === "undated") delete archived.provenance.generatedAt;
+      if (scenario === "uncovered")
+        archived.baseline.bySource.cli[0].inputTokens += 1;
+      const encode = (value) => {
+        const encoded = JSON.stringify([value]);
+        return scenario === "non-cli"
+          ? encoded.replaceAll('"cli"', '"other"')
+          : encoded;
+      };
+      expect(
+        jqExit(HISTORY, "null", [
+          "--argjson",
+          "previous",
+          encode(previous),
+          "--argjson",
+          "fresh",
+          encode(fresh),
+        ]),
+      ).not.toBe(0);
+    });
+  }
+
+  test("full collection publishes after a newer retained baseline supersedes the archive", () => {
+    const previous = retainedWithDerivedCostRoundTrip();
+    previous.historyRetention.blocks[0].provenance.generatedAt =
+      "2026-09-10T08:40:08Z";
+    const archivedBaseline = structuredClone(
+      previous.historyRetention.blocks[0].baseline,
+    );
+    archivedBaseline.projects[0].repositoryID = "github.com/example/fixture";
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      archivedBaseline,
+      existingUsage: JSON.stringify(previous),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const saved = JSON.parse(result.output);
+    expect(saved.totals.tokens).toBe(101);
+    expect(saved.daily[0]).toEqual(previous.daily[0]);
+    expect(result.stdout).toContain("summary");
+  }, 15_000);
+
   test("published retained baseline with derived cost round trips bootstraps the archive", () => {
     const retained = retainedWithDerivedCostRoundTrip();
     const result = runCollectorFixture({
