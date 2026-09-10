@@ -37,6 +37,7 @@ private struct PostgreSQLDatabaseReadColumn: Sendable {
     let typeOID: UInt32
     let isNullable: Bool
     let ordinal: Int
+    let enumValues: [String]?
 }
 
 private struct PostgreSQLDatabaseReadRelation: Sendable {
@@ -495,7 +496,8 @@ extension PostgreSQLDatabaseReadSupport {
                 typeName: selected.source.typeName,
                 isNullable: selected.source.isNullable,
                 isSortable: sortable(selected.source),
-                isFilterable: filterable(selected.source))
+                isFilterable: filterable(selected.source),
+                enumValues: selected.source.enumValues)
         }
         let hasMore = result.rows.count > request.pageSize.value
         let warnings = mode == .offset ? [offsetWarning(target: request.target)] : []
@@ -642,6 +644,9 @@ extension PostgreSQLDatabaseReadSupport {
                 a.atttypid::int8 AS type_oid,
                 NOT a.attnotnull AS is_nullable,
                 a.attnum::int8 AS ordinal,
+                (SELECT json_agg(e.enumlabel ORDER BY e.enumsortorder)::text
+                 FROM pg_catalog.pg_enum AS e
+                 WHERE e.enumtypid = a.atttypid) AS enum_values,
                 CASE c.relkind
                     WHEN 'r' THEN 'table'
                     WHEN 'p' THEN 'table'
@@ -714,7 +719,13 @@ extension PostgreSQLDatabaseReadSupport {
                 typeName: typeName,
                 typeOID: oid,
                 isNullable: try requiredBool("is_nullable", in: row),
-                ordinal: ordinalValue)
+                ordinal: ordinalValue,
+                enumValues: try row.cells.first(where: { $0.columnName == "enum_values" })
+                    .flatMap { cell in
+                        guard cell.bytes != nil else { return nil }
+                        let json = try cell.decode(String.self)
+                        return try JSONDecoder().decode([String].self, from: Data(json.utf8))
+                    })
             columns.append(column)
             if try requiredBool("is_key", in: row) {
                 guard keyName == nil else {
@@ -1480,23 +1491,24 @@ extension PostgreSQLDatabaseReadSupport {
             predicateCount += 1
             guard predicateCount <= 100 else { throw failure }
             let field: String
+            let parameterType: String?
             if let related = relatedFields[predicate.field] {
                 field = related.expression
+                parameterType = related.typeName
             } else if let available {
-                field = qualified(
-                    sourceAlias,
-                    try resolve(
-                        predicate.field, available: available, failure: failure
-                    ).name)
+                let column = try resolve(predicate.field, available: available, failure: failure)
+                field = qualified(sourceAlias, column.name)
+                parameterType = column.enumValues == nil ? nil : column.typeName
             } else {
                 field = qualified(sourceAlias, try fieldName(predicate.field, failure: failure))
+                parameterType = nil
             }
             func parameterMarker(_ number: Int, value: DatabaseValue) -> String {
                 let marker = "$\(number)"
-                guard let related = relatedFields[predicate.field], case .string = value else {
+                guard let parameterType, case .string = value else {
                     return marker
                 }
-                return "(\(marker)::text)::\(related.typeName)"
+                return "(\(marker)::text)::\(parameterType)"
             }
             let insensitive = predicate.caseSensitivity == .insensitive
             let sensitive = predicate.caseSensitivity != .insensitive
