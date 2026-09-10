@@ -416,6 +416,17 @@ HISTORY='
     | [ retainedBlocks($fresh)[]
         | . as $block
         | ([($old.daily // [])[] | select(.period == $block.period)][0]) as $published
+        | ([ $existing[] | select(historyKey(.) == historyKey($block)) ][0]) as $retained
+        | (try (.provenance.generatedAt | fromdateiso8601) catch null) as $archivedAt
+        | (try ($retained.provenance.generatedAt | fromdateiso8601) catch null) as $retainedAt
+        | select((
+            .source == "cli"
+            and .provenance.kind == "published-aggregate"
+            and $retained.provenance.kind == "published-aggregate"
+            and $archivedAt != null and $retainedAt != null and $archivedAt < $retainedAt
+            and ($retained.baseline | baselineIdentity($block.source)) == ($published | baselineIdentity($block.source))
+            and (coverageRegressed(.baseline.bySource[$block.source]; $published.bySource[$block.source]) | not)
+          ) | not)
         | select(
             .source != "cli"
             or .provenance.kind != "published-aggregate"
