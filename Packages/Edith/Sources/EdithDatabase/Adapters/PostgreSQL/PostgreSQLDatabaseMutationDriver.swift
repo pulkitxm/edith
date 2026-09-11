@@ -39,7 +39,8 @@ extension PostgresNIODatabaseClient {
                 query: PostgresQuery(unsafeSQL: "BEGIN TRANSACTION"),
                 logger: logger)
             do {
-                let bindings = try PostgreSQLDatabaseReadDriver.bindings(plan.parameters)
+                let bindings = try PostgreSQLDatabaseReadDriver.bindings(
+                    plan.parameters, inferStringTypes: true)
                 let result = try await PostgreSQLDatabaseReadDriver.execute(
                     connection,
                     query: PostgresQuery(unsafeSQL: plan.sql, binds: bindings),

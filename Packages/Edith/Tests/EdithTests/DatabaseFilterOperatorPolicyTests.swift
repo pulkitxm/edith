@@ -30,6 +30,21 @@ struct DatabaseFilterOperatorPolicyTests {
         #expect(operators == [.equal, .notEqual, .in, .notIn])
     }
 
+    @Test("Booleans and enums expose finite filter choices")
+    func valueChoices() {
+        #expect(
+            DatabaseFilterOperatorPolicy.valueChoices(for: field(type: "boolean", nullable: true))
+                == ["true", "false"])
+        #expect(
+            DatabaseFilterOperatorPolicy.valueChoices(for: field(type: "text", nullable: true))
+                == nil)
+        let enumField = DatabaseFieldDescriptor(
+            path: DatabaseFieldPath("role"), displayName: "role",
+            typeName: "member_role", isNullable: true, isSortable: true, isFilterable: true,
+            enumValues: ["viewer", "editor"])
+        #expect(DatabaseFilterOperatorPolicy.valueChoices(for: enumField) == ["viewer", "editor"])
+    }
+
     @Test("MongoDB keeps null and missing semantics distinct")
     func mongoPresence() {
         let operators = DatabaseFilterOperatorPolicy.operators(

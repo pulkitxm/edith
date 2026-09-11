@@ -30,6 +30,12 @@ struct DatabaseFilterOperatorPolicy {
         }
     }
 
+    static func valueChoices(for field: DatabaseFieldDescriptor) -> [String]? {
+        field.enumValues
+            ?? (fieldKind(product: nil, typeName: field.typeName) == .boolean
+                ? ["true", "false"] : nil)
+    }
+
     static func defaultOperator(
         product: DatabaseProduct?,
         field: DatabaseFieldDescriptor
