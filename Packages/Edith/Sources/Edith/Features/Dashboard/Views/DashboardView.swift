@@ -124,6 +124,13 @@ struct DashboardView: View {
         .onChange(of: model.loaded) { _, loaded in
             if automaticActionsEnabled, loaded { syncCustomDates() }
         }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged)
+        ) { _ in
+            guard automaticActionsEnabled else { return }
+            model.reloadPreferences()
+            syncCustomDates()
+        }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
         }

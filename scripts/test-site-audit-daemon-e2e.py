@@ -13,12 +13,15 @@ import threading
 import time
 import uuid
 
+from edith_test_environment import isolated_test_environment, test_build_directory
+
 repo = pathlib.Path(__file__).resolve().parents[1]
+build = test_build_directory(repo)
 root = pathlib.Path(tempfile.mkdtemp(prefix='edith-sites-e2e-'))
 label = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 suite = label + '.defaults'
 helper_suite = label + '.helper'
-env = dict(os.environ, EDITH_AGENT_MACH_SERVICE=label, EDITH_SHARED_DEFAULTS_SUITE=suite,
+env = dict(isolated_test_environment(root, label), EDITH_AGENT_MACH_SERVICE=label, EDITH_SHARED_DEFAULTS_SUITE=suite,
            EDITH_HELPER_DEFAULTS_SUITE=helper_suite, EDITH_DATA_ROOT=str(root / 'data'),
            EDITH_AGENT_BUILD='sites-e2e')
 target = 'gui/' + str(os.getuid()) + '/' + label
@@ -109,7 +112,7 @@ class SiteHandler(http.server.BaseHTTPRequestHandler):
 
 try:
     for name, identity in [('ed', 'ed'), ('edithd', 'com.pulkit.edith.agent')]:
-        shutil.copy2(repo / 'Packages/Edith/.build/debug' / name, root / name)
+        shutil.copy2(build / name, root / name)
         call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identity, str(root / name)])
     call(['/usr/bin/swiftc', str(repo / 'scripts/fixtures/daemon-xpc-client.swift'),
           '-o', str(root / 'client')], timeout=60)

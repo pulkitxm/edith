@@ -138,6 +138,21 @@ public enum UsageRefreshRunner {
         dataDir.appendingPathComponent("refresh.events")
     }
 
+    public static func runEventsURL(runID: String, dataDir: URL = Repo.dataDir) -> URL {
+        dataDir.appendingPathComponent(".refresh-runs").appendingPathComponent("\(runID).json")
+    }
+
+    public static func recordFailure(
+        _ message: String, runID: String, dataDir: URL = Repo.dataDir
+    ) {
+        guard UUID(uuidString: runID) != nil else { return }
+        let url = runEventsURL(runID: runID, dataDir: dataDir)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let line = UsageRefreshEvent.failure(message).wireLine
+        try? "run\t\(runID)\n\(line)\n".write(to: url, atomically: true, encoding: .utf8)
+    }
+
     public static func logURL(dataDir: URL = Repo.dataDir) -> URL {
         dataDir.appendingPathComponent("refresh.log")
     }
@@ -147,11 +162,18 @@ public enum UsageRefreshRunner {
     public static func run(
         dataDir: URL = Repo.dataDir,
         workingDirectory: URL = AppData.supportDir,
+        machinePolicy: UsageMachineRefreshPolicy = .skip,
+        runID: String = UUID().uuidString,
+        script: URL? = nil,
+        collectMachines:
+            @escaping @Sendable (
+                UsageMachineRefreshPolicy, URL,
+                @escaping @Sendable (UsageRefreshEvent) -> Void
+            ) async -> Void = collectDueMachines,
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
         let refreshTrace = PerformanceTrace.begin(.git, "usage.refresh")
         defer { PerformanceTrace.end(refreshTrace) }
-        guard let script = scriptURL() else { throw UsageRefreshFailure.scriptMissing }
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         guard let lock = UsageRefreshLock.acquire(at: lockURL(dataDir: dataDir)) else {
             throw UsageRefreshFailure.busy
@@ -169,16 +191,8 @@ public enum UsageRefreshRunner {
         cleanupStaleStages(in: stagingDirectory)
         let stagedUsage = stagingDirectory.appendingPathComponent("\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: stagedUsage) }
-        let baseline: UsageRefreshBaseline
-        do {
-            baseline = try stageCurrentUsage(at: stagedUsage, dataDir: dataDir)
-        } catch {
-            throw UsageRefreshFailure.reported(
-                "usage refresh staging failed; previous data preserved")
-        }
-
         let startedAt = Date()
-        let sink = UsageRefreshSink(dataDir: dataDir, startedAt: startedAt)
+        let sink = UsageRefreshSink(dataDir: dataDir, startedAt: startedAt, runID: runID)
         sink.begin()
         IPC.post(IPC.Name.usageRefreshStarted)
         defer { IPC.post(IPC.Name.usageRefreshFinished) }
@@ -193,64 +207,109 @@ public enum UsageRefreshRunner {
             sink.finish()
         }
 
-        let result: CLICommandResult
         do {
-            result = try await CLICommandRunner.runSeparated(
-                CLICommandRequest(
-                    executableURL: URL(fileURLWithPath: "/bin/bash"),
-                    arguments: [script.path, dataDir.path], environment: environment,
-                    currentDirectoryURL: workingDirectory, timeout: 900,
-                    maximumOutputBytes: 2 * 1_024 * 1_024,
-                    terminatesProcessGroup: true),
-                onStandardOutputLine: {
-                    collector.ingestStandardOutput(Data(($0 + "\n").utf8))
-                },
-                onStandardErrorLine: {
-                    collector.ingestStandardError(Data(($0 + "\n").utf8))
-                })
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as CLICommandRunnerError {
-            switch error {
-            case .timedOut:
-                throw UsageRefreshFailure.timedOut
-            case .outputLimitExceeded:
-                throw UsageRefreshFailure.outputLimitExceeded
-            case .launchFailed:
-                throw UsageRefreshFailure.launchFailed("process launch failed")
-            case .streamFailed:
-                throw UsageRefreshFailure.launchFailed("process output stream failed")
+            guard let script = script ?? scriptURL() else {
+                throw UsageRefreshFailure.scriptMissing
             }
-        } catch {
-            throw UsageRefreshFailure.launchFailed(error.localizedDescription)
-        }
-
-        collector.flush()
-        if let message = collector.reportedFailure {
-            throw UsageRefreshFailure.reported(message)
-        }
-        let status = result.terminationStatus
-        guard status == 0 else {
-            throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
-        }
-        do {
-            let retained = try publish(
-                stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
-            if retained > 0 {
-                let message =
-                    "\(retained) day/source blocks retain prior usage; "
-                    + "overlapping changes remain unresolved, newer days continue"
-                if !collector.events.contains(.note(message)) {
-                    collector.ingestStandardOutput(Data("note\t\(message)\n".utf8))
+            if machinePolicy != .skip {
+                await collectMachines(machinePolicy, dataDir) { event in
+                    collector.ingestStandardOutput(Data((event.wireLine + "\n").utf8))
                 }
             }
+            try Task.checkCancellation()
+            let baseline: UsageRefreshBaseline
+            do {
+                baseline = try stageCurrentUsage(at: stagedUsage, dataDir: dataDir)
+            } catch {
+                throw UsageRefreshFailure.reported(
+                    "usage refresh staging failed; previous data preserved")
+            }
+
+            let result: CLICommandResult
+            do {
+                result = try await CLICommandRunner.runSeparated(
+                    CLICommandRequest(
+                        executableURL: URL(fileURLWithPath: "/bin/bash"),
+                        arguments: [script.path, dataDir.path], environment: environment,
+                        currentDirectoryURL: workingDirectory, timeout: 900,
+                        maximumOutputBytes: 2 * 1_024 * 1_024,
+                        terminatesProcessGroup: true),
+                    streamsWhileRunning: true,
+                    onStandardOutputLine: {
+                        collector.ingestStandardOutput(Data(($0 + "\n").utf8))
+                    },
+                    onStandardErrorLine: {
+                        collector.ingestStandardError(Data(($0 + "\n").utf8))
+                    })
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as CLICommandRunnerError {
+                switch error {
+                case .timedOut:
+                    throw UsageRefreshFailure.timedOut
+                case .outputLimitExceeded:
+                    throw UsageRefreshFailure.outputLimitExceeded
+                case .launchFailed:
+                    throw UsageRefreshFailure.launchFailed("process launch failed")
+                case .streamFailed:
+                    throw UsageRefreshFailure.launchFailed("process output stream failed")
+                }
+            } catch {
+                throw UsageRefreshFailure.launchFailed(error.localizedDescription)
+            }
+
+            collector.flush()
+            if let message = collector.reportedFailure {
+                throw UsageRefreshFailure.reported(message)
+            }
+            let status = result.terminationStatus
+            guard status == 0 else {
+                throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
+            }
+            do {
+                let retained = try publish(
+                    stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+                if retained > 0 {
+                    let message =
+                        "\(retained) day/source blocks retain prior usage; "
+                        + "overlapping changes remain unresolved, newer days continue"
+                    if !collector.events.contains(.note(message)) {
+                        collector.ingestStandardOutput(Data("note\t\(message)\n".utf8))
+                    }
+                }
+            } catch {
+                throw UsageRefreshFailure.reported(
+                    "usage refresh publication failed; previous data preserved")
+            }
+            let elapsed = Date().timeIntervalSince(startedAt)
+            collector.complete(seconds: elapsed)
+            return UsageRefreshResult(
+                events: collector.events, seconds: elapsed, startedAt: startedAt)
         } catch {
-            throw UsageRefreshFailure.reported(
-                "usage refresh publication failed; previous data preserved")
+            collector.fail(error.localizedDescription)
+            throw error
         }
-        let elapsed = collector.totalSeconds ?? Date().timeIntervalSince(startedAt)
-        return UsageRefreshResult(
-            events: collector.events, seconds: elapsed, startedAt: startedAt)
+    }
+
+    public static func collectDueMachines(
+        _ policy: UsageMachineRefreshPolicy, dataDir: URL,
+        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async {
+        let registry = MachineRegistry.machines()
+        let targets = MachineUsageRound.due(
+            MachineUsageSelection.included(in: registry), force: policy == .all,
+            collectedAt: {
+                MachineUsageStore.summary(
+                    machineID: $0,
+                    in: dataDir.appendingPathComponent("machines"))?.collectedAt
+            })
+        guard !targets.isEmpty else { return }
+        onEvent(.note("collecting usage from \(targets.count) included machines"))
+        let round = await MachineUsageRound.collect(
+            targets, registry: registry, dataDir: dataDir, onEvent: onEvent)
+        if round.skippedBecauseBusy {
+            onEvent(.note("machine collection is already running; retaining its previous snapshot"))
+        }
     }
 
     @discardableResult
@@ -424,12 +483,29 @@ final class UsageRefreshCollector: @unchecked Sendable {
             recordDiagnostic(line)
             return
         }
+        if case let .finished(total) = event {
+            lock.withLock { seconds = total }
+            return
+        }
+        emit(event)
+    }
+
+    func complete(seconds: Double) {
+        emit(.finished(seconds: seconds))
+    }
+
+    func fail(_ message: String) {
+        guard reportedFailure == nil else { return }
+        emit(.failure(message))
+    }
+
+    private func emit(_ event: UsageRefreshEvent) {
         lock.lock()
         collected.append(event)
         if case let .failure(message) = event { failure = message }
-        if case let .finished(total) = event { seconds = total }
         lock.unlock()
         sink.write(event)
+        if event.isTerminal { sink.flush() }
         onEvent(event)
     }
 }
@@ -437,6 +513,8 @@ final class UsageRefreshCollector: @unchecked Sendable {
 final class UsageRefreshSink: @unchecked Sendable {
     private let lock = NSLock()
     private let eventsURL: URL
+    private let runEventsURL: URL
+    private let runID: String
     private let logURL: URL
     private let startedAt: Date
     private var transcript: [String] = []
@@ -444,16 +522,21 @@ final class UsageRefreshSink: @unchecked Sendable {
     private var sawSummary = false
     private var lastFlush: Date?
 
-    init(dataDir: URL, startedAt: Date) {
+    init(dataDir: URL, startedAt: Date, runID: String = UUID().uuidString) {
+        self.runID = runID
+        self.runEventsURL = UsageRefreshRunner.runEventsURL(runID: runID, dataDir: dataDir)
         self.eventsURL = UsageRefreshRunner.eventsURL(dataDir: dataDir)
         self.logURL = UsageRefreshRunner.logURL(dataDir: dataDir)
         self.startedAt = startedAt
     }
 
     func begin() {
+        let directory = runEventsURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        UsageRefreshRunner.cleanupStaleStages(in: directory)
         lock.lock()
         transcript = UsageRefreshTranscript.header(at: startedAt)
-        wire = []
+        wire = ["run\t\(runID)"]
         sawSummary = false
         lock.unlock()
         persist()
@@ -487,8 +570,9 @@ final class UsageRefreshSink: @unchecked Sendable {
         lastFlush = Date()
         let text = transcript.joined(separator: "\n") + "\n"
         let lines = wire.joined(separator: "\n") + "\n"
-        lock.unlock()
+        defer { lock.unlock() }
         try? text.write(to: logURL, atomically: true, encoding: .utf8)
+        try? lines.write(to: runEventsURL, atomically: true, encoding: .utf8)
         try? lines.write(to: eventsURL, atomically: true, encoding: .utf8)
     }
 }

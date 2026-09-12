@@ -5,6 +5,19 @@ import Testing
 @testable import EdithKit
 
 @Suite struct UsageDaemonIntegrationTests {
+    @Test func explicitMachinePoliciesAreConsumedOnceAndCoalesce() async {
+        let requests = UsageMachineRefreshRequests()
+        #expect(requests.take().machinePolicy == .due)
+        requests.enqueue(.skip)
+        #expect(requests.take().machinePolicy == .skip)
+        #expect(requests.take().machinePolicy == .due)
+        requests.enqueue(.due)
+        requests.enqueue(.skip)
+        requests.enqueue(.all)
+        #expect(requests.take().machinePolicy == .all)
+        #expect(requests.take().machinePolicy == .due)
+    }
+
     @Test func realUsageSchemaAggregatesEveryModelAndSource() throws {
         let rows = try UsageDocumentReader.rows(from: [
             "daily": [
@@ -85,43 +98,52 @@ import Testing
     @Test func rateLimitBackoffSurvivesAnotherRefreshRequest() async {
         let session = LimitsRefreshSession()
         let now = Date()
-        guard case .collect = await session.begin(force: false, now: now) else {
+        guard case .collect = await session.begin(force: false, providers: [.claude], now: now)
+        else {
             Issue.record("Expected initial collection")
             return
         }
-        let snapshot = LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Rate limited")
-        await session.finish(snapshot, retryNotBefore: now.addingTimeInterval(300))
+        let snapshot = LimitsTopicSnapshot(
+            refreshedAt: now,
+            providers: [
+                LimitsProviderSnapshot(
+                    provider: .claude, session: nil, week: nil, error: "Rate limited")
+            ], failure: "Rate limited")
+        await session.finish(snapshot, retryNotBefore: [.claude: now.addingTimeInterval(300)])
         guard
             case .cached(let cached) = await session.begin(
-                force: false, now: now.addingTimeInterval(100))
+                force: false, providers: [.claude], now: now.addingTimeInterval(100))
         else {
             Issue.record("Expected retained backoff")
             return
         }
         #expect(cached == snapshot)
-        guard case .collect = await session.begin(force: false, now: now.addingTimeInterval(301))
+        guard
+            case .collect = await session.begin(
+                force: false, providers: [.claude], now: now.addingTimeInterval(301))
         else {
             Issue.record("Expected collection after backoff")
             return
         }
-        await session.finish(snapshot, retryNotBefore: nil)
+        await session.finish(snapshot, retryNotBefore: [:])
     }
 
     @Test func concurrentLimitsRequestsShareTheOriginalCollection() async {
         let session = LimitsRefreshSession()
         let now = Date()
-        guard case .collect = await session.begin(force: false, now: now) else {
+        guard case .collect = await session.begin(force: false, providers: [.claude], now: now)
+        else {
             Issue.record("Expected initial collection")
             return
         }
-        let follower = Task { await session.begin(force: true, now: now) }
+        let follower = Task { await session.begin(force: true, providers: [.claude], now: now) }
         let deadline = ContinuousClock.now.advanced(by: .seconds(1))
         while await session.followerCount == 0, ContinuousClock.now < deadline {
             await Task.yield()
         }
         #expect(await session.followerCount == 1)
         let snapshot = LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: nil)
-        await session.finish(snapshot, retryNotBefore: now.addingTimeInterval(100))
+        await session.finish(snapshot, retryNotBefore: [.claude: now.addingTimeInterval(100)])
         let result = await follower.value
         switch result {
         case .cached(let cached): #expect(cached == snapshot)
@@ -132,13 +154,19 @@ import Testing
     @Test func aForcedRefreshBypassesBackoff() async {
         let session = LimitsRefreshSession()
         let now = Date()
-        _ = await session.begin(force: false, now: now)
-        let snapshot = LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Rate limited")
-        await session.finish(snapshot, retryNotBefore: now.addingTimeInterval(300))
-        guard case .collect = await session.begin(force: true, now: now) else {
+        _ = await session.begin(force: false, providers: [.claude], now: now)
+        let snapshot = LimitsTopicSnapshot(
+            refreshedAt: now,
+            providers: [
+                LimitsProviderSnapshot(
+                    provider: .claude, session: nil, week: nil, error: "Rate limited")
+            ], failure: "Rate limited")
+        await session.finish(snapshot, retryNotBefore: [.claude: now.addingTimeInterval(300)])
+        guard case .collect = await session.begin(force: true, providers: [.claude], now: now)
+        else {
             Issue.record("Expected forced collection")
             return
         }
-        await session.finish(snapshot, retryNotBefore: nil)
+        await session.finish(snapshot, retryNotBefore: [:])
     }
 }

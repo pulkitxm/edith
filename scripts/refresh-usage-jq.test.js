@@ -107,6 +107,7 @@ function runCollectorFixture({
   machineJSON,
   failDetails,
   failClaudeDaily = false,
+  rejectOnlinePricing = false,
   malformedClaudeDaily = false,
   failNormalization = false,
   legacyDeletedWorktree = false,
@@ -236,6 +237,12 @@ esac
   writeFileSync(
     ccusagePath,
     `#!/bin/sh
+if [ "\${REJECT_ONLINE_PRICING:-0}" = "1" ] && [ "\${1:-}" = "claude" ]; then
+  case " $* " in
+    *" --offline "*) ;;
+    *) exit 73 ;;
+  esac
+fi
 if [ "\${1:-}" = "--version" ]; then
   printf 'ccusage 20.0.19\\n'
 elif [ "\${2:-}" = "daily" ]; then
@@ -297,6 +304,7 @@ exec "$REAL_JQ" "$@"
       EDITH_CACHE_DIR: cache,
       FAKE_LOCAL_USAGE: hasLocalUsage ? "1" : "0",
       FAIL_CLAUDE_DAILY: failClaudeDaily ? "1" : "0",
+      REJECT_ONLINE_PRICING: rejectOnlinePricing ? "1" : "0",
       MALFORMED_CLAUDE_DAILY: malformedClaudeDaily ? "1" : "0",
       FAIL_NORMALIZATION: failNormalization ? "1" : "0",
       MUTATE_MACHINE_BEFORE_FLEET: mutateMachineBeforeFleet ? "1" : "0",
@@ -2631,6 +2639,19 @@ describe("collector failure handling", () => {
 });
 
 describe("collector configuration", () => {
+  test("publishes usage when online pricing is unavailable and reports empty-source progress", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      rejectOnlinePricing: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.output).totals.cost).toBe(1);
+    expect(result.stdout).toContain(
+      "phase\tcodex repository details\t0 days\t",
+    );
+    expect(result.stdout).toContain("phase\topencode\t0 days\t");
+  });
+
   test("imports every staging open flag explicitly", () => {
     expect(script).toContain(
       "-MFcntl=O_CREAT,O_EXCL,O_NOFOLLOW,O_NONBLOCK,O_RDONLY,O_WRONLY",

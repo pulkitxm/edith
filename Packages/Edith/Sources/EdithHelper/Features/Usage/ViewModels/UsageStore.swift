@@ -120,6 +120,8 @@ final class UsageStore: FeatureModule {
     private var launchObserver: NSObjectProtocol?
     private var refreshStartedObserver: NSObjectProtocol?
     private var limitsUpdatedObserver: NSObjectProtocol?
+    private var limitsTopicTask: Task<Void, Never>?
+    private var limitsRequestTask: Task<Void, Never>?
     private var usageRestoreObserver: NSObjectProtocol?
     private var limitsRestoreObserver: NSObjectProtocol?
     private var pendingRefresh = false
@@ -202,6 +204,14 @@ final class UsageStore: FeatureModule {
             Task { @MainActor in await self?.reloadLimitsFromHistory() }
         }
 
+        limitsTopicTask = Task { @MainActor [weak self] in
+            for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
+            {
+                guard !Task.isCancelled else { return }
+                await self?.receiveLimitsSnapshot(snapshot)
+            }
+        }
+
         usageRestoreObserver = IPC.observe(BackgroundBackupSignal.usageRestored) { [weak self] in
             Task { @MainActor in self?.scheduleRestoredUsageReload() }
         }
@@ -238,6 +248,10 @@ final class UsageStore: FeatureModule {
         usageRestoreReloadGeneration.invalidate()
         limitsRestoreReloadGeneration.invalidate()
         statsReloadGeneration.invalidate()
+        limitsTopicTask?.cancel()
+        limitsRequestTask?.cancel()
+        limitsTopicTask = nil
+        limitsRequestTask = nil
         refreshTask?.cancel()
         refreshTask = nil
         refreshGeneration += 1
@@ -298,8 +312,32 @@ final class UsageStore: FeatureModule {
     func refreshLimits(force: Bool = false) async {
         guard !terminating else { return }
         refreshingLimits = true
-        try? UsageAgentOperations.requestLimitsRefresh()
-        diag("requested limits refresh from the background agent")
+        limitsError = nil
+        limitsRequestTask?.cancel()
+        do {
+            try UsageAgentOperations.requestLimitsRefresh()
+            diag("requested limits refresh from the background agent")
+            limitsRequestTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(90)) } catch { return }
+                guard !Task.isCancelled, let self, !self.terminating, self.refreshingLimits else {
+                    return
+                }
+                self.refreshingLimits = false
+                self.limitsError = "The background agent did not finish refreshing limits."
+            }
+        } catch {
+            refreshingLimits = false
+            limitsError = error.localizedDescription
+        }
+    }
+
+    func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
+        guard !terminating else { return }
+        await reloadLimitsFromHistory()
+        limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
+        refreshingLimits = false
+        limitsRequestTask?.cancel()
+        limitsRequestTask = nil
     }
 
     func reloadLimitsFromHistory() async {
@@ -307,9 +345,7 @@ final class UsageStore: FeatureModule {
         let latest = await LimitsHistory.loadLatestProviders()
         seedFromHistory(latest, excluding: [])
         await loadLimitHistory(provider: limitHistoryProvider)
-        limitsError = nil
         updateStatusItem()
-        refreshingLimits = false
     }
 
     func prepareForTermination() {
@@ -519,8 +555,9 @@ final class UsageStore: FeatureModule {
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try? UsageAgentOperations.requestRefresh()
-                _ = try await UsageRefreshFollower.follow { event in
+                let runID = try UsageAgentOperations.requestRefresh(
+                    machinePolicy: collectMachines ? .due : .skip)
+                _ = try await UsageRefreshFollower.follow(runID: runID) { event in
                     Task { @MainActor in self.append(event) }
                 }
             } catch let failure as UsageRefreshFailure {

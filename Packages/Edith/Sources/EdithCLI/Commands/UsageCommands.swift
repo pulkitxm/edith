@@ -635,13 +635,12 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                     refresh = try await UsageRefreshFollower.follow(onEvent: sink)
                 } else {
                     progress.begin("starting")
-                    _ = try CLIEnvironment.performAgentOperation(
-                        UsageCollectionOperation.refresh.descriptor.id)
+                    let runID = try CLIEnvironment.requestUsageRefresh(.skip)
                     if UsageRefreshRunner.isRunning {
                         attached = true
                         progress.note("a refresh is already running, attaching to it")
                     }
-                    refresh = try await UsageRefreshFollower.follow(onEvent: sink)
+                    refresh = try await UsageRefreshFollower.follow(runID: runID, onEvent: sink)
                 }
                 progress.end()
                 guard !json else {

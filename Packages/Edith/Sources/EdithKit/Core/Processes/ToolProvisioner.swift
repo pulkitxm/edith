@@ -234,7 +234,7 @@ public enum CLICommandRunner {
     }
 
     public static func runSeparated(
-        _ request: CLICommandRequest,
+        _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
@@ -244,8 +244,8 @@ public enum CLICommandRunner {
                 onStandardErrorLine: onStandardErrorLine)
         }
         return try await runLocalSeparated(
-            request, onStandardOutputLine: onStandardOutputLine,
-            onStandardErrorLine: onStandardErrorLine)
+            request, streamsWhileRunning: streamsWhileRunning,
+            onStandardOutputLine: onStandardOutputLine, onStandardErrorLine: onStandardErrorLine)
     }
 
     public static func runLocalSeparated(
