@@ -31,7 +31,10 @@ struct UsageView: View {
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
             return providers.contains(saved) ? saved : providers.first ?? saved
         }
-        nonmutating set { selectedRaw = newValue.rawValue }
+        nonmutating set {
+            try? ConfigurationExecutor.application.set(
+                .string(newValue.rawValue), forKey: AppStorageKeys.Limits.provider)
+        }
     }
     private var limits: ProviderLimits { store.limits(for: selected) }
 

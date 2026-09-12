@@ -3,16 +3,31 @@ import Foundation
 public enum UsageRefreshFollower {
     public static func follow(
         dataDir: URL = Repo.dataDir,
+        runID: String? = nil,
+        startTimeout: TimeInterval = 1_800,
         pollInterval: Duration = .milliseconds(150),
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
         let startedAt = Date()
-        let events = UsageRefreshRunner.eventsURL(dataDir: dataDir)
+        if let runID, UUID(uuidString: runID) == nil {
+            throw UsageRefreshFailure.reported("invalid usage refresh identifier")
+        }
+        let events =
+            runID.map { UsageRefreshRunner.runEventsURL(runID: $0, dataDir: dataDir) }
+            ?? UsageRefreshRunner.eventsURL(dataDir: dataDir)
         let lock = UsageRefreshRunner.lockURL(dataDir: dataDir)
         var delivered = 0
         var collected: [UsageRefreshEvent] = []
 
         while true {
+            try Task.checkCancellation()
+            if runID != nil, !FileManager.default.fileExists(atPath: events.path) {
+                guard Date().timeIntervalSince(startedAt) < startTimeout else {
+                    throw UsageRefreshFailure.reported("the requested usage refresh did not start")
+                }
+                try await Task.sleep(for: pollInterval)
+                continue
+            }
             let parsed = read(events)
             while delivered < parsed.count {
                 let event = parsed[delivered]
@@ -47,6 +62,13 @@ public enum UsageRefreshFollower {
             }
             try await Task.sleep(for: pollInterval)
         }
+    }
+
+    public static func runID(at url: URL) -> String? {
+        guard let text = try? String(contentsOf: url, encoding: .utf8),
+            let first = text.split(separator: "\n").first, first.hasPrefix("run\t")
+        else { return nil }
+        return String(first.dropFirst(4))
     }
 
     public static func read(_ url: URL) -> [UsageRefreshEvent] {
