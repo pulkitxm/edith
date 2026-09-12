@@ -353,7 +353,8 @@ private struct NotchHomeTab: View {
                 actionTile(
                     preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake", active: preventSleep
                 ) {
-                    preventSleep.toggle()
+                    try? ConfigurationExecutor.application.set(
+                        .bool(!preventSleep), forKey: AppStorageKeys.General.preventSleep)
                     controller.collapseNow()
                 }
             }
@@ -623,7 +624,10 @@ private struct NotchUsageRings: View {
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
             return providers.contains(saved) ? saved : providers.first ?? saved
         }
-        nonmutating set { selectedRaw = newValue.rawValue }
+        nonmutating set {
+            try? ConfigurationExecutor.application.set(
+                .string(newValue.rawValue), forKey: AppStorageKeys.Limits.provider)
+        }
     }
 
     private var limits: ProviderLimits { usage.limits(for: selected) }
