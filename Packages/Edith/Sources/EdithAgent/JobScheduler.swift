@@ -49,6 +49,7 @@ public actor JobScheduler {
         var lastError: String?
         var runCount = 0
         var enqueued = false
+        var rerunRequested = false
         var flight: Flight?
         var nextRun: Date?
         var interval: TimeInterval?
@@ -102,6 +103,7 @@ public actor JobScheduler {
         timer = nil
         for id in order {
             states[id]?.enqueued = false
+            states[id]?.rerunRequested = false
             states[id]?.flight?.task.cancel()
             states[id]?.flight = nil
             states[id]?.nextRun = nil
@@ -160,7 +162,10 @@ public actor JobScheduler {
     @discardableResult
     public func enqueue(_ id: String) -> Bool {
         guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return false }
-        guard state.flight == nil else { return true }
+        guard state.flight == nil else {
+            states[id]?.rerunRequested = true
+            return true
+        }
         guard !state.enqueued else { return true }
         states[id]?.enqueued = true
         Task { await runEnqueued(id) }
@@ -194,7 +199,6 @@ public actor JobScheduler {
         await observe(AgentEvent(category: "job", name: id, message: "Started"))
         let result = await task.result
         guard states[id]?.flight?.id == token else { return nil }
-        states[id]?.flight = nil
         states[id]?.lastRun = began
         let duration = max(0, clock().timeIntervalSince(began))
         states[id]?.lastDuration = duration
@@ -212,6 +216,7 @@ public actor JobScheduler {
                     category: "job", name: id, message: failure ?? "Completed", duration: duration))
         case .failure(let error):
             let cancelled = error is CancellationError
+            if cancelled { states[id]?.rerunRequested = false }
             states[id]?.lastError = cancelled ? nil : error.localizedDescription
             await observe(
                 AgentEvent(
@@ -219,15 +224,22 @@ public actor JobScheduler {
                     message: cancelled ? "Cancelled" : error.localizedDescription,
                     duration: duration))
         }
+        guard states[id]?.flight?.id == token else { return nil }
+        states[id]?.flight = nil
+        let rerunRequested = states[id]?.rerunRequested == true
+        states[id]?.rerunRequested = false
         if let interval = states[id].flatMap(interval(for:)) {
             states[id]?.nextRun = clock().addingTimeInterval(interval)
         }
         publishJobs()
         refreshSchedule()
+        if rerunRequested { enqueue(id) }
         return payload
     }
 
     public func cancel(_ id: String) {
+        states[id]?.enqueued = false
+        states[id]?.rerunRequested = false
         states[id]?.flight?.task.cancel()
     }
 
@@ -243,7 +255,7 @@ public actor JobScheduler {
                 states[id]?.interval = current
                 states[id]?.nextRun = current.map { now.addingTimeInterval($0) }
             }
-            if !state.job.isEnabled() { states[id]?.flight?.task.cancel() }
+            if !state.job.isEnabled() { cancel(id) }
         }
         let next = order.compactMap { states[$0]?.nextRun }.min()
         let delay = min(30, max(0.05, next?.timeIntervalSince(now) ?? 30))

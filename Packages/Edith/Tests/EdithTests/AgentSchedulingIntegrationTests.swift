@@ -14,7 +14,7 @@ import Testing
         let first = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
         let second = Task { await scheduler.runNow("fixture.refresh") }
-        await scheduler.enqueue("fixture.refresh")
+        await scheduler.enqueueIfDue("fixture.refresh")
         #expect(await scheduler.snapshots.first?.phase == .running)
         await gate.release()
         #expect(await first.value == Data("result".utf8))
@@ -22,6 +22,65 @@ import Testing
         #expect(await gate.executions == 1)
         #expect(await scheduler.snapshots.first?.runCount == 1)
         #expect(output.count(topic: .usage) == 1)
+    }
+
+    @Test(arguments: [1, 5])
+    func explicitEnqueuesDuringCollectionProduceOneFollowUp(requests: Int) async {
+        let gate = CollectorGate()
+        let output = SchedulerOutput()
+        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
+        let first = Task { await scheduler.runNow("fixture.refresh") }
+        await gate.waitForStart()
+        for _ in 0..<requests { #expect(await scheduler.enqueue("fixture.refresh")) }
+        await gate.release()
+        #expect(await first.value == Data("result".utf8))
+        for _ in 0..<1_000 {
+            if await scheduler.snapshots.first?.runCount == 2 { break }
+            await Task.yield()
+        }
+        #expect(await gate.executions == 2)
+        #expect(output.count(topic: .usage) == 2)
+        await scheduler.shutdown()
+    }
+
+    @Test(arguments: [false, true])
+    func cancellingOrStoppingDiscardsPendingFollowUp(stop: Bool) async {
+        let gate = CollectorGate()
+        let scheduler = JobScheduler()
+        await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
+        let first = Task { await scheduler.runNow("fixture.refresh") }
+        await gate.waitForStart()
+        #expect(await scheduler.enqueue("fixture.refresh"))
+        if stop { await scheduler.stop() } else { await scheduler.cancel("fixture.refresh") }
+        await gate.release()
+        _ = await first.value
+        for _ in 0..<50 { await Task.yield() }
+        #expect(await gate.executions == 1)
+        await scheduler.shutdown()
+    }
+
+    @Test func passiveTriggersDuringCollectionDoNotRequestAnotherRun() async {
+        let gate = CollectorGate()
+        let policy = SchedulerPolicy()
+        let scheduler = JobScheduler(clock: { policy.date })
+        await scheduler.register(
+            AgentJob(descriptor: descriptor(cadence: .every(ambient: 900))) { await gate.run() })
+        await scheduler.start()
+        let first = Task { await scheduler.runNow("fixture.refresh") }
+        await gate.waitForStart()
+        policy.advance(901)
+        for _ in 0..<5 {
+            _ = await scheduler.enqueueIfDue("fixture.refresh")
+            await scheduler.addSubscriber(topic: .usage)
+            await scheduler.removeSubscriber(topic: .usage)
+            await scheduler.tick()
+        }
+        await gate.release()
+        _ = await first.value
+        for _ in 0..<50 { await Task.yield() }
+        #expect(await gate.executions == 1)
+        await scheduler.shutdown()
     }
 
     @Test func subscriberChangesDoNotCancelTheRunningCollector() async {
@@ -180,6 +239,7 @@ private actor CollectorGate {
 
     func run() async -> Data? {
         executions += 1
+        if executions > 1 { return Data("result".utf8) }
         for waiter in started { waiter.resume() }
         started.removeAll()
         return await withCheckedContinuation { finish = $0 }
