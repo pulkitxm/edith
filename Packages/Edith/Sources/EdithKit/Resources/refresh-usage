@@ -862,7 +862,7 @@ add_source() {
     return 2
   fi
   n=$(jq '.daily | length' "$daily")
-  if [ "$n" = "0" ]; then return 1; fi
+  if [ "$n" = "0" ]; then _phase "$src" "0 days"; return 1; fi
   if ! manifest=$(jq -c "$NORM"' { source: $src, label: $label, norm: [ .daily[] | normDay | .breakdowns |= dropSynthetic ] }' \
     --arg src "$src" --arg label "$(label_for "$src")" "$daily"); then
     _error "$src usage normalization failed; previous data preserved"
@@ -948,11 +948,11 @@ _phase "billing history" "$BILLING_RETAINED missing journals retained"
 if [ "$BILLING_CANDIDATES" -gt 0 ]; then
   _note "$BILLING_CANDIDATES rewritten billing records have unresolved identity and remain excluded from totals"
 fi
-if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json >"$TMP/cli.daily.json" 2>/dev/null; then
+if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json --offline >"$TMP/cli.daily.json" 2>/dev/null; then
   _error "cli daily collection failed; previous data preserved"
   exit 1
 fi
-if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json >"$TMP/cli.session.json" 2>/dev/null; then
+if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json --offline >"$TMP/cli.session.json" 2>/dev/null; then
   _error "cli session collection failed; previous data preserved"
   exit 1
 fi
@@ -960,11 +960,11 @@ include_source cli "$TMP/cli.daily.json" "$TMP/cli.session.json"
 
 COWORK_CFG="$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions" -maxdepth 2 -name .claude -type d 2>/dev/null | paste -sd, - || true)"
 if [ -n "$COWORK_CFG" ]; then
-  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json >"$TMP/cowork.daily.json" 2>/dev/null; then
+  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json --offline >"$TMP/cowork.daily.json" 2>/dev/null; then
     _error "cowork daily collection failed; previous data preserved"
     exit 1
   fi
-  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json >"$TMP/cowork.session.json" 2>/dev/null; then
+  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json --offline >"$TMP/cowork.session.json" 2>/dev/null; then
     _error "cowork session collection failed; previous data preserved"
     exit 1
   fi
@@ -985,6 +985,7 @@ if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline >"$TMP/codex.ses
   exit 1
 fi
 include_source codex "$TMP/codex.daily.json" "$TMP/codex.session.json"
+_note "collecting Codex repository details by day"
 : >"$TMP/codex.sessions-by-day.jsonl"
 while IFS= read -r codex_date; do
   if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline \
@@ -995,6 +996,7 @@ while IFS= read -r codex_date; do
   jq -c --arg date "$codex_date" '.sessions[] | . + {date: $date}' \
     "$TMP/codex.session-day.json" >>"$TMP/codex.sessions-by-day.jsonl"
 done < <(jq -r '.daily[].date' "$TMP/codex.daily.json")
+_phase "codex repository details" "$(jq '.daily | length' "$TMP/codex.daily.json") days"
 
 for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
   if ! ccu "$agent" daily --json --offline >"$TMP/$agent.daily.json" 2>/dev/null; then
