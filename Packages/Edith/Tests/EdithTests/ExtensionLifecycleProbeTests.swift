@@ -433,6 +433,9 @@ import EdithDatabase
             sshTarget: nil, session: "default", pane: "1", kind: "agent", status: .working,
             title: "Review", workspace: "", cwd: "")
         let ready = [HerdrHostSnapshot.local(herdrPresent: true, agents: [agent])]
+        let failed = [
+            HerdrHostSnapshot.local(herdrPresent: true, error: "Session server is unavailable.")
+        ]
 
         #expect(
             ExtensionLifecycleProbeEnvironment.herdrReadiness(absent)
@@ -443,6 +446,16 @@ import EdithDatabase
         #expect(
             ExtensionLifecycleProbeEnvironment.herdrReadiness(ready)
                 == .ready("Found 1 live Herdr sessions."))
+        #expect(
+            ExtensionLifecycleProbeEnvironment.herdrReadiness(failed)
+                == .degraded(
+                    "Found 0 live sessions; some hosts failed: "
+                        + "Session server is unavailable."))
+        #expect(
+            ExtensionLifecycleProbeEnvironment.herdrReadiness(ready + failed)
+                == .degraded(
+                    "Found 1 live sessions; some hosts failed: "
+                        + "Session server is unavailable."))
     }
 
     private func probe(
