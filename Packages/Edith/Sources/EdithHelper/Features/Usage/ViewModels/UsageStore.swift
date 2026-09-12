@@ -319,7 +319,9 @@ final class UsageStore: FeatureModule {
             diag("requested limits refresh from the background agent")
             limitsRequestTask = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: .seconds(90)) } catch { return }
-                guard let self, self.refreshingLimits else { return }
+                guard !Task.isCancelled, let self, !self.terminating, self.refreshingLimits else {
+                    return
+                }
                 self.refreshingLimits = false
                 self.limitsError = "The background agent did not finish refreshing limits."
             }
