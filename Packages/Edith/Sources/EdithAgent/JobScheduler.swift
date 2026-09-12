@@ -5,14 +5,17 @@ public struct AgentJob: Sendable {
     public let descriptor: AgentJobDescriptor
     public let isEnabled: @Sendable () -> Bool
     public let run: @Sendable () async throws -> Data?
+    public let cancelPending: @Sendable () -> Void
 
     public init(
         descriptor: AgentJobDescriptor,
         isEnabled: @escaping @Sendable () -> Bool = { true },
+        cancelPending: @escaping @Sendable () -> Void = {},
         run: @escaping @Sendable () async throws -> Data?
     ) {
         self.descriptor = descriptor
         self.isEnabled = isEnabled
+        self.cancelPending = cancelPending
         self.run = run
     }
 }
@@ -85,6 +88,7 @@ public actor JobScheduler {
         guard !shuttingDown else { return }
         let id = job.descriptor.id
         let subscribers = states[id]?.subscribers ?? 0
+        states[id]?.job.cancelPending()
         states[id]?.flight?.task.cancel()
         if states[id] == nil { order.append(id) }
         states[id] = State(job: job, subscribers: subscribers)
@@ -102,9 +106,7 @@ public actor JobScheduler {
         timer?.cancel()
         timer = nil
         for id in order {
-            states[id]?.enqueued = false
-            states[id]?.rerunRequested = false
-            states[id]?.flight?.task.cancel()
+            cancel(id)
             states[id]?.flight = nil
             states[id]?.nextRun = nil
             states[id]?.interval = nil
@@ -238,6 +240,7 @@ public actor JobScheduler {
     }
 
     public func cancel(_ id: String) {
+        states[id]?.job.cancelPending()
         states[id]?.enqueued = false
         states[id]?.rerunRequested = false
         states[id]?.flight?.task.cancel()

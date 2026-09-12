@@ -7,15 +7,15 @@ import Testing
 @Suite struct UsageDaemonIntegrationTests {
     @Test func explicitMachinePoliciesAreConsumedOnceAndCoalesce() async {
         let requests = UsageMachineRefreshRequests()
-        #expect(await requests.take().machinePolicy == .due)
-        await requests.enqueue(.skip)
-        #expect(await requests.take().machinePolicy == .skip)
-        #expect(await requests.take().machinePolicy == .due)
-        await requests.enqueue(.due)
-        await requests.enqueue(.skip)
-        await requests.enqueue(.all)
-        #expect(await requests.take().machinePolicy == .all)
-        #expect(await requests.take().machinePolicy == .due)
+        #expect(requests.take().machinePolicy == .due)
+        requests.enqueue(.skip)
+        #expect(requests.take().machinePolicy == .skip)
+        #expect(requests.take().machinePolicy == .due)
+        requests.enqueue(.due)
+        requests.enqueue(.skip)
+        requests.enqueue(.all)
+        #expect(requests.take().machinePolicy == .all)
+        #expect(requests.take().machinePolicy == .due)
     }
 
     @Test func realUsageSchemaAggregatesEveryModelAndSource() throws {

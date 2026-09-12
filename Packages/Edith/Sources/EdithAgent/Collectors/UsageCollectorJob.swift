@@ -80,19 +80,25 @@ public enum UsageDocumentReader {
     }
 }
 
-public actor UsageMachineRefreshRequests {
+public final class UsageMachineRefreshRequests: @unchecked Sendable {
     public struct Request: Equatable, Sendable {
         public let runID: String
         public var machinePolicy: UsageMachineRefreshPolicy
     }
 
     public static let shared = UsageMachineRefreshRequests()
+    private let lock = NSLock()
+    private let dataDirectory: URL
     private var pending: Request?
 
-    public init() {}
+    public init(dataDirectory: URL = Repo.dataDir) {
+        self.dataDirectory = dataDirectory
+    }
 
     @discardableResult
     public func enqueue(_ policy: UsageMachineRefreshPolicy) -> String {
+        lock.lock()
+        defer { lock.unlock() }
         if var request = pending {
             if request.machinePolicy.rawValue < policy.rawValue {
                 request.machinePolicy = policy
@@ -106,12 +112,29 @@ public actor UsageMachineRefreshRequests {
     }
 
     public func take() -> Request {
-        defer { pending = nil }
+        lock.lock()
+        defer {
+            pending = nil
+            lock.unlock()
+        }
         return pending ?? Request(runID: UUID().uuidString, machinePolicy: .due)
     }
 
     public func discard(_ runID: String) {
-        if pending?.runID == runID { pending = nil }
+        lock.withLock {
+            if pending?.runID == runID { pending = nil }
+        }
+    }
+
+    public func cancelPending() {
+        let request = lock.withLock {
+            defer { pending = nil }
+            return pending
+        }
+        guard let request else { return }
+        UsageRefreshRunner.recordFailure(
+            "Usage collection cancelled before starting.", runID: request.runID,
+            dataDir: dataDirectory)
     }
 }
 
@@ -126,7 +149,7 @@ public final class UsageCollectorJob: @unchecked Sendable {
         documentURL: URL = Repo.usageJSON,
         notifies: Bool = true,
         runner: @escaping @Sendable () async throws -> UsageRefreshResult = {
-            let request = await UsageMachineRefreshRequests.shared.take()
+            let request = UsageMachineRefreshRequests.shared.take()
             let deadline = ContinuousClock.now.advanced(by: .seconds(900))
             do {
                 while true {

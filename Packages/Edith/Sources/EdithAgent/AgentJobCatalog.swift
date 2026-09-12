@@ -19,6 +19,11 @@ public enum AgentJobCatalog {
             return AgentJob(
                 descriptor: descriptor,
                 isEnabled: { isEnabled(descriptor) },
+                cancelPending: {
+                    if descriptor.id == "usage.refresh" {
+                        UsageMachineRefreshRequests.shared.cancelPending()
+                    }
+                },
                 run: body)
         }
     }

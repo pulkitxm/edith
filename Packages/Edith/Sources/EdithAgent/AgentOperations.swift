@@ -55,9 +55,9 @@ public enum AgentOperations {
                 payload.isEmpty
                 ? UsageMachineRefreshPolicy.due
                 : try AgentPayload.decode(UsageMachineRefreshPolicy.self, from: payload)
-            let requestID = await UsageMachineRefreshRequests.shared.enqueue(policy)
+            let requestID = UsageMachineRefreshRequests.shared.enqueue(policy)
             guard await scheduler.enqueue("usage.refresh") else {
-                await UsageMachineRefreshRequests.shared.discard(requestID)
+                UsageMachineRefreshRequests.shared.discard(requestID)
                 throw AgentError(.refused, "Usage collection is disabled.")
             }
             return try AgentPayload.encode(requestID)

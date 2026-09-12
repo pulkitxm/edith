@@ -12,9 +12,11 @@ public enum UsageRefreshFollower {
         if let runID, UUID(uuidString: runID) == nil {
             throw UsageRefreshFailure.reported("invalid usage refresh identifier")
         }
+        let currentEvents = UsageRefreshRunner.eventsURL(dataDir: dataDir)
+        let selectedRun = runID ?? self.runID(at: currentEvents)
         let events =
-            runID.map { UsageRefreshRunner.runEventsURL(runID: $0, dataDir: dataDir) }
-            ?? UsageRefreshRunner.eventsURL(dataDir: dataDir)
+            selectedRun.map { UsageRefreshRunner.runEventsURL(runID: $0, dataDir: dataDir) }
+            ?? currentEvents
         let lock = UsageRefreshRunner.lockURL(dataDir: dataDir)
         var delivered = 0
         var collected: [UsageRefreshEvent] = []
