@@ -70,6 +70,7 @@ public enum ExtensionLiveAdapters {
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
         "attention", "seoAudit",
+        "captureTools",
     ]
 
     public static func provider(
@@ -121,6 +122,7 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "captureTools": await captureToolsReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
@@ -548,6 +550,24 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
+        ).readiness
+    }
+
+    static func captureToolsReadiness(defaults: UserDefaults) async -> ExtensionAdapterReadiness {
+        let mode = defaults.string(forKey: AppStorageKeys.Capture.copyMode)
+        let historySize = defaults.object(forKey: AppStorageKeys.Capture.historySize) as? Int
+        let configured =
+            (mode == nil || CaptureCopyMode(rawValue: mode!) != nil)
+            && (historySize == nil || (1...25).contains(historySize!))
+        let history = CaptureHistoryStore.load(from: defaults)
+        let screenCount = await MainActor.run { NSScreen.screens.count }
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: screenCount == 0 ? 0 : history.count,
+            readyDetail: "Saved screen reads: \(history.count).",
+            setupDetail: "The stored copy mode or history size is invalid.",
+            emptyDetail: screenCount == 0
+                ? "No active display is available for capture."
+                : "Offline recognition is ready and the history is empty."
         ).readiness
     }
 

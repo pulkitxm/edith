@@ -125,6 +125,9 @@ import EdithDatabase
             id: "seoAudit", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "captureTools", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
     ]
 
     @Test func policiesCoverTheRegistryExactly() {

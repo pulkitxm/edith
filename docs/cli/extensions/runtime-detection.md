@@ -43,6 +43,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |
 | Emoji Picker | bundled emoji catalog and valid picker settings | recent emoji usage | `ed emoji ls --json`; `ed permissions refresh` |
 | Color Picker | valid copy format, color profile, history limit, and decodable history | active display and saved sample count | `ed color ls --json`; `ed permissions refresh` |
+| Capture Tools | valid copy mode, history limit, and decodable read history | active display and saved read count | `ed config ls --group capture --json`; `ed permissions refresh` |
 
 ## Agent workflow
 

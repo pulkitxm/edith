@@ -33,7 +33,7 @@ import Testing
     }
 
     @Test func screenRecordingBlocksEveryExtensionThatRequiresIt() {
-        for id in ["focusDim", "presenter", "colorPicker"] {
+        for id in ["focusDim", "presenter", "colorPicker", "captureTools"] {
             #expect(needsAttention(enabled: [id], missing: [.screenRecording]))
         }
     }

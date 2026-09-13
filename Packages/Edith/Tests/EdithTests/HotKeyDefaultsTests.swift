@@ -79,4 +79,10 @@ import Testing
             #expect(ClipboardHotKey.label == "⌃⌥V")
         }
     }
+
+    @Test func globalHotKeyIdentifiersAreUnique() {
+        let identifiers = HotKeyCatalog.bindings.map(\.carbonID)
+
+        #expect(Set(identifiers).count == identifiers.count)
+    }
 }

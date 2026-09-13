@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "capture", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -63,6 +63,7 @@ public enum ConfigCatalog {
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
+        + capture
         + micMute
         + backup + permissions + terminal
 
@@ -921,6 +922,45 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let capture: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Capture.enabled, .bool, group: "capture",
+            summary: "Enable offline screen recognition and quick screenshots.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Capture.copyMode, .string, group: "capture",
+            summary: "Content copied after a screen read.",
+            allowed: CaptureCopyMode.allCases.map(\.rawValue), fallback: .string("smart")),
+        SettingDefinition(
+            AppStorageKeys.Capture.detectCodes, .bool, group: "capture",
+            summary: "Detect QR and other two-dimensional codes.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Capture.historySize, .int, group: "capture",
+            summary: "Maximum saved screen reads.", integerRange: 1...25, fallback: .int(10)),
+        SettingDefinition(
+            AppStorageKeys.Capture.saveScreenshots, .bool, group: "capture",
+            summary: "Keep the image behind every screen read in Pictures.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Capture.readHotKeyCode, .int, group: "capture",
+            summary: "Virtual key code for screen reading.", fallback: .int(15)),
+        SettingDefinition(
+            AppStorageKeys.Capture.readHotKeyMods, .int, group: "capture",
+            summary: "Carbon modifier mask for screen reading.", fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.Capture.readHotKeyLabel, .string, group: "capture",
+            summary: "Printable screen reading shortcut.", fallback: .string("⌃⌥⌘R")),
+        SettingDefinition(
+            AppStorageKeys.Capture.screenshotHotKeyCode, .int, group: "capture",
+            summary: "Virtual key code for quick screenshots.", fallback: .int(1)),
+        SettingDefinition(
+            AppStorageKeys.Capture.screenshotHotKeyMods, .int, group: "capture",
+            summary: "Carbon modifier mask for quick screenshots.", fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.Capture.screenshotHotKeyLabel, .string, group: "capture",
+            summary: "Printable screenshot shortcut.", fallback: .string("⌃⌥⌘S")),
     ]
 
     private static let database: [SettingDefinition] = [

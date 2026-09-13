@@ -22,7 +22,7 @@ import Testing
         "micMuteEnabled",
         "clipboardEnabled",
         "emojiEnabled",
-        "colorPickerEnabled",
+        "colorPickerEnabled", "captureToolsEnabled",
         "keystrokeHighlightEnabled",
         "focusDimEnabled",
         "presenterEnabled",
@@ -49,7 +49,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
-                "database", "attention", "seoAudit",
+                "database", "attention", "seoAudit", "captureTools",
             ])
     }
 
@@ -293,7 +293,7 @@ import Testing
         #expect(titleMatches.map(\.id) == ["audioMixer"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.suite == .desk })
-        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
+        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter", "captureTools"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
@@ -340,6 +340,7 @@ import Testing
             "clipboard": [],
             "emoji": [],
             "colorPicker": [.screenRecording],
+            "captureTools": [.screenRecording],
             "keystrokeHighlight": [.inputMonitoring],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
@@ -369,6 +370,7 @@ import Testing
             "clipboard": [.accessibility],
             "emoji": [.accessibility],
             "colorPicker": [],
+            "captureTools": [],
             "keystrokeHighlight": [],
             "focusDim": [],
             "presenter": [],

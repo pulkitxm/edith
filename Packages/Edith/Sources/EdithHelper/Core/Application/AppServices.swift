@@ -11,6 +11,7 @@ final class AppServices {
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
+    private(set) var captureTools: CaptureToolsStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
@@ -91,6 +92,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        captureTools?.shutdown()
+        captureTools = nil
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
         await PermissionsModel.shared.waitForShutdown()
@@ -270,6 +273,15 @@ final class AppServices {
             colorPicker = nil
         }
         colorPicker?.registerHotKey()
+
+        let captureToolsOn =
+            ExtensionRegistry.entry("captureTools")?.isEnabled(in: SharedDefaults.store) ?? false
+        if captureToolsOn, captureTools == nil { captureTools = CaptureToolsStore() }
+        if !captureToolsOn, let store = captureTools {
+            store.shutdown()
+            captureTools = nil
+        }
+        captureTools?.registerHotKeys()
 
         let clipboardOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false

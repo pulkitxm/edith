@@ -365,6 +365,9 @@ enum JSONContract {
         JSONCase(
             "ed download reveal", ["download", "reveal", "1", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed capture read", ["capture", "read", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed capture screenshot", ["capture", "screenshot", "--json"], mutatesTheMachine: true),
         JSONCase("ed color pick", ["color", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed color ls", ["color", "ls", "--json"]),
         JSONCase(

@@ -33,6 +33,10 @@ extension FocusDimDisplayMode: ConfigurationBindingValue {
     var configurationValue: JSONValue { .string(rawValue) }
 }
 
+extension CaptureCopyMode: ConfigurationBindingValue {
+    var configurationValue: JSONValue { .string(rawValue) }
+}
+
 extension Binding where Value: ConfigurationBindingValue {
     func configured(
         _ key: String, executor: ConfigurationExecutor = .application

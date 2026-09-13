@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 214 settings in 25
+reads, and `ed config` is that surface from the command line: 230 settings in 28
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -363,6 +363,22 @@ not here cannot be set, and `import` skips it.
 | `colorPickerHotKeyCode` | int | none | shared | Virtual key code of the colour picker shortcut. |
 | `colorPickerHotKeyMods` | int | none | shared | Carbon modifier mask of the colour picker shortcut. |
 | `colorPickerHotKeyLabel` | string | none | shared | Printable label for the colour picker shortcut. |
+
+### `capture`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `captureToolsEnabled` | bool | `false` | shared | Enable offline screen recognition and quick screenshots. |
+| `captureCopyMode` | string: `smart`, `text`, `codes`, `combined` | `smart` | shared | Content copied after a screen read. |
+| `captureDetectCodes` | bool | `true` | shared | Detect QR and other two-dimensional codes. |
+| `captureHistorySize` | int: 1 through 25 | `10` | shared | Maximum saved screen reads. |
+| `captureSaveScreenshots` | bool | `false` | shared | Keep the image behind every screen read in Pictures. |
+| `captureReadHotKeyCode` | int | `15` | shared | Virtual key code for screen reading. |
+| `captureReadHotKeyMods` | int | `6400` | shared | Carbon modifier mask for screen reading. |
+| `captureReadHotKeyLabel` | string | `⌃⌥⌘R` | shared | Printable screen reading shortcut. |
+| `captureScreenshotHotKeyCode` | int | `1` | shared | Virtual key code for quick screenshots. |
+| `captureScreenshotHotKeyMods` | int | `6400` | shared | Carbon modifier mask for quick screenshots. |
+| `captureScreenshotHotKeyLabel` | string | `⌃⌥⌘S` | shared | Printable screenshot shortcut. |
 
 ### `micmute`
 

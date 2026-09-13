@@ -271,6 +271,13 @@ public enum ExtensionRegistry {
             subtitle: "Crawl sitemaps, inspect page metadata, and keep every run local.",
             symbolName: "doc.text.magnifyingglass", suite: .data, host: .agent, featured: false,
             defaultsKey: "tabSEOAuditEnabled", requiredCapabilities: [.siteAuditing]),
+        ExtensionRegistryEntry(
+            id: "captureTools", title: "Capture Tools",
+            subtitle: "Offline screen OCR, QR recognition, and quick screenshots.",
+            symbolName: "viewfinder", suite: .media, host: .bar, featured: false,
+            defaultsKey: "captureToolsEnabled",
+            requiredCapabilities: [.screenContentRecognition],
+            optionalCapabilities: [.globalShortcuts]),
     ]
 
     public static func entry(_ id: String) -> ExtensionRegistryEntry? {

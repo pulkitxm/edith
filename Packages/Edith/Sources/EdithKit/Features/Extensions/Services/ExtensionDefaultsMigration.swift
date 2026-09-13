@@ -105,6 +105,7 @@ public enum ExtensionDefaultsMigration {
         FocusDimState.enabledKey: false,
         AppStorageKeys.Presenter.enabled: true,
         AppStorageKeys.ColorPicker.enabled: false,
+        AppStorageKeys.Capture.enabled: false,
         LidAwakeState.enabledKey: false,
     ]
 }
