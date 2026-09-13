@@ -49,7 +49,8 @@ public enum ConfigCatalog {
         "alerts",
         "budget",
         "dashboard", "database",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "network", "homebrew",
+        "cleaner",
         "music",
         "calendar",
         "clipboard", "keystrokes",
@@ -528,6 +529,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.General.keepAwakeEnabled, .bool, group: "system",
             summary: "Keep Awake ability: prevent idle sleep independently of System.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Tabs.networkDiagnosticsEnabled, .bool, group: "network",
+            summary: "Network Diagnostics extension: read-only connectivity checks.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",

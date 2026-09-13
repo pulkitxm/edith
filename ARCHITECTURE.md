@@ -185,3 +185,5 @@ endpoint, provider credentials, and the signed update channel. Changes that
 cross one of these boundaries should document the data flow, minimize retained
 data, fail closed, and include focused tests for authorization, parsing, and
 error handling.
+
+Network Diagnostics belongs to the System suite. The window, menu panel and CLI submit typed operations to the agent; the agent serializes scans, stores a bounded timeline in SQLite and schedules opt-in checks. Shared notification delivery keeps alerts working with the window closed. The agent does not request Wi-Fi or notification permissions.

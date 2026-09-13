@@ -87,6 +87,7 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.Tabs.attentionEnabled: true,
         AppStorageKeys.Tabs.usageEnabled: true,
         AppStorageKeys.Tabs.systemEnabled: true,
+        AppStorageKeys.Tabs.networkDiagnosticsEnabled: false,
         AppStorageKeys.AppMaintenance.enabled: false,
         AppStorageKeys.AppMaintenance.updateAutoRefresh: false,
         AppStorageKeys.AppMaintenance.updateNotifications: true,

@@ -192,6 +192,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "networkDiagnostics": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "appMaintenance": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "database": Policy(

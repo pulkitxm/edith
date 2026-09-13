@@ -154,6 +154,11 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
+    private static let networkRegistrations: [RegisteredUserOperation] =
+        NetworkDiagnosticOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+
     private static let agentRegistrations: [RegisteredUserOperation] =
         AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
@@ -210,6 +215,7 @@ public enum UserOperationCatalog {
     public static let registrations =
         machineRegistrations + applicationRegistrations + featureRegistrations
         + agentRegistrations + remoteFileRegistrations + remoteActionRegistrations
+        + networkRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)
 
@@ -293,6 +299,29 @@ private func userInterface(
 
 private func commandLineOnly(_ reason: String) -> UserOperationExposure {
     .commandLineOnly(reason: reason)
+}
+
+private extension NetworkDiagnosticOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .diagnose:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Network Diagnostics workspace", action: "run a snapshot"),
+                UserInterfaceActionPlacement(
+                    surface: "Menu panel", action: "run a network snapshot"),
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "run Network Diagnostics"),
+            ])
+        case .baseline:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Network Diagnostics workspace", action: "compare with baseline"),
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "show the network baseline"),
+            ])
+        }
+    }
 }
 
 private extension MachineControlOperation {

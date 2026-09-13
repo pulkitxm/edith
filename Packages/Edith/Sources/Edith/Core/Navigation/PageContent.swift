@@ -23,6 +23,7 @@ struct PageContent: View {
         case .appMaintenance: AppMaintenanceView()
         case .system: SuiteLandingPage(suite: SuiteRegistry.suite(.system))
         case .runningApps: SystemPage()
+        case .network: NetworkDiagnosticsPage()
         case .desk: SuiteLandingPage(suite: SuiteRegistry.suite(.desk))
         case .media: SuiteLandingPage(suite: SuiteRegistry.suite(.media))
         case .music: MusicPage()

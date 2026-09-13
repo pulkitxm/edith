@@ -2,10 +2,20 @@ import EdithKit
 import Foundation
 
 public enum AgentOperations {
-    public static func register(
+    static func register(
         on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
-        downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil
+        downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil,
+        network: NetworkDiagnosticsService? = nil
     ) async {
+        if let network {
+            await network.register(on: runtime)
+        } else {
+            for operation in NetworkDiagnosticOperation.allCases {
+                await runtime.register(operation: operation.descriptor.id.rawValue) { _ in
+                    throw AgentError(.unavailable, "Network diagnostic storage is unavailable.")
+                }
+            }
+        }
         let clipboard = ClipboardService()
         await clipboard.register(on: runtime)
         await FaviconService().register(on: runtime)

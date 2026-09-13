@@ -171,6 +171,13 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.inputSuppression]),
         ExtensionRegistryEntry(
+            id: "networkDiagnostics", title: "Network Diagnostics",
+            subtitle: "Explain local connectivity, latency, DNS, routes, proxies, and services.",
+            symbolName: "network", suite: .system, host: .agent, featured: true,
+            defaultsKey: "tabNetworkDiagnosticsEnabled",
+            requiredCapabilities: [.networkDiagnostics],
+            optionalCapabilities: [.notifications]),
+        ExtensionRegistryEntry(
             id: "keepAwake", title: "Keep Awake",
             subtitle: "Keep the Mac and display awake until you turn it off.",
             symbolName: "moon.zzz", suite: .system, host: .bar, featured: true,

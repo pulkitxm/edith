@@ -242,6 +242,7 @@ final class AppServices {
             store.shutdown()
             calendar = nil
         }
+
     }
 
     private func reconcilePanelServices() {

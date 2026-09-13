@@ -3,6 +3,10 @@ import Foundation
 public enum AgentJobPlan {
     public static let descriptors: [AgentJobDescriptor] = [
         AgentJobDescriptor(
+            id: "network.diagnostics", title: "Network diagnostics", trigger: .timer,
+            topic: .networkDiagnostics, cadence: .every(ambient: 60), power: .pauseOnLock,
+            abilityID: "networkDiagnostics"),
+        AgentJobDescriptor(
             id: "usage.refresh", title: "Usage cost refresh", trigger: .fileSystem,
             topic: .usage, cadence: .every(ambient: 900), power: .any, abilityID: "usage"),
         AgentJobDescriptor(

@@ -16,6 +16,7 @@ import Testing
         "homebrewEnabled",
         "cleanerEnabled",
         "tabSystemEnabled",
+        "tabNetworkDiagnosticsEnabled",
         "keepAwakeEnabled",
         "lidAwakeEnabled",
         "menuBarSystemStats",
@@ -46,7 +47,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
-                "system", "keepAwake", "lidAwake", "systemStats", "micMute",
+                "system", "networkDiagnostics", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
@@ -201,7 +202,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "networkDiagnostics",
+                "keepAwake", "clipboard",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
@@ -327,6 +329,7 @@ import Testing
             "usage": [],
             "herdr": [],
             "quinjet": [],
+            "networkDiagnostics": [],
             "companion": [],
             "plugins": [],
             "appMaintenance": [],
@@ -356,6 +359,7 @@ import Testing
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
+            "networkDiagnostics": [.notifications],
             "companion": [],
             "plugins": [],
             "appMaintenance": [.notifications],

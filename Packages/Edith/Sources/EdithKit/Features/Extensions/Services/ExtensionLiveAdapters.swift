@@ -65,11 +65,31 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
-        "keepAwake", "lidAwake",
-        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
-        "attention", "seoAudit",
+        "usage",
+        "quinjet",
+        "plugins",
+        "appMaintenance",
+        "homebrew",
+        "cleaner",
+        "system",
+        "networkDiagnostics",
+        "keepAwake",
+        "lidAwake",
+        "systemStats",
+        "micMute",
+        "clipboard",
+        "emoji",
+        "colorPicker",
+        "keystrokeHighlight",
+        "focusDim",
+        "presenter",
+        "music",
+        "downloads",
+        "notchShelf",
+        "audioMixer",
+        "calendar",
+        "attention",
+        "seoAudit",
     ]
 
     public static func provider(
@@ -104,6 +124,8 @@ public enum ExtensionLiveAdapters {
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
+        case "networkDiagnostics":
+            .ready("Read-only network diagnostics are available on this Mac.")
         case "keepAwake": .ready("Keep Awake is ready to prevent idle sleep without System.")
         case "appMaintenance": appMaintenanceReadiness()
         case "homebrew": homebrewReadiness(executable: executableNamed("brew"))

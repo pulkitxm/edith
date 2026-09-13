@@ -1,0 +1,242 @@
+import Foundation
+import GRDB
+import Testing
+
+@testable import EdithKit
+@testable import EdithAgent
+@testable import EdithCLI
+
+@Suite struct NetworkDiagnosticsTests {
+    @Test func configurationClampsAndFiltersUnsafeValues() {
+        let configuration = NetworkDiagnosticsConfiguration(
+            targetHost: " example.com ",
+            serviceTargets: [
+                NetworkServiceTarget(host: "example.com", port: 443),
+                NetworkServiceTarget(host: "", port: 0),
+            ], exclusions: [" Internal.Example "], sampleIntervalMinutes: 1,
+            timeoutSeconds: 100, retries: 10, pingCount: 0, timelineLimit: 2
+        ).normalized
+
+        #expect(configuration.targetHost == "example.com")
+        #expect(configuration.serviceTargets.count == 1)
+        #expect(configuration.exclusions == ["internal.example"])
+        #expect(configuration.sampleIntervalMinutes == 5)
+        #expect(configuration.timeoutSeconds == 30)
+        #expect(configuration.retries == 3)
+        #expect(configuration.pingCount == 1)
+        #expect(configuration.timelineLimit == 10)
+        #expect(configuration.excludes("api.internal.example"))
+    }
+
+    @Test func reportsRedactAddressesCredentialsQueriesAndSecrets() {
+        let snapshot = NetworkDiagnosticSnapshot(
+            durationMS: 10, state: .healthy,
+            path: NetworkPathSummary(
+                interfaceName: "en0", localAddress: "192.168.1.24", gateway: "192.168.1.1",
+                dnsServers: ["1.1.1.1"], wifiName: "Private Home", wifiBSSID: "aa:bb:cc:dd:ee:ff",
+                publicAddress: "203.0.113.10"),
+            checks: [
+                NetworkDiagnosticCheck(
+                    id: "web", title: "HTTPS", state: .healthy, summary: "Connected",
+                    detail: "https://user:pass@example.com/path?token=hello api_key=world")
+            ])
+        let report = NetworkDiagnosticsRedactor.report(snapshot)
+
+        #expect(!report.contains("192.168"))
+        #expect(!report.contains("1.1.1.1"))
+        #expect(!report.contains("Private Home"))
+        #expect(!report.contains("pass"))
+        #expect(!report.contains("hello"))
+        #expect(!report.contains("world"))
+        #expect(report.contains("<address>"))
+        #expect(report.contains("<redacted>"))
+    }
+
+    @Test func redactionPreservesTimestampsAndRedactsCompressedIPv6() {
+        let text = "captured 2026-08-29T21:41:42Z from 2001:db8::1 and ::1"
+        let redacted = NetworkDiagnosticsRedactor.redact(text)
+
+        #expect(redacted.contains("2026-08-29T21:41:42Z"))
+        #expect(!redacted.contains("2001:db8::1"))
+        #expect(!redacted.contains("::1"))
+    }
+
+    @Test func baselineComparisonExplainsStateAndLatencyChanges() {
+        let baseline = snapshot(
+            check: NetworkDiagnosticCheck(
+                id: "dns", title: "DNS", state: .healthy, summary: "Resolved", durationMS: 20))
+        let current = snapshot(
+            check: NetworkDiagnosticCheck(
+                id: "dns", title: "DNS", state: .warning, summary: "Slow", durationMS: 120)
+        )
+        .compared(with: baseline)
+
+        #expect(current.baselineChanges == ["DNS: healthy to warning"])
+    }
+
+    @Test func migrationPreservesTheExistingDaemonStore() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("edith.sqlite")
+        let previous = try DatabaseQueue(path: url.path)
+        try AgentSchema.migrator.migrate(previous, upTo: "0004-attention-delivery-receipts")
+        try previous.write { database in
+            try database.execute(sql: "PRAGMA user_version = 4")
+            try database.execute(
+                sql: "INSERT INTO attention_delivery_receipt VALUES ('fixture', 7, ?)",
+                arguments: [Date()])
+        }
+        try previous.close()
+        let store = try AgentStore(url: url, build: "network")
+        defer { try? store.close() }
+        #expect(store.schemaVersion == AgentSchema.version)
+        #expect(
+            try store.read {
+                try Int.fetchOne(
+                    $0,
+                    sql:
+                        "SELECT lastSequence FROM attention_delivery_receipt WHERE producerID = 'fixture'"
+                )
+            } == 7)
+        #expect(
+            try store.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM network_diagnostic") }
+                == 0)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: AgentStoreLayout.backupURL(root: directory, build: "network").path))
+    }
+
+    @Test func timelineRetentionKeepsNewestBoundedSnapshots() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            NetworkCommandResult(status: 0, output: "")
+        }
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        var configuration = NetworkDiagnosticsConfiguration()
+        configuration.timelineLimit = 10
+        for _ in 0..<15 {
+            _ = try await service.diagnose(
+                NetworkDiagnosticRequest(
+                    configuration: configuration, keepHistory: true, saveBaseline: false))
+        }
+        try store.write { database in
+            try database.execute(
+                sql: "UPDATE network_diagnostic SET capturedAt = ?",
+                arguments: [Date(timeIntervalSince1970: 0)])
+        }
+        let loaded = try AgentPayload.decode(
+            [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 100))
+        #expect(loaded.count == 10)
+        #expect(Set(loaded.map(\.id)).count == 10)
+        #expect(loaded.first!.createdAt >= loaded.last!.createdAt)
+    }
+
+    @Test func cancellingTheDaemonJobStopsItsProcessAndSkipsHistory() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            await NetworkProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["2"], timeout: 5)
+        }
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        let started = Date()
+        let run = Task {
+            try await service.diagnose(
+                NetworkDiagnosticRequest(
+                    configuration: .init(), keepHistory: true, saveBaseline: false))
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        run.cancel()
+        await #expect(throws: CancellationError.self) { try await run.value }
+        #expect(Date().timeIntervalSince(started) < 1)
+        let history = try AgentPayload.decode(
+            [NetworkDiagnosticSnapshot].self, from: await service.timeline(limit: 10))
+        #expect(history.isEmpty)
+    }
+
+    @Test func engineExplainsLocalPathWithoutRemoteTargets() async {
+        let engine = NetworkDiagnosticsEngine { executable, arguments, _ in
+            switch (executable.lastPathComponent, arguments) {
+            case ("route", _):
+                NetworkCommandResult(
+                    status: 0,
+                    output: "gateway: 192.168.1.1\ninterface: en0\n")
+            case ("ifconfig", _):
+                NetworkCommandResult(status: 0, output: "inet 192.168.1.24 netmask 0xffffff00")
+            case ("scutil", ["--dns"]):
+                NetworkCommandResult(status: 0, output: "nameserver[0] : 1.1.1.1")
+            case ("scutil", ["--proxy"]), ("scutil", ["--nc", "list"]):
+                NetworkCommandResult(status: 0, output: "")
+            case ("ping", _):
+                NetworkCommandResult(
+                    status: 0,
+                    output:
+                        "4 packets transmitted, 4 packets received, 0.0% packet loss\nround-trip min/avg/max/stddev = 1.0/2.0/3.0/0.5 ms"
+                )
+            default:
+                NetworkCommandResult(status: 1, output: "unexpected")
+            }
+        }
+        let result = await engine.diagnose(configuration: NetworkDiagnosticsConfiguration())
+
+        #expect(result.state == .healthy)
+        #expect(result.path.interfaceName == "en0")
+        #expect(result.path.gateway == "192.168.1.1")
+        #expect(result.path.dnsServers == ["1.1.1.1"])
+        #expect(result.checks.first { $0.id == "gateway" }?.packetLossPercent == 0)
+        #expect(result.checks.first { $0.id == "dns-lookup" }?.state == .skipped)
+    }
+
+    @Test func processRunnerStopsAtTimeout() async {
+        let started = Date()
+        let result = await NetworkProcessRunner.run(
+            executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["2"], timeout: 0.05)
+
+        #expect(result.timedOut)
+        #expect(Date().timeIntervalSince(started) < 1)
+    }
+
+    @Test func completedFailedDiagnosisReturnsSnapshotAndSuccess() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try AgentStore(
+            url: directory.appendingPathComponent("edith.sqlite"), build: "test")
+        defer { try? store.close() }
+        let engine = NetworkDiagnosticsEngine { _, _, _ in
+            NetworkCommandResult(status: 1, output: "connection refused")
+        }
+        let service = NetworkDiagnosticsService(store: store, engine: engine)
+        let runtime = AgentRuntime(build: "test", store: store)
+        await service.register(on: runtime)
+        let listener = AgentRuntimeTestListener(runtime: runtime)
+        defer { listener.stop() }
+        await CLIProbe.inWorld { _ in
+            let original = CLIEnvironment.networkClient
+            CLIEnvironment.networkClient = listener.client()
+            defer { CLIEnvironment.networkClient = original }
+            let result = await CLIProbe.capture([
+                "network", "diagnose", "--service", "127.0.0.1:1", "--timeout", "0.2", "--retries",
+                "0", "--count", "1", "--json", "--no-history",
+            ])
+            #expect(result.code == 0)
+            #expect(result.object?["state"] as? String == "failed")
+        }
+    }
+
+    private func snapshot(check: NetworkDiagnosticCheck) -> NetworkDiagnosticSnapshot {
+        NetworkDiagnosticSnapshot(
+            durationMS: 1, state: check.state, path: NetworkPathSummary(), checks: [check])
+    }
+}

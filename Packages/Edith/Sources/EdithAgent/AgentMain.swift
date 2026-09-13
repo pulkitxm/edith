@@ -84,11 +84,12 @@ public enum AgentBoot {
         let startup = Task {
             guard !Task.isCancelled else { return }
             await runtime.attach(scheduler: scheduler)
+            let network = store.map { NetworkDiagnosticsService(store: $0) }
             let metrics = await AgentMachineMetricsService()
             await metrics.register(on: runtime)
             await AgentOperations.register(
                 on: runtime, store: store, scheduler: scheduler, downloads: downloads,
-                attention: attention)
+                attention: attention, network: network)
             do {
                 let tasks = try AgentTaskService(
                     publish: { snapshots in
@@ -117,7 +118,7 @@ public enum AgentBoot {
             }
             for job in AgentJobCatalog.jobs(
                 store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
-                attention: attention)
+                attention: attention, network: network)
             {
                 await scheduler.register(job)
             }

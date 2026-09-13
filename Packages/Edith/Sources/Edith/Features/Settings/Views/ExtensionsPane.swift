@@ -1045,6 +1045,7 @@ private struct ExtensionDetailRows: View {
             case .quinjet: QuinjetRows()
             case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
+            case .networkDiagnostics: NetworkDiagnosticsRows()
             case .keepAwake: KeepAwakeRows()
             case .appMaintenance: AppMaintenanceRows()
             case .homebrew: HomebrewRows()
@@ -1075,6 +1076,30 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct NetworkDiagnosticsRows: View {
+    @AppStorage(AppStorageKeys.Tabs.networkDiagnosticsEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Group {
+            Section("Diagnostics") {
+                LabeledContent("Mode", value: "Read-only")
+                Text("Run explainable local path checks and configure explicit remote targets.")
+                    .settingsCaption()
+                Button("Open Network Diagnostics") { SectionWindow.open(.network) }
+            }
+            Section("Privacy") {
+                Text("Public IP lookup and scheduled sampling stay off until you enable them.")
+                    .settingsCaption()
+                Text("Copied and exported reports redact secrets and network addresses.")
+                    .settingsCaption()
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

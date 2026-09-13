@@ -77,6 +77,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case quinjet
     case seoAudit
     case system
+    case networkDiagnostics
     case keepAwake
     case appMaintenance
     case homebrew

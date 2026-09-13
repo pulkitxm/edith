@@ -217,6 +217,12 @@ public enum AppStorageKeys {
         public static let shuffling = "musicShuffling"
     }
 
+    public enum NetworkDiagnostics {
+        public static let baseline = "networkDiagnosticsBaseline"
+        public static let configuration = "networkDiagnosticsConfiguration"
+        public static let enabled = "tabNetworkDiagnosticsEnabled"
+    }
+
     public enum Notch {
         public static let alertAudio = "notchAlertAudio"
         public static let alertBattery = "notchAlertBattery"
@@ -290,6 +296,7 @@ public enum AppStorageKeys {
         public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let musicEnabled = "tabMusicEnabled"
+        public static let networkDiagnosticsEnabled = "tabNetworkDiagnosticsEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let seoAuditEnabled = "tabSEOAuditEnabled"

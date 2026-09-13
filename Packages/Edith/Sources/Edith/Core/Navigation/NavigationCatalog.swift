@@ -149,6 +149,9 @@ enum NavigationCatalog {
             id: "system", title: "System", symbolName: "switch.2", band: .suite(.system),
             isSuiteLanding: true, expansionKey: SuiteExpansion.key(for: .system)),
         SidebarPage(
+            id: "network", title: "Network", symbolName: "network",
+            band: .suite(.system), abilityIDs: ["networkDiagnostics"], parentID: "system"),
+        SidebarPage(
             id: "runningApps", title: "Running apps", symbolName: "cpu",
             band: .suite(.system), abilityIDs: ["system"], parentID: "system"),
 
@@ -267,7 +270,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case home, machines
     case agents, dashboard, herdr, quinjet, companion, plugins
     case appMaintenance
-    case system, runningApps
+    case system, runningApps, network
     case desk
     case media, music, calendar
     case data, database, attention, seoAudit

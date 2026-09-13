@@ -58,7 +58,9 @@ import Testing
             UsageCollectionOperation.refresh.descriptor.id,
             UsageCollectionOperation.limitsRefresh.descriptor.id,
         ]
-        #expect(AgentOperationCatalog.served == control + usage)
+        #expect(
+            AgentOperationCatalog.served == control + usage
+                + NetworkDiagnosticOperation.allCases.map { $0.descriptor.id })
         #expect(AgentOperationCatalog.serves(AgentControlOperation.jobs.descriptor.id))
         #expect(AgentOperationCatalog.serves(UsageCollectionOperation.refresh.descriptor.id))
         #expect(!AgentOperationCatalog.servesInternal("usage.refresh"))
@@ -75,7 +77,9 @@ import Testing
     @Test func everyServedOperationIsInTheUserOperationCatalog() {
         #expect(AgentOperationCatalog.descriptors.count == AgentOperationCatalog.served.count)
         for descriptor in AgentOperationCatalog.descriptors {
-            #expect(descriptor.cli.first == "agent" || descriptor.cli.first == "usage")
+            #expect(
+                descriptor.cli.first == "agent" || descriptor.cli.first == "usage"
+                    || descriptor.cli.first == "network")
         }
     }
 

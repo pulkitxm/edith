@@ -135,6 +135,15 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed network": Spec(options: [
+            "--json", "--target", "--dns", "--http", "--https", "--service", "--exclude",
+            "--public-ip", "--timeout", "--retries", "--count", "--save-baseline", "--no-history",
+        ]),
+        "ed network baseline": Spec(options: ["--json"]),
+        "ed network diagnose": Spec(options: [
+            "--json", "--target", "--dns", "--http", "--https", "--service", "--exclude",
+            "--public-ip", "--timeout", "--retries", "--count", "--save-baseline", "--no-history",
+        ]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

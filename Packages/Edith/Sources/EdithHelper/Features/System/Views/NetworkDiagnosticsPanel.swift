@@ -1,0 +1,102 @@
+import EdithKit
+import SwiftUI
+
+struct NetworkDiagnosticsPanel: View {
+    let openWorkspace: () -> Void
+    @State private var snapshot: NetworkDiagnosticSnapshot?
+    @State private var running = false
+    @State private var errorMessage: String?
+    @State private var task: Task<Void, Never>?
+
+    init(snapshot: NetworkDiagnosticSnapshot? = nil, openWorkspace: @escaping () -> Void) {
+        self.openWorkspace = openWorkspace
+        self._snapshot = State(initialValue: snapshot)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Network Diagnostics").font(.system(size: 15, weight: .semibold))
+                    Text("Read-only, local-first checks").font(.system(size: 11)).foregroundStyle(
+                        .secondary)
+                }
+                Spacer()
+                Button("Open workspace", action: openWorkspace)
+                    .buttonStyle(.edith(.toolbar))
+            }
+            if let snapshot {
+                HStack(spacing: 9) {
+                    Image(systemName: symbol(snapshot.state))
+                        .foregroundStyle(color(snapshot.state))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(snapshot.state.rawValue.capitalized)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("\(snapshot.checks.count) checks in \(Int(snapshot.durationMS)) ms")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(snapshot.createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                Text(
+                    "Run a snapshot to inspect your current route, DNS, gateway, and configured targets."
+                )
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            }
+            if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.secondary) }
+            Button {
+                running ? task?.cancel() : run()
+            } label: {
+                Label(
+                    running ? "Cancel" : "Run snapshot", systemImage: running ? "xmark" : "network"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.edith(running ? .destructive : .primary))
+        }
+        .onDisappear {
+            task?.cancel()
+            task = nil
+            running = false
+        }
+    }
+
+    private func run() {
+        running = true
+        let configuration = NetworkDiagnosticsPreferences.configuration()
+        errorMessage = nil
+        task = Task {
+            defer { running = false; task = nil }
+            do {
+                let result = try await NetworkDiagnosticsClient.diagnose(
+                    configuration: configuration)
+                guard !Task.isCancelled else { return }
+                snapshot = result
+            } catch is CancellationError {
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func symbol(_ state: NetworkDiagnosticState) -> String {
+        switch state {
+        case .healthy: "checkmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .failed: "xmark.octagon.fill"
+        case .skipped: "minus.circle.fill"
+        }
+    }
+
+    private func color(_ state: NetworkDiagnosticState) -> Color {
+        switch state {
+        case .healthy: .green
+        case .warning: .orange
+        case .failed: .red
+        case .skipped: .secondary
+        }
+    }
+}
