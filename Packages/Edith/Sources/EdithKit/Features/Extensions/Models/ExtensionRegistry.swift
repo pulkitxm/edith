@@ -56,7 +56,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .accessibility:
             "Asked when you first use Clean keys, clipboard instant paste, or emoji insertion."
         case .inputMonitoring:
-            "Asked when you first use Clean keys to block key presses during cleaning."
+            "Asked when you first use Clean keys or text snippet expansion."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
         case .screenRecording:
             "Required to detect shared content or sample colors from the screen."
@@ -131,6 +131,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "calendar": [.calendar]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
+        case "textUtilities": [.accessibility, .inputMonitoring]
         case "keystrokeHighlight": [.inputMonitoring]
         default: []
         }

@@ -55,6 +55,7 @@ import Testing
         "ed shelf clear",
         "ed shelf purge",
         "ed shelf rm",
+        "ed text snippets rm",
     ]
 
     static func nodes(

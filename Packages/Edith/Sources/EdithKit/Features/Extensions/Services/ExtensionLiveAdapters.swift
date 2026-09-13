@@ -67,7 +67,8 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
-        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+        "systemStats", "micMute", "clipboard", "textUtilities", "emoji", "colorPicker",
+        "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
         "attention", "seoAudit",
     ]
@@ -118,6 +119,7 @@ public enum ExtensionLiveAdapters {
         case "notchShelf": shelfReadiness()
         case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
+        case "textUtilities": .ready("Text expansion and clipboard utilities are ready.")
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)

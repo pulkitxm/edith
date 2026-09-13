@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var textUtilities: TextUtilitiesEngine?
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
@@ -90,6 +91,8 @@ final class AppServices {
 
     func prepareForTermination() async {
         startup.cancel()
+        textUtilities?.shutdown()
+        textUtilities = nil
         terminating = true
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
@@ -175,6 +178,8 @@ final class AppServices {
     func sync() {
         guard !terminating else { return }
         startup.cancel()
+        textUtilities?.shutdown()
+        textUtilities = nil
         reconcileMediaServices()
         reconcileSystemServices()
         reconcilePanelServices()
@@ -186,6 +191,8 @@ final class AppServices {
 
     func cancelStartup() {
         startup.cancel()
+        textUtilities?.shutdown()
+        textUtilities = nil
     }
 
     func waitForStartup() async {
@@ -287,6 +294,16 @@ final class AppServices {
             }
         }
         ClipboardPanel.shared.store = clipboard
+
+        let textUtilitiesOn =
+            ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) ?? false
+        if textUtilitiesOn {
+            if textUtilities == nil { textUtilities = TextUtilitiesEngine() }
+            textUtilities?.syncSettings()
+        } else {
+            textUtilities?.shutdown()
+            textUtilities = nil
+        }
 
         let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
         if emojiOn {

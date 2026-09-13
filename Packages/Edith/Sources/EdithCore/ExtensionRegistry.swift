@@ -198,6 +198,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "textUtilities", title: "Text Utilities",
+            subtitle: "Snippets, plain text paste, clipboard clearing, and clean links.",
+            symbolName: "text.badge.checkmark", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "textUtilitiesEnabled", requiredCapabilities: [.globalPaste],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

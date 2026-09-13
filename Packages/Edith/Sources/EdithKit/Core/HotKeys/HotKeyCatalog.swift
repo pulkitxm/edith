@@ -69,6 +69,8 @@ public enum HotKeyCatalog {
     public static let emoji = "emoji"
     public static let keystrokeHighlight = "keystrokeHighlight"
 
+    public static let textUtilities = "textUtilities"
+
     public static let bindings: [HotKeyBinding] = [
         HotKeyBinding(
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
@@ -111,6 +113,13 @@ public enum HotKeyCatalog {
             labelKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel, defaultCode: kVK_ANSI_K,
             defaultMods: controlKey | optionKey | cmdKey, defaultLabel: "⌃⌥⌘K",
             abilityID: "keystrokeHighlight"),
+        HotKeyBinding(
+            id: textUtilities, title: "Paste plain text", carbonID: 35,
+            codeKey: AppStorageKeys.TextUtilities.hotKeyCode,
+            modsKey: AppStorageKeys.TextUtilities.hotKeyMods,
+            labelKey: AppStorageKeys.TextUtilities.hotKeyLabel, defaultCode: kVK_ANSI_V,
+            defaultMods: controlKey | optionKey | cmdKey, defaultLabel: "⌃⌥⌘V",
+            abilityID: "textUtilities"),
     ]
 
     public static func binding(_ id: String) -> HotKeyBinding? {

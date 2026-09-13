@@ -235,6 +235,19 @@ struct EdithApp {
                     userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
             })
         _ = IPC.observe(
+            IPC.Name.requestPlainTextPaste,
+            info: { info in
+                let state = MainActor.assumeIsolated {
+                    services.textUtilities?.pastePlainText() ?? .unavailable
+                }
+                guard let requestID = info[PlainTextPasteIPC.requestIDKey] as? String else {
+                    return
+                }
+                IPC.post(
+                    IPC.Name.plainTextPasteResult,
+                    userInfo: PlainTextPasteIPC.payload(requestID: requestID, state: state))
+            })
+        _ = IPC.observe(
             IPC.Name.presentNotification,
             info: { info in
                 guard let notification = AgentNotification(userInfo: info) else { return }
@@ -432,6 +445,36 @@ enum EmojiHotKey {
     }
 }
 
+enum TextUtilitiesHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyCode) as? Int
+            ?? kVK_ANSI_V
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyMods) as? Int
+            ?? (controlKey | optionKey | cmdKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V"
+    }
+
+    @MainActor
+    static func register() {
+        guard ExtensionRegistry.entry("textUtilities")?.isEnabled(in: SharedDefaults.store) == true
+        else {
+            unregister()
+            return
+        }
+        HotKeyRegistrar.install(HotKeyCatalog.textUtilities) {
+            MainActor.assumeIsolated { _ = AppState.services.textUtilities?.pastePlainText() }
+        }
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.textUtilities)
+    }
+}
 enum MicHotKey {
     private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.micMute)! }
 

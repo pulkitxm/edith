@@ -1063,6 +1063,7 @@ private struct ExtensionDetailRows: View {
             case .notchShelf: NotchShelfRows()
             case .audioMixer: AudioMixerRows()
             case .clipboard: ClipboardRows()
+            case .textUtilities: TextUtilitiesRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()

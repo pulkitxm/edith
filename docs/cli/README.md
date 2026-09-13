@@ -62,6 +62,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
 | [`ed database`](./database/README.md) | Saved database connections and capability reports through the authenticated local broker |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed text`](./text/README.md) | Text snippets, plain-text paste, clipboard privacy, and tracking-free links |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
 | [`ed emoji`](./emoji/README.md) | Opening the emoji picker, listing what this Mac can render, typing one, and the default skin tone |

@@ -34,6 +34,10 @@ public enum IPC {
         public static let requestTestNotification = IPC.scopedName(
             "com.pulkit.edith.requestTestNotification")
         public static let clipboardChanged = IPC.scopedName("com.pulkit.edith.clipboardChanged")
+        public static let requestPlainTextPaste = IPC.scopedName(
+            "com.pulkit.edith.requestPlainTextPaste")
+        public static let plainTextPasteResult = IPC.scopedName(
+            "com.pulkit.edith.plainTextPasteResult")
         public static let requestColorPick = IPC.scopedName(
             "com.pulkit.edith.requestColorPick")
         public static let requestEmojiPanel = IPC.scopedName(
