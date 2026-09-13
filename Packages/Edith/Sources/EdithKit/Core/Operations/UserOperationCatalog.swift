@@ -104,55 +104,60 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
-    private static let featureRegistrations: [RegisteredUserOperation] =
-        UsageProjectOperation.allCases.map {
+    private static let featureRegistrations: [RegisteredUserOperation] = {
+        var registrations = UsageProjectOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ConfigurationOperation.allCases.map {
+        registrations += ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + TerminalToolingOperation.allCases.map {
+        registrations += TerminalToolingOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + PermissionOperation.allCases.map {
+        registrations += PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + RunningAppOperation.allCases.map {
+        registrations += RunningAppOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ColorPickerOperation.allCases.map {
+        registrations += ColorPickerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ColorSwatchOperation.allCases.map {
+        registrations += ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + EmojiOperation.allCases.map {
+        registrations += EmojiOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CompanionSettingsOperation.allCases.map {
+        registrations += CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + ClipboardOperation.allCases.map {
+        registrations += ClipboardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + AttentionFocusOperation.allCases.map {
+        registrations += AttentionFocusOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CleanerOperation.allCases.map {
+        registrations += CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + HomebrewOperation.allCases.map {
+        registrations += HomebrewOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + AppMaintenanceOperation.allCases.map {
+        registrations += AppMaintenanceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DatabaseConnectionOperation.allCases.map {
+        registrations += DatabaseConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + WorkspaceOperation.allCases.map {
+        registrations += WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += MediaToolkitOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        return registrations
+    }()
 
     private static let agentRegistrations: [RegisteredUserOperation] =
         AgentControlOperation.allCases.map {
@@ -1493,5 +1498,20 @@ private extension MachineFileOperation {
 private extension CompanionMindRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         .userInterface(placements)
+    }
+}
+
+private extension MediaToolkitOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .convertImages:
+            userInterface(
+                "Media Toolkit", "convert selected images",
+                ["~/Pictures/input.png", "--to", "~/Pictures/Converted"])
+        case .compressVideo:
+            userInterface(
+                "Media Toolkit", "compress the selected video",
+                ["~/Movies/input.mov", "--to", "~/Movies", "--target-mb", "20"])
+        }
     }
 }

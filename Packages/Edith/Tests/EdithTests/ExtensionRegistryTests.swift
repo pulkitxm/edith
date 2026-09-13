@@ -7,6 +7,7 @@ import Testing
 
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
+        "tabMediaToolkitEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -44,12 +45,11 @@ import Testing
     @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "usage", "herdr", "quinjet", "companion", "plugins",
-                "appMaintenance", "homebrew", "cleaner",
-                "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
-                "music", "downloads", "notchShelf", "audioMixer", "calendar",
-                "database", "attention", "seoAudit",
+                "usage", "herdr", "quinjet", "companion", "plugins", "appMaintenance", "homebrew",
+                "cleaner", "system", "keepAwake", "lidAwake", "systemStats", "micMute",
+                "mediaToolkit", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer",
+                "calendar", "database", "attention", "seoAudit",
             ])
     }
 
@@ -202,7 +202,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
-                "keystrokeHighlight", "notchShelf", "database", "attention",
+                "keystrokeHighlight", "notchShelf", "database", "attention", "mediaToolkit",
             ])
     }
 
@@ -324,6 +324,7 @@ import Testing
 
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
+            "mediaToolkit": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -353,6 +354,7 @@ import Testing
             "seoAudit": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
+            "mediaToolkit": [],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],

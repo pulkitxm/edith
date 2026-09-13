@@ -135,6 +135,16 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed media status": Spec(options: ["--json", "--help"]),
+        "ed media convert-images": Spec(
+            options: [
+                "--json", "--help", "--to", "--format", "--quality",
+                "--max-dimension",
+            ], optionValues: ["--to": .localPath], repeatingArgument: .localPath),
+        "ed media compress-video": Spec(
+            options: ["--json", "--help", "--to", "--target-mb", "--no-audio"],
+            optionValues: ["--to": .localPath], arguments: [.localPath]),
+        "ed media": Spec(options: ["--json", "--help"]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),

@@ -192,6 +192,12 @@ public enum ExtensionRegistry {
             defaultsKey: "micMuteEnabled", requiredCapabilities: [.microphoneControl],
             optionalCapabilities: [.globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "mediaToolkit", title: "Media Toolkit",
+            subtitle: "Batch-convert images and compress videos locally.",
+            symbolName: "photo.stack", suite: .media, host: .agent, featured: true,
+            defaultsKey: "tabMediaToolkitEnabled",
+            requiredCapabilities: [.localMediaProcessing]),
+        ExtensionRegistryEntry(
             id: "clipboard", title: "Clipboard",
             subtitle: "Clipboard history with instant paste.",
             symbolName: "doc.on.clipboard", suite: .desk, host: .bar, featured: true,

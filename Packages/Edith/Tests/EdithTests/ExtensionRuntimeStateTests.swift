@@ -263,6 +263,10 @@ import Testing
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
+            (
+                "mediaToolkit", "MediaToolkitRows", "enabled",
+                "../../MediaToolkit/MediaToolkitPage.swift"
+            ),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),

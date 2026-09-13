@@ -665,6 +665,7 @@ private struct ExtensionSettingsSheet: View {
         case "lidAwake": 400
         case "music": 460
         case "focusDim", "colorPicker", "keystrokeHighlight": 430
+        case "mediaToolkit": 520
         case "system": 500
         case "notchShelf", "presenter": 580
         default: 620
@@ -1059,6 +1060,7 @@ private struct ExtensionDetailRows: View {
                 MusicRows()
                 MusicBarRows()
             case .downloads: DownloadsRows()
+            case .mediaToolkit: MediaToolkitRows()
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
             case .audioMixer: AudioMixerRows()

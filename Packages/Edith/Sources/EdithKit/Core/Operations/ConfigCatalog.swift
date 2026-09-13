@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music",
+        "music", "media",
         "calendar",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
@@ -61,7 +61,7 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + media + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -660,6 +660,32 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.calendarEnabled, .bool, group: "calendar",
             summary: "Calendar extension: your schedule in the panel and the app.",
             fallback: .bool(false))
+    ]
+
+    private static let media: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.mediaToolkitEnabled, .bool, group: "media",
+            summary: "Media Toolkit extension: local image conversion and video compression.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.MediaToolkit.imageFormat, .string, group: "media",
+            summary: "Default image output format.",
+            allowed: MediaImageFormat.allCases.map(\.rawValue),
+            fallback: .string(MediaImageFormat.jpeg.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.MediaToolkit.imageMaxDimension, .int, group: "media",
+            summary: "Largest image edge in pixels; 0 keeps the original size.",
+            integerRange: 0...20_000, fallback: .int(1600)),
+        SettingDefinition(
+            AppStorageKeys.MediaToolkit.imageQuality, .number, group: "media",
+            summary: "Lossy image quality from 0.1 to 1.", fallback: .double(0.82)),
+        SettingDefinition(
+            AppStorageKeys.MediaToolkit.videoKeepAudio, .bool, group: "media",
+            summary: "Keep the audio track when compressing video.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.MediaToolkit.videoTargetMegabytes, .int, group: "media",
+            summary: "Maximum compressed video size in decimal megabytes.",
+            integerRange: 1...512, fallback: .int(20)),
     ]
 
     private static let clipboard: [SettingDefinition] = [
