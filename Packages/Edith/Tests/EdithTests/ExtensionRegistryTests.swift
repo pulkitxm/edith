@@ -21,6 +21,7 @@ import Testing
         "menuBarSystemStats",
         "micMuteEnabled",
         "clipboardEnabled",
+        "keyboardToolsEnabled",
         "emojiEnabled",
         "colorPickerEnabled",
         "keystrokeHighlightEnabled",
@@ -47,7 +48,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
+                "clipboard", "keyboardTools", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -202,6 +204,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "keyboardTools",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
@@ -338,6 +341,7 @@ import Testing
             "systemStats": [],
             "micMute": [],
             "clipboard": [],
+            "keyboardTools": [.accessibility],
             "emoji": [],
             "colorPicker": [.screenRecording],
             "keystrokeHighlight": [.inputMonitoring],
@@ -367,6 +371,7 @@ import Testing
             "systemStats": [],
             "micMute": [],
             "clipboard": [.accessibility],
+            "keyboardTools": [.inputMonitoring],
             "emoji": [.accessibility],
             "colorPicker": [],
             "keystrokeHighlight": [],

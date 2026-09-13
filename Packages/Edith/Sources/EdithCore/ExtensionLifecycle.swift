@@ -791,6 +791,44 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "keyboardTools",
+            "Filter accidental duplicate key presses and give Caps Lock tap and hold behaviors.",
+            workflows: [
+                instruction(
+                    "debounce", "Debounce a keyboard",
+                    "Suppress a second physical press inside the configured time window."),
+                instruction(
+                    "super", "Use Caps Lock as Super",
+                    "Tap it for an action or hold it with another key for modifiers."),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Grant keyboard access",
+                    "Allow Accessibility, then restart Edith if macOS asks for it.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable keyboardTools",
+                "ed config set keyboardDebounceWindowMs 50",
+                "ed config set keyboardSuperTapAction escape",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Keyboard Tools guide", "docs/cli/keyboard-tools/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Keyboard Tools readiness",
+                    "Inspect permissions, helper state, and configuration.",
+                    "ed extensions doctor keyboardTools --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Read runtime readiness",
+                    "Confirm the helper and keyboard configuration are ready.",
+                    "ed extensions verify keyboardTools --json")
+            ]),
+        descriptor(
             "keystrokeHighlight",
             "Show keyboard input as clear keycaps that disappear automatically.",
             workflows: [

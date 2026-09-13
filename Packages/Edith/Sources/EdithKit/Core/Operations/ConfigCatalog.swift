@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "keyboard", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -61,7 +61,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + calendar + clipboard + keyboard + keystrokeHighlight + notch + focusDim
+        + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -726,6 +727,34 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let keyboard: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.enabled, .bool, group: "keyboard",
+            summary: "Keyboard Tools extension: debounce and Caps Lock Super key.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.debounceEnabled, .bool, group: "keyboard",
+            summary: "Suppress accidental duplicate physical key presses.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.debounceWindow, .int, group: "keyboard",
+            summary: "Milliseconds in which a duplicate key press is suppressed.",
+            integerRange: KeyboardToolsSettings.debounceRange,
+            fallback: .int(KeyboardToolsSettings.defaultDebounceWindow)),
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.superEnabled, .bool, group: "keyboard",
+            summary: "Turn Caps Lock into a tap or modifier chord Super key.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.superTapAction, .string, group: "keyboard",
+            summary: "Action performed by a quick Caps Lock tap.",
+            allowed: KeyboardSuperTapAction.allCases.map(\.rawValue), fallback: .string("escape")),
+        SettingDefinition(
+            AppStorageKeys.KeyboardTools.superHoldAction, .string, group: "keyboard",
+            summary: "Modifiers applied while Caps Lock is held with another key.",
+            allowed: KeyboardSuperHoldAction.allCases.map(\.rawValue), fallback: .string("hyper")),
     ]
 
     private static let notch: [SettingDefinition] = [

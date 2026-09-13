@@ -38,6 +38,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Calendar | live EventKit authorization | readable calendar count | `ed permissions request calendar`; `ed calendar ls --json` |
 | Notch Shelf | decodable shelf index and, when Audio Mixer is enabled, macOS 14.4 or later | parked item count and missing backing files; Audio Mixer is omitted on unsupported systems | `ed shelf ls --json`; `ed permissions settings applicationAudio` |
 | Clipboard | decodable JSONL index | entry count and missing blob payloads | `ed clipboard stats --json`; `ed clipboard ls --json` |
+| Keyboard Tools | at least one input filter selected | debounce and Super key settings are valid | `ed config ls --group keyboard --json`; `ed extensions verify keyboardTools --json` |
 | Keystroke Highlight | enabled extension and active or paused state | listen-only keyboard event monitor while active | `ed config set keystrokeHighlightActive true`; `ed permissions request inputMonitoring` |
 | Focus Dim | finite intensity and animation values plus a valid display mode | active display count | `ed config ls --group focusdim --json`; `ed permissions refresh` |
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |

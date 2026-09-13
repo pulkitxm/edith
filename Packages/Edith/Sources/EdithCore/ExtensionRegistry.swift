@@ -198,6 +198,11 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "keyboardTools", title: "Keyboard Tools",
+            subtitle: "Debounce faulty keys and turn Caps Lock into a Super key.",
+            symbolName: "keyboard", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "keyboardToolsEnabled", requiredCapabilities: [.inputSuppression]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

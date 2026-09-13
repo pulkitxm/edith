@@ -50,6 +50,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed agent`](./agent/README.md) | The headless background agent: registration, live state and its job table |
 | [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP |
 | [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
+| [Keyboard Tools](./keyboard-tools/README.md) | Faulty-key debounce and configurable Caps Lock tap and hold behavior |
 | [Keystroke Highlight](./keystroke-highlight/README.md) | Showing key presses on screen for demos and recordings |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |

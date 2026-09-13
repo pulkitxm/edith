@@ -130,6 +130,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "keyboardTools": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         case "keystrokeHighlight": [.inputMonitoring]
         default: []
@@ -140,6 +141,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "usage", "appMaintenance": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
+        case "keyboardTools": [.inputMonitoring]
         case "notchShelf": [.bluetooth, .camera, .automation]
         case "audioMixer": [.applicationAudio]
         case "clipboard", "emoji": [.accessibility]
