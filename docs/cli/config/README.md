@@ -329,6 +329,18 @@ not here cannot be set, and `import` skips it.
 | `focusDimHotKeyMods` | int | none | shared | Carbon modifier mask of the focus dim shortcut. |
 | `focusDimHotKeyLabel` | string | none | shared | Printable label for the focus dim shortcut. |
 
+### `docktools`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `dockToolsEnabled` | bool | `false` | shared | Dock Tools extension: previews and Dock window controls. |
+| `dockToolsPreviewMode` | string: `hover`, `optionClick` | `hover` | shared | How Dock window previews open. |
+| `dockToolsHoverDelay` | number | `0.3` | shared | Seconds before a Dock hover preview opens. |
+| `dockToolsClickAction` | string: `standard`, `cycleWindows`, `minimizeFrontWindow` | `standard` | shared | Action for clicking the active app in the Dock. |
+| `dockToolsGreenButtonMaximizes` | bool | `false` | shared | Use the green window button to maximize without entering full screen. |
+| `dockToolsQuitOnLastWindow` | bool | `false` | shared | Quit regular apps when their last window closes. |
+| `dockToolsExcludedApps` | csv | none | shared | Bundle identifiers excluded from Dock Tools. |
+
 ### `presenter`
 
 | Key | Type | Default | Scope | What it controls |
@@ -463,8 +475,8 @@ as writable objects, so a document that validates against the schema can still
 contain a key `import` will skip.
 
 **`ed schema` is the machine-readable half of this page.** It prints a JSON
-Schema for the `import` document: the 191 writable keys as properties,
-`additionalProperties: false`, the `enum` for each of the 19 keys with an
+Schema for the `import` document: the 198 writable keys as properties,
+`additionalProperties: false`, the `enum` for each of the 21 keys with an
 allowed list, the default where the catalogue declares one, and `x-group`,
 `x-scope` and `x-format` annotations. A `csv` setting is typed as a string with
 `"x-format": "comma-separated"`; a `stringList` is an array of strings.
@@ -474,7 +486,7 @@ allowed list, the default where the catalogue declares one, and `x-group`,
 `tabSystemEnabled`, `tabMachinesEnabled`, `tabCompanionEnabled`,
 `menuBarSystemStats`, `micMuteEnabled`, `lidAwakeEnabled`, `tabMusicEnabled`,
 `tabCalendarEnabled`, `notchShelfEnabled`, `clipboardEnabled`,
-`focusDimEnabled`, `presenterEnabled` and `colorPickerEnabled` are the same
+`focusDimEnabled`, `dockToolsEnabled`, `presenterEnabled` and `colorPickerEnabled` are the same
 switches `ed extensions enable` and
 `ed extensions disable` flip. Prefer those verbs: they know which macOS
 permission the extension needs and say which one is missing, where

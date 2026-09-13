@@ -154,6 +154,11 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
+    private static let dockRegistrations: [RegisteredUserOperation] =
+        DockToolsOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+
     private static let agentRegistrations: [RegisteredUserOperation] =
         AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
@@ -208,7 +213,7 @@ public enum UserOperationCatalog {
     }()
 
     public static let registrations =
-        machineRegistrations + applicationRegistrations + featureRegistrations
+        machineRegistrations + applicationRegistrations + featureRegistrations + dockRegistrations
         + agentRegistrations + remoteFileRegistrations + remoteActionRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)

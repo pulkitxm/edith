@@ -1065,6 +1065,7 @@ private struct ExtensionDetailRows: View {
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
+            case .dockTools: DockToolsRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
             case .emoji: EmojiRows()

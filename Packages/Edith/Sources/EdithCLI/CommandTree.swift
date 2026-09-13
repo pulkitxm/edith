@@ -255,6 +255,9 @@ public enum CommandTree {
         "ed usage machines disable": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage machines forget": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage refresh": Spec(options: ["--json", "--follow", "--machines", "--no-machines"]),
+        "ed dock status": Spec(options: common),
+        "ed dock windows": Spec(options: common, arguments: [.runningApp]),
+        "ed dock show": Spec(options: common, arguments: [.runningApp]),
         "ed system stats": Spec(options: ["--json", "-f", "--follow", "--interval", "--processes"]),
         "ed system disks": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed music": Spec(

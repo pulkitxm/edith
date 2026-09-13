@@ -40,6 +40,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Clipboard | decodable JSONL index | entry count and missing blob payloads | `ed clipboard stats --json`; `ed clipboard ls --json` |
 | Keystroke Highlight | enabled extension and active or paused state | listen-only keyboard event monitor while active | `ed config set keystrokeHighlightActive true`; `ed permissions request inputMonitoring` |
 | Focus Dim | finite intensity and animation values plus a valid display mode | active display count | `ed config ls --group focusdim --json`; `ed permissions refresh` |
+| Dock Tools | valid preview and Dock click preferences | Dock access plus optional window preview capture | `ed dock status --json`; `ed permissions refresh` |
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |
 | Emoji Picker | bundled emoji catalog and valid picker settings | recent emoji usage | `ed emoji ls --json`; `ed permissions refresh` |
 | Color Picker | valid copy format, color profile, history limit, and decodable history | active display and saved sample count | `ed color ls --json`; `ed permissions refresh` |

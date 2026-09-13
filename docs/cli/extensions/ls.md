@@ -32,6 +32,7 @@ calendar     off    Media      Calendar
 notchShelf   off    Media      Notch Shelf
 clipboard    on     Utilities  Clipboard
 focusDim     off    Utilities  Focus Dim
+dockTools    off    Utilities  Dock Tools
 presenter    off    Utilities  Presenter
 emoji        off    Utilities  Emoji Picker
 colorPicker  on     Utilities  Color Picker

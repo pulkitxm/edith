@@ -15,6 +15,7 @@ final class AppServices {
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
+    private(set) var dockTools: DockToolsEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
@@ -95,6 +96,7 @@ final class AppServices {
         PermissionsModel.shared.shutdown()
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
+        dockTools?.shutdown()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
@@ -217,6 +219,15 @@ final class AppServices {
     }
 
     func reconcileSystemServices() {
+        let dockToolsOn =
+            ExtensionRegistry.entry("dockTools")?.isEnabled(in: SharedDefaults.store) ?? false
+        if dockToolsOn, dockTools == nil { dockTools = DockToolsEngine() }
+        if !dockToolsOn, let engine = dockTools {
+            engine.shutdown()
+            dockTools = nil
+        }
+        dockTools?.syncSettings()
+
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {
