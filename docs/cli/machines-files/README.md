@@ -177,3 +177,5 @@ for that machine is already open.
 - [Conventions and contracts](../conventions.md) has the full exit code and JSON
   contract these pages assume.
 - [All command groups](../README.md)
+
+Use [`ed machines files open`](./open.md) to open a directory in the main application’s Files window.

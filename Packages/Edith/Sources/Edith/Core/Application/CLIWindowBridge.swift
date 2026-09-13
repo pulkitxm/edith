@@ -4,6 +4,8 @@ import SwiftUI
 
 @MainActor
 enum CLIWindowBridge {
+    private static var openedFileRequests: [String] = []
+    private static var filesObserver: NSObjectProtocol?
     private static var revealObserver: NSObjectProtocol?
     private static var snapshotObserver: NSObjectProtocol?
 
@@ -19,8 +21,34 @@ enum CLIWindowBridge {
                 AppRuntimeCenter().perform(.snapshot) { snapshot(info) }
             }
         }
+        filesObserver = IPC.observe(IPC.Name.requestFinderOpen) { info in
+            MainActor.assumeIsolated { openFiles(info) }
+        }
         QuinjetSessionBridge.shared.install()
         MachineTerminalBroadcastBridge.install()
+    }
+
+    private static func openFiles(_ info: [AnyHashable: Any]) {
+        let model = MachinesModel.shared
+        let requestID = info["requestID"] as? String ?? ""
+        if openedFileRequests.contains(requestID) {
+            IPC.post(IPC.Name.finderOpenResult, userInfo: ["opened": true, "requestID": requestID])
+            return
+        }
+        guard !requestID.isEmpty, let raw = info["machine"] as? String,
+            let id = UUID(uuidString: raw), model.knows(id)
+        else {
+            IPC.post(
+                IPC.Name.finderOpenResult,
+                userInfo: [
+                    "opened": false, "reason": "Machine is unavailable.", "requestID": requestID,
+                ])
+            return
+        }
+        FinderWindow.open(session: model.session(for: id), path: info["path"] as? String)
+        openedFileRequests.append(requestID)
+        openedFileRequests = Array(openedFileRequests.suffix(16))
+        IPC.post(IPC.Name.finderOpenResult, userInfo: ["opened": true, "requestID": requestID])
     }
 
     private static func fail(_ message: String) {

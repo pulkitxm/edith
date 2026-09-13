@@ -102,6 +102,8 @@ public enum IPC {
         public static let requestCalendarEvents = IPC.scopedName(
             "com.pulkit.edith.requestCalendarEvents")
         public static let calendarEvents = IPC.scopedName("com.pulkit.edith.calendarEvents")
+        public static let requestFinderOpen = IPC.scopedName("com.pulkit.edith.requestFinderOpen")
+        public static let finderOpenResult = IPC.scopedName("com.pulkit.edith.finderOpenResult")
         public static let requestReveal = IPC.scopedName("com.pulkit.edith.requestReveal")
         public static let revealResult = IPC.scopedName("com.pulkit.edith.revealResult")
         public static let requestWindowSnapshot = IPC.scopedName(
