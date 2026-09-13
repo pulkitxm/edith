@@ -382,6 +382,12 @@ not here cannot be set, and `import` skips it.
 | `captureScreenshotHotKeyCode` | int | `1` | shared | Virtual key code for area capture. |
 | `captureScreenshotHotKeyMods` | int | `6400` | shared | Carbon modifier mask for area capture. |
 | `captureScreenshotHotKeyLabel` | string | `⌃⌥⌘S` | shared | Printable area capture shortcut. |
+| `captureRecordingSystemAudio` | bool | `true` | shared | Record system audio on its own track. |
+| `captureRecordingMicrophone` | bool | `false` | shared | Record the microphone on its own track. |
+| `captureRecordingFrameRate` | int: 15 through 60 | `30` | shared | Screen recording frame rate. |
+| `captureRecordingHotKeyCode` | int | `9` | shared | Virtual key code for starting or stopping a recording. |
+| `captureRecordingHotKeyMods` | int | `6400` | shared | Carbon modifier mask for screen recording. |
+| `captureRecordingHotKeyLabel` | string | `⌃⌥⌘V` | shared | Printable screen recording shortcut. |
 
 ### `micmute`
 

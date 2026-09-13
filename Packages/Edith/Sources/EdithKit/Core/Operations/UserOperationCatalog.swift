@@ -129,6 +129,9 @@ public enum UserOperationCatalog {
         registrations += CaptureToolOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += ScreenRecordingOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += EmojiOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1170,6 +1173,35 @@ private extension CaptureToolOperation {
             userInterface("Capture Tools settings", "capture the full screen")
         case .library:
             userInterface("Capture Tools settings", "open recent captures")
+        }
+    }
+}
+
+private extension ScreenRecordingOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .area:
+            userInterface("Capture Tools settings", "record an area")
+        case .window:
+            userInterface("Capture Tools settings", "record a window")
+        case .display:
+            userInterface("Capture Tools settings", "record a display")
+        case .pause:
+            userInterface("Recording controls", "pause recording")
+        case .resume:
+            userInterface("Recording controls", "resume recording")
+        case .stop:
+            userInterface("Recording controls", "stop and edit recording")
+        case .cancel:
+            userInterface("Recording controls", "cancel recording")
+        case .status:
+            userInterface("Capture Tools menu", "show recording state")
+        case .library:
+            userInterface("Capture Tools settings", "open recent recordings")
+        case .export:
+            userInterface(
+                "Recording editor", "export the edited recording",
+                ["00000000-0000-0000-0000-000000000001", "--to", "/tmp/recording.mp4"])
         }
     }
 }

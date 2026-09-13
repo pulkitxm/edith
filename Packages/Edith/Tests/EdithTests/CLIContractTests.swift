@@ -380,6 +380,38 @@ enum JSONContract {
         JSONCase(
             "ed capture library", ["capture", "library", "--json"],
             mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record area", ["capture", "record", "area", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record window", ["capture", "record", "window", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record display", ["capture", "record", "display", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record pause", ["capture", "record", "pause", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record resume", ["capture", "record", "resume", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record stop", ["capture", "record", "stop", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record cancel", ["capture", "record", "cancel", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record status", ["capture", "record", "status", "--json"]),
+        JSONCase(
+            "ed capture record library", ["capture", "record", "library", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record export",
+            [
+                "capture", "record", "export", "00000000-0000-0000-0000-000000000001", "--to",
+                "/tmp/recording.mp4", "--json",
+            ], mutatesTheMachine: true),
         JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
         JSONCase(

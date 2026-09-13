@@ -135,11 +135,22 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed capture record export": Spec(
+            options: ["--json", "--to"], optionValues: ["--to": .localPath], arguments: [.free]),
         "ed capture read": Spec(options: ["--json", "--help"]),
         "ed capture area": Spec(options: ["--json", "--help"]),
         "ed capture window": Spec(options: ["--json", "--help"]),
         "ed capture screen": Spec(options: ["--json", "--help"]),
         "ed capture library": Spec(options: ["--json", "--help"]),
+        "ed capture record area": Spec(options: ["--json", "--help"]),
+        "ed capture record window": Spec(options: ["--json", "--help"]),
+        "ed capture record display": Spec(options: ["--json", "--help"]),
+        "ed capture record pause": Spec(options: ["--json", "--help"]),
+        "ed capture record resume": Spec(options: ["--json", "--help"]),
+        "ed capture record stop": Spec(options: ["--json", "--help"]),
+        "ed capture record cancel": Spec(options: ["--json", "--help"]),
+        "ed capture record status": Spec(options: ["--json", "--help"]),
+        "ed capture record library": Spec(options: ["--json", "--help"]),
         "ed capture": Spec(options: ["--json", "--help"]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),

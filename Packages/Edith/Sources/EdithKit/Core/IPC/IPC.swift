@@ -46,6 +46,24 @@ public enum IPC {
             "com.pulkit.edith.requestCaptureScreen")
         public static let requestCaptureLibrary = IPC.scopedName(
             "com.pulkit.edith.requestCaptureLibrary")
+        public static let requestRecordingArea = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingArea")
+        public static let requestRecordingWindow = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingWindow")
+        public static let requestRecordingDisplay = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingDisplay")
+        public static let requestRecordingPause = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingPause")
+        public static let requestRecordingResume = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingResume")
+        public static let requestRecordingStop = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingStop")
+        public static let requestRecordingCancel = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingCancel")
+        public static let requestRecordingLibrary = IPC.scopedName(
+            "com.pulkit.edith.requestRecordingLibrary")
+        public static let recordingStatusChanged = IPC.scopedName(
+            "com.pulkit.edith.recordingStatusChanged")
         public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(

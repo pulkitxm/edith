@@ -72,6 +72,8 @@ public enum HotKeyCatalog {
     public static let captureRead = "captureRead"
     public static let captureScreenshot = "captureScreenshot"
 
+    public static let captureRecording = "captureRecording"
+
     public static let bindings: [HotKeyBinding] = [
         HotKeyBinding(
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
@@ -127,6 +129,13 @@ public enum HotKeyCatalog {
             modsKey: AppStorageKeys.Capture.screenshotHotKeyMods,
             labelKey: AppStorageKeys.Capture.screenshotHotKeyLabel, defaultCode: kVK_ANSI_S,
             defaultMods: controlKey | optionKey | cmdKey, defaultLabel: "⌃⌥⌘S",
+            abilityID: "captureTools"),
+        HotKeyBinding(
+            id: captureRecording, title: "Screen recording", carbonID: 33,
+            codeKey: AppStorageKeys.Capture.recordingHotKeyCode,
+            modsKey: AppStorageKeys.Capture.recordingHotKeyMods,
+            labelKey: AppStorageKeys.Capture.recordingHotKeyLabel, defaultCode: kVK_ANSI_V,
+            defaultMods: shiftKey | optionKey | cmdKey, defaultLabel: "⇧⌥⌘V",
             abilityID: "captureTools"),
     ]
 

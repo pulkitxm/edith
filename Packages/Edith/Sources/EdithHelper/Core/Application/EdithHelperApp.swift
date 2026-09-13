@@ -717,6 +717,30 @@ struct RootView: View {
                         .help("Cancel capture")
                     } else {
                         Menu {
+                            if captureTools.recordingStatus.state == .recording
+                                || captureTools.recordingStatus.state == .paused
+                            {
+                                Button {
+                                    captureTools.pauseOrResumeRecording()
+                                } label: {
+                                    Label(
+                                        captureTools.recordingStatus.state == .paused
+                                            ? "Resume recording" : "Pause recording",
+                                        systemImage: captureTools.recordingStatus.state == .paused
+                                            ? "play.fill" : "pause.fill")
+                                }
+                                Button {
+                                    captureTools.stopRecording()
+                                } label: {
+                                    Label("Stop and edit", systemImage: "stop.fill")
+                                }
+                                Button(role: .destructive) {
+                                    captureTools.cancelRecording()
+                                } label: {
+                                    Label("Cancel recording", systemImage: "xmark")
+                                }
+                                Divider()
+                            }
                             Button {
                                 dismissPanel()
                                 captureTools.start(.read)
@@ -744,9 +768,34 @@ struct RootView: View {
                             Divider()
                             Button {
                                 dismissPanel()
+                                captureTools.startRecording(.area)
+                            } label: {
+                                Label("Record area", systemImage: "record.circle")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.startRecording(.window)
+                            } label: {
+                                Label("Record window", systemImage: "macwindow.and.cursorarrow")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.startRecording(.display)
+                            } label: {
+                                Label("Record display", systemImage: "display")
+                            }
+                            Divider()
+                            Button {
+                                dismissPanel()
                                 captureTools.start(.library)
                             } label: {
                                 Label("Recent captures", systemImage: "photo.stack")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.showRecordingLibrary()
+                            } label: {
+                                Label("Recent recordings", systemImage: "video.stack")
                             }
                         } label: {
                             Image(systemName: "viewfinder")
