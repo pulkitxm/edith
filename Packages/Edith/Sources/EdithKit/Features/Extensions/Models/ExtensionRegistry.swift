@@ -64,7 +64,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "Asked when you first use the Notch Shelf per-app volume mixer."
         case .camera: "Asked when you first open the Notch Shelf camera preview."
         case .bluetooth: "Asked when Notch Shelf first checks for device connections."
-        case .automation: "Asked when Notch Shelf first controls external playback."
+        case .automation: "Asked when Edith first controls Finder or external playback."
         }
     }
 
@@ -114,7 +114,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth:
             "macOS will ask for Bluetooth access when connection alerts first run."
         case .automation:
-            "macOS will ask for Automation access when Notch Shelf first controls playback."
+            "macOS will ask for Automation access when Edith first controls Finder or playback."
         case .applicationAudio:
             "macOS will ask for application audio access when the mixer first changes an app."
         default: nil
@@ -143,6 +143,7 @@ public extension ExtensionRegistryEntry {
         case "notchShelf": [.bluetooth, .camera, .automation]
         case "audioMixer": [.applicationAudio]
         case "clipboard", "emoji": [.accessibility]
+        case "finderTools": [.accessibility, .automation]
         default: []
         }
     }

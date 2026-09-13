@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var finderTools: FinderToolsService?
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
@@ -97,6 +98,7 @@ final class AppServices {
         shutDownEmojiRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        finderTools?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -300,6 +302,15 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+
+        let finderToolsOn =
+            ExtensionRegistry.entry("finderTools")?.isEnabled(in: SharedDefaults.store) == true
+        if finderToolsOn, finderTools == nil { finderTools = FinderToolsService() }
+        if !finderToolsOn {
+            finderTools?.shutdown()
+            finderTools = nil
+        }
+        finderTools?.syncSettings()
     }
 
     private func shutDownEmojiRuntime() {

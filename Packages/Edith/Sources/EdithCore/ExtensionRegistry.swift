@@ -198,6 +198,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "finderTools", title: "Finder Tools",
+            subtitle: "Cut and paste, F2 rename, image paste, and safe DMG installs.",
+            symbolName: "folder.badge.gearshape", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "finderToolsEnabled",
+            requiredCapabilities: [.globalShortcuts, .runningApplications]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

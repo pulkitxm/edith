@@ -172,6 +172,9 @@ struct EdithApp {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.permissionsRefreshed) {
+            services.finderTools?.syncSettings()
+        }
         _ = IPC.observe(IPC.Name.requestEmojiPanel) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }

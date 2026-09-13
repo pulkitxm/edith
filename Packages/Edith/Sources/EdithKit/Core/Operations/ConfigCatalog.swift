@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard", "keystrokes",
+        "clipboard", "findertools", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -64,6 +64,7 @@ public enum ConfigCatalog {
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
         + micMute
+        + finderTools
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
@@ -726,6 +727,28 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let finderTools: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.FinderTools.enabled, .bool, group: "findertools",
+            summary: "Finder Tools extension: file shortcuts and disk image installs.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.FinderTools.cutPaste, .bool, group: "findertools",
+            summary: "Move Finder selections with Command-X and Command-V.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.FinderTools.rename, .bool, group: "findertools",
+            summary: "Rename the Finder selection with F2.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.FinderTools.pasteImages, .bool, group: "findertools",
+            summary: "Save copied images as PNG files with Command-V in Finder.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.FinderTools.diskImageInstaller, .bool, group: "findertools",
+            summary: "Offer to install the single app found on a mounted disk image.",
+            fallback: .bool(true)),
     ]
 
     private static let notch: [SettingDefinition] = [
