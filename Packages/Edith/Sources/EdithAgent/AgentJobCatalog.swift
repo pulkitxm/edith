@@ -44,6 +44,7 @@ public enum AgentJobCatalog {
             return await scheduler.subscriberCount(topic: .sessions) > 0
         }
         return [
+            "system.monitor": { try await SystemMonitorService.shared.data() },
             "usage.refresh": { try await usage.run() },
             "usage.limits": { try await limits.run() },
             "machines.health": { try await machines.run() },

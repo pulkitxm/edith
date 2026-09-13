@@ -185,3 +185,5 @@ endpoint, provider credentials, and the signed update channel. Changes that
 cross one of these boundaries should document the data flow, minimize retained
 data, fail closed, and include focused tests for authorization, parsing, and
 error handling.
+
+System Monitor collects CPU, memory, GPU, throughput, storage and battery metrics once in the agent. The menu bar, System page and `ed system stats` read the same typed snapshot. A bounded sampling cache coalesces concurrent reads; the scheduler samples every thirty seconds when enabled and raises its cadence for live subscribers. GPU and storage reads keep their slower cadence. The menu bar owns notification presentation and its permission grant.

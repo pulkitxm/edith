@@ -364,7 +364,7 @@ import Testing
             "system": [.accessibility, .inputMonitoring],
             "keepAwake": [],
             "lidAwake": [],
-            "systemStats": [],
+            "systemStats": [.notifications],
             "micMute": [],
             "clipboard": [.accessibility],
             "emoji": [.accessibility],

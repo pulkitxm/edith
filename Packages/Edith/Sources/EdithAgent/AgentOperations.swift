@@ -6,6 +6,9 @@ public enum AgentOperations {
         on runtime: AgentRuntime, store: AgentStore? = nil, scheduler: JobScheduler? = nil,
         downloads: DownloadWorker? = nil, attention: AttentionBackgroundService? = nil
     ) async {
+        await runtime.register(operation: SystemMonitorClient.descriptor.id.rawValue) { _ in
+            try await SystemMonitorService.shared.data()
+        }
         let clipboard = ClipboardService()
         await clipboard.register(on: runtime)
         await FaviconService().register(on: runtime)

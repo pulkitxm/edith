@@ -63,7 +63,7 @@ import Testing
                 .home, .machines,
                 .agents, .dashboard, .herdr, .quinjet, .companion, .plugins,
                 .appMaintenance,
-                .system, .runningApps,
+                .system, .systemMonitor, .runningApps,
                 .desk,
                 .media, .music, .calendar,
                 .data, .database, .attention, .seoAudit,

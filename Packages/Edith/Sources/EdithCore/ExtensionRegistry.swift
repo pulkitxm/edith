@@ -181,10 +181,11 @@ public enum ExtensionRegistry {
             symbolName: "laptopcomputer", suite: .system, host: .bar, featured: false,
             defaultsKey: "lidAwakeEnabled", requiredCapabilities: [.preventSleep]),
         ExtensionRegistryEntry(
-            id: "systemStats", title: "CPU & Memory in menu bar",
-            subtitle: "Live CPU and memory readout as a menu bar item.",
+            id: "systemStats", title: "System Monitor",
+            subtitle: "CPU, memory, GPU, network, disk, battery, power, and sustained alerts.",
             symbolName: "gauge.with.needle", suite: .system, host: .bar, featured: false,
-            defaultsKey: "menuBarSystemStats", requiredCapabilities: [.systemMetrics]),
+            defaultsKey: "menuBarSystemStats", requiredCapabilities: [.systemMetrics],
+            optionalCapabilities: [.notifications]),
         ExtensionRegistryEntry(
             id: "micMute", title: "Mic Mute",
             subtitle: "Mute every microphone system-wide with ⌘⇧M or the menu bar icon.",

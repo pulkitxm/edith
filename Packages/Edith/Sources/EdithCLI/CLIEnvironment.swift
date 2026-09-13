@@ -19,6 +19,7 @@ public struct CLIRemoteDirectoryTarget: Sendable {
 }
 
 public enum CLIEnvironment {
+    nonisolated(unsafe) public static var systemMonitorClient: AgentClient = .shared
     nonisolated(unsafe) public static var sharedDefaults: UserDefaults = {
         guard let suite = ProcessInfo.processInfo.environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"],
             let defaults = UserDefaults(suiteName: suite)
