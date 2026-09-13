@@ -70,6 +70,8 @@ enum CLIProcessProbeError: Error, Equatable, LocalizedError {
     }
 }
 
+private final class CLIProbeBundleMarker: NSObject {}
+
 enum CLIProcessProbe {
     static let defaultTimeout: TimeInterval = 15
     private static let terminationGrace: TimeInterval = 2
@@ -80,7 +82,11 @@ enum CLIProcessProbe {
         .deletingLastPathComponent()
 
     static var binary: URL {
-        packageRoot.appendingPathComponent(".build/debug/ed")
+        if let path = ProcessInfo.processInfo.environment["EDITH_TEST_CLI_EXECUTABLE"] {
+            return URL(fileURLWithPath: path)
+        }
+        return Bundle(for: CLIProbeBundleMarker.self).bundleURL
+            .deletingLastPathComponent().appendingPathComponent("ed")
     }
 
     static func run(
@@ -185,6 +191,7 @@ final class CLIWorld: @unchecked Sendable {
         AttentionPaths.root = sandbox
         AttentionCLIEnvironment.eventSink = nil
         MachinePaths.root = sandbox
+        ScratchpadPaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         let historyURL = sandbox.appendingPathComponent("update-checks.json")
         CLIEnvironment.updateHistoryURL = { historyURL }
@@ -410,6 +417,7 @@ final class CLIWorld: @unchecked Sendable {
         AttentionCLIEnvironment.eventSink = AgentAttentionSink()
         CLIEnvironment.reset()
         AttentionPaths.root = AppData.supportDir
+        ScratchpadPaths.root = AppData.supportDir
     }
 }
 

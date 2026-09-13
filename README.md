@@ -66,6 +66,7 @@ and platform details.
 
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
+- **Scratchpad** - named autosaving text pads with Markdown preview, search, export, quiet-period clearing and optional Companion promotion.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
 - **Emoji picker** - every emoji this Mac can draw on a hotkey, with search, categories, skin tones and your most-used pinned to the top.
 - **Keystroke Highlight** - toggle clear keycaps for demos with a global shortcut, then let each key press fade automatically.

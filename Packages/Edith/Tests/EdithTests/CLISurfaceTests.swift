@@ -226,7 +226,7 @@ import Testing
 
     @Test func theNewCommandGroupsCompleteAtTheTopLevel() {
         let result = Self.plan(["ed", ""], 1)
-        for name in ["app", "clipboard", "color", "shelf", "cleaner"] {
+        for name in ["app", "clipboard", "scratchpad", "color", "shelf", "cleaner"] {
             #expect(result.candidates.contains(name), "\(name) never completes")
         }
     }

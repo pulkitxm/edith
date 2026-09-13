@@ -91,6 +91,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        ScratchpadHotKey.unregister()
+        await ScratchpadPanel.shared.shutdownForTermination()
         keepAwake?.shutdown()
         PermissionsModel.shared.shutdown()
         await PermissionsModel.shared.waitForShutdown()
@@ -287,6 +289,16 @@ final class AppServices {
             }
         }
         ClipboardPanel.shared.store = clipboard
+
+        let scratchpadOn =
+            ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) ?? false
+        if scratchpadOn {
+            ScratchpadPanel.shared.install()
+            ScratchpadHotKey.register()
+        } else {
+            ScratchpadHotKey.unregister()
+            ScratchpadPanel.shared.uninstall()
+        }
 
         let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
         if emojiOn {

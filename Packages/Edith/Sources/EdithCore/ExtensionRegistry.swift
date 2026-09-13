@@ -198,6 +198,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "scratchpad", title: "Scratchpad",
+            subtitle: "Named, autosaving text pads that stay close while you work.",
+            symbolName: "note.text", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "scratchpadEnabled", requiredCapabilities: [.scratchpadStorage],
+            optionalCapabilities: [.globalShortcuts, .companionService]),
+        ExtensionRegistryEntry(
             id: "emoji", title: "Emoji Picker",
             subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
             symbolName: "face.smiling", suite: .desk, host: .bar, featured: false,

@@ -278,6 +278,16 @@ public enum AppStorageKeys {
         public static let mode = "presenterMode"
     }
 
+    public enum Scratchpad {
+        public static let alwaysOnTop = "scratchpadAlwaysOnTop"
+        public static let dismissOnDeactivate = "scratchpadDismissOnDeactivate"
+        public static let enabled = "scratchpadEnabled"
+        public static let hotKeyCode = "scratchpadHotKeyCode"
+        public static let hotKeyLabel = "scratchpadHotKeyLabel"
+        public static let hotKeyMods = "scratchpadHotKeyMods"
+        public static let retention = "scratchpadRetention"
+    }
+
     public enum Skills {
         public static let agentSelections = "skillsAgentSelections"
     }

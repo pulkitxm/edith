@@ -172,6 +172,14 @@ struct EdithApp {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.requestScratchpadPanel) {
+            MainActor.assumeIsolated { ScratchpadPanel.shared.toggle() }
+        }
+        _ = IPC.observe(IPC.Name.scratchpadChanged) {
+            MainActor.assumeIsolated {
+                if ScratchpadPanel.shared.isVisible { ScratchpadPanel.shared.show() }
+            }
+        }
         _ = IPC.observe(IPC.Name.requestEmojiPanel) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }
@@ -404,6 +412,39 @@ enum ClipboardHotKey {
     @MainActor
     static func save(code: Int, mods: Int, label: String) {
         HotKeyRegistrar.save(HotKeyCatalog.clipboard, code: code, mods: mods, label: label)
+    }
+}
+
+enum ScratchpadHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyCode) as? Int
+            ?? kVK_ANSI_N
+    }
+
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyMods) as? Int
+            ?? (controlKey | optionKey)
+    }
+
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.Scratchpad.hotKeyLabel) ?? "⌃⌥N"
+    }
+
+    @MainActor
+    static func register() {
+        guard ExtensionRegistry.entry("scratchpad")?.isEnabled(in: SharedDefaults.store) == true
+        else {
+            unregister()
+            return
+        }
+        HotKeyRegistrar.install(HotKeyCatalog.scratchpad) {
+            MainActor.assumeIsolated { ScratchpadPanel.shared.toggle() }
+        }
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.scratchpad)
     }
 }
 

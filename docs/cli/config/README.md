@@ -364,6 +364,18 @@ not here cannot be set, and `import` skips it.
 | `colorPickerHotKeyMods` | int | none | shared | Carbon modifier mask of the colour picker shortcut. |
 | `colorPickerHotKeyLabel` | string | none | shared | Printable label for the colour picker shortcut. |
 
+### `scratchpad`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `scratchpadEnabled` | bool | `false` | shared | Scratchpad extension: named autosaving text pads. |
+| `scratchpadAlwaysOnTop` | bool | `true` | shared | Keep the Scratchpad panel above other windows. |
+| `scratchpadDismissOnDeactivate` | bool | `true` | shared | Hide Scratchpad when another app becomes active. |
+| `scratchpadRetention` | string: `never`, `hour`, `day`, `week`, `month` | `never` | shared | Clear pad text after this much time without an edit. |
+| `scratchpadHotKeyCode` | int | none | shared | Virtual key code of the Scratchpad shortcut. |
+| `scratchpadHotKeyMods` | int | none | shared | Carbon modifier mask of the Scratchpad shortcut. |
+| `scratchpadHotKeyLabel` | string | none | shared | Printable label for the Scratchpad shortcut. |
+
 ### `micmute`
 
 | Key | Type | Default | Scope | What it controls |

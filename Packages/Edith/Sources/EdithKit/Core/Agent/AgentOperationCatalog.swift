@@ -9,10 +9,12 @@ public enum AgentOperationCatalog {
 
     public static let served: [UserOperationID] =
         AgentControlOperation.allCases.map { $0.descriptor.id } + usageOperations
+        + AgentScratchpadClient.operations.map { $0.descriptor.id }
 
     public static let internalOperations: [String] =
         [
-            AgentFaviconClient.operation, AttentionOperation.hasEvents, AttentionOperation.summary,
+            AgentScratchpadClient.selectOperation, AgentFaviconClient.operation,
+            AttentionOperation.hasEvents, AttentionOperation.summary,
             AttentionOperation.backup, AttentionOperation.restore,
             AttentionDeliveryClient.operation, AttentionDeliveryClient.statusOperation,
             AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
