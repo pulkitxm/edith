@@ -38,8 +38,14 @@ public enum IPC {
             "com.pulkit.edith.requestColorPick")
         public static let requestScreenRead = IPC.scopedName(
             "com.pulkit.edith.requestScreenRead")
-        public static let requestScreenshot = IPC.scopedName(
-            "com.pulkit.edith.requestScreenshot")
+        public static let requestCaptureArea = IPC.scopedName(
+            "com.pulkit.edith.requestCaptureArea")
+        public static let requestCaptureWindow = IPC.scopedName(
+            "com.pulkit.edith.requestCaptureWindow")
+        public static let requestCaptureScreen = IPC.scopedName(
+            "com.pulkit.edith.requestCaptureScreen")
+        public static let requestCaptureLibrary = IPC.scopedName(
+            "com.pulkit.edith.requestCaptureLibrary")
         public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(

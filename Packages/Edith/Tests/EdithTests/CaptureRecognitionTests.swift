@@ -49,6 +49,15 @@ import Testing
         #expect(result.codes.map(\.payload) == ["edith://capture"])
     }
 
+    @Test func recognizesLinearBarcodeOffline() throws {
+        let filter = try #require(CIFilter(name: "CICode128BarcodeGenerator"))
+        filter.setValue(Data("EDITH-128".utf8), forKey: "inputMessage")
+        let output = try #require(filter.outputImage?.transformed(by: .init(scaleX: 4, y: 4)))
+        let image = try #require(CIContext().createCGImage(output, from: output.extent))
+        let result = try CaptureRecognizer.recognize(image)
+        #expect(result.codes.map(\.payload).contains("EDITH-128"))
+    }
+
     @Test func onlyStrictWebLinksCanOpen() {
         #expect(CaptureRecognizedLink.openable("https://edith.app/capture") != nil)
         #expect(CaptureRecognizedLink.openable("http://localhost:8080") != nil)

@@ -368,17 +368,20 @@ not here cannot be set, and `import` skips it.
 
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
-| `captureToolsEnabled` | bool | `false` | shared | Enable offline screen recognition and quick screenshots. |
+| `captureToolsEnabled` | bool | `false` | shared | Enable local screen recognition and Capture Studio screenshots. |
 | `captureCopyMode` | string: `smart`, `text`, `codes`, `combined` | `smart` | shared | Content copied after a screen read. |
-| `captureDetectCodes` | bool | `true` | shared | Detect QR and other two-dimensional codes. |
+| `captureDetectCodes` | bool | `true` | shared | Detect QR, matrix, and linear barcodes. |
+| `captureCopyAfterCapture` | bool | `false` | shared | Copy each screenshot as PNG after capture. |
+| `captureSaveFolder` | string | none | shared | Folder used when a screenshot is saved. |
+| `captureFilenameTemplate` | string | `Edith Capture {date} at {time}` | shared | Filename tokens used when a screenshot is saved. |
 | `captureHistorySize` | int: 1 through 25 | `10` | shared | Maximum saved screen reads. |
 | `captureSaveScreenshots` | bool | `false` | shared | Keep the image behind every screen read in Pictures. |
 | `captureReadHotKeyCode` | int | `15` | shared | Virtual key code for screen reading. |
 | `captureReadHotKeyMods` | int | `6400` | shared | Carbon modifier mask for screen reading. |
 | `captureReadHotKeyLabel` | string | `⌃⌥⌘R` | shared | Printable screen reading shortcut. |
-| `captureScreenshotHotKeyCode` | int | `1` | shared | Virtual key code for quick screenshots. |
-| `captureScreenshotHotKeyMods` | int | `6400` | shared | Carbon modifier mask for quick screenshots. |
-| `captureScreenshotHotKeyLabel` | string | `⌃⌥⌘S` | shared | Printable screenshot shortcut. |
+| `captureScreenshotHotKeyCode` | int | `1` | shared | Virtual key code for area capture. |
+| `captureScreenshotHotKeyMods` | int | `6400` | shared | Carbon modifier mask for area capture. |
+| `captureScreenshotHotKeyLabel` | string | `⌃⌥⌘S` | shared | Printable area capture shortcut. |
 
 ### `micmute`
 

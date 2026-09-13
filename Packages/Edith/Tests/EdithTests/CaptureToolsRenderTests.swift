@@ -28,7 +28,7 @@ import Testing
         let view = CapturePreviewView(
             image: image, recognition: recognition, operation: .read, copyMode: .smart,
             copiedResult: true, copyImage: {}, saveImage: {}, copyResult: {}, openResult: {},
-            discard: {}, hovering: { _ in }
+            edit: {}, pin: {}, delete: {}, dragURL: nil, discard: {}, hovering: { _ in }
         )
         .frame(width: 440, height: 390)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -39,6 +39,30 @@ import Testing
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         #expect(bitmap.pixelsWide >= 440)
         if let directory = ProcessInfo.processInfo.environment["EDITH_RENDER_DUMP"] {
+            let model = try #require(CaptureEditorModel(image: image))
+            model.begin(at: CGPoint(x: 540, y: 210))
+            model.end(at: CGPoint(x: 400, y: 125))
+            #expect(model.document.annotations.count == 1)
+            #expect(try !model.exportData().isEmpty)
+            let editor = NSHostingView(
+                rootView: CaptureEditorView(
+                    model: model, copy: {}, save: {}, pin: {}, done: {}
+                )
+                .background(Color(nsColor: .windowBackgroundColor))
+                .preferredColorScheme(.dark))
+            let window = TestWindowHost.window(
+                contentRect: NSRect(x: 0, y: 0, width: 980, height: 700))
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.contentView = editor
+            defer { window.close() }
+            editor.frame = NSRect(x: 0, y: 0, width: 980, height: 700)
+            editor.layoutSubtreeIfNeeded()
+            let rendered = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
+            editor.cacheDisplay(in: editor.bounds, to: rendered)
+            let studioData = try #require(rendered.representation(using: .png, properties: [:]))
+            try studioData.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent("capture-studio.png"))
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             try data.write(
                 to: URL(fileURLWithPath: directory).appendingPathComponent("capture-tools.png"))

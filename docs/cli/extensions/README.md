@@ -79,6 +79,7 @@ walks, and its order is the order `ls` prints. Twenty-two entries, in this order
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
+| `captureTools` | Capture Tools | Utilities | Local screenshots, recognition, editing, pinning, and recent captures |
 
 The same twenty-two, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the

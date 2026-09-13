@@ -273,7 +273,7 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSEOAuditEnabled", requiredCapabilities: [.siteAuditing]),
         ExtensionRegistryEntry(
             id: "captureTools", title: "Capture Tools",
-            subtitle: "Offline screen OCR, QR recognition, and quick screenshots.",
+            subtitle: "Local screenshots, recognition, editing, pinning, and recent captures.",
             symbolName: "viewfinder", suite: .media, host: .bar, featured: false,
             defaultsKey: "captureToolsEnabled",
             requiredCapabilities: [.screenContentRecognition],

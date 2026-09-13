@@ -17,7 +17,7 @@ private final class CaptureSessionProbe: CaptureScreenshotCapturing, @unchecked 
         lock.withLock { cancellationCount }
     }
 
-    func capture() async throws -> URL {
+    func capture(_ mode: CaptureMode) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             lock.withLock { self.continuation = continuation }
         }
@@ -56,7 +56,7 @@ private final class CaptureSessionProbe: CaptureScreenshotCapturing, @unchecked 
             session: session, screenCaptureGranted: { true }, requestScreenCapture: {})
         defer { store.shutdown() }
 
-        store.start(.screenshot)
+        store.start(.area)
         for _ in 0..<50 where !session.started { await Task.yield() }
         store.cancel()
         await Task.yield()

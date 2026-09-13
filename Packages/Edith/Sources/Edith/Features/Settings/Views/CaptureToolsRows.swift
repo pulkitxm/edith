@@ -13,6 +13,12 @@ struct CaptureToolsRows: View {
         var historySize = 10
     @AppStorage(AppStorageKeys.Capture.saveScreenshots, store: SharedDefaults.store) private
         var saveScreenshots = false
+    @AppStorage(AppStorageKeys.Capture.copyAfterCapture, store: SharedDefaults.store) private
+        var copyAfterCapture = false
+    @AppStorage(AppStorageKeys.Capture.saveFolder, store: SharedDefaults.store) private
+        var saveFolder = ""
+    @AppStorage(AppStorageKeys.Capture.filenameTemplate, store: SharedDefaults.store) private
+        var filenameTemplate = CaptureFilenameTemplate.fallback
     @State private var history: [CaptureRecognition] = []
 
     var body: some View {
@@ -23,8 +29,20 @@ struct CaptureToolsRows: View {
                         _ = CaptureToolOperationExecution.request(.read)
                     }
                     .buttonStyle(.edith(.primary))
-                    Button("Screenshot") {
-                        _ = CaptureToolOperationExecution.request(.screenshot)
+                    Button("Area") {
+                        _ = CaptureToolOperationExecution.request(.area)
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    Button("Window") {
+                        _ = CaptureToolOperationExecution.request(.window)
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    Button("Screen") {
+                        _ = CaptureToolOperationExecution.request(.screen)
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    Button("Library") {
+                        _ = CaptureToolOperationExecution.request(.library)
                     }
                     .buttonStyle(.edith(.secondary))
                 }
@@ -32,10 +50,39 @@ struct CaptureToolsRows: View {
                     HotKeyRecorderControl(
                         keyPrefix: "captureReadHotKey", defaultLabel: "⌃⌥⌘R")
                 }
-                LabeledContent("Screenshot shortcut") {
+                LabeledContent("Area shortcut") {
                     HotKeyRecorderControl(
                         keyPrefix: "captureScreenshotHotKey", defaultLabel: "⌃⌥⌘S")
                 }
+            }
+
+            Section("Saving") {
+                Toggle(
+                    "Copy screenshots automatically",
+                    isOn: $copyAfterCapture.configured(AppStorageKeys.Capture.copyAfterCapture))
+                LabeledContent("Save folder") {
+                    HStack {
+                        Text(saveFolder.isEmpty ? "Pictures/Edith Captures" : saveFolder)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button("Choose") { chooseSaveFolder() }
+                            .buttonStyle(.edith(.secondary))
+                        if !saveFolder.isEmpty {
+                            Button("Reset") {
+                                saveFolder = ""
+                                IPC.post(IPC.Name.settingsChanged)
+                            }
+                            .buttonStyle(.edith(.borderless))
+                        }
+                    }
+                }
+                TextField(
+                    "Filename template", text: $filenameTemplate,
+                    prompt: Text(CaptureFilenameTemplate.fallback)
+                )
+                .onSubmit { IPC.post(IPC.Name.settingsChanged) }
+                Text("Available tokens: {date}, {time}, {timestamp}, and {mode}.")
+                    .settingsCaption()
             }
 
             Section("Recognition") {
@@ -117,5 +164,17 @@ struct CaptureToolsRows: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
         IPC.post(IPC.Name.clipboardChanged)
+    }
+
+    private func chooseSaveFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            saveFolder = url.path
+            IPC.post(IPC.Name.settingsChanged)
+        }
     }
 }

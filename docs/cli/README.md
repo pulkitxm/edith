@@ -61,10 +61,10 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
 | [`ed database`](./database/README.md) | Saved database connections and capability reports through the authenticated local broker |
-| [`ed capture`](./capture/README.md) | Offline OCR and quick screenshots |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
+| [`ed capture`](./capture/README.md) | Capture Studio screenshots, offline recognition, editing, and recent captures |
 | [`ed emoji`](./emoji/README.md) | Opening the emoji picker, listing what this Mac can render, typing one, and the default skin tone |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |

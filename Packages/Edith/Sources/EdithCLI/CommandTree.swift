@@ -136,7 +136,10 @@ public enum CommandTree {
 
     static let specs: [String: Spec] = [
         "ed capture read": Spec(options: ["--json", "--help"]),
-        "ed capture screenshot": Spec(options: ["--json", "--help"]),
+        "ed capture area": Spec(options: ["--json", "--help"]),
+        "ed capture window": Spec(options: ["--json", "--help"]),
+        "ed capture screen": Spec(options: ["--json", "--help"]),
+        "ed capture library": Spec(options: ["--json", "--help"]),
         "ed capture": Spec(options: ["--json", "--help"]),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),

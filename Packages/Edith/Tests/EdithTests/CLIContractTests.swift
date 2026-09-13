@@ -365,15 +365,21 @@ enum JSONContract {
         JSONCase(
             "ed download reveal", ["download", "reveal", "1", "--json"],
             mutatesTheMachine: true),
-        JSONCase("ed capture read", ["capture", "read", "--json"], mutatesTheMachine: true),
-        JSONCase(
-            "ed capture screenshot", ["capture", "screenshot", "--json"], mutatesTheMachine: true),
         JSONCase("ed color pick", ["color", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed color ls", ["color", "ls", "--json"]),
         JSONCase(
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
+        JSONCase("ed capture read", ["capture", "read", "--json"], mutatesTheMachine: true),
+        JSONCase("ed capture area", ["capture", "area", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed capture window", ["capture", "window", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed capture screen", ["capture", "screen", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed capture library", ["capture", "library", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
         JSONCase(
