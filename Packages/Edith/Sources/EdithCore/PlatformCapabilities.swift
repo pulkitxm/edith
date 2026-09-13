@@ -29,6 +29,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case runningApplications
     case screenColorSampling
     case screenShareDetection
+    case systemActions
     case skillInstallation
     case siteAuditing
     case systemMetrics

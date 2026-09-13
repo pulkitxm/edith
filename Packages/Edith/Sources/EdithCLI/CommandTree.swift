@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -255,6 +256,15 @@ public enum CommandTree {
         "ed usage machines disable": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage machines forget": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage refresh": Spec(options: ["--json", "--follow", "--machines", "--no-machines"]),
+        "ed quick-actions status": Spec(options: common),
+        "ed quick-actions appearance": Spec(options: common),
+        "ed quick-actions keyboard-light": Spec(options: common),
+        "ed quick-actions empty-trash": Spec(
+            options: common + ["--yes"], destructivePolicy: .previewThenYes),
+        "ed quick-actions eject-disks": Spec(options: common),
+        "ed quick-actions hidden-files": Spec(options: common),
+        "ed quick-actions desktop-icons": Spec(options: common),
+        "ed quick-actions lock-screen": Spec(options: common),
         "ed system stats": Spec(options: ["--json", "-f", "--follow", "--interval", "--processes"]),
         "ed system disks": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed music": Spec(

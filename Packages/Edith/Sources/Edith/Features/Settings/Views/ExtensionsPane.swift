@@ -666,7 +666,7 @@ private struct ExtensionSettingsSheet: View {
         case "music": 460
         case "focusDim", "colorPicker", "keystrokeHighlight": 430
         case "system": 500
-        case "notchShelf", "presenter": 580
+        case "notchShelf", "presenter", "quickActions": 580
         default: 620
         }
     }
@@ -1045,6 +1045,7 @@ private struct ExtensionDetailRows: View {
             case .quinjet: QuinjetRows()
             case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
+            case .quickActions: QuickActionsRows()
             case .keepAwake: KeepAwakeRows()
             case .appMaintenance: AppMaintenanceRows()
             case .homebrew: HomebrewRows()

@@ -588,6 +588,10 @@ let allTabs: [TabInfo] = [
         id: "system", title: "System",
         subtitle: "running apps, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
+        id: "quickActions", title: "Quick Actions",
+        subtitle: "one-click macOS controls",
+        enabledKey: AppStorageKeys.Tabs.quickActionsEnabled),
+    TabInfo(
         id: "calendar", title: "Calendar",
         subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),
 ]
@@ -618,6 +622,10 @@ struct RootView: View {
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
+    @AppStorage(AppStorageKeys.Suites.system, store: SharedDefaults.store) private
+        var systemSuiteEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.quickActionsEnabled, store: SharedDefaults.store) private
+        var quickActionsEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -643,6 +651,7 @@ struct RootView: View {
                 case "usage": usageEnabled
                 case "music": musicEnabled
                 case "system": systemEnabled
+                case "quickActions": quickActionsEnabled && systemSuiteEnabled
                 case "calendar": calendarEnabled
                 default: false
                 }
@@ -789,6 +798,8 @@ struct RootView: View {
         .onChange(of: usageEnabled) { pinTab() }
         .onChange(of: musicEnabled) { pinTab() }
         .onChange(of: systemEnabled) { pinTab() }
+        .onChange(of: quickActionsEnabled) { pinTab() }
+        .onChange(of: systemSuiteEnabled) { pinTab() }
         .onChange(of: calendarEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
@@ -804,6 +815,8 @@ struct RootView: View {
             MusicView(player: player)
         } else if tab == "system", let system = services.system {
             SystemView().environment(system)
+        } else if tab == "quickActions" {
+            QuickActionsView()
         } else if tab == "calendar", let calendar = services.calendar {
             CalendarView().environment(calendar)
         } else if enabledTabs.isEmpty {

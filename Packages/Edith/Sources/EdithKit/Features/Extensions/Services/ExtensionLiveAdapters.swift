@@ -66,6 +66,7 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
+        "quickActions",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
@@ -104,6 +105,7 @@ public enum ExtensionLiveAdapters {
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
+        case "quickActions": quickActionsReadiness()
         case "keepAwake": .ready("Keep Awake is ready to prevent idle sleep without System.")
         case "appMaintenance": appMaintenanceReadiness()
         case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
@@ -211,6 +213,17 @@ public enum ExtensionLiveAdapters {
             contentCount: count, readyDetail: "Running application control is available.",
             emptyDetail: "No regular applications are visible to the system runtime."
         ).readiness
+    }
+
+    static func quickActionsReadiness(
+        snapshot: QuickActionsSnapshot = QuickActionCenter.live.snapshot()
+    ) -> ExtensionAdapterReadiness {
+        let count = QuickAction.allCases.count - (snapshot.keyboardLightAvailable ? 0 : 1)
+        return .ready(
+            snapshot.keyboardLightAvailable
+                ? "All \(count) Quick Actions are available."
+                : "\(count) Quick Actions are available; this Mac has no controllable keyboard light."
+        )
     }
 
     static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {

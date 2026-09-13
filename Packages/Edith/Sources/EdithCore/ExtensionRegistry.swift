@@ -171,6 +171,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.inputSuppression]),
         ExtensionRegistryEntry(
+            id: "quickActions", title: "Quick Actions",
+            subtitle: "One-click controls for appearance, Finder, disks, Trash, and locking.",
+            symbolName: "bolt.fill", suite: .system, host: .bar, featured: true,
+            defaultsKey: "tabQuickActionsEnabled", requiredCapabilities: [.systemActions]),
+        ExtensionRegistryEntry(
             id: "keepAwake", title: "Keep Awake",
             subtitle: "Keep the Mac and display awake until you turn it off.",
             symbolName: "moon.zzz", suite: .system, host: .bar, featured: true,

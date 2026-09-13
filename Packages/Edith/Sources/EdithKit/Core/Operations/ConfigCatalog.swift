@@ -51,7 +51,7 @@ public enum ConfigCatalog {
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
-        "calendar",
+        "calendar", "quickactions",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
@@ -61,7 +61,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + calendar + quickActions + clipboard + keystrokeHighlight + notch + focusDim
+        + presenter
         + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
@@ -660,6 +661,34 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.calendarEnabled, .bool, group: "calendar",
             summary: "Calendar extension: your schedule in the panel and the app.",
             fallback: .bool(false))
+    ]
+
+    private static let quickActions: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.quickActionsEnabled, .bool, group: "quickactions",
+            summary: "Quick Actions extension: common one-click macOS controls.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.appearance, .bool, group: "quickactions",
+            summary: "Show the appearance action.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.keyboardLight, .bool, group: "quickactions",
+            summary: "Show the keyboard light action when supported.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.emptyTrash, .bool, group: "quickactions",
+            summary: "Show the confirmed Empty Trash action.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.ejectDisks, .bool, group: "quickactions",
+            summary: "Show the external disk ejection action.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.hiddenFiles, .bool, group: "quickactions",
+            summary: "Show the Finder hidden files action.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.desktopIcons, .bool, group: "quickactions",
+            summary: "Show the Finder desktop icons action.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.QuickActions.lockScreen, .bool, group: "quickactions",
+            summary: "Show the lock screen action.", fallback: .bool(true)),
     ]
 
     private static let clipboard: [SettingDefinition] = [

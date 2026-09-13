@@ -154,6 +154,11 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
+    private static let quickActionRegistrations: [RegisteredUserOperation] =
+        QuickAction.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+
     private static let agentRegistrations: [RegisteredUserOperation] =
         AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
@@ -209,6 +214,7 @@ public enum UserOperationCatalog {
 
     public static let registrations =
         machineRegistrations + applicationRegistrations + featureRegistrations
+        + quickActionRegistrations
         + agentRegistrations + remoteFileRegistrations + remoteActionRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)
@@ -1086,6 +1092,20 @@ private extension RunningAppOperation {
                     exampleArguments: ["--all", "--yes"]),
             ])
         }
+    }
+}
+
+private extension QuickAction {
+    var interfaceExposure: UserOperationExposure {
+        let arguments = self == .emptyTrash ? ["--yes"] : []
+        return .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Quick Actions panel", action: descriptor.summary,
+                exampleArguments: arguments),
+            UserInterfaceActionPlacement(
+                surface: "Quick Actions settings", action: descriptor.summary,
+                exampleArguments: arguments),
+        ])
     }
 }
 

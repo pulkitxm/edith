@@ -10,6 +10,7 @@ import Testing
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
+        "tabQuickActionsEnabled",
         "tabCompanionEnabled",
         "tabPluginsEnabled",
         "appMaintenanceEnabled",
@@ -46,7 +47,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
-                "system", "keepAwake", "lidAwake", "systemStats", "micMute",
+                "system", "quickActions", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
@@ -201,7 +202,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "quickActions",
+                "keepAwake", "clipboard",
                 "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
@@ -327,6 +329,7 @@ import Testing
             "usage": [],
             "herdr": [],
             "quinjet": [],
+            "quickActions": [],
             "companion": [],
             "plugins": [],
             "appMaintenance": [],
@@ -356,6 +359,7 @@ import Testing
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
+            "quickActions": [],
             "companion": [],
             "plugins": [],
             "appMaintenance": [.notifications],
@@ -506,6 +510,7 @@ import Testing
             "tabQuinjetEnabled": false,
             "tabSEOAuditEnabled": false,
             "tabSystemEnabled": true,
+            "tabQuickActionsEnabled": false,
             "tabDatabaseEnabled": false,
             "tabCompanionEnabled": false,
             "menuBarSystemStats": false,

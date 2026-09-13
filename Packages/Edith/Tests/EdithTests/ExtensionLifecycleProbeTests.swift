@@ -54,6 +54,9 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "quickActions", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "keepAwake", helper: true, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
