@@ -17,8 +17,6 @@ public enum VolumeCapacity {
     }
 
     static func resolve(important: Int64?, available: Int64?) -> Int64? {
-        if let important, important >= 0 { return important }
-        if let available, available >= 0 { return available }
-        return nil
+        [important, available].compactMap { $0 }.filter { $0 >= 0 }.max()
     }
 }
