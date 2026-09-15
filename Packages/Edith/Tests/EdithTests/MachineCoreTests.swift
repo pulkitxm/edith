@@ -1243,6 +1243,23 @@ private actor ProcessReadProbe {
 }
 
 @Suite struct LocalMachineSamplerResourceTests {
+    @Test func fallsBackToAvailableCapacityForExternalVolumes() {
+        #expect(VolumeCapacity.resolve(important: nil, available: 640_000) == 640_000)
+        #expect(VolumeCapacity.resolve(important: -1, available: 640_000) == 640_000)
+        #expect(VolumeCapacity.resolve(important: 0, available: 640_000) == 640_000)
+    }
+
+    @Test func preservesImportantCapacityAndFullVolumes() {
+        #expect(VolumeCapacity.resolve(important: 800_000, available: 640_000) == 800_000)
+        #expect(VolumeCapacity.resolve(important: 0, available: 0) == 0)
+        #expect(VolumeCapacity.resolve(important: nil, available: 0) == 0)
+    }
+
+    @Test func missingCapacityIsUnknownRatherThanFull() {
+        #expect(VolumeCapacity.resolve(important: nil, available: nil) == nil)
+        #expect(VolumeCapacity.resolve(important: -1, available: -1) == nil)
+    }
+
     @Test func reusesProcessSnapshotsBetweenRefreshes() async {
         let probe = ProcessReadProbe()
         let sampler = LocalMachineSampler(processSampleStride: 3) { await probe.read() }

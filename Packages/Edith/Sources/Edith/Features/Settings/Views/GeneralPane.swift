@@ -241,7 +241,6 @@ struct GeneralPane: View {
                             swatch(entry.name, color: entry.color)
                         }
                     }
-                    .opacity(themeName == "accent" ? 0.5 : 1)
                 }
             } header: {
                 Text("Appearance")
@@ -363,5 +362,8 @@ struct GeneralPane: View {
             }
         }
         .buttonStyle(.edith(.borderless))
+        .accessibilityLabel("\(name.capitalized) theme")
+        .accessibilityAddTraits(themeName == name ? .isSelected : AccessibilityTraits())
+        .help("Use the \(name) theme")
     }
 }

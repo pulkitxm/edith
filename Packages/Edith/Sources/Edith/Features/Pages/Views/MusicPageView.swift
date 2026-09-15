@@ -1620,6 +1620,7 @@ private struct MusicFolderTile: View {
                     .frame(width: MusicTile.artSize, height: MusicTile.artSize)
                 }
                 .buttonStyle(.edith(.borderless))
+                .accessibilityLabel("Open \(folder.name)")
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: UIScale.pt(24)))
