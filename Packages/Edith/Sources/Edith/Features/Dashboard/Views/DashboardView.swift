@@ -1049,51 +1049,54 @@ struct ActivityHeatmap: View {
                 }
             }
             .padding(.top, UIScale.pt(15))
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
-                    ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                        VStack(spacing: UIScale.pt(3)) {
-                            Text(monthLabel(for: weeks, at: index))
-                                .font(.system(size: UIScale.pt(9)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                                .frame(height: UIScale.pt(12))
-                            ForEach(week) { day in
-                                HeatCellView(
-                                    fill: cellColor(day.cost, cuts: cuts),
-                                    stroke: DashSkin.ink(dark).opacity(
-                                        hovered?.id == day.id ? 0.5 : 0)
-                                )
-                                .onHover { inside in
-                                    if inside {
-                                        if let detail = model.heatDetail[day.id] {
-                                            hovered = HeatHover(id: day.id, detail: detail)
-                                        } else {
+            GeometryReader { geometry in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
+                        ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
+                            VStack(spacing: UIScale.pt(3)) {
+                                Text(monthLabel(for: weeks, at: index))
+                                    .font(.system(size: UIScale.pt(9)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .frame(height: UIScale.pt(12))
+                                ForEach(week) { day in
+                                    HeatCellView(
+                                        fill: cellColor(day.cost, cuts: cuts),
+                                        stroke: DashSkin.ink(dark).opacity(
+                                            hovered?.id == day.id ? 0.5 : 0)
+                                    )
+                                    .onHover { inside in
+                                        if inside {
+                                            if let detail = model.heatDetail[day.id] {
+                                                hovered = HeatHover(id: day.id, detail: detail)
+                                            } else {
+                                                hovered = nil
+                                            }
+                                        } else if hovered?.id == day.id {
                                             hovered = nil
                                         }
-                                    } else if hovered?.id == day.id {
-                                        hovered = nil
                                     }
-                                }
-                                .popover(
-                                    isPresented: Binding(
-                                        get: { hovered?.id == day.id },
-                                        set: { shown in
-                                            if !shown, hovered?.id == day.id { hovered = nil }
-                                        }),
-                                    arrowEdge: .trailing
-                                ) {
-                                    if let hovered, hovered.id == day.id {
-                                        HeatCard(
-                                            detail: hovered.detail, model: model, dark: dark,
-                                            blur: blur, blurTokens: blurTokens)
+                                    .popover(
+                                        isPresented: Binding(
+                                            get: { hovered?.id == day.id },
+                                            set: { shown in
+                                                if !shown, hovered?.id == day.id { hovered = nil }
+                                            }),
+                                        arrowEdge: .trailing
+                                    ) {
+                                        if let hovered, hovered.id == day.id {
+                                            HeatCard(
+                                                detail: hovered.detail, model: model, dark: dark,
+                                                blur: blur, blurTokens: blurTokens)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    .frame(minWidth: geometry.size.width, alignment: .leading)
                 }
+                .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
             }
-            .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
         }
         .frame(height: UIScale.pt(137))
     }

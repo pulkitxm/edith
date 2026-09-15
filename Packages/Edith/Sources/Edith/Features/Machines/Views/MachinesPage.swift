@@ -36,6 +36,7 @@ struct MachinesPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+        .navigationTitle("Machines")
         .sheet(isPresented: $addSheetPresented) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))
