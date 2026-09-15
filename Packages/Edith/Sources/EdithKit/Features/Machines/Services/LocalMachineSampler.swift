@@ -74,21 +74,21 @@ public final class LocalMachineSampler: @unchecked Sendable {
 
     public func slow() -> MachineSlow {
         var disks: [MachineFilesystem] = []
-        let keys: [URLResourceKey] = [
-            .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
+        let keys = VolumeCapacity.resourceKeys.union([
+            .volumeTotalCapacityKey,
             .volumeNameKey, .volumeIsBrowsableKey,
-        ]
+        ])
         let urls =
             FileManager.default.mountedVolumeURLs(
-                includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+                includingResourceValuesForKeys: Array(keys), options: [.skipHiddenVolumes]) ?? []
         for url in urls {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                 values.volumeIsBrowsable == true,
-                let total = values.volumeTotalCapacity, total > 0
+                let total = values.volumeTotalCapacity, total > 0,
+                let available = VolumeCapacity.availableBytes(in: values)
             else { continue }
-            let available = values.volumeAvailableCapacityForImportantUsage ?? 0
             let totalKB = Int64(total) / 1024
-            let availKB = available / 1024
+            let availKB = min(totalKB, available / 1024)
             disks.append(
                 MachineFilesystem(
                     fs: values.volumeName ?? url.lastPathComponent, mount: url.path,

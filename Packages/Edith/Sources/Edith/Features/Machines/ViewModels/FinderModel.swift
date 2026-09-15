@@ -127,9 +127,8 @@ final class FinderModel {
         self.freeSpaceLoader =
             freeSpaceLoader ?? { path in
                 if session.isLocal {
-                    let values = try? URL(fileURLWithPath: path).resourceValues(
-                        forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-                    return (values?.volumeAvailableCapacityForImportantUsage).map { $0 / 1024 }
+                    return VolumeCapacity.availableBytes(at: URL(fileURLWithPath: path))
+                        .map { $0 / 1024 }
                 }
                 let platform = session.remotePlatform ?? .linux
                 let result = await session.runCommand(
