@@ -891,7 +891,8 @@ public enum ExtensionLifecycleCatalog {
                 "ed config ls --group sweaters --json",
             ],
             docs: [
-                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+                documentation("guide", "Window Sweaters guide", "docs/window-sweaters.md"),
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md"),
             ],
             recovery: [
                 instruction(

@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-two |
+| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-eight |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-two, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-eight, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,62 +52,73 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithCore is the single list every command here
-walks, and its order is the order `ls` prints. Twenty-two entries, in this order:
+walks, and its order is the order `ls` prints. Twenty-eight entries, in this order:
 
-| ID | Name | Group | What it does |
+| ID | Name | Suite | What it does |
 | --- | --- | --- | --- |
-| `attention` | Attention | Utilities | Understand where your time goes and protect focused work |
-| `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
-| `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
-| `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
-| `seoAudit` | Site Audit | Utilities | Crawl sitemaps, inspect page metadata, and keep every run local |
+| `usage` | Usage | Agents | Claude and Codex limits, usage stats, and alerts |
+| `herdr` | Sessions | Agents | Live Herdr sessions on this Mac and your SSH machines |
+| `quinjet` | Review | Agents | Review pull requests and live workspace changes in a native terminal |
+| `companion` | Memory | Agents | Your notes, voice memos and activity, remembered and searchable |
+| `plugins` | Plugins | Agents | Install Edith skills for your coding agents |
+| `appMaintenance` | Updates | Maintenance | Verified app installs, updates, review-first removal and history |
+| `homebrew` | Packages | Maintenance | One Homebrew client for formulae, casks and taps |
+| `cleaner` | Cleaner | Maintenance | Find reclaimable space across your drives and remove it on review |
 | `system` | System | System | Running apps and the keyboard-cleaning lock |
-| `keepAwake` | Keep Awake | System | Prevent idle sleep independently of running apps and keyboard cleaning |
-| `appMaintenance` | App Maintenance | System | Packages, verified installs, updates, and review-first removal |
-| `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
-| `database` | Database | Utilities | Guarded database exploration and production mutations |
-| `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
+| `keepAwake` | Keep Awake | System | Keep the Mac and display awake until you turn it off |
+| `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
-| `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
-| `music` | Music | Media | Plays your local music folder, with media keys |
-| `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
+| `clipboard` | Clipboard | Desk | Clipboard history with instant paste |
+| `emoji` | Emoji Picker | Desk | Every macOS emoji on a hotkey, straight into the app you are typing in |
+| `colorPicker` | Color Picker | Desk | System loupe on a hotkey, sampled color to your clipboard |
+| `keystrokeHighlight` | Keystroke Highlight | Desk | Show each key press on screen for polished demos |
+| `focusDim` | Focus Dim | Desk | Dims everything behind your active app |
+| `windowSweaters` | Window Sweaters | Desk | Knitted borders around your windows, in each app's own colours |
+| `presenter` | Presenter | Desk | Blurs sensitive numbers while sharing your screen |
+| `music` | Music | Media | Plays your local music folder, with media keys and a player bar |
+| `downloads` | Downloads | Media | Queue audio and video downloads that survive quitting the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
-| `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
-| `keystrokeHighlight` | Keystroke Highlight | Utilities | Shows each key press on screen for demos |
-| `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
-| `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
-| `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey |
-| `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
+| `audioMixer` | Audio Mixer | Media | Per-app volume from the notch shelf |
+| `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
+| `database` | Database | Data | Explore databases and run guarded production mutations |
+| `attention` | Attention | Data | Understand where your time goes and protect focused work! |
+| `seoAudit` | Site Audit | Data | Crawl sitemaps, inspect page metadata, and keep every run local |
 
-The same twenty-two, with what each one is made of. `Key` is the preference the app
+The same twenty-eight, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 eleven the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
-| `attention` | `tabAttentionEnabled` | yes | none | none | none | none |
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` | none |
 | `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
 | `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
-| `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
-| `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
-| `appMaintenance` | `appMaintenanceEnabled` | yes | none | none | none | `homebrew` |
-| `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
-| `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
+| `plugins` | `tabPluginsEnabled` | no | none | none | none | none |
+| `appMaintenance` | `appMaintenanceEnabled` | yes | none | `notifications` | none | `homebrew` |
+| `homebrew` | `homebrewEnabled` | no | none | none | `homebrew` | none |
+| `cleaner` | `cleanerEnabled` | no | none | none | none | none |
+| `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
+| `keepAwake` | `keepAwakeEnabled` | yes | none | none | none | none |
+| `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
-| `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
-| `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
-| `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
-| `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
-| `keystrokeHighlight` | `keystrokeHighlightEnabled` | yes | `inputMonitoring` | none | none | none |
-| `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
-| `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
 | `emoji` | `emojiEnabled` | no | none | `accessibility` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
+| `keystrokeHighlight` | `keystrokeHighlightEnabled` | yes | `inputMonitoring` | none | none | none |
+| `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
+| `windowSweaters` | `windowSweatersEnabled` | no | none | `accessibility` | none | none |
+| `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `music` | `tabMusicEnabled` | no | none | none | none | none |
+| `downloads` | `downloadsEnabled` | no | none | none | `yt-dlp` | none |
+| `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none | none |
+| `audioMixer` | `notchAudioMixerEnabled` | no | none | `applicationAudio` | none | none |
+| `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
+| `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
+| `attention` | `tabAttentionEnabled` | yes | none | none | none | none |
+| `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
 
 The JSON form also exposes the platform capability registry. Capabilities are
 not permission ids. They say which implementation an extension requires from
@@ -115,29 +126,34 @@ the current platform, and which missing implementations merely degrade it:
 
 | ID | Required capabilities | Optional capabilities |
 | --- | --- | --- |
-| `attention` | `runningApplications` | none |
 | `usage` | `usageCollection` | `notifications` |
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |
-| `seoAudit` | `siteAuditing` | none |
+| `companion` | `companionService` | none |
+| `plugins` | `skillInstallation` | none |
+| `appMaintenance` | `runningApplications` | `packageManagement` |
+| `homebrew` | `packageManagement` | none |
+| `cleaner` | `diskCleaning` | none |
 | `system` | `runningApplications` | `inputSuppression` |
 | `keepAwake` | `preventSleep` | none |
-| `appMaintenance` | `runningApplications` | `packageManagement` |
-| `machines` | `machineManagement` | `notifications` |
-| `database` | `databaseBroker` | none |
-| `companion` | `companionService` | none |
+| `lidAwake` | `preventSleep` | none |
 | `systemStats` | `systemMetrics` | none |
 | `micMute` | `microphoneControl` | `globalShortcuts` |
-| `lidAwake` | `preventSleep` | none |
-| `music` | `localMusicPlayback` | `mediaControls` |
-| `calendar` | `calendarEvents` | none |
-| `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
-| `keystrokeHighlight` | `keystrokeObservation` | none |
-| `focusDim` | `windowDimming` | none |
-| `presenter` | `screenShareDetection` | none |
 | `emoji` | `emojiInsertion` | `globalShortcuts` |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |
+| `keystrokeHighlight` | `keystrokeObservation` | none |
+| `focusDim` | `windowDimming` | none |
+| `windowSweaters` | `windowDecoration` | none |
+| `presenter` | `screenShareDetection` | none |
+| `music` | `localMusicPlayback` | `mediaControls` |
+| `downloads` | `mediaDownloads` | none |
+| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
+| `audioMixer` | `applicationAudio` | none |
+| `calendar` | `calendarEvents` | none |
+| `database` | `databaseBroker` | none |
+| `attention` | `runningApplications` | none |
+| `seoAudit` | `siteAuditing` | none |
 
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,
@@ -262,4 +278,5 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - [Extension runtime detection](./runtime-detection.md) for every live probe and
   recovery path
 - [Quinjet setup](https://github.com/pulkitxm/edith/blob/main/docs/quinjet.md) for terminal, theme, install and verification details
+- [Window Sweaters](https://github.com/pulkitxm/edith/blob/main/docs/window-sweaters.md) for the knitting, the colourways and what each control does
 - [All `ed` commands](../README.md)
