@@ -173,7 +173,9 @@ an MIT-licensed macOS utility by daemonphantom.
 SSH clipboard synchronization uses [ssh-clipboard](https://github.com/standardagents/ssh-clipboard),
 created by Justin Schroeder and maintained by Standard Agents under the MIT License.
 
-Window Sweaters is a Swift port of [Window Sweaters](https://github.com/saragordic/window-sweaters)
+Window Sweaters, which knits a border around every window, is documented in the
+[Window Sweaters guide](docs/window-sweaters.md). It is a Swift port of
+[Window Sweaters](https://github.com/saragordic/window-sweaters)
 by Sara Gordic, which is itself derived from [JankyBorders](https://github.com/FelixKratz/JankyBorders)
 by Felix Kratz. Both are licensed under the GPL-3.0, as is Edith. The knit renderer,
 the colourwork charts and the curated app colourways are Sara Gordic's design and are

@@ -278,5 +278,5 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - [Extension runtime detection](./runtime-detection.md) for every live probe and
   recovery path
 - [Quinjet setup](https://github.com/pulkitxm/edith/blob/main/docs/quinjet.md) for terminal, theme, install and verification details
-- [Window Sweaters](https://github.com/pulkitxm/edith/blob/main/docs/window-sweaters.md) for the knitting, the colourways and what each control does
+- `docs/window-sweaters.md` for the knitting, the colourways and what each Window Sweaters control does
 - [All `ed` commands](../README.md)

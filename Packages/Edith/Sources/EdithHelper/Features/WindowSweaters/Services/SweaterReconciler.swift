@@ -14,8 +14,34 @@ struct SweaterObservedWindow {
     var tracked = false
 }
 
+struct SweaterSnapshotResult {
+    var windows: [SweaterObservedWindow]
+    var liveWindows: Set<SkyLight.WindowID>?
+}
+
 enum SweaterSnapshot {
-    static func capture(ownPID: pid_t) -> [SweaterObservedWindow] {
+    static func capture(ownPID: pid_t, includingLiveness liveness: Bool)
+        -> SweaterSnapshotResult
+    {
+        SweaterSnapshotResult(
+            windows: onScreenWindows(ownPID: ownPID),
+            liveWindows: liveness ? allWindowIdentifiers() : nil)
+    }
+
+    static func allWindowIdentifiers() -> Set<SkyLight.WindowID> {
+        let options: CGWindowListOption = [.optionAll, .excludeDesktopElements]
+        guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+        else { return [] }
+        var identifiers: Set<SkyLight.WindowID> = []
+        identifiers.reserveCapacity(raw.count)
+        for info in raw {
+            guard let number = info[kCGWindowNumber as String] as? NSNumber else { continue }
+            identifiers.insert(number.uint32Value)
+        }
+        return identifiers
+    }
+
+    static func onScreenWindows(ownPID: pid_t) -> [SweaterObservedWindow] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
         else { return [] }
@@ -78,11 +104,17 @@ final class SweaterReconciler {
                 let active = self.tracker.settings.active
                 if active {
                     let pid = self.ownPID
+                    let liveness = CFAbsoluteTimeGetCurrent() >= self.liveWindowsExpiry
                     let snapshot = await Task.detached(priority: .userInitiated) {
-                        SweaterSnapshot.capture(ownPID: pid)
+                        SweaterSnapshot.capture(ownPID: pid, includingLiveness: liveness)
                     }.value
                     guard !Task.isCancelled else { return }
-                    self.reconcile(snapshot)
+                    if let live = snapshot.liveWindows {
+                        self.liveWindows = live
+                        self.liveWindowsExpiry =
+                            CFAbsoluteTimeGetCurrent() + Self.livenessInterval
+                    }
+                    self.reconcile(snapshot.windows)
                 }
                 try? await Task.sleep(for: .milliseconds(active ? 50 : 1000))
             }
@@ -98,16 +130,7 @@ final class SweaterReconciler {
     }
 
     private func windowExists(_ window: SkyLight.WindowID) -> Bool {
-        let now = CFAbsoluteTimeGetCurrent()
-        if now >= liveWindowsExpiry {
-            let options: CGWindowListOption = [.optionAll, .excludeDesktopElements]
-            guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
-            else { return true }
-            liveWindows = Set(
-                raw.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
-            liveWindowsExpiry = now + Self.livenessInterval
-        }
-        return liveWindows.contains(window)
+        liveWindows.isEmpty || liveWindows.contains(window)
     }
 
     private func reconcile(_ snapshot: [SweaterObservedWindow]) {
