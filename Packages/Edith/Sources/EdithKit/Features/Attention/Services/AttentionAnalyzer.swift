@@ -75,24 +75,19 @@ public struct AttentionAnalyzer: Sendable {
         var slotByTime: [Date: Int] = [:]
         slotByTime.reserveCapacity(boundaries.count)
         for (slot, time) in boundaries.enumerated() { slotByTime[time] = slot }
-        let claimOrder = candidates.indices.sorted {
-            let left = priority(candidates[$0])
-            let right = priority(candidates[$1])
-            return left == right ? $0 < $1 : left > right
-        }
+        let applications = candidates.indices.filter { candidates[$0].source == .application }
+        let browsers = candidates.indices.filter { candidates[$0].source == .browser }
+        let foreground = claim(
+            applications, candidates: candidates, slotByTime: slotByTime, slotCount: slotCount)
+        let claimed = claim(
+            browsers, candidates: candidates, slotByTime: slotByTime, slotCount: slotCount)
+        let contested = contestedClaims(
+            browsers, candidates: candidates, slotByTime: slotByTime, slotCount: slotCount)
         var winners = [Int?](repeating: nil, count: slotCount)
-        var nextOpenSlot = Array(0...slotCount)
-        for candidateIndex in claimOrder {
-            let candidate = candidates[candidateIndex]
-            guard let low = slotByTime[candidate.startedAt],
-                let high = slotByTime[candidate.endedAt]
-            else { continue }
-            var slot = openSlot(from: low, in: &nextOpenSlot)
-            while slot < high {
-                winners[slot] = candidateIndex
-                nextOpenSlot[slot] = slot + 1
-                slot = openSlot(from: slot + 1, in: &nextOpenSlot)
-            }
+        for slot in 0..<slotCount {
+            winners[slot] = winner(
+                foreground: foreground[slot], claimed: claimed[slot],
+                contested: contested[slot], candidates: candidates)
         }
         var result: [AttentionEvent] = []
         for slot in 0..<slotCount {
@@ -109,6 +104,108 @@ public struct AttentionAnalyzer: Sendable {
         return result
     }
 
+    private func winner(
+        foreground: Int?, claimed: Int?, contested: [Int]?, candidates: [AttentionEvent]
+    ) -> Int? {
+        guard let claimed else { return foreground }
+        guard let foreground else { return claimed }
+        let front = candidates[foreground]
+        guard AttentionBrowserIdentity.isBrowser(bundleID: front.bundleID, appName: front.appName)
+        else { return foreground }
+        guard let contested else { return claimed }
+        return corroborated(contested, candidates: candidates, window: front.windowTitle)
+            ?? foreground
+    }
+
+    private func corroborated(
+        _ claims: [Int], candidates: [AttentionEvent], window: String?
+    ) -> Int? {
+        let normalizedWindow = AttentionTitleCorrelation.normalized(window)
+        guard !normalizedWindow.isEmpty else { return nil }
+        var best: (score: Int, index: Int)?
+        var ambiguous = false
+        for index in claims {
+            let page = AttentionTitleCorrelation.normalized(candidates[index].windowTitle)
+            guard AttentionTitleCorrelation.corroborates(window: normalizedWindow, page: page)
+            else { continue }
+            let score = AttentionTitleCorrelation.overlap(normalizedWindow, page)
+            guard let current = best else {
+                best = (score, index)
+                continue
+            }
+            if score > current.score {
+                best = (score, index)
+                ambiguous = false
+            } else if score == current.score,
+                !sameIdentity(candidates[current.index], candidates[index])
+            {
+                ambiguous = true
+            }
+        }
+        guard let best, !ambiguous else { return nil }
+        return best.index
+    }
+
+    private func sameIdentity(_ left: AttentionEvent, _ right: AttentionEvent) -> Bool {
+        left.domain == right.domain && left.browserProfile == right.browserProfile
+    }
+
+    private func claim(
+        _ indices: [Int], candidates: [AttentionEvent], slotByTime: [Date: Int], slotCount: Int
+    ) -> [Int?] {
+        var winners = [Int?](repeating: nil, count: slotCount)
+        var nextOpenSlot = Array(0...slotCount)
+        let order = indices.sorted {
+            let left = priority(candidates[$0])
+            let right = priority(candidates[$1])
+            return left == right ? $0 < $1 : left > right
+        }
+        for candidateIndex in order {
+            let candidate = candidates[candidateIndex]
+            guard let low = slotByTime[candidate.startedAt],
+                let high = slotByTime[candidate.endedAt]
+            else { continue }
+            var slot = openSlot(from: low, in: &nextOpenSlot)
+            while slot < high {
+                winners[slot] = candidateIndex
+                nextOpenSlot[slot] = slot + 1
+                slot = openSlot(from: slot + 1, in: &nextOpenSlot)
+            }
+        }
+        return winners
+    }
+
+    private func contestedClaims(
+        _ indices: [Int], candidates: [AttentionEvent], slotByTime: [Date: Int], slotCount: Int
+    ) -> [[Int]?] {
+        var spans: [(low: Int, high: Int, index: Int)] = []
+        spans.reserveCapacity(indices.count)
+        var depth = [Int](repeating: 0, count: slotCount + 1)
+        for candidateIndex in indices {
+            let candidate = candidates[candidateIndex]
+            guard let low = slotByTime[candidate.startedAt],
+                let high = slotByTime[candidate.endedAt], low < high
+            else { continue }
+            spans.append((low, high, candidateIndex))
+            depth[low] += 1
+            depth[high] -= 1
+        }
+        var running = 0
+        var overlapping = [Bool](repeating: false, count: slotCount)
+        for slot in 0..<slotCount {
+            running += depth[slot]
+            overlapping[slot] = running > 1
+        }
+        guard overlapping.contains(true) else { return [[Int]?](repeating: nil, count: slotCount) }
+        var claims = [[Int]?](repeating: nil, count: slotCount)
+        for span in spans {
+            for slot in span.low..<span.high where overlapping[slot] {
+                claims[slot] = (claims[slot] ?? []) + [span.index]
+            }
+        }
+        return claims
+    }
+
     private func openSlot(from slot: Int, in nextOpenSlot: inout [Int]) -> Int {
         var open = slot
         while nextOpenSlot[open] != open { open = nextOpenSlot[open] }
@@ -122,9 +219,7 @@ public struct AttentionAnalyzer: Sendable {
     }
 
     private func priority(_ event: AttentionEvent) -> Int {
-        let source = event.source == .browser ? 20 : 10
-        let presence = event.presence == .active ? 2 : 1
-        return source + presence
+        event.presence == .active ? 2 : 1
     }
 
     private func resolve(
