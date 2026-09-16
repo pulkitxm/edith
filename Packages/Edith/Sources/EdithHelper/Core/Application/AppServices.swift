@@ -16,6 +16,7 @@ final class AppServices {
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
+    private(set) var windowSweaters: SweaterEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
@@ -356,6 +357,13 @@ final class AppServices {
             FocusDimState.setActive(false)
         }
 
+        let sweatersOn = SweaterState.isEnabled()
+        if sweatersOn, windowSweaters == nil { windowSweaters = SweaterEngine() }
+        if !sweatersOn, let engine = windowSweaters {
+            engine.shutdown()
+            windowSweaters = nil
+        }
+
         let presenterExtensionOn = Self.extensionEnabled(AppStorageKeys.Presenter.enabled)
         PresenterState.shared.syncEnabled(presenterExtensionOn)
         if presenterExtensionOn {
@@ -437,6 +445,7 @@ final class AppServices {
         lidAwake?.refreshFromSystem()
         lidAwake?.syncSettings()
         focusDim?.applySettings()
+        windowSweaters?.applySettings()
         presenter?.applySettings()
     }
 

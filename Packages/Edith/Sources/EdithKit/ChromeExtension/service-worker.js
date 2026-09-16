@@ -14,18 +14,33 @@ async function config() {
 }
 
 function browserName() {
-  const agent = navigator.userAgent
-  if (agent.includes("Edg/")) return "Microsoft Edge"
-  if (agent.includes("OPR/")) return "Opera"
+  const brands = navigator.userAgentData?.brands?.map(entry => entry.brand).join(" ") || ""
+  const agent = `${brands} ${navigator.userAgent}`
+  if (agent.includes("Dia")) return "Dia"
+  if (agent.includes("Arc")) return "Arc"
+  if (agent.includes("Edg/") || agent.includes("Microsoft Edge")) return "Microsoft Edge"
+  if (agent.includes("OPR/") || agent.includes("Opera")) return "Opera"
   if (agent.includes("Brave")) return "Brave"
-  if (agent.includes("Dia/")) return "Dia"
+  if (agent.includes("Vivaldi")) return "Vivaldi"
   if (agent.includes("Chrome/")) return "Google Chrome"
   return "Chromium browser"
 }
 
+async function focusedWindowID() {
+  const stored = await chrome.storage.session.get("attentionFocusedWindow")
+  return stored.attentionFocusedWindow
+}
+
+async function rememberFocus(windowID) {
+  await chrome.storage.session.set({ attentionFocusedWindow: windowID })
+}
+
 async function activeTab() {
+  const tracked = await focusedWindowID()
+  if (tracked === chrome.windows.WINDOW_ID_NONE) return null
   const window = await chrome.windows.getLastFocused()
   if (!window.focused || window.id === chrome.windows.WINDOW_ID_NONE) return null
+  if (tracked !== undefined && tracked !== window.id) return null
   const tabs = await chrome.tabs.query({ active: true, windowId: window.id })
   return tabs[0] || null
 }
@@ -154,7 +169,10 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.url || change.status === "complete") scheduleHeartbeat()
 })
 chrome.tabs.onRemoved.addListener(tabId => chrome.storage.session.remove(`media:${tabId}`))
-chrome.windows.onFocusChanged.addListener(scheduleHeartbeat)
+chrome.windows.onFocusChanged.addListener(windowID => {
+  work = work.catch(() => {}).then(() => rememberFocus(windowID))
+  scheduleHeartbeat()
+})
 chrome.idle.onStateChanged.addListener(scheduleHeartbeat)
 
 chrome.runtime.onMessage.addListener((message, sender) => {

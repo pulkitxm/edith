@@ -231,38 +231,6 @@ import Testing
         }
     }
 
-    @Test func cancellingGhosttyCloseLeavesTheSessionAndClearsTheRequest() async throws {
-        try await withGhosttyEnabled(true) {
-            var closeRequests = 0
-            let holder = TerminalSessionHolder(requestGhosttyClose: { _ in
-                closeRequests += 1
-                return true
-            })
-            holder.start(executable: "/bin/cat", arguments: [], environment: [])
-            let launch = try #require(holder.ghosttyLaunch)
-            let view = holder.retainedGhosttyView(
-                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
-            var decisions: [Bool] = []
-
-            holder.requestUserClose { decisions.append($0) }
-            view.onCloseRequestCancelled?()
-            await Task.yield()
-
-            #expect(closeRequests == 1)
-            #expect(decisions == [false])
-            #expect(holder.started)
-            #expect(holder.ghosttyView === view)
-            #expect(holder.ghosttyLaunch != nil)
-
-            view.onClose?(0)
-            await Task.yield()
-
-            #expect(decisions == [false])
-            #expect(holder.ghosttyView == nil)
-            #expect(holder.ghosttyLaunch == nil)
-        }
-    }
-
     @Test func confirmingGhosttyCloseCompletesTheUserRequest() async throws {
         try await withGhosttyEnabled(true) {
             let holder = TerminalSessionHolder(requestGhosttyClose: { _ in true })

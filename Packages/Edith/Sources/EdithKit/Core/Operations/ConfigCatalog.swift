@@ -53,7 +53,8 @@ public enum ConfigCatalog {
         "music",
         "calendar",
         "clipboard", "keystrokes",
-        "notch", "focusdim", "presenter", "colorpicker", "emoji", "bifrost", "micmute",
+        "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
+        "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -62,7 +63,7 @@ public enum ConfigCatalog {
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
-        + colorPicker + emoji + bifrost
+        + windowSweaters + colorPicker + emoji + bifrost
         + micMute
         + backup + permissions + terminal
 
@@ -806,6 +807,60 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let windowSweaters: [SettingDefinition] = [
+        SettingDefinition(
+            SweaterState.enabledKey, .bool, group: "sweaters",
+            summary: "Window Sweaters extension: knitted borders around your windows.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            SweaterState.activeKey, .bool, group: "sweaters",
+            summary: "Sweaters on right now. Turn off to pause without disabling.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.pattern, .string, group: "sweaters",
+            summary: "by-app, none, or a built-in pattern name.",
+            fallback: .string("by-app")),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.stitch, .string, group: "sweaters",
+            summary: "Plain knitting stitch used where no pattern applies.",
+            allowed: SweaterStitch.allCases.map(\.rawValue),
+            fallback: .string("stockinette")),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.basket, .string, group: "sweaters",
+            summary: "Colourway used by apps without a curated sweater.",
+            allowed: SweaterBaskets.all.map(\.name),
+            fallback: .string(SweaterBaskets.defaultName)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.borderWidth, .number, group: "sweaters",
+            summary: "Border width in points, 2 to 60.",
+            fallback: .double(SweaterLimits.defaultBorderWidth)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.gauge, .number, group: "sweaters",
+            summary: "Stitch rows across the band; fewer rows knit chunkier.",
+            fallback: .double(SweaterLimits.defaultGauge)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.anchor, .string, group: "sweaters",
+            summary: "Where each side's pattern repeat starts.",
+            allowed: SweaterAnchor.allCases.map(\.rawValue),
+            fallback: .string("corner")),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.order, .string, group: "sweaters",
+            summary: "Whether the sweater sits behind or in front of the window.",
+            allowed: SweaterOrder.allCases.map(\.rawValue),
+            fallback: .string("below")),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.unfocusedDim, .number, group: "sweaters",
+            summary: "How far unfocused sweaters are darkened, 0 to 0.9.",
+            fallback: .double(0)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.accessibilityFocus, .bool, group: "sweaters",
+            summary: "Read the focused window through Accessibility instead of the server.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.WindowSweaters.excludedApps, .string, group: "sweaters",
+            summary: "Comma-separated app names that never get a sweater."),
     ]
 
     private static let presenter: [SettingDefinition] = [

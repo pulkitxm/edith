@@ -4,6 +4,19 @@ import GhosttyKit
 import Testing
 
 @Suite struct GhosttyLifecycleTests {
+    @Test @MainActor func closingWithALiveProcessDoesNotRequireConfirmation() async {
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        var exitCodes: [Int32?] = []
+        view.onClose = { exitCodes.append($0) }
+
+        view.reportClosed(processAlive: true)
+        await Task.yield()
+
+        #expect(exitCodes.count == 1)
+        #expect(exitCodes[0] == nil)
+    }
+
     @Test @MainActor func anExitedChildCannotCloseTheSurfaceThatReusesItsSlot() async throws {
         let environment = ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))

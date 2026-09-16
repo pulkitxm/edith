@@ -307,4 +307,18 @@ public enum AppStorageKeys {
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }
+    public enum WindowSweaters {
+        public static let enabled = "windowSweatersEnabled"
+        public static let active = "windowSweatersActive"
+        public static let accessibilityFocus = "windowSweatersAccessibilityFocus"
+        public static let anchor = "windowSweatersAnchor"
+        public static let basket = "windowSweatersBasket"
+        public static let borderWidth = "windowSweatersBorderWidth"
+        public static let excludedApps = "windowSweatersExcludedApps"
+        public static let gauge = "windowSweatersGauge"
+        public static let order = "windowSweatersOrder"
+        public static let pattern = "windowSweatersPattern"
+        public static let stitch = "windowSweatersStitch"
+        public static let unfocusedDim = "windowSweatersUnfocusedDim"
+    }
 }

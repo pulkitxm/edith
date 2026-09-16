@@ -227,6 +227,12 @@ public enum ExtensionRegistry {
             symbolName: "circle.lefthalf.filled", suite: .desk, host: .bar, featured: false,
             defaultsKey: "focusDimEnabled", requiredCapabilities: [.windowDimming]),
         ExtensionRegistryEntry(
+            id: "windowSweaters", title: "Window Sweaters",
+            subtitle: "Knitted borders around your windows, in each app's own colours.",
+            symbolName: "square.dashed", suite: .desk, host: .bar, featured: false,
+            defaultsKey: "windowSweatersEnabled",
+            requiredCapabilities: [.windowDecoration]),
+        ExtensionRegistryEntry(
             id: "presenter", title: "Presenter",
             subtitle: "Blurs sensitive numbers while sharing your screen.",
             symbolName: "theatermasks.fill", suite: .desk, host: .bar, featured: false,

@@ -271,6 +271,10 @@ import Testing
                 "KeystrokeHighlightRows.swift"
             ),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
+            (
+                "windowSweaters", "WindowSweatersRows", "enabled",
+                "WindowSweatersRows.swift"
+            ),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),

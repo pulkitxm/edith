@@ -17,7 +17,7 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-                "focusDim", "presenter",
+                "focusDim", "windowSweaters", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])

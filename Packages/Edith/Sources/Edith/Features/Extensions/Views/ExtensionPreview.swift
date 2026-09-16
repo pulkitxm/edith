@@ -38,6 +38,7 @@ struct ExtensionPreview: View {
         case "keystrokeHighlight": keystrokeHighlightPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
+        case "windowSweaters": windowSweatersPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
         case "homebrew": homebrewPreview(phase: phase)
@@ -443,6 +444,33 @@ struct ExtensionPreview: View {
                 Capsule().fill(DashSkin.inkFaint(dark).opacity(0.42)).frame(
                     width: UIScale.pt(43), height: UIScale.pt(4))
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func windowSweatersPreview(phase: Double) -> some View {
+        let progress = loopProgress(phase, duration: 6)
+        let swatches = SweaterPreviewSwatch.all
+        let position = progress * Double(swatches.count)
+        let index = Int(position) % swatches.count
+        let next = (index + 1) % swatches.count
+        let blend = clamped((position - Double(Int(position))) * 3 - 2)
+        return ZStack {
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                .fill(DashSkin.paper2(dark))
+                .frame(width: UIScale.pt(70), height: UIScale.pt(36))
+                .offset(x: -14, y: -8)
+                .opacity(0.55)
+            ZStack {
+                Image(nsImage: swatches[index].image)
+                    .resizable()
+                    .opacity(1 - blend)
+                Image(nsImage: swatches[next].image)
+                    .resizable()
+                    .opacity(blend)
+            }
+            .frame(width: UIScale.pt(84), height: UIScale.pt(50))
+            .offset(x: 12, y: 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
