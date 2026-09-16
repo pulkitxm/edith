@@ -38,8 +38,14 @@ struct BifrostPanelView: View {
         .onAppear {
             searchFocused = true
             lastMouse = NSEvent.mouseLocation
+            BifrostPanel.shared.shortcutHandler = { number in
+                guard let result = model.result(atShortcut: number) else { return false }
+                activate(result)
+                return true
+            }
             publishHeight()
         }
+        .onDisappear { BifrostPanel.shared.shortcutHandler = nil }
         .onChange(of: model.height) { _, _ in publishHeight() }
         .onChange(of: store.revision) { _, _ in model.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.willShow)) { note in
@@ -135,7 +141,9 @@ struct BifrostPanelView: View {
             if let answer = result.answer {
                 BifrostAnswerCard(answer: answer, isSelected: result.id == model.selectedID)
             } else {
-                BifrostResultRow(result: result, isSelected: result.id == model.selectedID)
+                BifrostResultRow(
+                    result: result, isSelected: result.id == model.selectedID,
+                    shortcut: model.shortcutNumber(for: result.id))
             }
         }
         .buttonStyle(.edith(.borderless))
@@ -194,6 +202,7 @@ struct BifrostSectionHeader: View {
 struct BifrostResultRow: View {
     let result: BifrostResult
     let isSelected: Bool
+    var shortcut: Int?
 
     var body: some View {
         HStack(spacing: 11) {
@@ -215,6 +224,17 @@ struct BifrostResultRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+            if let shortcut {
+                Text("\u{2318}\(shortcut)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(.white.opacity(isSelected ? 0.14 : 0.07))
+                    )
+            }
         }
         .padding(.horizontal, 12)
         .frame(height: BifrostPanelMetrics.rowHeight)

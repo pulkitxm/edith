@@ -9,16 +9,18 @@ struct BifrostGuideOverlay: View {
         Canvas { context, canvasSize in
             let style = StrokeStyle(lineWidth: 1, dash: [5, 6])
             let color = Color.white.opacity(0.35)
-            for fraction in BifrostGuideLines.vertical {
+            let lines = BifrostGuideLines.fractions(
+                in: CGRect(origin: .zero, size: canvasSize))
+            for fraction in lines.vertical {
                 var path = Path()
                 let x = (canvasSize.width * fraction).rounded()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: canvasSize.height))
                 context.stroke(path, with: .color(color), style: style)
             }
-            for fraction in BifrostGuideLines.horizontal {
+            for fraction in lines.horizontal {
                 var path = Path()
-                let y = (canvasSize.height * fraction).rounded()
+                let y = (canvasSize.height * (1 - fraction)).rounded()
                 path.move(to: CGPoint(x: 0, y: y))
                 path.addLine(to: CGPoint(x: canvasSize.width, y: y))
                 context.stroke(path, with: .color(color), style: style)

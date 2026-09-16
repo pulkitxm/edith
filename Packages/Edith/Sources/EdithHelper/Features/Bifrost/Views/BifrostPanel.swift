@@ -10,6 +10,11 @@ private final class BifrostFloatingPanel: NSPanel {
         guard modifiers.contains(.command), !modifiers.contains(.control),
             !modifiers.contains(.option), let key = event.charactersIgnoringModifiers?.lowercased()
         else { return super.performKeyEquivalent(with: event) }
+        if let number = BifrostEditingAction.shortcutNumber(for: key),
+            MainActor.assumeIsolated({ BifrostPanel.shared.runShortcut(number) })
+        {
+            return true
+        }
         let shifted = modifiers.contains(.shift)
         guard let action = BifrostEditingAction.selector(for: key, shifted: shifted) else {
             return super.performKeyEquivalent(with: event)
@@ -19,6 +24,11 @@ private final class BifrostFloatingPanel: NSPanel {
 }
 
 enum BifrostEditingAction {
+    static func shortcutNumber(for key: String) -> Int? {
+        guard key.count == 1, let number = Int(key), (1...9).contains(number) else { return nil }
+        return number
+    }
+
     static func selector(for key: String, shifted: Bool) -> Selector? {
         switch key {
         case "a": #selector(NSText.selectAll(_:))
@@ -54,6 +64,14 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     private var showTask: Task<Void, Never>?
     private var showGeneration = 0
     private var anchorTop: CGPoint?
+    private var dragMonitor: Any?
+    private var dragOrigin: CGPoint?
+    var shortcutHandler: ((Int) -> Bool)?
+
+    func runShortcut(_ number: Int) -> Bool {
+        guard isVisible else { return false }
+        return shortcutHandler?(number) ?? false
+    }
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -76,6 +94,13 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
+        if position == .center, let screen = panel.screen ?? NSScreen.main {
+            let anchor = BifrostPanelMetrics.defaultAnchorTop(in: screen.visibleFrame)
+            let origin = NSPoint(
+                x: anchor.x, y: anchor.y - BifrostPanelMetrics.headerHeight)
+            finishShow(origin: origin, generation: generation, query: query)
+            return
+        }
         showTask = Task.detached { [weak self] in
             let placed = await position.origin(
                 size: nominal, statusItemFrame: nil, anchors: .bifrost)
@@ -94,6 +119,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         anchorTop = CGPoint(x: origin.x, y: origin.y + BifrostPanelMetrics.headerHeight)
         panel.orderFrontRegardless()
         panel.makeKey()
+        startWatchingDrags()
         NotificationCenter.default.post(
             name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
     }
@@ -102,6 +128,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         showGeneration += 1
         showTask?.cancel()
         showTask = nil
+        stopWatchingDrags()
         guides.hide()
         panel?.orderOut(nil)
         NotificationCenter.default.post(name: Self.didHide, object: nil)
@@ -167,9 +194,53 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         panel = created
     }
 
-    private func beginDrag() {
-        guard let panel, panel.isVisible else { return }
-        guides.show(on: panel.screen) { [weak self] in self?.finishDrag() }
+    private func startWatchingDrags() {
+        guard dragMonitor == nil else { return }
+        dragMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        ) { [weak self] event in
+            MainActor.assumeIsolated { self?.handle(event) ?? event }
+        }
+    }
+
+    private func stopWatchingDrags() {
+        if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
+        dragMonitor = nil
+        dragOrigin = nil
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard let panel, panel.isVisible else { return event }
+        switch event.type {
+        case .leftMouseDown:
+            let point = NSEvent.mouseLocation
+            guard BifrostPanelMetrics.isInDragHandle(point: point, frame: panel.frame) else {
+                return event
+            }
+            dragOrigin = point
+            return event
+        case .leftMouseDragged:
+            guard let origin = dragOrigin else { return event }
+            let point = NSEvent.mouseLocation
+            let delta = CGSize(width: point.x - origin.x, height: point.y - origin.y)
+            guard abs(delta.width) + abs(delta.height) > 1 else { return nil }
+            dragOrigin = point
+            panel.setFrame(
+                BifrostPanelMetrics.moved(panel.frame, by: delta), display: true)
+            if !guides.isVisible {
+                guides.show(on: panel.screen) { [weak self] in self?.finishDrag() }
+            }
+            return nil
+        case .leftMouseUp:
+            guard dragOrigin != nil else { return event }
+            dragOrigin = nil
+            guard guides.isVisible else { return event }
+            guides.hide()
+            finishDrag()
+            return nil
+        default:
+            return event
+        }
     }
 
     private func finishDrag() {
@@ -188,12 +259,5 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         }
     }
 
-    nonisolated func windowDidMove(_ notification: Notification) {
-        Task { @MainActor in
-            guard let panel = BifrostPanel.shared.panel, panel.isVisible,
-                NSEvent.pressedMouseButtons & 1 == 1
-            else { return }
-            BifrostPanel.shared.beginDrag()
-        }
-    }
+    nonisolated func windowDidMove(_ notification: Notification) {}
 }

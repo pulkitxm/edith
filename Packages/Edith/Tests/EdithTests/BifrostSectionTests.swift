@@ -93,20 +93,39 @@ import Testing
 }
 
 @Suite struct BifrostGuideLineTests {
-    @Test func guidesDivideTheVisibleFrame() {
-        let frame = CGRect(x: 100, y: 50, width: 800, height: 600)
-        let positions = BifrostGuideLines.positions(in: frame)
+    private let screen = CGRect(x: 0, y: 0, width: 1728, height: 1080)
 
-        #expect(positions.vertical == [300, 500, 700])
-        #expect(positions.horizontal == [170, 350, 530])
+    @Test func theBarOpensCentredAndHighOnTheScreen() {
+        let anchor = BifrostPanelMetrics.defaultAnchorTop(in: screen)
+
+        #expect(anchor.x == (screen.midX - BifrostPanelMetrics.width / 2).rounded())
+        #expect(
+            anchor.y == (screen.maxY - screen.height * BifrostPanelMetrics.topFraction).rounded())
+        #expect(screen.maxY - anchor.y < screen.height / 4)
     }
 
-    @Test func guidesStayInsideTheFrameTheyDivide() {
-        let frame = CGRect(x: 0, y: 0, width: 1728, height: 1080)
-        let positions = BifrostGuideLines.positions(in: frame)
+    @Test func guidesMarkWhereTheBarBelongs() {
+        let anchor = BifrostPanelMetrics.defaultAnchorTop(in: screen)
+        let positions = BifrostGuideLines.positions(in: screen)
 
-        #expect(positions.vertical.allSatisfy { frame.minX < $0 && $0 < frame.maxX })
-        #expect(positions.horizontal.allSatisfy { frame.minY < $0 && $0 < frame.maxY })
+        #expect(positions.vertical == [anchor.x, anchor.x + BifrostPanelMetrics.width])
+        #expect(positions.horizontal.first == anchor.y)
+    }
+
+    @Test func guidesStayInsideTheFrameTheyMark() {
+        let positions = BifrostGuideLines.positions(in: screen)
+
+        #expect(positions.vertical.allSatisfy { screen.minX < $0 && $0 < screen.maxX })
+        #expect(positions.horizontal.allSatisfy { screen.minY < $0 && $0 < screen.maxY })
+    }
+
+    @Test func aSecondScreenGetsItsOwnAnchor() {
+        let secondary = CGRect(x: 1728, y: 200, width: 1512, height: 900)
+        let anchor = BifrostPanelMetrics.defaultAnchorTop(in: secondary)
+
+        #expect(anchor.x > secondary.minX)
+        #expect(anchor.x + BifrostPanelMetrics.width < secondary.maxX)
+        #expect(anchor.y < secondary.maxY)
     }
 }
 
@@ -131,5 +150,33 @@ import Testing
 
         #expect(tall.maxY == short.maxY)
         #expect(short.minY > tall.minY)
+    }
+}
+
+@Suite struct BifrostDragTests {
+    private let frame = CGRect(x: 100, y: 400, width: 640, height: 300)
+
+    @Test func onlyTheHeaderStripStartsADrag() {
+        let header = CGPoint(x: 400, y: frame.maxY - 10)
+        let list = CGPoint(x: 400, y: frame.minY + 10)
+
+        #expect(BifrostPanelMetrics.isInDragHandle(point: header, frame: frame))
+        #expect(!BifrostPanelMetrics.isInDragHandle(point: list, frame: frame))
+    }
+
+    @Test func aPointOutsideTheBarNeverStartsADrag() {
+        #expect(
+            !BifrostPanelMetrics.isInDragHandle(
+                point: CGPoint(x: 10, y: frame.maxY - 10), frame: frame))
+        #expect(
+            !BifrostPanelMetrics.isInDragHandle(
+                point: CGPoint(x: 400, y: frame.maxY + 40), frame: frame))
+    }
+
+    @Test func movingKeepsTheSizeAndShiftsTheOrigin() {
+        let moved = BifrostPanelMetrics.moved(frame, by: CGSize(width: -30, height: 12))
+
+        #expect(moved.origin == CGPoint(x: 70, y: 412))
+        #expect(moved.size == frame.size)
     }
 }

@@ -18,6 +18,19 @@ final class BifrostPanelModel {
         refresh(resetSelection: true)
     }
 
+    static let shortcutLimit = 9
+
+    func shortcutNumber(for id: String) -> Int? {
+        guard let index = index(of: id), index < Self.shortcutLimit else { return nil }
+        return index + 1
+    }
+
+    func result(atShortcut number: Int) -> BifrostResult? {
+        let index = number - 1
+        guard index >= 0, index < results.count, index < Self.shortcutLimit else { return nil }
+        return results[index]
+    }
+
     var selected: BifrostResult? {
         guard let selectedID, let index = index(of: selectedID) else { return nil }
         return results[index]

@@ -45,7 +45,7 @@ public enum BifrostSectionBuilder {
 }
 
 public enum BifrostPanelMetrics {
-    public static let width: CGFloat = 640
+    public static let width: CGFloat = 750
     public static let headerHeight: CGFloat = 54
     public static let sectionHeaderHeight: CGFloat = 26
     public static let rowHeight: CGFloat = 44
@@ -53,12 +53,31 @@ public enum BifrostPanelMetrics {
     public static let listPadding: CGFloat = 6
     public static let answerHeight: CGFloat = 132
     public static let cornerRadius: CGFloat = 14
+    public static let topFraction: CGFloat = 0.147
+    public static let bottomFraction: CGFloat = 0.084
+
+    public static func defaultAnchorTop(in visibleFrame: CGRect) -> CGPoint {
+        CGPoint(
+            x: (visibleFrame.midX - width / 2).rounded(),
+            y: (visibleFrame.maxY - visibleFrame.height * topFraction).rounded())
+    }
     public static let scrimOpacity: Double = 0.62
 
     public static var scrim: Color { Color.black.opacity(scrimOpacity) }
 
     public static var nominalHeight: CGFloat {
         headerHeight + listPadding + footerHeight + sectionHeaderHeight + 5 * rowHeight
+    }
+
+    public static func isInDragHandle(point: CGPoint, frame: CGRect) -> Bool {
+        guard frame.contains(point) else { return false }
+        return point.y >= frame.maxY - headerHeight
+    }
+
+    public static func moved(_ frame: CGRect, by delta: CGSize) -> CGRect {
+        CGRect(
+            x: frame.origin.x + delta.width, y: frame.origin.y + delta.height,
+            width: frame.width, height: frame.height)
     }
 
     public static func frame(anchorTop: CGPoint, height: CGFloat) -> CGRect {
@@ -79,13 +98,19 @@ public enum BifrostPanelMetrics {
 }
 
 public struct BifrostGuideLines: Equatable, Sendable {
-    public static let vertical: [CGFloat] = [0.25, 0.5, 0.75]
-    public static let horizontal: [CGFloat] = [0.2, 0.5, 0.8]
-
     public static func positions(in frame: CGRect) -> (vertical: [CGFloat], horizontal: [CGFloat]) {
-        (
-            vertical.map { frame.minX + frame.width * $0 },
-            horizontal.map { frame.minY + frame.height * $0 }
+        let anchor = BifrostPanelMetrics.defaultAnchorTop(in: frame)
+        return (
+            [anchor.x, anchor.x + BifrostPanelMetrics.width],
+            [anchor.y, frame.minY + frame.height * BifrostPanelMetrics.bottomFraction]
+        )
+    }
+
+    public static func fractions(in frame: CGRect) -> (vertical: [CGFloat], horizontal: [CGFloat]) {
+        let lines = positions(in: frame)
+        return (
+            lines.vertical.map { ($0 - frame.minX) / frame.width },
+            lines.horizontal.map { ($0 - frame.minY) / frame.height }
         )
     }
 }
