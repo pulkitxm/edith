@@ -98,6 +98,7 @@ struct BifrostPanelView: View {
                 }
             }
         }
+        .padding(.bottom, BifrostPanel.listPadding)
     }
 
     private func activate(_ result: BifrostResult?) {

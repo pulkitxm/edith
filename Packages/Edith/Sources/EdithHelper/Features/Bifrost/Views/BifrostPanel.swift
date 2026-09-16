@@ -13,6 +13,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     static let width: CGFloat = 560
     static let rowHeight: CGFloat = 46
     static let headerHeight: CGFloat = 52
+    static let listPadding: CGFloat = 6
     static let willShow = Notification.Name("bifrostPanelWillShow")
     static let didHide = Notification.Name("bifrostPanelDidHide")
     static let prefillKey = "bifrostPanelPrefill"
@@ -33,7 +34,8 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     static func height(forRows rows: Int) -> CGFloat {
-        headerHeight + CGFloat(max(rows, 0)) * rowHeight
+        guard rows > 0 else { return headerHeight }
+        return headerHeight + CGFloat(rows) * rowHeight + listPadding
     }
 
     func toggle(query: String = "") {
