@@ -115,10 +115,19 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
 
     private func finishShow(origin: NSPoint, generation: Int, query: String) {
         guard generation == showGeneration, let panel else { return }
+        let wasVisible = panel.isVisible
         panel.setFrameOrigin(origin)
         anchorTop = CGPoint(x: origin.x, y: origin.y + BifrostPanelMetrics.headerHeight)
+        if !wasVisible { panel.alphaValue = 0 }
         panel.orderFrontRegardless()
         panel.makeKey()
+        if !wasVisible {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = BifrostPanelMetrics.appearDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        }
         startWatchingDrags()
         NotificationCenter.default.post(
             name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
@@ -130,7 +139,23 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         showTask = nil
         stopWatchingDrags()
         guides.hide()
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else {
+            panel?.orderOut(nil)
+            NotificationCenter.default.post(name: Self.didHide, object: nil)
+            return
+        }
+        let generation = showGeneration
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = BifrostPanelMetrics.dismissDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, generation == self.showGeneration else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        }
         NotificationCenter.default.post(name: Self.didHide, object: nil)
     }
 
@@ -140,8 +165,20 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
             anchorTop ?? CGPoint(x: panel.frame.minX, y: panel.frame.minY + panel.frame.height)
         anchorTop = top
         let frame = BifrostPanelMetrics.frame(anchorTop: top, height: height)
-        guard frame != panel.frame else { return }
-        panel.setFrame(frame, display: true)
+        guard
+            abs(frame.height - panel.frame.height) > BifrostPanelMetrics.resizeThreshold
+                || abs(frame.minX - panel.frame.minX) > BifrostPanelMetrics.resizeThreshold
+        else { return }
+        guard panel.isVisible else {
+            panel.setFrame(frame, display: true)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = BifrostPanelMetrics.resizeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.allowsImplicitAnimation = true
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 
     private func mountRootView() {

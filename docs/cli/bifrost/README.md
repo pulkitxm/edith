@@ -152,6 +152,10 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   `lastPosition`, so it opens where you left it until you choose another mode.
 - **The field is an ordinary text field.** ⌘A, ⌘C, ⌘V, ⌘X, ⌘Z and ⇧⌘Z all work,
   which a menu bar app has to arrange for itself because it has no Edit menu.
+- **Hold command to number the rows.** The `⌘1` to `⌘9` chips appear only while
+  command is down, and pressing the number runs that row. The bar itself opens,
+  grows and dismisses the way Spotlight does: the top edge stays where it is and
+  the list grows downward in about a fifth of a second.
 - **Return runs, `⌥`-return copies.** Return opens an application and puts an
   answer on the pasteboard; holding option copies whichever row is selected,
   including an application's path. Only the first of those counts as opening

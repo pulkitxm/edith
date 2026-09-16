@@ -9,6 +9,8 @@ struct BifrostPanelView: View {
 
     @State private var model: BifrostPanelModel
     @State private var lastMouse = NSEvent.mouseLocation
+    @State private var commandHeld = false
+    @State private var flagsMonitor: Any?
     @FocusState private var searchFocused: Bool
 
     init(
@@ -46,9 +48,13 @@ struct BifrostPanelView: View {
                 activate(result)
                 return true
             }
+            watchModifiers()
             publishHeight()
         }
-        .onDisappear { BifrostPanel.shared.shortcutHandler = nil }
+        .onDisappear {
+            BifrostPanel.shared.shortcutHandler = nil
+            stopWatchingModifiers()
+        }
         .onChange(of: height) { _, _ in publishHeight() }
         .onChange(of: store.revision) { _, _ in model.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.willShow)) { note in
@@ -61,6 +67,7 @@ struct BifrostPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.didHide)) { _ in
             store.leaveMode()
             model.reset()
+            commandHeld = false
         }
     }
 
@@ -69,6 +76,23 @@ struct BifrostPanelView: View {
             ? model.height
             : BifrostPanelMetrics.headerHeight + BifrostPanelMetrics.modeHeight
                 + BifrostPanelMetrics.footerHeight
+    }
+
+    private func watchModifiers() {
+        guard flagsMonitor == nil else { return }
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { event in
+            let held = event.modifierFlags.contains(.command)
+            if held != commandHeld {
+                withAnimation(.easeOut(duration: 0.1)) { commandHeld = held }
+            }
+            return event
+        }
+    }
+
+    private func stopWatchingModifiers() {
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        flagsMonitor = nil
+        commandHeld = false
     }
 
     private var shape: RoundedRectangle {
@@ -239,7 +263,8 @@ struct BifrostPanelView: View {
             } else {
                 BifrostResultRow(
                     result: result, isSelected: result.id == model.selectedID,
-                    shortcut: store.mode == .launcher ? model.shortcutNumber(for: result.id) : nil,
+                    shortcut: commandHeld && store.mode == .launcher
+                        ? model.shortcutNumber(for: result.id) : nil,
                     showsAccessory: store.mode == .launcher)
             }
         }
@@ -416,6 +441,7 @@ struct BifrostResultRow: View {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(.white.opacity(isSelected ? 0.14 : 0.07))
                     )
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .padding(.horizontal, 12)

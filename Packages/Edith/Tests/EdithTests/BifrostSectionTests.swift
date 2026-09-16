@@ -180,3 +180,23 @@ import Testing
         #expect(moved.size == frame.size)
     }
 }
+
+@Suite struct BifrostAnimationTests {
+    @Test func theBarGrowsInAboutTheTimeSpotlightTakes() {
+        #expect(BifrostPanelMetrics.resizeDuration > 0.1)
+        #expect(BifrostPanelMetrics.resizeDuration < 0.3)
+        #expect(BifrostPanelMetrics.appearDuration < BifrostPanelMetrics.resizeDuration)
+        #expect(BifrostPanelMetrics.dismissDuration < BifrostPanelMetrics.appearDuration)
+    }
+
+    @Test func aHeightChangeSmallerThanAPointIsNotWorthAnimating() {
+        let top = CGPoint(x: 100, y: 800)
+        let first = BifrostPanelMetrics.frame(anchorTop: top, height: 300)
+        let second = BifrostPanelMetrics.frame(anchorTop: top, height: 300.2)
+
+        #expect(abs(first.height - second.height) < BifrostPanelMetrics.resizeThreshold)
+        #expect(
+            abs(first.height - BifrostPanelMetrics.frame(anchorTop: top, height: 320).height)
+                > BifrostPanelMetrics.resizeThreshold)
+    }
+}
