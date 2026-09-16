@@ -17,7 +17,8 @@ public enum SweaterState {
         defaults.set(active, forKey: activeKey)
     }
 
-    public static func settings(_ defaults: UserDefaults = SharedDefaults.store) -> SweaterSettings {
+    public static func settings(_ defaults: UserDefaults = SharedDefaults.store) -> SweaterSettings
+    {
         let keys = AppStorageKeys.WindowSweaters.self
         return SweaterSettings(
             active: isActive(defaults),
@@ -49,6 +50,7 @@ public enum SweaterState {
     public static func setExcludedApps(
         _ apps: [String], _ defaults: UserDefaults = SharedDefaults.store
     ) {
-        defaults.set(apps.joined(separator: ","), forKey: AppStorageKeys.WindowSweaters.excludedApps)
+        defaults.set(
+            apps.joined(separator: ","), forKey: AppStorageKeys.WindowSweaters.excludedApps)
     }
 }

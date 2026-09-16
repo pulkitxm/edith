@@ -34,7 +34,8 @@ extension SweaterCollection {
         SweaterAppRule(match: "Preview", color: 0xff597baf, chart: "atelier-preview"),
         SweaterAppRule(match: "Microsoft Word", color: 0xff2855a1, chart: "atelier-word"),
         SweaterAppRule(match: "Microsoft Excel", color: 0xff28674f, chart: "atelier-excel"),
-        SweaterAppRule(match: "Microsoft PowerPoint", color: 0xffb9573d, chart: "atelier-powerpoint"),
+        SweaterAppRule(
+            match: "Microsoft PowerPoint", color: 0xffb9573d, chart: "atelier-powerpoint"),
         SweaterAppRule(match: "Microsoft Outlook", color: 0xff176bb7, chart: "atelier-outlook"),
         SweaterAppRule(match: "Code", color: 0xff237caf, chart: "atelier-vscode"),
         SweaterAppRule(match: "Visual Studio Code", color: 0xff237caf, chart: "atelier-vscode"),

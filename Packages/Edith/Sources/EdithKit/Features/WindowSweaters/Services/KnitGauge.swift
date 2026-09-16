@@ -72,9 +72,9 @@ public enum KnitMath {
         return color(forWindow: hash, basket: basket)
     }
 
-    static func noise(_ a: Int, _ b: Int) -> Double {
-        let value = sin(Double(a) * 12.9898 + Double(b) * 78.233) * 43758.5453
-        return value - floor(value)
+    static func noise(_ a: Int, _ b: Int) -> Float {
+        let value = sin(Float(a) * 12.9898 + Float(b) * 78.233) * 43758.5453
+        return value - value.rounded(.down)
     }
 
     static func components(_ argb: UInt32) -> (a: Double, r: Double, g: Double, b: Double) {

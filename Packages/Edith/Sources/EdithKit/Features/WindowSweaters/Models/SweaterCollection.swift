@@ -13,7 +13,8 @@ public struct SweaterAppRule: Equatable, Sendable {
 }
 
 public enum SweaterCollection {
-    public static func rule(for appName: String, userRules: [SweaterAppRule] = []) -> SweaterAppRule?
+    public static func rule(for appName: String, userRules: [SweaterAppRule] = [])
+        -> SweaterAppRule?
     {
         guard !appName.isEmpty else { return nil }
         if let match = longestPrefixMatch(appName, in: userRules) { return match }
