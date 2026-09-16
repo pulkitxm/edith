@@ -73,7 +73,9 @@ struct BifrostPanelView: View {
                 return .handled
             }
             if store.isIndexing {
-                ProgressView().controlSize(.small)
+                Text("Indexing")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16)
@@ -83,13 +85,16 @@ struct BifrostPanelView: View {
     private var resultList: some View {
         VStack(spacing: 0) {
             ForEach(model.results) { result in
-                BifrostResultRow(
-                    result: result, isSelected: result.id == model.selectedID
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { activate(result) }
-                .onHover { hovering in
-                    if hovering { model.select(result.id) }
+                Button {
+                    activate(result)
+                } label: {
+                    BifrostResultRow(
+                        result: result, isSelected: result.id == model.selectedID)
+                }
+                .buttonStyle(.edith(.borderless))
+                .onContinuousHover { phase in
+                    guard case .active = phase else { return }
+                    model.select(result.id)
                 }
             }
         }
@@ -127,6 +132,8 @@ struct BifrostResultRow: View {
         }
         .padding(.horizontal, 16)
         .frame(height: BifrostPanel.rowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(Color.accentColor.opacity(isSelected ? 0.22 : 0))

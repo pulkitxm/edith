@@ -371,6 +371,13 @@ enum JSONContract {
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
+        JSONCase("ed bifrost open", ["bifrost", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed bifrost ls", ["bifrost", "ls", "--json"]),
+        JSONCase("ed bifrost calc", ["bifrost", "calc", "2 + 2", "--json"]),
+        JSONCase("ed bifrost convert", ["bifrost", "convert", "12 km in miles", "--json"]),
+        JSONCase(
+            "ed bifrost reindex", ["bifrost", "reindex", "--json"], mutatesTheMachine: true),
+        JSONCase("ed bifrost clear", ["bifrost", "clear", "--json"]),
         JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
         JSONCase(
