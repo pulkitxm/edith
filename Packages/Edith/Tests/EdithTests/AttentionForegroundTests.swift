@@ -118,4 +118,21 @@ import Testing
             AttentionBrowserIdentity.isBrowser(
                 bundleID: "com.tinyspeck.slackmacgap", appName: "Slack") == false)
     }
+
+    @Test func samplingSliversDoNotSplitTheTimelineOrCountAsSwitches() {
+        var events: [AttentionEvent] = [
+            dia(start: 0, duration: 120, title: "Personal: Standup · Orbit")
+        ]
+        for step in 0..<12 {
+            events.append(
+                page(
+                    start: Double(step) * 10, duration: 9.9, domain: "orbit.noveum.ai",
+                    title: "Standup · Orbit", profile: "Work"))
+        }
+        let result = summary(events, seconds: 120)
+        #expect(result.activeDuration == 120)
+        #expect(result.contextSwitches == 0)
+        #expect(result.entities.count == 1)
+        #expect(result.entities.first?.name == "orbit.noveum.ai")
+    }
 }

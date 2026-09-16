@@ -1,6 +1,8 @@
 import Foundation
 
 public struct AttentionAnalyzer: Sendable {
+    public static let sliver: TimeInterval = 1
+
     public init() {}
 
     public func summary(
@@ -66,11 +68,31 @@ public struct AttentionAnalyzer: Sendable {
     public func resolvedPrimaryIntervals(
         events: [AttentionEvent], from: Date, to: Date
     ) -> [AttentionEvent] {
+        let resolution = resolve(events: events, from: from, to: to)
+        var result: [AttentionEvent] = []
+        for slot in resolution.winners.indices {
+            guard let winner = resolution.winners[slot] else { continue }
+            var selected = resolution.candidates[winner]
+            selected.startedAt = resolution.boundaries[slot]
+            selected.duration = resolution.boundaries[slot + 1].timeIntervalSince(
+                resolution.boundaries[slot])
+            if let last = result.last, last.canMerge(with: selected, pulseTime: 0) {
+                result[result.count - 1] = last.merged(with: selected)
+            } else {
+                result.append(selected)
+            }
+        }
+        return result
+    }
+
+    private func resolve(
+        events: [AttentionEvent], from: Date, to: Date
+    ) -> (candidates: [AttentionEvent], boundaries: [Date], winners: [Int?]) {
         let candidates = events.filter(\.isPrimaryAttention).compactMap {
             $0.clipped(from: from, to: to)
         }
         let boundaries = Set(candidates.flatMap { [$0.startedAt, $0.endedAt] }).sorted()
-        guard boundaries.count > 1 else { return [] }
+        guard boundaries.count > 1 else { return (candidates, boundaries, []) }
         let slotCount = boundaries.count - 1
         var slotByTime: [Date: Int] = [:]
         slotByTime.reserveCapacity(boundaries.count)
@@ -89,17 +111,60 @@ public struct AttentionAnalyzer: Sendable {
                 foreground: foreground[slot], claimed: claimed[slot],
                 contested: contested[slot], candidates: candidates)
         }
-        var result: [AttentionEvent] = []
-        for slot in 0..<slotCount {
-            guard let winner = winners[slot] else { continue }
-            var selected = candidates[winner]
-            selected.startedAt = boundaries[slot]
-            selected.duration = boundaries[slot + 1].timeIntervalSince(boundaries[slot])
-            if let last = result.last, last.canMerge(with: selected, pulseTime: 0) {
-                result[result.count - 1] = last.merged(with: selected)
+        return (
+            candidates, boundaries,
+            settled(winners, boundaries: boundaries, candidates: candidates)
+        )
+    }
+
+    private func identity(_ index: Int?, candidates: [AttentionEvent]) -> String? {
+        guard let index else { return nil }
+        let event = candidates[index]
+        return [
+            event.source.rawValue, event.presence.rawValue,
+            event.bundleID ?? event.appName ?? "", event.domain ?? "",
+            event.browserProfile ?? "",
+        ].joined(separator: "\u{1F}")
+    }
+
+    private func settled(
+        _ winners: [Int?], boundaries: [Date], candidates: [AttentionEvent]
+    ) -> [Int?] {
+        guard winners.count > 1 else { return winners }
+        var runs: [(low: Int, high: Int, key: String?, seconds: TimeInterval)] = []
+        for slot in winners.indices {
+            let key = identity(winners[slot], candidates: candidates)
+            let seconds = boundaries[slot + 1].timeIntervalSince(boundaries[slot])
+            if var last = runs.last, last.key == key {
+                last.high = slot + 1
+                last.seconds += seconds
+                runs[runs.count - 1] = last
             } else {
-                result.append(selected)
+                runs.append((slot, slot + 1, key, seconds))
             }
+        }
+        var index = 0
+        while index < runs.count {
+            guard runs.count > 1, runs[index].seconds < Self.sliver else {
+                index += 1
+                continue
+            }
+            let previous = index > 0 ? runs[index - 1].seconds : -1
+            let following = index + 1 < runs.count ? runs[index + 1].seconds : -1
+            let target = previous >= following ? index - 1 : index + 1
+            runs[target].low = min(runs[target].low, runs[index].low)
+            runs[target].high = max(runs[target].high, runs[index].high)
+            runs[target].seconds += runs[index].seconds
+            runs.remove(at: index)
+            index = max(0, min(index, runs.count) - 1)
+        }
+        var result = winners
+        for run in runs {
+            let winner =
+                winners[run.low..<run.high].first {
+                    identity($0, candidates: candidates) == run.key
+                } ?? winners[run.low]
+            for slot in run.low..<run.high { result[slot] = winner }
         }
         return result
     }
