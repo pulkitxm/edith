@@ -68,7 +68,8 @@ public enum ExtensionLiveAdapters {
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "focusDim", "windowSweaters", "presenter", "music", "downloads", "notchShelf",
+        "audioMixer", "calendar",
         "attention", "seoAudit",
     ]
 
@@ -120,6 +121,7 @@ public enum ExtensionLiveAdapters {
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
+        case "windowSweaters": windowSweatersReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
@@ -476,6 +478,24 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Focus Dim can manage \(screenCount) display(s).",
             setupDetail: "A stored dim intensity, animation duration, or display mode is invalid.",
             emptyDetail: "No active display is available for Focus Dim."
+        ).readiness
+    }
+
+    static func windowSweatersReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let settings = SweaterState.settings(defaults)
+        let configured =
+            settings.borderWidth.isFinite && settings.gauge.isFinite
+            && settings.unfocusedDim.isFinite
+            && SweaterBaskets.all.contains { $0.name == settings.basket }
+            && (settings.pattern.chartName.map {
+                SweaterChartCatalog.chart(named: $0) != nil
+            } ?? true)
+        let patterns = SweaterChartCatalog.builtIn.count
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: patterns,
+            readyDetail: "\(patterns) knitting patterns are loaded.",
+            setupDetail: "A stored border width, stitch size, colourway or pattern is invalid.",
+            emptyDetail: "No knitting pattern is available."
         ).readiness
     }
 
