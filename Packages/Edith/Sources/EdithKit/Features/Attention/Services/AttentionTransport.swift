@@ -125,9 +125,14 @@ public struct AttentionPageSnapshot: Codable, Sendable {
         all: [AttentionEvent], hasStoredEvents: Bool
     ) {
         settings = request.settings ?? repository.loadSettings()
-        summary = AttentionAnalyzer().summary(
+        let analyzer = AttentionAnalyzer()
+        summary = analyzer.summary(
             events: all, settings: settings, from: request.from, to: request.to)
-        events = Array(all.reversed().prefix(500))
+        let resolved = analyzer.resolvedPrimaryIntervals(
+            events: all, from: request.from, to: request.to)
+        let media = all.filter { !$0.isPrimaryAttention }
+        events = Array(
+            (resolved + media).sorted { $0.startedAt < $1.startedAt }.reversed().prefix(500))
         focusSessions = Array(
             repository.focusSessions(from: request.from, to: request.to).reversed())
         activeFocus = repository.activeFocus()
