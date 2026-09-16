@@ -84,6 +84,10 @@ final class BifrostStore: FeatureModule {
         }
     }
 
+    func copy(_ result: BifrostResult) {
+        copy(result.action.copyText)
+    }
+
     func forget(_ targetKey: String) {
         ledger.forget(targetKey)
         persistLedger()

@@ -68,8 +68,8 @@ struct BifrostPanelView: View {
                 onDismiss()
                 return .handled
             }
-            .onKeyPress(.return) {
-                activate(model.selected)
+            .onKeyPress(keys: [.return]) { press in
+                activate(model.selected, copyOnly: press.modifiers.contains(.option))
                 return .handled
             }
             if store.isIndexing {
@@ -101,9 +101,13 @@ struct BifrostPanelView: View {
         .padding(.bottom, BifrostPanel.listPadding)
     }
 
-    private func activate(_ result: BifrostResult?) {
+    private func activate(_ result: BifrostResult?, copyOnly: Bool = false) {
         guard let result else { return }
         onDismiss()
+        if copyOnly {
+            store.copy(result)
+            return
+        }
         store.run(result)
     }
 }

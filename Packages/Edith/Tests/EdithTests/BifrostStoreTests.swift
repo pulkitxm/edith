@@ -135,6 +135,25 @@ import Testing
         #expect(recorder.opened.isEmpty)
     }
 
+    @Test func anApplicationCanBeCopiedInsteadOfOpened() throws {
+        let (defaults, indexStore, suiteName, directory) = makeWorld()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        indexStore.save(BifrostIndex(generatedAt: Date(), applications: Self.applications))
+        let recorder = Recorder()
+        let store = makeStore(defaults: defaults, indexStore: indexStore, recorder: recorder)
+        defer { store.shutdown() }
+
+        let safari = try #require(store.results(for: "safari").first)
+        store.copy(safari)
+
+        #expect(recorder.copied == ["/Applications/Safari.app"])
+        #expect(recorder.opened.isEmpty)
+        #expect(store.results(for: "").isEmpty)
+    }
+
     @Test func theResultLimitIsClampedToWhatTheBarCanShow() {
         let (defaults, indexStore, suiteName, directory) = makeWorld()
         defer {

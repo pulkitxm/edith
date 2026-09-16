@@ -41,6 +41,11 @@ is up closes it again. With a query it always shows the bar and replaces
 whatever was in the field, which is what makes
 `ed bifrost open "12 km in miles"` a reasonable thing to bind to a key.
 
+Return runs the selected row: an application opens, an answer goes to the
+pasteboard. `⌥`-return copies whatever is selected instead, so an application
+row hands you its path rather than launching it, and either way the bar
+dismisses.
+
 The shortcut is `⌥space` unless you have rebound it in Settings > Shortcuts,
 which writes `bifrostHotKeyCode`, `bifrostHotKeyMods` and `bifrostHotKeyLabel`.
 The bar opens where `bifrostPopupAt` says: `center` by default, or `cursor`,

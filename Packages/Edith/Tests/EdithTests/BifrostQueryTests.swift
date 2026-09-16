@@ -64,6 +64,16 @@ import Testing
         #expect(result.subtitle == "/Applications")
     }
 
+    @Test func everyResultKnowsWhatCopyingItMeans() throws {
+        let application = try #require(
+            BifrostQuery.results(query: "safari", applications: Self.applications).first)
+        let answer = try #require(
+            BifrostQuery.results(query: "2+2", applications: Self.applications).first)
+
+        #expect(application.action.copyText == "/Applications/Safari.app")
+        #expect(answer.action.copyText == "4")
+    }
+
     @Test func theLimitIsHonouredIncludingTheLeadingResult() {
         let results = BifrostQuery.results(
             query: "s", applications: Self.applications, limit: 3)

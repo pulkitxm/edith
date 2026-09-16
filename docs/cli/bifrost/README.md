@@ -105,6 +105,10 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   loses to something you opened five times this week. The ledger holds at most
   300 entries and the boost it contributes is capped, so frequency breaks ties
   between comparable matches rather than overriding the match itself.
+- **Return runs, `⌥`-return copies.** Return opens an application and puts an
+  answer on the pasteboard; holding option copies whichever row is selected,
+  including an application's path. Only the first of those counts as opening
+  something, so only the first moves the frequency ledger.
 - **Only the bar records use.** Opening an application from `ed` does not exist
   as a command, and `ls` never records anything, so the ledger only ever moves
   when you pick something in the panel.

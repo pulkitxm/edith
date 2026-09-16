@@ -24,6 +24,13 @@ public enum BifrostAction: Equatable, Sendable {
         case .copy: "copy"
         }
     }
+
+    public var copyText: String {
+        switch self {
+        case .launch(let path): path
+        case .copy(let text): text
+        }
+    }
 }
 
 public struct BifrostResult: Identifiable, Equatable, Sendable {
