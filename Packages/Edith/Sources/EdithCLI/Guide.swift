@@ -42,6 +42,7 @@ public enum Guide {
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
         ed emoji pick               open Edith's emoji picker
+        ed bifrost open             open the Bifrost launcher bar
         ed usage sources            the agents that produced your usage history
         ed usage export             branded PNG cards for sharing your activity
         ed schema                   JSON Schema for the config document
@@ -511,6 +512,9 @@ public enum Guide {
         ed emoji ls --search rocket     the emoji this Mac can render
         ed emoji insert 1F600           type one into the app in front of you
         ed emoji tone medium            the default skin tone
+        ed bifrost ls --search code     the applications Bifrost indexed
+        ed bifrost calc "12 * 8 + 4%"   the answer the bar would show
+        ed bifrost convert "12 km in miles"
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1

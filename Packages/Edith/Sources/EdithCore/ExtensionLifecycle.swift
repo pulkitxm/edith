@@ -911,7 +911,7 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "answer", "Calculate or convert",
                     "Type a sum or a unit question and copy the answer.",
-                    "ed bifrost calc \"12 * 8\""),
+                    "ed bifrost calc 2+2"),
             ],
             prerequisites: [
                 instruction(
@@ -921,7 +921,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable bifrost", "ed bifrost ls --json",
-                "ed bifrost convert \"12 km in miles\"",
+                "ed bifrost calc 2+2",
             ],
             docs: [documentation("guide", "Bifrost guide", "docs/cli/bifrost/README.md")],
             recovery: [
