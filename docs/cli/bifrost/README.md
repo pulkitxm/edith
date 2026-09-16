@@ -73,6 +73,58 @@ error: safari is not an expression Bifrost can evaluate
 hint: try a sum such as `ed bifrost calc "2 + 2"`
 ```
 
+## The extra sources
+
+The bar always searches the application index, the calculator, unit and currency
+conversion, clipboard history and file search. Everything else is a switch, off
+or on in Settings, Extensions, Bifrost, and readable from the command line:
+
+```sh
+ed config ls --group bifrost --json
+ed config set bifrostSourceOpenWindows true
+```
+
+| Source | Key | On by default | What it adds |
+| --- | --- | --- | --- |
+| Quicklinks | `bifrostSourceQuicklinks` | yes | Your saved links, searches and deeplinks |
+| Snippets | `bifrostSourceSnippets` | yes | Reusable text, pasted into the app you were typing in |
+| Shell commands | `bifrostSourceShellCommands` | yes | Named scripts run through your login shell |
+| Apple Shortcuts | `bifrostSourceAppleShortcuts` | yes | What `shortcuts list` reports, run with `shortcuts run` |
+| Window management | `bifrostSourceWindowActions` | yes | Twenty-seven Rectangle-style actions on the front window |
+| System actions | `bifrostSourceSystemActions` | yes | Lock, sleep, appearance, trash, eject, restart, shut down |
+| Running apps | `bifrostSourceRunningApplications` | yes | Switch to or quit an app that is open now |
+| Open windows | `bifrostSourceOpenWindows` | no | Jump to an open window by its title |
+
+Window management, open windows and pasting a snippet need Accessibility.
+Without it the window actions do nothing and a snippet is only copied.
+
+```sh
+ed permissions request accessibility
+```
+
+The five destructive system actions — log out, restart, shut down, empty trash
+and quit all apps — raise a confirmation before anything happens.
+
+### Quicklinks, snippets and commands
+
+The three you write yourself live in the shared defaults suite as JSON, at
+`bifrostQuicklinks`, `bifrostSnippets` and `bifrostShellCommands`, so they
+travel with a settings backup and can be scripted. Each takes placeholders:
+
+| Placeholder | Becomes |
+| --- | --- |
+| `{query}` | What you typed after the keyword |
+| `{clipboard}` | The current clipboard text |
+| `{selection}` | The selection, falling back to the clipboard |
+| `{date}` | Today, `yyyy-MM-dd`, or `{date:EEEE}` for your own format |
+| `{time}` | Now, `HH:mm`, or `{time:HH.mm.ss}` |
+| `{uuid}` | A fresh UUID |
+
+Give one a keyword and it becomes a prefix: type `gh edith` and the bar runs the
+quicklink keyed `gh` with `edith` as `{query}`, skipping every other result. A
+keyword on its own is just a search. Values going into a web URL are
+percent-encoded; everywhere else they are inserted as typed.
+
 ## Notes and gotchas
 
 - **The index is a cache, not a search.** Scanning walks `/Applications`,
@@ -103,7 +155,7 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
 - **The ledger is a stored value, not a setting.** It lives at the
   `bifrostUsage` key of the shared defaults suite as a JSON-encoded list of
   `{target, count, lastUsedAt}`, so `ed config ls --group bifrost` lists the
-  seven `bifrost` settings and never the ledger. `ed bifrost clear` is the only
+  nineteen `bifrost` settings and never the ledger. `ed bifrost clear` is the only
   way to empty it from the command line.
 - **Frequency is decayed, not counted.** Each entry scores
   `count * 0.5^(ageDays / 14)`, so something you opened thirty times last month

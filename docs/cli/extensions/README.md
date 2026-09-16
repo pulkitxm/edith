@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-eight |
+| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-nine |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-eight, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-nine, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithCore is the single list every command here
-walks, and its order is the order `ls` prints. Twenty-eight entries, in this order:
+walks, and its order is the order `ls` prints. Twenty-nine entries, in this order:
 
 | ID | Name | Suite | What it does |
 | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ walks, and its order is the order `ls` prints. Twenty-eight entries, in this ord
 | `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
+| `bifrost` | Bifrost | Desk | One bar that opens any app and answers sums and unit questions |
 | `clipboard` | Clipboard | Desk | Clipboard history with instant paste |
 | `emoji` | Emoji Picker | Desk | Every macOS emoji on a hotkey, straight into the app you are typing in |
 | `colorPicker` | Color Picker | Desk | System loupe on a hotkey, sampled color to your clipboard |
@@ -85,9 +86,9 @@ walks, and its order is the order `ls` prints. Twenty-eight entries, in this ord
 | `attention` | Attention | Data | Understand where your time goes and protect focused work! |
 | `seoAudit` | Site Audit | Data | Crawl sitemaps, inspect page metadata, and keep every run local |
 
-The same twenty-eight, with what each one is made of. `Key` is the preference the app
+The same twenty-nine, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-eleven the welcome tour shows before you ask it for all of them.
+twelve the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -104,6 +105,7 @@ eleven the welcome tour shows before you ask it for all of them.
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
+| `bifrost` | `bifrostEnabled` | yes | none | `accessibility` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
 | `emoji` | `emojiEnabled` | no | none | `accessibility` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
@@ -139,6 +141,7 @@ the current platform, and which missing implementations merely degrade it:
 | `lidAwake` | `preventSleep` | none |
 | `systemStats` | `systemMetrics` | none |
 | `micMute` | `microphoneControl` | `globalShortcuts` |
+| `bifrost` | `applicationLaunching` | `globalShortcuts`, `globalPaste` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
 | `emoji` | `emojiInsertion` | `globalShortcuts` |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |

@@ -8,7 +8,8 @@ public enum BifrostQuery {
 
     public static func results(
         query: String, applications: [BifrostApplication],
-        commands: [BifrostCommand] = [], ledger: BifrostUsageLedger = BifrostUsageLedger(),
+        commands: [BifrostCommand] = [], entries: [BifrostEntry] = [],
+        ledger: BifrostUsageLedger = BifrostUsageLedger(),
         rates: BifrostRates? = nil, now: Date = Date(), limit: Int = defaultLimit
     ) -> [BifrostResult] {
         guard limit > 0 else { return [] }
@@ -16,8 +17,11 @@ public enum BifrostQuery {
         guard trimmed.count <= maximumQueryLength else { return [] }
         guard !trimmed.isEmpty else {
             return frequent(
-                applications: applications, commands: commands, ledger: ledger, now: now,
-                limit: limit)
+                applications: applications, commands: commands, entries: entries,
+                ledger: ledger, now: now, limit: limit)
+        }
+        if let routed = keywordRoute(trimmed, entries: entries) {
+            return [entryResult(routed, score: Int.max, argument: keywordArgument(trimmed))]
         }
         var results: [BifrostResult] = []
         if let money = BifrostCurrencyParser.parse(trimmed, rates: rates) {
@@ -31,19 +35,31 @@ public enum BifrostQuery {
         guard room > 0 else { return results }
         results.append(
             contentsOf: matches(
-                query: trimmed, applications: applications, commands: commands, ledger: ledger,
-                now: now, limit: room))
+                query: trimmed, applications: applications, commands: commands,
+                entries: entries, ledger: ledger, now: now, limit: room))
         return results
+    }
+
+    public static func keywordRoute(_ query: String, entries: [BifrostEntry]) -> BifrostEntry? {
+        let pieces = query.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard pieces.count == 2 else { return nil }
+        return BifrostEntryCatalog.keywords(in: entries)[String(pieces[0]).lowercased()]
+    }
+
+    public static func keywordArgument(_ query: String) -> String {
+        let pieces = query.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard pieces.count == 2 else { return "" }
+        return String(pieces[1]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public static func matches(
         query: String, applications: [BifrostApplication], commands: [BifrostCommand] = [],
-        ledger: BifrostUsageLedger, now: Date, limit: Int
+        entries: [BifrostEntry] = [], ledger: BifrostUsageLedger, now: Date, limit: Int
     ) -> [BifrostResult] {
         let needle = BifrostMatcher.normalize(query)
         guard !needle.isEmpty, limit > 0 else { return [] }
         var scored: [Candidate] = []
-        scored.reserveCapacity(min(applications.count + commands.count, 64))
+        scored.reserveCapacity(min(applications.count + commands.count + entries.count, 96))
         for application in applications {
             guard let base = BifrostMatcher.score(application.searchTarget, query: needle) else {
                 continue
@@ -63,6 +79,14 @@ public enum BifrostQuery {
                     result: commandResult(command, score: base + boost(key, query, ledger, now)),
                     name: command.title, tie: command.id))
         }
+        for entry in entries {
+            guard let base = BifrostMatcher.score(entry.target, query: needle) else { continue }
+            let key = entry.action.targetKey
+            scored.append(
+                Candidate(
+                    result: entryResult(entry, score: base + boost(key, query, ledger, now)),
+                    name: entry.title, tie: entry.id))
+        }
         return grouped(order(scored).prefix(limit).map(\.result))
     }
 
@@ -77,7 +101,11 @@ public enum BifrostQuery {
         return ordered
     }
 
-    static let kindOrder: [BifrostResultKind] = [.conversion, .calculation, .application, .command]
+    static let kindOrder: [BifrostResultKind] = [
+        .conversion, .calculation, .application, .runningApp, .openWindow, .command,
+        .quicklink, .snippet, .shellCommand, .shortcut, .windowAction, .systemAction,
+        .clip, .file,
+    ]
 
     struct Candidate {
         let result: BifrostResult
@@ -104,7 +132,7 @@ public enum BifrostQuery {
 
     static func frequent(
         applications: [BifrostApplication], commands: [BifrostCommand],
-        ledger: BifrostUsageLedger, now: Date, limit: Int
+        entries: [BifrostEntry] = [], ledger: BifrostUsageLedger, now: Date, limit: Int
     ) -> [BifrostResult] {
         var byKey: [String: BifrostResult] = [:]
         for application in applications {
@@ -116,6 +144,11 @@ public enum BifrostQuery {
             let key = BifrostAction.run(commandID: command.id).targetKey
             guard byKey[key] == nil else { continue }
             byKey[key] = commandResult(command, score: ledger.boost(for: key, now: now))
+        }
+        for entry in entries {
+            let key = entry.action.targetKey
+            guard byKey[key] == nil else { continue }
+            byKey[key] = entryResult(entry, score: ledger.boost(for: key, now: now))
         }
         var results: [BifrostResult] = []
         for key in ledger.ranked(now: now, limit: limit) {
@@ -138,6 +171,16 @@ public enum BifrostQuery {
             id: "command:" + command.id, kind: .command, title: command.title,
             subtitle: command.subtitle, symbolName: command.symbolName,
             action: .run(commandID: command.id), score: score)
+    }
+
+    static func entryResult(
+        _ entry: BifrostEntry, score: Int, argument: String = ""
+    ) -> BifrostResult {
+        let subtitle = argument.isEmpty ? entry.subtitle : "\(entry.subtitle) — \(argument)"
+        return BifrostResult(
+            id: entry.id, kind: entry.kind, title: entry.title, subtitle: subtitle,
+            symbolName: entry.symbolName, iconPath: entry.iconPath, action: entry.action,
+            score: score, copyText: entry.copyText)
     }
 
     static func calculationResult(_ calculation: BifrostCalculation) -> BifrostResult {

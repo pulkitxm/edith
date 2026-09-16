@@ -953,12 +953,25 @@ public enum ExtensionLifecycleCatalog {
                     "answer", "Calculate or convert",
                     "Type a sum or a unit question and copy the answer.",
                     "ed bifrost calc 2+2"),
+                instruction(
+                    "sources", "Choose what else it searches",
+                    "Turn quicklinks, snippets, commands, shortcuts and window and system"
+                        + " actions on or off.",
+                    "ed config ls --group bifrost --json"),
+                instruction(
+                    "library", "Save quicklinks, snippets and commands",
+                    "Write your own entries, with placeholders for typed input and the"
+                        + " clipboard."),
             ],
             prerequisites: [
                 instruction(
                     "index", "Index your applications",
                     "The launcher indexes the application folders on this Mac on first use.",
-                    "ed bifrost reindex")
+                    "ed bifrost reindex"),
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Optional. Accessibility moves windows and pastes snippets for you.",
+                    "ed permissions request accessibility"),
             ],
             examples: [
                 "ed extensions enable bifrost", "ed bifrost ls --json",
@@ -974,7 +987,11 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "ls", "Read the indexed applications",
                     "Confirm the launcher can see the applications on this Mac.",
-                    "ed bifrost ls --json")
+                    "ed bifrost ls --json"),
+                instruction(
+                    "config", "Inspect the sources",
+                    "Confirm which extra sources the bar is searching.",
+                    "ed config ls --group bifrost --json"),
             ]),
         descriptor(
             "emoji", "Insert any emoji macOS can draw into whatever you are typing in.",

@@ -301,7 +301,7 @@ struct BifrostPanelView: View {
 
     private var primaryLabel: String {
         guard store.mode == .launcher else { return store.mode.primaryAction }
-        return model.selected?.action.isRepeatable == true ? "Open" : "Copy"
+        return model.selected?.action.primaryVerb ?? "Open"
     }
 
     private func leaveMode() {

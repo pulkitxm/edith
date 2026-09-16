@@ -371,7 +371,7 @@ import Testing
             "lidAwake": [],
             "systemStats": [],
             "micMute": [],
-            "bifrost": [],
+            "bifrost": [.accessibility],
             "clipboard": [.accessibility],
             "emoji": [.accessibility],
             "colorPicker": [],

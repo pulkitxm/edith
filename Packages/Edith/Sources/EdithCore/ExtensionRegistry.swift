@@ -196,7 +196,7 @@ public enum ExtensionRegistry {
             subtitle: "One bar that opens any app and answers sums and unit questions.",
             symbolName: "rainbow", suite: .desk, host: .bar, featured: true,
             defaultsKey: "bifrostEnabled", requiredCapabilities: [.applicationLaunching],
-            optionalCapabilities: [.globalShortcuts]),
+            optionalCapabilities: [.globalShortcuts, .globalPaste]),
         ExtensionRegistryEntry(
             id: "clipboard", title: "Clipboard",
             subtitle: "Clipboard history with instant paste.",

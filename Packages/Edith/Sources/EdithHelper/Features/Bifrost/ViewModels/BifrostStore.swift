@@ -7,6 +7,7 @@ import Foundation
 final class BifrostStore: FeatureModule {
     private(set) var applications: [BifrostApplication] = []
     private(set) var commands: [BifrostCommand] = []
+    private(set) var entries: [BifrostEntry] = []
     private(set) var rates: BifrostRates?
     private(set) var mode: BifrostMode = .launcher
     private(set) var scope: BifrostScope = BifrostScopeCatalog.clipboard()[0]
@@ -21,6 +22,10 @@ final class BifrostStore: FeatureModule {
 
     private var ledger: BifrostUsageLedger
     private var indexTask: Task<Void, Never>?
+    private var sourcesTask: Task<Void, Never>?
+    private var shortcutNames: [String] = []
+    private var runningApplications: [BifrostRunningApplication] = []
+    private var openWindows: [BifrostWindowHandle] = []
     private var ratesTask: Task<Void, Never>?
     private var modeTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
@@ -64,6 +69,7 @@ final class BifrostStore: FeatureModule {
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
         commands = BifrostCommandCatalog.available(in: store)
         rates = rateStore.load()
+        entries = BifrostEntryCatalog.entries(sources: BifrostSource.enabled(in: store))
         if let cached = indexStore.load() {
             applications = cached.applications
             indexedAt = cached.generatedAt
@@ -85,6 +91,8 @@ final class BifrostStore: FeatureModule {
         isShutDown = true
         indexTask?.cancel()
         indexTask = nil
+        sourcesTask?.cancel()
+        sourcesTask = nil
         ratesTask?.cancel()
         ratesTask = nil
         modeTask?.cancel()
@@ -97,7 +105,8 @@ final class BifrostStore: FeatureModule {
 
     func results(for query: String, now: Date = Date()) -> [BifrostResult] {
         BifrostQuery.results(
-            query: query, applications: applications, commands: commands, ledger: ledger,
+            query: query, applications: applications, commands: commands, entries: entries,
+            ledger: ledger,
             rates: rates, now: now, limit: resultLimit)
     }
 
@@ -222,11 +231,28 @@ final class BifrostStore: FeatureModule {
         case .copy(let text):
             copy(text)
             return true
+        default:
+            let argument = keywordArgument(for: result, query: query)
+            let action = result.action
+            let defaults = store
+            Task {
+                _ = await BifrostActionRunner.perform(
+                    action, argument: argument, defaults: defaults)
+            }
+            record(result.action.targetKey, query: query, at: now)
+            return true
         }
     }
 
+    func keywordArgument(for result: BifrostResult, query: String) -> String {
+        guard BifrostQuery.keywordRoute(query, entries: entries)?.id == result.id else {
+            return ""
+        }
+        return BifrostQuery.keywordArgument(query)
+    }
+
     func copy(_ result: BifrostResult) {
-        copy(result.action.copyText)
+        copy(result.copyText)
     }
 
     func forget(_ targetKey: String) {
@@ -276,7 +302,53 @@ final class BifrostStore: FeatureModule {
     private func adoptSettings() {
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
         commands = BifrostCommandCatalog.available(in: store)
+        rebuildEntries()
         revision += 1
+    }
+
+    func refreshDynamicSources() {
+        guard !isShutDown else { return }
+        let sources = BifrostSource.enabled(in: store)
+        runningApplications =
+            sources.contains(.runningApplications) ? BifrostRunningApps.applications() : []
+        rebuildEntries()
+        let wantsWindows = sources.contains(.openWindows)
+        let wantsShortcuts = sources.contains(.appleShortcuts)
+        guard wantsWindows || wantsShortcuts else { return }
+        let hasShortcuts = !shortcutNames.isEmpty
+        sourcesTask?.cancel()
+        sourcesTask = Task { [weak self] in
+            var windows: [BifrostWindowHandle] = []
+            if wantsWindows {
+                windows = await Task.detached(priority: .utility) {
+                    BifrostRunningApps.windows()
+                }.value
+            }
+            var names: [String] = []
+            if wantsShortcuts, !hasShortcuts { names = await BifrostShortcutsIndex.names() }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.adoptDynamicSources(windows: windows, shortcuts: names)
+            }
+        }
+    }
+
+    private func adoptDynamicSources(windows: [BifrostWindowHandle], shortcuts: [String]) {
+        guard !isShutDown else { return }
+        openWindows = windows
+        if !shortcuts.isEmpty { shortcutNames = shortcuts }
+        rebuildEntries()
+        revision += 1
+    }
+
+    private func rebuildEntries() {
+        entries = BifrostEntryCatalog.entries(
+            sources: BifrostSource.enabled(in: store),
+            quicklinks: BifrostLibraryStore.quicklinks(store),
+            snippets: BifrostLibraryStore.snippets(store),
+            shellCommands: BifrostLibraryStore.shellCommands(store),
+            shortcuts: shortcutNames, runningApplications: runningApplications,
+            openWindows: openWindows)
     }
 }
 
