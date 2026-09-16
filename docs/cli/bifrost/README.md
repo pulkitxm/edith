@@ -90,11 +90,16 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   in order, including the frequency boost from your own ledger. Without
   `--search`, `ls` prints the index in alphabetical order and ignores the
   ledger entirely.
-- **Matching is a subsequence, not a substring.** Every letter of the query has
-  to appear in the name in order, so `gc` finds Google Chrome and `vsc` finds
-  Visual Studio Code, while `safz` finds nothing. Word starts and runs of
-  adjacent letters score higher than scattered letters, an exact name beats a
-  prefix, and a shorter name wins a tie.
+- **Matching is a subsequence that has to start a word.** Every letter of the
+  query has to appear in the name in order, so `gc` finds Google Chrome and
+  `vsc` finds Visual Studio Code, while `safz` finds nothing. The first letter
+  also has to land on the start of a word, which is what stops `aaa` from
+  matching three scattered letters in Edith Panel: `chrome` finds Google
+  Chrome, `hrome` finds nothing. A word starts after a space, a hyphen, an
+  underscore, a dot or a slash, and at a case or digit boundary, so `term`
+  finds iTerm. Word starts and runs of adjacent letters score higher than
+  scattered letters, an exact name beats a prefix, and a shorter name wins a
+  tie.
 - **The ledger is a stored value, not a setting.** It lives at the
   `bifrostUsage` key of the shared defaults suite as a JSON-encoded list of
   `{target, count, lastUsedAt}`, so `ed config ls --group bifrost` lists the

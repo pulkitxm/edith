@@ -56,6 +56,10 @@ public enum BifrostPanelMetrics {
 
     public static var scrim: Color { Color.black.opacity(scrimOpacity) }
 
+    public static var nominalHeight: CGFloat {
+        headerHeight + listPadding + footerHeight + sectionHeaderHeight + 5 * rowHeight
+    }
+
     public static func frame(anchorTop: CGPoint, height: CGFloat) -> CGRect {
         CGRect(x: anchorTop.x, y: anchorTop.y - height, width: width, height: height)
     }

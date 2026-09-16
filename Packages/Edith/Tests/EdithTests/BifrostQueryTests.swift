@@ -135,12 +135,18 @@ import Testing
 
     @Test func resultsNeverInterleaveTheirKinds() {
         let results = BifrostQuery.results(
-            query: "e", applications: Self.applications, commands: Self.commands, limit: 8)
-        let sections = BifrostSectionBuilder.sections(from: results, query: "e")
+            query: "c", applications: Self.applications, commands: Self.commands, limit: 8)
+        let sections = BifrostSectionBuilder.sections(from: results, query: "c")
 
         #expect(!results.isEmpty)
         #expect(sections.count == Set(sections.map(\.id)).count)
         #expect(sections.map(\.id) == ["application", "command"])
+    }
+
+    @Test func aQueryThatStartsMidWordIsNotAMatch() {
+        #expect(BifrostQuery.results(query: "aaa", applications: Self.applications).isEmpty)
+        #expect(BifrostQuery.results(query: "hrome", applications: Self.applications).isEmpty)
+        #expect(titles("chrome").first == "Google Chrome")
     }
 
     @Test func anAnswerLeadsWhateverElseMatches() {

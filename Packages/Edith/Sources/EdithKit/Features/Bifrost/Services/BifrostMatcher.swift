@@ -61,6 +61,7 @@ public enum BifrostMatcher {
         for character in query {
             guard let index = next(character, in: target, from: cursor, adjacentTo: previousIndex)
             else { return nil }
+            if previousIndex < 0, !target.wordStarts[index] { return nil }
             if index == previousIndex + 1 {
                 total += adjacentScore
             } else if target.wordStarts[index] {

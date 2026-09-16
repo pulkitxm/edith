@@ -69,14 +69,20 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         guard store != nil, let panel else { return }
         let collapsed = NSSize(
             width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.headerHeight)
+        let nominal = NSSize(
+            width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.nominalHeight)
         panel.setContentSize(collapsed)
         let position = PopupPosition.stored(forKey: AppStorageKeys.Bifrost.popupAt)
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
         showTask = Task.detached { [weak self] in
-            let origin = await position.origin(
-                size: collapsed, statusItemFrame: nil, anchors: .bifrost)
+            let placed = await position.origin(
+                size: nominal, statusItemFrame: nil, anchors: .bifrost)
+            let origin = NSPoint(
+                x: placed.x,
+                y: placed.y + BifrostPanelMetrics.nominalHeight
+                    - BifrostPanelMetrics.headerHeight)
             guard !Task.isCancelled else { return }
             await self?.finishShow(origin: origin, generation: generation, query: query)
         }

@@ -35,7 +35,6 @@ struct BifrostPanelView: View {
         .edithGlass(in: shape)
         .clipShape(shape)
         .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 1))
-        .animation(.easeOut(duration: 0.12), value: model.selectedID)
         .onAppear {
             searchFocused = true
             lastMouse = NSEvent.mouseLocation
@@ -118,7 +117,7 @@ struct BifrostPanelView: View {
             .scrollBounceBehavior(.basedOnSize)
             .onChange(of: model.selectedID) { _, id in
                 guard let id else { return }
-                withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id, anchor: .center) }
+                proxy.scrollTo(id, anchor: .center)
             }
         }
     }
