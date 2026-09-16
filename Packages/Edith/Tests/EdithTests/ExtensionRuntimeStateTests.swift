@@ -274,6 +274,7 @@ import Testing
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
+            ("bifrost", "BifrostRows", "bifrostEnabled", "BifrostRows.swift"),
             ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
             ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
