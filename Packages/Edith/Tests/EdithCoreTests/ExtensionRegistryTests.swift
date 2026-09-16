@@ -16,8 +16,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim",
-                "windowSweaters", "presenter",
+                "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "windowSweaters", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])

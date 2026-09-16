@@ -16,6 +16,9 @@ public enum ArgumentKind: Equatable, Sendable {
     case emojiTone
     case emojiGroup
     case emojiCharacter
+    case bifrostQuery
+    case bifrostExpression
+    case bifrostConversion
     case pruneTarget
     case composeProject
     case historyIndex
@@ -389,6 +392,15 @@ public enum CommandTree {
             options: ["--json", "--help", "--format", "--limit"],
             optionValues: ["--format": .colorFormat]),
         "ed color clear": Spec(options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
+        "ed bifrost open": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.bifrostQuery]),
+        "ed bifrost ls": Spec(options: ["--json", "--help", "--search", "--limit"]),
+        "ed bifrost calc": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.bifrostExpression]),
+        "ed bifrost convert": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.bifrostConversion]),
+        "ed bifrost reindex": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed bifrost clear": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed emoji pick": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed emoji ls": Spec(
             options: ["--json", "--help", "--frequent", "--search", "--group", "--limit"],

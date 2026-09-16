@@ -72,7 +72,7 @@ public enum SuiteRegistry {
             symbolName: "switch.2", defaultsKey: "suiteSystemEnabled"),
         SuiteDescriptor(
             id: .desk, title: "Desk",
-            subtitle: "Clipboard, emoji and color pickers, keystrokes, dimming and presenting.",
+            subtitle: "The launcher, clipboard and pickers, keystrokes, dimming and presenting.",
             symbolName: "hand.tap", defaultsKey: "suiteDeskEnabled"),
         SuiteDescriptor(
             id: .media, title: "Media",

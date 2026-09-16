@@ -70,6 +70,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "bifrost", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "clipboard", helper: true, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),

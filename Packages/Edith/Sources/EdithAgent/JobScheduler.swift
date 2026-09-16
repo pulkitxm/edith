@@ -54,6 +54,7 @@ public actor JobScheduler {
         var enqueued = false
         var rerunRequested = false
         var flight: Flight?
+        var joinedRuns = 0
         var nextRun: Date?
         var interval: TimeInterval?
     }
@@ -189,10 +190,17 @@ public actor JobScheduler {
         return enqueue(id)
     }
 
+    var joinedRuns: [String: Int] {
+        states.mapValues(\.joinedRuns)
+    }
+
     @discardableResult
     public func runNow(_ id: String) async -> Data? {
         guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return nil }
-        if let flight = state.flight { return try? await flight.task.value }
+        if let flight = state.flight {
+            states[id]?.joinedRuns += 1
+            return try? await flight.task.value
+        }
         let token = UUID()
         let began = clock()
         let task = Task { try await state.job.run() }

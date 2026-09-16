@@ -99,6 +99,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case presenter
     case colorPicker
     case emoji
+    case bifrost
 }
 
 public enum ExtensionModalMutationOutcome: Equatable, Sendable {

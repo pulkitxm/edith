@@ -246,6 +246,10 @@ public enum CompletionEngine {
             return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {
                 String($0 + 1)
             }
+        case .bifrostQuery:
+            return (BifrostIndexStore.shared.load()?.applications ?? []).prefix(200).map(\.name)
+        case .bifrostExpression: return []
+        case .bifrostConversion: return []
         case .emojiTone: return EmojiSkinTone.allCases.map(\.token)
         case .emojiGroup: return EmojiCatalog.shared.groups.map(\.id)
         case .emojiCharacter:

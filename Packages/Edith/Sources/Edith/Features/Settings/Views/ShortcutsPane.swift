@@ -4,6 +4,9 @@ import EdithKit
 import SwiftUI
 
 struct ShortcutsSettingsPane: View {
+    @AppStorage(AppStorageKeys.Bifrost.enabled, store: SharedDefaults.store) private
+        var bifrostEnabled =
+        false
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
         var clipboardEnabled =
         false
@@ -25,7 +28,8 @@ struct ShortcutsSettingsPane: View {
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, emoji: emojiEnabled, micMute: micMuteEnabled,
+            bifrost: bifrostEnabled, clipboard: clipboardEnabled, emoji: emojiEnabled,
+            micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
             colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled)
     }
@@ -105,6 +109,10 @@ struct ShortcutsSettingsPane: View {
     @ViewBuilder
     private func extensionShortcutRow(_ shortcut: ExtensionShortcut) -> some View {
         switch shortcut {
+        case .bifrost:
+            shortcutRow(
+                "Bifrost", subtitle: "Opens the launcher bar over whatever you are doing",
+                keyPrefix: "bifrostHotKey", defaultLabel: "\u{2325}\u{2423}")
         case .clipboard:
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
@@ -207,11 +215,13 @@ struct HotKeyRecorderControl: View {
             mods |= cmdKey
             symbols += "⌘"
         }
-        let key = event.charactersIgnoringModifiers?.uppercased() ?? "?"
+        let label = HotKeyGlyph.label(
+            modifiers: symbols, keyCode: Int(event.keyCode),
+            characters: event.charactersIgnoringModifiers)
         try? ConfigurationExecutor.application.set([
             (keyPrefix + "Code", .int(Int(event.keyCode))),
             (keyPrefix + "Mods", .int(mods)),
-            (keyPrefix + "Label", .string(symbols + key)),
+            (keyPrefix + "Label", .string(label)),
         ])
         stop()
     }

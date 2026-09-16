@@ -172,6 +172,13 @@ struct EdithApp {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.requestClipboardPanel) {
+            MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
+        }
+        _ = IPC.observe(IPC.Name.requestBifrostPanel) { info in
+            let query = info[BifrostPanelIPC.queryKey] as? String ?? ""
+            MainActor.assumeIsolated { BifrostPanel.shared.toggle(query: query) }
+        }
         _ = IPC.observe(IPC.Name.requestEmojiPanel) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }
@@ -404,6 +411,31 @@ enum ClipboardHotKey {
     @MainActor
     static func save(code: Int, mods: Int, label: String) {
         HotKeyRegistrar.save(HotKeyCatalog.clipboard, code: code, mods: mods, label: label)
+    }
+}
+
+enum BifrostHotKey {
+    private static var binding: HotKeyBinding { HotKeyCatalog.binding(HotKeyCatalog.bifrost)! }
+
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
+
+    @MainActor
+    static func register() {
+        HotKeyRegistrar.install(HotKeyCatalog.bifrost) {
+            MainActor.assumeIsolated { BifrostPanel.shared.toggle() }
+        }
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.bifrost)
+    }
+
+    @MainActor
+    static func save(code: Int, mods: Int, label: String) {
+        HotKeyRegistrar.save(HotKeyCatalog.bifrost, code: code, mods: mods, label: label)
     }
 }
 

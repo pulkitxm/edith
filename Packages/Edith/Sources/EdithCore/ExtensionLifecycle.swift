@@ -939,6 +939,44 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group presenter --json")
             ]),
         descriptor(
+            "bifrost",
+            "Open anything on this Mac, and answer a sum or a unit question, in one bar.",
+            workflows: [
+                instruction(
+                    "open", "Open the bar",
+                    "Summon the launcher from its shortcut or the command line.",
+                    "ed bifrost open"),
+                instruction(
+                    "launch", "Open an application",
+                    "Type a few letters of a name and press return."),
+                instruction(
+                    "answer", "Calculate or convert",
+                    "Type a sum or a unit question and copy the answer.",
+                    "ed bifrost calc 2+2"),
+            ],
+            prerequisites: [
+                instruction(
+                    "index", "Index your applications",
+                    "The launcher indexes the application folders on this Mac on first use.",
+                    "ed bifrost reindex")
+            ],
+            examples: [
+                "ed extensions enable bifrost", "ed bifrost ls --json",
+                "ed bifrost calc 2+2",
+            ],
+            docs: [documentation("guide", "Bifrost guide", "docs/cli/bifrost/README.md")],
+            recovery: [
+                instruction(
+                    "reindex", "Rebuild the application index",
+                    "Scan the application folders again from scratch.", "ed bifrost reindex")
+            ],
+            verification: [
+                instruction(
+                    "ls", "Read the indexed applications",
+                    "Confirm the launcher can see the applications on this Mac.",
+                    "ed bifrost ls --json")
+            ]),
+        descriptor(
             "emoji", "Insert any emoji macOS can draw into whatever you are typing in.",
             workflows: [
                 instruction(

@@ -20,6 +20,7 @@ import Testing
         "lidAwakeEnabled",
         "menuBarSystemStats",
         "micMuteEnabled",
+        "bifrostEnabled",
         "clipboardEnabled",
         "emojiEnabled",
         "colorPickerEnabled",
@@ -48,8 +49,8 @@ import Testing
                 "usage", "herdr", "quinjet", "companion", "plugins",
                 "appMaintenance", "homebrew", "cleaner",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-                "clipboard", "emoji", "colorPicker", "keystrokeHighlight", "focusDim",
-                "windowSweaters", "presenter",
+                "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+                "focusDim", "windowSweaters", "presenter",
                 "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -203,8 +204,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "clipboard",
-                "keystrokeHighlight", "notchShelf", "database", "attention",
+                "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
+                "clipboard", "keystrokeHighlight", "notchShelf", "database", "attention",
             ])
     }
 
@@ -339,6 +340,7 @@ import Testing
             "lidAwake": [],
             "systemStats": [],
             "micMute": [],
+            "bifrost": [],
             "clipboard": [],
             "emoji": [],
             "colorPicker": [.screenRecording],
@@ -369,6 +371,7 @@ import Testing
             "lidAwake": [],
             "systemStats": [],
             "micMute": [],
+            "bifrost": [],
             "clipboard": [.accessibility],
             "emoji": [.accessibility],
             "colorPicker": [],

@@ -59,6 +59,17 @@ public enum AppStorageKeys {
         public static let lastBackupAt = "lastBackupAt"
     }
 
+    public enum Bifrost {
+        public static let enabled = "bifrostEnabled"
+        public static let hotKeyCode = "bifrostHotKeyCode"
+        public static let hotKeyLabel = "bifrostHotKeyLabel"
+        public static let hotKeyMods = "bifrostHotKeyMods"
+        public static let indexedAt = "bifrostIndexedAt"
+        public static let popupAt = "bifrostPopupAt"
+        public static let resultLimit = "bifrostResultLimit"
+        public static let usage = "bifrostUsage"
+    }
+
     public enum Budget {
         public static let capPercent = "budgetCapPercent"
         public static let deadline = "budgetDeadline"
