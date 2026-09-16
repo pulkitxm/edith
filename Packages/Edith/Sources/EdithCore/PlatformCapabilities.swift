@@ -2,6 +2,7 @@ import Foundation
 
 public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendable {
     case applicationAudio
+    case applicationLaunching
     case bluetoothMonitoring
     case calendarEvents
     case cameraPreview

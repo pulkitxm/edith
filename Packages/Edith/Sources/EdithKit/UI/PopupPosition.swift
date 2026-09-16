@@ -9,6 +9,8 @@ public struct PopupAnchorKeys: Sendable {
         self.positionY = positionY
     }
 
+    public static let bifrost = PopupAnchorKeys(
+        positionX: "bifrostWindowPositionX", positionY: "bifrostWindowPositionY")
     public static let clipboard = PopupAnchorKeys(
         positionX: "clipboardWindowPositionX", positionY: "clipboardWindowPositionY")
     public static let emoji = PopupAnchorKeys(

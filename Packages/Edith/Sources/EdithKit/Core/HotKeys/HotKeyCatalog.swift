@@ -60,6 +60,7 @@ public struct HotKeyBinding: Identifiable, Equatable, Sendable {
 
 public enum HotKeyCatalog {
     public static let panel = "panel"
+    public static let bifrost = "bifrost"
     public static let clipboard = "clipboard"
     public static let notchShelf = "notchShelf"
     public static let focusDim = "focusDim"
@@ -74,6 +75,12 @@ public enum HotKeyCatalog {
             id: panel, title: "Open the Edith panel", carbonID: 1, codeKey: "hotKeyCode",
             modsKey: "hotKeyMods", labelKey: "hotKeyLabel", defaultCode: kVK_ANSI_E,
             defaultMods: cmdKey | optionKey, defaultLabel: "⌥⌘E", abilityID: nil),
+        HotKeyBinding(
+            id: bifrost, title: "Bifrost launcher", carbonID: 10,
+            codeKey: AppStorageKeys.Bifrost.hotKeyCode,
+            modsKey: AppStorageKeys.Bifrost.hotKeyMods,
+            labelKey: AppStorageKeys.Bifrost.hotKeyLabel, defaultCode: kVK_Space,
+            defaultMods: optionKey, defaultLabel: "\u{2325}\u{2423}", abilityID: "bifrost"),
         HotKeyBinding(
             id: clipboard, title: "Clipboard history", carbonID: 2,
             codeKey: "clipboardHotKeyCode", modsKey: "clipboardHotKeyMods",

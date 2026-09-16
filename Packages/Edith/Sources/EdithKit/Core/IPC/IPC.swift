@@ -36,6 +36,12 @@ public enum IPC {
         public static let clipboardChanged = IPC.scopedName("com.pulkit.edith.clipboardChanged")
         public static let requestColorPick = IPC.scopedName(
             "com.pulkit.edith.requestColorPick")
+        public static let requestBifrostPanel = IPC.scopedName(
+            "com.pulkit.edith.requestBifrostPanel")
+        public static let requestBifrostReindex = IPC.scopedName(
+            "com.pulkit.edith.requestBifrostReindex")
+        public static let bifrostIndexChanged = IPC.scopedName(
+            "com.pulkit.edith.bifrostIndexChanged")
         public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(

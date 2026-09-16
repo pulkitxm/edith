@@ -129,6 +129,9 @@ public enum UserOperationCatalog {
         + EmojiOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + BifrostOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1117,6 +1120,25 @@ private extension DatabaseConnectionOperation {
             userInterface(
                 "Database workbench", "close the selected database connection",
                 ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
+        }
+    }
+}
+
+private extension BifrostOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .open:
+            userInterface("Bifrost settings", "open the launcher bar")
+        case .ls:
+            userInterface("Bifrost bar", "browse the indexed applications")
+        case .calc:
+            userInterface("Bifrost bar", "evaluate an expression", ["2 + 2"])
+        case .convert:
+            userInterface("Bifrost bar", "convert between units", ["12 km in miles"])
+        case .reindex:
+            userInterface("Bifrost settings", "rebuild the application index")
+        case .clear:
+            userInterface("Bifrost settings", "clear what you open most")
         }
     }
 }

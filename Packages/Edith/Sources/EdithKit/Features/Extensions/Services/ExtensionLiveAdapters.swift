@@ -67,7 +67,8 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
         "keepAwake", "lidAwake",
-        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+        "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
+        "keystrokeHighlight",
         "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
         "attention", "seoAudit",
     ]
@@ -121,6 +122,7 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "bifrost": bifrostReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
@@ -548,6 +550,26 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
+        ).readiness
+    }
+
+    static func bifrostReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        guard let index = BifrostIndexStore.shared.load(), index.isUsable else {
+            return .empty("No applications are indexed yet; the first search builds the index.")
+        }
+        let ledger = BifrostUsageLedger.load(from: defaults, key: AppStorageKeys.Bifrost.usage)
+        let limit = defaults.object(forKey: AppStorageKeys.Bifrost.resultLimit) as? Int
+        let configured =
+            limit == nil
+            || (BifrostQuery.minimumResultLimit...BifrostQuery.maximumResultLimit)
+                .contains(limit!)
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: index.applications.count,
+            readyDetail:
+                "\(index.applications.count) applications indexed, "
+                + "\(ledger.entries.count) opened from the bar.",
+            setupDetail: "The stored result limit is outside the supported range.",
+            emptyDetail: "No applications are indexed yet."
         ).readiness
     }
 

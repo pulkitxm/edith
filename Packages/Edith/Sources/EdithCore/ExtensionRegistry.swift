@@ -192,6 +192,12 @@ public enum ExtensionRegistry {
             defaultsKey: "micMuteEnabled", requiredCapabilities: [.microphoneControl],
             optionalCapabilities: [.globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "bifrost", title: "Bifrost",
+            subtitle: "One bar that opens any app and answers sums and unit questions.",
+            symbolName: "rainbow", suite: .desk, host: .bar, featured: true,
+            defaultsKey: "bifrostEnabled", requiredCapabilities: [.applicationLaunching],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "clipboard", title: "Clipboard",
             subtitle: "Clipboard history with instant paste.",
             symbolName: "doc.on.clipboard", suite: .desk, host: .bar, featured: true,

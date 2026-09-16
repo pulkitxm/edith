@@ -53,7 +53,7 @@ public enum ConfigCatalog {
         "music",
         "calendar",
         "clipboard", "keystrokes",
-        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
+        "notch", "focusdim", "presenter", "colorpicker", "emoji", "bifrost", "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -62,7 +62,7 @@ public enum ConfigCatalog {
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
-        + colorPicker + emoji
+        + colorPicker + emoji + bifrost
         + micMute
         + backup + permissions + terminal
 
@@ -956,6 +956,34 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Emoji.hotKeyLabel, .string, group: "emoji",
             summary: "Printable label for the emoji picker shortcut."),
+    ]
+
+    private static let bifrost: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Bifrost.enabled, .bool, group: "bifrost",
+            summary: "Bifrost extension: one bar for applications, sums and conversions.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.popupAt, .string, group: "bifrost",
+            summary: "Where the launcher bar opens.",
+            allowed: PopupPosition.allCases.map(\.rawValue), fallback: .string("center")),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.resultLimit, .int, group: "bifrost",
+            summary: "How many results the launcher shows at once.",
+            integerRange: BifrostQuery.minimumResultLimit...BifrostQuery.maximumResultLimit,
+            fallback: .int(BifrostQuery.defaultLimit)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.indexedAt, .number, group: "bifrost",
+            summary: "When the application index was last rebuilt.", readOnly: true),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.hotKeyCode, .int, group: "bifrost",
+            summary: "Virtual key code of the launcher shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.hotKeyMods, .int, group: "bifrost",
+            summary: "Carbon modifier mask of the launcher shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.hotKeyLabel, .string, group: "bifrost",
+            summary: "Printable label for the launcher shortcut."),
     ]
 
     private static let micMute: [SettingDefinition] = [
