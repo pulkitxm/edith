@@ -215,11 +215,13 @@ struct HotKeyRecorderControl: View {
             mods |= cmdKey
             symbols += "⌘"
         }
-        let key = event.charactersIgnoringModifiers?.uppercased() ?? "?"
+        let label = HotKeyGlyph.label(
+            modifiers: symbols, keyCode: Int(event.keyCode),
+            characters: event.charactersIgnoringModifiers)
         try? ConfigurationExecutor.application.set([
             (keyPrefix + "Code", .int(Int(event.keyCode))),
             (keyPrefix + "Mods", .int(mods)),
-            (keyPrefix + "Label", .string(symbols + key)),
+            (keyPrefix + "Label", .string(label)),
         ])
         stop()
     }

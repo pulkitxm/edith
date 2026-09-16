@@ -26,6 +26,24 @@ import Testing
         #expect(score("Activity Monitor", "am") != nil)
     }
 
+    @Test func initialsInsideOneWordStillMatch() {
+        #expect(score("WhatsApp", "wa") != nil)
+        #expect(score("WhatsApp", "wapp") != nil)
+        #expect(score("WhatsApp", "whats") != nil)
+    }
+
+    @Test func scatteredLettersAreNotAMatch() {
+        #expect(score("Edith Development", "eee") == nil)
+        #expect(score("Edith Panel Open the menu bar panel", "aaa") == nil)
+        #expect(score("Activity Monitor", "aoo") == nil)
+    }
+
+    @Test func aQueryHasToStartAWord() {
+        #expect(score("Google Chrome", "hrome") == nil)
+        #expect(score("Google Chrome", "chrome") != nil)
+        #expect(score("iTerm", "term") != nil)
+    }
+
     @Test func aMissingLetterIsNoMatch() {
         #expect(score("Safari", "safz") == nil)
         #expect(score("Notes", "notess") == nil)

@@ -94,7 +94,12 @@ struct BifrostPanelView: View {
     }
 
     private var queryBinding: Binding<String> {
-        Binding(get: { model.query }, set: { model.setQuery($0) })
+        Binding(
+            get: { model.query },
+            set: { value in
+                model.setQuery(value)
+                publishHeight()
+            })
     }
 
     private var resultList: some View {

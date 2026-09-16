@@ -43,6 +43,7 @@ public enum BifrostMatcher {
     public static let looseScore = 12
     public static let gapPenalty = 2
     public static let lengthPenalty = 1
+    public static let looseAllowance = 1
 
     public static func normalize(_ query: String) -> [Character] {
         var folded: [Character] = []
@@ -58,6 +59,7 @@ public enum BifrostMatcher {
         var total = 0
         var cursor = 0
         var previousIndex = -1
+        var loose = 0
         for character in query {
             guard let index = next(character, in: target, from: cursor, adjacentTo: previousIndex)
             else { return nil }
@@ -67,6 +69,8 @@ public enum BifrostMatcher {
             } else if target.wordStarts[index] {
                 total += wordStartScore
             } else {
+                loose += 1
+                guard loose <= looseAllowance else { return nil }
                 total += looseScore
             }
             if previousIndex >= 0 {
