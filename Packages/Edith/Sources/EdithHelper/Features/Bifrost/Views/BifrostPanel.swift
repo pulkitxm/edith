@@ -66,7 +66,6 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     private var anchorTop: CGPoint?
     private var dragMonitor: Any?
     private var dragOrigin: CGPoint?
-    private var isAppearing = false
     var shortcutHandler: ((Int) -> Bool)?
 
     func runShortcut(_ number: Int) -> Bool {
@@ -86,47 +85,45 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
 
     func show(query: String = "") {
         guard store != nil, let panel else { return }
-        let collapsed = NSSize(
-            width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.headerHeight)
-        let nominal = NSSize(
-            width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.nominalHeight)
-        panel.setContentSize(collapsed)
-        let position = PopupPosition.stored(forKey: AppStorageKeys.Bifrost.popupAt)
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
+        let position = PopupPosition.stored(forKey: AppStorageKeys.Bifrost.popupAt)
         if position == .center, let screen = panel.screen ?? NSScreen.main {
-            let anchor = BifrostPanelMetrics.defaultAnchorTop(in: screen.visibleFrame)
-            let origin = NSPoint(
-                x: anchor.x, y: anchor.y - BifrostPanelMetrics.headerHeight)
-            finishShow(origin: origin, generation: generation, query: query)
+            present(
+                anchorTop: BifrostPanelMetrics.defaultAnchorTop(in: screen.visibleFrame),
+                generation: generation, query: query)
             return
         }
+        let nominal = NSSize(
+            width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.nominalHeight)
         showTask = Task.detached { [weak self] in
             let placed = await position.origin(
                 size: nominal, statusItemFrame: nil, anchors: .bifrost)
-            let origin = NSPoint(
-                x: placed.x,
-                y: placed.y + BifrostPanelMetrics.nominalHeight
-                    - BifrostPanelMetrics.headerHeight)
             guard !Task.isCancelled else { return }
-            await self?.finishShow(origin: origin, generation: generation, query: query)
+            await self?.present(
+                anchorTop: CGPoint(
+                    x: placed.x, y: placed.y + BifrostPanelMetrics.nominalHeight),
+                generation: generation, query: query)
         }
     }
 
-    private func finishShow(origin: NSPoint, generation: Int, query: String) {
+    private func present(anchorTop top: CGPoint, generation: Int, query: String) {
         guard generation == showGeneration, let panel else { return }
         let wasVisible = panel.isVisible
-        panel.setFrameOrigin(origin)
-        anchorTop = CGPoint(x: origin.x, y: origin.y + BifrostPanelMetrics.headerHeight)
-        if !wasVisible { panel.alphaValue = 0 }
+        anchorTop = top
+        if !wasVisible {
+            panel.alphaValue = 0
+            panel.setFrame(
+                BifrostPanelMetrics.frame(
+                    anchorTop: top, height: BifrostPanelMetrics.headerHeight),
+                display: false)
+        }
+        NotificationCenter.default.post(
+            name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
         panel.orderFrontRegardless()
         panel.makeKey()
         startWatchingDrags()
-        isAppearing = !wasVisible
-        NotificationCenter.default.post(
-            name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
-        isAppearing = false
         guard !wasVisible else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = BifrostPanelMetrics.appearDuration
@@ -171,7 +168,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
             abs(frame.height - panel.frame.height) > BifrostPanelMetrics.resizeThreshold
                 || abs(frame.minX - panel.frame.minX) > BifrostPanelMetrics.resizeThreshold
         else { return }
-        guard panel.isVisible, !isAppearing else {
+        guard panel.isVisible else {
             panel.setFrame(frame, display: true)
             return
         }
