@@ -16,6 +16,7 @@ import Testing
         let second = Task { await scheduler.runNow("fixture.refresh") }
         await scheduler.enqueueIfDue("fixture.refresh")
         #expect(await scheduler.snapshots.first?.phase == .running)
+        await waitForJoin(scheduler)
         await gate.release()
         #expect(await first.value == Data("result".utf8))
         #expect(await second.value == Data("result".utf8))
@@ -230,6 +231,16 @@ import Testing
             id: "fixture.refresh", title: "Fixture", trigger: .timer, topic: .usage,
             cadence: cadence)
     }
+}
+
+private func waitForJoin(
+    _ scheduler: JobScheduler, id: String = "fixture.refresh", attempts: Int = 1_000
+) async {
+    for _ in 0..<attempts {
+        if await scheduler.joinedRuns[id, default: 0] > 0 { return }
+        await Task.yield()
+    }
+    Issue.record("no second caller joined the run in flight")
 }
 
 private actor CollectorGate {
