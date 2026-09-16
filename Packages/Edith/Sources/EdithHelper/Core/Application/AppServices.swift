@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var bifrost: BifrostStore?
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
@@ -95,6 +96,7 @@ final class AppServices {
         PermissionsModel.shared.shutdown()
         await PermissionsModel.shared.waitForShutdown()
         shutDownEmojiRuntime()
+        shutDownBifrostRuntime()
         keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
@@ -288,6 +290,15 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
+        let bifrostOn = Self.extensionEnabled(AppStorageKeys.Bifrost.enabled)
+        if bifrostOn {
+            if bifrost == nil { bifrost = BifrostStore() }
+            BifrostHotKey.register()
+        } else {
+            shutDownBifrostRuntime()
+        }
+        BifrostPanel.shared.store = bifrost
+
         let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
         if emojiOn {
             if emoji == nil { emoji = EmojiStore() }
@@ -300,6 +311,13 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
+
+    private func shutDownBifrostRuntime() {
+        BifrostHotKey.unregister()
+        bifrost?.shutdown()
+        bifrost = nil
+        BifrostPanel.shared.store = nil
     }
 
     private func shutDownEmojiRuntime() {

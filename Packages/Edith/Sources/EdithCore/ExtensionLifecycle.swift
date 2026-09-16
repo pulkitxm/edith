@@ -898,7 +898,8 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group presenter --json")
             ]),
         descriptor(
-            "bifrost", "Open anything on this Mac, and answer a sum or a unit question, in one bar.",
+            "bifrost",
+            "Open anything on this Mac, and answer a sum or a unit question, in one bar.",
             workflows: [
                 instruction(
                     "open", "Open the bar",

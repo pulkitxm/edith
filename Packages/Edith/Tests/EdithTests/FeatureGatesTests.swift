@@ -51,33 +51,33 @@ import Testing
     @Test func extensionShortcutsOnlyIncludeEnabledOwners() {
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, emoji: false, micMute: false, focusDim: false, presenter: false,
-                colorPicker: false, keystrokeHighlight: false
+                bifrost: false, clipboard: false, emoji: false, micMute: false,
+                focusDim: false, presenter: false, colorPicker: false, keystrokeHighlight: false
             ).isEmpty)
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, emoji: false, micMute: false, focusDim: false, presenter: true,
-                colorPicker: false, keystrokeHighlight: false)
+                bifrost: false, clipboard: true, emoji: false, micMute: false,
+                focusDim: false, presenter: true, colorPicker: false, keystrokeHighlight: false)
                 == [.clipboard, .presenter])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, emoji: false, micMute: true, focusDim: false, presenter: false,
-                colorPicker: false, keystrokeHighlight: false)
+                bifrost: false, clipboard: false, emoji: false, micMute: true,
+                focusDim: false, presenter: false, colorPicker: false, keystrokeHighlight: false)
                 == [.micMute])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, emoji: true, micMute: false, focusDim: false, presenter: false,
-                colorPicker: false, keystrokeHighlight: false)
+                bifrost: false, clipboard: false, emoji: true, micMute: false,
+                focusDim: false, presenter: false, colorPicker: false, keystrokeHighlight: false)
                 == [.emoji])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, emoji: false, micMute: false, focusDim: false, presenter: false,
-                colorPicker: false, keystrokeHighlight: true)
+                bifrost: false, clipboard: false, emoji: false, micMute: false,
+                focusDim: false, presenter: false, colorPicker: false, keystrokeHighlight: true)
                 == [.keystrokeHighlight])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, emoji: true, micMute: true, focusDim: true, presenter: true,
-                colorPicker: true, keystrokeHighlight: true)
+                bifrost: true, clipboard: true, emoji: true, micMute: true,
+                focusDim: true, presenter: true, colorPicker: true, keystrokeHighlight: true)
                 == ExtensionShortcut.allCases)
     }
 

@@ -27,6 +27,7 @@ public enum ContextualPermissionGate {
 }
 
 public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
+    case bifrost
     case clipboard
     case emoji
     case micMute
@@ -38,10 +39,11 @@ public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
 
 public enum ExtensionShortcutVisibility {
     public static func visible(
-        clipboard: Bool, emoji: Bool, micMute: Bool, focusDim: Bool, presenter: Bool,
-        colorPicker: Bool, keystrokeHighlight: Bool
+        bifrost: Bool, clipboard: Bool, emoji: Bool, micMute: Bool, focusDim: Bool,
+        presenter: Bool, colorPicker: Bool, keystrokeHighlight: Bool
     ) -> [ExtensionShortcut] {
         let states: [(ExtensionShortcut, Bool)] = [
+            (.bifrost, bifrost),
             (.clipboard, clipboard),
             (.emoji, emoji),
             (.micMute, micMute),

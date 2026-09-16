@@ -1068,6 +1068,7 @@ private struct ExtensionDetailRows: View {
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
             case .emoji: EmojiRows()
+            case .bifrost: BifrostRows()
             }
         } else {
             Section("Controls") {

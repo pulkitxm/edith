@@ -73,10 +73,15 @@ enum SuiteLandingGroups {
         for suite: SuiteID, abilities: [ExtensionRegistryEntry]
     ) -> [(title: String, abilities: [ExtensionRegistryEntry])] {
         guard suite == .desk else { return [("Abilities", abilities)] }
+        let launcher = ["bifrost"]
         let pickers = ["clipboard", "emoji", "colorPicker"]
         return [
+            ("Launcher", abilities.filter { launcher.contains($0.id) }),
             ("Pickers", abilities.filter { pickers.contains($0.id) }),
-            ("Stage", abilities.filter { !pickers.contains($0.id) }),
+            (
+                "Stage",
+                abilities.filter { !launcher.contains($0.id) && !pickers.contains($0.id) }
+            ),
         ].filter { !$0.1.isEmpty }
     }
 }
