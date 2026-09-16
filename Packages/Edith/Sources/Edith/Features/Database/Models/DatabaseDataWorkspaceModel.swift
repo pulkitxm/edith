@@ -128,6 +128,17 @@ struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
     let isEditable: Bool
     var text: String
     var isIncluded: Bool
+    var enumValues: [String]? = nil
+    var isNullable: Bool = true
+    var isNull: Bool = false
+    var isGenerated: Bool = false
+    var hasDefault: Bool = false
+    var isJSON: Bool = false
+
+    var choiceValues: [String]? {
+        enumValues
+            ?? (["bool", "boolean"].contains(typeName.lowercased()) ? ["true", "false"] : nil)
+    }
 }
 
 @MainActor
@@ -141,7 +152,10 @@ final class DatabaseDataWorkspaceModel {
     private(set) var orderedSorts: [DatabaseWorkspaceSort] = []
     private(set) var state = DatabaseDataWorkspaceState.idle
     private(set) var resultMode = DatabaseDataResultMode.browse
-    private(set) var records: [DatabaseRecord] = []
+    private(set) var recordsRevision = 0
+    private(set) var records: [DatabaseRecord] = [] {
+        didSet { recordsRevision &+= 1 }
+    }
     private(set) var fields: [DatabaseFieldDescriptor] = []
     private(set) var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?
@@ -161,6 +175,8 @@ final class DatabaseDataWorkspaceModel {
     private var activeConnectionID: DatabaseConnectionID?
     private var activeProduct: DatabaseProduct?
     private var lastQueryRequest: DatabaseQueryRequest?
+    private var browseQueryIsCurrent = false
+    private var preparesBrowseQuery = false
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -205,6 +221,9 @@ final class DatabaseDataWorkspaceModel {
                 includesValue = includesValue || field.id == "value"
             }
             return includesKey && includesValue
+        }
+        if editorMode == .insert, activeProduct == .postgresql {
+            return !editorFields.isEmpty
         }
         return editorFields.contains(where: { $0.isEditable && $0.isIncluded })
     }
@@ -450,7 +469,17 @@ final class DatabaseDataWorkspaceModel {
         _ object: DatabaseObjectIdentifier,
         connection: DatabaseConnectionSummary
     ) {
-        prepareTarget(object, connection: connection, mode: .query)
+        if connection.product == .postgresql, selectedObject == object {
+            if browseQueryIsCurrent, let query = metadata?.browseQuery {
+                queryText = query
+            } else {
+                preparesBrowseQuery = true
+                queryText = ""
+                browse(connection)
+            }
+        } else {
+            prepareTarget(object, connection: connection, mode: .query)
+        }
     }
 
     func runQuery(_ connection: DatabaseConnectionSummary, appending: Bool = false) {
@@ -540,6 +569,7 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func cancel() {
+        preparesBrowseQuery = false
         activeTask?.cancel()
         activeTask = nil
         generation = UUID()
@@ -586,9 +616,18 @@ final class DatabaseDataWorkspaceModel {
                     typeName: field.typeName,
                     originalValue: nil,
                     isIdentity: false,
-                    isEditable: Self.supportsEditing(typeName: field.typeName),
+                    isEditable: field.isGenerated != true
+                        && (field.enumValues != nil
+                            || Self.supportsEditing(typeName: field.typeName)
+                            || isJSONField(field, connection: connection)),
                     text: "",
-                    isIncluded: false)
+                    isIncluded: !field.isNullable && field.hasDefault == false
+                        && field.isGenerated != true,
+                    enumValues: field.enumValues,
+                    isNullable: field.isNullable,
+                    isGenerated: field.isGenerated == true,
+                    hasDefault: field.hasDefault == true,
+                    isJSON: isJSONField(field, connection: connection))
             }
         }
     }
@@ -632,10 +671,10 @@ final class DatabaseDataWorkspaceModel {
         }
         let redisString = Self.isRedisString(record)
         editorFields = record.fields.map { field in
-            let typeName =
-                fields.first {
-                    $0.path.segments.joined(separator: ".") == field.name
-                }?.typeName ?? "text"
+            let descriptor = fields.first {
+                $0.path.segments.joined(separator: ".") == field.name
+            }
+            let typeName = descriptor?.typeName ?? "text"
             let isIdentity = identityNames.contains(field.name)
             let isEditable: Bool
             if connection.product == .redis || connection.product == .valkey {
@@ -643,7 +682,10 @@ final class DatabaseDataWorkspaceModel {
                     field.name == "ttlMilliseconds"
                     || (field.name == "value" && redisString && Self.supportsEditing(field.value))
             } else {
-                isEditable = !isIdentity && Self.supportsEditing(field.value)
+                isEditable =
+                    !isIdentity && descriptor?.isGenerated != true
+                    && (descriptor?.enumValues != nil || Self.supportsEditing(field.value)
+                        || descriptor.map { isJSONField($0, connection: connection) } == true)
             }
             return DatabaseRowFieldDraft(
                 id: field.name,
@@ -652,7 +694,13 @@ final class DatabaseDataWorkspaceModel {
                 isIdentity: isIdentity,
                 isEditable: isEditable,
                 text: Self.text(for: field.value),
-                isIncluded: false)
+                isIncluded: false,
+                enumValues: descriptor?.enumValues,
+                isNullable: descriptor?.isNullable ?? true,
+                isNull: field.value == .null,
+                isGenerated: descriptor?.isGenerated == true,
+                hasDefault: descriptor?.hasDefault == true,
+                isJSON: descriptor.map { isJSONField($0, connection: connection) } == true)
         }
     }
 
@@ -685,7 +733,23 @@ final class DatabaseDataWorkspaceModel {
             return name == "value" && Self.isRedisString(records[index])
                 && Self.supportsEditing(value(named: name, in: records[index]))
         }
-        return Self.supportsEditing(typeName: field.typeName)
+        return field.isGenerated != true
+            && (Self.supportsEditing(typeName: field.typeName)
+                || isJSONField(field, connection: connection))
+    }
+
+    func usesStructuredEditor(field name: String, connection: DatabaseConnectionSummary) -> Bool {
+        guard let field = fields.first(where: { $0.path.segments.joined(separator: ".") == name })
+        else { return false }
+        return field.enumValues != nil || ["bool", "boolean"].contains(field.typeName.lowercased())
+            || isJSONField(field, connection: connection)
+    }
+
+    private func isJSONField(
+        _ field: DatabaseFieldDescriptor, connection: DatabaseConnectionSummary
+    ) -> Bool {
+        connection.product == .postgresql
+            && ["json", "jsonb"].contains(field.typeName.lowercased())
     }
 
     func inlineMutationRequest(
@@ -706,8 +770,10 @@ final class DatabaseDataWorkspaceModel {
             editorFields[index].isEditable
         else { return }
         editorFields[index].text = text
+        editorFields[index].isNull = false
         if let originalValue = editorFields[index].originalValue {
-            editorFields[index].isIncluded = text != Self.text(for: originalValue)
+            editorFields[index].isIncluded =
+                originalValue == .null || text != Self.text(for: originalValue)
         } else {
             editorFields[index].isIncluded = true
         }
@@ -728,7 +794,13 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func setEditorFieldNull(_ id: String) {
-        updateEditorField(id, text: "NULL")
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable, editorFields[index].isNullable
+        else { return }
+        editorFields[index].text = "NULL"
+        editorFields[index].isNull = true
+        editorFields[index].isIncluded = editorFields[index].originalValue != .null
+        editorError = nil
     }
 
     func resetEditorField(_ id: String) {
@@ -737,6 +809,7 @@ final class DatabaseDataWorkspaceModel {
         else { return }
         editorFields[index].text = editorFields[index].originalValue.map(Self.text(for:)) ?? ""
         editorFields[index].isIncluded = false
+        editorFields[index].isNull = editorFields[index].originalValue == .null
         editorError = nil
     }
 
@@ -1036,6 +1109,12 @@ final class DatabaseDataWorkspaceModel {
                         operation: searchQueryOperation)
             } == true
         cancel()
+        if selectedObject != object {
+            clearFilters()
+            clearSorts()
+            cancelEditor()
+        }
+        browseQueryIsCurrent = false
         selectedObject = object
         targetText = object.path.joined(separator: ".")
         records = []
@@ -1207,6 +1286,7 @@ final class DatabaseDataWorkspaceModel {
         default:
             break
         }
+        let descriptor = fields.first { $0.path.segments.joined(separator: ".") == fieldName }
         let valueTexts: [String]
         switch clause.operation {
         case .in, .notIn, .between:
@@ -1215,7 +1295,8 @@ final class DatabaseDataWorkspaceModel {
                 fieldName: fieldName)
         default:
             let value = clause.valueText.trimmingCharacters(in: .whitespacesAndNewlines)
-            valueTexts = value.isEmpty ? [] : [value]
+            valueTexts =
+                descriptor?.enumValues != nil ? [clause.valueText] : (value.isEmpty ? [] : [value])
         }
         if clause.operation == .between, valueTexts.count != 2 {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
@@ -1230,13 +1311,17 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
                 "Enter a value for the \(fieldName) filter.")
         }
-        let typeName =
-            fields.first {
-                $0.path.segments.joined(separator: ".") == fieldName
-            }?.typeName ?? "text"
+        let typeName = descriptor?.typeName ?? "text"
+        if let choices = descriptor?.enumValues {
+            guard valueTexts.allSatisfy(choices.contains) else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Choose a declared enum value for the \(fieldName) filter.")
+            }
+        }
         do {
             return try valueTexts.map {
-                try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
+                if descriptor?.enumValues != nil { return DatabaseValue.string($0) }
+                return try Self.value(from: $0, typeName: typeName, fieldName: fieldName)
             }
         } catch {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
@@ -1247,10 +1332,14 @@ final class DatabaseDataWorkspaceModel {
     private func fieldPath(named name: String) -> DatabaseFieldPath {
         fields.first {
             $0.path.segments.joined(separator: ".") == name
-        }?.path ?? DatabaseFieldPath(name)
+        }?.path
+            ?? DatabaseFieldPath(
+                activeProduct == .postgresql
+                    ? name.components(separatedBy: ".") : [name])
     }
 
     private func resetBrowsePaging() {
+        browseQueryIsCurrent = false
         if isLoading {
             cancel()
         }
@@ -1404,6 +1493,11 @@ final class DatabaseDataWorkspaceModel {
         fields = page.fields
         nextContinuation = page.nextContinuation
         metadata = page.metadata
+        browseQueryIsCurrent = mode == .browse && page.metadata.browseQuery != nil
+        if preparesBrowseQuery {
+            preparesBrowseQuery = false
+            queryText = page.metadata.browseQuery ?? ""
+        }
         state = .loaded
         announcement("Loaded \(page.records.count) database records.")
     }
@@ -1738,10 +1832,25 @@ final class DatabaseDataWorkspaceModel {
     private static func value(
         from field: DatabaseRowFieldDraft
     ) throws -> DatabaseValue {
-        let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.uppercased() == "NULL" {
+        if field.isNull {
+            guard field.isNullable else {
+                throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+            }
             return .null
         }
+        if field.isJSON {
+            guard let data = field.text.data(using: .utf8),
+                (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
+            else { throw DatabaseRowEditorError.invalidValue(field.id, field.typeName) }
+            return .string(field.text)
+        }
+        if let enumValues = field.enumValues {
+            guard enumValues.contains(field.text) else {
+                throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+            }
+            return .string(field.text)
+        }
+        let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let original = field.originalValue {
             switch original {
             case .boolean:
@@ -1760,7 +1869,7 @@ final class DatabaseDataWorkspaceModel {
                 }
                 return .unsignedInteger(value)
             case .decimal:
-                return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+                return try decimalValue(trimmed, fieldName: field.id, typeName: field.typeName)
             case .floatingPoint:
                 guard let value = Double(trimmed), value.isFinite else {
                     throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
@@ -1830,7 +1939,7 @@ final class DatabaseDataWorkspaceModel {
             return .signedInteger(value)
         }
         if type.contains("numeric") || type.contains("decimal") {
-            return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+            return try decimalValue(trimmed, fieldName: fieldName, typeName: typeName)
         }
         if type.contains("real") || type.contains("double") {
             guard let value = Double(trimmed), value.isFinite else {
@@ -1860,6 +1969,19 @@ final class DatabaseDataWorkspaceModel {
             return .time(DatabaseTimeValue(text: trimmed))
         }
         return .string(text)
+    }
+
+    private static func decimalValue(_ value: String, fieldName: String, typeName: String) throws
+        -> DatabaseValue
+    {
+        guard
+            value.range(
+                of: #"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"#,
+                options: .regularExpression) != nil
+        else {
+            throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+        }
+        return .decimal(DatabaseDecimalValue(rawValue: value))
     }
 
     private static func isMongoDBObjectID(_ value: String) -> Bool {

@@ -37,6 +37,9 @@ private struct PostgreSQLDatabaseReadColumn: Sendable {
     let typeOID: UInt32
     let isNullable: Bool
     let ordinal: Int
+    let enumValues: [String]?
+    let isGenerated: Bool
+    let hasDefault: Bool
 }
 
 private struct PostgreSQLDatabaseReadRelation: Sendable {
@@ -46,6 +49,11 @@ private struct PostgreSQLDatabaseReadRelation: Sendable {
     let columns: [PostgreSQLDatabaseReadColumn]
     let keyColumn: PostgreSQLDatabaseReadColumn?
     let keyKind: DatabaseRecordIdentityKind?
+}
+
+private struct PostgreSQLDatabaseReadRelatedField: Sendable {
+    let expression: String
+    let typeName: String
 }
 
 private struct PostgreSQLDatabaseReadSelectedColumn: Sendable {
@@ -226,7 +234,7 @@ enum PostgreSQLDatabaseReadSupport {
                 pg_catalog.has_schema_privilege(n.oid, 'USAGE') AS can_use,
                 pg_catalog.has_schema_privilege(n.oid, 'CREATE') AS can_create
             FROM pg_catalog.pg_namespace AS n
-            WHERE n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\'
+            WHERE n.nspname NOT LIKE 'pg\\_%' ESCAPE chr(92)
                 AND n.nspname <> 'information_schema'
             ORDER BY n.nspname
             LIMIT \(limit) OFFSET \(cursor.position)
@@ -382,10 +390,13 @@ extension PostgreSQLDatabaseReadSupport {
             sessionID: sessionID,
             digest: digest)
         let sourceAlias = "_edith_relation"
+        let relatedFields = try await relatedFilterFields(
+            request.filter, relation: relation, sourceAlias: sourceAlias, client: client)
         let filter = try filterSQL(
             request.filter,
             available: relation.columns,
             sourceAlias: sourceAlias,
+            relatedFields: relatedFields,
             firstParameter: 1,
             failure: PostgreSQLDatabaseAdapterSupport.invalidRead)
         var predicates: [String] = []
@@ -435,6 +446,14 @@ extension PostgreSQLDatabaseReadSupport {
         if mode == .offset {
             sql += " OFFSET \(cursor.position)"
         }
+        var querySQL =
+            "SELECT \(selected.map { qualified(sourceAlias, $0.source.name) }.joined(separator: ", "))"
+        querySQL +=
+            " FROM \(quote(relation.schema)).\(quote(relation.name)) AS \(quote(sourceAlias))"
+        if !predicates.isEmpty { querySQL += " WHERE \(predicates.joined(separator: " AND "))" }
+        querySQL += " ORDER BY \(order.joined(separator: ", ")) LIMIT \(request.pageSize.value)"
+        if mode == .offset { querySQL += " OFFSET \(cursor.position)" }
+        let browseQuery = try PostgreSQLBrowseQuery.render(querySQL, parameters: parameters)
         let result = try await client.executeRead(
             PostgreSQLDatabaseReadPlan(
                 sql: sql,
@@ -479,7 +498,10 @@ extension PostgreSQLDatabaseReadSupport {
                 typeName: selected.source.typeName,
                 isNullable: selected.source.isNullable,
                 isSortable: sortable(selected.source),
-                isFilterable: filterable(selected.source))
+                isFilterable: filterable(selected.source),
+                enumValues: selected.source.enumValues,
+                isGenerated: selected.source.isGenerated,
+                hasDefault: selected.source.hasDefault)
         }
         let hasMore = result.rows.count > request.pageSize.value
         let warnings = mode == .offset ? [offsetWarning(target: request.target)] : []
@@ -495,7 +517,122 @@ extension PostgreSQLDatabaseReadSupport {
             target: request.target,
             warnings: warnings,
             bytesReceived: result.bytesReceived,
-            startedAt: startedAt)
+            startedAt: startedAt,
+            browseQuery: browseQuery)
+    }
+
+    private static func relatedFilterFields(
+        _ filter: DatabaseFilter?,
+        relation: PostgreSQLDatabaseReadRelation,
+        sourceAlias: String,
+        client: any PostgreSQLDatabaseClient
+    ) async throws -> [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] {
+        var paths = Set<DatabaseFieldPath>()
+        var count = 0
+        func collect(_ filter: DatabaseFilter, depth: Int) throws {
+            guard depth <= 16, count <= 100 else {
+                throw PostgreSQLDatabaseAdapterSupport.invalidRead
+            }
+            switch filter {
+            case .predicate(let predicate):
+                count += 1
+                guard count <= 100 else { throw PostgreSQLDatabaseAdapterSupport.invalidRead }
+                if predicate.field.segments.count > 1 { paths.insert(predicate.field) }
+            case .all(let children), .any(let children):
+                guard children.count <= 100 else {
+                    throw PostgreSQLDatabaseAdapterSupport.invalidRead
+                }
+                for child in children { try collect(child, depth: depth + 1) }
+            case .not(let child):
+                try collect(child, depth: depth + 1)
+            }
+        }
+        if let filter { try collect(filter, depth: 0) }
+        var expressions: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] = [:]
+        for path in paths.sorted(by: { $0.segments.lexicographicallyPrecedes($1.segments) }) {
+            guard (2...9).contains(path.segments.count) else {
+                throw relationshipFailure("Related field paths support up to eight relationships.")
+            }
+            for segment in path.segments { try validateIdentifier(segment) }
+            var schema = relation.schema
+            var name = relation.name
+            var previousAlias = sourceAlias
+            var sources: [String] = []
+            var joins: [String] = []
+            for (index, segment) in path.segments.dropLast().enumerated() {
+                let sql = """
+                    SELECT con.oid::text AS constraint_id,
+                        target_ns.nspname::text AS target_schema,
+                        target.relname::text AS target_table,
+                        source_column.attname::text AS source_column,
+                        target_column.attname::text AS target_column
+                    FROM pg_catalog.pg_constraint AS con
+                    JOIN pg_catalog.pg_class AS source ON source.oid = con.conrelid
+                    JOIN pg_catalog.pg_namespace AS source_ns ON source_ns.oid = source.relnamespace
+                    JOIN pg_catalog.pg_class AS target ON target.oid = con.confrelid
+                    JOIN pg_catalog.pg_namespace AS target_ns ON target_ns.oid = target.relnamespace
+                    CROSS JOIN LATERAL unnest(con.conkey, con.confkey)
+                        WITH ORDINALITY AS pair(source_number, target_number, position)
+                    JOIN pg_catalog.pg_attribute AS source_column
+                        ON source_column.attrelid = source.oid AND source_column.attnum = pair.source_number
+                    JOIN pg_catalog.pg_attribute AS target_column
+                        ON target_column.attrelid = target.oid AND target_column.attnum = pair.target_number
+                    WHERE con.contype = 'f' AND source_ns.nspname = $1 AND source.relname = $2
+                        AND (target.relname = $3 OR con.conname = $3
+                            OR (cardinality(con.conkey) = 1 AND source_column.attname = $3))
+                    ORDER BY con.oid, pair.position
+                    LIMIT 101
+                    """
+                let result = try await client.executeRead(
+                    PostgreSQLDatabaseReadPlan(
+                        sql: sql, parameters: [.string(schema), .string(name), .string(segment)],
+                        maximumRows: 101))
+                guard !result.rows.isEmpty else {
+                    throw relationshipFailure(
+                        "No foreign key matches the related field path. Use a referenced table, foreign key column, or constraint name."
+                    )
+                }
+                let identities = try Set(
+                    result.rows.map { try requiredString("constraint_id", in: $0) })
+                guard identities.count == 1, result.rows.count <= 100 else {
+                    throw relationshipFailure(
+                        "The relationship is ambiguous. Use its foreign key column or constraint name in the field path."
+                    )
+                }
+                let first = result.rows[0]
+                schema = try requiredString("target_schema", in: first)
+                name = try requiredString("target_table", in: first)
+                let alias = "_edith_related_\(index)"
+                sources.append("\(quote(schema)).\(quote(name)) AS \(quote(alias))")
+                for row in result.rows {
+                    let source = try requiredString("source_column", in: row)
+                    let target = try requiredString("target_column", in: row)
+                    joins.append(
+                        "\(qualified(previousAlias, source)) = \(qualified(alias, target))")
+                }
+                previousAlias = alias
+            }
+            let target = try await Self.relation(
+                schema: schema, name: name, expectedKind: .table, client: client)
+            let column = try resolve(
+                DatabaseFieldPath(path.segments.last!), available: target.columns,
+                failure: relationshipFailure("The related table has no matching field."))
+            guard filterable(column) else {
+                throw relationshipFailure("This related field does not support filtering.")
+            }
+            expressions[path] = PostgreSQLDatabaseReadRelatedField(
+                expression:
+                    "(SELECT \(qualified(previousAlias, column.name)) FROM \(sources.joined(separator: ", ")) WHERE \(joins.joined(separator: " AND ")))",
+                typeName: column.typeName)
+        }
+        return expressions
+    }
+
+    private static func relationshipFailure(_ message: String) -> DatabaseAdapterFailure {
+        .reported(
+            DatabaseErrorEnvelope(
+                category: .invalidRequest, message: message,
+                productCode: "postgresql.relationship.invalid"))
     }
 
     private static func relation(
@@ -511,6 +648,11 @@ extension PostgreSQLDatabaseReadSupport {
                 a.atttypid::int8 AS type_oid,
                 NOT a.attnotnull AS is_nullable,
                 a.attnum::int8 AS ordinal,
+                (a.attgenerated <> '' OR a.attidentity = 'a') AS is_generated,
+                (a.atthasdef OR a.attidentity <> '') AS has_default,
+                (SELECT json_agg(e.enumlabel ORDER BY e.enumsortorder)::text
+                 FROM pg_catalog.pg_enum AS e
+                 WHERE e.enumtypid = a.atttypid) AS enum_values,
                 CASE c.relkind
                     WHEN 'r' THEN 'table'
                     WHEN 'p' THEN 'table'
@@ -583,7 +725,17 @@ extension PostgreSQLDatabaseReadSupport {
                 typeName: typeName,
                 typeOID: oid,
                 isNullable: try requiredBool("is_nullable", in: row),
-                ordinal: ordinalValue)
+                ordinal: ordinalValue,
+                enumValues: try row.cells.first(where: { $0.columnName == "enum_values" })
+                    .flatMap { cell in
+                        guard cell.bytes != nil else { return nil }
+                        let json = try cell.decode(String.self)
+                        return try JSONDecoder().decode([String].self, from: Data(json.utf8))
+                    },
+                isGenerated: try row.cells.first(where: { $0.columnName == "is_generated" })?
+                    .decode(Bool.self) ?? false,
+                hasDefault: try row.cells.first(where: { $0.columnName == "has_default" })?.decode(
+                    Bool.self) ?? false)
             columns.append(column)
             if try requiredBool("is_key", in: row) {
                 guard keyName == nil else {
@@ -1313,6 +1465,7 @@ extension PostgreSQLDatabaseReadSupport {
         _ filter: DatabaseFilter?,
         available: [PostgreSQLDatabaseReadColumn]?,
         sourceAlias: String,
+        relatedFields: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField] = [:],
         firstParameter: Int,
         failure: DatabaseAdapterFailure
     ) throws -> PostgreSQLDatabaseReadSQLFragment {
@@ -1325,6 +1478,7 @@ extension PostgreSQLDatabaseReadSupport {
             filter,
             available: available,
             sourceAlias: sourceAlias,
+            relatedFields: relatedFields,
             depth: 0,
             predicateCount: &predicateCount,
             nextParameter: &nextParameter,
@@ -1335,6 +1489,7 @@ extension PostgreSQLDatabaseReadSupport {
         _ filter: DatabaseFilter,
         available: [PostgreSQLDatabaseReadColumn]?,
         sourceAlias: String,
+        relatedFields: [DatabaseFieldPath: PostgreSQLDatabaseReadRelatedField],
         depth: Int,
         predicateCount: inout Int,
         nextParameter: inout Int,
@@ -1345,17 +1500,26 @@ extension PostgreSQLDatabaseReadSupport {
         case let .predicate(predicate):
             predicateCount += 1
             guard predicateCount <= 100 else { throw failure }
-            let name: String
-            if let available {
-                name = try resolve(
-                    predicate.field,
-                    available: available,
-                    failure: failure
-                ).name
+            let field: String
+            let parameterType: String?
+            if let related = relatedFields[predicate.field] {
+                field = related.expression
+                parameterType = related.typeName
+            } else if let available {
+                let column = try resolve(predicate.field, available: available, failure: failure)
+                field = qualified(sourceAlias, column.name)
+                parameterType = column.enumValues == nil ? nil : column.typeName
             } else {
-                name = try fieldName(predicate.field, failure: failure)
+                field = qualified(sourceAlias, try fieldName(predicate.field, failure: failure))
+                parameterType = nil
             }
-            let field = qualified(sourceAlias, name)
+            func parameterMarker(_ number: Int, value: DatabaseValue) -> String {
+                let marker = "$\(number)"
+                guard let parameterType, case .string = value else {
+                    return marker
+                }
+                return "(\(marker)::text)::\(parameterType)"
+            }
             let insensitive = predicate.caseSensitivity == .insensitive
             let sensitive = predicate.caseSensitivity != .insensitive
             switch predicate.operation {
@@ -1380,7 +1544,7 @@ extension PostgreSQLDatabaseReadSupport {
                     .lessThan: "<",
                     .lessThanOrEqual: "<=",
                 ]
-                let marker = "$\(nextParameter)"
+                let marker = parameterMarker(nextParameter, value: predicate.values[0])
                 nextParameter += 1
                 return PostgreSQLDatabaseReadSQLFragment(
                     sql: "\(field) \(operators[predicate.operation]!) \(marker)",
@@ -1390,7 +1554,8 @@ extension PostgreSQLDatabaseReadSupport {
                 let first = nextParameter
                 nextParameter += 2
                 return PostgreSQLDatabaseReadSQLFragment(
-                    sql: "\(field) BETWEEN $\(first) AND $\(first + 1)",
+                    sql:
+                        "\(field) BETWEEN \(parameterMarker(first, value: predicate.values[0])) AND \(parameterMarker(first + 1, value: predicate.values[1]))",
                     parameters: predicate.values)
             case .in, .notIn:
                 guard !predicate.values.isEmpty,
@@ -1400,7 +1565,7 @@ extension PostgreSQLDatabaseReadSupport {
                     throw failure
                 }
                 let markers = predicate.values.indices.map { index in
-                    "$\(nextParameter + index)"
+                    parameterMarker(nextParameter + index, value: predicate.values[index])
                 }
                 nextParameter += predicate.values.count
                 let operation = predicate.operation == .in ? "IN" : "NOT IN"
@@ -1433,7 +1598,7 @@ extension PostgreSQLDatabaseReadSupport {
                 let marker = "$\(nextParameter)"
                 nextParameter += 1
                 return PostgreSQLDatabaseReadSQLFragment(
-                    sql: "\(field) \(operation) \(marker) ESCAPE '\\'",
+                    sql: "\(field) \(operation) \(marker) ESCAPE chr(92)",
                     parameters: [.string(pattern)])
             case .isMissing, .isNotMissing, .regularExpression, .fullText:
                 throw failure
@@ -1452,6 +1617,7 @@ extension PostgreSQLDatabaseReadSupport {
                     child,
                     available: available,
                     sourceAlias: sourceAlias,
+                    relatedFields: relatedFields,
                     depth: depth + 1,
                     predicateCount: &predicateCount,
                     nextParameter: &nextParameter,
@@ -1467,6 +1633,7 @@ extension PostgreSQLDatabaseReadSupport {
                 child,
                 available: available,
                 sourceAlias: sourceAlias,
+                relatedFields: relatedFields,
                 depth: depth + 1,
                 predicateCount: &predicateCount,
                 nextParameter: &nextParameter,
@@ -1702,7 +1869,8 @@ extension PostgreSQLDatabaseReadSupport {
         target: DatabaseTargetIdentifier,
         warnings: [DatabaseWarning],
         bytesReceived: UInt64,
-        startedAt: Date
+        startedAt: Date,
+        browseQuery: String? = nil
     ) throws -> DatabaseAdapterPage {
         let endingPosition = cursor.position + UInt64(records.count)
         guard endingPosition <= PostgreSQLDatabaseReadBounds.maximumContinuationPosition else {
@@ -1760,7 +1928,8 @@ extension PostgreSQLDatabaseReadSupport {
                 timing: DatabaseQueryTiming(
                     durationMilliseconds: elapsedMilliseconds),
                 bytesReceived: bytesReceived,
-                warnings: warnings))
+                warnings: warnings,
+                browseQuery: browseQuery))
     }
 
     private static func continuation(

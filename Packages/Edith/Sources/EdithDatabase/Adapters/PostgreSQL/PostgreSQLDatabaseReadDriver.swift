@@ -104,14 +104,23 @@ private struct PostgreSQLDatabaseTextParameter: PostgresDynamicTypeEncodable {
 
 enum PostgreSQLDatabaseReadDriver {
     static func bindings(
-        _ values: [DatabaseValue]
+        _ values: [DatabaseValue],
+        inferStringTypes: Bool = false
     ) throws -> PostgresBindings {
         guard values.count <= PostgreSQLDatabaseReadBounds.maximumParameters else {
             throw PostgreSQLDatabaseDriverFailure.invalidRequest
         }
         var bindings = PostgresBindings(capacity: values.count)
         for value in values {
-            try append(value, to: &bindings)
+            if inferStringTypes, case let .string(text) = value {
+                guard PostgreSQLDatabaseReadValueSupport.validBoundString(text) else {
+                    throw PostgreSQLDatabaseDriverFailure.invalidRequest
+                }
+                bindings.append(
+                    PostgreSQLDatabaseTextParameter(value: text, psqlType: PostgresDataType(0)))
+            } else {
+                try append(value, to: &bindings)
+            }
         }
         return bindings
     }

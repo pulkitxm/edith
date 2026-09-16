@@ -567,3 +567,169 @@ struct PostgreSQLDatabaseReadingLiveTests {
         )
     }
 }
+
+@Test(
+    .enabled(
+        if: PostgreSQLDatabaseReadingLiveEnvironment.values["EDITH_DATABASE_RELATION_FILTERS"]
+            == "1"))
+func postgresqlRelatedFiltersLive() async throws {
+    let definition = try PostgreSQLDatabaseReadingLiveEnvironment.definition()
+    let client = try await PostgresNIODatabaseClient.connect(
+        PostgreSQLDatabaseReadingLiveEnvironment.plan())
+    let identity = try await client.discoverIdentity()
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition, productIdentity: identity, client: client)
+    do {
+        let cases: [(String, [String], DatabaseFilterOperator, String, Int)] = [
+            ("member", ["organization", "slug"], .equal, "sample-studio", 2),
+            ("member", ["organizationId", "slug"], .equal, "sample-studio", 2),
+            ("member", ["organization", "id"], .equal, "10", 2),
+            ("member", ["organization", "active"], .equal, "true", 2),
+            ("member", ["organization", "account", "slug"], .equal, "north", 3),
+            ("member", ["organization", "slug"], .contains, "50%_off\\offer", 1),
+            ("assignment", ["ownerId", "slug"], .equal, "sample-studio", 1),
+            ("composite_member", ["composite_org", "slug"], .equal, "sample", 1),
+        ]
+        for (table, path, operation, value, count) in cases {
+            let request = try DatabaseAdapterPageRequest(
+                target: DatabaseTargetIdentifier(
+                    connectionID: definition.id,
+                    object: DatabaseObjectIdentifier(
+                        kind: .table, path: ["relation_filters", table])),
+                page: DatabasePageRequest(
+                    pageSize: try DatabasePageSize(10),
+                    filter: .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath(path),
+                            operation: operation, values: [.string(value)]))),
+                continuation: nil)
+            let page = try await session.readPage(
+                request,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(page.records.count == count)
+            let query = try #require(page.metadata.browseQuery)
+            let replay = try await session.query(
+                PostgreSQLDatabaseReadingLiveEnvironment.query(
+                    connectionID: definition.id, command: query),
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(replay.records.map(\.fields) == page.records.map(\.fields))
+            #expect(!query.contains("__edith_postgresql_key"))
+        }
+        await session.disconnect()
+    } catch {
+        await session.disconnect()
+        throw error
+    }
+}
+
+@Test(
+    .enabled(
+        if: PostgreSQLDatabaseReadingLiveEnvironment.values["EDITH_DATABASE_RELATION_FILTERS"]
+            == "1"))
+func postgresqlEnumRowsLive() async throws {
+    let definition = try PostgreSQLDatabaseReadingLiveEnvironment.definition(writable: true)
+    let client = try await PostgresNIODatabaseClient.connect(
+        PostgreSQLDatabaseReadingLiveEnvironment.plan(readOnly: false))
+    let identity = try await client.discoverIdentity()
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition, productIdentity: identity, client: client)
+    let schema =
+        "enum_probe_" + UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+    func execute(_ sql: String) async throws {
+        try await PostgreSQLDatabaseReadingLiveEnvironment.executeSetup(sql, client: client)
+    }
+    func apply(_ request: DatabaseDestructiveRequest) async throws {
+        let plan = try await session.normalizeMutation(
+            request, context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+        let result = try await session.executeMutation(
+            plan, context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+        #expect(result.effect == .applied)
+        #expect(result.affectedRecords.value == 1)
+    }
+    let target = DatabaseTargetIdentifier(
+        connectionID: definition.id,
+        object: DatabaseObjectIdentifier(kind: .table, path: [schema, "members"]))
+    func browse(_ filter: DatabaseFilter? = nil) async throws -> DatabaseAdapterPage {
+        try await session.readPage(
+            DatabaseAdapterPageRequest(
+                target: target,
+                page: DatabasePageRequest(pageSize: try DatabasePageSize(10), filter: filter),
+                continuation: nil),
+            context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+    }
+    do {
+        try await execute("CREATE SCHEMA \(schema)")
+        try await execute(
+            "CREATE TYPE \(schema).member_role AS ENUM ('viewer', 'editor', 'NULL', 'admin''s role')"
+        )
+        try await execute(
+            "CREATE TABLE \(schema).members (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text DEFAULT 'Sample Member', role \(schema).member_role DEFAULT 'viewer')"
+        )
+        let empty = try await browse()
+        #expect(empty.fields.first(where: { $0.displayName == "id" })?.isGenerated == true)
+        #expect(empty.fields.first(where: { $0.displayName == "name" })?.hasDefault == true)
+        #expect(
+            empty.fields.first(where: { $0.displayName == "role" })?.enumValues == [
+                "viewer", "editor", "NULL", "admin's role",
+            ])
+        try await apply(DatabaseRowMutationRequests.postgreSQLInsert(target: target, values: []))
+        try await apply(
+            DatabaseRowMutationRequests.postgreSQLInsert(
+                target: target,
+                values: [
+                    DatabaseObjectField(name: "name", value: .string("Taylor Demo")),
+                    DatabaseObjectField(name: "role", value: .string("admin's role")),
+                ]))
+        let rows = try await browse()
+        #expect(rows.records.count == 2)
+        #expect(
+            rows.records[0].fields.first(where: { $0.name == "name" })?.value
+                == .string("Sample Member"))
+        let recordTarget = DatabaseTargetIdentifier(
+            connectionID: definition.id, object: target.object,
+            record: try #require(rows.records.first?.identity))
+        try await apply(
+            DatabaseRowMutationRequests.postgreSQLUpdate(
+                target: recordTarget,
+                values: [
+                    DatabaseObjectField(name: "role", value: .string("NULL"))
+                ]))
+        let filtered = try await browse(
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("role"), operation: .equal, values: [.string("NULL")]))
+        )
+        #expect(filtered.records.count == 1)
+        let query = try #require(filtered.metadata.browseQuery)
+        let replay = try await session.query(
+            PostgreSQLDatabaseReadingLiveEnvironment.query(
+                connectionID: definition.id, command: query),
+            context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+        #expect(replay.records.count == 1)
+        #expect(
+            replay.records[0].fields.filter { $0.name != "role" }
+                == filtered.records[0].fields.filter { $0.name != "role" })
+        guard
+            case let .productSpecific(role) = replay.records[0].fields.first(where: {
+                $0.name == "role"
+            })?.value
+        else {
+            Issue.record("Expected the enum label in query results")
+            return
+        }
+        #expect(role.textRepresentation == "NULL")
+        try await apply(
+            DatabaseRowMutationRequests.postgreSQLUpdate(
+                target: recordTarget, values: [DatabaseObjectField(name: "role", value: .null)]))
+        let nulls = try await browse(
+            .predicate(
+                DatabaseFilterPredicate(field: DatabaseFieldPath("role"), operation: .isNull)))
+        #expect(nulls.records.count == 1)
+        try await execute("DROP SCHEMA \(schema) CASCADE")
+        await session.disconnect()
+    } catch {
+        try? await execute("DROP SCHEMA IF EXISTS \(schema) CASCADE")
+        await session.disconnect()
+        throw error
+    }
+}

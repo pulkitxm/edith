@@ -688,6 +688,12 @@ final class DashboardModel {
         selectedSources = Set(group.sourceIDs)
     }
 
+    func reloadPreferences() {
+        guard loaded else { return }
+        restore()
+        recompute()
+    }
+
     private func restore() {
         loading = true
         defer { loading = false }
@@ -711,7 +717,7 @@ final class DashboardModel {
         } else if selectedModels.isEmpty || selectedModels.isDisjoint(with: validModels) {
             selectedModels = Set(defaultModels)
         }
-        if let raw = d.string(forKey: "dashPaths"), !raw.isEmpty {
+        if let raw = d.string(forKey: "dashPaths") {
             selectedPaths = reconciledPaths(Set(raw.split(separator: "\n").map(String.init)))
         }
         if let sc = d.string(forKey: "dashSort"), let col = TableColumn(rawValue: sc) {

@@ -20,13 +20,19 @@ At launch, tabs restore disconnected. The user reconnects deliberately, especial
 
 ### Browse and edit
 
-The object explorer fetches only roots and expanded children. Selecting a data object opens a bounded first page. Filter, sort, and projection controls issue a new server request. The grid states whether results are complete, sampled, estimated, truncated, or stale.
+The object explorer fetches only roots and expanded children. Selecting a data object opens a bounded first page. Each opened table has a closable tab with its own filters, sorting, column settings, loaded rows, query draft, and scroll position. Opening another table starts with clean filters; selecting an existing tab restores its state for the active connection. Filter, sort, and projection controls issue a new server request. The grid states whether results are complete, sampled, estimated, truncated, or stale.
 
 Selecting a row, key, document, or search hit opens a detail inspector. Edits are staged locally, preserving original and proposed values. Apply opens the canonical mutation preview. A successful apply returns changed values when the product supports them and refreshes only affected scope.
 
+Boolean fields offer true/false selectors, and PostgreSQL enum columns expose their declared labels as choices in the row editor and equality filters. Nullable enums distinguish a label named `NULL` from a database null. Double-clicking a boolean, enum, or JSON cell opens the typed row editor. Generated columns are read-only, nullable fields have an explicit NULL state, and JSON and decimal edits are validated before review. New rows omit unchecked fields so database defaults and generated identities apply, including inserts that use only defaults. Inserts and updates use the existing mutation review flow.
+
 For a relation without a stable key, implicit row editing is disabled. The user can create an explicit predicate operation with a stronger preview.
 
+PostgreSQL filters accept related paths such as `organization.slug` through declared foreign keys. Use the referenced table name, foreign key column, or constraint name for each relationship segment. Paths can follow up to eight relationships, including composite keys; ambiguous paths require an explicit column or constraint name.
+
 ### Query and command
+
+Switching a PostgreSQL table from Browse to Query shows runnable SQL for the current filters, sorting, and page limit, with values filled in. If browse controls have changed, the workspace refreshes the query before enabling the editor.
 
 Each editor tab binds a connection and namespace. Its tab, toolbar, gutter, and execute control repeat the connection context. Changing the connection is explicit and never automatic after a disconnect.
 

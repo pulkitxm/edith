@@ -15,9 +15,10 @@ import urllib.error
 import urllib.request
 import uuid
 
-from edith_test_environment import isolated_test_environment
+from edith_test_environment import isolated_test_environment, test_build_directory
 
 repo = pathlib.Path(__file__).resolve().parents[1]
+build = test_build_directory(repo)
 root = pathlib.Path(tempfile.mkdtemp(prefix='edith-attention-e2e-'))
 label = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 suite = label + '.defaults'
@@ -117,7 +118,7 @@ class IconHandler(http.server.BaseHTTPRequestHandler):
 
 try:
     for name, identity in [('ed', 'ed'), ('edithd', 'com.pulkit.edith.agent')]:
-        shutil.copy2(repo / 'Packages/Edith/.build/debug' / name, root / name)
+        shutil.copy2(build / name, root / name)
         call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identity, str(root / name)])
     call(['/usr/bin/swiftc', str(repo / 'scripts/fixtures/daemon-xpc-client.swift'),
           '-o', str(root / 'client')], timeout=60)

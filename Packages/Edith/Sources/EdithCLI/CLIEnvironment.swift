@@ -75,6 +75,11 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
 
+    nonisolated(unsafe) public static var requestUsageRefresh:
+        @Sendable (UsageMachineRefreshPolicy) throws -> String? = {
+            try UsageAgentOperations.requestRefresh(machinePolicy: $0)
+        }
+
     nonisolated(unsafe) public static var verifyAgentHandshake:
         @Sendable () throws -> AgentHandshake = {
             try AgentClient.shared.verifyHandshake()

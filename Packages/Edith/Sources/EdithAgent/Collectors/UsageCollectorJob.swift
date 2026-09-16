@@ -80,6 +80,64 @@ public enum UsageDocumentReader {
     }
 }
 
+public final class UsageMachineRefreshRequests: @unchecked Sendable {
+    public struct Request: Equatable, Sendable {
+        public let runID: String
+        public var machinePolicy: UsageMachineRefreshPolicy
+    }
+
+    public static let shared = UsageMachineRefreshRequests()
+    private let lock = NSLock()
+    private let dataDirectory: URL
+    private var pending: Request?
+
+    public init(dataDirectory: URL = Repo.dataDir) {
+        self.dataDirectory = dataDirectory
+    }
+
+    @discardableResult
+    public func enqueue(_ policy: UsageMachineRefreshPolicy) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        if var request = pending {
+            if request.machinePolicy.rawValue < policy.rawValue {
+                request.machinePolicy = policy
+                pending = request
+            }
+            return request.runID
+        }
+        let request = Request(runID: UUID().uuidString, machinePolicy: policy)
+        pending = request
+        return request.runID
+    }
+
+    public func take() -> Request {
+        lock.lock()
+        defer {
+            pending = nil
+            lock.unlock()
+        }
+        return pending ?? Request(runID: UUID().uuidString, machinePolicy: .due)
+    }
+
+    public func discard(_ runID: String) {
+        lock.withLock {
+            if pending?.runID == runID { pending = nil }
+        }
+    }
+
+    public func cancelPending() {
+        let request = lock.withLock {
+            defer { pending = nil }
+            return pending
+        }
+        guard let request else { return }
+        UsageRefreshRunner.recordFailure(
+            "Usage collection cancelled before starting.", runID: request.runID,
+            dataDir: dataDirectory)
+    }
+}
+
 public final class UsageCollectorJob: @unchecked Sendable {
     private let store: AgentStore?
     private let runner: @Sendable () async throws -> UsageRefreshResult
@@ -91,7 +149,29 @@ public final class UsageCollectorJob: @unchecked Sendable {
         documentURL: URL = Repo.usageJSON,
         notifies: Bool = true,
         runner: @escaping @Sendable () async throws -> UsageRefreshResult = {
-            try await UsageRefreshRunner.run()
+            let request = UsageMachineRefreshRequests.shared.take()
+            let deadline = ContinuousClock.now.advanced(by: .seconds(900))
+            do {
+                while true {
+                    try Task.checkCancellation()
+                    do {
+                        return try await UsageRefreshRunner.run(
+                            machinePolicy: request.machinePolicy, runID: request.runID)
+                    } catch UsageRefreshFailure.busy {
+                        if ContinuousClock.now >= deadline {
+                            UsageRefreshRunner.recordFailure(
+                                UsageRefreshFailure.timedOut.localizedDescription,
+                                runID: request.runID)
+                            throw UsageRefreshFailure.timedOut
+                        }
+                    }
+                    try await Task.sleep(for: .milliseconds(150))
+                }
+            } catch is CancellationError {
+                UsageRefreshRunner.recordFailure(
+                    "Usage collection cancelled.", runID: request.runID)
+                throw CancellationError()
+            }
         }
     ) {
         self.store = store

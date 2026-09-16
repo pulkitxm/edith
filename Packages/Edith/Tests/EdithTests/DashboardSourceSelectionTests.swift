@@ -82,4 +82,32 @@ import Testing
         #expect(model.selectedSources == ["cli"])
         #expect(model.series.first { $0.id == period }?.tokens == 403_000)
     }
+
+    @Test func externalCompleteScopeChangesUpdateAnAlreadyLoadedDashboard() throws {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set("cli", forKey: "dashSources")
+        defaults.set("cli,codex", forKey: "dashKnownSources")
+        defaults.set("claude", forKey: "dashModels")
+        defaults.set(
+            UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+        let model = DashboardModel(preferences: defaults)
+        model.ingest(try usage())
+        #expect(model.series.first { $0.id == period }?.tokens == 403_000)
+
+        model.selectedPaths = ["/synthetic/project"]
+        defaults.set("cli,codex", forKey: "dashSources")
+        defaults.set("claude,gpt", forKey: "dashModels")
+        defaults.set("all", forKey: "dashRange")
+        defaults.set("", forKey: "dashPaths")
+        model.reloadPreferences()
+
+        #expect(model.selectedSources == ["cli", "codex"])
+        #expect(model.selectedModels == ["claude", "gpt"])
+        #expect(model.selectedPaths.isEmpty)
+        #expect(model.series.first { $0.id == period }?.tokens == 31_403_000)
+        model.ingest(try usage())
+        #expect(model.series.first { $0.id == period }?.tokens == 31_403_000)
+    }
+
 }

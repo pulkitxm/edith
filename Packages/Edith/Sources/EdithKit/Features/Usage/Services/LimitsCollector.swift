@@ -67,34 +67,51 @@ public enum LimitsCollector {
         refreshSession: LimitsRefreshSession = .shared,
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
-        let startedAt = Date()
-        var retryNotBefore: Date?
-        switch await refreshSession.begin(force: force, now: startedAt) {
-        case .cached(let snapshot): return snapshot
-        case .collect: break
-        }
-        let providers = enabledProviders(defaults: defaults)
-        var snapshots: [LimitsProviderSnapshot] = []
-        var topFailure: String?
-        for provider in providers {
+        await collect(
+            providers: enabledProviders(defaults: defaults), force: force,
+            refreshSession: refreshSession, announce: announce
+        ) { provider in
             switch provider {
             case .claude:
-                let result = await fetchClaude(
+                var retryNotBefore: Date?
+                let snapshot = await fetchClaude(
                     credentialSession: credentialSession, retryNotBefore: &retryNotBefore)
-                snapshots.append(result)
-                if result.error != nil { topFailure = result.error }
+                return (snapshot, retryNotBefore)
             case .codex:
-                let result = await fetchCodex()
-                snapshots.append(result)
-                if result.error != nil { topFailure = result.error }
+                return (await fetchCodex(), nil)
             }
         }
-        if snapshots.contains(where: { $0.session != nil || $0.week != nil || $0.fable != nil }) {
-            announce(IPC.Name.limitsUpdated)
+    }
+
+    static func collect(
+        providers: [LimitProvider], force: Bool = false,
+        refreshSession: LimitsRefreshSession, now: Date = Date(),
+        announce: @Sendable (Notification.Name) -> Void,
+        fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
+    ) async -> LimitsTopicSnapshot {
+        let paused: [LimitsProviderSnapshot]
+        switch await refreshSession.begin(force: force, providers: providers, now: now) {
+        case .cached(let snapshot): return snapshot
+        case .collect(let providers): paused = providers
+        }
+        var snapshots: [LimitsProviderSnapshot] = []
+        var deadlines: [LimitProvider: Date] = [:]
+        for provider in providers {
+            if let cached = paused.first(where: { $0.provider == provider }) {
+                snapshots.append(cached)
+                if let deadline = await refreshSession.retryDeadline(for: provider) {
+                    deadlines[provider] = deadline
+                }
+            } else {
+                let (snapshot, deadline) = await fetch(provider)
+                snapshots.append(snapshot)
+                deadlines[provider] = deadline
+            }
         }
         let snapshot = LimitsTopicSnapshot(
-            refreshedAt: startedAt, providers: snapshots, failure: topFailure)
-        await refreshSession.finish(snapshot, retryNotBefore: retryNotBefore)
+            refreshedAt: now, providers: snapshots, failure: snapshots.compactMap(\.error).first)
+        await refreshSession.finish(snapshot, retryNotBefore: deadlines)
+        announce(IPC.Name.limitsUpdated)
         return snapshot
     }
 

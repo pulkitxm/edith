@@ -144,6 +144,9 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
     public let isNullable: Bool
     public let isSortable: Bool
     public let isFilterable: Bool
+    public let enumValues: [String]?
+    public let isGenerated: Bool?
+    public let hasDefault: Bool?
 
     public init(
         path: DatabaseFieldPath,
@@ -151,7 +154,10 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
         typeName: String,
         isNullable: Bool,
         isSortable: Bool,
-        isFilterable: Bool
+        isFilterable: Bool,
+        enumValues: [String]? = nil,
+        isGenerated: Bool? = nil,
+        hasDefault: Bool? = nil
     ) {
         self.path = path
         self.displayName = displayName
@@ -159,6 +165,9 @@ public struct DatabaseFieldDescriptor: Codable, Hashable, Sendable {
         self.isNullable = isNullable
         self.isSortable = isSortable
         self.isFilterable = isFilterable
+        self.enumValues = enumValues
+        self.isGenerated = isGenerated
+        self.hasDefault = hasDefault
     }
 }
 
@@ -226,6 +235,7 @@ public struct DatabaseQueryTiming: Codable, Hashable, Sendable {
 }
 
 public struct DatabasePageMetadata: Codable, Hashable, Sendable {
+    public let browseQuery: String?
     public let completeness: DatabaseResultCompleteness
     public let count: DatabaseCountMetadata
     public let timing: DatabaseQueryTiming?
@@ -239,8 +249,10 @@ public struct DatabasePageMetadata: Codable, Hashable, Sendable {
         timing: DatabaseQueryTiming? = nil,
         bytesReceived: UInt64? = nil,
         warnings: [DatabaseWarning] = [],
-        partialFailures: [DatabasePartialFailure] = []
+        partialFailures: [DatabasePartialFailure] = [],
+        browseQuery: String? = nil
     ) {
+        self.browseQuery = browseQuery
         self.completeness = completeness
         self.count = count
         self.timing = timing

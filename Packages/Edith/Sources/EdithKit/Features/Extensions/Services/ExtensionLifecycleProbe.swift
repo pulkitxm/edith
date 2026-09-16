@@ -149,14 +149,14 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             return .uninstalled("Herdr is not installed on this Mac or a configured machine.")
         }
         let agents = installed.flatMap(\.agents)
-        guard !agents.isEmpty else {
-            return .empty("Herdr is installed, but no live sessions were found.")
-        }
         let errors = hosts.compactMap(\.error)
         if !errors.isEmpty {
             return .degraded(
                 "Found \(agents.count) live sessions; some hosts failed: "
                     + errors.joined(separator: "; "))
+        }
+        guard !agents.isEmpty else {
+            return .empty("Herdr is installed, but no live sessions were found.")
         }
         return .ready("Found \(agents.count) live Herdr sessions.")
     }

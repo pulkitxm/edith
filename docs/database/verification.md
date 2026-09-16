@@ -196,3 +196,9 @@ Inspection verifies panel resize and persistence, focused mode, toolbar overflow
 Integration and performance runs write redacted JSON result documents under an ignored artifacts directory. Approved summaries with no credentials, private endpoints, or unrelated machine data are committed under `docs/database/results/`. Each summary identifies source commit, adapter, product version, image ID, seed version, counts, commands, measured context, pass or failure, limitation, and evidence artifact.
 
 A claim is complete only when its exact result exists and the corresponding automated contract is green.
+
+### Related filters and table tabs
+
+Load `scripts/fixtures/database-relation-filters.sql` into an empty, isolated PostgreSQL database. Set `EDITH_DATABASE_POSTGRESQL_HOST`, `EDITH_DATABASE_POSTGRESQL_PORT`, `EDITH_DATABASE_POSTGRESQL_DATABASE`, `EDITH_DATABASE_POSTGRESQL_USERNAME`, and `EDITH_DATABASE_POSTGRESQL_PASSWORD` for that fixture, plus `EDITH_DATABASE_RELATION_FILTERS=1`. Run `Packages/Edith/test.sh --filter 'postgresqlRelated|postgresqlEnumRowsLive|relatedFiltersAndTableTabsRender'` to verify relationship traversal, typed values, composite keys, SQL replay, enum labels, inserts using defaults, enum updates, and the workbench using synthetic data.
+
+Set `EDITH_DATABASE_EVIDENCE_DIR` to a local output directory to capture the Browse, Query, new-row editor, and saved-row windows. This briefly displays the synthetic fixture window. Ordinary render tests remain offscreen. `DatabaseTableScrollTests` verifies horizontal and vertical scroll restoration after recreating the native table.

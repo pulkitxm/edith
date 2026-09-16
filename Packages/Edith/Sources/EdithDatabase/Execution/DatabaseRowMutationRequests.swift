@@ -77,15 +77,17 @@ public enum DatabaseRowMutationRequests {
     ) throws -> DatabaseDestructiveRequest {
         let table = try postgreSQLTable(target, requiresIdentity: false)
         try validateFields(values, excluding: [])
-        guard !values.isEmpty else { throw DatabaseRowMutationRequestError.missingValues }
         let columns = values.map { quote($0.name) }.joined(separator: ", ")
         let placeholders = values.indices.map { "$\($0 + 1)" }.joined(separator: ", ")
+        let statement =
+            values.isEmpty
+            ? "INSERT INTO \(table) DEFAULT VALUES RETURNING 1"
+            : "INSERT INTO \(table) (\(columns)) VALUES (\(placeholders)) RETURNING 1"
         return DatabaseDestructiveRequest(
             target: target,
             payload: .relational(
                 product: .postgresql,
-                statement:
-                    "INSERT INTO \(table) (\(columns)) VALUES (\(placeholders)) RETURNING 1",
+                statement: statement,
                 parameters: values.map {
                     DatabaseMutationParameter(name: $0.name, value: $0.value)
                 }))

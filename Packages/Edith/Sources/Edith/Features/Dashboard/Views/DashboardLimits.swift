@@ -12,6 +12,7 @@ struct RateLimitsDialsView: View {
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
     @State private var point: LimitPoint?
+    @State private var latestLimits: LimitsTopicSnapshot?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
         LimitProvider.claude.rawValue
@@ -66,8 +67,14 @@ struct RateLimitsDialsView: View {
             }
             .frame(maxWidth: .infinity)
             if let point {
-                Text("As of \(point.date.formatted(.dateTime.hour().minute()))")
+                Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
                     .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            if let error = latestLimits?.providers.first(where: { $0.provider == selected })?.error
+            {
+                Text(error)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
             }
             if showsJumpLink {
                 JumpLink(title: "Open Agent Usage", destination: .dashboard, dark: dark)
@@ -86,6 +93,14 @@ struct RateLimitsDialsView: View {
             shadow: .black.opacity(dark ? 0.32 : 0.05)
         )
         .task { reload() }
+        .task {
+            for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
+            {
+                guard !Task.isCancelled else { return }
+                latestLimits = snapshot
+                reload()
+            }
+        }
         .onChange(of: selectedRaw) { reload() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.limitsUpdated)
@@ -177,6 +192,13 @@ struct LimitsRefreshButton: View {
         .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
         .help("Refresh limits now")
+        .task {
+            for await _ in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits) {
+                guard !Task.isCancelled else { return }
+                refreshing = false
+                onRefreshed()
+            }
+        }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.limitsUpdated)
         ) { _ in

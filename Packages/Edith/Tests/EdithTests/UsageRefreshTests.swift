@@ -100,6 +100,120 @@ import Testing
         #expect(collector.reportedFailure == "history merge failed")
     }
 
+    @Test func collectorSuccessWaitsForPublication() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sink = UsageRefreshSink(dataDir: dir, startedAt: Date())
+        sink.begin()
+        let collector = UsageRefreshCollector(sink: sink, onEvent: { _ in })
+        collector.ingestStandardOutput(Data("phase\tlocal\t1 day\t0.2\ndone\t0.5\n".utf8))
+        collector.flush()
+        #expect(!collector.events.contains { $0.isTerminal })
+        #expect(
+            !UsageRefreshFollower.read(UsageRefreshRunner.eventsURL(dataDir: dir))
+                .contains { $0.isTerminal })
+        collector.complete(seconds: 0.8)
+        #expect(
+            UsageRefreshFollower.read(UsageRefreshRunner.eventsURL(dataDir: dir)).last
+                == .finished(seconds: 0.8))
+    }
+
+    @Test func publicationFailureReplacesCollectorSuccess() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sink = UsageRefreshSink(dataDir: dir, startedAt: Date())
+        sink.begin()
+        let collector = UsageRefreshCollector(sink: sink, onEvent: { _ in })
+        collector.ingestStandardOutput(Data("done\t0.5\n".utf8))
+        collector.fail("publication rejected")
+        let events = UsageRefreshFollower.read(UsageRefreshRunner.eventsURL(dataDir: dir))
+        #expect(events == [.failure("publication rejected")])
+    }
+
+    @Test func pipelineStreamsProgressBeforePublishing() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try usage(period: "2026-09-12", source: "local")
+            .write(to: dir.appendingPathComponent("fixture.json"))
+        let script = dir.appendingPathComponent("collector.sh")
+        try """
+        printf 'phase\\tlocal\\t1 day\\t0.1\\n'
+        for attempt in {1..100}; do
+          test -f "$1/observed" && break
+          sleep 0.02
+        done
+        test -f "$1/observed" || exit 9
+        cp "$1/fixture.json" "$EDITH_USAGE_OUTPUT"
+        printf 'done\\t0.1\\n'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        let result = try await UsageRefreshRunner.run(
+            dataDir: dir, workingDirectory: dir, script: script,
+            onEvent: { event in
+                if case .phase = event {
+                    try? Data().write(to: dir.appendingPathComponent("observed"))
+                }
+            })
+        #expect(result.events.last?.isTerminal == true)
+        #expect(
+            FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
+    }
+
+    @Test func machineCollectionRunsBeforeThePublicationBaseline() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fresh = try usage(period: "2026-09-12", source: "remote")
+        let script = dir.appendingPathComponent("collector.sh")
+        try """
+        cp "$1/remote.json" "$EDITH_USAGE_OUTPUT"
+        printf 'done\\t0.1\\n'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        _ = try await UsageRefreshRunner.run(
+            dataDir: dir, workingDirectory: dir, machinePolicy: .due, script: script,
+            collectMachines: { policy, root, _ in
+                #expect(policy == .due)
+                try? fresh.write(to: root.appendingPathComponent("remote.json"))
+                try? Data("fresh generation".utf8)
+                    .write(to: root.appendingPathComponent("machines.generation"))
+            })
+        let published = try Data(contentsOf: dir.appendingPathComponent("usage.json"))
+        let document = try #require(JSONSerialization.jsonObject(with: published) as? [String: Any])
+        #expect(document["sources"] as? [String] == ["remote"])
+    }
+
+    @Test func pipelinePublicationFailureIsObservedByFollowers() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = try usage(period: "2026-09-11", source: "local")
+        try previous.write(to: dir.appendingPathComponent("usage.json"))
+        let script = dir.appendingPathComponent("collector.sh")
+        try """
+        cp "$1/usage.json" "$EDITH_USAGE_OUTPUT"
+        printf 'changed' > "$1/machines.generation"
+        printf 'done\\t0.1\\n'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        await #expect(throws: UsageRefreshFailure.self) {
+            try await UsageRefreshRunner.run(dataDir: dir, workingDirectory: dir, script: script)
+        }
+        #expect(try Data(contentsOf: dir.appendingPathComponent("usage.json")) == previous)
+        await #expect(throws: UsageRefreshFailure.self) {
+            try await UsageRefreshFollower.follow(dataDir: dir)
+        }
+        #expect(
+            !UsageRefreshFollower.read(UsageRefreshRunner.eventsURL(dataDir: dir))
+                .contains {
+                    if case .finished = $0 { return true }; return false
+                })
+    }
+
+    @Test func followerCannotReportAnOlderRunsSuccess() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try await UsageRefreshPlayback.replay(events: [.finished(seconds: 1)], dataDir: dir)
+        await #expect(throws: UsageRefreshFailure.self) {
+            try await UsageRefreshFollower.follow(dataDir: dir, runID: "different-run")
+        }
+    }
+
     @Test func parsesEveryEventTheScriptEmits() {
         #expect(
             UsageRefreshEvent.parse("phase\tcli\t28 days\t0.88")

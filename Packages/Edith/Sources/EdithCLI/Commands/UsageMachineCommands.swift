@@ -75,8 +75,8 @@ enum UsageMachineBridge {
         case .completed:
             return true
         case .alreadyRunning:
-            progress.note("a usage refresh is already running, it will pick this up")
-            return true
+            progress.note("a usage refresh is already running; dashboard publication is pending")
+            return false
         case .failed(let detail):
             progress.note("could not fold it in: \(detail)")
             return false

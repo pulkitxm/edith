@@ -126,3 +126,37 @@ test.skipIf(!binary)(
     }
   },
 );
+
+test.skipIf(!binary)(
+  "offline automatic pricing preserves recorded billing costs in daily and session reports",
+  () => {
+    const root = mkdtempSync(join(tmpdir(), "edith-offline-billing-"));
+    const config = join(root, "config");
+    const projects = join(config, "projects", "synthetic-project");
+    mkdirSync(projects, { recursive: true });
+    writeFileSync(join(projects, "session.jsonl"), cases["spaced-null"]);
+    const env = {
+      ...process.env,
+      HOME: join(root, "home"),
+      XDG_CONFIG_HOME: join(root, "isolated-config"),
+      CLAUDE_CONFIG_DIR: config,
+    };
+    delete env.CFFIXED_USER_HOME;
+    try {
+      for (const report of ["daily", "session"]) {
+        const results = ["auto", "display"].map((mode) => {
+          const result = Bun.spawnSync(
+            [binary, "claude", report, "--json", "--offline", "--mode", mode],
+            { env, cwd: root, timeout: 10000 },
+          );
+          expect(result.exitCode).toBe(0);
+          return JSON.parse(result.stdout.toString());
+        });
+        expect(results[0]).toEqual(results[1]);
+        expect(results[0].totals.totalCost).toBe(1.5);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

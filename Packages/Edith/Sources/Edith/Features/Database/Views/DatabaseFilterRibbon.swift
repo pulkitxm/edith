@@ -11,6 +11,9 @@ struct DatabaseFilterRibbon: View {
     let apply: () -> Void
 
     @State private var editorID: UUID?
+    private var supportsRelatedFields: Bool {
+        connection.product == .postgresql && data.resultMode == .browse
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -92,6 +95,7 @@ struct DatabaseFilterRibbon: View {
                 Divider()
             }
             Section("Add filter") {
+                relatedFieldControl
                 ForEach(availableFilterFields, id: \.path) { field in
                     Button(field.displayName) {
                         addFilter(field)
@@ -104,9 +108,25 @@ struct DatabaseFilterRibbon: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(availableFilterFields.isEmpty)
+        .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
         .help(filterHelp)
         .accessibilityLabel(filterAccessibilityLabel)
+        .popover(
+            isPresented: Binding(
+                get: { editorID != nil }, set: { if !$0 { editorID = nil } })
+        ) {
+            if let editorID { filterEditor(editorID) }
+        }
+    }
+
+    @ViewBuilder
+    private var relatedFieldControl: some View {
+        if supportsRelatedFields {
+            Button("Related field…") {
+                presentEditor(data.addFilterClause(field: "", operation: .equal))
+            }
+            Divider()
+        }
     }
 
     private var columnsMenu: some View {
@@ -163,6 +183,7 @@ struct DatabaseFilterRibbon: View {
 
     private var addFilterMenu: some View {
         Menu {
+            relatedFieldControl
             ForEach(availableFilterFields, id: \.path) { field in
                 Button(field.displayName) {
                     addFilter(field)
@@ -174,7 +195,7 @@ struct DatabaseFilterRibbon: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(availableFilterFields.isEmpty)
+        .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
         .help(
             availableFilterFields.isEmpty
                 ? "No more filters are available for this result" : "Add a filter")
@@ -427,6 +448,12 @@ struct DatabaseFilterRibbon: View {
                 }
                 filterEditorControl("Field") {
                     Picker("Field", selection: clauseFieldBinding(id)) {
+                        if !filterableFields.contains(where: {
+                            $0.path.segments.joined(separator: ".") == clause.field
+                        }) {
+                            Text(clause.field.isEmpty ? "Related field" : clause.field).tag(
+                                clause.field)
+                        }
                         ForEach(filterableFields(keeping: id), id: \.path) { field in
                             Text(field.displayName)
                                 .tag(field.path.segments.joined(separator: "."))
@@ -434,6 +461,14 @@ struct DatabaseFilterRibbon: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
+                    if supportsRelatedFields {
+                        TextField("organization.slug", text: clauseFieldBinding(id))
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Field path")
+                        Text("Use table.field, foreignKeyColumn.field, or constraint.field.")
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(palette.inkFaint)
+                    }
                 }
                 filterEditorControl("Condition") {
                     Picker("Condition", selection: clauseOperationBinding(id)) {
@@ -446,13 +481,25 @@ struct DatabaseFilterRibbon: View {
                 }
                 if operationNeedsValue(clause.operation) {
                     filterEditorControl("Value") {
-                        TextField(valuePlaceholder(clause.operation), text: clauseValueBinding(id))
+                        if let choices = valueChoices(for: clause) {
+                            Picker("Value", selection: clauseValueBinding(id)) {
+                                if !choices.contains(clause.valueText) {
+                                    Text("Choose a value").tag(clause.valueText).disabled(true)
+                                }
+                                ForEach(choices, id: \.self) { value in Text(value).tag(value) }
+                            }
+                            .labelsHidden()
+                        } else {
+                            TextField(
+                                valuePlaceholder(clause.operation), text: clauseValueBinding(id)
+                            )
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: UIScale.pt(11), design: .monospaced))
                             .onSubmit {
                                 editorID = nil
                                 apply()
                             }
+                        }
                     }
                 }
                 if operationSupportsCaseSensitivity(clause) {
@@ -628,11 +675,24 @@ struct DatabaseFilterRibbon: View {
     private func addFilter(_ field: DatabaseFieldDescriptor) {
         let id = data.addFilterClause(
             field: field.path.segments.joined(separator: "."))
+        presentEditor(id)
+    }
+
+    private func presentEditor(_ id: UUID) {
         Task { @MainActor in
             await Task.yield()
             guard data.filterClauses.contains(where: { $0.id == id }) else { return }
             editorID = id
         }
+    }
+
+    private func valueChoices(for clause: DatabaseWorkspaceFilterClause) -> [String]? {
+        guard [.equal, .notEqual].contains(clause.operation),
+            let field = data.fields.first(where: {
+                $0.path.segments.joined(separator: ".") == clause.field
+            })
+        else { return nil }
+        return DatabaseFilterOperatorPolicy.valueChoices(for: field)
     }
 
     private func operators(
@@ -642,7 +702,16 @@ struct DatabaseFilterRibbon: View {
             let field = data.fields.first(where: {
                 $0.path.segments.joined(separator: ".") == clause.field
             })
-        else { return [clause.operation] }
+        else {
+            return supportsRelatedFields
+                ? DatabaseFilterOperatorPolicy.operators(
+                    product: connection.product,
+                    field: DatabaseFieldDescriptor(
+                        path: DatabaseFieldPath(clause.field),
+                        displayName: clause.field, typeName: "text", isNullable: true,
+                        isSortable: false, isFilterable: true))
+                : [clause.operation]
+        }
         return DatabaseFilterOperatorPolicy.operators(
             product: connection.product,
             field: field)

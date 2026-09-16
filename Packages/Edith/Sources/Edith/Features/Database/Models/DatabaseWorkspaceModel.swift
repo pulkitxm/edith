@@ -44,6 +44,8 @@ final class DatabaseWorkspaceModel {
         self.currentDate = currentDate
     }
 
+    var mutationTarget: DatabaseTargetIdentifier? { mutationRequest?.target }
+
     var hasUnresolvedMutation: Bool {
         unresolvedOperationID != nil
     }

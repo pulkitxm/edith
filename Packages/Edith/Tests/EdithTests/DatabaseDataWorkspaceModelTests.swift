@@ -784,6 +784,146 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.state == .loaded)
     }
 
+    @Test("Enum editing distinguishes labels from null and inserts omit defaults")
+    func enumRowEditor() async throws {
+        let values = ["viewer", "editor", "NULL", "admin's role"]
+        let descriptor = DatabaseFieldDescriptor(
+            path: DatabaseFieldPath("role"), displayName: "role", typeName: "member_role",
+            isNullable: true, isSortable: true, isFilterable: true, enumValues: values)
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+                ]),
+            fields: [
+                DatabaseObjectField(
+                    name: "role",
+                    value: .productSpecific(
+                        DatabaseProductValue(
+                            product: .postgresql, typeName: "member_role",
+                            textRepresentation: "viewer")))
+            ])
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [record], fields: [descriptor])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.members"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.editorFields.first?.enumValues == values)
+        #expect(model.editorFields.first?.isEditable == true)
+        model.updateEditorField("role", text: "NULL")
+        let label = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, labelParameters) = label.payload else {
+            Issue.record("Expected relational enum update")
+            return
+        }
+        #expect(labelParameters.first?.value == .string("NULL"))
+        model.setEditorFieldNull("role")
+        let null = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, nullParameters) = null.payload else { return }
+        #expect(nullParameters.first?.value == .null)
+        model.updateEditorField("role", text: "invalid")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.beginInsert(connection)
+        #expect(model.editorFields.first?.enumValues == values)
+        let defaults = try #require(model.editorMutationRequest(connection))
+        #expect(
+            defaults.payload.command
+                == "INSERT INTO \"public\".\"members\" DEFAULT VALUES RETURNING 1")
+        model.updateEditorField("role", text: "editor")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"public\".\"members\" (\"role\") VALUES ($1) RETURNING 1")
+    }
+
+    @Test("Row forms use schema choices, generated fields, explicit nulls, and validated JSON")
+    func typedRowEditor() async throws {
+        func field(
+            _ name: String, _ type: String, nullable: Bool = true, generated: Bool = false,
+            hasDefault: Bool = false
+        ) -> DatabaseFieldDescriptor {
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath(name), displayName: name, typeName: type,
+                isNullable: nullable, isSortable: true, isFilterable: true, isGenerated: generated,
+                hasDefault: hasDefault)
+        }
+        let fields = [
+            field("id", "bigint", nullable: false, generated: true, hasDefault: true),
+            field("active", "boolean", nullable: false, hasDefault: true),
+            field("nickname", "text"),
+            field("settings", "jsonb"), field("price", "numeric"),
+            field("name", "text", nullable: false),
+        ]
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+                ]),
+            fields: [
+                DatabaseObjectField(name: "id", value: .signedInteger(1)),
+                DatabaseObjectField(name: "active", value: .boolean(false)),
+                DatabaseObjectField(name: "nickname", value: .null),
+                DatabaseObjectField(
+                    name: "settings",
+                    value: .productSpecific(
+                        DatabaseProductValue(
+                            product: .postgresql, typeName: "jsonb", textRepresentation: "{}"))),
+                DatabaseObjectField(
+                    name: "price", value: .decimal(DatabaseDecimalValue(rawValue: "1.25"))),
+            ])
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [record], fields: fields)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.members"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(
+            model.editorFields.first(where: { $0.id == "active" })?.choiceValues == [
+                "true", "false",
+            ])
+        #expect(model.usesStructuredEditor(field: "active", connection: connection))
+        #expect(model.usesStructuredEditor(field: "settings", connection: connection))
+        model.updateEditorField("active", text: "true")
+        model.setEditorFieldNull("active")
+        #expect(model.editorFields.first(where: { $0.id == "active" })?.isNull == false)
+        model.updateEditorField("nickname", text: "NULL")
+        let update = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, parameters) = update.payload else { return }
+        #expect(parameters.first(where: { $0.name == "active" })?.value == .boolean(true))
+        #expect(parameters.first(where: { $0.name == "nickname" })?.value == .string("NULL"))
+        model.updateEditorField("nickname", text: "")
+        let empty = try #require(model.editorMutationRequest(connection))
+        guard case let .relational(_, _, emptyParameters) = empty.payload else { return }
+        #expect(emptyParameters.first(where: { $0.name == "nickname" })?.value == .string(""))
+        model.updateEditorField("settings", text: "invalid json")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.updateEditorField("settings", text: "{\"enabled\":true}")
+        #expect(model.editorMutationRequest(connection) != nil)
+        model.updateEditorField("price", text: "12not-a-number")
+        #expect(model.editorMutationRequest(connection) == nil)
+        model.updateEditorField("price", text: "12345678901234567890.123456789")
+        #expect(model.editorMutationRequest(connection) != nil)
+        model.beginInsert(connection)
+        #expect(model.editorFields.first(where: { $0.id == "id" })?.isEditable == false)
+        #expect(model.editorFields.first(where: { $0.id == "name" })?.isIncluded == true)
+        #expect(model.editorFields.first(where: { $0.id == "active" })?.isIncluded == false)
+        model.updateEditorField("id", text: "5")
+        #expect(model.editorFields.first(where: { $0.id == "id" })?.isIncluded == false)
+    }
+
     @Test("Row editor creates canonical update, insert, and delete requests")
     func rowMutationRequests() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
@@ -1362,6 +1502,155 @@ struct DatabaseDataWorkspaceModelTests {
 
         let request = try #require((await sender.recordedRequests()).first?.queryRequest)
         return (request, connection)
+    }
+
+    @Test func tableTabsRetainIndependentStateAndReopenCleanly() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+            Self.response(records: [Self.record(3)]),
+        ])
+        let connection = try Self.connection(product: .postgresql)
+        let firstObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        let secondObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"])
+        let initial = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let tabs = DatabaseTableTabsModel(
+            data: initial,
+            makeData: {
+                DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+            })
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let first = try #require(tabs.selected)
+        first.data.addFilterClause(
+            field: "organization.slug", operation: .equal, valueText: "sample")
+        first.data.setSort(field: "id", direction: .descending, additive: false)
+        first.data.selectRecord(at: 0)
+        first.data.queryText = "SELECT 'saved draft'"
+        first.scrollOffset = CGPoint(x: 120, y: 450)
+        first.mode = .query
+
+        tabs.open(secondObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let second = try #require(tabs.selected)
+        #expect(second.id != first.id)
+        #expect(second.data.filterClauses.isEmpty)
+        #expect(second.data.orderedSorts.isEmpty)
+        #expect(second.scrollOffset == .zero)
+        #expect(second.mode == .browse)
+
+        tabs.open(firstObject, connection: connection)
+        #expect(tabs.tabs.count == 2)
+        #expect(tabs.selected === first)
+        #expect(tabs.data.filterClauses.first?.field == "organization.slug")
+        #expect(tabs.data.records == [Self.record(1)])
+        #expect(tabs.data.selectedRecordIndex == 0)
+        #expect(tabs.data.queryText == "SELECT 'saved draft'")
+        #expect(first.scrollOffset == CGPoint(x: 120, y: 450))
+        #expect(first.mode == .query)
+        #expect(await sender.recordedRequests().count == 2)
+
+        tabs.close(first.id)
+        #expect(tabs.selected === second)
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.filterClauses.isEmpty)
+        tabs.prepare(for: nil)
+        #expect(tabs.tabs.isEmpty)
+        #expect(tabs.data.records.isEmpty)
+    }
+
+    @Test func mutationRefreshesItsTableAfterSwitchingTabs() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+            Self.response(records: [Self.record(3)]),
+        ])
+        let connection = try Self.connection(product: .postgresql)
+        let tabs = DatabaseTableTabsModel(makeData: {
+            DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        })
+        let firstObject = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        tabs.open(firstObject, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let first = try #require(tabs.selected)
+        tabs.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"]),
+            connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let selectedID = tabs.selectedID
+        tabs.finishMutation(
+            target: DatabaseTargetIdentifier(connectionID: connection.id, object: firstObject),
+            connection: connection)
+        await Self.waitUntil { first.data.state == .loaded }
+        #expect(first.data.records == [Self.record(3)])
+        #expect(tabs.selectedID == selectedID)
+        #expect(tabs.data.records == [Self.record(2)])
+    }
+
+    @Test func changingTablesClearsFiltersAndSorts() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "organization"]),
+            connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "slug", valueText: "sample")
+        model.setSort(field: "slug", direction: .ascending, additive: false)
+        model.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "member"]),
+            connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        let request = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(request.page.filter == nil)
+        #expect(request.page.sorts.isEmpty)
+    }
+
+    @Test func queryModeUsesCurrentBrowseSQLAndRefreshesChangedFilters() async throws {
+        func response(_ query: String) -> DatabaseBrokerCommandResponse {
+            .browse(
+                .success(
+                    DatabaseBrowseResult(
+                        page: DatabasePage(
+                            records: [Self.record(1)],
+                            metadata: DatabasePageMetadata(
+                                completeness: .init(state: .complete),
+                                count: .init(value: 1, accuracy: .exact), browseQuery: query))),
+                    metadata: .init(completeness: .init(state: .complete))))
+        }
+        let firstSQL = "SELECT id FROM public.member ORDER BY id LIMIT 100"
+        let filteredSQL =
+            "SELECT id FROM public.member WHERE organization.slug = 'sample' ORDER BY id DESC LIMIT 100"
+        let sender = DatabaseDataScriptedSender(responses: [
+            response(firstSQL), response(filteredSQL),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        let object = DatabaseObjectIdentifier(kind: .table, path: ["public", "member"])
+        model.prepare(for: connection)
+        model.open(object, connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.prepareQuery(object, connection: connection)
+        #expect(model.queryText == firstSQL)
+        #expect(await sender.recordedRequests().count == 1)
+        model.addFilterClause(field: "organization.slug", operation: .equal, valueText: "sample")
+        model.setSort(field: "id", direction: .descending, additive: false)
+        model.prepareQuery(object, connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        #expect(model.queryText == filteredSQL)
+        let request = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(
+            request.page.filter
+                == .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath(["organization", "slug"]), operation: .equal,
+                        values: [.string("sample")])))
+        #expect(request.page.sorts.first?.direction == .descending)
     }
 
     private static func connection(

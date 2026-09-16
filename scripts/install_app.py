@@ -71,6 +71,39 @@ class NativeProcesses:
                 identities.append(identity)
         return identities
 
+    def is_background(self, identity):
+        if self.identity(identity.pid) != identity:
+            return False
+        sysctl = ctypes.CDLL(None, use_errno=True).sysctl
+        sysctl.argtypes = (ctypes.POINTER(ctypes.c_int), ctypes.c_uint,
+                           ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t),
+                           ctypes.c_void_p, ctypes.c_size_t)
+        identifiers = (ctypes.c_int * 3)(1, 49, identity.pid)
+        size = ctypes.c_size_t()
+        if sysctl(identifiers, 3, None, ctypes.byref(size), None, 0) != 0:
+            return False
+        if size.value < 4 or size.value > 4 * 1024 * 1024:
+            return False
+        buffer = ctypes.create_string_buffer(size.value)
+        if sysctl(identifiers, 3, buffer, ctypes.byref(size), None, 0) != 0:
+            return False
+        data = buffer.raw[:size.value]
+        argument_count = struct.unpack_from('=i', data)[0]
+        if argument_count < 0 or argument_count > 65536:
+            return False
+        offset = data.find(b'\0', 4)
+        if offset < 0:
+            return False
+        while offset < len(data) and data[offset] == 0:
+            offset += 1
+        for _ in range(argument_count):
+            end = data.find(b'\0', offset)
+            if end < 0:
+                return False
+            offset = end + 1
+        environment = data[offset:].split(b'\0')
+        return b'EDITH_CLI=1' in environment or b'EDITH_DATABASE_BROKER=1' in environment
+
     def alive(self, identity):
         fields = self.process_info(identity.pid)
         if fields is not None:
@@ -183,8 +216,10 @@ def install_locked(source, destination, quit_application, verify):
         installed_files = {destination / relative: identity for relative in EXECUTABLES
                            if (identity := existing_identity(destination / relative)) is not None}
         main_path = destination / EXECUTABLES[0]
-        quit_application(destination, processes.matching(
-            {main_path: installed_files.get(main_path)}), processes)
+        main_processes = processes.matching({main_path: installed_files.get(main_path)})
+        gui_processes = [identity for identity in main_processes
+                         if not processes.is_background(identity)]
+        quit_application(destination, gui_processes, processes)
         retired_processes = processes.matching(installed_files)
         if existing_identity(destination) != original:
             raise RuntimeError('The installed application changed before publication; retry installation.')

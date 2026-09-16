@@ -105,7 +105,7 @@ struct DatabasePage: View {
     @State private var connectionManagementRoute: DatabaseConnectionManagementRoute?
     @State private var actionConfirmation: DatabaseConnectionActionConfirmation?
     @State private var managementMessage: DatabaseConnectionManagementMessage?
-    @State private var dataWorkspace = DatabaseDataWorkspaceModel()
+    @State private var tableTabs = DatabaseTableTabsModel()
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
@@ -152,7 +152,7 @@ struct DatabasePage: View {
             guard case .succeeded = phase,
                 let connection = connectionWorkspace.selectedConnection
             else { return }
-            dataWorkspace.finishMutation(connection)
+            tableTabs.finishMutation(target: workspace.mutationTarget, connection: connection)
         }
         .onChange(of: connectionWorkspace.selectedConnectionID) { _, connectionID in
             guard let focusedConnectionID, focusedConnectionID != connectionID else { return }
@@ -611,7 +611,7 @@ struct DatabasePage: View {
 
     private func clearWorkspaceDataIfSelected(_ connectionID: DatabaseConnectionID) {
         guard connectionWorkspace.selectedConnectionID == connectionID else { return }
-        dataWorkspace.prepare(for: nil)
+        tableTabs.prepare(for: nil)
         objectExplorer.prepare(for: nil)
     }
 
@@ -641,7 +641,7 @@ struct DatabasePage: View {
             DatabaseWorkbenchView(
                 connections: connectionWorkspace,
                 explorer: objectExplorer,
-                data: dataWorkspace,
+                tabs: tableTabs,
                 mutations: workspace)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

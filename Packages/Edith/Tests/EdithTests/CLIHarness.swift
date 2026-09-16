@@ -232,6 +232,11 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.runningApps = { [] }
         CLIEnvironment.usageRefresh = .scripted(events: [])
+        CLIEnvironment.requestUsageRefresh = { _ in
+            let response = try CLIEnvironment.performAgentOperation(
+                UsageCollectionOperation.refresh.descriptor.id)
+            return try? AgentPayload.decode(String.self, from: response)
+        }
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
         }
