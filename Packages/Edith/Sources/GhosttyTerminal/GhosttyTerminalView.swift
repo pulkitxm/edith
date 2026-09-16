@@ -3,7 +3,6 @@ import GhosttyKit
 
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
-    public var onCloseRequestCancelled: (() -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onFocus: (() -> Void)?
     public var onTitleChange: ((String) -> Void)?
@@ -23,8 +22,6 @@ public final class GhosttyTerminalView: NSView {
     private var owned: GhosttyConfigStrings?
     var temporaryDropFiles = Set<URL>()
     private var closed = false
-    private var closePromptVisible = false
-    private var closeAlert: NSAlert?
     private var pendingExitCode: Int32?
     private var drawScheduled = false
     private(set) var renderingActive = true
@@ -141,11 +138,6 @@ public final class GhosttyTerminalView: NSView {
         GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
         closed = true
         removeWindowObservers()
-        closePromptVisible = false
-        if let closeAlert, let parent = closeAlert.window.sheetParent {
-            parent.endSheet(closeAlert.window, returnCode: .cancel)
-        }
-        closeAlert = nil
         if let surface {
             GhosttyRuntime.shared.drainPendingWork()
             ghostty_surface_free(surface)
@@ -250,47 +242,14 @@ public final class GhosttyTerminalView: NSView {
         }
     }
 
-    private func handleClose(processAlive: Bool) {
+    private func handleClose(processAlive _: Bool) {
         guard !closed else { return }
-        guard processAlive else {
-            finishClose()
-            return
-        }
-        guard !closePromptVisible else { return }
-        closePromptVisible = true
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Close Terminal?"
-        alert.informativeText =
-            "The terminal still has a running process. Closing it will stop that process."
-        alert.addButton(withTitle: "Close Terminal")
-        alert.addButton(withTitle: "Cancel")
-        closeAlert = alert
-        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
-            guard let self, self.closePromptVisible else { return }
-            self.closePromptVisible = false
-            self.closeAlert = nil
-            if response == .alertFirstButtonReturn {
-                self.finishClose()
-            } else {
-                self.onCloseRequestCancelled?()
-            }
-        }
-        if let window {
-            alert.beginSheetModal(for: window, completionHandler: finish)
-        } else {
-            finish(alert.runModal())
-        }
+        finishClose()
     }
 
     private func finishClose() {
         guard !closed else { return }
         closed = true
-        closePromptVisible = false
-        if let closeAlert, let parent = closeAlert.window.sheetParent {
-            parent.endSheet(closeAlert.window, returnCode: .cancel)
-        }
-        closeAlert = nil
         let exitCode = pendingExitCode
         let onClose = onClose
         shutdown()

@@ -178,12 +178,6 @@ final class TerminalSessionHolder {
                 self.finishGhosttySession(view, exitCode: exitCode)
             }
         }
-        view.onCloseRequestCancelled = { [weak self, weak view] in
-            Task { @MainActor in
-                guard let self, let view else { return }
-                self.cancelUserClose(for: view, generation: viewGeneration)
-            }
-        }
         view.onTitleChange = { [weak self] title in
             Task { @MainActor in
                 self?.setCurrentTitle(title, generation: viewGeneration)
@@ -219,10 +213,6 @@ final class TerminalSessionHolder {
             exitCode == nil || exitCode == 0
             ? "Session ended." : "Session ended with status \(exitCode ?? 0)."
         closeCompletion?(true)
-    }
-
-    private func cancelUserClose(for view: GhosttyTerminalView, generation: Int) {
-        takeUserCloseCompletion(for: view, generation: generation)?(false)
     }
 
     private func takeUserCloseCompletion(
