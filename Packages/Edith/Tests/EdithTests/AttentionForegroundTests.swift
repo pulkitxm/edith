@@ -109,7 +109,9 @@ import Testing
     }
 
     @Test func browserApplicationsAreRecognisedByBundleAndName() {
-        #expect(AttentionBrowserIdentity.isBrowser(bundleID: "company.thebrowser.dia", appName: nil))
+        #expect(
+            AttentionBrowserIdentity.isBrowser(
+                bundleID: "company.thebrowser.dia", appName: nil))
         #expect(AttentionBrowserIdentity.isBrowser(bundleID: "com.google.Chrome", appName: nil))
         #expect(AttentionBrowserIdentity.isBrowser(bundleID: nil, appName: "Brave Browser"))
         #expect(
