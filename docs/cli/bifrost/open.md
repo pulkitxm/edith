@@ -41,6 +41,10 @@ is up closes it again. With a query it always shows the bar and replaces
 whatever was in the field, which is what makes
 `ed bifrost open "12 km in miles"` a reasonable thing to bind to a key.
 
+The field is an ordinary text field: ⌘A selects all, ⌘C, ⌘V and ⌘X work, and
+⌘Z and ⇧⌘Z undo and redo. The bar routes those itself, because a menu bar app
+has no Edit menu to carry them.
+
 Return runs the selected row: an application opens, an answer goes to the
 pasteboard. `⌥`-return copies whatever is selected instead, so an application
 row hands you its path rather than launching it, and either way the bar

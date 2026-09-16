@@ -285,3 +285,25 @@ import Testing
         #expect(model.results.map(\.title) == ["One"])
     }
 }
+
+@Suite @MainActor struct BifrostEditingActionTests {
+    @Test func theFieldKeepsEveryStandardEditingShortcut() {
+        #expect(BifrostEditingAction.selector(for: "a", shifted: false) != nil)
+        #expect(BifrostEditingAction.selector(for: "c", shifted: false) != nil)
+        #expect(BifrostEditingAction.selector(for: "v", shifted: false) != nil)
+        #expect(BifrostEditingAction.selector(for: "x", shifted: false) != nil)
+    }
+
+    @Test func undoAndRedoDifferByShift() {
+        let undo = BifrostEditingAction.selector(for: "z", shifted: false)
+        let redo = BifrostEditingAction.selector(for: "z", shifted: true)
+        #expect(undo != redo)
+        #expect(undo == Selector(("undo:")))
+        #expect(redo == Selector(("redo:")))
+    }
+
+    @Test func anythingElseIsLeftToTheResponderChain() {
+        #expect(BifrostEditingAction.selector(for: "q", shifted: false) == nil)
+        #expect(BifrostEditingAction.selector(for: "w", shifted: true) == nil)
+    }
+}

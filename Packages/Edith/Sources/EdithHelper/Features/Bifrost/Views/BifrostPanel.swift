@@ -4,6 +4,31 @@ import SwiftUI
 
 private final class BifrostFloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.contains(.command), !modifiers.contains(.control),
+            !modifiers.contains(.option), let key = event.charactersIgnoringModifiers?.lowercased()
+        else { return super.performKeyEquivalent(with: event) }
+        let shifted = modifiers.contains(.shift)
+        guard let action = BifrostEditingAction.selector(for: key, shifted: shifted) else {
+            return super.performKeyEquivalent(with: event)
+        }
+        return NSApp.sendAction(action, to: nil, from: self)
+    }
+}
+
+enum BifrostEditingAction {
+    static func selector(for key: String, shifted: Bool) -> Selector? {
+        switch key {
+        case "a": #selector(NSText.selectAll(_:))
+        case "c": #selector(NSText.copy(_:))
+        case "v": #selector(NSText.paste(_:))
+        case "x": #selector(NSText.cut(_:))
+        case "z": shifted ? Selector(("redo:")) : Selector(("undo:"))
+        default: nil
+        }
+    }
 }
 
 @MainActor
