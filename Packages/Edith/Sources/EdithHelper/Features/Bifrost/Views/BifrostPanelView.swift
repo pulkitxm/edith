@@ -8,6 +8,7 @@ struct BifrostPanelView: View {
     var onHeightChanged: (CGFloat) -> Void
 
     @State private var model: BifrostPanelModel
+    @State private var lastMouse = NSEvent.mouseLocation
     @FocusState private var searchFocused: Bool
 
     init(
@@ -29,14 +30,15 @@ struct BifrostPanelView: View {
                 footer
             }
         }
-        .frame(width: BifrostPanelMetrics.width, alignment: .top)
-        .background(.black.opacity(0.28))
+        .frame(width: BifrostPanelMetrics.width, height: model.height, alignment: .top)
+        .background(BifrostPanelMetrics.scrim)
         .edithGlass(in: shape)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 1))
         .animation(.easeOut(duration: 0.12), value: model.selectedID)
         .onAppear {
             searchFocused = true
+            lastMouse = NSEvent.mouseLocation
             publishHeight()
         }
         .onChange(of: model.height) { _, _ in publishHeight() }
@@ -44,6 +46,7 @@ struct BifrostPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.willShow)) { note in
             model.reset(query: note.userInfo?[BifrostPanel.prefillKey] as? String ?? "")
             searchFocused = true
+            lastMouse = NSEvent.mouseLocation
             publishHeight()
         }
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.didHide)) { _ in
@@ -130,6 +133,9 @@ struct BifrostPanelView: View {
         .id(result.id)
         .onContinuousHover { phase in
             guard case .active = phase else { return }
+            let location = NSEvent.mouseLocation
+            guard location != lastMouse else { return }
+            lastMouse = location
             model.select(result.id)
         }
     }
@@ -144,7 +150,7 @@ struct BifrostPanelView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: BifrostPanelMetrics.footerHeight)
-        .background(.black.opacity(0.18))
+        .background(.white.opacity(0.04))
     }
 
     private func activate(_ result: BifrostResult?, copyOnly: Bool = false) {
@@ -172,7 +178,7 @@ struct BifrostSectionHeader: View {
                 height: BifrostPanelMetrics.sectionHeaderHeight, alignment: .leading
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial.opacity(0.6))
+            .background(BifrostPanelMetrics.scrim)
     }
 }
 

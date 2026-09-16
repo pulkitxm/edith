@@ -109,3 +109,27 @@ import Testing
         #expect(positions.horizontal.allSatisfy { frame.minY < $0 && $0 < frame.maxY })
     }
 }
+
+@Suite struct BifrostPanelFrameTests {
+    @Test func growingTheBarKeepsItsTopEdgeWhereItWas() {
+        let top = CGPoint(x: 200, y: 900)
+        let collapsed = BifrostPanelMetrics.frame(
+            anchorTop: top, height: BifrostPanelMetrics.headerHeight)
+        let grown = BifrostPanelMetrics.frame(anchorTop: top, height: 420)
+
+        #expect(collapsed.maxY == top.y)
+        #expect(grown.maxY == top.y)
+        #expect(collapsed.minX == grown.minX)
+        #expect(grown.height == 420)
+        #expect(grown.width == BifrostPanelMetrics.width)
+    }
+
+    @Test func shrinkingTheBarKeepsItsTopEdgeWhereItWas() {
+        let top = CGPoint(x: 0, y: 500)
+        let tall = BifrostPanelMetrics.frame(anchorTop: top, height: 400)
+        let short = BifrostPanelMetrics.frame(anchorTop: top, height: 100)
+
+        #expect(tall.maxY == short.maxY)
+        #expect(short.minY > tall.minY)
+    }
+}

@@ -53,6 +53,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     private var hosting: NSHostingView<AnyView>?
     private var showTask: Task<Void, Never>?
     private var showGeneration = 0
+    private var anchorTop: CGPoint?
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -66,26 +67,29 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
 
     func show(query: String = "") {
         guard store != nil, let panel else { return }
-        NotificationCenter.default.post(
-            name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
+        let collapsed = NSSize(
+            width: BifrostPanelMetrics.width, height: BifrostPanelMetrics.headerHeight)
+        panel.setContentSize(collapsed)
         let position = PopupPosition.stored(forKey: AppStorageKeys.Bifrost.popupAt)
-        let size = panel.frame.size
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
         showTask = Task.detached { [weak self] in
             let origin = await position.origin(
-                size: size, statusItemFrame: nil, anchors: .bifrost)
+                size: collapsed, statusItemFrame: nil, anchors: .bifrost)
             guard !Task.isCancelled else { return }
-            await self?.finishShow(origin: origin, generation: generation)
+            await self?.finishShow(origin: origin, generation: generation, query: query)
         }
     }
 
-    private func finishShow(origin: NSPoint, generation: Int) {
+    private func finishShow(origin: NSPoint, generation: Int, query: String) {
         guard generation == showGeneration, let panel else { return }
         panel.setFrameOrigin(origin)
+        anchorTop = CGPoint(x: origin.x, y: origin.y + BifrostPanelMetrics.headerHeight)
         panel.orderFrontRegardless()
         panel.makeKey()
+        NotificationCenter.default.post(
+            name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
     }
 
     func hide() {
@@ -99,10 +103,11 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
 
     func resize(height: CGFloat) {
         guard let panel else { return }
-        guard abs(panel.frame.height - height) > 0.5 else { return }
-        var frame = panel.frame
-        frame.origin.y += frame.height - height
-        frame.size = NSSize(width: BifrostPanelMetrics.width, height: height)
+        let top =
+            anchorTop ?? CGPoint(x: panel.frame.minX, y: panel.frame.minY + panel.frame.height)
+        anchorTop = top
+        let frame = BifrostPanelMetrics.frame(anchorTop: top, height: height)
+        guard frame != panel.frame else { return }
         panel.setFrame(frame, display: true)
     }
 
@@ -140,10 +145,18 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         created.isMovableByWindowBackground = true
         created.delegate = self
 
+        let container = NSView()
         let host = NSHostingView(rootView: AnyView(EmptyView()))
-        host.translatesAutoresizingMaskIntoConstraints = true
-        host.autoresizingMask = [.width, .height]
-        created.contentView = host
+        host.sizingOptions = []
+        host.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            host.topAnchor.constraint(equalTo: container.topAnchor),
+            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        created.contentView = container
         hosting = host
         panel = created
     }
@@ -155,6 +168,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
 
     private func finishDrag() {
         guard let panel else { return }
+        anchorTop = CGPoint(x: panel.frame.minX, y: panel.frame.minY + panel.frame.height)
         PopupPosition.saveLastPosition(
             frame: panel.frame, screen: panel.screen, anchors: .bifrost)
         SharedDefaults.store.set(

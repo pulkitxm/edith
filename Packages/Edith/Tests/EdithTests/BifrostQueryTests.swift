@@ -133,6 +133,23 @@ import Testing
         #expect(titles("vsc").first == "Visual Studio Code")
     }
 
+    @Test func resultsNeverInterleaveTheirKinds() {
+        let results = BifrostQuery.results(
+            query: "e", applications: Self.applications, commands: Self.commands, limit: 8)
+        let sections = BifrostSectionBuilder.sections(from: results, query: "e")
+
+        #expect(!results.isEmpty)
+        #expect(sections.count == Set(sections.map(\.id)).count)
+        #expect(sections.map(\.id) == ["application", "command"])
+    }
+
+    @Test func anAnswerLeadsWhateverElseMatches() {
+        let results = BifrostQuery.results(
+            query: "2+2", applications: Self.applications, commands: Self.commands, limit: 8)
+
+        #expect(results.first?.kind == .calculation)
+    }
+
     @Test func everyResultKnowsWhatCopyingItMeans() throws {
         let application = try #require(
             BifrostQuery.results(query: "safari", applications: Self.applications).first)

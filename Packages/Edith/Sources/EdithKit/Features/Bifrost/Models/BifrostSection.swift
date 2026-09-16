@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 
 public struct BifrostSection: Identifiable, Equatable, Sendable {
     public let id: String
@@ -51,6 +52,13 @@ public enum BifrostPanelMetrics {
     public static let footerHeight: CGFloat = 36
     public static let listPadding: CGFloat = 6
     public static let cornerRadius: CGFloat = 14
+    public static let scrimOpacity: Double = 0.62
+
+    public static var scrim: Color { Color.black.opacity(scrimOpacity) }
+
+    public static func frame(anchorTop: CGPoint, height: CGFloat) -> CGRect {
+        CGRect(x: anchorTop.x, y: anchorTop.y - height, width: width, height: height)
+    }
 
     public static func height(for sections: [BifrostSection]) -> CGFloat {
         guard !sections.isEmpty else { return headerHeight }

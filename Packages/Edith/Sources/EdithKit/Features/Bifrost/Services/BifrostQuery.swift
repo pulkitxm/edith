@@ -61,8 +61,21 @@ public enum BifrostQuery {
                     result: commandResult(command, score: base + boost(key, query, ledger, now)),
                     name: command.title, tie: command.id))
         }
-        return order(scored).prefix(limit).map(\.result)
+        return grouped(order(scored).prefix(limit).map(\.result))
     }
+
+    static func grouped(_ results: [BifrostResult]) -> [BifrostResult] {
+        var byKind: [BifrostResultKind: [BifrostResult]] = [:]
+        for result in results { byKind[result.kind, default: []].append(result) }
+        var ordered: [BifrostResult] = []
+        for kind in kindOrder {
+            guard let group = byKind[kind] else { continue }
+            ordered.append(contentsOf: group)
+        }
+        return ordered
+    }
+
+    static let kindOrder: [BifrostResultKind] = [.conversion, .calculation, .application, .command]
 
     struct Candidate {
         let result: BifrostResult
