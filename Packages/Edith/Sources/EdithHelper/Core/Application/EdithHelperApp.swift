@@ -172,6 +172,9 @@ struct EdithApp {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.requestClipboardPanel) {
+            MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
+        }
         _ = IPC.observe(IPC.Name.requestBifrostPanel) { info in
             let query = info[BifrostPanelIPC.queryKey] as? String ?? ""
             MainActor.assumeIsolated { BifrostPanel.shared.toggle(query: query) }

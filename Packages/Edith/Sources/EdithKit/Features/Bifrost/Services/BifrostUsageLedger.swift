@@ -16,6 +16,9 @@ public struct BifrostUsageLedger: Codable, Sendable, Equatable {
     public static let halfLifeDays: Double = 14
     public static let capacity = 300
     public static let scoreCeiling = 240
+    public static let queryCeiling = 420
+    public static let queryPrefix = "q:"
+    public static let querySeparator: Character = "\u{1}"
 
     public private(set) var entries: [BifrostUsage]
 
@@ -35,11 +38,53 @@ public struct BifrostUsageLedger: Codable, Sendable, Equatable {
         return min(Int((log2(decayed + 1) * 60).rounded()), Self.scoreCeiling)
     }
 
+    public static func queryKey(query: String, target: String) -> String? {
+        let normalized = normalize(query)
+        guard !normalized.isEmpty else { return nil }
+        return queryPrefix + normalized + String(querySeparator) + target
+    }
+
+    public static func normalize(_ query: String) -> String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    public static func lesson(decayed: Double, exact: Bool) -> Int {
+        let weight = exact ? 300.0 : 150.0
+        let repeats = exact ? 60.0 : 30.0
+        let scaled = weight * min(decayed, 1) + repeats * log2(decayed + 1)
+        return min(Int(scaled.rounded()), queryCeiling)
+    }
+
+    public func queryBoost(for target: String, query: String, now: Date) -> Int {
+        let typed = Self.normalize(query)
+        guard !typed.isEmpty else { return 0 }
+        var best = 0
+        for entry in entries {
+            guard entry.target.hasPrefix(Self.queryPrefix) else { continue }
+            let body = entry.target.dropFirst(Self.queryPrefix.count)
+            guard let split = body.firstIndex(of: Self.querySeparator) else { continue }
+            let learned = String(body[body.startIndex..<split])
+            guard String(body[body.index(after: split)...]) == target else { continue }
+            guard learned.hasPrefix(typed) else { continue }
+            let decayed = Self.score(entry, now: now)
+            guard decayed > 0 else { continue }
+            best = max(best, Self.lesson(decayed: decayed, exact: learned.count == typed.count))
+        }
+        return best
+    }
+
+    public mutating func record(_ target: String, query: String, at moment: Date) {
+        record(target, at: moment)
+        guard let key = Self.queryKey(query: query, target: target) else { return }
+        record(key, at: moment)
+    }
+
     public func ranked(now: Date, limit: Int) -> [String] {
         guard limit > 0 else { return [] }
-        let scored: [(target: String, score: Double, lastUsedAt: Date)] = entries.map {
-            ($0.target, Self.score($0, now: now), $0.lastUsedAt)
-        }
+        let scored: [(target: String, score: Double, lastUsedAt: Date)] =
+            entries
+            .filter { !$0.target.hasPrefix(Self.queryPrefix) }
+            .map { ($0.target, Self.score($0, now: now), $0.lastUsedAt) }
         let ordered = scored.sorted { first, second in
             if first.score != second.score { return first.score > second.score }
             if first.lastUsedAt != second.lastUsedAt { return first.lastUsedAt > second.lastUsedAt }

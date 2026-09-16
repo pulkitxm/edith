@@ -17,6 +17,17 @@ import Testing
             name: "Visual Studio Code", path: "/Applications/Visual Studio Code.app"),
     ]
 
+    private static let commands = [
+        BifrostCommand(
+            id: "emoji.pick", title: "Emoji Picker", subtitle: "Type an emoji",
+            symbolName: "face.smiling", abilityID: "emoji",
+            notification: Notification.Name("fixture.emoji"), terms: ["emoji"]),
+        BifrostCommand(
+            id: "clipboard.open", title: "Clipboard History", subtitle: "Paste something",
+            symbolName: "doc.on.clipboard", abilityID: "clipboard",
+            notification: Notification.Name("fixture.clipboard"), terms: ["paste"]),
+    ]
+
     private func titles(_ query: String, limit: Int = 8) -> [String] {
         BifrostQuery.results(query: query, applications: Self.applications, limit: limit)
             .map(\.title)
@@ -62,6 +73,64 @@ import Testing
         #expect(result.kind == .application)
         #expect(result.action == .launch(path: "/Applications/Safari.app"))
         #expect(result.subtitle == "/Applications")
+    }
+
+    @Test func commandsRankAlongsideApplications() {
+        let results = BifrostQuery.results(
+            query: "emoji", applications: Self.applications, commands: Self.commands)
+
+        #expect(results.first?.title == "Emoji Picker")
+        #expect(results.first?.kind == .command)
+        #expect(results.first?.action == .run(commandID: "emoji.pick"))
+    }
+
+    @Test func aCommandIsFoundByWhatItDoesNotOnlyItsName() {
+        let results = BifrostQuery.results(
+            query: "paste", applications: Self.applications, commands: Self.commands)
+
+        #expect(results.first?.title == "Clipboard History")
+    }
+
+    @Test func picKingOneResultTeachesTheQuery() {
+        var ledger = BifrostUsageLedger()
+        let now = Date()
+        let plain = BifrostQuery.results(
+            query: "c", applications: Self.applications, commands: Self.commands, limit: 5)
+        ledger.record("app:/Applications/Google Chrome.app", query: "c", at: now)
+
+        let taught = BifrostQuery.results(
+            query: "c", applications: Self.applications, commands: Self.commands,
+            ledger: ledger, now: now, limit: 5)
+
+        #expect(plain.first?.title == "Calculator")
+        #expect(taught.first?.title == "Google Chrome")
+    }
+
+    @Test func whatWasTaughtForALongerQueryStillHelpsAShorterOne() {
+        var ledger = BifrostUsageLedger()
+        let now = Date()
+        ledger.record("app:/System/Applications/Notes.app", query: "note", at: now)
+
+        let results = BifrostQuery.results(
+            query: "n", applications: Self.applications, ledger: ledger, now: now, limit: 5)
+
+        #expect(results.first?.title == "Notes")
+    }
+
+    @Test func aLessonForOneQueryDoesNotLeakIntoAnother() {
+        var ledger = BifrostUsageLedger()
+        let now = Date()
+        ledger.record("app:/System/Applications/Notes.app", query: "note", at: now)
+
+        #expect(
+            ledger.queryBoost(for: "app:/System/Applications/Notes.app", query: "s", now: now) == 0)
+        #expect(
+            ledger.queryBoost(for: "app:/Applications/Safari.app", query: "note", now: now) == 0)
+    }
+
+    @Test func initialsFindAnApplication() {
+        #expect(titles("gc").first == "Google Chrome")
+        #expect(titles("vsc").first == "Visual Studio Code")
     }
 
     @Test func everyResultKnowsWhatCopyingItMeans() throws {

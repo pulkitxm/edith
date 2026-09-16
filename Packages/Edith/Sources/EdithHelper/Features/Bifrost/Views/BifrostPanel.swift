@@ -35,13 +35,11 @@ enum BifrostEditingAction {
 final class BifrostPanel: NSObject, NSWindowDelegate {
     static let shared = BifrostPanel()
 
-    static let width: CGFloat = 560
-    static let rowHeight: CGFloat = 46
-    static let headerHeight: CGFloat = 52
-    static let listPadding: CGFloat = 6
     static let willShow = Notification.Name("bifrostPanelWillShow")
     static let didHide = Notification.Name("bifrostPanelDidHide")
     static let prefillKey = "bifrostPanelPrefill"
+
+    let guides = BifrostDragGuides()
 
     weak var store: BifrostStore? {
         didSet {
@@ -57,11 +55,6 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     private var showGeneration = 0
 
     var isVisible: Bool { panel?.isVisible ?? false }
-
-    static func height(forRows rows: Int) -> CGFloat {
-        guard rows > 0 else { return headerHeight }
-        return headerHeight + CGFloat(rows) * rowHeight + listPadding
-    }
 
     func toggle(query: String = "") {
         if isVisible, query.isEmpty {
@@ -99,17 +92,17 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         showGeneration += 1
         showTask?.cancel()
         showTask = nil
+        guides.hide()
         panel?.orderOut(nil)
         NotificationCenter.default.post(name: Self.didHide, object: nil)
     }
 
-    func resize(rows: Int) {
+    func resize(height: CGFloat) {
         guard let panel else { return }
-        let height = Self.height(forRows: rows)
         guard abs(panel.frame.height - height) > 0.5 else { return }
         var frame = panel.frame
         frame.origin.y += frame.height - height
-        frame.size = NSSize(width: Self.width, height: height)
+        frame.size = NSSize(width: BifrostPanelMetrics.width, height: height)
         panel.setFrame(frame, display: true)
     }
 
@@ -122,13 +115,15 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         hosting?.rootView = AnyView(
             BifrostPanelView(
                 store: store, onDismiss: { [weak self] in self?.hide() },
-                onRowsChanged: { [weak self] rows in self?.resize(rows: rows) }))
+                onHeightChanged: { [weak self] height in self?.resize(height: height) }))
         hosting?.layoutSubtreeIfNeeded()
     }
 
     private func makePanel() {
         let created = BifrostFloatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: Self.height(forRows: 0)),
+            contentRect: NSRect(
+                x: 0, y: 0, width: BifrostPanelMetrics.width,
+                height: BifrostPanelMetrics.headerHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: true)
         created.isOpaque = false
@@ -145,30 +140,32 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         created.isMovableByWindowBackground = true
         created.delegate = self
 
-        let effect = NSVisualEffectView()
-        effect.material = .hudWindow
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 12
-        effect.layer?.masksToBounds = true
-
         let host = NSHostingView(rootView: AnyView(EmptyView()))
-        host.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(host)
-        NSLayoutConstraint.activate([
-            host.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            host.topAnchor.constraint(equalTo: effect.topAnchor),
-            host.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
-        ])
-        created.contentView = effect
+        host.translatesAutoresizingMaskIntoConstraints = true
+        host.autoresizingMask = [.width, .height]
+        created.contentView = host
         hosting = host
         panel = created
     }
 
+    private func beginDrag() {
+        guard let panel, panel.isVisible else { return }
+        guides.show(on: panel.screen) { [weak self] in self?.finishDrag() }
+    }
+
+    private func finishDrag() {
+        guard let panel else { return }
+        PopupPosition.saveLastPosition(
+            frame: panel.frame, screen: panel.screen, anchors: .bifrost)
+        SharedDefaults.store.set(
+            PopupPosition.lastPosition.rawValue, forKey: AppStorageKeys.Bifrost.popupAt)
+    }
+
     nonisolated func windowDidResignKey(_ notification: Notification) {
-        Task { @MainActor in BifrostPanel.shared.hide() }
+        Task { @MainActor in
+            guard !BifrostPanel.shared.guides.isVisible else { return }
+            BifrostPanel.shared.hide()
+        }
     }
 
     nonisolated func windowDidMove(_ notification: Notification) {
@@ -176,8 +173,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
             guard let panel = BifrostPanel.shared.panel, panel.isVisible,
                 NSEvent.pressedMouseButtons & 1 == 1
             else { return }
-            PopupPosition.saveLastPosition(
-                frame: panel.frame, screen: panel.screen, anchors: .bifrost)
+            BifrostPanel.shared.beginDrag()
         }
     }
 }

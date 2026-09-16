@@ -105,6 +105,23 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   loses to something you opened five times this week. The ledger holds at most
   300 entries and the boost it contributes is capped, so frequency breaks ties
   between comparable matches rather than overriding the match itself.
+- **Commands sit next to applications.** The bar also lists Edith's own
+  abilities as commands: the clipboard history, the emoji picker, the colour
+  picker, the Edith panel and a rebuild of this index. A command only appears
+  while the ability behind it is enabled, and it matches on what it does as
+  well as its name, so `paste` finds the clipboard history.
+- **The bar learns what you meant.** Picking a result records the query you
+  typed as well as what you opened, so once you have opened WhatsApp from `w`,
+  `w` puts it first next time. A lesson from a longer query still helps a
+  shorter prefix of it, it never leaks into an unrelated query, and it decays
+  on the same fourteen-day half-life as everything else, so a one-off choice
+  fades rather than sticking forever.
+- **Dragging the bar makes its position yours.** The bar is movable by its
+  background; dashed guides appear across the screen while you drag, and
+  letting go writes the position and switches `bifrostPopupAt` to
+  `lastPosition`, so it opens where you left it until you choose another mode.
+- **The field is an ordinary text field.** ⌘A, ⌘C, ⌘V, ⌘X, ⌘Z and ⇧⌘Z all work,
+  which a menu bar app has to arrange for itself because it has no Edit menu.
 - **Return runs, `⌥`-return copies.** Return opens an application and puts an
   answer on the pasteboard; holding option copies whichever row is selected,
   including an application's path. Only the first of those counts as opening

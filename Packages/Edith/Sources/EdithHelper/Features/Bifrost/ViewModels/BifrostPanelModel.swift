@@ -1,3 +1,4 @@
+import CoreGraphics
 import EdithKit
 import Foundation
 import Observation
@@ -7,6 +8,7 @@ import Observation
 final class BifrostPanelModel {
     private(set) var query = ""
     private(set) var results: [BifrostResult] = []
+    private(set) var sections: [BifrostSection] = []
     private(set) var selectedID: String?
 
     @ObservationIgnored private let resolve: (String) -> [BifrostResult]
@@ -37,9 +39,16 @@ final class BifrostPanelModel {
         refresh(resetSelection: true)
     }
 
+    var height: CGFloat { BifrostPanelMetrics.height(for: sections) }
+
+    var listHeight: CGFloat {
+        max(height - BifrostPanelMetrics.headerHeight - BifrostPanelMetrics.footerHeight, 0)
+    }
+
     func refresh(resetSelection: Bool = false) {
         let previous = selectedID
         results = resolve(query)
+        sections = BifrostSectionBuilder.sections(from: results, query: query)
         if resetSelection || previous == nil || index(of: previous ?? "") == nil {
             selectedID = results.first?.id
         } else {

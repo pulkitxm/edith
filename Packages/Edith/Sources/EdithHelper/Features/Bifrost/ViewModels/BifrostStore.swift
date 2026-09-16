@@ -6,6 +6,7 @@ import Foundation
 @Observable
 final class BifrostStore: FeatureModule {
     private(set) var applications: [BifrostApplication] = []
+    private(set) var commands: [BifrostCommand] = []
     private(set) var indexedAt: Date?
     private(set) var isIndexing = false
     private(set) var revision = 0
@@ -19,26 +20,32 @@ final class BifrostStore: FeatureModule {
     private let scan: @Sendable () -> [BifrostApplication]
     private let open: @MainActor (String) -> Bool
     private let copy: @MainActor (String) -> Void
+    private let post: @MainActor (Notification.Name) -> Void
 
     required convenience init() {
         self.init(
             store: SharedDefaults.store, indexStore: .shared,
             scan: { BifrostApplicationScanner.scan(roots: BifrostApplicationScanner.defaultRoots) },
             open: { BifrostLauncher.open(path: $0) },
-            copy: { BifrostLauncher.copy(text: $0) })
+            copy: { BifrostLauncher.copy(text: $0) },
+            post: { IPC.post($0) })
     }
 
     init(
         store: UserDefaults, indexStore: BifrostIndexStore,
         scan: @escaping @Sendable () -> [BifrostApplication],
-        open: @escaping @MainActor (String) -> Bool, copy: @escaping @MainActor (String) -> Void
+        open: @escaping @MainActor (String) -> Bool,
+        copy: @escaping @MainActor (String) -> Void,
+        post: @escaping @MainActor (Notification.Name) -> Void = { IPC.post($0) }
     ) {
         self.store = store
         self.indexStore = indexStore
         self.scan = scan
         self.open = open
         self.copy = copy
+        self.post = post
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
+        commands = BifrostCommandCatalog.available(in: store)
         if let cached = indexStore.load() {
             applications = cached.applications
             indexedAt = cached.generatedAt
@@ -67,16 +74,21 @@ final class BifrostStore: FeatureModule {
 
     func results(for query: String, now: Date = Date()) -> [BifrostResult] {
         BifrostQuery.results(
-            query: query, applications: applications, ledger: ledger, now: now,
-            limit: resultLimit)
+            query: query, applications: applications, commands: commands, ledger: ledger,
+            now: now, limit: resultLimit)
     }
 
     @discardableResult
-    func run(_ result: BifrostResult, now: Date = Date()) -> Bool {
+    func run(_ result: BifrostResult, query: String = "", now: Date = Date()) -> Bool {
         switch result.action {
         case .launch(let path):
             guard open(path) else { return false }
-            record(result.action.targetKey, at: now)
+            record(result.action.targetKey, query: query, at: now)
+            return true
+        case .run(let commandID):
+            guard let command = BifrostCommandCatalog.command(id: commandID) else { return false }
+            post(command.notification)
+            record(result.action.targetKey, query: query, at: now)
             return true
         case .copy(let text):
             copy(text)
@@ -122,8 +134,8 @@ final class BifrostStore: FeatureModule {
         IPC.post(IPC.Name.bifrostIndexChanged)
     }
 
-    private func record(_ targetKey: String, at moment: Date) {
-        ledger.record(targetKey, at: moment)
+    private func record(_ targetKey: String, query: String, at moment: Date) {
+        ledger.record(targetKey, query: query, at: moment)
         persistLedger()
     }
 
@@ -134,6 +146,7 @@ final class BifrostStore: FeatureModule {
 
     private func adoptSettings() {
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
+        commands = BifrostCommandCatalog.available(in: store)
         revision += 1
     }
 }

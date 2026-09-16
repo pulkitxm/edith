@@ -2,25 +2,38 @@ import Foundation
 
 public enum BifrostResultKind: String, Codable, Sendable {
     case application
+    case command
     case calculation
     case conversion
 
     public var title: String {
         switch self {
         case .application: "Applications"
+        case .command: "Commands"
         case .calculation: "Calculator"
         case .conversion: "Conversion"
+        }
+    }
+
+    public var accessory: String {
+        switch self {
+        case .application: "Application"
+        case .command: "Command"
+        case .calculation: "Answer"
+        case .conversion: "Answer"
         }
     }
 }
 
 public enum BifrostAction: Equatable, Sendable {
     case launch(path: String)
+    case run(commandID: String)
     case copy(text: String)
 
     public var targetKey: String {
         switch self {
         case .launch(let path): "app:" + path
+        case .run(let commandID): "command:" + commandID
         case .copy: "copy"
         }
     }
@@ -28,7 +41,15 @@ public enum BifrostAction: Equatable, Sendable {
     public var copyText: String {
         switch self {
         case .launch(let path): path
+        case .run(let commandID): commandID
         case .copy(let text): text
+        }
+    }
+
+    public var isRepeatable: Bool {
+        switch self {
+        case .launch, .run: true
+        case .copy: false
         }
     }
 }
@@ -58,9 +79,6 @@ public struct BifrostResult: Identifiable, Equatable, Sendable {
     }
 
     public var accessoryText: String {
-        switch action {
-        case .launch: "Open"
-        case .copy: "Copy"
-        }
+        kind.accessory
     }
 }
