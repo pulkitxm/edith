@@ -98,6 +98,11 @@ import Testing
         #expect(sections.first?.title == "Today")
     }
 
+    @Test func smallEntriesReportBytesRatherThanZero() {
+        #expect(BifrostFileFormat.size(41) == "41 bytes")
+        #expect(BifrostFileFormat.size(163_000).hasSuffix("KB"))
+    }
+
     @Test func aTextEntryReportsItsOwnLengthWhenTheBlobIsEmpty() {
         let empty = ClipboardEntry(
             id: "e", sha256: "e", types: [], ext: "txt", sourceApp: nil, sourceBundleID: nil,
@@ -182,5 +187,80 @@ import Testing
         #expect(BifrostCommandCatalog.command(id: "clipboard.open")?.mode == .clipboard)
         #expect(BifrostCommandCatalog.command(id: "files.search")?.mode == .files)
         #expect(BifrostCommandCatalog.command(id: "panel.open")?.mode == nil)
+    }
+}
+
+@Suite struct BifrostSearchPlanTests {
+    @Test func ripgrepListsFilesForANameSearchAndGrepsForContents() {
+        let names = BifrostRipgrep.arguments(
+            for: BifrostSearchPlan(query: "report", root: "/Users/x", target: .name))
+        let contents = BifrostRipgrep.arguments(
+            for: BifrostSearchPlan(query: "TODO", root: "/Users/x", target: .contents))
+
+        #expect(names.contains("--files"))
+        #expect(!names.contains("TODO"))
+        #expect(contents.contains("--files-with-matches"))
+        #expect(contents.contains("TODO"))
+        #expect(contents.last == "/Users/x")
+    }
+
+    @Test func aKindBecomesGlobs() {
+        let arguments = BifrostRipgrep.arguments(
+            for: BifrostSearchPlan(query: "", root: "/r", kind: .images))
+
+        #expect(arguments.contains("--glob"))
+        #expect(arguments.contains("*.png"))
+        #expect(!BifrostSearchKind.everything.extensions.isEmpty == false)
+    }
+
+    @Test func nameMatchingComparesTheLastPathComponent() {
+        let paths = ["/a/report.pdf", "/b/notes.txt", "/c/Reported.md"]
+
+        #expect(
+            BifrostRipgrep.filterNames(paths, query: "report")
+                == ["/a/report.pdf", "/c/Reported.md"])
+        #expect(BifrostRipgrep.filterNames(paths, query: " ") == paths)
+    }
+
+    @Test func aRemoteSearchIsOneCappedShellCommand() {
+        let command = BifrostRipgrep.remoteCommand(
+            for: BifrostSearchPlan(query: "build", root: "/srv", machine: "box"))
+
+        #expect(command.contains("rg --files"))
+        #expect(command.contains("/srv"))
+        #expect(command.contains("head -n \(BifrostFileSearch.limit)"))
+        #expect(command.contains("'build'"))
+    }
+
+    @Test func quotingSurvivesAnAwkwardQuery() {
+        #expect(BifrostRipgrep.shellQuoted("it's") == "'it'\\''s'")
+        #expect(
+            BifrostRipgrep.remoteCommand(
+                for: BifrostSearchPlan(query: "a'b", root: nil, target: .contents, machine: "box")
+            ).contains("'a'\\''b'"))
+    }
+
+    @Test func remotePathsBecomeRowsThatNameTheirMachine() throws {
+        let files = BifrostFileSearch.remote(paths: ["/srv/app/main.rs"], machine: "box")
+        let result = try #require(
+            BifrostFileSearch.results(files: files, now: Date(), query: "main").first)
+
+        #expect(files.first?.machine == "box")
+        #expect(result.subtitle.hasPrefix("box"))
+        #expect(result.iconPath == nil)
+        #expect(result.detail?.rows.contains { $0.label == "Machine" } == true)
+    }
+
+    @Test func aMachineScopeCarriesItsName() {
+        let scopes = BifrostScopeCatalog.files(home: "/Users/sam", machines: ["box", "build"])
+
+        #expect(scopes.last?.machine == "build")
+        #expect(scopes.first?.machine == nil)
+        #expect(scopes.contains { $0.id == "machine:box" })
+    }
+
+    @Test func ripgrepIsFoundOnlyWhereItIsExecutable() {
+        #expect(BifrostRipgrep.executable(paths: ["/nowhere/rg"]) == nil)
+        #expect(BifrostRipgrep.executable(paths: ["/bin/sh"])?.path == "/bin/sh")
     }
 }

@@ -118,6 +118,16 @@ struct BifrostPanelView: View {
             if store.isIndexing || store.isLoadingMode {
                 BifrostSkeletonPill()
             }
+            if store.mode == .files {
+                filterPicker(
+                    title: store.target.title,
+                    options: BifrostSearchTarget.allCases.map { ($0.title, $0) },
+                    select: { store.select(target: $0, query: model.query) })
+                filterPicker(
+                    title: store.searchKind.title,
+                    options: BifrostSearchKind.allCases.map { ($0.title, $0) },
+                    select: { store.select(searchKind: $0, query: model.query) })
+            }
             if store.mode != .launcher {
                 scopePicker
             }
@@ -134,6 +144,28 @@ struct BifrostPanelView: View {
         } label: {
             HStack(spacing: 5) {
                 Text(store.scope.title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private func filterPicker<Option>(
+        title: String, options: [(String, Option)], select: @escaping (Option) -> Void
+    ) -> some View {
+        Menu {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                Button(option.0) { select(option.1) }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(title)
                     .font(.system(size: 12))
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")

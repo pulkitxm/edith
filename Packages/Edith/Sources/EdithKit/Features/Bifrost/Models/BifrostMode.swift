@@ -72,11 +72,13 @@ public struct BifrostScope: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let path: String?
+    public let machine: String?
 
-    public init(id: String, title: String, path: String? = nil) {
+    public init(id: String, title: String, path: String? = nil, machine: String? = nil) {
         self.id = id
         self.title = title
         self.path = path
+        self.machine = machine
     }
 }
 
@@ -91,25 +93,29 @@ public enum BifrostScopeCatalog {
         ]
     }
 
-    public static func files(home: String = NSHomeDirectory()) -> [BifrostScope] {
+    public static func files(
+        home: String = NSHomeDirectory(), machines: [String] = []
+    ) -> [BifrostScope] {
         let name = (home as NSString).lastPathComponent
-        return [
+        var scopes = [
             BifrostScope(id: "home", title: "User (\(name))", path: home),
-            BifrostScope(
-                id: "desktop", title: "Desktop", path: home + "/Desktop"),
-            BifrostScope(
-                id: "documents", title: "Documents", path: home + "/Documents"),
-            BifrostScope(
-                id: "downloads", title: "Downloads", path: home + "/Downloads"),
+            BifrostScope(id: "desktop", title: "Desktop", path: home + "/Desktop"),
+            BifrostScope(id: "documents", title: "Documents", path: home + "/Documents"),
+            BifrostScope(id: "downloads", title: "Downloads", path: home + "/Downloads"),
             BifrostScope(id: "everywhere", title: "Everywhere"),
         ]
+        for machine in machines {
+            scopes.append(
+                BifrostScope(id: "machine:" + machine, title: machine, machine: machine))
+        }
+        return scopes
     }
 
-    public static func scopes(for mode: BifrostMode) -> [BifrostScope] {
+    public static func scopes(for mode: BifrostMode, machines: [String] = []) -> [BifrostScope] {
         switch mode {
         case .launcher: []
         case .clipboard: clipboard()
-        case .files: files()
+        case .files: files(machines: machines)
         }
     }
 }

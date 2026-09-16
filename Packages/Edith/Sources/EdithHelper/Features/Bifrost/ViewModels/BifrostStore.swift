@@ -10,6 +10,9 @@ final class BifrostStore: FeatureModule {
     private(set) var rates: BifrostRates?
     private(set) var mode: BifrostMode = .launcher
     private(set) var scope: BifrostScope = BifrostScopeCatalog.clipboard()[0]
+    private(set) var target: BifrostSearchTarget = .name
+    private(set) var searchKind: BifrostSearchKind = .everything
+    private(set) var machines: [String] = []
     private(set) var modeResults: [BifrostResult] = []
     private(set) var isLoadingMode = false
     private(set) var indexedAt: Date?
@@ -98,7 +101,7 @@ final class BifrostStore: FeatureModule {
             rates: rates, now: now, limit: resultLimit)
     }
 
-    var scopes: [BifrostScope] { BifrostScopeCatalog.scopes(for: mode) }
+    var scopes: [BifrostScope] { BifrostScopeCatalog.scopes(for: mode, machines: machines) }
 
     func enter(_ mode: BifrostMode, query: String = "") {
         guard self.mode != mode else { return }
@@ -126,6 +129,18 @@ final class BifrostStore: FeatureModule {
         loadMode(query: query)
     }
 
+    func select(target: BifrostSearchTarget, query: String) {
+        guard target != self.target else { return }
+        self.target = target
+        loadMode(query: query)
+    }
+
+    func select(searchKind: BifrostSearchKind, query: String) {
+        guard searchKind != self.searchKind else { return }
+        self.searchKind = searchKind
+        loadMode(query: query)
+    }
+
     func loadMode(query: String, now: Date = Date()) {
         guard mode != .launcher else { return }
         modeTask?.cancel()
@@ -144,9 +159,11 @@ final class BifrostStore: FeatureModule {
                 await self?.publish(results, for: mode)
             }
         case .files:
+            let plan = BifrostSearchPlan(
+                query: query, root: scope.path, target: target, kind: searchKind,
+                machine: scope.machine)
             modeTask = Task.detached(priority: .userInitiated) { [weak self] in
-                let files = await BifrostFileSearch.search(
-                    query: query, scopePath: scope.path)
+                let files = await BifrostFileSearch.search(plan: plan)
                 guard !Task.isCancelled else { return }
                 let results = BifrostFileSearch.results(files: files, now: now, query: query)
                 await self?.publish(results, for: mode)

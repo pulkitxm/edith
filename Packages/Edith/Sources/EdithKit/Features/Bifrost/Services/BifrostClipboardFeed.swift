@@ -101,7 +101,7 @@ public enum BifrostFileFormat {
     public static func size(_ bytes: Int) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         return formatter.string(fromByteCount: Int64(bytes))
     }
 

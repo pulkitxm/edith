@@ -130,8 +130,16 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   the bar into that view rather than opening another window: entries on the
   left grouped by the day you copied them, what is selected on the right with
   its preview and its details, a scope menu at the top right, and escape to go
-  back. File search runs through Spotlight's own `mdfind`, so there is no second
-  index to keep and an empty query lists what you used in the last week.
+  back.
+- **File search has three dials.** Names or Contents chooses what is searched,
+  a kind narrows it to images, documents or code, and the scope picks where:
+  your home folder, Desktop, Documents, Downloads, everywhere, or one of the
+  machines you have configured. Contents searching and any narrowed kind go
+  through ripgrep when it is installed, an empty query lists what you used this
+  week through Spotlight's `mdfind`, and everything falls back to `mdfind` when
+  ripgrep is missing. A machine scope runs the same ripgrep query over SSH and
+  lists what it finds there; those rows name their machine and carry no local
+  preview.
 - **The bar learns what you meant.** Picking a result records the query you
   typed as well as what you opened, so once you have opened WhatsApp from `w`,
   `w` puts it first next time. A lesson from a longer query still helps a
