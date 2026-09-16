@@ -5,6 +5,8 @@ public enum BifrostResultKind: String, Codable, Sendable {
     case command
     case calculation
     case conversion
+    case clip
+    case file
 
     public var title: String {
         switch self {
@@ -12,6 +14,8 @@ public enum BifrostResultKind: String, Codable, Sendable {
         case .command: "Commands"
         case .calculation: "Calculator"
         case .conversion: "Conversion"
+        case .clip: "History"
+        case .file: "Files"
         }
     }
 
@@ -21,6 +25,8 @@ public enum BifrostResultKind: String, Codable, Sendable {
         case .command: "Command"
         case .calculation: "Answer"
         case .conversion: "Answer"
+        case .clip: "Clipboard"
+        case .file: "File"
         }
     }
 }
@@ -83,11 +89,13 @@ public struct BifrostResult: Identifiable, Equatable, Sendable {
     public let action: BifrostAction
     public let score: Int
     public let answer: BifrostAnswer?
+    public let detail: BifrostDetail?
+    public let group: String?
 
     public init(
         id: String, kind: BifrostResultKind, title: String, subtitle: String,
         symbolName: String, iconPath: String? = nil, action: BifrostAction, score: Int,
-        answer: BifrostAnswer? = nil
+        answer: BifrostAnswer? = nil, detail: BifrostDetail? = nil, group: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -98,6 +106,8 @@ public struct BifrostResult: Identifiable, Equatable, Sendable {
         self.action = action
         self.score = score
         self.answer = answer
+        self.detail = detail
+        self.group = group
     }
 
     public var accessoryText: String {

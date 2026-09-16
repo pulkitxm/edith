@@ -18,19 +18,22 @@ struct BifrostPanelView: View {
         self.store = store
         self.onDismiss = onDismiss
         self.onHeightChanged = onHeightChanged
-        _model = State(initialValue: BifrostPanelModel(resolve: { store.results(for: $0) }))
+        _model = State(
+            initialValue: BifrostPanelModel(resolve: { query in
+                store.mode == .launcher ? store.results(for: query) : store.modeResults
+            }))
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            searchField
-            if !model.sections.isEmpty {
+            header
+            if !model.sections.isEmpty || store.mode != .launcher {
                 Divider().opacity(0.25)
-                resultList
+                content
                 footer
             }
         }
-        .frame(width: BifrostPanelMetrics.width, height: model.height, alignment: .top)
+        .frame(width: BifrostPanelMetrics.width, height: height, alignment: .top)
         .background(BifrostPanelMetrics.scrim)
         .edithGlass(in: shape)
         .clipShape(shape)
@@ -46,17 +49,26 @@ struct BifrostPanelView: View {
             publishHeight()
         }
         .onDisappear { BifrostPanel.shared.shortcutHandler = nil }
-        .onChange(of: model.height) { _, _ in publishHeight() }
+        .onChange(of: height) { _, _ in publishHeight() }
         .onChange(of: store.revision) { _, _ in model.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.willShow)) { note in
+            store.leaveMode()
             model.reset(query: note.userInfo?[BifrostPanel.prefillKey] as? String ?? "")
             searchFocused = true
             lastMouse = NSEvent.mouseLocation
             publishHeight()
         }
         .onReceive(NotificationCenter.default.publisher(for: BifrostPanel.didHide)) { _ in
+            store.leaveMode()
             model.reset()
         }
+    }
+
+    private var height: CGFloat {
+        store.mode == .launcher
+            ? model.height
+            : BifrostPanelMetrics.headerHeight + BifrostPanelMetrics.modeHeight
+                + BifrostPanelMetrics.footerHeight
     }
 
     private var shape: RoundedRectangle {
@@ -64,16 +76,28 @@ struct BifrostPanelView: View {
     }
 
     private func publishHeight() {
-        onHeightChanged(model.height)
+        onHeightChanged(height)
     }
 
-    private var searchField: some View {
+    private var header: some View {
         HStack(spacing: 12) {
-            Image(nsImage: Logo.header)
-                .resizable()
-                .frame(width: 20, height: 20)
-                .opacity(0.9)
-            TextField("Search apps, commands, sums and units", text: queryBinding)
+            if store.mode == .launcher {
+                Image(nsImage: Logo.header)
+                    .resizable()
+                    .frame(width: 20, height: 20)
+                    .opacity(0.9)
+            } else {
+                Button {
+                    leaveMode()
+                } label: {
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(.white.opacity(0.10)))
+                }
+                .buttonStyle(.edith(.borderless))
+            }
+            TextField(store.mode.placeholder, text: queryBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: 17, weight: .regular))
                 .lineLimit(1)
@@ -84,19 +108,42 @@ struct BifrostPanelView: View {
                     return .handled
                 }
                 .onKeyPress(.escape) {
-                    onDismiss()
+                    if store.mode == .launcher { onDismiss() } else { leaveMode() }
                     return .handled
                 }
                 .onKeyPress(keys: [.return]) { press in
                     activate(model.selected, copyOnly: press.modifiers.contains(.option))
                     return .handled
                 }
-            if store.isIndexing {
+            if store.isIndexing || store.isLoadingMode {
                 BifrostSkeletonPill()
+            }
+            if store.mode != .launcher {
+                scopePicker
             }
         }
         .padding(.horizontal, 16)
         .frame(height: BifrostPanelMetrics.headerHeight)
+    }
+
+    private var scopePicker: some View {
+        Menu {
+            ForEach(store.scopes) { scope in
+                Button(scope.title) { store.select(scope: scope, query: model.query) }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(store.scope.title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private var queryBinding: Binding<String> {
@@ -104,14 +151,32 @@ struct BifrostPanelView: View {
             get: { model.query },
             set: { value in
                 model.setQuery(value)
+                if store.mode != .launcher { store.loadMode(query: value) }
                 publishHeight()
             })
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if store.mode == .launcher {
+            resultList.frame(height: model.listHeight)
+        } else {
+            HStack(spacing: 0) {
+                resultList
+                    .frame(
+                        width: BifrostPanelMetrics.width * (1 - BifrostPanelMetrics.detailFraction))
+                Divider().opacity(0.25)
+                BifrostDetailPane(detail: model.selected?.detail)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(height: BifrostPanelMetrics.modeHeight)
+        }
     }
 
     private var resultList: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(model.sections) { section in
                         Section {
                             ForEach(section.results) { result in
@@ -124,7 +189,6 @@ struct BifrostPanelView: View {
                 }
                 .padding(.vertical, BifrostPanelMetrics.listPadding / 2)
             }
-            .frame(height: model.listHeight)
             .scrollBounceBehavior(.basedOnSize)
             .onChange(of: model.selectedID) { _, id in
                 guard let id else { return }
@@ -143,7 +207,8 @@ struct BifrostPanelView: View {
             } else {
                 BifrostResultRow(
                     result: result, isSelected: result.id == model.selectedID,
-                    shortcut: model.shortcutNumber(for: result.id))
+                    shortcut: store.mode == .launcher ? model.shortcutNumber(for: result.id) : nil,
+                    showsAccessory: store.mode == .launcher)
             }
         }
         .buttonStyle(.edith(.borderless))
@@ -158,27 +223,112 @@ struct BifrostPanelView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
+            Image(systemName: store.mode.symbolName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(store.mode.title)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            BifrostHint(
-                label: model.selected?.action.isRepeatable == true ? "Open" : "Copy",
-                keys: "return")
+            BifrostHint(label: primaryLabel, keys: "return")
             BifrostHint(label: "Copy", keys: "option return")
+            if store.mode != .launcher {
+                BifrostHint(label: "Back", keys: "escape")
+            }
         }
         .padding(.horizontal, 14)
         .frame(height: BifrostPanelMetrics.footerHeight)
-        .background(.white.opacity(0.04))
+    }
+
+    private var primaryLabel: String {
+        guard store.mode == .launcher else { return store.mode.primaryAction }
+        return model.selected?.action.isRepeatable == true ? "Open" : "Copy"
+    }
+
+    private func leaveMode() {
+        store.leaveMode()
+        model.reset()
+        searchFocused = true
+        publishHeight()
     }
 
     private func activate(_ result: BifrostResult?, copyOnly: Bool = false) {
         guard let result else { return }
         let query = model.query
+        if case .run(let commandID) = result.action,
+            BifrostCommandCatalog.command(id: commandID)?.mode != nil, !copyOnly
+        {
+            store.run(result, query: query)
+            model.reset()
+            searchFocused = true
+            publishHeight()
+            return
+        }
         onDismiss()
         if copyOnly {
             store.copy(result)
             return
         }
         store.run(result, query: query)
+    }
+}
+
+struct BifrostDetailPane: View {
+    let detail: BifrostDetail?
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 14) {
+                if let detail {
+                    preview(detail)
+                    Text(detail.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 9) {
+                        ForEach(detail.rows) { row in
+                            HStack(alignment: .top, spacing: 12) {
+                                Text(row.label)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 8)
+                                Text(row.value)
+                                    .font(.system(size: 12))
+                                    .multilineTextAlignment(.trailing)
+                                    .lineLimit(3)
+                            }
+                        }
+                    }
+                } else {
+                    Text("Nothing selected")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func preview(_ detail: BifrostDetail) -> some View {
+        if let path = detail.imagePath, let image = NSImage(contentsOfFile: path) {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: 150)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if let text = detail.text, !text.isEmpty {
+            Text(text)
+                .font(.system(size: 12))
+                .lineLimit(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.white.opacity(0.05))
+                )
+        }
     }
 }
 
@@ -191,11 +341,8 @@ struct BifrostSectionHeader: View {
             .kerning(0.6)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 18)
-            .frame(
-                height: BifrostPanelMetrics.sectionHeaderHeight, alignment: .leading
-            )
+            .frame(height: BifrostPanelMetrics.sectionHeaderHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(BifrostPanelMetrics.scrim)
     }
 }
 
@@ -203,6 +350,7 @@ struct BifrostResultRow: View {
     let result: BifrostResult
     let isSelected: Bool
     var shortcut: Int?
+    var showsAccessory = true
 
     var body: some View {
         HStack(spacing: 11) {
@@ -212,7 +360,7 @@ struct BifrostResultRow: View {
                 Text(result.title)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                if result.kind != .application {
+                if result.kind != .application, !result.subtitle.isEmpty {
                     Text(result.subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -220,10 +368,12 @@ struct BifrostResultRow: View {
                 }
             }
             Spacer(minLength: 10)
-            Text(result.accessoryText)
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+            if showsAccessory {
+                Text(result.accessoryText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
             if let shortcut {
                 Text("\u{2318}\(shortcut)")
                     .font(.system(size: 10, weight: .medium))
@@ -266,7 +416,7 @@ struct BifrostAnswerCard: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: 140)
+            .frame(width: 150)
             side(answer.output, caption: answer.outputCaption)
         }
         .padding(.horizontal, 14)
@@ -297,9 +447,7 @@ struct BifrostAnswerCard: View {
                     .lineLimit(1)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(.white.opacity(0.08))
-                    )
+                    .background(Capsule().fill(.white.opacity(0.08)))
             }
         }
         .frame(maxWidth: .infinity)
@@ -390,6 +538,7 @@ struct BifrostHint: View {
             case "option": text += "\u{2325}"
             case "command": text += "\u{2318}"
             case "shift": text += "\u{21E7}"
+            case "escape": text += "\u{238B}"
             default: text += key.uppercased()
             }
         }

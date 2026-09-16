@@ -8,6 +8,10 @@ final class BifrostStore: FeatureModule {
     private(set) var applications: [BifrostApplication] = []
     private(set) var commands: [BifrostCommand] = []
     private(set) var rates: BifrostRates?
+    private(set) var mode: BifrostMode = .launcher
+    private(set) var scope: BifrostScope = BifrostScopeCatalog.clipboard()[0]
+    private(set) var modeResults: [BifrostResult] = []
+    private(set) var isLoadingMode = false
     private(set) var indexedAt: Date?
     private(set) var isIndexing = false
     private(set) var revision = 0
@@ -15,6 +19,7 @@ final class BifrostStore: FeatureModule {
     private var ledger: BifrostUsageLedger
     private var indexTask: Task<Void, Never>?
     private var ratesTask: Task<Void, Never>?
+    private var modeTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var isShutDown = false
     private let store: UserDefaults
@@ -79,6 +84,8 @@ final class BifrostStore: FeatureModule {
         indexTask = nil
         ratesTask?.cancel()
         ratesTask = nil
+        modeTask?.cancel()
+        modeTask = nil
         for observer in observers { IPC.stopObserving(observer) }
         observers = []
     }
@@ -89,6 +96,70 @@ final class BifrostStore: FeatureModule {
         BifrostQuery.results(
             query: query, applications: applications, commands: commands, ledger: ledger,
             rates: rates, now: now, limit: resultLimit)
+    }
+
+    var scopes: [BifrostScope] { BifrostScopeCatalog.scopes(for: mode) }
+
+    func enter(_ mode: BifrostMode, query: String = "") {
+        guard self.mode != mode else { return }
+        self.mode = mode
+        scope =
+            BifrostScopeCatalog.scopes(for: mode).first
+            ?? BifrostScope(id: "all", title: "All")
+        modeResults = []
+        loadMode(query: query)
+    }
+
+    func leaveMode() {
+        guard mode != .launcher else { return }
+        modeTask?.cancel()
+        modeTask = nil
+        mode = .launcher
+        modeResults = []
+        isLoadingMode = false
+        revision += 1
+    }
+
+    func select(scope: BifrostScope, query: String) {
+        guard scope != self.scope else { return }
+        self.scope = scope
+        loadMode(query: query)
+    }
+
+    func loadMode(query: String, now: Date = Date()) {
+        guard mode != .launcher else { return }
+        modeTask?.cancel()
+        isLoadingMode = true
+        let mode = mode
+        let scope = scope
+        switch mode {
+        case .launcher:
+            return
+        case .clipboard:
+            modeTask = Task.detached(priority: .userInitiated) { [weak self] in
+                let entries = ClipboardRepository.loadEntries()
+                guard !Task.isCancelled else { return }
+                let results = BifrostClipboardFeed.results(
+                    entries: entries, query: query, scope: scope.id, now: now)
+                await self?.publish(results, for: mode)
+            }
+        case .files:
+            modeTask = Task.detached(priority: .userInitiated) { [weak self] in
+                let files = await BifrostFileSearch.search(
+                    query: query, scopePath: scope.path)
+                guard !Task.isCancelled else { return }
+                let results = BifrostFileSearch.results(files: files, now: now, query: query)
+                await self?.publish(results, for: mode)
+            }
+        }
+    }
+
+    private func publish(_ results: [BifrostResult], for mode: BifrostMode) {
+        guard !isShutDown, self.mode == mode else { return }
+        modeResults = results
+        isLoadingMode = false
+        modeTask = nil
+        revision += 1
     }
 
     func refreshRates(now: Date = Date()) {
@@ -123,6 +194,11 @@ final class BifrostStore: FeatureModule {
             return true
         case .run(let commandID):
             guard let command = BifrostCommandCatalog.command(id: commandID) else { return false }
+            if let mode = command.mode {
+                enter(mode)
+                record(result.action.targetKey, query: query, at: now)
+                return true
+            }
             post(command.notification)
             record(result.action.targetKey, query: query, at: now)
             return true

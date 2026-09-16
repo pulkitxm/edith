@@ -75,7 +75,7 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let core = BifrostCommandCatalog.available(in: defaults)
-        #expect(core.map(\.id) == ["panel.open"])
+        #expect(core.map(\.id) == ["files.search", "panel.open"])
 
         defaults.set(true, forKey: AppStorageKeys.Suites.desk)
         defaults.set(true, forKey: AppStorageKeys.Emoji.enabled)

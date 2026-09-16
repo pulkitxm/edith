@@ -122,10 +122,16 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   currency query simply produces no answer rather than an error. The card says
   how old the rate is. Amounts understand `k`, `m` and `b`, so `48k` is 48,000.
 - **Commands sit next to applications.** The bar also lists Edith's own
-  abilities as commands: the clipboard history, the emoji picker, the colour
-  picker, the Edith panel and a rebuild of this index. A command only appears
-  while the ability behind it is enabled, and it matches on what it does as
-  well as its name, so `paste` finds the clipboard history.
+  abilities as commands: the clipboard history, file search, the emoji picker,
+  the colour picker, the Edith panel and a rebuild of this index. A command only
+  appears while the ability behind it is enabled, and it matches on what it does
+  as well as its name, so `paste` finds the clipboard history.
+- **The clipboard and file search open inside the bar.** Choosing either turns
+  the bar into that view rather than opening another window: entries on the
+  left grouped by the day you copied them, what is selected on the right with
+  its preview and its details, a scope menu at the top right, and escape to go
+  back. File search runs through Spotlight's own `mdfind`, so there is no second
+  index to keep and an empty query lists what you used in the last week.
 - **The bar learns what you meant.** Picking a result records the query you
   typed as well as what you opened, so once you have opened WhatsApp from `w`,
   `w` puts it first next time. A lesson from a longer query still helps a

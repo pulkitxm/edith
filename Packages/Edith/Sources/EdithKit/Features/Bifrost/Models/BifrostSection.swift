@@ -20,27 +20,31 @@ public enum BifrostSectionBuilder {
     public static func sections(from results: [BifrostResult], query: String) -> [BifrostSection] {
         var built: [BifrostSection] = []
         var current: [BifrostResult] = []
+        var key: String?
         var kind: BifrostResultKind?
         for result in results {
-            if result.kind != kind, let kind, !current.isEmpty {
-                built.append(section(kind: kind, results: current, query: query))
+            let resultKey = result.group ?? result.kind.rawValue
+            if resultKey != key, let key, let kind, !current.isEmpty {
+                built.append(section(kind: kind, key: key, results: current, query: query))
                 current = []
             }
+            key = resultKey
             kind = result.kind
             current.append(result)
         }
-        if let kind, !current.isEmpty {
-            built.append(section(kind: kind, results: current, query: query))
+        if let key, let kind, !current.isEmpty {
+            built.append(section(kind: kind, key: key, results: current, query: query))
         }
         return built
     }
 
     private static func section(
-        kind: BifrostResultKind, results: [BifrostResult], query: String
+        kind: BifrostResultKind, key: String, results: [BifrostResult], query: String
     ) -> BifrostSection {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = kind == .application && trimmed.isEmpty ? recentTitle : kind.title
-        return BifrostSection(id: kind.rawValue, title: title, results: results)
+        let grouped = results.first?.group
+        let title = grouped ?? (kind == .application && trimmed.isEmpty ? recentTitle : kind.title)
+        return BifrostSection(id: key, title: title, results: results)
     }
 }
 
@@ -54,6 +58,8 @@ public enum BifrostPanelMetrics {
     public static let answerHeight: CGFloat = 132
     public static let cornerRadius: CGFloat = 14
     public static let topFraction: CGFloat = 0.147
+    public static let modeHeight: CGFloat = 470
+    public static let detailFraction: CGFloat = 0.52
     public static let bottomFraction: CGFloat = 0.084
 
     public static func defaultAnchorTop(in visibleFrame: CGRect) -> CGPoint {
@@ -61,7 +67,7 @@ public enum BifrostPanelMetrics {
             x: (visibleFrame.midX - width / 2).rounded(),
             y: (visibleFrame.maxY - visibleFrame.height * topFraction).rounded())
     }
-    public static let scrimOpacity: Double = 0.62
+    public static let scrimOpacity: Double = 0.84
 
     public static var scrim: Color { Color.black.opacity(scrimOpacity) }
 

@@ -9,10 +9,11 @@ public struct BifrostCommand: Identifiable, Equatable, Sendable {
     public let abilityID: String?
     public let notification: Notification.Name
     public let terms: [String]
+    public let mode: BifrostMode?
 
     public init(
         id: String, title: String, subtitle: String, symbolName: String, abilityID: String?,
-        notification: Notification.Name, terms: [String] = []
+        notification: Notification.Name, terms: [String] = [], mode: BifrostMode? = nil
     ) {
         self.id = id
         self.title = title
@@ -21,6 +22,7 @@ public struct BifrostCommand: Identifiable, Equatable, Sendable {
         self.abilityID = abilityID
         self.notification = notification
         self.terms = terms
+        self.mode = mode
     }
 
     public var searchText: String {
@@ -36,7 +38,7 @@ public enum BifrostCommandCatalog {
                 subtitle: "Paste something you copied earlier",
                 symbolName: "doc.on.clipboard", abilityID: "clipboard",
                 notification: IPC.Name.requestClipboardPanel,
-                terms: ["paste", "copied", "history"]),
+                terms: ["paste", "copied", "history"], mode: .clipboard),
             BifrostCommand(
                 id: "emoji.pick", title: "Emoji Picker",
                 subtitle: "Type an emoji into the app in front of you",
@@ -49,6 +51,12 @@ public enum BifrostCommandCatalog {
                 symbolName: "eyedropper", abilityID: "colorPicker",
                 notification: IPC.Name.requestColorPick,
                 terms: ["colour", "hex", "eyedropper", "pick"]),
+            BifrostCommand(
+                id: "files.search", title: "Search Files",
+                subtitle: "Find a file by name, or pick one you used lately",
+                symbolName: "magnifyingglass", abilityID: nil,
+                notification: IPC.Name.requestBifrostPanel,
+                terms: ["file", "files", "finder", "document"], mode: .files),
             BifrostCommand(
                 id: "panel.open", title: "Edith Panel",
                 subtitle: "Open the menu bar panel", symbolName: "square.grid.2x2",
