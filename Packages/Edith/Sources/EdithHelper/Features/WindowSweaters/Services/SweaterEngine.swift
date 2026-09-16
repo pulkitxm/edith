@@ -45,6 +45,7 @@ final class SweaterEngine: FeatureModule {
             || updated.basket != current.basket || updated.gauge != current.gauge
             || updated.borderWidth != current.borderWidth || updated.anchor != current.anchor
             || updated.unfocusedDim != current.unfocusedDim
+            || updated.appTheme != current.appTheme
         let recreates =
             updated.excludedApps != current.excludedApps || updated.order != current.order
         current = updated

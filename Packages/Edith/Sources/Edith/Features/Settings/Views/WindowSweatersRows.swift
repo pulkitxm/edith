@@ -34,6 +34,8 @@ struct WindowSweatersRows: View {
     @AppStorage(Keys.accessibilityFocus, store: SharedDefaults.store) private
         var accessibilityFocus = false
     @AppStorage(Keys.excludedApps, store: SharedDefaults.store) private var excludedApps = ""
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var appTheme =
+        AppTheme.accent.rawValue
 
     private var selection: SweaterPattern { SweaterPattern.from(pattern) }
 
@@ -49,7 +51,8 @@ struct WindowSweatersRows: View {
 
             SweaterPreviewStrip(
                 pattern: selection, stitch: stitch, basket: basket, borderWidth: borderWidth,
-                gauge: max(gauge, minimumGauge), anchor: anchor)
+                gauge: max(gauge, minimumGauge), anchor: anchor,
+                appTheme: AppTheme(storedName: appTheme))
 
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Picker("Pattern", selection: $pattern.configured(Keys.pattern)) {
@@ -205,8 +208,9 @@ private struct SweaterPreviewStrip: View {
     let borderWidth: Double
     let gauge: Double
     let anchor: SweaterAnchor
+    let appTheme: AppTheme
 
-    private static let sampleApps = ["Claude", "Finder", "Spotify", "Notes"]
+    private static let sampleApps = ["Edith", "Claude", "Finder", "Spotify"]
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -246,23 +250,13 @@ private struct SweaterPreviewStrip: View {
 
         var knitGauge = KnitGauge.standard
         knitGauge.rows = gauge
-        let rule = SweaterCollection.rule(for: app)
-        let color =
-            rule?.color
-            ?? KnitMath.color(forApp: app, basket: SweaterBaskets.basket(named: basket))
-        let chart: SweaterChart?
-        switch pattern {
-        case .byApp:
-            chart =
-                rule?.chart.isEmpty == false
-                ? SweaterChartCatalog.chart(named: rule!.chart) : nil
-        case .plain: chart = nil
-        case .chart(let name): chart = SweaterChartCatalog.chart(named: name)
-        }
+        let yarn = SweaterYarn.resolve(
+            app: app, pattern: pattern, basket: SweaterBaskets.basket(named: basket),
+            appTheme: appTheme)
 
         KnitRenderer.shared.draw(
             in: context, windowRect: window, radius: 6,
-            band: min(borderWidth, 16), color: color, chart: chart, dim: 0, tuck: 1,
+            band: min(borderWidth, 16), color: yarn.color, chart: yarn.chart, dim: 0, tuck: 1,
             stitch: stitch, anchor: anchor, gauge: knitGauge)
 
         guard let image = context.makeImage() else { return nil }

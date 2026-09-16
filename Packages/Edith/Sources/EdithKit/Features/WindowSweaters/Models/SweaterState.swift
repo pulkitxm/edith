@@ -35,7 +35,9 @@ public enum SweaterState {
             unfocusedDim: SweaterLimits.clampDim(
                 defaults.object(forKey: keys.unfocusedDim) as? Double ?? 0),
             accessibilityFocus: defaults.bool(forKey: keys.accessibilityFocus),
-            excludedApps: excludedApps(defaults))
+            excludedApps: excludedApps(defaults),
+            appTheme: AppTheme(
+                storedName: defaults.string(forKey: AppStorageKeys.General.theme) ?? ""))
     }
 
     public static func excludedApps(_ defaults: UserDefaults = SharedDefaults.store) -> [String] {

@@ -20,6 +20,7 @@ struct SweaterRuntimeSettings {
     let basket: SweaterBasket
     let excludedApps: [String]
     let accessibilityFocus: Bool
+    let appTheme: AppTheme
     let renderer: KnitRenderer
 
     init(_ settings: SweaterSettings, renderer: KnitRenderer) {
@@ -38,21 +39,13 @@ struct SweaterRuntimeSettings {
         self.basket = SweaterBaskets.basket(named: settings.basket)
         self.excludedApps = settings.excludedApps
         self.accessibilityFocus = settings.accessibilityFocus
+        self.appTheme = settings.appTheme
         self.renderer = renderer
     }
 
     func yarn(forApp app: String) -> (color: UInt32, chart: SweaterChart?) {
-        let rule = SweaterCollection.rule(for: app)
-        let color = rule?.color ?? KnitMath.color(forApp: app, basket: basket)
-        switch pattern {
-        case .byApp:
-            guard let name = rule?.chart, !name.isEmpty else { return (color, nil) }
-            return (color, SweaterChartCatalog.chart(named: name))
-        case .plain:
-            return (color, nil)
-        case .chart(let name):
-            return (color, SweaterChartCatalog.chart(named: name))
-        }
+        SweaterYarn.resolve(
+            app: app, pattern: pattern, basket: basket, appTheme: appTheme)
     }
 
     func allows(app: String) -> Bool {

@@ -178,6 +178,7 @@ public struct SweaterSettings: Equatable, Sendable {
     public var unfocusedDim: Double
     public var accessibilityFocus: Bool
     public var excludedApps: [String]
+    public var appTheme: AppTheme
 
     public init(
         active: Bool = true,
@@ -190,7 +191,8 @@ public struct SweaterSettings: Equatable, Sendable {
         order: SweaterOrder = .below,
         unfocusedDim: Double = 0,
         accessibilityFocus: Bool = false,
-        excludedApps: [String] = []
+        excludedApps: [String] = [],
+        appTheme: AppTheme = .accent
     ) {
         self.active = active
         self.pattern = pattern
@@ -203,6 +205,7 @@ public struct SweaterSettings: Equatable, Sendable {
         self.unfocusedDim = unfocusedDim
         self.accessibilityFocus = accessibilityFocus
         self.excludedApps = excludedApps
+        self.appTheme = appTheme
     }
 
     public var effectiveGauge: Double {

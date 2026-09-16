@@ -3,7 +3,7 @@
 Window Sweaters knits a border around every window, in a colour chosen for the app
 that owns it. Claude gets its terracotta, Finder its blue, Spotify its green. Apps
 without a colourway of their own take a colour derived from their name, so it stays
-the same every time you open them.
+the same every time you open them. Edith's own windows wear your app theme.
 
 The borders are drawn by Edith's menu bar companion, not by a separate app.
 
@@ -31,6 +31,12 @@ colourways, widths and patterns are kept for when you turn it back on.
 
 **Stitch** applies to plain knitting: stockinette, rib or garter. Colourwork always
 knits stockinette, so this control only appears for Plain.
+
+Edith's own windows are the exception to all of this: they knit in whatever app
+theme you have chosen, so changing the theme rechecks the wool. The base yarn is
+the theme colour, softened a little so a bright system colour reads as dyed wool
+rather than neon, and the diamonds are knitted in two lighter tints of it. Nothing
+to configure; pick a theme in Settings and Edith's windows follow.
 
 **Spare wool** is the basket that apps without a curated sweater draw from. The
 colour is picked from the app's name, so it is stable across launches and neighbouring
@@ -62,7 +68,8 @@ Borders hide while a window is being resized and return when you let go. They al
 hide during the Dock's minimize animation, because a rectangular border cannot follow
 that shape.
 
-The colours are chosen by hand, not read from app icons.
+The colours are chosen by hand, not read from app icons. Edith's own windows are
+the exception and follow your app theme.
 
 ## From the command line
 
@@ -100,6 +107,9 @@ Ported from [Window Sweaters](https://github.com/saragordic/window-sweaters) by 
 Gordic, itself derived from [JankyBorders](https://github.com/FelixKratz/JankyBorders)
 by Felix Kratz. Both are GPL-3.0, as is Edith. The renderer, the colourwork charts and
 the curated app colourways are Sara Gordic's design.
+
+The theme colourway Edith knits for its own windows is added here and is not part of
+the original collection.
 
 Application names in the collection belong to their respective owners and describe
 colourway inspiration only. No affiliation or endorsement is implied.
