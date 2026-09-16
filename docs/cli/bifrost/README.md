@@ -110,6 +110,17 @@ hint: try a sum such as `ed bifrost calc "2 + 2"`
   loses to something you opened five times this week. The ledger holds at most
   300 entries and the boost it contributes is capped, so frequency breaks ties
   between comparable matches rather than overriding the match itself.
+- **An answer gets a card, not a row.** A sum, a unit conversion or a currency
+  conversion renders as a two-sided card: what you asked on the left, the answer
+  on the right, both sides named underneath. Return copies the answer exactly as
+  it does from a row.
+- **Currency needs a rate, so it needs the network.** Typing `48k usd in inr`
+  converts through the European Central Bank's daily reference rates, which
+  Edith fetches from `ecb.europa.eu` at most once every six hours and caches at
+  `~/Library/Caches/Edith/bifrost-rates.json`. The request carries nothing but
+  itself, there is no key and no account, and with no cache and no network a
+  currency query simply produces no answer rather than an error. The card says
+  how old the rate is. Amounts understand `k`, `m` and `b`, so `48k` is 48,000.
 - **Commands sit next to applications.** The bar also lists Edith's own
   abilities as commands: the clipboard history, the emoji picker, the colour
   picker, the Edith panel and a rebuild of this index. A command only appears

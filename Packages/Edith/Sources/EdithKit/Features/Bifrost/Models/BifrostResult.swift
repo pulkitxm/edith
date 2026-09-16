@@ -54,6 +54,25 @@ public enum BifrostAction: Equatable, Sendable {
     }
 }
 
+public struct BifrostAnswer: Equatable, Sendable {
+    public let input: String
+    public let output: String
+    public let inputCaption: String
+    public let outputCaption: String
+    public let footnote: String?
+
+    public init(
+        input: String, output: String, inputCaption: String = "", outputCaption: String = "",
+        footnote: String? = nil
+    ) {
+        self.input = input
+        self.output = output
+        self.inputCaption = inputCaption
+        self.outputCaption = outputCaption
+        self.footnote = footnote
+    }
+}
+
 public struct BifrostResult: Identifiable, Equatable, Sendable {
     public let id: String
     public let kind: BifrostResultKind
@@ -63,10 +82,12 @@ public struct BifrostResult: Identifiable, Equatable, Sendable {
     public let iconPath: String?
     public let action: BifrostAction
     public let score: Int
+    public let answer: BifrostAnswer?
 
     public init(
         id: String, kind: BifrostResultKind, title: String, subtitle: String,
-        symbolName: String, iconPath: String? = nil, action: BifrostAction, score: Int
+        symbolName: String, iconPath: String? = nil, action: BifrostAction, score: Int,
+        answer: BifrostAnswer? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -76,6 +97,7 @@ public struct BifrostResult: Identifiable, Equatable, Sendable {
         self.iconPath = iconPath
         self.action = action
         self.score = score
+        self.answer = answer
     }
 
     public var accessoryText: String {

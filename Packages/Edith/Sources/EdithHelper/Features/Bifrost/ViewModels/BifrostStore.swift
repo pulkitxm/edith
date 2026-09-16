@@ -7,16 +7,20 @@ import Foundation
 final class BifrostStore: FeatureModule {
     private(set) var applications: [BifrostApplication] = []
     private(set) var commands: [BifrostCommand] = []
+    private(set) var rates: BifrostRates?
     private(set) var indexedAt: Date?
     private(set) var isIndexing = false
     private(set) var revision = 0
 
     private var ledger: BifrostUsageLedger
     private var indexTask: Task<Void, Never>?
+    private var ratesTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var isShutDown = false
     private let store: UserDefaults
     private let indexStore: BifrostIndexStore
+    private let rateStore: BifrostRateStore
+    private let fetchRates: @Sendable () async -> BifrostRates?
     private let scan: @Sendable () -> [BifrostApplication]
     private let open: @MainActor (String) -> Bool
     private let copy: @MainActor (String) -> Void
@@ -25,6 +29,7 @@ final class BifrostStore: FeatureModule {
     required convenience init() {
         self.init(
             store: SharedDefaults.store, indexStore: .shared,
+            rateStore: .shared, fetchRates: { await BifrostRateFeed.fetch() },
             scan: { BifrostApplicationScanner.scan(roots: BifrostApplicationScanner.defaultRoots) },
             open: { BifrostLauncher.open(path: $0) },
             copy: { BifrostLauncher.copy(text: $0) },
@@ -33,6 +38,8 @@ final class BifrostStore: FeatureModule {
 
     init(
         store: UserDefaults, indexStore: BifrostIndexStore,
+        rateStore: BifrostRateStore = .shared,
+        fetchRates: @escaping @Sendable () async -> BifrostRates? = { nil },
         scan: @escaping @Sendable () -> [BifrostApplication],
         open: @escaping @MainActor (String) -> Bool,
         copy: @escaping @MainActor (String) -> Void,
@@ -40,12 +47,15 @@ final class BifrostStore: FeatureModule {
     ) {
         self.store = store
         self.indexStore = indexStore
+        self.rateStore = rateStore
+        self.fetchRates = fetchRates
         self.scan = scan
         self.open = open
         self.copy = copy
         self.post = post
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
         commands = BifrostCommandCatalog.available(in: store)
+        rates = rateStore.load()
         if let cached = indexStore.load() {
             applications = cached.applications
             indexedAt = cached.generatedAt
@@ -59,6 +69,7 @@ final class BifrostStore: FeatureModule {
             },
         ]
         if applications.isEmpty { reindex() }
+        refreshRates()
     }
 
     func shutdown() {
@@ -66,6 +77,8 @@ final class BifrostStore: FeatureModule {
         isShutDown = true
         indexTask?.cancel()
         indexTask = nil
+        ratesTask?.cancel()
+        ratesTask = nil
         for observer in observers { IPC.stopObserving(observer) }
         observers = []
     }
@@ -75,7 +88,30 @@ final class BifrostStore: FeatureModule {
     func results(for query: String, now: Date = Date()) -> [BifrostResult] {
         BifrostQuery.results(
             query: query, applications: applications, commands: commands, ledger: ledger,
-            now: now, limit: resultLimit)
+            rates: rates, now: now, limit: resultLimit)
+    }
+
+    func refreshRates(now: Date = Date()) {
+        guard !isShutDown, ratesTask == nil else { return }
+        if let rates, rates.isFresh(now: now) { return }
+        let fetchRates = fetchRates
+        let rateStore = rateStore
+        ratesTask = Task.detached(priority: .utility) { [weak self] in
+            let fetched = await fetchRates()
+            guard !Task.isCancelled else {
+                await self?.finishRates(nil)
+                return
+            }
+            if let fetched { rateStore.save(fetched) }
+            await self?.finishRates(fetched)
+        }
+    }
+
+    private func finishRates(_ fetched: BifrostRates?) {
+        ratesTask = nil
+        guard !isShutDown, let fetched else { return }
+        rates = fetched
+        revision += 1
     }
 
     @discardableResult

@@ -127,11 +127,16 @@ struct BifrostPanelView: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ result: BifrostResult) -> some View {
         Button {
             activate(result)
         } label: {
-            BifrostResultRow(result: result, isSelected: result.id == model.selectedID)
+            if let answer = result.answer {
+                BifrostAnswerCard(answer: answer, isSelected: result.id == model.selectedID)
+            } else {
+                BifrostResultRow(result: result, isSelected: result.id == model.selectedID)
+            }
         }
         .buttonStyle(.edith(.borderless))
         .id(result.id)
@@ -220,6 +225,64 @@ struct BifrostResultRow: View {
                 .fill(.white.opacity(isSelected ? 0.14 : 0))
         )
         .padding(.horizontal, 6)
+    }
+}
+
+struct BifrostAnswerCard: View {
+    let answer: BifrostAnswer
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            side(answer.input, caption: answer.inputCaption)
+            VStack(spacing: 5) {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                if let footnote = answer.footnote {
+                    Text(footnote)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 140)
+            side(answer.output, caption: answer.outputCaption)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: BifrostPanelMetrics.answerHeight - 12)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.white.opacity(isSelected ? 0.10 : 0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.white.opacity(isSelected ? 0.16 : 0.07), lineWidth: 1)
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    private func side(_ value: String, caption: String) -> some View {
+        VStack(spacing: 8) {
+            Text(value)
+                .font(.system(size: 21, weight: .semibold))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(.white.opacity(0.08))
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

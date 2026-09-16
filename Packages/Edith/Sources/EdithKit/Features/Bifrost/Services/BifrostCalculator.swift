@@ -34,6 +34,8 @@ public enum BifrostCalculator {
         return value
     }
 
+    static let magnitudes: [Character: Double] = ["k": 1_000, "m": 1_000_000, "b": 1_000_000_000]
+
     static let functions: Set<String> = [
         "sqrt", "cbrt", "abs", "round", "floor", "ceil", "ln", "log", "log2", "exp",
         "sin", "cos", "tan", "asin", "acos", "atan", "min", "max", "pow", "hypot",
@@ -178,7 +180,11 @@ public enum BifrostCalculator {
                 break
             }
             guard let value = Double(text) else { return nil }
-            return (value, index)
+            guard index < characters.count,
+                let scale = magnitudes[characters[index]],
+                index + 1 >= characters.count || !characters[index + 1].isLetter
+            else { return (value, index) }
+            return (value * scale, index + 1)
         }
     }
 

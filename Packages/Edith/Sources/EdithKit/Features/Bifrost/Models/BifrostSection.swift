@@ -51,6 +51,7 @@ public enum BifrostPanelMetrics {
     public static let rowHeight: CGFloat = 44
     public static let footerHeight: CGFloat = 36
     public static let listPadding: CGFloat = 6
+    public static let answerHeight: CGFloat = 132
     public static let cornerRadius: CGFloat = 14
     public static let scrimOpacity: Double = 0.62
 
@@ -68,7 +69,10 @@ public enum BifrostPanelMetrics {
         guard !sections.isEmpty else { return headerHeight }
         var height = headerHeight + listPadding + footerHeight
         for section in sections {
-            height += sectionHeaderHeight + CGFloat(section.results.count) * rowHeight
+            height += sectionHeaderHeight
+            for result in section.results {
+                height += result.answer == nil ? rowHeight : answerHeight
+            }
         }
         return height
     }

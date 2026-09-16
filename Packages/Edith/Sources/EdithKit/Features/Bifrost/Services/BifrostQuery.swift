@@ -9,7 +9,7 @@ public enum BifrostQuery {
     public static func results(
         query: String, applications: [BifrostApplication],
         commands: [BifrostCommand] = [], ledger: BifrostUsageLedger = BifrostUsageLedger(),
-        now: Date = Date(), limit: Int = defaultLimit
+        rates: BifrostRates? = nil, now: Date = Date(), limit: Int = defaultLimit
     ) -> [BifrostResult] {
         guard limit > 0 else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -20,7 +20,9 @@ public enum BifrostQuery {
                 limit: limit)
         }
         var results: [BifrostResult] = []
-        if let conversion = BifrostConversionParser.parse(trimmed) {
+        if let money = BifrostCurrencyParser.parse(trimmed, rates: rates) {
+            results.append(currencyResult(money, now: now))
+        } else if let conversion = BifrostConversionParser.parse(trimmed) {
             results.append(conversionResult(conversion))
         } else if let calculation = BifrostCalculator.evaluate(trimmed) {
             results.append(calculationResult(calculation))
@@ -142,7 +144,9 @@ public enum BifrostQuery {
         BifrostResult(
             id: "calc:" + calculation.expression, kind: .calculation, title: calculation.display,
             subtitle: calculation.expression, symbolName: "function",
-            action: .copy(text: calculation.copyText), score: Int.max)
+            action: .copy(text: calculation.copyText), score: Int.max,
+            answer: BifrostAnswer(
+                input: calculation.expression, output: calculation.display))
     }
 
     static func conversionResult(_ conversion: BifrostConversion) -> BifrostResult {
@@ -150,7 +154,38 @@ public enum BifrostQuery {
             id: "convert:" + conversion.source.id + ">" + conversion.target.id,
             kind: .conversion, title: conversion.display, subtitle: conversion.detail,
             symbolName: "arrow.left.arrow.right", action: .copy(text: conversion.copyText),
-            score: Int.max)
+            score: Int.max,
+            answer: BifrostAnswer(
+                input: "\(BifrostNumberFormat.grouped(conversion.value)) "
+                    + conversion.source.symbol,
+                output: conversion.display,
+                inputCaption: conversion.source.name(for: conversion.value).capitalized,
+                outputCaption: conversion.target.name(for: conversion.result).capitalized))
+    }
+
+    static func currencyResult(_ money: BifrostCurrencyConversion, now: Date) -> BifrostResult {
+        BifrostResult(
+            id: "money:" + money.source.code + ">" + money.target.code,
+            kind: .conversion, title: money.display, subtitle: money.detail,
+            symbolName: "arrow.left.arrow.right", action: .copy(text: money.copyText),
+            score: Int.max,
+            answer: BifrostAnswer(
+                input: BifrostCurrencyCatalog.format(money.value, code: money.source.code),
+                output: money.display, inputCaption: money.source.name,
+                outputCaption: money.target.name,
+                footnote: BifrostQuery.freshness(of: money.asOf, now: now)))
+    }
+
+    public static func freshness(of moment: Date, now: Date) -> String {
+        let seconds = max(now.timeIntervalSince(moment), 0)
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        formatter.allowedUnits = seconds < 3600 ? [.minute] : [.day, .hour]
+        guard seconds >= 60, let text = formatter.string(from: seconds) else {
+            return "Updated just now"
+        }
+        return "Updated \(text) ago"
     }
 
     static func readablePath(_ path: String) -> String {
