@@ -11,6 +11,8 @@ struct BifrostRows: View {
         "center"
     @AppStorage(AppStorageKeys.Bifrost.resultLimit, store: SharedDefaults.store) private
         var resultLimit = BifrostQuery.defaultLimit
+    @AppStorage(AppStorageKeys.Bifrost.pasteSnippets, store: SharedDefaults.store) private
+        var pasteSnippets = true
     @State private var index: BifrostIndex?
 
     var body: some View {
@@ -55,6 +57,51 @@ struct BifrostRows: View {
             .disabled(!bifrostEnabled)
             .opacity(bifrostEnabled ? 1 : 0.5)
 
+            Section {
+                ForEach(BifrostSource.allCases, id: \.self) { source in
+                    BifrostSourceToggle(source: source)
+                }
+                Toggle(
+                    "Paste snippets into the app you were typing in",
+                    isOn: $pasteSnippets.configured(AppStorageKeys.Bifrost.pasteSnippets))
+                Text("Needs Accessibility. Without it a snippet is only copied.")
+                    .font(.system(size: UIScale.pt(10)))
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("What else it searches")
+            } footer: {
+                Text(
+                    "Applications, the calculator, unit and currency conversion, clipboard history and file search are always on. These are the extra sources."
+                )
+                .font(.system(size: UIScale.pt(10)))
+            }
+            .disabled(!bifrostEnabled)
+            .opacity(bifrostEnabled ? 1 : 0.5)
+
+            Section {
+                BifrostQuicklinkEditor()
+            } header: {
+                Text("Quicklinks")
+            }
+            .disabled(!bifrostEnabled)
+            .opacity(bifrostEnabled ? 1 : 0.5)
+
+            Section {
+                BifrostSnippetEditor()
+            } header: {
+                Text("Snippets")
+            }
+            .disabled(!bifrostEnabled)
+            .opacity(bifrostEnabled ? 1 : 0.5)
+
+            Section {
+                BifrostShellCommandEditor()
+            } header: {
+                Text("Shell commands")
+            }
+            .disabled(!bifrostEnabled)
+            .opacity(bifrostEnabled ? 1 : 0.5)
+
             if bifrostEnabled {
                 Section {
                     Button("Rebuild index") {
@@ -78,5 +125,25 @@ struct BifrostRows: View {
         .onReceive(NotificationCenter.default.publisher(for: IPC.Name.bifrostIndexChanged)) { _ in
             index = BifrostIndexStore.shared.load()
         }
+    }
+}
+
+private struct BifrostSourceToggle: View {
+    let source: BifrostSource
+
+    @State private var isOn = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Toggle(source.title, isOn: $isOn)
+                .onChange(of: isOn) { _, value in
+                    try? ConfigurationExecutor.application.set(
+                        .bool(value), forKey: source.defaultsKey)
+                }
+            Text(source.summary)
+                .font(.system(size: UIScale.pt(10)))
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { isOn = source.isEnabled() }
     }
 }

@@ -84,7 +84,8 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     }
 
     func show(query: String = "") {
-        guard store != nil, let panel else { return }
+        guard let store, let panel else { return }
+        store.refreshDynamicSources()
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()

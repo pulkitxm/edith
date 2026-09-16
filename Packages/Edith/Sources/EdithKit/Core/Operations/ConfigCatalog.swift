@@ -1037,6 +1037,43 @@ public enum ConfigCatalog {
             AppStorageKeys.Bifrost.hotKeyMods, .int, group: "bifrost",
             summary: "Carbon modifier mask of the launcher shortcut."),
         SettingDefinition(
+            AppStorageKeys.Bifrost.sourceQuicklinks, .bool, group: "bifrost",
+            summary: "Search your saved quicklinks.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceSnippets, .bool, group: "bifrost",
+            summary: "Search your saved snippets.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceShellCommands, .bool, group: "bifrost",
+            summary: "Search your saved shell commands.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceAppleShortcuts, .bool, group: "bifrost",
+            summary: "Search the shortcuts you built in the Shortcuts app.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceWindowActions, .bool, group: "bifrost",
+            summary: "Offer the window management actions.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceSystemActions, .bool, group: "bifrost",
+            summary: "Offer lock, sleep, appearance and trash actions.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceRunningApplications, .bool, group: "bifrost",
+            summary: "Offer the apps that are running right now.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.sourceOpenWindows, .bool, group: "bifrost",
+            summary: "Offer every open window by title.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.pasteSnippets, .bool, group: "bifrost",
+            summary: "Paste a snippet straight into the app you were typing in.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.quicklinks, .string, group: "bifrost",
+            summary: "Saved quicklinks, stored as JSON."),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.snippets, .string, group: "bifrost",
+            summary: "Saved snippets, stored as JSON."),
+        SettingDefinition(
+            AppStorageKeys.Bifrost.shellCommands, .string, group: "bifrost",
+            summary: "Saved shell commands, stored as JSON."),
+        SettingDefinition(
             AppStorageKeys.Bifrost.hotKeyLabel, .string, group: "bifrost",
             summary: "Printable label for the launcher shortcut."),
     ]
