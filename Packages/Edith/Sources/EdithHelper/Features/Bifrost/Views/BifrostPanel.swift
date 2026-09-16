@@ -48,7 +48,6 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         guard store != nil, let panel else { return }
         NotificationCenter.default.post(
             name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
-        panel.setContentSize(NSSize(width: Self.width, height: Self.height(forRows: 0)))
         let position = PopupPosition.stored(forKey: AppStorageKeys.Bifrost.popupAt)
         let size = panel.frame.size
         showGeneration += 1
@@ -78,7 +77,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     }
 
     func resize(rows: Int) {
-        guard let panel, panel.isVisible else { return }
+        guard let panel else { return }
         let height = Self.height(forRows: rows)
         guard abs(panel.frame.height - height) > 0.5 else { return }
         var frame = panel.frame
