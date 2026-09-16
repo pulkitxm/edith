@@ -866,6 +866,47 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group focusdim --json")
             ]),
         descriptor(
+            "windowSweaters",
+            "Knit a border around every window, coloured to match the app it belongs to.",
+            workflows: [
+                instruction(
+                    "wear", "Put the sweaters on",
+                    "Every window gets a knitted border in its app's own colourway."),
+                instruction(
+                    "knit", "Change the knitting",
+                    "Pick a pattern, stitch, border width and stitch size."),
+                instruction(
+                    "pause", "Take them off for a while",
+                    "Pause the sweaters without disabling the extension.",
+                    "ed config set windowSweatersActive false"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Optional. Accessibility sharpens which window counts as focused.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable windowSweaters",
+                "ed config ls --group sweaters --json",
+            ],
+            docs: [
+                documentation("guide", "Window Sweaters guide", "docs/window-sweaters.md"),
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md"),
+            ],
+            recovery: [
+                instruction(
+                    "restore", "Put the borders back",
+                    "Turn the sweaters off and on to rebuild every window overlay.",
+                    "ed config set windowSweatersActive true")
+            ],
+            verification: [
+                instruction(
+                    "config", "Inspect the knitting",
+                    "Confirm the pattern, width and stitch size in use.",
+                    "ed config ls --group sweaters --json")
+            ]),
+        descriptor(
             "presenter",
             "Hide sensitive numbers automatically while sharing or recording your screen.",
             workflows: [
