@@ -243,12 +243,13 @@ struct BifrostPanelView: View {
                         }
                     }
                 }
-                .padding(.vertical, BifrostPanelMetrics.listPadding / 2)
+                .padding(.vertical, BifrostPanelMetrics.listPadding)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
             .onChange(of: model.selectedID) { _, id in
                 guard let id else { return }
-                proxy.scrollTo(id, anchor: .center)
+                proxy.scrollTo(id)
             }
         }
     }

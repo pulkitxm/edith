@@ -66,6 +66,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
     private var anchorTop: CGPoint?
     private var dragMonitor: Any?
     private var dragOrigin: CGPoint?
+    private var isAppearing = false
     var shortcutHandler: ((Int) -> Bool)?
 
     func runShortcut(_ number: Int) -> Bool {
@@ -121,16 +122,17 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         if !wasVisible { panel.alphaValue = 0 }
         panel.orderFrontRegardless()
         panel.makeKey()
-        if !wasVisible {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = BifrostPanelMetrics.appearDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().alphaValue = 1
-            }
-        }
         startWatchingDrags()
+        isAppearing = !wasVisible
         NotificationCenter.default.post(
             name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
+        isAppearing = false
+        guard !wasVisible else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = BifrostPanelMetrics.appearDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
     }
 
     func hide() {
@@ -169,7 +171,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
             abs(frame.height - panel.frame.height) > BifrostPanelMetrics.resizeThreshold
                 || abs(frame.minX - panel.frame.minX) > BifrostPanelMetrics.resizeThreshold
         else { return }
-        guard panel.isVisible else {
+        guard panel.isVisible, !isAppearing else {
             panel.setFrame(frame, display: true)
             return
         }

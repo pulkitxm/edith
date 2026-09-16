@@ -60,7 +60,7 @@ public enum BifrostPanelMetrics {
     public static let topFraction: CGFloat = 0.147
     public static let modeHeight: CGFloat = 470
     public static let resizeDuration: Double = 0.18
-    public static let appearDuration: Double = 0.12
+    public static let appearDuration: Double = 0.10
     public static let dismissDuration: Double = 0.09
     public static let resizeThreshold: CGFloat = 0.5
     public static let detailFraction: CGFloat = 0.52
