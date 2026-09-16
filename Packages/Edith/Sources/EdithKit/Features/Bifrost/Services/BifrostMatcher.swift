@@ -8,25 +8,21 @@ public struct BifrostMatchTarget: Equatable, Sendable {
         var folded: [Character] = []
         var starts: [Bool] = []
         var previous: Character?
+        var afterBoundary = true
         folded.reserveCapacity(text.count)
         starts.reserveCapacity(text.count)
         for character in text {
-            let isBoundary =
-                character == " " || character == "-" || character == "_"
-                || character == "." || character == "/"
-            if isBoundary {
-                previous = character
+            guard character.isLetter || character.isNumber else {
+                afterBoundary = true
+                previous = nil
                 continue
-            }
-            let previousWasBoundary = previous.map {
-                $0 == " " || $0 == "-" || $0 == "_" || $0 == "." || $0 == "/"
             }
             let caseBoundary = previous.map { $0.isLowercase && character.isUppercase } ?? false
             let digitBoundary = previous.map { !$0.isNumber && character.isNumber } ?? false
-            starts.append(
-                folded.isEmpty || previousWasBoundary == true || caseBoundary || digitBoundary)
+            starts.append(folded.isEmpty || afterBoundary || caseBoundary || digitBoundary)
             folded.append(Character(character.lowercased()))
             previous = character
+            afterBoundary = false
         }
         characters = folded
         wordStarts = starts

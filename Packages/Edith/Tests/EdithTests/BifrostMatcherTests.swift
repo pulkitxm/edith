@@ -44,6 +44,19 @@ import Testing
         #expect(score("iTerm", "term") != nil)
     }
 
+    @Test func invisibleCharactersDoNotHideTheFirstWord() {
+        #expect(score("\u{200E}WhatsApp", "what") != nil)
+        #expect(score("\u{200E}WhatsApp", "wa") != nil)
+        #expect(score("\u{202A}Mail\u{202C}", "mail") != nil)
+    }
+
+    @Test func punctuationSeparatesWords() {
+        let target = BifrostMatchTarget("Adobe (Creative) Cloud")
+        #expect(String(target.characters) == "adobecreativecloud")
+        #expect(target.wordStarts.filter { $0 }.count == 3)
+        #expect(score("Adobe (Creative) Cloud", "acc") != nil)
+    }
+
     @Test func aMissingLetterIsNoMatch() {
         #expect(score("Safari", "safz") == nil)
         #expect(score("Notes", "notess") == nil)
