@@ -13,7 +13,7 @@ struct MachinesFilesCommand: AsyncParsableCommand {
             MachinesFilesMakeDirectoryCommand.self, MachinesFilesRemoveCommand.self,
             MachinesFilesSearchCommand.self, MachinesFilesInfoCommand.self,
             MachinesFilesDuplicateCommand.self, MachinesFilesUndoCommand.self,
-            MachineFilesPreviewCommand.self,
+            MachinesFilesOpenCommand.self, MachineFilesPreviewCommand.self,
             MachineFilesLaunchCommand.self, MachineFilesRevealCommand.self,
             MachineFilesGetManyCommand.self, MachineFilesTransferCommand.self,
         ],
@@ -346,6 +346,81 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
                 operation: operation, completedVerb: "uploaded", source: "This Mac",
                 destinationMachine: target.machine.name, plan: plan, outcome: outcome, json: json)
         }
+    }
+}
+
+struct MachinesFilesOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open",
+        abstract: "Open Edith's Files window on a machine directory.",
+        discussion: """
+            Opens a Files window in the main Edith application, starting it if needed.
+            With no path, browsing continues in this terminal's remembered directory.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Remote directory to show. Defaults to this terminal's directory.")
+    var path: String?
+
+    func run() async throws {
+        try await execute {
+            let target =
+                machine.lowercased() == "local"
+                ? Machine.local : try MachineResolver.machine(machine)
+            let directory =
+                path ?? MachineWorkingDirectory.load(machineID: target.id)
+            let progress = CLIProgress.forCommand(json: json)
+            if !AppBridge.mainAppIsRunning {
+                guard let bundle = CLIEnvironment.installedAppURL() else {
+                    throw CLIFailure.unavailable(
+                        "Edith is not installed", hint: "install Edith and retry")
+                }
+                try await EdithProcesses.launch(bundle)
+            }
+            let requestID = UUID().uuidString
+            var answer: [AnyHashable: Any]?
+            for _ in 0..<4 {
+                answer = await AppBridge.awaitReply(
+                    IPC.Name.finderOpenResult, timeout: 3,
+                    matching: { $0["requestID"] as? String == requestID }
+                ) {
+                    var info: [String: Any] = [
+                        "machine": target.id.uuidString, "requestID": requestID,
+                    ]
+                    if let directory { info["path"] = directory }
+                    AppBridge.post(IPC.Name.requestFinderOpen, userInfo: info)
+                }
+                if answer != nil { break }
+            }
+            progress.end()
+            guard let reply = answer else {
+                throw AppBridge.silence("opening the Files window")
+            }
+            guard reply["opened"] as? Bool == true else {
+                throw CLIFailure.unavailable(
+                    "Edith would not open a window for \(target.name)",
+                    hint: reply["reason"] as? String)
+            }
+            report(machine: target, directory: directory)
+        }
+    }
+
+    private func report(machine target: Machine, directory: String?) {
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "machine": .string(target.name),
+                    "opened": .bool(true),
+                    "path": .string(directory ?? ""),
+                ]))
+            return
+        }
+        CLIOut.out("opened \(directory ?? "the home directory") on \(target.name)")
     }
 }
 
