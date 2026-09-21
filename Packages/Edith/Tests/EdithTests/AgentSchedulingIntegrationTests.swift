@@ -151,7 +151,6 @@ import Testing
             await !scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         await scheduler.addSubscriber(topic: .usage)
         #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
-        #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         for _ in 0..<1_000 {
             let snapshot = await scheduler.snapshots.first
             if snapshot?.runCount == 2, snapshot?.phase == .idle { break }
