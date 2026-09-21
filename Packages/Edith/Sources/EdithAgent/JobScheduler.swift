@@ -190,6 +190,12 @@ public actor JobScheduler {
         return enqueue(id)
     }
 
+    @discardableResult
+    public func enqueueFileSystemChange(_ id: String, topic: AgentTopic) -> Bool {
+        if subscriberCount(topic: topic) > 0 { return enqueue(id) }
+        return enqueueIfDue(id)
+    }
+
     var joinedRuns: [String: Int] {
         states.mapValues(\.joinedRuns)
     }

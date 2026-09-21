@@ -40,6 +40,10 @@ import Testing
 
         #expect(attention.contains("LoadingContainer("))
         #expect(dashboard.contains(".task(id: refresh.updating)"))
+        #expect(
+            dashboard.contains(
+                "AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage)"))
+        #expect(dashboard.contains("refresh.requestRefresh()"))
         #expect(!dashboard.contains("Task { await model.load() }"))
     }
 

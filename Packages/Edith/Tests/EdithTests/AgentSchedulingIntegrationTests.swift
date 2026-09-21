@@ -134,7 +134,7 @@ import Testing
         await scheduler.stop()
     }
 
-    @Test func filesystemEnqueueHonorsTheAmbientCadenceAfterACompletedRun() async {
+    @Test func filesystemEnqueueRefreshesLiveSubscribersWithoutChangingAmbientCadence() async {
         let policy = SchedulerPolicy()
         let scheduler = JobScheduler(clock: { policy.date })
         await scheduler.register(
@@ -144,13 +144,14 @@ import Testing
         await scheduler.start()
         _ = await scheduler.runNow("fixture.refresh")
 
-        #expect(await !scheduler.enqueueIfDue("fixture.refresh"))
+        #expect(
+            await !scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         policy.advance(899)
-        #expect(await !scheduler.enqueueIfDue("fixture.refresh"))
-        policy.advance(2)
-        #expect(await scheduler.enqueueIfDue("fixture.refresh"))
-        _ = await scheduler.enqueueIfDue("fixture.refresh")
-        _ = await scheduler.enqueueIfDue("fixture.refresh")
+        #expect(
+            await !scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
+        await scheduler.addSubscriber(topic: .usage)
+        #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
+        #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         for _ in 0..<1_000 {
             let snapshot = await scheduler.snapshots.first
             if snapshot?.runCount == 2, snapshot?.phase == .idle { break }
@@ -158,6 +159,9 @@ import Testing
         }
 
         #expect(await scheduler.snapshots.first?.runCount == 2)
+        await scheduler.removeSubscriber(topic: .usage)
+        policy.advance(2)
+        #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         await scheduler.stop()
     }
 
