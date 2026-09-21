@@ -113,6 +113,14 @@ struct DashboardView: View {
             await model.load()
             syncCustomDates()
         }
+        .task {
+            guard automaticActionsEnabled else { return }
+            refresh.requestRefresh()
+            for await _ in AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage) {
+                await model.load()
+                syncCustomDates()
+            }
+        }
         .onAppear {
             guard automaticActionsEnabled else { return }
             model.beginObserving()
