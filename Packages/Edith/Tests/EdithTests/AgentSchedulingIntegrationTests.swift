@@ -160,7 +160,8 @@ import Testing
 
         #expect(await scheduler.snapshots.first?.runCount == 2)
         await scheduler.removeSubscriber(topic: .usage)
-        policy.advance(2)
+        #expect(await !scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
+        policy.advance(901)
         #expect(await scheduler.enqueueFileSystemChange("fixture.refresh", topic: .usage))
         await scheduler.stop()
     }
