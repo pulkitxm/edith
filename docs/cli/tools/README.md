@@ -37,7 +37,7 @@ switched on.
 | `claude` | Claude Code | The Agent Usage extension | `claude` is on the assembled PATH and answers `--version` successfully | `brew install --cask claude-code`, falling back to `npm install -g @anthropic-ai/claude-code` |
 | `codex` | Codex | The Agent Usage extension, and only while `codexLimitsEnabled` is on, which it is unless you turn it off | `codex` is on the assembled PATH and answers `--version` successfully | `brew install --cask codex`, falling back to `npm install -g @openai/codex` |
 | `quinjet` | Quinjet | The Quinjet extension | an executable called `quinjet` is on the assembled PATH and answers `--version` successfully | `brew install pulkitxm/tap/quinjet` |
-| `homebrew` | Homebrew | Homebrew extension | `brew` answers `--version` successfully | manual installation from https://brew.sh |
+| `homebrew` | Homebrew | Homebrew extension | `brew` answers `--version` successfully | manual installation from [Homebrew](https://brew.sh) |
 
 The version string in every case is the first non-empty line the tool prints on
 stdout or stderr for `--version`.
