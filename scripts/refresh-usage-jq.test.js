@@ -108,6 +108,7 @@ function runCollectorFixture({
   failDetails,
   failClaudeDaily = false,
   rejectOnlinePricing = false,
+  requireBunRuntime = false,
   malformedClaudeDaily = false,
   failNormalization = false,
   legacyDeletedWorktree = false,
@@ -228,7 +229,7 @@ function runCollectorFixture({
     `#!/bin/sh
 case "\${1:-}" in
   */usage-billing-archive.mjs) exec "$REAL_BUN" "$@" ;;
-  *) exec "$@" ;;
+  *) export CCUSAGE_BUN_RUNTIME=1; exec "$@" ;;
 esac
 `,
   );
@@ -237,6 +238,9 @@ esac
   writeFileSync(
     ccusagePath,
     `#!/bin/sh
+if [ "${requireBunRuntime ? "1" : "0"}" = "1" ] && [ "\${CCUSAGE_BUN_RUNTIME:-0}" != "1" ]; then
+  exit 127
+fi
 if [ "\${REJECT_ONLINE_PRICING:-0}" = "1" ] && [ "\${1:-}" = "claude" ]; then
   case " $* " in
     *" --offline "*) ;;
@@ -2639,6 +2643,17 @@ describe("collector failure handling", () => {
 });
 
 describe("collector configuration", () => {
+  test("reuses the installed collector when only Bun is available", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      requireBunRuntime: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("phase\tccusage\tcached\t");
+    expect(result.stdout).not.toContain("installing ccusage");
+    expect(JSON.parse(result.output).totals.cost).toBe(1);
+  });
+
   test("publishes usage when online pricing is unavailable and reports empty-source progress", () => {
     const result = runCollectorFixture({
       hasLocalUsage: true,
