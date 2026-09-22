@@ -108,7 +108,7 @@ import EdithDatabase
         MatrixRow(
             id: "downloads", helper: false, machine: false,
             toolRule: .all, adapter: true,
-            requiredTools: ["yt-dlp"], optionalTools: []),
+            requiredTools: ["yt-dlp", "ffmpeg"], optionalTools: []),
         MatrixRow(
             id: "notchShelf", helper: true, machine: false,
             toolRule: .all, adapter: true,

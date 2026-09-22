@@ -46,7 +46,7 @@ import Testing
 
         #expect(requiredByExtension["usage"] == ["claude", "codex"])
         #expect(requiredByExtension["music"]?.isEmpty == true)
-        #expect(requiredByExtension["downloads"] == ["yt-dlp"])
+        #expect(requiredByExtension["downloads"] == ["yt-dlp", "ffmpeg"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
         #expect(requiredByExtension["homebrew"] == ["homebrew"])
         #expect(optionalByExtension["appMaintenance"] == ["homebrew"])
