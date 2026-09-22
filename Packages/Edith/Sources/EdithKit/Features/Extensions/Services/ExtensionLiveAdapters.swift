@@ -112,7 +112,8 @@ public enum ExtensionLiveAdapters {
         case "cleaner": cleanerReadiness()
         case "downloads":
             downloadsReadiness(
-                executable: executableNamed("yt-dlp"), transcoder: executableNamed("ffmpeg"))
+                executable: executableNamed("yt-dlp"), transcoder: executableNamed("ffmpeg"),
+                javascriptRuntime: executableNamed("deno"))
         case "audioMixer": audioMixerReadiness(defaults: defaults)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -258,13 +259,15 @@ public enum ExtensionLiveAdapters {
     static func downloadsReadiness(
         executable: URL? = CLIToolEnvironment.executable(named: "yt-dlp"),
         transcoder: URL? = CLIToolEnvironment.executable(named: "ffmpeg"),
+        javascriptRuntime: URL? = CLIToolEnvironment.executable(named: "deno"),
         directory: URL = Repo.musicDir
     ) -> ExtensionAdapterReadiness {
-        let missing: [String] = [("yt-dlp", executable), ("FFmpeg", transcoder)]
-            .compactMap { name, executable in executable == nil ? name : nil }
+        let missing: [String] = [
+            ("yt-dlp", executable), ("FFmpeg", transcoder), ("Deno", javascriptRuntime),
+        ].compactMap { name, executable in executable == nil ? name : nil }
         guard missing.isEmpty else {
             return .uninstalled(
-                "Install \(missing.joined(separator: " and ")) to download and convert media.")
+                "Install \(missing.joined(separator: ", ")) to download and convert media.")
         }
         var isDirectory: ObjCBool = false
         let hasFolder =

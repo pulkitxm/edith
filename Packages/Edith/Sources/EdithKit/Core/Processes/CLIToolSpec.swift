@@ -89,6 +89,14 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             arguments: ["install", "ffmpeg"],
             instruction: "Install with `brew install ffmpeg`."))
 
+    public static let deno = CLIToolSpec(
+        id: "deno", displayName: "Deno",
+        why: "Enables YouTube downloads with yt-dlp.",
+        presenceStrategy: .executable(name: "deno", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "deno"],
+            instruction: "Install with `brew install deno`."))
+
     public static let claudeCode = CLIToolSpec(
         id: "claude", displayName: "Claude Code",
         why: "Includes Claude Code cloud sessions in Agent Usage.",

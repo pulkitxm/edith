@@ -219,7 +219,7 @@ import Testing
 
         #expect(music.requiredTools.isEmpty)
         #expect(music.optionalTools.isEmpty)
-        #expect(downloads.requiredTools == [.youtubeDownloader, .ffmpeg])
+        #expect(downloads.requiredTools == [.youtubeDownloader, .ffmpeg, .deno])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])

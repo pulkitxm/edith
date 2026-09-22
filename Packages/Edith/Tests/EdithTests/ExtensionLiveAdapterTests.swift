@@ -12,22 +12,30 @@ import EdithCore
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = URL(fileURLWithPath: "/synthetic/bin/yt-dlp")
         let transcoder = URL(fileURLWithPath: "/synthetic/bin/ffmpeg")
+        let runtime = URL(fileURLWithPath: "/synthetic/bin/deno")
 
         #expect(
             ExtensionLiveAdapters.downloadsReadiness(
-                executable: executable, transcoder: nil, directory: root)
+                executable: executable, transcoder: nil, javascriptRuntime: runtime,
+                directory: root)
                 == .uninstalled("Install FFmpeg to download and convert media."))
         #expect(
             ExtensionLiveAdapters.downloadsReadiness(
-                executable: nil, transcoder: nil, directory: root)
-                == .uninstalled("Install yt-dlp and FFmpeg to download and convert media."))
+                executable: nil, transcoder: nil, javascriptRuntime: nil, directory: root)
+                == .uninstalled("Install yt-dlp, FFmpeg, Deno to download and convert media."))
         #expect(
             ExtensionLiveAdapters.downloadsReadiness(
-                executable: executable, transcoder: transcoder, directory: root)
+                executable: executable, transcoder: transcoder, javascriptRuntime: nil,
+                directory: root)
+                == .uninstalled("Install Deno to download and convert media."))
+        #expect(
+            ExtensionLiveAdapters.downloadsReadiness(
+                executable: executable, transcoder: transcoder, javascriptRuntime: runtime,
+                directory: root)
                 == .ready("Download tools are installed and the download folder is writable."))
         #expect(
             ExtensionLiveAdapters.downloadsReadiness(
-                executable: executable, transcoder: transcoder,
+                executable: executable, transcoder: transcoder, javascriptRuntime: runtime,
                 directory: root.appendingPathComponent("missing"))
                 == .needsSetup("Choose an existing, writable download folder."))
     }
@@ -36,7 +44,14 @@ import EdithCore
         let result = await ExtensionLiveAdapters.readiness(for: "downloads") { name in
             name == "yt-dlp" ? URL(fileURLWithPath: "/synthetic/bin/yt-dlp") : nil
         }
-        #expect(result == .uninstalled("Install FFmpeg to download and convert media."))
+        #expect(result == .uninstalled("Install FFmpeg, Deno to download and convert media."))
+    }
+
+    @Test func downloadReadinessUsesTheInjectedRuntimeLookup() async {
+        let result = await ExtensionLiveAdapters.readiness(for: "downloads") { name in
+            name == "deno" ? nil : URL(fileURLWithPath: "/synthetic/bin/\(name)")
+        }
+        #expect(result == .uninstalled("Install Deno to download and convert media."))
     }
 
     @Test func keepAwakeReadinessDoesNotDependOnSystem() async {
