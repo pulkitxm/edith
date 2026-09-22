@@ -237,7 +237,8 @@ def dropSynthetic:
   map(select(.modelName != "<synthetic>"
     or (.inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens + .cost) > 0));
 def normDay:
-  if (.modelBreakdowns | type) == "array" then
+  . as $day
+  | (if (.modelBreakdowns | type) == "array" then
     { period: .date, breakdowns: [ .modelBreakdowns[] | {
         modelName: (.modelName // "unknown"),
         inputTokens: (.inputTokens // 0),
@@ -278,7 +279,16 @@ def normDay:
         cacheReadTokens: ($d.cacheReadTokens // 0),
         cost: ($d.totalCost // $d.costUSD // 0)
       } ] }
-  end;
+  end)
+  | (($day.totalTokens // 0) - ([.breakdowns[]
+      | .inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens] | add // 0)) as $extra
+  | if $extra > 0 then
+      if (.breakdowns | length) == 1 then .breakdowns[0].outputTokens += $extra
+      else .breakdowns += [{
+        modelName: "unattributed-tokens", inputTokens: 0, outputTokens: $extra,
+        cacheCreationTokens: 0, cacheReadTokens: 0, cost: 0
+      }] end
+    else . end;
 '
 
 ASSEMBLE='

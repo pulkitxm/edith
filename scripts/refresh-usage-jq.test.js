@@ -1177,6 +1177,54 @@ describe("NORM", () => {
       JSON.stringify({ daily }),
     )[0];
 
+  test("retains separately reported reasoning in a single-model total", () => {
+    const [day] = norm([
+      {
+        date: "2026-08-06",
+        totalTokens: 81,
+        modelBreakdowns: [
+          {
+            modelName: "gpt-5.6-sol",
+            inputTokens: 45,
+            outputTokens: 6,
+            cacheReadTokens: 21,
+            cost: 0.25,
+          },
+        ],
+      },
+    ]);
+    expect(day.breakdowns[0]).toMatchObject({
+      inputTokens: 45,
+      outputTokens: 15,
+      cacheReadTokens: 21,
+      cost: 0.25,
+    });
+  });
+
+  test("keeps unassigned tokens without guessing their model or adding cost", () => {
+    const [day] = norm([
+      {
+        date: "2026-08-06",
+        totalTokens: 25,
+        modelBreakdowns: [
+          { modelName: "first", inputTokens: 10, cost: 1 },
+          { modelName: "second", inputTokens: 10, cost: 2 },
+        ],
+      },
+    ]);
+    expect(
+      day.breakdowns.find((row) => row.modelName === "unattributed-tokens"),
+    ).toEqual({
+      modelName: "unattributed-tokens",
+      inputTokens: 0,
+      outputTokens: 5,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      cost: 0,
+    });
+    expect(day.breakdowns.reduce((total, row) => total + row.cost, 0)).toBe(3);
+  });
+
   test("claude shape keeps per-model rows without re-adding reasoning", () => {
     const [day] = norm([
       {
