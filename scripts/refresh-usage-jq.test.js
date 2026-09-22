@@ -3037,14 +3037,16 @@ describe("retained history coverage", () => {
       expect(result.historyRetention.blocks).toEqual([]);
       previous.historyRetention = {
         version: 1,
-        blocks: [{
-          period: baseline.period,
-          source,
-          state: "partial-overlap",
-          provenance: { kind: "published-aggregate" },
-          baseline,
-          candidates: [candidate],
-        }],
+        blocks: [
+          {
+            period: baseline.period,
+            source,
+            state: "partial-overlap",
+            provenance: { kind: "published-aggregate" },
+            baseline,
+            candidates: [candidate],
+          },
+        ],
       };
       const recovered = merge(previous, fresh);
       expect(recovered.totals.tokens).toBe(120);
@@ -3055,12 +3057,16 @@ describe("retained history coverage", () => {
 
     test(`${source} repricing still protects missing tokens and cost-only history`, () => {
       for (const amount of [0, 100]) {
-        const previous = doc([day("2026-09-05", {
-          [source]: [{ ...row("one", amount), cost: 1 }],
-        })]);
-        const fresh = doc([day("2026-09-05", {
-          [source]: [{ ...row("one", amount / 2), cost: 0.5 }],
-        })]);
+        const previous = doc([
+          day("2026-09-05", {
+            [source]: [{ ...row("one", amount), cost: 1 }],
+          }),
+        ]);
+        const fresh = doc([
+          day("2026-09-05", {
+            [source]: [{ ...row("one", amount / 2), cost: 0.5 }],
+          }),
+        ]);
         const result = merge(previous, fresh);
         expect(result.totals.tokens).toBe(amount);
         expect(result.totals.cost).toBe(1);
@@ -3071,9 +3077,11 @@ describe("retained history coverage", () => {
 
   test("billed usage still retains a cost decrease with unchanged tokens", () => {
     const previous = doc([day("2026-09-05", { cli: [row("one", 100)] })]);
-    const fresh = doc([day("2026-09-05", {
-      cli: [{ ...row("one", 100), cost: 0.5 }],
-    })]);
+    const fresh = doc([
+      day("2026-09-05", {
+        cli: [{ ...row("one", 100), cost: 0.5 }],
+      }),
+    ]);
     const result = merge(previous, fresh);
     expect(result.totals.cost).toBe(1);
     expect(result.historyRetention.blocks).toHaveLength(1);
