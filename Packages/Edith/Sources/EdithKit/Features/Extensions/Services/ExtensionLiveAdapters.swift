@@ -260,7 +260,7 @@ public enum ExtensionLiveAdapters {
         transcoder: URL? = CLIToolEnvironment.executable(named: "ffmpeg"),
         directory: URL = Repo.musicDir
     ) -> ExtensionAdapterReadiness {
-        let missing = [("yt-dlp", executable), ("FFmpeg", transcoder)]
+        let missing: [String] = [("yt-dlp", executable), ("FFmpeg", transcoder)]
             .compactMap { name, executable in executable == nil ? name : nil }
         guard missing.isEmpty else {
             return .uninstalled(
