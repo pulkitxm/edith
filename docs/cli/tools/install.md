@@ -12,7 +12,7 @@ Arguments:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<tool>` | one of `yt-dlp`, `ffmpeg`, `claude`, `codex`, `quinjet`, `homebrew`, or a matching display name | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
+| `<tool>` | one of `yt-dlp`, `ffmpeg`, `deno`, `claude`, `codex`, `quinjet`, `homebrew`, or a matching display name | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
 
 Options:
 
@@ -58,6 +58,7 @@ Examples:
 ```
 ed tools install yt-dlp
 ed tools install ffmpeg
+ed tools install deno
 ed tools install codex --json
 ed tools install quinjet
 ed tools install "Claude Code"
@@ -112,14 +113,14 @@ An id that is not in the catalogue never reaches an install:
 ```
 $ ed tools install unknown-tool
 error: no tool called unknown-tool
-hint: tools: yt-dlp, ffmpeg, claude, codex, quinjet, homebrew
+hint: tools: yt-dlp, ffmpeg, deno, claude, codex, quinjet, homebrew
 ```
 
 Behaviour: the presence check runs first, so an already-installed tool is
 reported and exits 0 without touching the network. Only the other branch does
 any work, and it does it here: `ToolInstaller` runs `curl`, `chmod` and a move
 for yt-dlp, `brew` and then `npm` for the two agent CLIs, or Homebrew for
-Quinjet and FFmpeg, in this process. Homebrew itself must be installed manually.
+Quinjet, FFmpeg and Deno, in this process. Homebrew itself must be installed manually.
 Nothing is posted at Edith and no part of it has to be running. Every line those
 commands print is echoed as a `·` row as it arrives, which for the curl progress
 bar is one row per redraw. When they finish, `ed` runs the tool's own

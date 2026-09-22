@@ -1,6 +1,6 @@
 # `ed tools ls`
 
-Lists the six tools with their state, version and reason.
+Lists the seven tools with their state, version and reason.
 
 Usage:
 
@@ -15,7 +15,7 @@ Options:
 | `--json` | flag | off | Emits one JSON document on stdout. |
 
 There are no positional arguments, and there is nothing to filter or sort by:
-the order is always `yt-dlp`, `ffmpeg`, `claude`, `codex`, `quinjet`, `homebrew`.
+the order is always `yt-dlp`, `ffmpeg`, `deno`, `claude`, `codex`, `quinjet`, `homebrew`.
 
 `--json` shape, an array with one object per tool:
 
@@ -36,6 +36,14 @@ the order is always `yt-dlp`, `ffmpeg`, `claude`, `codex`, `quinjet`, `homebrew`
     "path": "/opt/homebrew/bin/ffmpeg",
     "version": "ffmpeg version 9.0.2",
     "why": "Converts downloaded audio and combines video with sound."
+  },
+  {
+    "id": "deno",
+    "installed": true,
+    "name": "Deno",
+    "path": "/opt/homebrew/bin/deno",
+    "version": "deno 2.9.7",
+    "why": "Enables YouTube downloads with yt-dlp."
   },
   {
     "id": "claude",
