@@ -110,7 +110,9 @@ public enum ExtensionLiveAdapters {
         case "appMaintenance": appMaintenanceReadiness()
         case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
         case "cleaner": cleanerReadiness()
-        case "downloads": downloadsReadiness(executable: executableNamed("yt-dlp"))
+        case "downloads":
+            downloadsReadiness(
+                executable: executableNamed("yt-dlp"), transcoder: executableNamed("ffmpeg"))
         case "audioMixer": audioMixerReadiness(defaults: defaults)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -255,17 +257,23 @@ public enum ExtensionLiveAdapters {
 
     static func downloadsReadiness(
         executable: URL? = CLIToolEnvironment.executable(named: "yt-dlp"),
+        transcoder: URL? = CLIToolEnvironment.executable(named: "ffmpeg"),
         directory: URL = Repo.musicDir
     ) -> ExtensionAdapterReadiness {
+        let missing = [("yt-dlp", executable), ("FFmpeg", transcoder)]
+            .compactMap { name, executable in executable == nil ? name : nil }
+        guard missing.isEmpty else {
+            return .uninstalled(
+                "Install \(missing.joined(separator: " and ")) to download and convert media.")
+        }
         var isDirectory: ObjCBool = false
         let hasFolder =
             FileManager.default.fileExists(
                 atPath: directory.path, isDirectory: &isDirectory) && isDirectory.boolValue
         return ExtensionAdapterFacts(
-            installed: executable != nil, configured: hasFolder,
-            readyDetail: "yt-dlp is installed and the download folder is writable.",
-            uninstalledDetail: "yt-dlp is not installed on this Mac.",
-            setupDetail: "The download folder does not exist yet."
+            configured: hasFolder && FileManager.default.isWritableFile(atPath: directory.path),
+            readyDetail: "Download tools are installed and the download folder is writable.",
+            setupDetail: "Choose an existing, writable download folder."
         ).readiness
     }
 
