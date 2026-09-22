@@ -1,10 +1,11 @@
 # `ed tools`
 
 `ed tools` answers one question: does this Mac have the command line programs
-Edith's extensions shell out to, and where are they? Four tools are in the
+Edith's extensions shell out to, and where are they? Six tools are in the
 catalogue, and the catalogue is fixed in the binary: `yt-dlp`, which the Music
-extension and the whole download queue run, `claude` and `codex`, the agent
-CLIs behind Agent Usage, and `quinjet`, which powers workspace review.
+extension and the whole download queue run, `ffmpeg` for media conversion,
+`claude` and `codex` for Agent Usage, `quinjet` for workspace review, and
+`homebrew` for package management.
 
 `ls` looks for each one and asks it for its version. `install` reports the tool
 when it is already there and otherwise fetches it itself, in this process, the
@@ -20,21 +21,23 @@ same command.
 | Command | What it does |
 | --- | --- |
 | `ed tools` | Runs `ed tools ls`, which is the default subcommand. |
-| `ed tools ls` | Lists all four tools with whether each is installed, its version, and why Edith wants it. |
+| `ed tools ls` | Lists all six tools with whether each is installed, its version, and why Edith wants it. |
 | `ed tools install <tool>` | Reports the tool when it is already installed, otherwise fetches it here and checks it landed on PATH. |
 
 ## The tools
 
 Every tool `ed` can report on or install, in the order `ls` prints them. All
-four are listed on every run, whether or not the extension that wants them is
+six are listed on every run, whether or not the extension that wants them is
 switched on.
 
 | `id` | Name | Wanted by | Present when | `install` fetches it from |
 | --- | --- | --- | --- | --- |
 | `yt-dlp` | yt-dlp | The Music extension, and everything under `ed download` | `yt-dlp` is on the assembled PATH and answers `--version` successfully | the official release asset `https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos`, downloaded with `curl --fail --location --progress-bar`, made executable, and moved to `~/Library/Application Support/Edith/bin/yt-dlp` |
+| `ffmpeg` | FFmpeg | Downloads | `ffmpeg` answers `-version` successfully | `brew install ffmpeg` |
 | `claude` | Claude Code | The Agent Usage extension | `claude` is on the assembled PATH and answers `--version` successfully | `brew install --cask claude-code`, falling back to `npm install -g @anthropic-ai/claude-code` |
 | `codex` | Codex | The Agent Usage extension, and only while `codexLimitsEnabled` is on, which it is unless you turn it off | `codex` is on the assembled PATH and answers `--version` successfully | `brew install --cask codex`, falling back to `npm install -g @openai/codex` |
 | `quinjet` | Quinjet | The Quinjet extension | an executable called `quinjet` is on the assembled PATH and answers `--version` successfully | `brew install pulkitxm/tap/quinjet` |
+| `homebrew` | Homebrew | Homebrew extension | `brew` answers `--version` successfully | manual installation from https://brew.sh |
 
 The version string in every case is the first non-empty line the tool prints on
 stdout or stderr for `--version`.
@@ -52,6 +55,7 @@ which is the line to run by hand:
 
 ```
 yt-dlp   Download yt-dlp_macos from the official yt-dlp release and place it in a folder on PATH.
+ffmpeg   Install with `brew install ffmpeg`.
 claude   Install with `brew install --cask claude-code` or `npm install -g @anthropic-ai/claude-code`.
 codex    Install with `brew install --cask codex` or `npm install -g @openai/codex`.
 quinjet  Install with `brew install pulkitxm/tap/quinjet`.
@@ -99,7 +103,7 @@ read Codex limits, so what `ed tools ls` reports is what the app will find.
 | --- | --- |
 | 0 | The listing printed; the tool was already installed; the install finished and the tool answered `--version`. Also `--help` on the group or on either verb. |
 | 2 | The command line was wrong in ArgumentParser's own terms: `ed tools install` with no tool, an unknown flag, or an extra argument (`ed tools ls extra` and `ed tools bogus` both land here, because the unmatched word is offered to the default subcommand `ls`, which takes none). |
-| 3 | `install` was given something that is not one of `yt-dlp`, `claude`, `codex` or `quinjet`, under either its id or its display name. |
+| 3 | `install` was given something that is not one of `yt-dlp`, `ffmpeg`, `claude`, `codex`, `quinjet` or `homebrew`, under either its id or its display name. |
 | 4 | `install` ran and could not finish: neither Homebrew nor npm available, a `curl`, `chmod`, `brew` or `npm` that exited non-zero, or a tool that could not be verified afterwards. |
 
 Nothing here exits 1. The only failures are a name that does not resolve and an
@@ -172,7 +176,7 @@ install that did not land.
   Quinjet extension off does not remove anything either: tools stay installed
   when the extension that wanted them is disabled.
 - The relation between tools and extensions is readable from the other side:
-  `ed extensions info music --json` reports `"optionalTools": ["yt-dlp"]`,
+  `ed extensions info downloads --json` reports `"requiredTools": ["yt-dlp", "ffmpeg"]`,
   `ed extensions info usage --json` reports `"requiredTools": ["claude", "codex"]`,
   and `ed extensions info quinjet --json` reports `"requiredTools": ["quinjet"]`.
 - `ed download tool` is the second view of the same yt-dlp. It prints the

@@ -1,6 +1,6 @@
 # `ed tools ls`
 
-Lists the four tools with their state, version and reason.
+Lists the six tools with their state, version and reason.
 
 Usage:
 
@@ -15,7 +15,7 @@ Options:
 | `--json` | flag | off | Emits one JSON document on stdout. |
 
 There are no positional arguments, and there is nothing to filter or sort by:
-the order is always `yt-dlp`, `claude`, `codex`, `quinjet`.
+the order is always `yt-dlp`, `ffmpeg`, `claude`, `codex`, `quinjet`, `homebrew`.
 
 `--json` shape, an array with one object per tool:
 
@@ -28,6 +28,14 @@ the order is always `yt-dlp`, `claude`, `codex`, `quinjet`.
     "path": "/Users/pulkit/Library/Application Support/Edith/bin/yt-dlp",
     "version": "2026.07.04",
     "why": "Downloads YouTube audio into your Music library."
+  },
+  {
+    "id": "ffmpeg",
+    "installed": true,
+    "name": "FFmpeg",
+    "path": "/opt/homebrew/bin/ffmpeg",
+    "version": "ffmpeg version 9.0.2",
+    "why": "Converts downloaded audio and combines video with sound."
   },
   {
     "id": "claude",
@@ -52,6 +60,14 @@ the order is always `yt-dlp`, `claude`, `codex`, `quinjet`.
     "path": "/opt/homebrew/bin/quinjet",
     "version": "quinjet 1.0.0",
     "why": "Powers local pull request review and live workspace changes."
+  },
+  {
+    "id": "homebrew",
+    "installed": true,
+    "name": "Homebrew",
+    "path": "/opt/homebrew/bin/brew",
+    "version": "Homebrew 7.0.4",
+    "why": "Provides the formula and cask catalog managed by this extension."
   }
 ]
 ```
