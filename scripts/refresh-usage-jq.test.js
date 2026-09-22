@@ -228,7 +228,7 @@ function runCollectorFixture({
     bunPath,
     `#!/bin/sh
 case "\${1:-}" in
-  */usage-billing-archive.mjs) exec "$REAL_BUN" "$@" ;;
+  */usage-billing-archive.mjs|*/usage-session-input.mjs) exec "$REAL_BUN" "$@" ;;
   *) export CCUSAGE_BUN_RUNTIME=1; exec "$@" ;;
 esac
 `,
@@ -248,7 +248,10 @@ if [ "\${REJECT_ONLINE_PRICING:-0}" = "1" ] && [ "\${1:-}" = "claude" ]; then
   esac
 fi
 if [ "\${1:-}" = "--version" ]; then
-  printf 'ccusage 20.0.19\\n'
+  case "$0" in
+    */.codex-ccusage/*) printf 'ccusage 20.0.24\\n' ;;
+    *) printf 'ccusage 20.0.19\\n' ;;
+  esac
 elif [ "\${2:-}" = "daily" ]; then
   if [ "\${1:-}" = "claude" ] && [ "\${FAIL_CLAUDE_DAILY:-0}" = "1" ]; then
     exit 72
@@ -269,6 +272,10 @@ fi
 `,
   );
   chmodSync(ccusagePath, 0o755);
+  const sessionBin = join(cache, ".codex-ccusage", "node_modules", ".bin");
+  mkdirSync(sessionBin, { recursive: true });
+  writeFileSync(join(sessionBin, "ccusage"), readFileSync(ccusagePath));
+  chmodSync(join(sessionBin, "ccusage"), 0o755);
   if (failDetails || mutateMachineBeforeFleet) {
     const realJQ = Bun.which("jq");
     expect(realJQ).not.toBeNull();
@@ -2689,7 +2696,9 @@ describe("collector configuration", () => {
 
   test("limits Codex discovery to sessions and archived sessions", () => {
     expect(script).toContain('CODEX_CFG="$TMP/codex-home"');
-    expect(script).toContain("for dir in sessions archived_sessions; do");
+    expect(script).toContain(
+      'bun "$SESSION_INPUT_SCRIPT" "$HOME/.codex" "$CODEX_CFG"',
+    );
     expect(script).toContain(
       'CODEX_HOME="$CODEX_CFG" ccu codex daily --json --offline',
     );
