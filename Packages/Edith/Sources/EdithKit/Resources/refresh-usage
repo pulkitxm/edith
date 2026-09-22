@@ -864,11 +864,10 @@ else
   _phase "session collector" "cached"
 fi
 ccu() {
-  if [ "${1:-}" = "codex" ]; then
-    bun "$CODEX_CCUSAGE_BIN" "$@"
-  else
-    bun "$CCUSAGE_BIN" "$@"
-  fi
+  case "${1:-}" in
+    codex|opencode) bun "$CODEX_CCUSAGE_BIN" "$@" ;;
+    *) bun "$CCUSAGE_BIN" "$@" ;;
+  esac
 }
 
 : >"$TMP/manifest.jsonl"
@@ -1761,13 +1760,14 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   }
   OPENCODE_MESSAGES="
     select json_object(
+      'id', m.id,
       'sid', m.session_id,
       'ts', json_extract(m.data, '\$.time.created'),
       'cwd', coalesce(nullif(json_extract(m.data, '\$.path.cwd'), ''), s.directory, ''),
       'model', coalesce(json_extract(m.data, '\$.modelID'), 'unknown'),
       'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
       'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
-      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0),
+      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0) + coalesce(json_extract(m.data, '\$.tokens.reasoning'), 0),
       'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
       'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
     from message m
@@ -1777,13 +1777,14 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   "
   OPENCODE_MESSAGES_FALLBACK="
     select json_object(
+      'id', m.id,
       'sid', m.session_id,
       'ts', json_extract(m.data, '\$.time.created'),
       'cwd', coalesce(json_extract(m.data, '\$.path.cwd'), ''),
       'model', coalesce(json_extract(m.data, '\$.modelID'), 'unknown'),
       'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
       'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
-      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0),
+      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0) + coalesce(json_extract(m.data, '\$.tokens.reasoning'), 0),
       'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
       'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
     from message m
@@ -1793,6 +1794,27 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   OPENCODE_TITLES="
     select json_object('sid', id, 'title', title)
     from session where coalesce(title, '') != '';
+  "
+  OPENCODE_MESSAGES_V2="
+    select json_object(
+      'id', m.id,
+      'sid', m.session_id,
+      'ts', coalesce(json_extract(m.data, '\$.time.created'), m.time_created),
+      'cwd', coalesce(nullif(json_extract(m.data, '\$.path.cwd'), ''), s.directory, ''),
+      'model', coalesce(json_extract(m.data, '\$.model.id'), 'unknown'),
+      'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
+      'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
+      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0) + coalesce(json_extract(m.data, '\$.tokens.reasoning'), 0),
+      'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
+      'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
+    from session_message m
+    left join session_v2 s on s.id = m.session_id
+    where m.type = 'assistant'
+      and coalesce(json_extract(m.data, '\$.time.created'), m.time_created) is not null;
+  "
+  OPENCODE_TITLES_V2="
+    select json_object('sid', id, 'title', title)
+    from session_v2 where coalesce(title, '') != '';
   "
   opencode_sql() {
     local db="$1" sql="$2"
@@ -1811,27 +1833,32 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     fi
   }
   walk_opencode() {
-    local db="$HOME/.local/share/opencode/opencode.db"
+    local db="${1:-$HOME/.local/share/opencode/opencode.db}"
     [ -f "$db" ] || return 0
     if ! command -v bun >/dev/null 2>&1 && ! command -v sqlite3 >/dev/null 2>&1; then
       install_bun >/dev/null 2>&1 || return 0
     fi
-    if ! opencode_sql "$db" "$OPENCODE_MESSAGES" >"$TMP/opencode.rows.jsonl" 2>/dev/null; then
-      opencode_sql "$db" "$OPENCODE_MESSAGES_FALLBACK" >"$TMP/opencode.rows.jsonl" 2>/dev/null \
-        || return 0
+    opencode_sql "$db" "$OPENCODE_MESSAGES_V2" >"$TMP/opencode.rows.jsonl" 2>/dev/null || true
+    if ! opencode_sql "$db" "$OPENCODE_MESSAGES" >"$TMP/opencode.legacy.jsonl" 2>/dev/null; then
+      opencode_sql "$db" "$OPENCODE_MESSAGES_FALLBACK" >"$TMP/opencode.legacy.jsonl" 2>/dev/null \
+        || true
     fi
-    jq -c --argjson off "$OFF" --arg src opencode '
-        select(.inp + .out + .cc + .cr > 0)
+    jq -sc --argjson off "$OFF" --arg src opencode '
+        unique_by(.id)[] | select(.inp + .out + .cc + .cr > 0)
         | (.ts / 1000 | floor) as $ep
         | ($ep + $off) as $loc
-        | { t: "rec", id: ($src + ":" + .sid + ":" + (.ts | tostring)),
+        | { t: "rec", id: ($src + ":" + .id),
             date: ($loc | strftime("%Y-%m-%d")), hour: (($loc / 3600 | floor) % 24),
             ts: .ts, model: .model, cwd: .cwd, wt: null,
             sid: .sid, src: $src, cost: .cost,
             inp: .inp, out: .out, cc: .cc, cr: .cr,
-            tok: (.inp + .out + .cc + .cr) }' "$TMP/opencode.rows.jsonl" \
+            tok: (.inp + .out + .cc + .cr) }' "$TMP/opencode.rows.jsonl" "$TMP/opencode.legacy.jsonl" \
       >>"$TMP/walk.jsonl" 2>/dev/null || true
     if opencode_sql "$db" "$OPENCODE_TITLES" >"$TMP/opencode.titles.jsonl" 2>/dev/null; then
+      jq -c '{t: "title", sid: .sid, title: .title}' "$TMP/opencode.titles.jsonl" \
+        >>"$TMP/walk.jsonl" 2>/dev/null || true
+    fi
+    if opencode_sql "$db" "$OPENCODE_TITLES_V2" >"$TMP/opencode.titles.jsonl" 2>/dev/null; then
       jq -c '{t: "title", sid: .sid, title: .title}' "$TMP/opencode.titles.jsonl" \
         >>"$TMP/walk.jsonl" 2>/dev/null || true
     fi

@@ -1046,7 +1046,7 @@ describe("OpenCode repository queries", () => {
     database.run(
       "create table session (id text primary key, directory text, title text)",
     );
-    database.run("create table message (session_id text, data text)");
+    database.run("create table message (id text, session_id text, data text)");
     database.run(
       "insert into session values (?, ?, ?)",
       "session-1",
@@ -1054,7 +1054,8 @@ describe("OpenCode repository queries", () => {
       "OpenCode chat",
     );
     database.run(
-      "insert into message values (?, ?)",
+      "insert into message values (?, ?, ?)",
+      "message-1",
       "session-1",
       JSON.stringify({
         role: "assistant",
@@ -1066,6 +1067,7 @@ describe("OpenCode repository queries", () => {
     );
     const row = JSON.parse(database.query(OPENCODE_MESSAGES).values()[0][0]);
     expect(row).toEqual({
+      id: "message-1",
       sid: "session-1",
       ts: 1_786_000_000_000,
       cwd: "/repo/from-session",
@@ -1086,7 +1088,7 @@ describe("OpenCode repository queries", () => {
     modern.run(
       "create table session (id text primary key, directory text, title text)",
     );
-    modern.run("create table message (session_id text, data text)");
+    modern.run("create table message (id text, session_id text, data text)");
     const message = JSON.stringify({
       role: "assistant",
       time: { created: 1_786_000_000_000 },
@@ -1099,7 +1101,12 @@ describe("OpenCode repository queries", () => {
       "/repo/from-session",
       "",
     );
-    modern.run("insert into message values (?, ?)", "session-2", message);
+    modern.run(
+      "insert into message values (?, ?, ?)",
+      "message-2",
+      "session-2",
+      message,
+    );
     const modernRow = JSON.parse(
       modern.query(OPENCODE_MESSAGES).values()[0][0],
     );
@@ -1107,8 +1114,13 @@ describe("OpenCode repository queries", () => {
     modern.close();
 
     const legacy = new Database(":memory:");
-    legacy.run("create table message (session_id text, data text)");
-    legacy.run("insert into message values (?, ?)", "session-2", message);
+    legacy.run("create table message (id text, session_id text, data text)");
+    legacy.run(
+      "insert into message values (?, ?, ?)",
+      "message-2",
+      "session-2",
+      message,
+    );
     const legacyRow = JSON.parse(
       legacy.query(OPENCODE_MESSAGES_FALLBACK).values()[0][0],
     );
