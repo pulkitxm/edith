@@ -414,10 +414,12 @@ HISTORY='
       and validRetention($document.historyRetention.blocks)
     then $document.historyRetention.blocks
     else error("usage retained history is invalid") end;
-  def coverageRegressed($old; $new):
+  def coverageRegressed($source; $old; $new):
     ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens"] as $fields
-    | (([($new // [])[].cost // 0] | add // 0) + 0.000001
-        < ([($old // [])[].cost // 0] | add // 0))
+    | ([($old // [])[] | . as $row | $fields[] | $row[.] // 0] | add // 0) as $tokens
+    | ((($source != "codex" and $source != "opencode") or $tokens == 0)
+        and (([($new // [])[].cost // 0] | add // 0) + 0.000001
+          < ([($old // [])[].cost // 0] | add // 0)))
       or any(($old // [])[]; .modelName as $model
         | any($fields[]; . as $field
           | ([($new // [])[] | select(.modelName == $model) | .[$field] // 0] | add // 0) + 0.000001
@@ -436,7 +438,7 @@ HISTORY='
             and $retained.provenance.kind == "published-aggregate"
             and $archivedAt != null and $retainedAt != null and $archivedAt < $retainedAt
             and ($retained.baseline | baselineIdentity($block.source)) == ($published | baselineIdentity($block.source))
-            and (coverageRegressed(.baseline.bySource[$block.source]; $published.bySource[$block.source]) | not)
+            and (coverageRegressed($block.source; .baseline.bySource[$block.source]; $published.bySource[$block.source]) | not)
           ) | not)
         | select(
             .source != "cli"
@@ -444,7 +446,7 @@ HISTORY='
             or any($existing[]; historyKey(.) == historyKey($block))
             or $published == null
             or (.baseline | baselineIdentity($block.source)) == ($published | baselineIdentity($block.source))
-            or coverageRegressed(.baseline.bySource[$block.source]; $published.bySource[$block.source])) ];
+            or coverageRegressed($block.source; .baseline.bySource[$block.source]; $published.bySource[$block.source])) ];
   def retainHistory($old; $fresh):
     (reduce ((retainedBlocks($old) + incomingRetention($old; $fresh))[]) as $block ({};
       historyKey($block) as $key
@@ -463,10 +465,10 @@ HISTORY='
             | if $block != null and ($block.candidates | length) > 0
                 and ($block.baseline | baselineIdentity($source)) == ($oldDay | baselineIdentity($source))
                 and all(([$newDay] + $block.candidates)[];
-                  coverageRegressed($oldDay.bySource[$source]; .bySource[$source]) | not)
+                  coverageRegressed($source; $oldDay.bySource[$source]; .bySource[$source]) | not)
               then del(.blocks[$key]) else . end
             | if .blocks[$key] != null
-                or coverageRegressed($oldDay.bySource[$source]; $newDay.bySource[$source])
+                or coverageRegressed($source; $oldDay.bySource[$source]; $newDay.bySource[$source])
               then trimDay($oldDay; [$source]) as $baseline
                 | trimDay($newDay; [$source]) as $candidate
                 | if .blocks[$key] == null then

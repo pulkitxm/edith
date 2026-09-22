@@ -417,7 +417,8 @@ public enum UsageHistory {
                 !candidates.isEmpty, !sameHistory(current, baseline, source: source),
                 ([current] + candidates).allSatisfy({ day in
                     !coverageRegressed(
-                        old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                        source: source, old: rows,
+                        fresh: (day["bySource"] as? [String: Any])?[source])
                 })
             {
                 retained.removeValue(forKey: key)
@@ -476,13 +477,15 @@ public enum UsageHistory {
                     !candidates.isEmpty,
                     ([newDay] + candidates).allSatisfy({ day in
                         !coverageRegressed(
-                            old: rows, fresh: (day["bySource"] as? [String: Any])?[source])
+                            source: source, old: rows,
+                            fresh: (day["bySource"] as? [String: Any])?[source])
                     })
                 {
                     retained.removeValue(forKey: key)
                 }
                 guard
-                    retained[key] != nil || coverageRegressed(old: rows, fresh: newSources[source])
+                    retained[key] != nil
+                        || coverageRegressed(source: source, old: rows, fresh: newSources[source])
                 else { continue }
                 let baseline = historyBlock(oldDay, source: source)
                 let candidate = historyBlock(newDay, source: source)
@@ -572,14 +575,18 @@ public enum UsageHistory {
         }.sorted { ($0.0 ?? Data()).lexicographicallyPrecedes($1.0 ?? Data()) }.map(\.1)
     }
 
-    private static func coverageRegressed(old: Any, fresh: Any?) -> Bool {
+    private static func coverageRegressed(source: String, old: Any, fresh: Any?) -> Bool {
         let oldRows = old as? [[String: Any]] ?? []
         let newRows = fresh as? [[String: Any]] ?? []
         let fields = [
             "inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens",
         ]
-        if newRows.reduce(0, { $0 + num($1["cost"]) }) + 0.000_001
-            < oldRows.reduce(0, { $0 + num($1["cost"]) })
+        let oldTokens = oldRows.reduce(0) { total, row in
+            total + fields.reduce(0) { $0 + num(row[$1]) }
+        }
+        if (source != "codex" && source != "opencode") || oldTokens == 0,
+            newRows.reduce(0, { $0 + num($1["cost"]) }) + 0.000_001
+                < oldRows.reduce(0, { $0 + num($1["cost"]) })
         {
             return true
         }

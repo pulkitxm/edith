@@ -4,6 +4,65 @@ import Testing
 @testable import EdithKit
 
 @Suite struct UsageHistoryRetentionTests {
+    @Test(arguments: ["codex", "opencode"])
+    func repricingPublishesRecoveredTokensAndResolvesOldPriceBlocks(source: String) throws {
+        let baseline = day("2026-09-05", [source: [row("one", 100)]])
+        var updated = row("one", 100)
+        updated["outputTokens"] = 20
+        updated["cost"] = 0.5
+        let candidate: [String: Any] = [
+            "period": "2026-09-05", "bySource": [source: [updated]],
+            "projects": [],
+            "hours": (0..<24).map { _ in
+                ["tokens": 0, "cost": 0, "bySource": [:], "byPath": [:]] as [String: Any]
+            },
+        ]
+        let previous = try document([baseline])
+        let fresh = try document([candidate])
+        var retained = try object(previous)
+        retained["historyRetention"] = [
+            "version": 1,
+            "blocks": [
+                [
+                    "period": "2026-09-05", "source": source, "state": "partial-overlap",
+                    "provenance": ["kind": "published-aggregate"],
+                    "baseline": baseline, "candidates": [candidate],
+                ] as [String: Any]
+            ],
+        ]
+        let archived = try JSONSerialization.data(withJSONObject: retained)
+        let results = [
+            UsageHistory.mergeRefresh(fresh: fresh, previous: previous),
+            UsageHistory.mergeRefresh(fresh: fresh, previous: archived),
+            UsageHistory.merge(local: fresh, cloud: archived),
+        ]
+        for value in results {
+            let merged = try #require(value)
+            #expect(UsageHistory.isValidDocument(merged))
+            let result = try object(merged)
+            #expect(tokens(result) == 120)
+            #expect((result["totals"] as? [String: Any])?["cost"] as? Double == 0.5)
+            #expect(try blocks(result).isEmpty)
+        }
+    }
+
+    @Test(arguments: ["codex", "opencode", "cli"])
+    func repricingStillProtectsMissingTokensAndCostOnlyHistory(source: String) throws {
+        for amount in [0.0, 100.0] {
+            var original = row("one", amount)
+            original["cost"] = 1.0
+            var updated = row("one", amount / 2)
+            updated["cost"] = 0.5
+            let previous = try document([day("2026-09-05", [source: [original]])])
+            let fresh = try document([day("2026-09-05", [source: [updated]])])
+            let merged = try #require(UsageHistory.mergeRefresh(fresh: fresh, previous: previous))
+            let result = try object(merged)
+            #expect(tokens(result) == amount)
+            #expect((result["totals"] as? [String: Any])?["cost"] as? Double == 1)
+            #expect(try blocks(result).count == 1)
+        }
+    }
+
     @Test func missingModelPreservesWholeHistoryWhileNewDaysAndOtherSourcesAdvance() throws {
         let previous = try document([
             day(

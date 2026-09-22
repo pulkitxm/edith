@@ -3023,6 +3023,70 @@ describe("retained history coverage", () => {
       JSON.stringify([fresh]),
     ])[0];
 
+  for (const source of ["codex", "opencode"]) {
+    test(`${source} repricing publishes recovered tokens and resolves old price blocks`, () => {
+      const baseline = day("2026-09-05", { [source]: [row("one", 100)] });
+      const candidate = day(baseline.period, {
+        [source]: [{ ...row("one", 100), outputTokens: 20, cost: 0.5 }],
+      });
+      const previous = doc([baseline]);
+      const fresh = doc([candidate]);
+      const result = merge(previous, fresh);
+      expect(result.totals.tokens).toBe(120);
+      expect(result.totals.cost).toBe(0.5);
+      expect(result.historyRetention.blocks).toEqual([]);
+      previous.historyRetention = {
+        version: 1,
+        blocks: [
+          {
+            period: baseline.period,
+            source,
+            state: "partial-overlap",
+            provenance: { kind: "published-aggregate" },
+            baseline,
+            candidates: [candidate],
+          },
+        ],
+      };
+      const recovered = merge(previous, fresh);
+      expect(recovered.totals.tokens).toBe(120);
+      expect(recovered.totals.cost).toBe(0.5);
+      expect(recovered.historyRetention.blocks).toEqual([]);
+      expect(merge(recovered, fresh).historyRetention.blocks).toEqual([]);
+    });
+
+    test(`${source} repricing still protects missing tokens and cost-only history`, () => {
+      for (const amount of [0, 100]) {
+        const previous = doc([
+          day("2026-09-05", {
+            [source]: [{ ...row("one", amount), cost: 1 }],
+          }),
+        ]);
+        const fresh = doc([
+          day("2026-09-05", {
+            [source]: [{ ...row("one", amount / 2), cost: 0.5 }],
+          }),
+        ]);
+        const result = merge(previous, fresh);
+        expect(result.totals.tokens).toBe(amount);
+        expect(result.totals.cost).toBe(1);
+        expect(result.historyRetention.blocks).toHaveLength(1);
+      }
+    });
+  }
+
+  test("billed usage still retains a cost decrease with unchanged tokens", () => {
+    const previous = doc([day("2026-09-05", { cli: [row("one", 100)] })]);
+    const fresh = doc([
+      day("2026-09-05", {
+        cli: [{ ...row("one", 100), cost: 0.5 }],
+      }),
+    ]);
+    const result = merge(previous, fresh);
+    expect(result.totals.cost).toBe(1);
+    expect(result.historyRetention.blocks).toHaveLength(1);
+  });
+
   test("resolved archive baselines do not freeze newer published usage", () => {
     const baseline = day("2026-09-05", { cli: [row("one", 100)] });
     const previous = doc([day("2026-09-05", { cli: [row("one", 150)] })]);
