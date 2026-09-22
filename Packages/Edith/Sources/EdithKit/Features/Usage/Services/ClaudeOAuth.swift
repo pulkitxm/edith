@@ -126,7 +126,7 @@ public enum ClaudeCredentialStoreError: LocalizedError, Equatable {
     }
 }
 
-public enum ClaudeCredentialDataLookup: Equatable {
+public enum ClaudeCredentialDataLookup: Equatable, Sendable {
     case data(Data)
     case missing
     case cancelled
@@ -143,9 +143,11 @@ public enum ClaudeCredentialStore {
     public static let maximumCredentialBytes = 65_536
 
     private static let keychainService = "Claude Code-credentials"
+    private static let keychainReads = BoundedKeychainAccess<ClaudeCredentialDataLookup>()
+    private static let keychainWrites = BoundedKeychainAccess<Bool>()
 
     public static func read() async -> ClaudeCredentialLookup {
-        let keychain = keychainData()
+        let keychain = await keychainReads.run(fallback: .timedOut) { keychainData() }
         return read(
             home: FileManager.default.homeDirectoryForCurrentUser,
             keychainData: keychain,
@@ -196,7 +198,22 @@ public enum ClaudeCredentialStore {
     }
 
     public static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
-        try await persist(data, source: source, keychainUpdater: { try updateKeychain($0) })
+        if source == .keychain {
+            guard data.count <= maximumCredentialBytes else {
+                throw ClaudeCredentialStoreError.keychainUpdateFailed
+            }
+            let updated = await keychainWrites.run(fallback: false) {
+                do {
+                    try updateKeychain(data)
+                    return true
+                } catch {
+                    return false
+                }
+            }
+            guard updated else { throw ClaudeCredentialStoreError.keychainUpdateFailed }
+        } else {
+            try await persist(data, source: source, keychainUpdater: { try updateKeychain($0) })
+        }
     }
 
     public static func persist(
