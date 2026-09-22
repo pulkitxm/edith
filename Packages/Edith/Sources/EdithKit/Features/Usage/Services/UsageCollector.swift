@@ -9,22 +9,29 @@ public enum UsageCollector {
 
     public static func script() -> Data? {
         guard let url = scriptURL(),
-            let runtimeURL = BundledResources.locate(
-                "usage-billing-archive.mjs", in: BundledResources.kitBundleName),
-            let source = try? String(contentsOf: url, encoding: .utf8),
-            let runtime = try? String(contentsOf: runtimeURL, encoding: .utf8)
+            var source = try? String(contentsOf: url, encoding: .utf8)
         else { return nil }
-        let marker = #"BILLING_ARCHIVE_SCRIPT="${BASH_SOURCE[0]%/*}/usage-billing-archive.mjs""#
-        guard source.components(separatedBy: marker).count == 2, runtime.hasSuffix("\n") else {
-            return nil
+        for (variable, name, delimiter) in [
+            ("BILLING_ARCHIVE_SCRIPT", "usage-billing-archive.mjs", "EDITH_BILLING_RUNTIME"),
+            ("SESSION_INPUT_SCRIPT", "usage-session-input.mjs", "EDITH_SESSION_RUNTIME"),
+        ] {
+            guard
+                let runtimeURL = BundledResources.locate(name, in: BundledResources.kitBundleName),
+                let runtime = try? String(contentsOf: runtimeURL, encoding: .utf8)
+            else { return nil }
+            let marker = "\(variable)=\"${BASH_SOURCE[0]%/*}/\(name)\""
+            guard source.components(separatedBy: marker).count == 2, runtime.hasSuffix("\n") else {
+                return nil
+            }
+            let embedded = """
+                \(variable)="$TMP/\(name)"
+                cat >"$\(variable)" <<'\(delimiter)'
+                \(runtime.dropLast())
+                \(delimiter)
+                """
+            source = source.replacingOccurrences(of: marker, with: embedded)
         }
-        let embedded = """
-            BILLING_ARCHIVE_SCRIPT="$TMP/usage-billing-archive.mjs"
-            cat >"$BILLING_ARCHIVE_SCRIPT" <<'EDITH_BILLING_RUNTIME'
-            \(runtime.dropLast())
-            EDITH_BILLING_RUNTIME
-            """
-        return Data(source.replacingOccurrences(of: marker, with: embedded).utf8)
+        return Data(source.utf8)
     }
 
     public static var machinesDirectory: URL {

@@ -4,13 +4,17 @@ import Testing
 @testable import EdithKit
 
 @Suite struct UsageCollectorScriptTests {
-    @Test func remotePayloadCreatesItsExactBundledArchiveRuntime() async throws {
+    @Test(arguments: [
+        ("usage-billing-archive.mjs", "BILLING_ARCHIVE_SCRIPT"),
+        ("usage-session-input.mjs", "SESSION_INPUT_SCRIPT"),
+    ])
+    func remotePayloadCreatesItsExactBundledRuntime(name: String, variable: String) async throws {
         let script = try #require(UsageCollector.script())
         let text = try #require(String(data: script, encoding: .utf8))
         let boundary = try #require(text.range(of: "\n_now() {"))
         let prefix = String(text[..<boundary.lowerBound])
         let runtimeURL = try #require(
-            BundledResources.locate("usage-billing-archive.mjs", in: BundledResources.kitBundleName)
+            BundledResources.locate(name, in: BundledResources.kitBundleName)
         )
         let expected = try Data(contentsOf: runtimeURL)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -27,7 +31,7 @@ import Testing
                 arguments: ["-s", "--", root.appendingPathComponent("data").path],
                 environment: environment, currentDirectoryURL: root,
                 timeout: 5, maximumOutputBytes: 256 * 1_024,
-                standardInputData: Data((prefix + "\ncat \"$BILLING_ARCHIVE_SCRIPT\"\n").utf8),
+                standardInputData: Data((prefix + "\ncat \"$\(variable)\"\n").utf8),
                 terminatesProcessGroup: true),
             onLine: { _ in })
         #expect(result.terminationStatus == 0)
