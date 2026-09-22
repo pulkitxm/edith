@@ -842,7 +842,7 @@ CCUSAGE_VERSION="20.0.19"
 CACHE="$EDCACHE/.ccusage"
 mkdir -p "$CACHE"
 CCUSAGE_BIN="$CACHE/node_modules/.bin/ccusage"
-INSTALLED_CCUSAGE_VERSION="$("$CCUSAGE_BIN" --version 2>/dev/null | awk '{print $NF}' || true)"
+INSTALLED_CCUSAGE_VERSION="$(bun "$CCUSAGE_BIN" --version 2>/dev/null | awk '{print $NF}' || true)"
 if [ "$INSTALLED_CCUSAGE_VERSION" != "$CCUSAGE_VERSION" ]; then
   _note "installing ccusage (first run, ~15s)"
   (cd "$CACHE" && bun add --exact "ccusage@$CCUSAGE_VERSION" >/dev/null 2>&1)
