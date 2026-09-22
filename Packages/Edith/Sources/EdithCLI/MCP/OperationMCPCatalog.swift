@@ -22,10 +22,9 @@ public struct OperationMCPTool: Equatable, Sendable {
     public var isDestructive: Bool { effect == .destructive || requiresPreview }
 
     public func arguments(_ extra: [String], confirm: Bool) -> [String] {
-        var result = route + extra
-        if !result.contains("--json") { result.append("--json") }
-        if isDestructive, confirm, !result.contains("--yes") { result.append("--yes") }
-        return result
+        var options = ["--json"]
+        if isDestructive, confirm { options.append("--yes") }
+        return route + options + extra
     }
 }
 
