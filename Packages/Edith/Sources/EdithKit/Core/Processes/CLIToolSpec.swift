@@ -81,6 +81,14 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         ),
         versionProbeTimeout: 30)
 
+    public static let ffmpeg = CLIToolSpec(
+        id: "ffmpeg", displayName: "FFmpeg",
+        why: "Converts downloaded audio and combines video with sound.",
+        presenceStrategy: .executable(name: "ffmpeg", versionArguments: ["-version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "ffmpeg"],
+            instruction: "Install with `brew install ffmpeg`."))
+
     public static let claudeCode = CLIToolSpec(
         id: "claude", displayName: "Claude Code",
         why: "Includes Claude Code cloud sessions in Agent Usage.",

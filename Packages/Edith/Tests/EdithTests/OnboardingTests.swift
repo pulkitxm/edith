@@ -27,7 +27,8 @@ import Testing
         #expect(OnboardingFlow.requiredTools(selectedIDs: ["music"]).isEmpty)
         #expect(OnboardingFlow.optionalTools(selectedIDs: ["music"]).isEmpty)
         #expect(
-            OnboardingFlow.requiredTools(selectedIDs: ["downloads"]) == [.youtubeDownloader])
+            OnboardingFlow.requiredTools(selectedIDs: ["downloads"])
+                == [.youtubeDownloader, .ffmpeg])
         #expect(
             OnboardingFlow.optionalTools(selectedIDs: ["appMaintenance"]) == [.homebrew])
         #expect(

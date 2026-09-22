@@ -2043,7 +2043,7 @@ private struct MusicRows: View {
     @State private var openError: String?
 
     var body: some View {
-        CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
+        CLIToolStatusSection(tools: [.youtubeDownloader, .ffmpeg], extensionEnabled: enabled)
 
         Section {
             LabeledContent("Music folder") {

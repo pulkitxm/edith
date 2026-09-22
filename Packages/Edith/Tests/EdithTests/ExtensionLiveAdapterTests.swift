@@ -7,6 +7,38 @@ import EdithCore
 @testable import EdithKit
 
 @Suite struct ExtensionLiveAdapterTests {
+    @Test func downloadsRequireTheConverterBeforeReportingReady() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = URL(fileURLWithPath: "/synthetic/bin/yt-dlp")
+        let transcoder = URL(fileURLWithPath: "/synthetic/bin/ffmpeg")
+
+        #expect(
+            ExtensionLiveAdapters.downloadsReadiness(
+                executable: executable, transcoder: nil, directory: root)
+                == .uninstalled("Install FFmpeg to download and convert media."))
+        #expect(
+            ExtensionLiveAdapters.downloadsReadiness(
+                executable: nil, transcoder: nil, directory: root)
+                == .uninstalled("Install yt-dlp and FFmpeg to download and convert media."))
+        #expect(
+            ExtensionLiveAdapters.downloadsReadiness(
+                executable: executable, transcoder: transcoder, directory: root)
+                == .ready("Download tools are installed and the download folder is writable."))
+        #expect(
+            ExtensionLiveAdapters.downloadsReadiness(
+                executable: executable, transcoder: transcoder,
+                directory: root.appendingPathComponent("missing"))
+                == .needsSetup("Choose an existing, writable download folder."))
+    }
+
+    @Test func downloadReadinessUsesTheInjectedConverterLookup() async {
+        let result = await ExtensionLiveAdapters.readiness(for: "downloads") { name in
+            name == "yt-dlp" ? URL(fileURLWithPath: "/synthetic/bin/yt-dlp") : nil
+        }
+        #expect(result == .uninstalled("Install FFmpeg to download and convert media."))
+    }
+
     @Test func keepAwakeReadinessDoesNotDependOnSystem() async {
         let result = await ExtensionLiveAdapters.readiness(for: "keepAwake")
         #expect(result == .ready("Keep Awake is ready to prevent idle sleep without System."))
