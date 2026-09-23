@@ -2,6 +2,7 @@ import Foundation
 
 public struct MachineUsageSummary: Equatable, Sendable, Identifiable {
     public var machineID: UUID
+    public var connectionID: UUID
     public var name: String
     public var slug: String
     public var host: String
@@ -15,9 +16,10 @@ public struct MachineUsageSummary: Equatable, Sendable, Identifiable {
 
     public init(
         machineID: UUID, name: String, slug: String, host: String, collectedAt: Date,
-        sources: [String], days: Int, cost: Double, tokens: Double
+        sources: [String], days: Int, cost: Double, tokens: Double, connectionID: UUID? = nil
     ) {
         self.machineID = machineID
+        self.connectionID = connectionID ?? machineID
         self.name = name
         self.slug = slug
         self.host = host
@@ -65,12 +67,13 @@ public struct MachineUsageFreshness: Equatable, Sendable {
     }
 
     public var statusLabel: String {
-        isStale ? "stale · collected \(ageLabel)" : "collected \(ageLabel)"
+        isStale ? "usage stale · collected \(ageLabel)" : "collected \(ageLabel)"
     }
 }
 
 public enum MachineUsageError: LocalizedError, Equatable {
     case scriptMissing
+    case historyHostMismatch(String)
     case unreachableHome(String)
     case noUsageThere(String)
     case collectorFailed(machine: String, status: Int32, detail: String)
@@ -78,6 +81,8 @@ public enum MachineUsageError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case let .historyHostMismatch(name):
+            return "\(name): the SSH host does not match its saved usage history"
         case .scriptMissing:
             return "the usage collector is missing from this build"
         case let .unreachableHome(name):
@@ -154,22 +159,29 @@ public enum MachineUsageSelection {
     public static func includes(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store)
         -> Bool
     {
-        machineIDs(store).contains(machineID)
+        let bindings = MachineUsageBindings(machines: MachineRegistry.machines())
+        let selected = machineIDs(store)
+        return selected.contains(machineID) || selected.contains(bindings.identity(for: machineID))
     }
 
     public static func include(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store) {
-        save(machineIDs(store).union([machineID]), store)
+        let identity = MachineUsageBindings(machines: MachineRegistry.machines()).identity(
+            for: machineID)
+        save(machineIDs(store).union([identity]), store)
     }
 
     public static func exclude(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store) {
-        save(machineIDs(store).subtracting([machineID]), store)
+        let identity = MachineUsageBindings(machines: MachineRegistry.machines()).identity(
+            for: machineID)
+        save(machineIDs(store).subtracting([machineID, identity]), store)
     }
 
     public static func included(
-        in machines: [Machine], _ store: UserDefaults = SharedDefaults.store
+        in machines: [Machine], _ store: UserDefaults = SharedDefaults.store,
+        directory: URL = UsageCollector.machinesDirectory
     ) -> [Machine] {
-        let chosen = machineIDs(store)
-        return machines.filter { chosen.contains($0.id) }
+        MachineUsageBindings(machines: machines, directory: directory)
+            .included(machines, selected: machineIDs(store))
     }
 
     private static func save(_ ids: Set<UUID>, _ store: UserDefaults) {
@@ -185,6 +197,7 @@ public enum MachineUsageStore {
     private struct StoredDocument: Decodable {
         struct MachineBlock: Decodable {
             let id: String?
+            let connectionID: String?
             let name: String?
             let slug: String?
             let host: String?
@@ -243,20 +256,24 @@ public enum MachineUsageStore {
             sources: document.sources ?? [],
             days: document.daily?.count ?? 0,
             cost: document.totals?.cost ?? 0,
-            tokens: document.totals?.tokens ?? 0)
+            tokens: document.totals?.tokens ?? 0,
+            connectionID: block.connectionID.flatMap(UUID.init(uuidString:)))
     }
 
     @discardableResult
     public static func save(
         document: Data, machine: Machine, slug: String, host: String, collectedAt: Date,
-        in directory: URL = UsageCollector.machinesDirectory
+        in directory: URL = UsageCollector.machinesDirectory,
+        identity: UUID? = nil
     ) throws -> MachineUsageSummary {
         guard document.count <= UsageDataFiles.maximumMachineDocumentBytes,
             var object = try? JSONSerialization.jsonObject(with: document) as? [String: Any],
             object["daily"] is [Any]
         else { throw MachineUsageError.documentUnreadable(machine.name) }
+        let usageID = identity ?? machine.id
         object["machine"] = [
-            "id": machine.id.uuidString,
+            "id": usageID.uuidString,
+            "connectionID": machine.id.uuidString,
             "name": machine.name,
             "slug": slug,
             "host": host,
@@ -266,7 +283,7 @@ public enum MachineUsageStore {
         guard encoded.count <= UsageDataFiles.maximumMachineDocumentBytes,
             let summary = summary(data: encoded)
         else { throw MachineUsageError.documentUnreadable(machine.name) }
-        let file = UsageCollector.machineFile(id: machine.id, in: directory)
+        let file = UsageCollector.machineFile(id: usageID, in: directory)
         try UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
             try bumpGeneration(in: directory)
             try UsageDurableFile.write(encoded, to: file)
@@ -279,11 +296,13 @@ public enum MachineUsageStore {
         _ machines: [Machine], in directory: URL = UsageCollector.machinesDirectory
     ) -> [UUID] {
         let slugs = MachineUsageSlug.slugs(for: machines)
+        let bindings = MachineUsageBindings(machines: machines, directory: directory)
         let byID = Dictionary(
-            machines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            machines.map { (bindings.identity(for: $0.id), $0) },
+            uniquingKeysWith: { first, _ in first })
         var changed: [UUID] = []
         for id in storedIDs(in: directory) {
-            guard let machine = byID[id], let slug = slugs[id] else { continue }
+            guard let machine = byID[id], let slug = slugs[machine.id] else { continue }
             let file = UsageCollector.machineFile(id: id, in: directory)
             let didChange =
                 (try? UsageDataLock.withLock(
@@ -468,7 +487,9 @@ public enum MachineUsageCollector {
 
     public static func collect(
         machine: Machine, slug: String, over connection: SSHConnection,
-        timeout: TimeInterval = defaultTimeout, now: Date = Date()
+        timeout: TimeInterval = defaultTimeout, now: Date = Date(),
+        history: MachineUsageSummary? = nil,
+        directory: URL = UsageCollector.machinesDirectory
     ) async throws -> MachineUsageCollection {
         guard let script = UsageCollector.script() else { throw MachineUsageError.scriptMissing }
         guard let platform = await connection.remotePlatform else {
@@ -483,6 +504,10 @@ public enum MachineUsageCollector {
             throw MachineUsageError.unreachableHome(machine.name)
         }
         let host = values.host.isEmpty ? machine.host : values.host
+        if let history {
+            try MachineUsageBindings(machines: [machine], summaries: [history])
+                .validateHost(values.host, for: machine)
+        }
 
         let run = try await connection.run(
             runCommand(home: home, platform: platform), stdin: script, timeout: timeout)
@@ -505,7 +530,8 @@ public enum MachineUsageCollector {
                 at: scratch, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes)
         else { throw MachineUsageError.documentUnreadable(machine.name) }
         let summary = try MachineUsageStore.save(
-            document: document, machine: machine, slug: slug, host: host, collectedAt: now)
+            document: document, machine: machine, slug: slug, host: host, collectedAt: now,
+            in: directory, identity: history?.machineID)
         return MachineUsageCollection(summary: summary, log: run.combinedText)
     }
 

@@ -27,10 +27,6 @@ struct UsageMachinesCommand: AsyncParsableCommand {
 }
 
 enum UsageMachineBridge {
-    static func stored(_ machineID: UUID) -> MachineUsageSummary? {
-        MachineUsageStore.summary(machineID: machineID)
-    }
-
     static func json(machine: Machine, counted: Bool, summary: MachineUsageSummary?)
         -> JSONValue
     {
@@ -99,21 +95,26 @@ struct UsageMachinesListCommand: AsyncParsableCommand {
                     "no machines are configured",
                     hint: "add one in Edith under Machines, then run `ed machines ls`")
             }
-            let counted = MachineUsageSelection.machineIDs()
+            let bindings = MachineUsageBindings(machines: machines)
+            let counted = Set(
+                bindings.included(
+                    machines,
+                    selected: MachineUsageSelection.machineIDs(CLIEnvironment.sharedDefaults)
+                ).map(\.id))
             guard !json else {
                 CLIOut.json(
                     .array(
                         machines.map {
                             UsageMachineBridge.json(
                                 machine: $0, counted: counted.contains($0.id),
-                                summary: UsageMachineBridge.stored($0.id))
+                                summary: bindings.summaries[$0.id])
                         }))
                 return
             }
             let rows = machines.map {
                 UsageMachineBridge.row(
                     machine: $0, counted: counted.contains($0.id),
-                    summary: UsageMachineBridge.stored($0.id))
+                    summary: bindings.summaries[$0.id])
             }
             CLIOut.out(TextTable.render(headers: UsageMachineBridge.headers, rows: rows))
         }

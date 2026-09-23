@@ -151,7 +151,7 @@ import Testing
         let now = try #require(EdithDate.parseISO("2026-08-11T19:00:01Z"))
         let freshness = try #require(model.machineFreshness(tuf, now: now))
         #expect(freshness.isStale)
-        #expect(freshness.statusLabel == "stale · collected 40m ago")
+        #expect(freshness.statusLabel == "usage stale · collected 40m ago")
     }
 
     private func usage() throws -> DashUsage {

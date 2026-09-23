@@ -249,6 +249,10 @@ private final class HerdrTerminalBridgeRuntime {
         try controller.run()
 
         let writer = HerdrTerminalWriter(controllerInput.fileHandleForWriting)
+        writer.send(
+            try HerdrTerminalBridge.resizeCommand(
+                columns: dimensions.columns, rows: dimensions.rows,
+                cellWidth: dimensions.cellWidth, cellHeight: dimensions.cellHeight))
         let resizeTimer = startResizeTimer(writer: writer, initial: dimensions)
         startInputForwarding(writer: writer)
         defer {

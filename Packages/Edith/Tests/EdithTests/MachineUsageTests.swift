@@ -81,7 +81,7 @@ import Testing
         let freshness = MachineUsageFreshness(
             collectedAt: now.addingTimeInterval(-(30 * 60 + 5 * 60 + 1)), now: now)
         #expect(freshness.isStale)
-        #expect(freshness.statusLabel == "stale · collected 35m ago")
+        #expect(freshness.statusLabel == "usage stale · collected 35m ago")
     }
 
     @Test func collectionAgeStaysCompactAndNeverGoesNegative() {

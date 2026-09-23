@@ -11,6 +11,14 @@ one becomes `machine:<lowercase-machine-uuid>:<agent>`. The UUID is stable
 across a rename, so `ed usage summary` does not double count a renamed machine
 and `--machine` keeps selecting the same agents.
 
+Removing and re-adding a machine with the same unique name reconnects its saved
+usage history and collection choice on the next refresh. Collection uses the new
+SSH registration and checks that the remote hostname matches the saved history
+before updating it. The usage UUID stays unchanged, so chart selections and
+historical totals are preserved. Ambiguous names are not automatically linked.
+The dashboard's `usage stale` warning describes the age of the last collection,
+not whether SSH is connected.
+
 Whatever the collector needs and cannot find there, jq, bun and ccusage, is
 installed under `~/.cache/edith` on that machine. That is why collecting waits
 to be asked rather than happening for every machine you have configured, and why
