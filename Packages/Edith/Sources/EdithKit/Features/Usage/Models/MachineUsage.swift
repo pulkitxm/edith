@@ -2,6 +2,7 @@ import Foundation
 
 public struct MachineUsageSummary: Equatable, Sendable, Identifiable {
     public var machineID: UUID
+    public var connectionID: UUID
     public var name: String
     public var slug: String
     public var host: String
@@ -15,9 +16,10 @@ public struct MachineUsageSummary: Equatable, Sendable, Identifiable {
 
     public init(
         machineID: UUID, name: String, slug: String, host: String, collectedAt: Date,
-        sources: [String], days: Int, cost: Double, tokens: Double
+        sources: [String], days: Int, cost: Double, tokens: Double, connectionID: UUID? = nil
     ) {
         self.machineID = machineID
+        self.connectionID = connectionID ?? machineID
         self.name = name
         self.slug = slug
         self.host = host
@@ -71,6 +73,7 @@ public struct MachineUsageFreshness: Equatable, Sendable {
 
 public enum MachineUsageError: LocalizedError, Equatable {
     case scriptMissing
+    case historyHostMismatch(String)
     case unreachableHome(String)
     case noUsageThere(String)
     case collectorFailed(machine: String, status: Int32, detail: String)
@@ -78,6 +81,8 @@ public enum MachineUsageError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case let .historyHostMismatch(name):
+            return "\(name): the SSH host does not match its saved usage history"
         case .scriptMissing:
             return "the usage collector is missing from this build"
         case let .unreachableHome(name):
@@ -185,6 +190,7 @@ public enum MachineUsageStore {
     private struct StoredDocument: Decodable {
         struct MachineBlock: Decodable {
             let id: String?
+            let connectionID: String?
             let name: String?
             let slug: String?
             let host: String?
@@ -243,20 +249,24 @@ public enum MachineUsageStore {
             sources: document.sources ?? [],
             days: document.daily?.count ?? 0,
             cost: document.totals?.cost ?? 0,
-            tokens: document.totals?.tokens ?? 0)
+            tokens: document.totals?.tokens ?? 0,
+            connectionID: block.connectionID.flatMap(UUID.init(uuidString:)))
     }
 
     @discardableResult
     public static func save(
         document: Data, machine: Machine, slug: String, host: String, collectedAt: Date,
-        in directory: URL = UsageCollector.machinesDirectory
+        in directory: URL = UsageCollector.machinesDirectory,
+        identity: UUID? = nil
     ) throws -> MachineUsageSummary {
         guard document.count <= UsageDataFiles.maximumMachineDocumentBytes,
             var object = try? JSONSerialization.jsonObject(with: document) as? [String: Any],
             object["daily"] is [Any]
         else { throw MachineUsageError.documentUnreadable(machine.name) }
+        let usageID = identity ?? machine.id
         object["machine"] = [
-            "id": machine.id.uuidString,
+            "id": usageID.uuidString,
+            "connectionID": machine.id.uuidString,
             "name": machine.name,
             "slug": slug,
             "host": host,
@@ -266,7 +276,7 @@ public enum MachineUsageStore {
         guard encoded.count <= UsageDataFiles.maximumMachineDocumentBytes,
             let summary = summary(data: encoded)
         else { throw MachineUsageError.documentUnreadable(machine.name) }
-        let file = UsageCollector.machineFile(id: machine.id, in: directory)
+        let file = UsageCollector.machineFile(id: usageID, in: directory)
         try UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
             try bumpGeneration(in: directory)
             try UsageDurableFile.write(encoded, to: file)
