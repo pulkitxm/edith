@@ -219,9 +219,11 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("for attempt in 1 2 3 4 5; do");
   expect(dmgJob).toContain("sleep 2");
   expect(dmgJob).toContain('exit "$verify_status"');
+  expect(buildScript).toContain("XCODE_BUILD_SETTINGS=(ARCHS=arm64)");
   expect(buildScript).toContain(
-    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
+    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize DEAD_CODE_STRIPPING=YES\n  GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)',
   );
+  expect(buildScript).not.toContain("swift build");
   expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
@@ -261,6 +263,24 @@ test("superseded release builds yield the lane before packaging", () => {
       ?.length,
   ).toBe(10);
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
+});
+
+test("one Xcode build produces every bundled executable", () => {
+  const scheme = readFileSync(
+    "edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme",
+    "utf8",
+  );
+  for (const product of ["edithd", "EdithLidAwakeHelper"]) {
+    expect(scheme).toContain(`BlueprintIdentifier = "${product}"`);
+    expect(buildScript).toContain(
+      `$DERIVED/Build/Products/$CONFIG/${product}"`,
+    );
+  }
+  expect(
+    scheme.match(/ReferencedContainer = "container:Packages\/Edith"/g),
+  ).toHaveLength(2);
+  expect(makefile).toContain("for target in EdithMain EdithHelper; do");
+  expect(makefile).toContain("-derivedDataPath build");
 });
 
 test("bundle verification requires one executable and its CLI launcher", () => {

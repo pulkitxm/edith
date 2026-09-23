@@ -125,8 +125,9 @@ fi
 
 CONFIG=Debug
 [ "$RELEASE" = 1 ] && CONFIG=Release
-XCODE_BUILD_SETTING=""
-[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize
+XCODE_BUILD_SETTINGS=(ARCHS=arm64)
+[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize DEAD_CODE_STRIPPING=YES
+  GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)
 
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
@@ -143,7 +144,7 @@ xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
-  ${XCODE_BUILD_SETTING:+"$XCODE_BUILD_SETTING"} \
+  "${XCODE_BUILD_SETTINGS[@]}" \
   build
 
 BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"
@@ -151,21 +152,10 @@ BUILT_HELPER="$DERIVED/Build/Products/$CONFIG/EdithHelper.app"
 test -d "$BUILT" || { echo "build did not produce $BUILT" >&2; exit 1; }
 test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exit 1; }
 
-SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
-SWIFT_CONFIGURATION=debug
-SWIFT_FLAGS=(--disable-index-store --force-resolved-versions)
-if [ "$CONFIG" = Release ]; then
-  SWIFT_CONFIGURATION=release
-  SWIFT_FLAGS+=(-Xswiftc -Osize)
-fi
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
-  --product EdithLidAwakeHelper
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" "${SWIFT_FLAGS[@]}" \
-  --product edithd
-SWIFT_BIN_PATH="$($SWIFT_BIN build --package-path Packages/Edith \
-  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)"
-PRIVILEGED_HELPER_BUILD="$SWIFT_BIN_PATH/EdithLidAwakeHelper"
-AGENT_BUILD="$SWIFT_BIN_PATH/edithd"
+PRIVILEGED_HELPER_BUILD="$DERIVED/Build/Products/$CONFIG/EdithLidAwakeHelper"
+AGENT_BUILD="$DERIVED/Build/Products/$CONFIG/edithd"
+test -f "$PRIVILEGED_HELPER_BUILD" || { echo "build did not produce $PRIVILEGED_HELPER_BUILD" >&2; exit 1; }
+test -f "$AGENT_BUILD" || { echo "build did not produce $AGENT_BUILD" >&2; exit 1; }
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
