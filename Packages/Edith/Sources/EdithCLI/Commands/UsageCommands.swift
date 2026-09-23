@@ -668,10 +668,12 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         sink: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws {
         let registry = MachineRegistry.machines()
+        let bindings = MachineUsageBindings(machines: registry)
         let due = MachineUsageRound.due(
-            MachineUsageSelection.included(in: registry, CLIEnvironment.sharedDefaults),
+            bindings.included(
+                registry, selected: MachineUsageSelection.machineIDs(CLIEnvironment.sharedDefaults)),
             force: force,
-            collectedAt: { MachineUsageStore.summary(machineID: $0)?.collectedAt })
+            collectedAt: { bindings.summaries[$0]?.collectedAt })
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
         let result = await UsageCollectionOperationExecution.collectMachines(

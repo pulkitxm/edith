@@ -67,7 +67,7 @@ public struct MachineUsageFreshness: Equatable, Sendable {
     }
 
     public var statusLabel: String {
-        isStale ? "stale · collected \(ageLabel)" : "collected \(ageLabel)"
+        isStale ? "usage stale · collected \(ageLabel)" : "collected \(ageLabel)"
     }
 }
 
@@ -159,22 +159,29 @@ public enum MachineUsageSelection {
     public static func includes(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store)
         -> Bool
     {
-        machineIDs(store).contains(machineID)
+        let bindings = MachineUsageBindings(machines: MachineRegistry.machines())
+        let selected = machineIDs(store)
+        return selected.contains(machineID) || selected.contains(bindings.identity(for: machineID))
     }
 
     public static func include(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store) {
-        save(machineIDs(store).union([machineID]), store)
+        let identity = MachineUsageBindings(machines: MachineRegistry.machines()).identity(
+            for: machineID)
+        save(machineIDs(store).union([identity]), store)
     }
 
     public static func exclude(_ machineID: UUID, _ store: UserDefaults = SharedDefaults.store) {
-        save(machineIDs(store).subtracting([machineID]), store)
+        let identity = MachineUsageBindings(machines: MachineRegistry.machines()).identity(
+            for: machineID)
+        save(machineIDs(store).subtracting([machineID, identity]), store)
     }
 
     public static func included(
-        in machines: [Machine], _ store: UserDefaults = SharedDefaults.store
+        in machines: [Machine], _ store: UserDefaults = SharedDefaults.store,
+        directory: URL = UsageCollector.machinesDirectory
     ) -> [Machine] {
-        let chosen = machineIDs(store)
-        return machines.filter { chosen.contains($0.id) }
+        MachineUsageBindings(machines: machines, directory: directory)
+            .included(machines, selected: machineIDs(store))
     }
 
     private static func save(_ ids: Set<UUID>, _ store: UserDefaults) {
@@ -289,11 +296,13 @@ public enum MachineUsageStore {
         _ machines: [Machine], in directory: URL = UsageCollector.machinesDirectory
     ) -> [UUID] {
         let slugs = MachineUsageSlug.slugs(for: machines)
+        let bindings = MachineUsageBindings(machines: machines, directory: directory)
         let byID = Dictionary(
-            machines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            machines.map { (bindings.identity(for: $0.id), $0) },
+            uniquingKeysWith: { first, _ in first })
         var changed: [UUID] = []
         for id in storedIDs(in: directory) {
-            guard let machine = byID[id], let slug = slugs[id] else { continue }
+            guard let machine = byID[id], let slug = slugs[machine.id] else { continue }
             let file = UsageCollector.machineFile(id: id, in: directory)
             let didChange =
                 (try? UsageDataLock.withLock(
@@ -478,7 +487,9 @@ public enum MachineUsageCollector {
 
     public static func collect(
         machine: Machine, slug: String, over connection: SSHConnection,
-        timeout: TimeInterval = defaultTimeout, now: Date = Date()
+        timeout: TimeInterval = defaultTimeout, now: Date = Date(),
+        history: MachineUsageSummary? = nil,
+        directory: URL = UsageCollector.machinesDirectory
     ) async throws -> MachineUsageCollection {
         guard let script = UsageCollector.script() else { throw MachineUsageError.scriptMissing }
         guard let platform = await connection.remotePlatform else {
@@ -493,6 +504,10 @@ public enum MachineUsageCollector {
             throw MachineUsageError.unreachableHome(machine.name)
         }
         let host = values.host.isEmpty ? machine.host : values.host
+        if let history {
+            try MachineUsageBindings(machines: [machine], summaries: [history])
+                .validateHost(values.host, for: machine)
+        }
 
         let run = try await connection.run(
             runCommand(home: home, platform: platform), stdin: script, timeout: timeout)
@@ -515,7 +530,8 @@ public enum MachineUsageCollector {
                 at: scratch, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes)
         else { throw MachineUsageError.documentUnreadable(machine.name) }
         let summary = try MachineUsageStore.save(
-            document: document, machine: machine, slug: slug, host: host, collectedAt: now)
+            document: document, machine: machine, slug: slug, host: host, collectedAt: now,
+            in: directory, identity: history?.machineID)
         return MachineUsageCollection(summary: summary, log: run.combinedText)
     }
 

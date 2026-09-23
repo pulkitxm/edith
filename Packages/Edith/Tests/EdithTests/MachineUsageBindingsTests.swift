@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct MachineUsageBindingsTests {
@@ -65,5 +66,58 @@ import Testing
         #expect(stored.first?.machineID == old.id)
         #expect(stored.first?.connectionID == current.id)
         #expect(stored.first?.collectedAt != .distantPast)
+        var renamed = current
+        renamed.name = "fixture-renamed"
+        #expect(MachineUsageStore.restamp([renamed], in: directory) == [old.id])
+        let bindings = MachineUsageBindings(machines: [renamed], directory: directory)
+        #expect(bindings.identity(for: renamed.id) == old.id)
+        #expect(bindings.summaries[renamed.id]?.name == renamed.name)
+        let due = MachineUsageRound.due(
+            [renamed], force: false, collectedAt: { bindings.summaries[$0]?.collectedAt })
+        #expect(due.isEmpty)
     }
+    @Test func cliUsesReaddedConnectionForSelectionAndForgetting() async throws {
+        try await CLIProbe.inWorld { world in
+            let old = Machine(name: "fixture", host: "192.0.2.1")
+            let current = Machine(name: "fixture", host: "192.0.2.2")
+            let document = Data(#"{"daily":[{"period":"2026-09-01"}],"sources":["cli"]}"#.utf8)
+            _ = try MachineUsageStore.save(
+                document: document, machine: old, slug: "fixture", host: "fixture-host",
+                collectedAt: .distantPast)
+            world.shared.set([old.id.uuidString], forKey: MachineUsageSelection.key)
+            MachineRegistry.add(current)
+
+            #expect(MachineUsageSelection.included(in: [current], world.shared) == [current])
+            let listed = await CLIProbe.capture(["usage", "machines", "ls", "--json"])
+            #expect(listed.code == 0)
+            #expect(listed.stdout.contains("fixture-host"))
+            #expect(listed.stdout.contains("true"))
+
+            let disabled = await CLIProbe.capture([
+                "usage", "machines", "disable", "fixture", "--json",
+            ])
+            #expect(disabled.code == 0)
+            #expect(MachineUsageSelection.included(in: [current], world.shared).isEmpty)
+            let enabled = await CLIProbe.capture([
+                "usage", "machines", "enable", "fixture", "--json",
+            ])
+            #expect(enabled.code == 0)
+            #expect(MachineUsageSelection.machineIDs(world.shared) == [old.id])
+
+            #expect(
+                UsageCollectionOperationExecution.forgetMachine(
+                    machineID: current.id, store: world.shared, afterDrop: {}))
+            #expect(MachineUsageStore.summaries().isEmpty)
+            #expect(MachineUsageSelection.machineIDs(world.shared).isEmpty)
+        }
+    }
+
+    @Test func twoRegisteredOwnersCannotShareOneHistory() {
+        let old = Machine(name: "old", host: "192.0.2.1")
+        let current = Machine(name: "new", host: "192.0.2.2")
+        let bindings = MachineUsageBindings(
+            machines: [old, current], summaries: [history(old, connectionID: current.id)])
+        #expect(bindings.summaries.isEmpty)
+    }
+
 }

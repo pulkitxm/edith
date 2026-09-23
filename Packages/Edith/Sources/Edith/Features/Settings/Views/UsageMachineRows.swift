@@ -90,14 +90,18 @@ struct UsageMachineRows: View {
 
     private func reload() {
         machines = MachineRegistry.machines()
-        counted = MachineUsageSelection.machineIDs()
         reloadTask?.cancel()
+        let registry = machines
         reloadTask = Task {
             let found = await Task.detached(priority: .utility) {
-                MachineUsageRows.summariesByMachineID(MachineUsageStore.summaries())
+                let bindings = MachineUsageBindings(machines: registry)
+                let selected = bindings.included(
+                    registry, selected: MachineUsageSelection.machineIDs())
+                return (bindings.summaries, Set(selected.map(\.id)))
             }.value
             guard !Task.isCancelled else { return }
-            summaries = found
+            summaries = found.0
+            counted = found.1
             reloadTask = nil
         }
     }

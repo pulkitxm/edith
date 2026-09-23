@@ -274,7 +274,7 @@ public enum UsageCollectionOperationExecution {
         let round = await collect(input, onEvent)
         let included = Set(
             input.targets.compactMap { machine in
-                round.collected.contains { $0.machineID == machine.id } ? machine.id : nil
+                round.collected.contains { $0.connectionID == machine.id } ? machine.id : nil
             })
         if includeSuccessfulMachines {
             for id in included { MachineUsageSelection.include(id, store) }
@@ -293,8 +293,12 @@ public enum UsageCollectionOperationExecution {
             UsageCollectionOperationExecution.request(.refresh)
         }
     ) -> Bool {
-        let dropped = MachineUsageStore.forget(machineID: machineID, in: directory)
+        let identity = MachineUsageBindings(
+            machines: MachineRegistry.machines(), directory: directory
+        ).identity(for: machineID)
         MachineUsageSelection.exclude(machineID, store)
+        MachineUsageSelection.exclude(identity, store)
+        let dropped = MachineUsageStore.forget(machineID: identity, in: directory)
         if dropped { afterDrop() }
         return dropped
     }

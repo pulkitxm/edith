@@ -296,13 +296,12 @@ public enum UsageRefreshRunner {
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async {
         let registry = MachineRegistry.machines()
+        let bindings = MachineUsageBindings(
+            machines: registry, directory: dataDir.appendingPathComponent("machines"))
         let targets = MachineUsageRound.due(
-            MachineUsageSelection.included(in: registry), force: policy == .all,
-            collectedAt: {
-                MachineUsageStore.summary(
-                    machineID: $0,
-                    in: dataDir.appendingPathComponent("machines"))?.collectedAt
-            })
+            bindings.included(registry, selected: MachineUsageSelection.machineIDs()),
+            force: policy == .all,
+            collectedAt: { bindings.summaries[$0]?.collectedAt })
         guard !targets.isEmpty else { return }
         onEvent(.note("collecting usage from \(targets.count) included machines"))
         let round = await MachineUsageRound.collect(

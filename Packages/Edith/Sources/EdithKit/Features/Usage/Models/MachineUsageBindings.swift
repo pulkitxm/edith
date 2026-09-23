@@ -13,10 +13,13 @@ public struct MachineUsageBindings: Sendable {
                 $0.machineID == machine.id || $0.connectionID == machine.id
             }
             if direct.count == 1 {
-                bound[machine.id] = direct[0]
+                let summary = direct[0]
+                let owners = registered.intersection([summary.machineID, summary.connectionID])
+                guard owners == [machine.id] else { continue }
+                bound[machine.id] = summary
                 continue
             }
-            guard direct.isEmpty,
+            guard direct.isEmpty, !machine.name.trimmingCharacters(in: .whitespaces).isEmpty,
                 machines.filter({ $0.name.lowercased() == machine.name.lowercased() }).count == 1
             else { continue }
             let orphaned = stored.filter {

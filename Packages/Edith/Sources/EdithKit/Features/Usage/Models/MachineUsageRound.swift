@@ -37,9 +37,12 @@ public enum MachineUsageRound {
     }
 
     public static func due(force: Bool, now: Date = Date()) -> [Machine] {
-        due(
-            MachineUsageSelection.included(in: MachineRegistry.machines()), force: force, now: now,
-            collectedAt: { MachineUsageStore.summary(machineID: $0)?.collectedAt })
+        let machines = MachineRegistry.machines()
+        let bindings = MachineUsageBindings(machines: machines)
+        return due(
+            bindings.included(machines, selected: MachineUsageSelection.machineIDs()),
+            force: force, now: now,
+            collectedAt: { bindings.summaries[$0]?.collectedAt })
     }
 
     public static func collect(
@@ -58,6 +61,8 @@ public enum MachineUsageRound {
         defer { lock.release() }
 
         let slugs = MachineUsageSlug.slugs(for: registry.isEmpty ? machines : registry)
+        let directory = dataDir.appendingPathComponent("machines")
+        let bindings = MachineUsageBindings(machines: registry, directory: directory)
         var result = MachineUsageRoundResult()
         for machine in machines {
             let startedAt = Date()
@@ -67,7 +72,8 @@ public enum MachineUsageRound {
                 try await connection.connect()
                 let run = try await withOneRetryOnADroppedLink(connection) {
                     try await MachineUsageCollector.collect(
-                        machine: machine, slug: slug, over: connection, timeout: timeout)
+                        machine: machine, slug: slug, over: connection, timeout: timeout,
+                        history: bindings.summaries[machine.id], directory: directory)
                 }
                 result.collected.append(run.summary)
                 if verbose {
