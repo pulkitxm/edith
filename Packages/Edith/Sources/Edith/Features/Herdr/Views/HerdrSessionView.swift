@@ -641,8 +641,7 @@ struct HerdrSessionView: View {
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
                 environment: request.environment,
-                allowsLocalFileLinks: tab.agent.machineIsLocal,
-                resetTerminalAfterInterrupt: true)
+                allowsLocalFileLinks: tab.agent.machineIsLocal)
         } catch {
             connectError = error.localizedDescription
         }
