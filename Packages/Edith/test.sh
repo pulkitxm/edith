@@ -99,7 +99,7 @@ if [[ -d "$FW/Testing.framework" ]]; then
 fi
 if [[ "${1:-}" == "--build-only" ]]; then
     shift
-    swift build --build-tests --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+    swift build --product EdithPackageTests --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
 else
     swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
 fi
