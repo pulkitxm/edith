@@ -179,6 +179,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
@@ -211,9 +212,11 @@ jobs:
       - name: Cache Swift build products
         uses: ./.github/actions/cache-swift
         with:
-          variant: app-debug
-      - name: Build the .app bundle
-        run: ./build.sh --no-open
+          variant: app-release
+      - name: Build the release .app bundle
+        env:
+          EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
+        run: ./build.sh --no-open --release
       - name: Verify nested bundles and signing
         run: make verify-bundle
 
@@ -228,6 +231,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Install Fish
         run: |
@@ -415,6 +419,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Cache libghostty
