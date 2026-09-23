@@ -181,13 +181,20 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["working-directory"]).toBe("Packages/Edith");
   expect(build["timeout-minutes"]).toBe(20);
   expect(build.if).toBeUndefined();
-  expect(run.run).toBe("./test.sh --skip-build");
+  expect(run.run).toBe(
+    `./test.sh --skip-build \${{ matrix.selection }} '^EdithTests\\.CLI'`,
+  );
+  expect(job.strategy["fail-fast"]).toBe(false);
+  expect(job.strategy.matrix.include).toEqual([
+    { suites: "cli", selection: "--filter" },
+    { suites: "app", selection: "--skip" },
+  ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
   expect(run["timeout-minutes"]).toBe(10);
   expect(run.if).toBeUndefined();
   expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
   expect(save.if).toBe(
-    "steps.swift-cache.outputs.compiled-cache-hit != 'true'",
+    "matrix.suites == 'cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
   );
   expect(save.uses).toBe(
     "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",

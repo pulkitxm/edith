@@ -221,13 +221,21 @@ jobs:
         run: make verify-bundle
 
   swift-test:
-    name: swift-test
+    name: swift-test (${{ matrix.suites }})
     needs: changes
     if: >-
       needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suites: cli
+            selection: --filter
+          - suites: app
+            selection: --skip
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -274,7 +282,7 @@ jobs:
         run: ./test.sh --build-only
         working-directory: Packages/Edith
       - name: Save compiled tests
-        if: steps.swift-cache.outputs.compiled-cache-hit != 'true'
+        if: matrix.suites == 'cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
@@ -285,7 +293,7 @@ jobs:
           key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
         timeout-minutes: 10
-        run: ./test.sh --skip-build
+        run: ./test.sh --skip-build ${{ matrix.selection }} '^EdithTests\.CLI'
         working-directory: Packages/Edith
         env:
           EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
