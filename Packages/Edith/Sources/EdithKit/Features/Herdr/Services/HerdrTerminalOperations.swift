@@ -63,6 +63,6 @@ public enum HerdrMachineTerminal {
             arguments: connection.terminalArguments(
                 remoteCommand: remoteHerdrCommand(
                     arguments: [], platform: .windows, interactive: true)),
-            environment: unnested(environment) + connection.terminalEnvironment())
+            environment: unnested(environment + connection.terminalEnvironment()))
     }
 }

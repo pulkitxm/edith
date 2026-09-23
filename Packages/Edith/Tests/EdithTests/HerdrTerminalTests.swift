@@ -91,6 +91,24 @@ import Testing
         #expect(!request.environment.contains("HERDR_ENV=1"))
     }
 
+    @Test func aWindowsTerminalClearsNestingInheritedFromTheHostProcess() {
+        let previous = ProcessInfo.processInfo.environment["HERDR_ENV"]
+        setenv("HERDR_ENV", "1", 1)
+        defer {
+            if let previous {
+                setenv("HERDR_ENV", previous, 1)
+            } else {
+                unsetenv("HERDR_ENV")
+            }
+        }
+        let machine = Machine(name: "Box", host: "box.example", username: "dev")
+        let request = HerdrMachineTerminal.windowsLaunchRequest(
+            connection: SSHConnection(machine: machine), environment: [])
+
+        #expect(!request.environment.contains("HERDR_ENV=1"))
+        #expect(request.environment.filter { $0.hasPrefix("HERDR_ENV=") } == ["HERDR_ENV="])
+    }
+
     @Test func anAgentStillAttachesToItsOwnPane() {
         let agent = HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
