@@ -94,10 +94,7 @@ struct UsageMachineRows: View {
         let registry = machines
         reloadTask = Task {
             let found = await Task.detached(priority: .utility) {
-                let bindings = MachineUsageBindings(machines: registry)
-                let selected = bindings.included(
-                    registry, selected: MachineUsageSelection.machineIDs())
-                return (bindings.summaries, Set(selected.map(\.id)))
+                MachineUsageRows.selectionSnapshot(in: registry)
             }.value
             guard !Task.isCancelled else { return }
             summaries = found.0
@@ -154,6 +151,15 @@ struct UsageMachineRows: View {
 }
 
 enum MachineUsageRows {
+    static func selectionSnapshot(
+        in machines: [Machine]
+    ) -> ([UUID: MachineUsageSummary], Set<UUID>) {
+        let bindings = MachineUsageBindings(machines: machines)
+        let selected = bindings.included(
+            machines, selected: MachineUsageSelection.machineIDs())
+        return (bindings.summaries, Set(selected.map(\.id)))
+    }
+
     static func summariesByMachineID(
         _ summaries: [MachineUsageSummary]
     ) -> [UUID: MachineUsageSummary] {
