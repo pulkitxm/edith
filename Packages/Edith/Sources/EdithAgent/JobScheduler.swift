@@ -23,6 +23,11 @@ public struct AgentJob: Sendable {
 public protocol AgentPowerSource: Sendable {
     var isOnBattery: Bool { get }
     var isScreenLocked: Bool { get }
+    var isConstrained: Bool { get }
+}
+
+extension AgentPowerSource {
+    public var isConstrained: Bool { false }
 }
 
 public struct StaticPowerSource: AgentPowerSource {
@@ -330,7 +335,8 @@ public actor JobScheduler {
         }
         let value = AgentCadenceMath.interval(
             for: state.job.descriptor.cadence, subscribers: state.subscribers,
-            pauseAmbient: pauseAmbientOnBattery && power.isOnBattery)
+            pauseAmbient: pauseAmbientOnBattery && power.isOnBattery,
+            constrained: power.isConstrained)
         guard let value, value.isFinite, value > 0 else { return nil }
         return value
     }

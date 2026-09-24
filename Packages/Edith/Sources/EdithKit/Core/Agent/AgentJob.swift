@@ -124,12 +124,15 @@ public struct AgentJobSnapshot: Codable, Equatable, Sendable, Identifiable {
 }
 
 public enum AgentCadenceMath {
+    public static let constrainedAmbientStretch: TimeInterval = 3
+
     public static func interval(
-        for cadence: AgentCadence, subscribers: Int, pauseAmbient: Bool
+        for cadence: AgentCadence, subscribers: Int, pauseAmbient: Bool, constrained: Bool = false
     ) -> TimeInterval? {
         if subscribers > 0, let live = cadence.live { return live }
         if pauseAmbient { return nil }
-        return cadence.ambient
+        guard constrained else { return cadence.ambient }
+        return cadence.ambient.map { $0 * constrainedAmbientStretch }
     }
 
     public static func tolerance(for interval: TimeInterval) -> TimeInterval {

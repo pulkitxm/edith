@@ -163,6 +163,12 @@ public struct LivePowerSource: AgentPowerSource {
     public var isScreenLocked: Bool {
         cache.current().screenLocked
     }
+
+    public var isConstrained: Bool {
+        let process = ProcessInfo.processInfo
+        return process.isLowPowerModeEnabled
+            || process.thermalState == .serious || process.thermalState == .critical
+    }
 }
 
 final class PowerStateCache: @unchecked Sendable {

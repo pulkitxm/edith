@@ -113,6 +113,19 @@ import Testing
         #expect(AgentCadenceMath.interval(for: cadence, subscribers: 0, pauseAmbient: true) == nil)
     }
 
+    @Test func constrainedPowerStretchesOnlyAmbientWork() {
+        let cadence = AgentCadence.every(ambient: 900, live: 300)
+        #expect(
+            AgentCadenceMath.interval(
+                for: cadence, subscribers: 0, pauseAmbient: false, constrained: true) == 2_700)
+        #expect(
+            AgentCadenceMath.interval(
+                for: cadence, subscribers: 1, pauseAmbient: false, constrained: true) == 300)
+        #expect(
+            AgentCadenceMath.interval(
+                for: cadence, subscribers: 0, pauseAmbient: true, constrained: true) == nil)
+    }
+
     @Test func onDemandJobsNeverSchedule() {
         #expect(
             AgentCadenceMath.interval(
