@@ -30,11 +30,12 @@ Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
 companion, nested at `Contents/Library/LoginItems` and shipped as
-`Edith.app`) and the `ed` CLI executable (`Contents/MacOS`). `build.sh` then
-builds `edithd`, the headless background agent, and `EdithLidAwakeHelper` with
-SwiftPM, placing the agent at `Contents/MacOS/edithd` with its LaunchAgent
-property list in `Contents/Library/LaunchAgents`, and the signed privileged
-helper with its launchd property list alongside.
+`Edith.app`) and the `ed` CLI executable (`Contents/MacOS`). The same scheme
+builds `edithd`, the headless background agent, and `EdithLidAwakeHelper`, so
+every executable shares one compiled module graph. `build.sh` places the agent
+at `Contents/MacOS/edithd` with its LaunchAgent property list in
+`Contents/Library/LaunchAgents`, and the signed privileged helper with its
+launchd property list alongside.
 
 All Swift code lives in one SwiftPM package, `Packages/Edith`. The Xcode
 targets are folder-synchronized onto `Packages/Edith/Sources/*`, so a file
@@ -57,17 +58,15 @@ Keychain Access, Certificate Assistant, Create a Certificate, named
 "Edith Dev", Identity Type "Self Signed Root", Certificate Type
 "Code Signing".
 
-Before it signs a `--release` build, `build.sh` strips the binaries in `dist`.
-Xcode's Release configuration builds with `dwarf-with-dsym` and no stripping, and
-a plain `xcodebuild build` never strips, so every shipped binary would otherwise
-carry its full DWARF. The `.dSYM` bundles stay in `build/Build/Products/Release`,
-so a crash report is still symbolicatable.
+Before it signs a `--release` build, `build.sh` strips the binaries in `dist`,
+because a plain `xcodebuild build` never strips. A `--release` build also skips
+debug info and dSYM generation: no release pipeline kept the dSYMs, and emitting
+DWARF only to strip it cost compile time on every build.
 
-The Release configuration also pins `ARCHS = arm64`. Xcode's default builds a
-universal binary, which doubles every executable in the bundle; the SwiftPM build
-this project replaced only ever produced arm64, so the x86_64 slice was never
-something Edith shipped deliberately. Together with the stripping that is a 64MB
-DMG down to 23MB.
+`build.sh` passes `ARCHS=arm64` to every target. The Release configuration pins
+it for the app targets, but Swift package targets do not inherit project
+settings, so without the override Xcode compiled every package twice, once for
+an x86_64 slice that was thinned away before shipping.
 
 It also deletes the `Frameworks` directory Xcode embeds inside the nested
 `Edith Files.app`. That app links Sparkle through the outer bundle, its rpath is

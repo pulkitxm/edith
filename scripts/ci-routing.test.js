@@ -142,12 +142,14 @@ test("performance inputs run structural contracts against the compared revision"
   expect(checks).toContain("fetch-depth: 0");
 });
 
-test("main releases skip the redundant debug app build", () => {
+test("pull requests build the release app that main releases rebuild", () => {
   const swiftBuild = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-build:"),
     ciWorkflow.indexOf("\n  swift-test:"),
   );
   expect(swiftBuild).toContain("github.event_name != 'push'");
+  expect(swiftBuild).toContain("run: ./build.sh --no-open --release");
+  expect(swiftBuild).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
   const releaseBuild = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  version:"),
     ciWorkflow.indexOf("\n  dmg:"),
@@ -179,13 +181,20 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["working-directory"]).toBe("Packages/Edith");
   expect(build["timeout-minutes"]).toBe(20);
   expect(build.if).toBeUndefined();
-  expect(run.run).toBe("./test.sh --skip-build");
+  expect(run.run).toBe(
+    `./test.sh --skip-build \${{ matrix.selection }} '^EdithTests\\.CLI'`,
+  );
+  expect(job.strategy["fail-fast"]).toBe(false);
+  expect(job.strategy.matrix.include).toEqual([
+    { suites: "cli", selection: "--filter" },
+    { suites: "app", selection: "--skip" },
+  ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
   expect(run["timeout-minutes"]).toBe(10);
   expect(run.if).toBeUndefined();
   expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
   expect(save.if).toBe(
-    "steps.swift-cache.outputs.compiled-cache-hit != 'true'",
+    "matrix.suites == 'cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
   );
   expect(save.uses).toBe(
     "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
@@ -201,7 +210,9 @@ test("Swift tests cache a successful build before bounded execution", () => {
   ]) {
     expect(steps.indexOf(before)).toBeLessThan(steps.indexOf(after));
   }
-  const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
+  const compiled = swiftCache.runs.steps.find(
+    (step) => step.id === "compiled-tests",
+  );
   expect(save.with.path).toBe(compiled.with.path);
   expect(swiftCache.outputs["compiled-cache-key"].value).toBe(
     compiled.with.key,
@@ -220,19 +231,41 @@ test("Swift build consumers retain automatic compiled cache saves", () => {
   expect(tests.uses).toBe(
     "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
   );
-  expect(tests.with).toEqual(compiled.with);
+  expect(tests.with.key).toBe(compiled.with.key);
+  expect(tests.with["restore-keys"]).toBe(compiled.with["restore-keys"]);
+  expect(tests.with.path).toContain("Packages/Edith/.build/*-apple-macosx");
   expect(compiled.if).toBe("inputs.variant != 'tests-debug'");
   expect(compiled.uses).toBe(
     "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
   );
+  expect(compiled.with.path.trim().split("\n")).toEqual([
+    "build/Build",
+    "build/SDKExplicitPrecompiledModules",
+  ]);
   for (const [job, variant] of [
-    ["swift-build", "app-debug"],
+    ["swift-build", "app-release"],
     ["dmg", "app-release"],
   ]) {
     const cache = ciJobs[job].steps.find(
       (step) => step.uses === "./.github/actions/cache-swift",
     );
     expect(cache.with.variant).toBe(variant);
+  }
+});
+
+test("Swift jobs restore commit times from full history before reusing builds", () => {
+  const [restoreTimes] = swiftCache.runs.steps;
+  expect(restoreTimes.run).toBe("python3 -B scripts/restore-source-mtimes.py");
+  for (const name of ["swift-build", "swift-test", "dmg"]) {
+    const steps = ciJobs[name].steps;
+    const checkout = steps.find((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    const cache = steps.findIndex(
+      (step) => step.uses === "./.github/actions/cache-swift",
+    );
+    expect(checkout.with["fetch-depth"], name).toBe(0);
+    expect(steps.indexOf(checkout), name).toBeLessThan(cache);
   }
 });
 

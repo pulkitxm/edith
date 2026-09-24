@@ -57,7 +57,8 @@ with pathlib.Path(os.environ['WRAPPER_DEFAULTS_CALLS']).open('a') as stream:
         self.assertEqual(result.returncode, 0, result.stderr)
         values = json.loads(result.stdout)
         self.assertEqual(values['arguments'], [
-            'build', '--build-tests', '--disable-index-store', '--scratch-path', '/tmp/edith-build-probe'])
+            'build', '--product', 'EdithPackageTests', '--disable-index-store', '--scratch-path',
+            '/tmp/edith-build-probe'])
         self.assertFalse(pathlib.Path(values['EDITH_TEST_RUNTIME_ROOT']).exists())
 
     def test_skip_build_runs_tests_serially_with_the_requested_filter(self):

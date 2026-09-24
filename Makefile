@@ -116,10 +116,14 @@ ci-swift: ci-swift-check
 	$(MAKE) verify-bundle
 
 verify-release-build-settings:
-	@test "$$(xcodebuild -project edth.xcodeproj -target EdithMain -configuration Release -showBuildSettings | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
-	  || { echo "Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }
-	@test "$$(xcodebuild -project edth.xcodeproj -target EdithMain -configuration Release -showBuildSettings | awk '$$1 == "SWIFT_OPTIMIZATION_LEVEL" { print $$3; exit }')" = -Osize \
-	  || { echo "Release SWIFT_OPTIMIZATION_LEVEL must be -Osize" >&2; exit 1; }
+	@for target in EdithMain EdithHelper; do \
+	  settings="$$(xcodebuild -project edth.xcodeproj -scheme $$target -configuration Release -derivedDataPath build \
+	    -onlyUsePackageVersionsFromResolvedFile -showBuildSettings)" || exit 1; \
+	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
+	    || { echo "$$target Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }; \
+	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "SWIFT_OPTIMIZATION_LEVEL" { print $$3; exit }')" = -Osize \
+	    || { echo "$$target Release SWIFT_OPTIMIZATION_LEVEL must be -Osize" >&2; exit 1; }; \
+	done
 
 verify-bundle: verify-release-build-settings
 	test -f dist/Edith.app/Contents/MacOS/Edith
