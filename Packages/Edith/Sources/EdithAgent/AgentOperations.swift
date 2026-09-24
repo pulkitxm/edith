@@ -24,6 +24,7 @@ public enum AgentOperations {
         }
         await registerControls(on: runtime)
         await AgentNotificationOperations.register(on: runtime)
+        await AgentJevOperations.register(on: runtime)
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)
             await runtime.register(operation: CompanionBackgroundOperation.refresh) { _ in
