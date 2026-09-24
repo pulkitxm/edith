@@ -328,7 +328,7 @@ final class HerdrDragCoordinator {
             return
         }
         guard springTarget != id else { return }
-        stopSpring()
+        springTask?.cancel()
         springTarget = id
         springTask = Task { [weak self] in
             try? await Task.sleep(for: Self.springDelay)
