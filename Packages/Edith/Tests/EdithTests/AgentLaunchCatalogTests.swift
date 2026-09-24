@@ -165,6 +165,23 @@ private final class FetchLog: @unchecked Sendable {
         #expect(catalog.pickerModels(including: nil).count == 4)
     }
 
+    @Test func explanationsDescribeEachChoiceInOneLine() {
+        let claude = AgentLaunchKind.claude.builtIn
+        #expect(
+            claude.explanations(for: AgentLaunchOptions(model: "opus", effort: "high", fast: true))
+                == [
+                    "opus: Latest Opus", "Effort high: Deeper thinking for complex work",
+                    "Fast mode on: About 2x speed, uses more of your limit.",
+                ])
+        #expect(claude.explanations(for: AgentLaunchOptions(model: "sonnet")).count == 2)
+        #expect(
+            AgentLaunchKind.pi.builtIn.explanations(for: .none)
+                == ["Pi picks its own model.", "Thinking: the model's default."])
+        #expect(
+            AgentLaunchKind.gemini.builtIn.explanations(for: AgentLaunchOptions(model: "gemini-x"))
+                == ["gemini-x: not in the current list"])
+    }
+
     @Test func discoveryScriptsAreBoundedAndPlatformAware() throws {
         let codex = try #require(
             AgentLaunchDiscovery.script(for: .codex, refresh: false, platform: .darwin))

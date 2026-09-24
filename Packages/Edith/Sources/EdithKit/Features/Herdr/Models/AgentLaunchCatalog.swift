@@ -122,6 +122,8 @@ public enum AgentLaunchKind: String, CaseIterable, Sendable {
 
     public var selectsAtLaunch: Bool { self != .opencode }
 
+    public var effortLabel: String { self == .pi ? "Thinking" : "Effort" }
+
     public var acceptsUnlistedModels: Bool { self != .amp }
 
     public var note: String? {
@@ -269,6 +271,32 @@ public enum AgentLaunchKind: String, CaseIterable, Sendable {
 }
 
 extension AgentLaunchCatalog {
+    public func explanations(for options: AgentLaunchOptions) -> [String] {
+        let chosen = model(options.model)
+        var lines: [String] = []
+        if let id = options.model {
+            let listed = lists(id)
+            let name = listed ? chosen.name : id
+            let summary = listed ? chosen.summary : "not in the current list"
+            lines.append(summary.isEmpty ? name : "\(name): \(summary)")
+        } else {
+            lines.append("\(kind.rawValue) picks its own model.")
+        }
+        if !chosen.efforts.isEmpty {
+            if let effort = chosen.effort(options.effort) {
+                let detail = effort.summary.isEmpty ? "." : ": \(effort.summary)"
+                lines.append("\(kind.effortLabel) \(effort.id)\(detail)")
+            } else {
+                let fallback = chosen.defaultEffort.map { " (\($0))" } ?? ""
+                lines.append("\(kind.effortLabel): the model's default\(fallback).")
+            }
+        }
+        if let fast = chosen.fastSummary {
+            lines.append("Fast mode\(options.fast ? " on" : ""): \(fast)")
+        }
+        return lines
+    }
+
     static func derived(
         kind: AgentLaunchKind, models: [AgentLaunchModel], source: AgentLaunchSource
     ) -> AgentLaunchCatalog {

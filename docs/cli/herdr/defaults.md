@@ -1,7 +1,7 @@
 # `ed herdr defaults`
 
 The model, effort and fast mode Edith passes whenever it starts an agent of a
-given kind. The Agent Launch Commands sheet on the Herdr page edits the same
+given kind. The Agent Launch Settings sheet on the Herdr page edits the same
 values.
 
 ```
