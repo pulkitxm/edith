@@ -17,7 +17,7 @@ public enum WindowKeyCommand: Equatable, Sendable {
     ) -> WindowKeyCommand? {
         let active = modifiers.intersection([.command, .control, .option, .shift])
         if keyCode == tabKeyCode {
-            guard active.subtracting(.shift) == .control else { return nil }
+            guard active.subtracting(.shift) == .option else { return nil }
             return active.contains(.shift) ? .cycleBackward : .cycleForward
         }
         guard active.subtracting(.shift) == .command, let characters else { return nil }

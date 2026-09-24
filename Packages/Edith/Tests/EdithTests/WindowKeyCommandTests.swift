@@ -27,11 +27,16 @@ import Testing
         #expect(resolve("-") == .zoomOut)
     }
 
-    @Test func controlTabCycles() {
+    @Test func optionTabCycles() {
         #expect(
-            resolve(nil, WindowKeyCommand.tabKeyCode, .control) == .cycleForward)
+            resolve(nil, WindowKeyCommand.tabKeyCode, .option) == .cycleForward)
         #expect(
-            resolve(nil, WindowKeyCommand.tabKeyCode, [.control, .shift]) == .cycleBackward)
+            resolve(nil, WindowKeyCommand.tabKeyCode, [.option, .shift]) == .cycleBackward)
+    }
+
+    @Test func controlTabNoLongerCyclesSidebarSections() {
+        #expect(resolve(nil, WindowKeyCommand.tabKeyCode, .control) == nil)
+        #expect(resolve(nil, WindowKeyCommand.tabKeyCode, [.control, .shift]) == nil)
     }
 
     @Test func unmodifiedAndForeignModifierKeysAreIgnored() {
