@@ -140,6 +140,13 @@ public enum CommandTree {
     static let specs: [String: Spec] = [
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
+        "ed docs ls": Spec(
+            options: ["--json", "-h", "--help", "--version", "--group"],
+            optionValues: ["--group": .free]),
+        "ed docs show": Spec(
+            options: ["--json", "-h", "--help", "--version"], repeatingArgument: .free),
+        "ed docs ask": Spec(
+            options: ["--json", "-h", "--help", "--version"], repeatingArgument: .free),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed completions install": Spec(

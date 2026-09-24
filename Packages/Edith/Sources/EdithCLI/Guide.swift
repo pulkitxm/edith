@@ -48,6 +48,8 @@ public enum Guide {
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
+        ed docs ask "<request>"     the commands that handle a plain-language request
+        ed docs show <command>      the reference page for one command
         ed guide                    this text
         ed guide agent              repository instructions making an agent ed-aware
         ed guide --json             the complete parser command catalog

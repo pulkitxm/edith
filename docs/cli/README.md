@@ -50,6 +50,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed agent`](./agent/README.md) | The headless background agent: registration, live state and its job table |
 | [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP |
 | [`ed jev`](./jev/README.md) | The TypeSafe Jev key, its status, and raw typed decisions |
+| [`ed docs`](./docs/README.md) | This reference in the app and on the command line, and asking which command handles a request |
 | [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
 | [Keystroke Highlight](./keystroke-highlight/README.md) | Showing key presses on screen for demos and recordings |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
