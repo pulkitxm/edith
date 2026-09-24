@@ -38,6 +38,8 @@ final class TerminalSessionHolder {
     private(set) var ghosttyLaunch: GhosttyLaunch?
     private(set) var ghosttyView: GhosttyTerminalView?
     private(set) var presentationGeneration = 0
+    private(set) var transferringDrop = false
+    private(set) var dropTransferError: String?
 
     private var delegateBox: TerminalProcessDelegate?
     private var appliedPalette: TerminalPalette?
@@ -324,6 +326,23 @@ final class TerminalSessionHolder {
             terminalView.send(Array(text.utf8))
         }
     }
+
+    func deliverRemoteDrop(
+        _ payload: TerminalDropPayload, upload: ([URL]) async throws -> [String]
+    ) async {
+        transferringDrop = true
+        dropTransferError = nil
+        defer {
+            transferringDrop = false
+            payload.removeTemporaryFiles()
+        }
+        do {
+            let paths = try await upload(payload.files)
+            insertText(paths.map(ShellQuote.quote).joined(separator: " "))
+        } catch {
+            dropTransferError = error.localizedDescription
+        }
+    }
 }
 
 final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
@@ -392,7 +411,11 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
             copy(self)
             return true
         case .paste:
-            paste(self)
+            if let payload = TerminalDropPayload.files(from: .general) {
+                _ = accept(payload)
+            } else {
+                paste(self)
+            }
             return true
         case .none:
             return super.performKeyEquivalent(with: event)
@@ -581,9 +604,12 @@ struct MachineTerminalTab: View {
             if presentation.showsTerminal {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
-                    wantsFocus: wantsFocus, onFocus: onFocus
+                    wantsFocus: wantsFocus,
+                    onDropFiles: session.isLocal ? nil : uploadDrop,
+                    onFocus: onFocus
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay { TerminalDropTransferStatus(holder: holder) }
             } else {
                 terminalUnavailable(presentation)
             }
@@ -780,6 +806,16 @@ struct MachineTerminalTab: View {
     private func restart() {
         holder.reset()
         startIfPossible()
+    }
+
+    private func uploadDrop(_ payload: TerminalDropPayload) -> Bool {
+        guard let connection = session.connectionRef else { return false }
+        Task {
+            await holder.deliverRemoteDrop(payload) { files in
+                try await TerminalDropTransfer.upload(files, over: connection)
+            }
+        }
+        return true
     }
 
     private func perform(_ action: MachineTerminalAction) {

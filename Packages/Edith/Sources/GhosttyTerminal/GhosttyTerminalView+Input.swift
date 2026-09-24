@@ -702,7 +702,7 @@ extension GhosttyTerminalView {
         let paste = menu.addItem(
             withTitle: "Paste", action: #selector(pasteTerminalClipboard(_:)), keyEquivalent: "")
         paste.target = self
-        paste.isEnabled = NSPasteboard.general.string(forType: .string) != nil
+        paste.isEnabled = TerminalDropPayload.canRead(.general)
         let selectAll = menu.addItem(
             withTitle: "Select All", action: #selector(selectAllTerminalText(_:)), keyEquivalent: ""
         )

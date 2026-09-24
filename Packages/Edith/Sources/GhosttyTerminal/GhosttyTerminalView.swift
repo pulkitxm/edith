@@ -291,6 +291,7 @@ public final class GhosttyTerminalView: NSView {
     public func setRenderingActive(_ active: Bool) {
         guard renderingActive != active else { return }
         renderingActive = active
+        isHidden = !active
         if !active { mouseOverSurface = false }
         syncFocus()
         applyPresentationState()

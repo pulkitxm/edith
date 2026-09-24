@@ -54,9 +54,68 @@ import Testing
         defer { payload.removeTemporaryFiles() }
 
         #expect(payload.files.count == 1)
-        #expect(["png", "tiff"].contains(payload.files[0].pathExtension))
+        #expect(payload.files[0].pathExtension == "png")
         #expect(FileManager.default.fileExists(atPath: payload.files[0].path))
         #expect(payload.temporaryFiles == Set(payload.files))
+    }
+
+    @Test func tiffOnlyImageDataBecomesAPNGAgentsCanAttach() throws {
+        let board = NSPasteboard(name: .init("edith.drop.tiff-data"))
+        board.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(try #require(Self.redSquare().tiffRepresentation), forType: .tiff)
+        board.writeObjects([item])
+
+        let payload = try #require(TerminalDropPayload.files(from: board))
+        defer { payload.removeTemporaryFiles() }
+
+        #expect(payload.files[0].pathExtension == "png")
+        let written = try Data(contentsOf: payload.files[0])
+        #expect(written.starts(with: [0x89, 0x50, 0x4E, 0x47]))
+    }
+
+    @Test func aPNGOfferedBesideTIFFIsKeptUnchanged() throws {
+        let board = NSPasteboard(name: .init("edith.drop.png-and-tiff"))
+        board.clearContents()
+        let image = Self.redSquare()
+        let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let item = NSPasteboardItem()
+        item.setData(try #require(image.tiffRepresentation), forType: .tiff)
+        item.setData(png, forType: .png)
+        board.writeObjects([item])
+
+        let payload = try #require(TerminalDropPayload.files(from: board))
+        defer { payload.removeTemporaryFiles() }
+
+        #expect(payload.files[0].pathExtension == "png")
+        #expect(try Data(contentsOf: payload.files[0]) == png)
+    }
+
+    @Test func jpegImageDataKeepsItsFormat() throws {
+        let board = NSPasteboard(name: .init("edith.drop.jpeg-data"))
+        board.clearContents()
+        let bitmap = try #require(
+            Self.redSquare().tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let jpeg = try #require(bitmap.representation(using: .jpeg, properties: [:]))
+        let item = NSPasteboardItem()
+        item.setData(jpeg, forType: .init("public.jpeg"))
+        board.writeObjects([item])
+
+        let payload = try #require(TerminalDropPayload.files(from: board))
+        defer { payload.removeTemporaryFiles() }
+
+        #expect(["jpeg", "jpg"].contains(payload.files[0].pathExtension))
+        #expect(try Data(contentsOf: payload.files[0]) == jpeg)
+    }
+
+    private static func redSquare() -> NSImage {
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: 2).fill()
+        image.unlockFocus()
+        return image
     }
 
     @Test func pdfDataBecomesATemporaryPDF() throws {
@@ -112,6 +171,27 @@ import Testing
         #expect(
             GhosttyTerminalView.dropped(from: board)
                 == "'https://example.com/?one=1&two=2'")
+    }
+
+    @Test @MainActor func anInactiveTerminalStackedAboveDoesNotCatchTheDrop() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let visible = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        let stacked = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        for view in [visible, stacked] {
+            view.frame = container.bounds
+            container.addSubview(view)
+        }
+        let center = NSPoint(x: container.bounds.midX, y: container.bounds.midY)
+
+        stacked.setRenderingActive(false)
+        let reachesVisible = container.hitTest(center) === visible
+        #expect(reachesVisible)
+
+        stacked.setRenderingActive(true)
+        let reachesStacked = container.hitTest(center) === stacked
+        #expect(reachesStacked)
     }
 
     @Test func promisedFilesAreRegisteredAsDropTypes() {
