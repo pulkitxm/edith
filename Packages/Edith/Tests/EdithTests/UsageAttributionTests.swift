@@ -137,6 +137,32 @@ enum AttributionFixture {
     }
 }
 
+final class AttributionScriptedDecider: JevDeciding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let pick: @Sendable ([String: String]) -> (String, Double)
+    private var captured: [JevRequest] = []
+
+    init(_ pick: @escaping @Sendable ([String: String]) -> (String, Double)) {
+        self.pick = pick
+    }
+
+    var requests: [JevRequest] { lock.withLock { captured } }
+
+    func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {
+        lock.withLock { captured.append(request) }
+        guard case .fields(let state) = request.state else { throw JevError.malformedResponse }
+        let (choice, probability) = pick(state)
+        return JevDecision(
+            response: JevResponse(
+                model: JevRequest.defaultModel,
+                answers: [
+                    "repository": JevAnswer(
+                        type: "choice", choice: choice, probabilities: [choice: probability])
+                ]),
+            milliseconds: 5)
+    }
+}
+
 @Suite struct UsageAttributionTests {
     typealias Fixture = AttributionFixture
 
@@ -244,5 +270,81 @@ enum AttributionFixture {
         #expect(matcher.title("Update edith and quinjet") == nil)
         #expect(matcher.title("Chat 1a2b3c4d") == nil)
         #expect(matcher.title("Write the api docs") == nil)
+    }
+
+    @Test func jevDecidesTheRestAtOrAboveTheThreshold() async throws {
+        let decider = AttributionScriptedDecider { state in
+            state["folder"] == "scratch" ? (Fixture.quinjet.id, 0.8) : ("none", 0.95)
+        }
+        let cache = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: UsageAttributionCache(), decider: decider)
+        #expect(decider.requests.count == 2)
+        let scratch = try #require(cache.decisions["folder||folder:/tmp/scratch"])
+        #expect(scratch.method == .jev)
+        #expect(scratch.repository == Fixture.quinjet)
+        let ambiguous = try #require(cache.decisions["chat|\(Fixture.codex)|\(Fixture.machine)|c3"])
+        #expect(ambiguous.repository == nil)
+        #expect(cache.decisions["chat|\(Fixture.codex)|\(Fixture.machine)|c2"] == nil)
+        #expect(
+            cache.decisions["folder||folder:/Users/me/code/edith-worktrees/feature-x"]?.method
+                == .name)
+        let request = try #require(decider.requests.first)
+        guard case .fields(let state) = request.state,
+            case .choice(_, let options)? = request.questions["repository"]
+        else {
+            Issue.record("expected a choice over fields")
+            return
+        }
+        #expect(Set(state.keys) == ["folder", "path", "machine", "source", "titles"])
+        #expect(options.map(\.id).contains("none"))
+        #expect(options.map(\.id).contains(Fixture.quinjet.id))
+        let again = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: cache, decider: decider)
+        #expect(again == cache)
+        #expect(decider.requests.count == 2)
+    }
+
+    @Test func doubtfulAnswersAreKeptAsNone() async {
+        let decider = AttributionScriptedDecider { _ in (Fixture.quinjet.id, 0.79) }
+        let cache = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: UsageAttributionCache(), decider: decider)
+        let scratch = cache.decisions["folder||folder:/tmp/scratch"]
+        #expect(scratch?.repository == nil)
+        #expect(scratch?.confidence == 0.79)
+    }
+
+    @Test func eachRunAsksABoundedNumberOfQuestions() async {
+        let folders = (0..<5).map {
+            Fixture.project(
+                "folder:/tmp/scratch\($0)", "scratch\($0)", path: "/tmp/scratch\($0)",
+                cost: Double($0 + 1), tokens: 10)
+        }
+        let document = Fixture.document(Array(Fixture.projects.prefix(2)) + folders)
+        let decider = AttributionScriptedDecider { _ in ("none", 0.9) }
+        let first = await UsageAttributionAdvisor.advise(
+            document, cache: UsageAttributionCache(), decider: decider, limit: 2)
+        #expect(decider.requests.count == 2)
+        #expect(first.decisions.keys.contains("folder||folder:/tmp/scratch4"))
+        _ = await UsageAttributionAdvisor.advise(
+            document, cache: first, decider: decider, limit: 2)
+        #expect(decider.requests.count == 4)
+    }
+
+    @Test func withoutAKeyJevIsNeverCalled() async {
+        let calls = JevCallCounter()
+        let engine = JevEngine(
+            store: MemoryJevKeyStore(),
+            makeClient: { key in
+                calls.increment()
+                return JevClient(apiKey: key)
+            })
+        let decider: JevDeciding? = await engine.isConfigured ? engine : nil
+        let cache = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: UsageAttributionCache(), decider: decider)
+        _ = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: UsageAttributionCache(), decider: engine)
+        #expect(calls.count == 0)
+        #expect(cache.decisions.values.allSatisfy { $0.method == .name })
+        #expect(cache.decisions.count == 2)
     }
 }

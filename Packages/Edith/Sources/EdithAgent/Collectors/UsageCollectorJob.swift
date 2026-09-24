@@ -155,8 +155,12 @@ public final class UsageCollectorJob: @unchecked Sendable {
                 while true {
                     try Task.checkCancellation()
                     do {
-                        return try await UsageRefreshRunner.run(
+                        let result = try await UsageRefreshRunner.run(
                             machinePolicy: request.machinePolicy, runID: request.runID)
+                        let engine = AgentJev.engine
+                        await UsageAttributionAdvisor.run(
+                            decider: await engine.isConfigured ? engine : nil)
+                        return result
                     } catch UsageRefreshFailure.busy {
                         if ContinuousClock.now >= deadline {
                             UsageRefreshRunner.recordFailure(
