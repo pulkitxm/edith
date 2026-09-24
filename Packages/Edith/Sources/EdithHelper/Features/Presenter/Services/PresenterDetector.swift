@@ -34,8 +34,6 @@ final class PresenterDetector: FeatureModule {
     private final class ScanContext: @unchecked Sendable {
         var titlesAvailable: Bool?
         var titlesCheckedAt: TimeInterval = 0
-        var recordingHit = false
-        var tick = 0
         private let lock = NSLock()
         private var rulesApply = false
 
@@ -205,12 +203,9 @@ final class PresenterDetector: FeatureModule {
         let detectRecording =
             SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
             ?? true
-        if context.tick % 3 == 0 {
-            context.recordingHit = detectRecording && isProcessRunning(named: "screencapture")
-        }
-        context.tick += 1
         return ScanOutcome(
-            windowReason: windowReason, recordingHit: detectRecording && context.recordingHit)
+            windowReason: windowReason,
+            recordingHit: detectRecording && isProcessRunning(named: "screencapture"))
     }
 
     private func applyScan(_ outcome: ScanOutcome) {

@@ -275,7 +275,9 @@ public actor JobScheduler {
             let current = interval(for: state)
             if current != state.interval {
                 states[id]?.interval = current
-                states[id]?.nextRun = current.map { now.addingTimeInterval($0) }
+                states[id]?.nextRun = current.map {
+                    max(now, (state.lastRun ?? now).addingTimeInterval($0))
+                }
             }
             if !state.job.isEnabled() { cancel(id) }
         }

@@ -109,6 +109,11 @@ private final class WaveBarsView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
+    deinit {
+        guard viewing else { return }
+        Task { @MainActor in PlaybackLevel.shared.detachViewer() }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         let visible = window != nil

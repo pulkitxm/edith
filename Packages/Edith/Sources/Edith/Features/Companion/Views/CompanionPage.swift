@@ -112,6 +112,7 @@ struct CompanionPage: View {
             guard requestsEnabled, windowVisible else { return }
             while !Task.isCancelled {
                 await home.refresh()
+                guard !Task.isCancelled else { return }
                 if !checkedSetup {
                     checkedSetup = true
                     if CompanionDeploymentStore.load() == nil, !home.reachable,

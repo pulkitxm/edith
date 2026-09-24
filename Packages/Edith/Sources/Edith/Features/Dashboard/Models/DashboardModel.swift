@@ -822,7 +822,6 @@ final class DashboardModel {
         case .heatMetric:
             d.setIfChanged(heatMetric.rawValue, forKey: "dashHeatMetric")
         }
-        restoredPreferences = preferenceFingerprint()
     }
 
     private func encodeRange(_ r: DashRange) -> String {

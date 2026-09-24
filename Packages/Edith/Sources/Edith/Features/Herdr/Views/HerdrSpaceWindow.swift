@@ -93,6 +93,7 @@ enum HerdrSpaceWindow {
         let hosting = NSHostingController(
             rootView: ZoomableRoot {
                 HerdrSpaceView(model: model, store: store, launchEnabled: launchEnabled)
+                    .agentTopic(.sessions, as: SessionsSnapshot.self) { store.adopt($0) }
             })
         hosting.sizingOptions = []
         window.contentViewController = hosting

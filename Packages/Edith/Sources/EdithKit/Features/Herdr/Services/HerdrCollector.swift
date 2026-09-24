@@ -200,7 +200,7 @@ public enum HerdrCollector {
                 CLICommandRequest(
                     executableURL: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-c", command],
                     environment: CLIToolEnvironment.sanitized(), timeout: commandTimeout,
-                    maximumOutputBytes: 16 << 20, terminatesProcessGroup: true),
+                    maximumOutputBytes: 16 << 20),
                 onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
             return CommandResult(
                 status: result.terminationStatus, stdout: result.standardOutput,

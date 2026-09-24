@@ -8,9 +8,7 @@ import SwiftUI
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
-    private var settingsBroadcastObserver: NSObjectProtocol?
     private var settingsBroadcastPending = false
-    private var broadcastSettings: NSDictionary?
     private var lastUsageEnabled: Bool?
     private var appStarted = false
     private var launchCleanupTask: Task<Void, Never>?
@@ -53,11 +51,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         CLIWindowBridge.install()
         lastUsageEnabled =
             SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
-        broadcastSettings = NSDictionary(
-            dictionary: SharedDefaults.store.dictionaryRepresentation())
-        settingsBroadcastObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-            Task { @MainActor in self?.adoptBroadcastSettings() }
-        }
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main
@@ -128,20 +121,11 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func adoptBroadcastSettings() {
-        guard !settingsBroadcastPending else { return }
-        broadcastSettings = NSDictionary(
-            dictionary: SharedDefaults.store.dictionaryRepresentation())
-    }
-
     private func flushSettingsChangedBroadcast() {
         guard settingsBroadcastPending else { return }
         settingsBroadcastPending = false
-        defer { ProcessInfo.processInfo.enableSuddenTermination() }
-        let settings = NSDictionary(dictionary: SharedDefaults.store.dictionaryRepresentation())
-        guard settings != broadcastSettings else { return }
-        broadcastSettings = settings
         IPC.post(IPC.Name.settingsChanged)
+        ProcessInfo.processInfo.enableSuddenTermination()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
