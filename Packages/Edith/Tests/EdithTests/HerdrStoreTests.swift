@@ -230,6 +230,128 @@ private actor HerdrWatchHarness {
         #expect(store.canCloseToTheRight(of: last) == false)
     }
 
+    @Test func cycleTabWrapsForwardAndBackwardThroughTheBoard() {
+        let store = seededStore()
+        let ids = store.orderedTabIDs
+        #expect(ids == [HerdrStore.boardID] + store.tabs.map(\.id))
+
+        store.selectedTab = ids.last!
+        #expect(store.cycleTab(backwards: false))
+        #expect(store.selectedTab == ids[0])
+
+        #expect(store.cycleTab(backwards: true))
+        #expect(store.selectedTab == ids.last!)
+    }
+
+    @Test func cycleTabFailsWithNoOpenTabs() {
+        let store = HerdrStore()
+        #expect(store.cycleTab(backwards: false) == false)
+        #expect(store.selectedTab == HerdrStore.boardID)
+    }
+
+    @Test func closeFocusedTabIgnoresTheBoard() {
+        let store = seededStore()
+        store.selectedTab = HerdrStore.boardID
+        #expect(store.closeFocusedTab() == false)
+        #expect(store.tabs.count == 3)
+    }
+
+    @Test func closeFocusedTabClosesTheSelectedTab() {
+        let store = seededStore()
+        let focused = store.tabs[2].id
+        store.selectedTab = focused
+        #expect(store.closeFocusedTab())
+        #expect(!store.tabs.contains { $0.id == focused })
+    }
+
+    @Test func reopenLastClosedTabWalksBackThroughHistory() {
+        let store = HerdrStore()
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.hosts = [.local(herdrPresent: true, agents: [claude, codex])]
+        store.open(claude)
+        store.open(codex)
+
+        store.closeTab(store.tab(containing: claude.id)!.id)
+        store.closeTab(store.tab(containing: codex.id)!.id)
+        #expect(store.tabs.isEmpty)
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.currentTab?.agentIDs == [codex.id])
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.currentTab?.agentIDs == [claude.id])
+
+        #expect(store.reopenLastClosedTab() == false)
+    }
+
+    @Test func reopenLastClosedTabSkipsAgentsThatAreNoLongerLive() {
+        let store = HerdrStore()
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.hosts = [.local(herdrPresent: true, agents: [claude, codex])]
+        store.open(claude)
+        store.open(codex)
+
+        store.closeTab(store.tab(containing: claude.id)!.id)
+        store.hosts = [.local(herdrPresent: true, agents: [codex])]
+        store.closeTab(store.tab(containing: codex.id)!.id)
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.currentTab?.agentIDs == [codex.id])
+        #expect(store.reopenLastClosedTab() == false)
+    }
+
+    @Test func reopeningEachTabAfterABatchCloseRestoresTheOriginalOrder() {
+        let store = HerdrStore()
+        let one = agent("Claude Code", pane: "1")
+        let two = agent("Codex", pane: "2")
+        let three = agent("OpenCode", pane: "3")
+        store.hosts = [.local(herdrPresent: true, agents: [one, two, three])]
+        store.open(one)
+        store.open(two)
+        store.open(three)
+
+        store.closeAll()
+        #expect(store.reopenLastClosedTab())
+        #expect(store.reopenLastClosedTab())
+        #expect(store.reopenLastClosedTab())
+
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, two.id, three.id])
+    }
+
+    @Test func reopeningASingleClosedTabRestoresItsOriginalPosition() {
+        let store = HerdrStore()
+        let one = agent("Claude Code", pane: "1")
+        let two = agent("Codex", pane: "2")
+        let three = agent("OpenCode", pane: "3")
+        store.hosts = [.local(herdrPresent: true, agents: [one, two, three])]
+        store.open(one)
+        store.open(two)
+        store.open(three)
+
+        store.closeTab(store.tab(containing: two.id)!.id)
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, three.id])
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, two.id, three.id])
+    }
+
+    @Test func reopenLastClosedTabHistoryIsBoundedToTenEntries() {
+        let store = HerdrStore()
+        let agents = (0..<11).map { agent("Claude Code", pane: "p\($0)") }
+        store.hosts = [.local(herdrPresent: true, agents: agents)]
+        for candidate in agents { store.open(candidate) }
+        store.closeAll()
+
+        for candidate in agents[1...].reversed() {
+            #expect(store.reopenLastClosedTab())
+            #expect(store.currentTab?.agentIDs == [candidate.id])
+        }
+        #expect(store.reopenLastClosedTab() == false)
+        #expect(store.tabs.flatMap(\.agentIDs) == agents[1...].map(\.id))
+    }
+
     private func seededStore(
         requestUserClose: @escaping HerdrStore.UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
