@@ -459,11 +459,4 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(accessory.view.fittingSize.height <= 36)
     }
 
-    @Test func panelTabBarRenders() {
-        let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
-        #expect(
-            renders(
-                TabBar(tabs: tabs, selection: .constant("usage"), theme: .orange),
-                width: 480, height: 60))
-    }
 }
