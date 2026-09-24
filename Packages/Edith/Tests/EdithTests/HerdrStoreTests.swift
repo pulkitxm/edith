@@ -569,9 +569,9 @@ private actor HerdrWatchHarness {
         #expect(calls[0].machine == nil)
         #expect(calls[0].space == nil)
         #expect(calls[0].label == "new-space")
-        #expect(store.tabs.map(\.id) == ["local|default|w9:p1"])
-        #expect(store.selectedTab == "local|default|w9:p1")
-        #expect(store.tabs.first?.agent.workspace == "new-space")
+        #expect(store.tabs.map(\.agentIDs) == [["local|default|w9:p1"]])
+        #expect(store.currentTab?.agentIDs == ["local|default|w9:p1"])
+        #expect(store.sessions.first?.agent.workspace == "new-space")
     }
 
     @Test func launchNewAgentResolvesARemoteHostToItsMachine() async throws {
@@ -597,7 +597,7 @@ private actor HerdrWatchHarness {
             existingSpace: space, newSpaceLabel: nil)
 
         #expect(await recorder.machines == [machine])
-        #expect(store.tabs.first?.agent.workspace == "edith")
+        #expect(store.sessions.first?.agent.workspace == "edith")
     }
 
     @Test func launchNewAgentPropagatesLauncherErrors() async {
