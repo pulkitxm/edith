@@ -629,12 +629,6 @@ extension GhosttyTerminalView {
             _ = accept(payload)
             return
         }
-        let receivingPromises = TerminalDropPayload.receivePromisedFiles(
-            from: .general
-        ) { [weak self] payload in
-            _ = self?.accept(payload)
-        }
-        if receivingPromises { return }
         _ = performBindingAction("paste_from_clipboard")
     }
 
