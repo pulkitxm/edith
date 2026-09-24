@@ -277,8 +277,15 @@ extension HerdrLayout {
             }
         }
         return candidates.min { first, second in
-            distance(from: origin, to: first.value, side: side)
-                < distance(from: origin, to: second.value, side: side)
+            let firstDistance = distance(from: origin, to: first.value, side: side)
+            let secondDistance = distance(from: origin, to: second.value, side: side)
+            if abs(firstDistance - secondDistance) > epsilon {
+                return firstDistance < secondDistance
+            }
+            if abs(first.value.minY - second.value.minY) > epsilon {
+                return first.value.minY < second.value.minY
+            }
+            return first.value.minX < second.value.minX
         }?.key
     }
 

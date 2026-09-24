@@ -76,14 +76,12 @@ final class HerdrStore {
     var selectedTab = boardID {
         didSet {
             guard selectedTab != oldValue else { return }
-            guard
-                let agent = tabs.first(where: { $0.id == selectedTab })?.agent
-                    ?? detachedTabs[selectedTab]?.agent
-            else { return }
+            guard let agent = focusedSession?.agent else { return }
             revealSpace(containing: agent)
         }
     }
-    var tabs: [HerdrOpenTab] = []
+    var tabs: [HerdrTab] = []
+    private(set) var sessions: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
     var detailOpen = true {
@@ -350,7 +348,7 @@ final class HerdrStore {
         HerdrSplitFraction.set(fraction, for: id, defaults)
     }
 
-    var openIDs: Set<String> { Set(tabs.map(\.id)) }
+    var openIDs: Set<String> { Set(sessions.map(\.id)) }
 
     func watch() async {
         guard watchTask == nil else { return }
@@ -458,9 +456,9 @@ final class HerdrStore {
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         hosts = snapshots
-        for index in tabs.indices {
-            if let updated = agents.first(where: { $0.id == tabs[index].id }) {
-                tabs[index].agent = updated
+        for index in sessions.indices {
+            if let updated = agents.first(where: { $0.id == sessions[index].id }) {
+                sessions[index].agent = updated
             }
         }
         if collapseSnapshotComplete {
@@ -541,29 +539,94 @@ final class HerdrStore {
             : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
     }
 
+    func session(_ agentID: String) -> HerdrOpenTab? {
+        sessions.first { $0.id == agentID }
+    }
+
+    func tab(_ id: String) -> HerdrTab? {
+        tabs.first { $0.id == id }
+    }
+
+    func tab(containing agentID: String) -> HerdrTab? {
+        tabs.first { $0.layout.contains(agentID) }
+    }
+
+    var currentTab: HerdrTab? { tab(selectedTab) }
+
+    var focusedSession: HerdrOpenTab? {
+        currentTab.flatMap { session($0.focused) }
+    }
+
     func open(_ agent: HerdrAgent) {
         open(agent, showing: nil)
     }
 
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
         revealSpace(containing: agent)
-        if let index = tabs.firstIndex(where: { $0.id == agent.id }) {
-            if let view { apply(view, at: index) }
-            selectedTab = agent.id
+        if sessions.contains(where: { $0.id == agent.id }) {
+            if let view { setView(view, for: agent.id) }
+            reveal(agent.id)
             return
         }
-        var tab = makeTab(for: agent)
-        if let view, !agent.isTerminal { tab.view = view }
-        let resolved = tab.view
+        adoptSession(for: agent, showing: view)
+        let tab = HerdrTab(agentID: agent.id)
         tabs.append(tab)
-        if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
-        if resolved == .split { detailOpen = false }
-        selectedTab = agent.id
+        if self.view(for: agent.id) == .split { detailOpen = false }
+        selectedTab = tab.id
+    }
+
+    func open(_ agent: HerdrAgent, beside side: InsertSide) {
+        guard let current = currentTab, !current.layout.contains(agent.id) else {
+            open(agent)
+            return
+        }
+        if sessions.contains(where: { $0.id == agent.id }) {
+            detachFromLayout(agent.id)
+        } else {
+            adoptSession(for: agent, showing: nil)
+        }
+        updateTab(current.id) { tab in
+            tab.layout = tab.layout.inserting(.pane(agent.id), near: tab.focused, side: side)
+            tab.focused = agent.id
+            tab.zoomed = nil
+        }
+        revealSpace(containing: agent)
+        selectedTab = current.id
+    }
+
+    private func adoptSession(for agent: HerdrAgent, showing view: HerdrAgentView?) {
+        var session = makeTab(for: agent)
+        if let view, !agent.isTerminal {
+            session.view = view
+            HerdrAgentViews.set(view, for: agent.id, defaults)
+        }
+        sessions.append(session)
+    }
+
+    private func reveal(_ agentID: String) {
+        guard let tab = tab(containing: agentID) else { return }
+        updateTab(tab.id) { tab in
+            tab.focused = agentID
+            if tab.zoomed != nil { tab.zoomed = agentID }
+        }
+        selectedTab = tab.id
     }
 
     func view(for id: String) -> HerdrAgentView {
-        tabs.first { $0.id == id }?.view ?? detachedTabs[id]?.view
+        session(id)?.view ?? detachedTabs[id]?.view
             ?? HerdrAgentViews.view(for: id, defaults)
+    }
+
+    func shownView(for id: String) -> HerdrAgentView {
+        let view = view(for: id)
+        guard view == .split, tab(containing: id)?.isSplit == true else { return view }
+        return .agent
+    }
+
+    func views(for id: String) -> [HerdrAgentView] {
+        if session(id)?.agent.isTerminal == true { return [] }
+        if tab(containing: id)?.isSplit == true { return [.agent, .diff] }
+        return [.agent, .split, .diff]
     }
 
     func setView(_ view: HerdrAgentView, for id: String) {
@@ -576,23 +639,159 @@ final class HerdrStore {
             if view == .split { detailOpen = false }
             return
         }
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
             HerdrAgentViews.set(view, for: id, defaults)
             return
         }
-        revealSpace(containing: tabs[index].agent)
-        apply(view, at: index)
-    }
-
-    private func apply(_ view: HerdrAgentView, at index: Int) {
-        guard tabs[index].view != view else { return }
-        tabs[index].view = view
-        HerdrAgentViews.set(view, for: tabs[index].id, defaults)
+        guard views(for: id).contains(view) else { return }
+        revealSpace(containing: sessions[index].agent)
+        guard sessions[index].view != view else { return }
+        sessions[index].view = view
+        HerdrAgentViews.set(view, for: id, defaults)
         if view == .split { detailOpen = false }
     }
 
+    func focus(_ agentID: String) {
+        guard let tab = tab(containing: agentID), tab.focused != agentID else { return }
+        updateTab(tab.id) { $0.focused = agentID }
+        if let agent = session(agentID)?.agent { revealSpace(containing: agent) }
+    }
+
+    func focusNeighbor(toward side: InsertSide) {
+        guard let tab = currentTab, tab.zoomed == nil,
+            let next = tab.layout.neighbor(of: tab.focused, toward: side)
+        else { return }
+        focus(next)
+    }
+
+    func toggleZoom(_ agentID: String) {
+        guard let tab = tab(containing: agentID), tab.isSplit else { return }
+        updateTab(tab.id) { tab in
+            tab.zoomed = tab.zoomed == agentID ? nil : agentID
+            tab.focused = agentID
+        }
+    }
+
+    func arrange(_ tabID: String, as arrangement: HerdrArrangement) {
+        guard let tab = tab(tabID) else { return }
+        let ordered = [tab.focused] + tab.agentIDs.filter { $0 != tab.focused }
+        guard let layout = arrangement.layout(ordered) else { return }
+        updateTab(tabID) { tab in
+            tab.layout = layout
+            tab.zoomed = nil
+        }
+    }
+
+    func rotate(_ tabID: String) {
+        updateTab(tabID) { $0.layout = $0.layout.rotated() }
+    }
+
+    func mirror(_ tabID: String, _ axis: SplitAxis) {
+        updateTab(tabID) { $0.layout = $0.layout.mirrored(axis) }
+    }
+
+    func equalize(_ tabID: String) {
+        updateTab(tabID) { $0.layout = $0.layout.equalized() }
+    }
+
+    func resize(_ tabID: String, split: UUID, index: Int, by change: Double) {
+        updateTab(tabID) { $0.layout = $0.layout.resizing(split: split, index: index, by: change) }
+    }
+
+    func swap(_ first: String, _ second: String) {
+        guard let tab = tab(containing: first), tab.layout.contains(second) else { return }
+        updateTab(tab.id) { $0.layout = $0.layout.swapping(first, second) }
+    }
+
+    func moveToNewTab(_ agentID: String) {
+        guard let source = tab(containing: agentID), source.isSplit,
+            let index = tabs.firstIndex(where: { $0.id == source.id })
+        else { return }
+        detachFromLayout(agentID)
+        let tab = HerdrTab(agentID: agentID)
+        tabs.insert(tab, at: min(index + 1, tabs.count))
+        selectedTab = tab.id
+    }
+
+    func separate(_ tabID: String) {
+        guard let index = tabs.firstIndex(where: { $0.id == tabID }), tabs[index].isSplit else {
+            return
+        }
+        let ids = tabs[index].agentIDs
+        let focused = tabs[index].focused
+        let singles = ids.map { HerdrTab(agentID: $0) }
+        tabs.replaceSubrange(index...index, with: singles)
+        selectedTab = singles.first { $0.focused == focused }?.id ?? singles[0].id
+    }
+
+    func merge(_ sourceID: String, into targetID: String) {
+        guard sourceID != targetID, let source = tab(sourceID), tab(targetID) != nil else {
+            return
+        }
+        tabs.removeAll { $0.id == sourceID }
+        updateTab(targetID) { tab in
+            tab.layout = Self.adding(source.agentIDs, to: tab.layout)
+            tab.focused = source.focused
+            tab.zoomed = nil
+        }
+        selectedTab = targetID
+    }
+
+    func gatherAll(into targetID: String) {
+        guard let target = tab(targetID) else { return }
+        let ids = target.agentIDs + tabs.filter { $0.id != targetID }.flatMap(\.agentIDs)
+        let arrangement: HerdrArrangement = ids.count >= 4 ? .grid : .columns
+        tabs.removeAll { $0.id != targetID }
+        updateTab(targetID) { tab in
+            tab.layout = arrangement.layout(ids) ?? tab.layout
+            tab.zoomed = nil
+        }
+        selectedTab = targetID
+    }
+
+    func canMerge(_ tabID: String) -> Bool {
+        tabs.count > 1 && tab(tabID) != nil
+    }
+
+    static func adding(_ ids: [String], to layout: HerdrLayout) -> HerdrLayout {
+        let combined = layout.panes + ids
+        if let current = HerdrArrangement.matching(layout),
+            let flowed = current.layout(combined)
+        {
+            return flowed
+        }
+        return ids.reduce(layout) { result, id in result.inserting(.pane(id), atEdge: .right) }
+    }
+
+    private func detachFromLayout(_ agentID: String) {
+        guard let index = tabs.firstIndex(where: { $0.layout.contains(agentID) }) else { return }
+        guard let remaining = tabs[index].layout.removing(agentID) else {
+            let removed = tabs.remove(at: index)
+            if selectedTab == removed.id { selectedTab = tabs.last?.id ?? Self.boardID }
+            return
+        }
+        tabs[index].layout = remaining
+        if tabs[index].focused == agentID { tabs[index].focused = remaining.panes[0] }
+        if tabs[index].zoomed == agentID || !tabs[index].isSplit { tabs[index].zoomed = nil }
+    }
+
+    private func updateTab(_ id: String, _ body: (inout HerdrTab) -> Void) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        body(&tabs[index])
+        if !tabs[index].layout.contains(tabs[index].focused) {
+            tabs[index].focused = tabs[index].agentIDs.first ?? tabs[index].focused
+        }
+        if let zoomed = tabs[index].zoomed, !tabs[index].layout.contains(zoomed) {
+            tabs[index].zoomed = nil
+        }
+    }
+
     func close(_ id: String) {
-        closeWhere { _, tab in tab.id == id }
+        closeSequentially([id][...])
+    }
+
+    func closeTab(_ tabID: String) {
+        closeTabs { _, tab in tab.id == tabID }
     }
 
     func closeAgent(_ agent: HerdrAgent) async throws {
@@ -602,29 +801,29 @@ final class HerdrStore {
 
     func closeOthers(besides id: String) {
         if id == Self.boardID {
-            closeWhere { _, _ in true }
+            closeTabs { _, _ in true }
             return
         }
-        closeWhere { _, tab in tab.id != id }
+        closeTabs { _, tab in tab.id != id }
         selectedTab = id
     }
 
     func closeAll() {
-        closeWhere { _, _ in true }
+        closeTabs { _, _ in true }
     }
 
     func closeToTheRight(of id: String) {
         if id == Self.boardID {
-            closeWhere { _, _ in true }
+            closeTabs { _, _ in true }
             return
         }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        closeWhere { i, _ in i > index }
+        closeTabs { i, _ in i > index }
     }
 
     func closeToTheLeft(of id: String) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        closeWhere { i, _ in i < index }
+        closeTabs { i, _ in i < index }
     }
 
     func canCloseOthers(besides id: String) -> Bool {
@@ -646,9 +845,9 @@ final class HerdrStore {
         return index > 0
     }
 
-    private func closeWhere(_ predicate: (Int, HerdrOpenTab) -> Bool) {
-        let ids = tabs.enumerated().compactMap { item in
-            predicate(item.offset, item.element) ? item.element.id : nil
+    private func closeTabs(_ predicate: (Int, HerdrTab) -> Bool) {
+        let ids = tabs.enumerated().flatMap { item in
+            predicate(item.offset, item.element) ? item.element.agentIDs : []
         }
         guard !ids.isEmpty else { return }
         closeSequentially(ids[...])
@@ -657,32 +856,33 @@ final class HerdrStore {
     private func closeSequentially(_ ids: ArraySlice<String>) {
         guard let id = ids.first else { return }
         let remaining = ids.dropFirst()
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
             closeSequentially(remaining)
             return
         }
-        if !tabs[index].agent.isTerminal {
-            let holder = tabs[index].holder
+        if !sessions[index].agent.isTerminal {
+            let holder = sessions[index].holder
             holder.stop()
-            removeClosedTab(id, holder: holder)
+            removeClosedSession(id, holder: holder)
             closeSequentially(remaining)
             return
         }
-        let holder = tabs[index].holder
+        let holder = sessions[index].holder
         requestUserClose(holder) { [weak self, weak holder] confirmed in
             guard let self else { return }
-            if confirmed, let holder { self.removeClosedTab(id, holder: holder) }
+            if confirmed, let holder { self.removeClosedSession(id, holder: holder) }
             self.closeSequentially(remaining)
         }
     }
 
-    private func removeClosedTab(_ id: String, holder: TerminalSessionHolder) {
-        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+    private func removeClosedSession(_ id: String, holder: TerminalSessionHolder) {
+        guard let index = sessions.firstIndex(where: { $0.id == id && $0.holder === holder })
+        else {
             return
         }
-        tabs[index].quinjet.stop()
-        tabs.remove(at: index)
-        if selectedTab == id { selectedTab = tabs.last?.id ?? Self.boardID }
+        sessions[index].quinjet.stop()
+        sessions.remove(at: index)
+        detachFromLayout(id)
     }
 
     func selectBoard() {
@@ -821,4 +1021,20 @@ struct HerdrOpenTab: Identifiable {
     var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
+}
+
+struct HerdrTab: Identifiable, Equatable {
+    let id: String
+    var layout: HerdrLayout
+    var focused: String
+    var zoomed: String?
+
+    init(id: String = UUID().uuidString, agentID: String) {
+        self.id = id
+        layout = .pane(agentID)
+        focused = agentID
+    }
+
+    var agentIDs: [String] { layout.panes }
+    var isSplit: Bool { layout.paneCount > 1 }
 }
