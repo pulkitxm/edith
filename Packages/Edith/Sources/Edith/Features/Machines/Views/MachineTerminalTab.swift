@@ -411,7 +411,11 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
             copy(self)
             return true
         case .paste:
-            paste(self)
+            if let payload = TerminalDropPayload.files(from: .general) {
+                _ = accept(payload)
+            } else {
+                paste(self)
+            }
             return true
         case .none:
             return super.performKeyEquivalent(with: event)
