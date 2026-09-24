@@ -808,7 +808,8 @@ struct HerdrPage: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, UIScale.pt(8))
+            .padding(.leading, UIScale.pt(12))
+            .padding(.trailing, UIScale.pt(8))
             .padding(.vertical, UIScale.pt(8))
             .widgetBar(
                 cornerRadius: 8,
