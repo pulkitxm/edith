@@ -277,10 +277,10 @@ private actor HerdrWatchHarness {
         #expect(store.tabs.isEmpty)
 
         #expect(store.reopenLastClosedTab())
-        #expect(store.selectedTab == codex.id)
+        #expect(store.currentTab?.agentIDs == [codex.id])
 
         #expect(store.reopenLastClosedTab())
-        #expect(store.selectedTab == claude.id)
+        #expect(store.currentTab?.agentIDs == [claude.id])
 
         #expect(store.reopenLastClosedTab() == false)
     }
@@ -298,8 +298,43 @@ private actor HerdrWatchHarness {
         store.close(codex.id)
 
         #expect(store.reopenLastClosedTab())
-        #expect(store.selectedTab == codex.id)
+        #expect(store.currentTab?.agentIDs == [codex.id])
         #expect(store.reopenLastClosedTab() == false)
+    }
+
+    @Test func reopeningEachTabAfterABatchCloseRestoresTheOriginalOrder() {
+        let store = HerdrStore()
+        let one = agent("Claude Code", pane: "1")
+        let two = agent("Codex", pane: "2")
+        let three = agent("OpenCode", pane: "3")
+        store.hosts = [.local(herdrPresent: true, agents: [one, two, three])]
+        store.open(one)
+        store.open(two)
+        store.open(three)
+
+        store.closeAll()
+        #expect(store.reopenLastClosedTab())
+        #expect(store.reopenLastClosedTab())
+        #expect(store.reopenLastClosedTab())
+
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, two.id, three.id])
+    }
+
+    @Test func reopeningASingleClosedTabRestoresItsOriginalPosition() {
+        let store = HerdrStore()
+        let one = agent("Claude Code", pane: "1")
+        let two = agent("Codex", pane: "2")
+        let three = agent("OpenCode", pane: "3")
+        store.hosts = [.local(herdrPresent: true, agents: [one, two, three])]
+        store.open(one)
+        store.open(two)
+        store.open(three)
+
+        store.close(two.id)
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, three.id])
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.tabs.flatMap(\.agentIDs) == [one.id, two.id, three.id])
     }
 
     @Test func reopenLastClosedTabHistoryIsBoundedToTenEntries() {
@@ -311,9 +346,10 @@ private actor HerdrWatchHarness {
 
         for candidate in agents[1...].reversed() {
             #expect(store.reopenLastClosedTab())
-            #expect(store.selectedTab == candidate.id)
+            #expect(store.currentTab?.agentIDs == [candidate.id])
         }
         #expect(store.reopenLastClosedTab() == false)
+        #expect(store.tabs.flatMap(\.agentIDs) == agents[1...].map(\.id))
     }
 
     private func seededStore(
