@@ -28,7 +28,7 @@ public struct DocsLibrary: Sendable {
         pages = parsed
         pageIndex = index
         groups = Self.makeGroups(parsed, index: index)
-        let commands = DocsCommandIndexer(pages: parsed, index: index).commands()
+        let commands = DocsCommandIndexer(pages: parsed).commands()
         self.commands = commands
         commandIndex = Dictionary(
             commands.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
@@ -76,26 +76,6 @@ public struct DocsLibrary: Sendable {
         return location(forCommand: trimmed)
     }
 
-    public func section(_ location: DocsLocation) -> String {
-        guard let page = page(location.path) else { return "" }
-        guard let anchor = location.anchor else { return page.title + " " + page.abstract }
-        var collecting = false
-        var text: [String] = []
-        for block in page.blocks {
-            if case .heading(let heading) = block {
-                if collecting { break }
-                collecting = heading.anchor == anchor
-                if collecting { text.append(heading.text) }
-                continue
-            }
-            if collecting, case .paragraph = block {
-                text.append(block.plainText)
-                break
-            }
-        }
-        return text.joined(separator: " ")
-    }
-
     public func pages(inGroup group: String?) -> [DocsPage] {
         guard let group, !group.isEmpty else { return groups.flatMap(\.pages) }
         let wanted = group.lowercased()
@@ -112,12 +92,12 @@ public struct DocsLibrary: Sendable {
         }
         return names.map { name in
             let members = byGroup[name] ?? []
-            let readme = members.first { $0.path.hasSuffix(indexPath) }
+            let readmePath = DocsGroup.readmePath(for: name)
+            let readme = members.first { $0.path == readmePath }
             let linked = readme.map { linkOrder($0, pages: true) } ?? []
             let sorted = members.sorted { left, right in
                 func rank(_ page: DocsPage) -> Int {
-                    if page.path.hasSuffix(indexPath) { return -1 }
-                    return linked.firstIndex(of: page.path) ?? Int.max
+                    page.path == readmePath ? -1 : linked.firstIndex(of: page.path) ?? Int.max
                 }
                 return rank(left) == rank(right) ? left.path < right.path : rank(left) < rank(right)
             }
@@ -170,7 +150,14 @@ struct DocsCommandIndexer {
     }
 
     let pages: [DocsPage]
-    let index: [String: Int]
+    let byCommand: [String: DocsPage]
+
+    init(pages: [DocsPage]) {
+        self.pages = pages
+        byCommand = Dictionary(
+            pages.compactMap { page in page.command.map { ($0, page) } },
+            uniquingKeysWith: { first, _ in first })
+    }
 
     func commands() -> [DocsCommand] {
         var entries: [String: Entry] = [:]
@@ -260,13 +247,13 @@ struct DocsCommandIndexer {
         while words.count > 1 {
             words.removeLast()
             let parent = words.joined(separator: " ")
-            if let page = pages.first(where: { $0.command == parent }) { return page }
+            if let page = byCommand[parent] { return page }
         }
         return nil
     }
 
     static func mention(of command: String, in pages: [DocsPage]) -> DocsLocation? {
-        for page in pages {
+        for page in pages where page.markdown.contains(command) {
             var anchor: String?
             var fallback: DocsLocation?
             for block in page.blocks {

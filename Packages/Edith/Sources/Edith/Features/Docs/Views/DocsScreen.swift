@@ -8,9 +8,9 @@ enum DocsNavigation {
     static let outlineThreshold = 1060.0
 
     static func title(of page: DocsPage, in group: DocsGroup) -> String {
-        let root = group.pages.first?.command
-        if page.path.hasSuffix(DocsLibrary.indexPath), !group.id.isEmpty { return "Overview" }
+        if page.path == group.readmePath, !group.id.isEmpty { return "Overview" }
         guard let command = page.command else { return page.title }
+        let root = group.pages.first { $0.path == group.readmePath }?.command
         if let root, command.hasPrefix(root + " ") {
             return String(command.dropFirst(root.count + 1))
         }
