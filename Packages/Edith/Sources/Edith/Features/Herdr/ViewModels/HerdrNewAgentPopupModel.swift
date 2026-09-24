@@ -22,26 +22,28 @@ final class HerdrNewAgentPopupModel {
     var errorMessage: String?
     var launching = false
 
-    static func matchingKinds(_ query: String) -> [String] {
+    nonisolated static func matchingKinds(_ query: String) -> [String] {
         guard !query.isEmpty else { return HerdrKind.filterLabels }
         return HerdrKind.filterLabels.filter { $0.localizedCaseInsensitiveContains(query) }
     }
 
-    static func matchingMachines(_ query: String, in hosts: [HerdrHostSnapshot])
+    nonisolated static func matchingMachines(_ query: String, in hosts: [HerdrHostSnapshot])
         -> [HerdrHostSnapshot]
     {
         guard !query.isEmpty else { return hosts }
         return hosts.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
-    static func matchingSpaces(_ query: String, in workspaces: [HerdrWorkspaceSummary])
+    nonisolated static func matchingSpaces(_ query: String, in workspaces: [HerdrWorkspaceSummary])
         -> [HerdrWorkspaceSummary]
     {
         guard !query.isEmpty else { return workspaces }
         return workspaces.filter { $0.label.localizedCaseInsensitiveContains(query) }
     }
 
-    static func matchingSpace(named query: String, in workspaces: [HerdrWorkspaceSummary])
+    nonisolated static func matchingSpace(
+        named query: String, in workspaces: [HerdrWorkspaceSummary]
+    )
         -> HerdrWorkspaceSummary?
     {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
