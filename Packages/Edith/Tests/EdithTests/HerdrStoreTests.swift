@@ -272,8 +272,8 @@ private actor HerdrWatchHarness {
         store.open(claude)
         store.open(codex)
 
-        store.close(claude.id)
-        store.close(codex.id)
+        store.closeTab(store.tab(containing: claude.id)!.id)
+        store.closeTab(store.tab(containing: codex.id)!.id)
         #expect(store.tabs.isEmpty)
 
         #expect(store.reopenLastClosedTab())
@@ -293,9 +293,9 @@ private actor HerdrWatchHarness {
         store.open(claude)
         store.open(codex)
 
-        store.close(claude.id)
+        store.closeTab(store.tab(containing: claude.id)!.id)
         store.hosts = [.local(herdrPresent: true, agents: [codex])]
-        store.close(codex.id)
+        store.closeTab(store.tab(containing: codex.id)!.id)
 
         #expect(store.reopenLastClosedTab())
         #expect(store.currentTab?.agentIDs == [codex.id])
@@ -330,7 +330,7 @@ private actor HerdrWatchHarness {
         store.open(two)
         store.open(three)
 
-        store.close(two.id)
+        store.closeTab(store.tab(containing: two.id)!.id)
         #expect(store.tabs.flatMap(\.agentIDs) == [one.id, three.id])
 
         #expect(store.reopenLastClosedTab())

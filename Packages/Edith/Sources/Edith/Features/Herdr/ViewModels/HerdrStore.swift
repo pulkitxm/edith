@@ -12,6 +12,7 @@ typealias HerdrLiveWatcher =
 typealias HerdrAgentCloser = @Sendable (HerdrAgent) async throws -> Void
 
 struct HerdrClosedTabRecord: Equatable {
+    let tabID: String
     let layout: HerdrLayout
     let focused: String
     let zoomed: String?
@@ -946,7 +947,7 @@ final class HerdrStore {
             let agentsInTab = tab.agentIDs.compactMap { session($0)?.agent }
             closedTabHistory.append(
                 HerdrClosedTabRecord(
-                    layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
+                    tabID: tab.id, layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
                     agents: agentsInTab, rightNeighborID: rightNeighborID))
             if closedTabHistory.count > closedTabHistoryLimit { closedTabHistory.removeFirst() }
         }
@@ -1221,7 +1222,7 @@ final class HerdrStore {
         for pane in record.layout.panes where !liveIDs.contains(pane) {
             layout = layout.removing(pane) ?? layout
         }
-        var tab = HerdrTab(agentID: liveAgents[0].id)
+        var tab = HerdrTab(id: record.tabID, agentID: liveAgents[0].id)
         tab.layout = layout
         tab.focused = liveIDs.contains(record.focused) ? record.focused : liveAgents[0].id
         tab.zoomed = record.zoomed.flatMap { liveIDs.contains($0) ? $0 : nil }
