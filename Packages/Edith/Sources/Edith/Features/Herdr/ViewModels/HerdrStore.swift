@@ -91,6 +91,12 @@ final class HerdrStore {
         }
     }
     var railOpen = true
+    var animatesLayout = false {
+        didSet {
+            guard animatesLayout != oldValue else { return }
+            defaults.set(animatesLayout, forKey: AppStorageKeys.Herdr.animatesLayout)
+        }
+    }
     var railWidth = HerdrPaneSizing.railDefault {
         didSet {
             guard railWidth != oldValue else { return }
@@ -192,6 +198,8 @@ final class HerdrStore {
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        animatesLayout =
+            defaults.object(forKey: AppStorageKeys.Herdr.animatesLayout) as? Bool ?? false
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
                 ?? HerdrPaneSizing.railDefault)
@@ -688,10 +696,7 @@ final class HerdrStore {
         guard let window, pageWindows.contains(window), let tab = currentTab, tab.isSplit,
             let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
         else { return false }
-        let animation = Motion.animation(
-            Motion.glide,
-            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        withAnimation(animation) {
+        withAnimation(layoutAnimation) {
             switch key {
             case let .focus(side): focusNeighbor(toward: side)
             case let .cycle(backwards): cycleFocus(backwards: backwards)
@@ -699,6 +704,13 @@ final class HerdrStore {
             }
         }
         return true
+    }
+
+    var layoutAnimation: Animation? {
+        guard animatesLayout else { return nil }
+        return Motion.animation(
+            Motion.glide,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     func movePage(from old: NSWindow?, to new: NSWindow?) {
