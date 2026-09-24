@@ -52,3 +52,55 @@ import Testing
             PresenterRules.firstMatch(in: windows, titlesAvailable: true) == "Zoom share detected")
     }
 }
+
+@Suite struct PresenterBroadenedRulesTests {
+    @Test(arguments: [
+        ("FaceTime", "You are sharing your screen", "FaceTime share detected"),
+        ("Webex", "You're sharing your screen", "Webex share detected"),
+        ("Cisco Webex Meetings", "You're sharing", "Webex share detected"),
+        ("Slack", "Huddle: you're sharing your screen", "Slack huddle share detected"),
+        ("Discord", "Screen Share", "Discord share detected"),
+        ("Firefox", "meet.google.com is sharing your screen.", "Google Meet share detected"),
+        ("Microsoft Edge", "meet.google.com is sharing a window.", "Google Meet share detected"),
+        ("Brave Browser", "meet.google.com is sharing your screen.", "Google Meet share detected"),
+    ])
+    func matchesShareWindows(owner: String, title: String, reason: String) {
+        let windows = [
+            PresenterWindowInfo(ownerName: owner, title: title, width: 420, height: 60, layer: 3)
+        ]
+        #expect(PresenterRules.firstMatch(in: windows, titlesAvailable: true) == reason)
+    }
+
+    @Test(arguments: [
+        ("FaceTime", "FaceTime"),
+        ("Webex", "Webex Meetings"),
+        ("Slack", "Huddle in #general - Acme - Slack"),
+        ("Discord", "#general | Friends - Discord"),
+        ("Firefox", "Google Meet - Mozilla Firefox"),
+        ("Microsoft Edge", "Sharing tips - Microsoft Edge"),
+        ("Finder", "sharing your screen"),
+    ])
+    func ignoresCallsThatAreNotSharing(owner: String, title: String) {
+        let windows = [
+            PresenterWindowInfo(ownerName: owner, title: title, width: 1200, height: 800)
+        ]
+        #expect(PresenterRules.firstMatch(in: windows, titlesAvailable: true) == nil)
+    }
+
+    @Test func titlesAreIgnoredWithoutScreenRecordingAccess() {
+        let windows = [
+            PresenterWindowInfo(
+                ownerName: "Discord", title: "Screen Share", width: 800, height: 600)
+        ]
+        #expect(PresenterRules.firstMatch(in: windows, titlesAvailable: false) == nil)
+    }
+
+    @Test func everyCallAppIsWatched() {
+        for id in [
+            "com.apple.FaceTime", "Cisco-Systems.Spark", "org.mozilla.firefox",
+            "com.microsoft.edgemac", "com.brave.Browser",
+        ] {
+            #expect(PresenterRules.watchedBundleIDs.contains(id))
+        }
+    }
+}

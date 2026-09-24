@@ -27,10 +27,17 @@ enum PresenterRules {
         "com.microsoft.teams2",
         "com.microsoft.teams",
         "com.google.Chrome",
+        "org.chromium.Chromium",
         "com.apple.Safari",
         "company.thebrowser.Browser",
+        "org.mozilla.firefox",
+        "com.microsoft.edgemac",
+        "com.brave.Browser",
         "com.tinyspeck.slackmacgap",
         "com.hnc.Discord",
+        "com.apple.FaceTime",
+        "Cisco-Systems.Spark",
+        "com.webex.meetingmanager",
         "com.apple.QuickTimePlayerX",
     ]
 
@@ -41,12 +48,31 @@ enum PresenterRules {
             titles: ["zoom share statusbar window", "meeting toolbar"]),
         TitleRule(
             reason: "Google Meet share detected",
-            owners: ["Google Chrome", "Google Chrome Helper", "Chromium", "Arc", "Safari"],
-            titles: ["is sharing your screen", "presenting to everyone"]),
+            owners: [
+                "Google Chrome", "Google Chrome Helper", "Chromium", "Arc", "Safari", "Firefox",
+                "Microsoft Edge", "Brave Browser",
+            ],
+            titles: ["is sharing your screen", "is sharing a window", "presenting to everyone"]),
         TitleRule(
             reason: "Teams share detected",
             owners: ["Microsoft Teams", "MSTeams"],
             titles: ["sharing your screen", "you're presenting", "meeting controls"]),
+        TitleRule(
+            reason: "FaceTime share detected",
+            owners: ["FaceTime"],
+            titles: ["sharing your screen", "screen sharing"]),
+        TitleRule(
+            reason: "Webex share detected",
+            owners: ["Webex"],
+            titles: ["sharing your screen", "you're sharing"]),
+        TitleRule(
+            reason: "Slack huddle share detected",
+            owners: ["Slack"],
+            titles: ["sharing your screen", "you're sharing"]),
+        TitleRule(
+            reason: "Discord share detected",
+            owners: ["Discord"],
+            titles: ["screen share"]),
     ]
 
     static let geometryRules: [GeometryRule] = [
