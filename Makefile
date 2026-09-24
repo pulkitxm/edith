@@ -78,6 +78,7 @@ performance-fixture:
 
 ci-docs:
 	bun test scripts/cli-docs.test.js scripts/sync-wiki.test.js
+	bun scripts/generate-cli-docs-bundle.mjs --check
 
 ci-companion-runtime:
 	bun test scripts/companion-runtime.test.js
