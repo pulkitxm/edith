@@ -119,6 +119,9 @@ public actor AgentNotificationService {
                 problems[provider.provider] = LimitLoginProblem(error: error)
                 continue
             }
+            guard provider.session != nil || provider.week != nil || provider.fable != nil else {
+                continue
+            }
             healthy.insert(provider.provider)
             for target in LimitAlertTarget.all
             where target.provider == provider.provider && settings.tracks(target) {
