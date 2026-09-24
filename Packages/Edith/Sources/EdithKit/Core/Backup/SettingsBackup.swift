@@ -1040,8 +1040,9 @@ final class SettingsBackup {
     private var musicBackupTask: Task<Void, Never>?
     private var clipboardBackupTask: Task<Void, Never>?
     private var debounce: Timer?
+    private var queuedSettingsData: Data?
     private var sweep: Timer?
-    nonisolated static let sweepInterval: TimeInterval = 30
+    nonisolated static let sweepInterval: TimeInterval = 60
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
 
@@ -1859,7 +1860,8 @@ final class SettingsBackup {
 
     func export() {
         guard !settingsRestorePending else { return }
-        guard let data = snapshot() else { return }
+        guard let data = snapshot(), data != queuedSettingsData else { return }
+        queuedSettingsData = data
         pendingSettingsData = data
         guard settingsExportTask == nil else { return }
         settingsExportGeneration += 1
@@ -1887,6 +1889,8 @@ final class SettingsBackup {
                     SharedDefaults.store.set(
                         Date().timeIntervalSince1970,
                         forKey: AppStorageKeys.Backup.lastBackupAt)
+                } else {
+                    queuedSettingsData = nil
                 }
             })
         guard settingsExportGeneration == generation else { return }

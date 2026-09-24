@@ -65,6 +65,7 @@ final class AttentionTrackingService {
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.writeHeartbeat() }
         }
+        timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -148,6 +149,11 @@ final class AttentionTrackingRuntime {
 
     func sync(_ settings: AttentionSettings) {
         guard !stopped else { return }
+        guard settings.isEnabled, settings.trackingEnabled else {
+            collector?.shutdown()
+            collector = nil
+            return
+        }
         if collector == nil {
             let writer = AttentionHeartbeatWriter(
                 spool: AttentionDeliverySpool(

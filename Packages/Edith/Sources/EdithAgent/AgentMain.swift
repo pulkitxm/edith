@@ -152,14 +152,34 @@ public enum AgentBoot {
 }
 
 public struct LivePowerSource: AgentPowerSource {
+    private let cache = PowerStateCache()
+
     public init() {}
 
     public var isOnBattery: Bool {
-        PowerState.isOnBattery()
+        cache.current().onBattery
     }
 
     public var isScreenLocked: Bool {
-        PowerState.isScreenLocked()
+        cache.current().screenLocked
+    }
+}
+
+final class PowerStateCache: @unchecked Sendable {
+    static let lifetime: TimeInterval = 2
+
+    private let lock = NSLock()
+    private var sample: (date: Date, onBattery: Bool, screenLocked: Bool)?
+
+    func current(now: Date = Date()) -> (onBattery: Bool, screenLocked: Bool) {
+        lock.withLock {
+            if let sample, now.timeIntervalSince(sample.date) < Self.lifetime {
+                return (sample.onBattery, sample.screenLocked)
+            }
+            let fresh = (now, PowerState.isOnBattery(), PowerState.isScreenLocked())
+            sample = fresh
+            return (fresh.1, fresh.2)
+        }
     }
 }
 
@@ -168,7 +188,7 @@ enum PowerState {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
             return false
         }
-        return IOPSGetProvidingPowerSourceType(snapshot).takeRetainedValue()
+        return IOPSGetProvidingPowerSourceType(snapshot).takeUnretainedValue()
             as String == kIOPMBatteryPowerKey
     }
 

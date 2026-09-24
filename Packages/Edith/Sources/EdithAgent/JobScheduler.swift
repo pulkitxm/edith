@@ -274,10 +274,14 @@ public actor JobScheduler {
             }
             if !state.job.isEnabled() { cancel(id) }
         }
-        let next = order.compactMap { states[$0]?.nextRun }.min()
+        let next = order.compactMap { id in
+            states[id].flatMap { $0.flight == nil ? $0.nextRun : nil }
+        }.min()
         let delay = min(30, max(0.05, next?.timeIntervalSince(now) ?? 30))
         timer = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            do {
+                try await Task.sleep(for: .seconds(delay), tolerance: .seconds(delay / 10))
+            } catch { return }
             guard !Task.isCancelled else { return }
             await self?.tick()
         }
