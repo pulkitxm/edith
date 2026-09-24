@@ -113,6 +113,7 @@ enum NavigationCatalog {
     static let pages: [SidebarPage] = [
         SidebarPage(id: "home", title: "Home", symbolName: "house.fill", band: .core),
         SidebarPage(id: "machines", title: "Fleet", symbolName: "server.rack", band: .core),
+        SidebarPage(id: "docs", title: "Docs", symbolName: "book.closed", band: .core),
 
         SidebarPage(
             id: "agents", title: "Agents", symbolName: "sparkles", band: .suite(.agents),
@@ -264,7 +265,7 @@ enum NavigationCatalog {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, machines
+    case home, machines, docs
     case agents, dashboard, herdr, quinjet, companion, plugins
     case appMaintenance
     case system, runningApps

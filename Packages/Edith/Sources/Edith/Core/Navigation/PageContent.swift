@@ -14,6 +14,7 @@ struct PageContent: View {
         switch destination {
         case .home: HomePage()
         case .machines: MachinesPage()
+        case .docs: DocsScreen()
         case .agents: SuiteLandingPage(suite: SuiteRegistry.suite(.agents))
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()

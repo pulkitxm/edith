@@ -60,7 +60,7 @@ import Testing
     @Test func homeItemsUseInformationArchitectureOrder() {
         #expect(
             MainDestination.homeItems == [
-                .home, .machines,
+                .home, .machines, .docs,
                 .agents, .dashboard, .herdr, .quinjet, .companion, .plugins,
                 .appMaintenance,
                 .system, .runningApps,
