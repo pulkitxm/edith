@@ -95,38 +95,62 @@ public struct TerminalDropPayload: Sendable {
 
     private static func materializeMedia(from pasteboard: NSPasteboard) -> URL? {
         for item in pasteboard.pasteboardItems ?? [] {
-            for type in item.types {
-                guard let contentType = UTType(type.rawValue), supported(contentType),
-                    let data = item.data(forType: type), !data.isEmpty
-                else { continue }
-                let fileExtension =
-                    contentType.preferredFilenameExtension
-                    ?? fallbackExtension(
-                        for: contentType)
-                guard let directory = temporaryDirectory() else { return nil }
-                let url = directory.appendingPathComponent("drop.\(fileExtension)")
-                do {
-                    try data.write(to: url, options: .atomic)
-                    return url
-                } catch {
-                    try? FileManager.default.removeItem(at: directory)
-                    return nil
-                }
-            }
+            guard let media = media(in: item) else { continue }
+            return write(media.data, fileExtension: media.fileExtension)
         }
-        guard let image = NSImage(pasteboard: pasteboard), let data = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: data),
-            let png = bitmap.representation(using: .png, properties: [:]),
-            let directory = temporaryDirectory()
-        else { return nil }
-        let url = directory.appendingPathComponent("drop.png")
+        guard let image = NSImage(pasteboard: pasteboard), let png = pngData(from: image) else {
+            return nil
+        }
+        return write(png, fileExtension: "png")
+    }
+
+    private static func media(in item: NSPasteboardItem) -> (data: Data, fileExtension: String)? {
+        let candidates = item.types.compactMap { type -> (NSPasteboard.PasteboardType, UTType)? in
+            guard let contentType = UTType(type.rawValue), supported(contentType) else {
+                return nil
+            }
+            return (type, contentType)
+        }
+        let ordered =
+            candidates.filter { agentReadable($0.1) } + candidates.filter { !agentReadable($0.1) }
+        for (type, contentType) in ordered {
+            guard let data = item.data(forType: type), !data.isEmpty else { continue }
+            if contentType.conforms(to: .image), !agentReadable(contentType) {
+                guard let image = NSImage(data: data), let png = pngData(from: image) else {
+                    continue
+                }
+                return (png, "png")
+            }
+            return (
+                data, contentType.preferredFilenameExtension ?? fallbackExtension(for: contentType)
+            )
+        }
+        return nil
+    }
+
+    private static func write(_ data: Data, fileExtension: String) -> URL? {
+        guard let directory = temporaryDirectory() else { return nil }
+        let url = directory.appendingPathComponent("drop.\(fileExtension)")
         do {
-            try png.write(to: url, options: .atomic)
+            try data.write(to: url, options: .atomic)
             return url
         } catch {
             try? FileManager.default.removeItem(at: directory)
             return nil
         }
+    }
+
+    private static func pngData(from image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else {
+            return nil
+        }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private static let agentImageTypes: [UTType] = [.png, .jpeg, .gif, .webP]
+
+    private static func agentReadable(_ type: UTType) -> Bool {
+        agentImageTypes.contains { type.conforms(to: $0) }
     }
 
     private static func supported(_ type: UTType) -> Bool {
