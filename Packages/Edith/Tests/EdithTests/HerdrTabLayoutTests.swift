@@ -209,7 +209,7 @@ import Testing
         store.open(codex, beside: .right)
         let page = NSWindow()
         let other = NSWindow()
-        store.pageWindow = page
+        store.movePage(from: nil, to: page)
 
         #expect(!store.performLayoutKey(keyCode: 123, modifiers: [.command, .option], in: other))
         #expect(store.currentTab?.focused == codex.id)
@@ -219,6 +219,41 @@ import Testing
         #expect(store.currentTab?.zoomed == claude.id)
         store.moveToNewTab(codex.id)
         #expect(!store.performLayoutKey(keyCode: 124, modifiers: [.command, .option], in: page))
+    }
+
+    @Test func addingAnAgentKeepsTheFocusedPaneInTheBigSpot() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let agents = ["a", "b", "c", "d"].map { agent("Codex", pane: $0) }
+        store.open(agents[0])
+        store.open(agents[1], beside: .right)
+        store.open(agents[2], beside: .right)
+        store.focus(agents[0].id)
+        let tabID = try #require(store.currentTab).id
+        store.arrange(tabID, as: .focusRight)
+        store.open(agents[3])
+        let extra = try #require(store.currentTab).id
+
+        store.merge(extra, into: tabID)
+
+        let tab = try #require(store.tab(tabID))
+        let frames = tab.layout.frames(in: CGRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(HerdrArrangement.matching(tab.layout) == .focusRight)
+        #expect(frames[agents[0].id]?.maxX == 100)
+        #expect(frames[agents[0].id]?.height == 100)
+    }
+
+    @Test func layoutKeysFollowEveryWindowShowingHerdr() {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        store.open(agent("Claude Code", pane: "a"))
+        store.open(agent("Codex", pane: "b"), beside: .right)
+        let main = NSWindow()
+        let section = NSWindow()
+        store.movePage(from: nil, to: main)
+        store.movePage(from: nil, to: section)
+        store.movePage(from: section, to: nil)
+
+        #expect(store.performLayoutKey(keyCode: 123, modifiers: [.command, .option], in: main))
+        #expect(!store.performLayoutKey(keyCode: 124, modifiers: [.command, .option], in: section))
     }
 
     @Test func reopeningAnAgentInASharedTabFocusesIt() {

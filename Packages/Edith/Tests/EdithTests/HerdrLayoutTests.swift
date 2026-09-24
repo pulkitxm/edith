@@ -131,6 +131,12 @@ import Testing
         }
     }
 
+    @Test func slotOrderReadsTheArrangementBack() throws {
+        let layout = try #require(HerdrArrangement.focusRight.layout(["main", "b", "c"]))
+        #expect(HerdrArrangement.focusRight.slotOrder(of: layout) == ["main", "b", "c"])
+        #expect(HerdrArrangement.columns.slotOrder(of: layout) == nil)
+    }
+
     @Test func gridOfFourIsTwoByTwo() throws {
         let layout = try #require(HerdrArrangement.grid.layout(["a", "b", "c", "d"]))
         let frames = layout.frames(in: unit)

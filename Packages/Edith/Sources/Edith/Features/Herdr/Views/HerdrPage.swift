@@ -65,7 +65,7 @@ struct HerdrPage: View {
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
-        .background(HerdrWindowReader { store.pageWindow = $0 })
+        .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
         .navigationTitle("Herdr")
         .onAppear {
             HerdrAgentWindowDelegate.shared.onClose = { id in
@@ -1037,7 +1037,7 @@ private struct KindPillHelp: ViewModifier {
 }
 
 private struct HerdrWindowReader: NSViewRepresentable {
-    let onWindow: (NSWindow?) -> Void
+    let onWindow: (NSWindow?, NSWindow?) -> Void
 
     func makeNSView(context: Context) -> ReaderView {
         let view = ReaderView()
@@ -1050,11 +1050,14 @@ private struct HerdrWindowReader: NSViewRepresentable {
     }
 
     final class ReaderView: NSView {
-        var onWindow: ((NSWindow?) -> Void)?
+        var onWindow: ((NSWindow?, NSWindow?) -> Void)?
+        private weak var current: NSWindow?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            onWindow?(window)
+            guard current !== window else { return }
+            onWindow?(current, window)
+            current = window
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }

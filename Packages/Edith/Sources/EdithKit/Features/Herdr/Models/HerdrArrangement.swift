@@ -123,6 +123,27 @@ public enum HerdrArrangement: String, CaseIterable, Codable, Sendable, Identifia
         (0..<max(0, count)).map(String.init)
     }
 
+    public func slotOrder(of layout: HerdrLayout) -> [String]? {
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let slots = slotFrames(count: layout.paneCount, in: unit, gap: 0)
+        guard slots.count == layout.paneCount else { return nil }
+        let frames = layout.frames(in: unit)
+        var order: [String] = []
+        for slot in slots {
+            guard
+                let match = frames.first(where: { entry in
+                    !order.contains(entry.key)
+                        && abs(entry.value.minX - slot.minX) < 0.01
+                        && abs(entry.value.minY - slot.minY) < 0.01
+                        && abs(entry.value.width - slot.width) < 0.01
+                        && abs(entry.value.height - slot.height) < 0.01
+                })
+            else { return nil }
+            order.append(match.key)
+        }
+        return order
+    }
+
     public func slotFrames(count: Int, in rect: CGRect, gap: CGFloat) -> [CGRect] {
         guard let layout = layout(Self.placeholders(count)) else { return [] }
         let frames = layout.frames(in: rect, gap: gap)

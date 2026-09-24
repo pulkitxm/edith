@@ -148,7 +148,7 @@ final class HerdrStore {
         }
     }
 
-    @ObservationIgnored weak var pageWindow: NSWindow?
+    @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
@@ -668,7 +668,7 @@ final class HerdrStore {
     func performLayoutKey(
         keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow?
     ) -> Bool {
-        guard let window, window === pageWindow, let tab = currentTab, tab.isSplit,
+        guard let window, pageWindows.contains(window), let tab = currentTab, tab.isSplit,
             let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
         else { return false }
         let animation = Motion.animation(
@@ -681,6 +681,11 @@ final class HerdrStore {
             }
         }
         return true
+    }
+
+    func movePage(from old: NSWindow?, to new: NSWindow?) {
+        if let old { pageWindows.remove(old) }
+        if let new { pageWindows.add(new) }
     }
 
     func toggleZoom(_ agentID: String) {
@@ -773,9 +778,9 @@ final class HerdrStore {
     }
 
     static func adding(_ ids: [String], to layout: HerdrLayout) -> HerdrLayout {
-        let combined = layout.panes + ids
         if let current = HerdrArrangement.matching(layout),
-            let flowed = current.layout(combined)
+            let order = current.slotOrder(of: layout),
+            let flowed = current.layout(order + ids)
         {
             return flowed
         }
