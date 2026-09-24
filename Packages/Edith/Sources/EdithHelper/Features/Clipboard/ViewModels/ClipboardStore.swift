@@ -12,6 +12,7 @@ final class ClipboardStore: FeatureModule {
     private(set) var refreshError: String?
     private(set) var captureError: String?
     @ObservationIgnored private var timer: DispatchSourceTimer?
+    @ObservationIgnored private var timerInterval: Double?
     @ObservationIgnored private nonisolated(unsafe) var refreshTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var captureTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var activationTask: Task<Void, Never>?
@@ -75,7 +76,8 @@ final class ClipboardStore: FeatureModule {
         }
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
             Task { @MainActor in
-                self?.timer?.cancel(); self?.timer = nil; self?.updateTimer()
+                guard let self, self.timerInterval != self.configuredInterval else { return }
+                self.timer?.cancel(); self.timer = nil; self.updateTimer()
             }
         }
         reload()
@@ -111,15 +113,19 @@ final class ClipboardStore: FeatureModule {
         settingsObserver = nil
     }
 
-    private func updateTimer() {
-        guard visibility.active, capturesPasteboard else { timer?.cancel(); timer = nil; return }
-        guard timer == nil else { return }
+    private var configuredInterval: Double {
         let configured =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
             ?? ClipboardIndex.defaultCheckInterval
-        let interval =
-            configured.isFinite
+        return configured.isFinite
             ? min(60, max(0.2, configured)) : ClipboardIndex.defaultCheckInterval
+    }
+
+    private func updateTimer() {
+        guard visibility.active, capturesPasteboard else { timer?.cancel(); timer = nil; return }
+        guard timer == nil else { return }
+        let interval = configuredInterval
+        timerInterval = interval
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(200))
         timer.setEventHandler { [weak self] in self?.tick() }

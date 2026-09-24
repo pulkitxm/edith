@@ -17,6 +17,14 @@ final class PresenterDetector: FeatureModule {
         "com.hnc.Discord",
         "com.apple.QuickTimePlayerX",
     ]
+    static let windowRuleBundleIDs: Set<String> = [
+        "us.zoom.xos",
+        "com.microsoft.teams2",
+        "com.microsoft.teams",
+        "com.google.Chrome",
+        "com.apple.Safari",
+        "company.thebrowser.Browser",
+    ]
 
     private struct ScanOutcome: Sendable {
         let windowReason: String?
@@ -26,6 +34,15 @@ final class PresenterDetector: FeatureModule {
     private final class ScanContext: @unchecked Sendable {
         var titlesAvailable: Bool?
         var titlesCheckedAt: TimeInterval = 0
+        var recordingHit = false
+        var tick = 0
+        private let lock = NSLock()
+        private var rulesApply = false
+
+        var windowRulesApply: Bool {
+            get { lock.withLock { rulesApply } }
+            set { lock.withLock { rulesApply = newValue } }
+        }
     }
 
     private var gateApps: Set<String> = []
@@ -132,6 +149,7 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func syncWindowScanTimer() {
+        scanContext.windowRulesApply = !gateApps.isDisjoint(with: Self.windowRuleBundleIDs)
         guard !gateApps.isEmpty else {
             windowScanTimer?.cancel()
             windowScanTimer = nil
@@ -180,14 +198,19 @@ final class PresenterDetector: FeatureModule {
             context.titlesAvailable = titlesAvailable
             context.titlesCheckedAt = now
         }
-        let windowReason = PresenterRules.firstMatch(
-            in: titlesAvailable ? currentWindows() : [], titlesAvailable: titlesAvailable)
+        let windowReason =
+            context.windowRulesApply
+            ? PresenterRules.firstMatch(in: currentWindows(), titlesAvailable: titlesAvailable)
+            : nil
         let detectRecording =
             SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
             ?? true
+        if context.tick % 3 == 0 {
+            context.recordingHit = detectRecording && isProcessRunning(named: "screencapture")
+        }
+        context.tick += 1
         return ScanOutcome(
-            windowReason: windowReason,
-            recordingHit: detectRecording && isProcessRunning(named: "screencapture"))
+            windowReason: windowReason, recordingHit: detectRecording && context.recordingHit)
     }
 
     private func applyScan(_ outcome: ScanOutcome) {

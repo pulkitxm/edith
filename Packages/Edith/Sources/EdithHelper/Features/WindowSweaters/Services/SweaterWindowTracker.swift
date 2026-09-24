@@ -23,6 +23,8 @@ final class SweaterWindowTracker {
 
     nonisolated(unsafe) static weak var active: SweaterWindowTracker?
 
+    var onActivity: (() -> Void)?
+
     var settings: SweaterRuntimeSettings { settingsProvider() }
 
     init(settings: @escaping () -> SweaterRuntimeSettings) {
@@ -363,6 +365,7 @@ private let sweaterSimpleHandler:
 
 extension SweaterWindowTracker {
     func handleSpawn(event: UInt32, payload: SweaterSpawnPayload) {
+        onActivity?()
         let window = payload.window
         let space = payload.space
         if window != 0, event == SweaterEvent.windowDestroy, borders[window] != nil {
@@ -384,6 +387,7 @@ extension SweaterWindowTracker {
     }
 
     func handleModify(event: UInt32, window: SkyLight.WindowID) {
+        onActivity?()
         if borders[window] == nil {
             if event == SweaterEvent.windowMove || event == SweaterEvent.windowResize { return }
             if isOwnWindow(window) { return }
@@ -414,6 +418,7 @@ extension SweaterWindowTracker {
     }
 
     func handleSimple(event: UInt32) {
+        onActivity?()
         if event == SweaterEvent.spaceChange {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(20))

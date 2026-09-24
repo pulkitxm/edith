@@ -105,8 +105,10 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         levelRequestObserver = IPC.observe(IPC.Name.requestMusicLevels) { [weak self] in
             MainActor.assumeIsolated {
                 self?.levelSubscriberUntil = Date().addingTimeInterval(2.5)
+                self?.resumeLevelTimer()
             }
         }
+        PlaybackLevel.shared.onViewersChange = { [weak self] in self?.resumeLevelTimer() }
         broadcastState()
     }
 
@@ -268,8 +270,17 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         saveTimer = nil
     }
 
+    private var levelDemanded: Bool {
+        PlaybackLevel.shared.viewers > 0 || Date() < levelSubscriberUntil
+    }
+
+    private func resumeLevelTimer() {
+        guard saveTimer != nil else { return }
+        startLevelTimer()
+    }
+
     private func startLevelTimer() {
-        guard levelTimer == nil else { return }
+        guard levelTimer == nil, levelDemanded else { return }
         levelTick = 0
         systemVolume = SystemVolume.current()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) {
@@ -290,6 +301,10 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     }
 
     private func sampleLevel() {
+        guard levelDemanded else {
+            stopLevelTimer()
+            return
+        }
         guard let p = player, p.isPlaying else { return }
         p.updateMeters()
         if levelTick % 3 == 0 { systemVolume = SystemVolume.current() }

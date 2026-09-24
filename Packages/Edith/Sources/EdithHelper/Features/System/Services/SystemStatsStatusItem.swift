@@ -12,6 +12,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
     private var cachedTintKey: String?
+    private var displayedTitle: (cpu: Int, memory: Int, tint: String?)?
     private var cachedGlyphs: [String: NSAttributedString] = [:]
     private var numberAttributes: [NSAttributedString.Key: Any] = [:]
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
@@ -109,6 +110,9 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         snapshot.cpu = cpu
         snapshot.memory = memory
         ensureStyleCache()
+        let shown = (cpu: Int(cpu.rounded()), memory: Int(memory.rounded()), tint: cachedTintKey)
+        if let displayedTitle, displayedTitle == shown { return }
+        displayedTitle = shown
         let title = title(cpu: cpu, memory: memory)
         item.length = StatusItemSizing.titleLength(title)
         item.button?.attributedTitle = title

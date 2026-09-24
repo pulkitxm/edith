@@ -27,6 +27,7 @@ final class LidAwakeAutoOffTimer {
         let ticker = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        ticker.tolerance = 5
         RunLoop.main.add(ticker, forMode: .common)
         self.ticker = ticker
     }
