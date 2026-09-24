@@ -309,8 +309,6 @@ private actor HerdrWatchHarness {
         for candidate in agents { store.open(candidate) }
         store.closeAll()
 
-        // The oldest close (agents[0]) is evicted once the 11th close pushes the
-        // history past its 10-entry cap, so only agents[1...] (newest first) come back.
         for candidate in agents[1...].reversed() {
             #expect(store.reopenLastClosedTab())
             #expect(store.selectedTab == candidate.id)
