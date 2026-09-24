@@ -198,7 +198,6 @@ final class RenderedHerdrPage {
         window.contentView = host
         window.orderBack(nil)
         await settle()
-        drag.animation = nil
     }
 
     func settle() async {

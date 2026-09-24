@@ -139,7 +139,6 @@ struct HerdrPaneHeader: View {
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { session.agent }
@@ -178,13 +177,13 @@ struct HerdrPaneHeader: View {
                     ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                 help: zoomed ? "Restore the layout (⇧⌘↩)" : "Zoom this agent (⇧⌘↩)"
             ) {
-                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                withAnimation(store.layoutAnimation) {
                     store.toggleZoom(session.id)
                 }
             }
             menu
             iconButton("xmark", help: "Close \(agent.title)") {
-                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                withAnimation(store.layoutAnimation) {
                     store.close(session.id)
                 }
             }
@@ -246,12 +245,12 @@ struct HerdrPaneHeader: View {
     @ViewBuilder
     private var menuItems: some View {
         Button(zoomed ? "Restore Layout" : "Zoom") {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+            withAnimation(store.layoutAnimation) {
                 store.toggleZoom(session.id)
             }
         }
         Button("Move to New Tab") {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+            withAnimation(store.layoutAnimation) {
                 store.moveToNewTab(session.id)
             }
         }
@@ -260,7 +259,7 @@ struct HerdrPaneHeader: View {
             Menu("Swap With") {
                 ForEach(others) { other in
                     Button(other.agent.title) {
-                        withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                        withAnimation(store.layoutAnimation) {
                             store.swap(session.id, other.id)
                         }
                     }
@@ -269,7 +268,7 @@ struct HerdrPaneHeader: View {
         }
         Divider()
         Button("Close", role: .destructive) {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+            withAnimation(store.layoutAnimation) {
                 store.close(session.id)
             }
         }

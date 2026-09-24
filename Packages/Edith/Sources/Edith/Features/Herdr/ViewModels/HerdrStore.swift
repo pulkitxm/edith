@@ -10,6 +10,15 @@ typealias HerdrLiveWatcher =
 
 typealias HerdrAgentCloser = @Sendable (HerdrAgent) async throws -> Void
 
+struct HerdrClosedTabRecord: Equatable {
+    let tabID: String
+    let layout: HerdrLayout
+    let focused: String
+    let zoomed: String?
+    let agents: [HerdrAgent]
+    let rightNeighborID: String?
+}
+
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -81,6 +90,8 @@ final class HerdrStore {
     }
     var tabs: [HerdrTab] = []
     private(set) var sessions: [HerdrOpenTab] = []
+    private var closedTabHistory: [HerdrClosedTabRecord] = []
+    private let closedTabHistoryLimit = 10
     var refreshing = false
     var copiedID: String?
     var detailOpen = true {
@@ -90,6 +101,12 @@ final class HerdrStore {
         }
     }
     var railOpen = true
+    var animatesLayout = false {
+        didSet {
+            guard animatesLayout != oldValue else { return }
+            defaults.set(animatesLayout, forKey: AppStorageKeys.Herdr.animatesLayout)
+        }
+    }
     var railWidth = HerdrPaneSizing.railDefault {
         didSet {
             guard railWidth != oldValue else { return }
@@ -191,6 +208,8 @@ final class HerdrStore {
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        animatesLayout =
+            defaults.object(forKey: AppStorageKeys.Herdr.animatesLayout) as? Bool ?? false
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
                 ?? HerdrPaneSizing.railDefault)
@@ -689,10 +708,7 @@ final class HerdrStore {
         guard let window, pageWindows.contains(window), let tab = currentTab, tab.isSplit,
             let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
         else { return false }
-        let animation = Motion.animation(
-            Motion.glide,
-            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        withAnimation(animation) {
+        withAnimation(layoutAnimation) {
             switch key {
             case let .focus(side): focusNeighbor(toward: side)
             case let .cycle(backwards): cycleFocus(backwards: backwards)
@@ -700,6 +716,13 @@ final class HerdrStore {
             }
         }
         return true
+    }
+
+    var layoutAnimation: Animation? {
+        guard animatesLayout else { return nil }
+        return Motion.animation(
+            Motion.glide,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     func movePage(from old: NSWindow?, to new: NSWindow?) {
@@ -930,10 +953,26 @@ final class HerdrStore {
     }
 
     private func closeTabs(_ predicate: (Int, HerdrTab) -> Bool) {
-        let ids = tabs.enumerated().flatMap { item in
-            predicate(item.offset, item.element) ? item.element.agentIDs : []
+        var matchedAny = false
+        var ids: [String] = []
+        for offset in tabs.indices {
+            let tab = tabs[offset]
+            guard predicate(offset, tab) else { continue }
+            matchedAny = true
+            let rightNeighborID = offset + 1 < tabs.count ? tabs[offset + 1].id : nil
+            var agentsInTab: [HerdrAgent] = []
+            for agentID in tab.agentIDs {
+                guard let found = session(agentID)?.agent else { continue }
+                agentsInTab.append(found)
+            }
+            closedTabHistory.append(
+                HerdrClosedTabRecord(
+                    tabID: tab.id, layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
+                    agents: agentsInTab, rightNeighborID: rightNeighborID))
+            if closedTabHistory.count > closedTabHistoryLimit { closedTabHistory.removeFirst() }
+            for agentID in tab.agentIDs { ids.append(agentID) }
         }
-        guard !ids.isEmpty else { return }
+        guard matchedAny else { return }
         closeSequentially(ids[...])
     }
 
@@ -1165,6 +1204,59 @@ final class HerdrStore {
     }
 
     var orderedTabIDs: [String] { [Self.boardID] + tabs.map(\.id) }
+
+    @discardableResult
+    func cycleTab(backwards: Bool) -> Bool {
+        let ids = orderedTabIDs
+        guard ids.count > 1, let index = ids.firstIndex(of: selectedTab) else { return false }
+        let next = backwards ? (index - 1 + ids.count) % ids.count : (index + 1) % ids.count
+        selectedTab = ids[next]
+        return true
+    }
+
+    @discardableResult
+    func closeFocusedTab() -> Bool {
+        guard selectedTab != Self.boardID else { return false }
+        closeTab(selectedTab)
+        return true
+    }
+
+    @discardableResult
+    func reopenLastClosedTab() -> Bool {
+        while let candidate = closedTabHistory.popLast() {
+            let liveAgents = candidate.agents.filter { recorded in
+                agents.contains { $0.id == recorded.id }
+            }
+            guard !liveAgents.isEmpty else { continue }
+            openReopenedTab(candidate, liveAgents: liveAgents)
+            return true
+        }
+        return false
+    }
+
+    private func openReopenedTab(_ record: HerdrClosedTabRecord, liveAgents: [HerdrAgent]) {
+        for agent in liveAgents where !sessions.contains(where: { $0.id == agent.id }) {
+            adoptSession(for: agent, showing: nil)
+        }
+        let liveIDs = Set(liveAgents.map(\.id))
+        var layout = record.layout
+        for pane in record.layout.panes where !liveIDs.contains(pane) {
+            layout = layout.removing(pane) ?? layout
+        }
+        var tab = HerdrTab(id: record.tabID, agentID: liveAgents[0].id)
+        tab.layout = layout
+        tab.focused = liveIDs.contains(record.focused) ? record.focused : liveAgents[0].id
+        tab.zoomed = record.zoomed.flatMap { liveIDs.contains($0) ? $0 : nil }
+        if let rightNeighborID = record.rightNeighborID,
+            let index = tabs.firstIndex(where: { $0.id == rightNeighborID })
+        {
+            tabs.insert(tab, at: index)
+        } else {
+            tabs.append(tab)
+        }
+        revealSpace(containing: liveAgents[0])
+        selectedTab = tab.id
+    }
 
     func moveTab(_ id: String, toIndexOf target: String) {
         guard id != target, id != Self.boardID else { return }

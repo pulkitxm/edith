@@ -80,7 +80,6 @@ struct HerdrPage: View {
             drag.store = store
             drag.unit = UIScale.current
             drag.gap = UIScale.pt(6)
-            drag.animation = Motion.animation(Motion.glide, reduceMotion: reduceMotion)
             drag.onTearOff = { agent in
                 if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
                 store.close(agent.id)
@@ -205,7 +204,7 @@ struct HerdrPage: View {
 
     private var detailToggle: some View {
         Button {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+            withAnimation(store.layoutAnimation) {
                 store.detailOpen.toggle()
             }
         } label: {
@@ -230,12 +229,14 @@ struct HerdrPage: View {
             ForEach(1...9, id: \.self) { number in
                 Button("") { store.selectTab(number: number) }
                     .keyboardShortcut(
-                        KeyEquivalent(Character("\(number)")), modifiers: .option)
+                        KeyEquivalent(Character("\(number)")), modifiers: .command)
             }
             if let space = store.agentSpaces.first {
                 Button("") { openSpace(space) }
                     .keyboardShortcut("s", modifiers: [.command, .option])
             }
+            Button("") { store.reopenLastClosedTab() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
         }
         .opacity(0)
         .allowsHitTesting(false)
@@ -243,7 +244,7 @@ struct HerdrPage: View {
 
     private var railToggle: some View {
         Button {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+            withAnimation(store.layoutAnimation) {
                 store.setRailOpen(!store.railOpen)
             }
         } label: {
@@ -556,7 +557,7 @@ struct HerdrPage: View {
     }
 
     private func animate(_ change: () -> Void) {
-        withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), change)
+        withAnimation(store.layoutAnimation, change)
     }
 
     private var board: some View {

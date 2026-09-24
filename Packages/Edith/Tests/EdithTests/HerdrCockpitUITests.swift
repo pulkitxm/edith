@@ -143,6 +143,25 @@ import Testing
         #expect(!third.railOpen)
     }
 
+    @Test func layoutChangesAreInstantUntilAnimationIsTurnedOn() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.animatesLayout)
+        #expect(first.layoutAnimation == nil)
+
+        first.animatesLayout = true
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.animatesLayout)
+        #expect(
+            (second.layoutAnimation == nil)
+                == NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+
+        second.animatesLayout = false
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!third.animatesLayout)
+        #expect(third.layoutAnimation == nil)
+    }
+
     @Test func paneWidthsAreClampedAndSurviveARestart() {
         let suite = defaults()
         let first = HerdrStore(defaults: suite, liveWatcher: { _ in })

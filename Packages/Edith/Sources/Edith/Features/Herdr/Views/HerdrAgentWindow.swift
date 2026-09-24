@@ -109,7 +109,6 @@ struct HerdrTitlebarViewPicker: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selection: HerdrAgentView {
         store.detachedTab(id: agentID)?.view ?? .agent
@@ -141,7 +140,7 @@ struct HerdrTitlebarViewPicker: View {
                 stroke: accent.opacity(dark ? 0.5 : 0.35)
             )
             Button {
-                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                withAnimation(store.layoutAnimation) {
                     store.detailOpen.toggle()
                 }
             } label: {
