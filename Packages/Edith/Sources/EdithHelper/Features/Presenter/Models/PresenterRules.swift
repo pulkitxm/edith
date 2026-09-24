@@ -1,10 +1,11 @@
 import Foundation
 
-struct PresenterWindowInfo {
+struct PresenterWindowInfo: Equatable, Sendable {
     let ownerName: String
     let title: String
     let width: Double
     let height: Double
+    var layer: Int = 0
 }
 
 enum PresenterRules {
@@ -20,6 +21,18 @@ enum PresenterRules {
         let width: ClosedRange<Double>
         let height: ClosedRange<Double>
     }
+
+    static let watchedBundleIDs: Set<String> = [
+        "us.zoom.xos",
+        "com.microsoft.teams2",
+        "com.microsoft.teams",
+        "com.google.Chrome",
+        "com.apple.Safari",
+        "company.thebrowser.Browser",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "com.apple.QuickTimePlayerX",
+    ]
 
     static let titleRules: [TitleRule] = [
         TitleRule(
