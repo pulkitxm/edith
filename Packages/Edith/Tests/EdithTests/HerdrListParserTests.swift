@@ -306,4 +306,65 @@ import Testing
         let client = try HerdrSocketClient.unix(path: path)
         client.close()
     }
+
+    @Test func workspacesReadsTheRealListShape() {
+        let json = """
+            {"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[
+              {"workspace_id":"w1","label":"pulkit.page-projects-page","number":1,
+               "pane_count":3,"tab_count":3,"agent_status":"unknown","focused":false},
+              {"workspace_id":"w5","label":"edith-worktrees","number":5,
+               "pane_count":3,"tab_count":3,"agent_status":"working","focused":true}
+            ]}}
+            """
+        let workspaces = HerdrListParser.workspaces(from: json)
+        #expect(workspaces.count == 2)
+        #expect(workspaces[0].id == "w1")
+        #expect(workspaces[0].label == "pulkit.page-projects-page")
+        #expect(workspaces[0].tabCount == 3)
+        #expect(workspaces[0].paneCount == 3)
+        #expect(workspaces[1].id == "w5")
+        #expect(workspaces[1].label == "edith-worktrees")
+    }
+
+    @Test func workspacesFallsBackToTheIDWhenNoLabelIsPresent() {
+        let json = #"{"result":{"workspaces":[{"workspace_id":"w9"}]}}"#
+        let workspaces = HerdrListParser.workspaces(from: json)
+        #expect(
+            workspaces == [HerdrWorkspaceSummary(id: "w9", label: "w9", tabCount: 0, paneCount: 0)])
+    }
+
+    @Test func workspacesReturnsEmptyForMalformedInput() {
+        #expect(HerdrListParser.workspaces(from: "not json").isEmpty)
+        #expect(HerdrListParser.workspaces(from: #"{"result":{}}"#).isEmpty)
+    }
+
+    @Test func createdPaneReadsAWorkspaceCreateResponse() {
+        let json = """
+            {"id":"cli:workspace:create","result":{
+              "root_pane":{"pane_id":"w6:p1","tab_id":"w6:t1","workspace_id":"w6"},
+              "tab":{"tab_id":"w6:t1","workspace_id":"w6","label":"1"},
+              "type":"workspace_created",
+              "workspace":{"workspace_id":"w6","label":"edith-test-scratch"}
+            }}
+            """
+        let created = HerdrListParser.createdPane(from: json)
+        #expect(created == HerdrCreatedPane(workspaceID: "w6", tabID: "w6:t1", paneID: "w6:p1"))
+    }
+
+    @Test func createdPaneReadsATabCreateResponseWithNoWorkspaceObject() {
+        let json = """
+            {"id":"cli:tab:create","result":{
+              "root_pane":{"pane_id":"w7:p2","tab_id":"w7:t2","workspace_id":"w7"},
+              "tab":{"tab_id":"w7:t2","workspace_id":"w7","label":"2"},
+              "type":"tab_created"
+            }}
+            """
+        let created = HerdrListParser.createdPane(from: json)
+        #expect(created == HerdrCreatedPane(workspaceID: "w7", tabID: "w7:t2", paneID: "w7:p2"))
+    }
+
+    @Test func createdPaneReturnsNilForMalformedInput() {
+        #expect(HerdrListParser.createdPane(from: "not json") == nil)
+        #expect(HerdrListParser.createdPane(from: #"{"result":{"type":"ok"}}"#) == nil)
+    }
 }
