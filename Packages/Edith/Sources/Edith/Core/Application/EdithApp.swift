@@ -35,6 +35,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         appStarted = true
+        UserShellEnvironment.shared.enable()
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()

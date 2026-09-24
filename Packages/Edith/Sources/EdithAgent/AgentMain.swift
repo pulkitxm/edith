@@ -55,6 +55,7 @@ public enum AgentBoot {
     }
 
     public static func start() -> AgentServices {
+        UserShellEnvironment.shared.enable()
         let build = build()
         let store = makeStore(build: build)
         let runtime = AgentRuntime(build: build, store: store)

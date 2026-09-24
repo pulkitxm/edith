@@ -14,7 +14,7 @@ export PATH="$EDCACHE/bin:$EDCACHE/bun/bin:$PATH"
 
 if ! command -v bun >/dev/null 2>&1; then
   NODE_DIR="$HOME/.nvm/versions/node"
-  [ -d "$NODE_DIR" ] && export PATH="$NODE_DIR/$(ls "$NODE_DIR" 2>/dev/null | tail -1)/bin:$PATH"
+  [ -d "$NODE_DIR" ] && export PATH="$NODE_DIR/$(ls "$NODE_DIR" 2>/dev/null | sort -V | tail -1)/bin:$PATH"
 fi
 
 OUT_DIR="${1:-$PWD/data}"

@@ -113,6 +113,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
+        UserShellEnvironment.shared.enable()
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
         AgentCommandRouting.enable()
