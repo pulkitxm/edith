@@ -24,7 +24,7 @@ typealias HerdrNewAgentLauncher =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
         _ newSpaceLabel: String?
-    ) async throws -> Void
+    ) async throws -> HerdrCreatedPane
 
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
@@ -218,6 +218,7 @@ final class HerdrStore {
                 kind: kind,
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: created.paneID, on: machine)
+            return created
         },
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
@@ -1351,7 +1352,14 @@ final class HerdrStore {
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
         newSpaceLabel: String?
     ) async throws {
-        try await newAgentLauncher(kind, machine(for: host), existingSpace, newSpaceLabel)
+        let created = try await newAgentLauncher(
+            kind, machine(for: host), existingSpace, newSpaceLabel)
+        open(
+            HerdrAgent.make(
+                machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
+                sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
+                status: .unknown, title: kind,
+                workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: ""))
     }
 
     func attachRequest(

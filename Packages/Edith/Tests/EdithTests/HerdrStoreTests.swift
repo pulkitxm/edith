@@ -556,6 +556,7 @@ private actor HerdrWatchHarness {
         let store = HerdrStore(
             newAgentLauncher: { kind, machine, space, label in
                 await recorder.record(kind, machine, space, label)
+                return HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
             })
 
         try await store.launchNewAgent(
@@ -568,6 +569,9 @@ private actor HerdrWatchHarness {
         #expect(calls[0].machine == nil)
         #expect(calls[0].space == nil)
         #expect(calls[0].label == "new-space")
+        #expect(store.tabs.map(\.id) == ["local|default|w9:p1"])
+        #expect(store.selectedTab == "local|default|w9:p1")
+        #expect(store.tabs.first?.agent.workspace == "new-space")
     }
 
     @Test func launchNewAgentResolvesARemoteHostToItsMachine() async throws {
@@ -578,7 +582,10 @@ private actor HerdrWatchHarness {
         }
         let recorder = Recorder()
         let store = HerdrStore(
-            newAgentLauncher: { _, machine, _, _ in await recorder.record(machine) },
+            newAgentLauncher: { _, machine, _, _ in
+                await recorder.record(machine)
+                return HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
+            },
             machinesProvider: { [machine] })
         let space = HerdrWorkspaceSummary(id: "w1", label: "edith", tabCount: 1, paneCount: 1)
 
@@ -590,6 +597,7 @@ private actor HerdrWatchHarness {
             existingSpace: space, newSpaceLabel: nil)
 
         #expect(await recorder.machines == [machine])
+        #expect(store.tabs.first?.agent.workspace == "edith")
     }
 
     @Test func launchNewAgentPropagatesLauncherErrors() async {
@@ -600,6 +608,7 @@ private actor HerdrWatchHarness {
                 kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
                 newSpaceLabel: "x")
         }
+        #expect(store.tabs.isEmpty)
     }
 
     private static func scratchDefaults() -> UserDefaults {

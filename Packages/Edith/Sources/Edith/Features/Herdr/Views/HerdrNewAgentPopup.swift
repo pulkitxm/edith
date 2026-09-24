@@ -36,6 +36,10 @@ struct HerdrNewAgentPopup: View {
         .onChange(of: currentQuery) { _, _ in selectionIndex = 0 }
     }
 
+    private func scrollToSelection(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(selectionIndex, anchor: .center)
+    }
+
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             ForEach(
@@ -111,64 +115,66 @@ struct HerdrNewAgentPopup: View {
         }
     }
 
-    @ViewBuilder
     private var resultsList: some View {
-        switch model.step {
-        case .kind: kindRows
-        case .machine: machineRows
-        case .space: spaceRows
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    switch model.step {
+                    case .kind: kindRows
+                    case .machine: machineRows
+                    case .space: spaceRows
+                    }
+                }
+            }
+            .onChange(of: selectionIndex) { _, _ in scrollToSelection(proxy) }
+            .onChange(of: model.step) { _, _ in scrollToSelection(proxy) }
         }
     }
 
+    @ViewBuilder
     private var kindRows: some View {
         let kinds = HerdrNewAgentPopupModel.matchingKinds(model.kindQuery)
-        return ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
-                    row(index: index) {
-                        HerdrKindMark(kind: kind, size: UIScale.pt(16))
-                        Text(kind).font(.system(size: UIScale.pt(12)))
-                        Spacer()
-                    }
-                }
-                if kinds.isEmpty {
-                    emptyState("No matching agent kinds")
-                }
+        ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
+            row(index: index) {
+                HerdrKindMark(kind: kind, size: UIScale.pt(16))
+                Text(kind).font(.system(size: UIScale.pt(12)))
+                Spacer()
             }
+        }
+        if kinds.isEmpty {
+            emptyState("No matching agent kinds")
         }
     }
 
+    @ViewBuilder
     private var machineRows: some View {
         let machines = HerdrNewAgentPopupModel.matchingMachines(model.machineQuery, in: hosts)
-        return ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(machines.enumerated()), id: \.element.id) { index, host in
-                    let available = host.reachable && host.herdrPresent
-                    row(index: index) {
-                        Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
-                            .font(.system(size: UIScale.pt(13)))
-                            .foregroundStyle(available ? .primary : .secondary)
-                        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                            Text(host.name).font(.system(size: UIScale.pt(12)))
-                            if !available {
-                                Text(unavailableReason(host))
-                                    .font(.system(size: UIScale.pt(10)))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
+        ForEach(Array(machines.enumerated()), id: \.element.id) { index, host in
+            let available = host.reachable && host.herdrPresent
+            row(index: index) {
+                Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(available ? .primary : .secondary)
+                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                    Text(host.name).font(.system(size: UIScale.pt(12)))
+                    if !available {
+                        Text(unavailableReason(host))
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(.secondary)
                     }
-                    .opacity(available ? 1 : 0.5)
                 }
-                if machines.isEmpty {
-                    emptyState("No machines found")
-                } else if machines.allSatisfy({ !$0.reachable || !$0.herdrPresent }) {
-                    refreshRow
-                }
+                Spacer()
             }
+            .opacity(available ? 1 : 0.5)
+        }
+        if machines.isEmpty {
+            emptyState("No machines found")
+        } else if machines.allSatisfy({ !$0.reachable || !$0.herdrPresent }) {
+            refreshRow
         }
     }
 
+    @ViewBuilder
     private var spaceRows: some View {
         let matches = HerdrNewAgentPopupModel.matchingSpaces(model.spaceQuery, in: model.workspaces)
         let trimmedQuery = model.spaceQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -176,35 +182,31 @@ struct HerdrNewAgentPopup: View {
             !trimmedQuery.isEmpty
             && HerdrNewAgentPopupModel.matchingSpace(named: trimmedQuery, in: model.workspaces)
                 == nil
-        return ScrollView {
-            LazyVStack(spacing: 0) {
-                if model.loadingWorkspaces {
-                    HerdrSkeleton(dark: dark, rows: 4, card: false)
-                } else {
-                    ForEach(Array(matches.enumerated()), id: \.element.id) { index, space in
-                        row(index: index) {
-                            Image(systemName: "square.split.2x2")
-                                .font(.system(size: UIScale.pt(12)))
-                            Text(space.label).font(.system(size: UIScale.pt(12)))
-                            Spacer()
-                            Text("\(space.paneCount) pane\(space.paneCount == 1 ? "" : "s")")
-                                .font(.system(size: UIScale.pt(10)))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if showsCreateRow {
-                        row(index: matches.count) {
-                            Image(systemName: "plus.square")
-                                .font(.system(size: UIScale.pt(12)))
-                            Text("Create space “\(trimmedQuery)”").font(
-                                .system(size: UIScale.pt(12)))
-                            Spacer()
-                        }
-                    }
-                    if matches.isEmpty, !showsCreateRow {
-                        emptyState("No spaces yet — type a name to create one")
-                    }
+        if model.loadingWorkspaces {
+            HerdrSkeleton(dark: dark, rows: 4, card: false)
+        } else {
+            ForEach(Array(matches.enumerated()), id: \.element.id) { index, space in
+                row(index: index) {
+                    Image(systemName: "square.split.2x2")
+                        .font(.system(size: UIScale.pt(12)))
+                    Text(space.label).font(.system(size: UIScale.pt(12)))
+                    Spacer()
+                    Text("\(space.paneCount) pane\(space.paneCount == 1 ? "" : "s")")
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(.secondary)
                 }
+            }
+            if showsCreateRow {
+                row(index: matches.count) {
+                    Image(systemName: "plus.square")
+                        .font(.system(size: UIScale.pt(12)))
+                    Text("Create space “\(trimmedQuery)”").font(
+                        .system(size: UIScale.pt(12)))
+                    Spacer()
+                }
+            }
+            if matches.isEmpty, !showsCreateRow {
+                emptyState("No spaces yet — type a name to create one")
             }
         }
     }
@@ -222,6 +224,7 @@ struct HerdrNewAgentPopup: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.edith(.selection, selected: index == selectionIndex))
+        .id(index)
     }
 
     private var refreshRow: some View {
