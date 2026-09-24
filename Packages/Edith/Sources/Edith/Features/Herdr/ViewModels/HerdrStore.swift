@@ -148,6 +148,7 @@ final class HerdrStore {
         }
     }
 
+    @ObservationIgnored weak var pageWindow: NSWindow?
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
@@ -664,6 +665,24 @@ final class HerdrStore {
         focus(next)
     }
 
+    func performLayoutKey(
+        keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow?
+    ) -> Bool {
+        guard let window, window === pageWindow, let tab = currentTab, tab.isSplit,
+            let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
+        else { return false }
+        let animation = Motion.animation(
+            Motion.glide,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        withAnimation(animation) {
+            switch key {
+            case let .focus(side): focusNeighbor(toward: side)
+            case .zoom: toggleZoom(tab.focused)
+            }
+        }
+        return true
+    }
+
     func toggleZoom(_ agentID: String) {
         guard let tab = tab(containing: agentID), tab.isSplit else { return }
         updateTab(tab.id) { tab in
@@ -1037,4 +1056,22 @@ struct HerdrTab: Identifiable, Equatable {
 
     var agentIDs: [String] { layout.panes }
     var isSplit: Bool { layout.paneCount > 1 }
+}
+
+enum HerdrLayoutKey: Equatable {
+    case focus(InsertSide)
+    case zoom
+
+    static func resolve(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> HerdrLayoutKey? {
+        let flags = modifiers.chordOnly
+        if flags == [.command, .shift], keyCode == 36 { return .zoom }
+        guard flags == [.command, .option] else { return nil }
+        switch keyCode {
+        case 123: return .focus(.left)
+        case 124: return .focus(.right)
+        case 125: return .focus(.bottom)
+        case 126: return .focus(.top)
+        default: return nil
+        }
+    }
 }

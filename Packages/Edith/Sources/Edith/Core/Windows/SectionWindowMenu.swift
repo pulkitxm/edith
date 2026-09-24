@@ -263,6 +263,11 @@ enum SectionWindowMenu {
                 if flags == .command, characters?.lowercased() == "w" {
                     return CloseCommand.perform(on: NSApp.keyWindow)
                 }
+                if HerdrStore.shared.performLayoutKey(
+                    keyCode: keyCode, modifiers: modifiers, in: window)
+                {
+                    return true
+                }
                 if let command = WorkspaceKeyCommand.resolve(
                     characters: characters, keyCode: keyCode, modifiers: modifiers)
                 {

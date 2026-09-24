@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
@@ -188,6 +189,36 @@ import Testing
         #expect(store.currentTab?.focused == claude.id)
         store.focusNeighbor(toward: .left)
         #expect(store.currentTab?.focused == claude.id)
+    }
+
+    @Test func layoutKeysResolveTheTerminalStyleChords() {
+        #expect(
+            HerdrLayoutKey.resolve(keyCode: 123, modifiers: [.command, .option]) == .focus(.left))
+        #expect(
+            HerdrLayoutKey.resolve(keyCode: 126, modifiers: [.command, .option]) == .focus(.top))
+        #expect(HerdrLayoutKey.resolve(keyCode: 36, modifiers: [.command, .shift]) == .zoom)
+        #expect(HerdrLayoutKey.resolve(keyCode: 123, modifiers: [.command]) == nil)
+        #expect(HerdrLayoutKey.resolve(keyCode: 36, modifiers: [.command]) == nil)
+    }
+
+    @Test func layoutKeysOnlyActInTheWindowShowingHerdr() {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude)
+        store.open(codex, beside: .right)
+        let page = NSWindow()
+        let other = NSWindow()
+        store.pageWindow = page
+
+        #expect(!store.performLayoutKey(keyCode: 123, modifiers: [.command, .option], in: other))
+        #expect(store.currentTab?.focused == codex.id)
+        #expect(store.performLayoutKey(keyCode: 123, modifiers: [.command, .option], in: page))
+        #expect(store.currentTab?.focused == claude.id)
+        #expect(store.performLayoutKey(keyCode: 36, modifiers: [.command, .shift], in: page))
+        #expect(store.currentTab?.zoomed == claude.id)
+        store.moveToNewTab(codex.id)
+        #expect(!store.performLayoutKey(keyCode: 124, modifiers: [.command, .option], in: page))
     }
 
     @Test func reopeningAnAgentInASharedTabFocusesIt() {

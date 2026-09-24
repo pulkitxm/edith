@@ -65,6 +65,7 @@ struct HerdrPage: View {
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
+        .background(HerdrWindowReader { store.pageWindow = $0 })
         .navigationTitle("Herdr")
         .onAppear {
             HerdrAgentWindowDelegate.shared.onClose = { id in
@@ -232,21 +233,6 @@ struct HerdrPage: View {
                 Button("") { openSpace(space) }
                     .keyboardShortcut("s", modifiers: [.command, .option])
             }
-            Button("") { store.focusNeighbor(toward: .left) }
-                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
-            Button("") { store.focusNeighbor(toward: .right) }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-            Button("") { store.focusNeighbor(toward: .top) }
-                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            Button("") { store.focusNeighbor(toward: .bottom) }
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-            Button("") {
-                guard let focused = store.currentTab?.focused else { return }
-                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
-                    store.toggleZoom(focused)
-                }
-            }
-            .keyboardShortcut(.return, modifiers: [.command, .shift])
         }
         .opacity(0)
         .allowsHitTesting(false)
@@ -1047,5 +1033,30 @@ private struct KindPillHelp: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+private struct HerdrWindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> ReaderView {
+        let view = ReaderView()
+        view.onWindow = onWindow
+        return view
+    }
+
+    func updateNSView(_ view: ReaderView, context: Context) {
+        view.onWindow = onWindow
+    }
+
+    final class ReaderView: NSView {
+        var onWindow: ((NSWindow?) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            onWindow?(window)
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
