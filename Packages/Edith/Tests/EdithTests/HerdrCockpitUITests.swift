@@ -51,7 +51,7 @@ import Testing
             agentCloser: { agent in await capture.append(agent.id) })
         store.apply([host])
         store.open(agent)
-        #expect(store.selectedTab == agent.id)
+        #expect(store.currentTab?.focused == agent.id)
 
         try await store.closeAgent(agent)
 
@@ -69,23 +69,23 @@ import Testing
         store.open(agent)
         store.open(first)
         store.open(second)
-        #expect(store.tabs.map(\.id) == [agent.id, first.id, second.id])
-        store.moveTab(second.id, toIndexOf: agent.id)
-        #expect(store.tabs.map(\.id) == [second.id, agent.id, first.id])
-        store.moveTab(second.id, toIndexOf: HerdrStore.boardID)
-        #expect(store.tabs.map(\.id) == [second.id, agent.id, first.id])
-        store.moveTab(agent.id, toIndexOf: first.id)
-        #expect(store.tabs.map(\.id) == [second.id, first.id, agent.id])
+        #expect(store.tabs.map(\.focused) == [agent.id, first.id, second.id])
+        store.moveTab(tabID(store, second), toIndexOf: tabID(store, agent))
+        #expect(store.tabs.map(\.focused) == [second.id, agent.id, first.id])
+        store.moveTab(tabID(store, second), toIndexOf: HerdrStore.boardID)
+        #expect(store.tabs.map(\.focused) == [second.id, agent.id, first.id])
+        store.moveTab(tabID(store, agent), toIndexOf: tabID(store, first))
+        #expect(store.tabs.map(\.focused) == [second.id, first.id, agent.id])
     }
 
     @Test func theBoardNeverMovesAndUnknownTabsAreIgnored() {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
         store.apply([host])
         store.open(agent)
-        store.moveTab(HerdrStore.boardID, toIndexOf: agent.id)
-        store.moveTab("nowhere", toIndexOf: agent.id)
-        store.moveTab(agent.id, toIndexOf: "nowhere")
-        #expect(store.tabs.map(\.id) == [agent.id])
+        store.moveTab(HerdrStore.boardID, toIndexOf: tabID(store, agent))
+        store.moveTab("nowhere", toIndexOf: tabID(store, agent))
+        store.moveTab(tabID(store, agent), toIndexOf: "nowhere")
+        #expect(store.tabs.map(\.focused) == [agent.id])
     }
 
     @Test func optionNumbersWalkTheTabsAndNineIsTheLast() {
@@ -121,8 +121,8 @@ import Testing
         #expect(store.machineTerminals.count == 2)
         let terminal = store.machineTerminals[0]
         store.open(terminal)
-        #expect(store.selectedTab == terminal.id)
-        #expect(store.tabs.map(\.id) == [terminal.id])
+        #expect(store.currentTab?.focused == terminal.id)
+        #expect(store.tabs.map(\.focused) == [terminal.id])
     }
 
     @Test func bothPanesSurviveARestart() {
@@ -303,7 +303,7 @@ import Testing
         store.open(second)
         store.setAllAgentSpacesCollapsed(true)
 
-        store.selectedTab = agent.id
+        store.selectedTab = tabID(store, agent)
         #expect(!store.spaceIsCollapsed("edith"))
         #expect(store.spaceIsCollapsed("quinjet"))
 
@@ -453,4 +453,9 @@ private actor HerdrCloseCapture {
     func ids() -> [String] {
         values
     }
+}
+
+@MainActor
+private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
+    store.tab(containing: agent.id)?.id ?? ""
 }

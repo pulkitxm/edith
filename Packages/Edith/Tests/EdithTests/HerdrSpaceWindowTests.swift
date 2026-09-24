@@ -21,7 +21,7 @@ import Testing
         let agents = [localAgent, remoteAgent]
         store.apply([.local(herdrPresent: true, agents: agents)])
         store.open(localAgent)
-        let sourceHolder = store.tabs[0].holder
+        let sourceHolder = store.sessions[0].holder
 
         let model = HerdrSpaceWindowModel(
             space: HerdrAgentSpace(id: "edith", title: "edith", agents: agents), store: store)

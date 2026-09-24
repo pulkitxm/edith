@@ -154,17 +154,18 @@ private actor HerdrWatchHarness {
             requested.append(ObjectIdentifier(holder))
             completion(false)
         }
-        let keep = store.tabs[0]
-        let first = store.tabs[1]
-        let second = store.tabs[2]
+        let keep = store.tabs[0].id
+        let first = store.sessions[1]
+        let second = store.sessions[2]
         first.holder.start(executable: "/bin/cat", arguments: [], environment: [])
         second.holder.start(executable: "/bin/cat", arguments: [], environment: [])
 
-        store.closeOthers(besides: keep.id)
+        store.closeOthers(besides: keep)
 
         #expect(requested.isEmpty)
-        #expect(store.tabs.map(\.id) == [keep.id])
-        #expect(store.selectedTab == keep.id)
+        #expect(store.tabs.map(\.id) == [keep])
+        #expect(store.sessions.map(\.id) == [store.tabs[0].focused])
+        #expect(store.selectedTab == keep)
         #expect(!first.holder.started)
         #expect(!second.holder.started)
     }
@@ -180,14 +181,14 @@ private actor HerdrWatchHarness {
         let terminal = HerdrMachineTerminal.agent(
             for: .local(herdrPresent: true))
         store.open(terminal)
-        let holder = try #require(store.tabs.first?.holder)
+        let holder = try #require(store.sessions.first?.holder)
 
         store.close(terminal.id)
 
         #expect(requested == [ObjectIdentifier(holder)])
-        #expect(store.tabs.map(\.id) == [terminal.id])
+        #expect(store.sessions.map(\.id) == [terminal.id])
         decisions[0](false)
-        #expect(store.tabs.map(\.id) == [terminal.id])
+        #expect(store.sessions.map(\.id) == [terminal.id])
 
         store.close(terminal.id)
 
@@ -235,17 +236,9 @@ private actor HerdrWatchHarness {
         }
     ) -> HerdrStore {
         let store = HerdrStore(requestUserClose: requestUserClose)
-        store.tabs = [
-            HerdrOpenTab(
-                agent: agent("Claude Code", pane: "a"), machine: nil,
-                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()),
-            HerdrOpenTab(
-                agent: agent("Codex", pane: "b"), machine: nil, holder: TerminalSessionHolder(),
-                quinjet: HerdrQuinjetSession()),
-            HerdrOpenTab(
-                agent: agent("OpenCode", pane: "c"), machine: nil, holder: TerminalSessionHolder(),
-                quinjet: HerdrQuinjetSession()),
-        ]
+        store.open(agent("Claude Code", pane: "a"))
+        store.open(agent("Codex", pane: "b"))
+        store.open(agent("OpenCode", pane: "c"))
         store.selectedTab = store.tabs[2].id
         return store
     }
@@ -273,7 +266,8 @@ private actor HerdrWatchHarness {
             .local(herdrPresent: true, agents: [updated])
         ])
         #expect(store.hosts.first?.agents.map(\.id) == [updated.id])
-        #expect(store.tabs.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
+        #expect(
+            store.sessions.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
     }
 
     @Test func stoppedAndReplacedWatchersCannotPublish() async {
@@ -336,7 +330,7 @@ private actor HerdrWatchHarness {
         let store = HerdrStore()
         let selected = agent("Codex", pane: "pane-1")
         store.open(selected)
-        let tab = try #require(store.tabs.first)
+        let tab = try #require(store.sessions.first)
         let executable = URL(fileURLWithPath: "/tmp/herdr")
         let bridge = URL(fileURLWithPath: "/tmp/ed")
         let environment = ["TERM=xterm-256color"]
@@ -374,7 +368,7 @@ private actor HerdrWatchHarness {
         let second = HerdrStore(defaults: defaults)
         second.open(claude)
         #expect(second.view(for: claude.id) == .diff)
-        #expect(second.tabs.first?.view == .diff)
+        #expect(second.sessions.first?.view == .diff)
     }
 
     @Test func switchingBackToTheAgentSticks() {
@@ -383,7 +377,7 @@ private actor HerdrWatchHarness {
         let claude = agent("Claude Code", pane: "a")
         store.open(claude, showing: .diff)
         store.setView(.agent, for: claude.id)
-        #expect(store.tabs.first?.view == .agent)
+        #expect(store.sessions.first?.view == .agent)
         #expect(HerdrAgentViews.view(for: claude.id, defaults) == .agent)
     }
 
@@ -408,7 +402,7 @@ private actor HerdrWatchHarness {
         store.open(agent("Codex", pane: "b"))
         store.open(claude, showing: .diff)
         #expect(store.tabs.count == 2)
-        #expect(store.selectedTab == claude.id)
+        #expect(store.currentTab?.focused == claude.id)
         #expect(store.view(for: claude.id) == .diff)
     }
 
@@ -421,7 +415,7 @@ private actor HerdrWatchHarness {
         store.open(codex)
         store.close(codex.id)
         #expect(store.view(for: claude.id) == .diff)
-        #expect(store.tabs.first?.view == .diff)
+        #expect(store.sessions.first?.view == .diff)
     }
 
     private static func scratchDefaults() -> UserDefaults {
