@@ -1350,16 +1350,20 @@ final class HerdrStore {
 
     func launchNewAgent(
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
-        newSpaceLabel: String?
+        newSpaceLabel: String?, openBeside: Bool = false
     ) async throws {
         let created = try await newAgentLauncher(
             kind, machine(for: host), existingSpace, newSpaceLabel)
-        open(
-            HerdrAgent.make(
-                machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
-                sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
-                status: .unknown, title: kind,
-                workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: ""))
+        let placeholder = HerdrAgent.make(
+            machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
+            sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
+            status: .unknown, title: kind,
+            workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        if openBeside {
+            open(placeholder, beside: .right)
+        } else {
+            open(placeholder)
+        }
     }
 
     func attachRequest(

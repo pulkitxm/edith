@@ -10,7 +10,29 @@ final class HerdrNewAgentPopupModel {
         case space
     }
 
+    enum LayoutChoice: String, CaseIterable, Identifiable {
+        case newTab
+        case sideBySide
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .newTab: "New Tab"
+            case .sideBySide: "Side by Side"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .newTab: "plus.rectangle"
+            case .sideBySide: "rectangle.split.2x1"
+            }
+        }
+    }
+
     var step = Step.kind
+    var layoutChoice = LayoutChoice.newTab
     var kindQuery = ""
     var selectedKind: String?
     var machineQuery = ""

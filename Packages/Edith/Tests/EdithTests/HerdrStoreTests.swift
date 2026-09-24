@@ -600,6 +600,26 @@ private actor HerdrWatchHarness {
         #expect(store.sessions.first?.agent.workspace == "edith")
     }
 
+    @Test func launchNewAgentOpensBesideTheCurrentTabWhenRequested() async throws {
+        let existing = agent("Claude Code", pane: "existing")
+        let store = HerdrStore(
+            newAgentLauncher: { _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
+            })
+        store.hosts = [.local(herdrPresent: true, agents: [existing])]
+        store.open(existing)
+        let existingTabID = store.selectedTab
+
+        try await store.launchNewAgent(
+            kind: "Codex", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "new-space", openBeside: true)
+
+        #expect(store.tabs.count == 1)
+        #expect(store.selectedTab == existingTabID)
+        #expect(store.currentTab?.isSplit == true)
+        #expect(store.currentTab?.agentIDs.contains("local|default|w9:p1") == true)
+    }
+
     @Test func launchNewAgentPropagatesLauncherErrors() async {
         struct LaunchFailure: Error {}
         let store = HerdrStore(newAgentLauncher: { _, _, _, _ in throw LaunchFailure() })

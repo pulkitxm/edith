@@ -66,8 +66,25 @@ struct HerdrNewAgentPopup: View {
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
             }
+            layoutChoiceMenu
         }
         .padding(UIScale.pt(14))
+    }
+
+    private var layoutChoiceMenu: some View {
+        Menu {
+            Picker("Layout", selection: $model.layoutChoice) {
+                ForEach(HerdrNewAgentPopupModel.LayoutChoice.allCases) { choice in
+                    Label(choice.title, systemImage: choice.symbolName).tag(choice)
+                }
+            }
+        } label: {
+            Image(systemName: model.layoutChoice.symbolName)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        .help("Choose how the new agent opens: \(model.layoutChoice.title)")
     }
 
     private var field: some View {
@@ -320,7 +337,8 @@ struct HerdrNewAgentPopup: View {
         Task {
             do {
                 try await store.launchNewAgent(
-                    kind: kind, host: host, existingSpace: space, newSpaceLabel: newLabel)
+                    kind: kind, host: host, existingSpace: space, newSpaceLabel: newLabel,
+                    openBeside: model.layoutChoice == .sideBySide)
                 model.launching = false
                 dismiss()
             } catch {
