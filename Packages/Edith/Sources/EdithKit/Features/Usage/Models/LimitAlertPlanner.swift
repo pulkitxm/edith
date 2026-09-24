@@ -5,10 +5,12 @@ public struct LimitBurn: Equatable, Sendable {
     public let lookback: TimeInterval
 
     public var phrase: String {
-        if lookback >= 20 * 3600 { return "your pace over the last day" }
-        if lookback >= 3500 && lookback <= 3700 { return "your last hour's pace" }
-        if lookback >= 1700 && lookback <= 1900 { return "your last 30 minutes' pace" }
-        return "your pace so far this window"
+        let minutes = Int((lookback / 60).rounded())
+        if minutes >= 20 * 60 { return "your pace over the last day" }
+        if minutes == 60 { return "your last hour's pace" }
+        if minutes == 30 { return "your last 30 minutes' pace" }
+        if minutes >= 120 { return "your pace over the last \(minutes / 60) hours" }
+        return "your pace over the last \(minutes) minutes"
     }
 }
 
@@ -151,6 +153,11 @@ public enum LimitAlertPlanner {
         settings: LimitAlertSettings, clock: LimitAlertClock, recentlyActive: Bool
     ) -> (LimitAlert?, String) {
         let now = clock.now
+        if let known = entry.resetsAt, let reported = a.window.resetsAt, known > now,
+            known.timeIntervalSince(reported) > a.target.sameWindowTolerance
+        {
+            return (nil, "the reset time moved backwards, ignoring this reading")
+        }
         if isNewWindow(entry, a) {
             let previous = entry
             entry = LimitAlertLedger.Entry(resetsAt: a.window.resetsAt)
@@ -281,6 +288,12 @@ public enum LimitAlertPlanner {
         guard let cap = a.projectedCapAt, cap <= reset.addingTimeInterval(-lead) else {
             return .quiet(
                 String(format: "at %.1f%% an hour it reaches the cap after the reset", burn.perHour)
+            )
+        }
+        let horizon: TimeInterval = a.target.isWeekly ? 2 * 86_400 : 90 * 60
+        guard cap.timeIntervalSince(clock.now) <= horizon else {
+            return .quiet(
+                "the cap is more than \(a.target.isWeekly ? "2 days" : "90 minutes") away at this pace"
             )
         }
         if entry.sent[LimitAlertKind.onPace.rawValue] != nil {
