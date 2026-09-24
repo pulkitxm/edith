@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import Foundation
 import Observation
@@ -69,8 +70,10 @@ final class SidebarStatusModel {
         guard refreshTask == nil else { return }
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
-                try? await Task.sleep(for: .seconds(5))
+                if NSApp.occlusionState.contains(.visible) {
+                    await self?.refresh()
+                }
+                try? await Task.sleep(for: .seconds(5), tolerance: .seconds(1))
             }
         }
     }
@@ -83,39 +86,46 @@ final class SidebarStatusModel {
     func refresh() async {
         await refreshAgent()
         refreshSessions()
-        refreshLimits()
+        await refreshLimits()
         refreshMaintenance()
+    }
+
+    private func assign<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<SidebarStatusModel, Value>, _ value: Value
+    ) {
+        guard self[keyPath: keyPath] != value else { return }
+        self[keyPath: keyPath] = value
     }
 
     private func refreshSessions() {
         guard ExtensionRegistry.entry("herdr")?.isEnabled(in: SharedDefaults.store) == true
         else {
-            sessionsWorking = 0
+            assign(\.sessionsWorking, 0)
             return
         }
         let live = HerdrStore.shared.agents.filter { $0.status == .working }.count
         if live > 0 || !HerdrStore.shared.agents.isEmpty {
             SidebarBadgeStore.recordSessions(working: live)
-            sessionsWorking = live
+            assign(\.sessionsWorking, live)
         } else {
-            sessionsWorking = SidebarBadgeStore.sessionsWorking()
+            assign(\.sessionsWorking, SidebarBadgeStore.sessionsWorking())
         }
     }
 
-    private func refreshLimits() {
+    private func refreshLimits() async {
         guard ExtensionRegistry.entry("usage")?.isEnabled(in: SharedDefaults.store) == true
         else {
-            sessionPercent = nil
-            weeklyPercent = nil
+            assign(\.sessionPercent, nil)
+            assign(\.weeklyPercent, nil)
             return
         }
         let provider =
             LimitProvider(
                 rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.Limits.provider)
                     ?? "") ?? .claude
-        let latest = LimitsHistory.latest(provider: provider)
-        sessionPercent = latest?.session?.percent
-        weeklyPercent = latest?.week?.percent
+        let latest = await LimitsHistory.loadLatestProviders(providers: [provider])[provider]
+        assign(\.sessionPercent, latest?.session?.percent)
+        assign(\.weeklyPercent, latest?.week?.percent)
     }
 
     private func refreshMaintenance() {
@@ -123,8 +133,8 @@ final class SidebarStatusModel {
             ExtensionRegistry.entry("appMaintenance")?.isEnabled(in: SharedDefaults.store) == true
         let cleanerOn =
             ExtensionRegistry.entry("cleaner")?.isEnabled(in: SharedDefaults.store) == true
-        updatesAvailable = maintenanceOn ? SidebarBadgeStore.updatesAvailable() : 0
-        reclaimableBytes = cleanerOn ? SidebarBadgeStore.reclaimableBytes() : 0
+        assign(\.updatesAvailable, maintenanceOn ? SidebarBadgeStore.updatesAvailable() : 0)
+        assign(\.reclaimableBytes, cleanerOn ? SidebarBadgeStore.reclaimableBytes() : 0)
     }
 
     private func refreshAgent() async {
@@ -132,12 +142,12 @@ final class SidebarStatusModel {
             (try AgentClient.shared.runtimeSnapshot(), try AgentClient.shared.jobSnapshots())
         }
         guard let (runtime, jobs) = probe else {
-            agentRunning = false
-            agentSummary = AgentRegistrationState.current.title
+            assign(\.agentRunning, false)
+            assign(\.agentSummary, AgentRegistrationState.current.title)
             return
         }
-        agentRunning = true
-        agentSummary = SidebarBadgeFormat.agentSummary(jobs: jobs, cpu: runtime.cpuPercent)
+        assign(\.agentRunning, true)
+        assign(\.agentSummary, SidebarBadgeFormat.agentSummary(jobs: jobs, cpu: runtime.cpuPercent))
     }
 
     func badge(pageID: String) -> SidebarBadge? {

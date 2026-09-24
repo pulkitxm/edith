@@ -18,6 +18,7 @@ struct DashboardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compactLayout
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.windowVisible) private var windowVisible
     @State private var showLog = false
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
@@ -113,8 +114,8 @@ struct DashboardView: View {
             await model.load()
             syncCustomDates()
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .task(id: windowVisible) {
+            guard automaticActionsEnabled, windowVisible else { return }
             refresh.requestRefresh()
             for await _ in AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage) {
                 await model.load()

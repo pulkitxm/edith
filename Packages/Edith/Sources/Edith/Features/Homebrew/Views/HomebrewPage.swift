@@ -293,7 +293,7 @@ struct HomebrewMaintenanceView: View {
 
     private var packageCard: some View {
         HomebrewCard {
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text(
                         model.mode == .installed
