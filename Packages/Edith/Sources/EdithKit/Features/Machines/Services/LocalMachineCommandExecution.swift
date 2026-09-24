@@ -5,7 +5,7 @@ public enum LocalMachineCommandExecution {
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
         await run(
-            executable: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-c", command],
+            executable: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-lc", command],
             environment: CLIToolEnvironment.sanitized(), commandLabel: command, stdin: stdin,
             timeout: timeout)
     }

@@ -80,7 +80,7 @@ public enum AgentMachineOperations {
             environment = MachineSSHEnvironment.make(for: machine)
         } else {
             executable = URL(fileURLWithPath: "/bin/zsh")
-            arguments = ["-c", request.command]
+            arguments = ["-lc", request.command]
             environment = CLIToolEnvironment.sanitized()
         }
         try Task.checkCancellation()

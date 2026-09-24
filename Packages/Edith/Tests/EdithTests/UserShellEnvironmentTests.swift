@@ -112,6 +112,23 @@ import Testing
         return condition()
     }
 
+    @Test func fingerprintNoticesEditsInsideWatchedDirectories() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-paths-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let entry = directory.appendingPathComponent("homebrew")
+        try Data("/opt/homebrew/bin\n".utf8).write(to: entry)
+        let before = UserShellEnvironment.fingerprint([directory.path])
+
+        let handle = try FileHandle(forWritingTo: entry)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("/opt/homebrew/sbin\n".utf8))
+        try handle.close()
+
+        #expect(UserShellEnvironment.fingerprint([directory.path]) != before)
+    }
+
     @Test func fallbackNodeVersionsPreferTheNewestRelease() {
         let versions = ["v9.11.2", "v18.9.1", "v22.3.0", "v18.10.0"]
         #expect(

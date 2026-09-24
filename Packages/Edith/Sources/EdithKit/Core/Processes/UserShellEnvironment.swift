@@ -18,7 +18,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
         "TERM", "COLORTERM", "COLUMNS", "LINES", "TMUX", "TMUX_PANE", "STY", "WINDOWID",
         "PS1", "PS2", "PS3", "PS4", "PROMPT", "RPROMPT", "NO_COLOR", "LC_TERMINAL",
         "LC_TERMINAL_VERSION", "XPC_SERVICE_NAME", "XPC_FLAGS", "__CFBundleIdentifier",
-        "__CF_USER_TEXT_ENCODING", "SECURITYSESSIONID", "LaunchInstanceID",
+        "__CF_USER_TEXT_ENCODING", "SECURITYSESSIONID", "LaunchInstanceID", "SSH_AGENT_PID",
     ]
     static let sessionPrefixes = [
         "EDITH_", "TERM_", "ITERM_", "GHOSTTY_", "VSCODE_", "P9K_", "_P9K_", "POWERLEVEL9K_",
@@ -58,13 +58,26 @@ public final class UserShellEnvironment: @unchecked Sendable {
         self.capture = capture
     }
 
-    public func enable() {
+    public func enable(after delay: Duration = .zero) {
         let started = lock.withLock { () -> Bool in
             guard !enabled else { return false }
             enabled = true
             return true
         }
-        if started { startCapture() }
+        guard started else { return }
+        guard delay > .zero else {
+            startCapture()
+            return
+        }
+        Task(priority: .utility) { [weak self] in
+            try? await Task.sleep(for: delay)
+            self?.startCapture()
+        }
+    }
+
+    public func refreshIfEnabled() async {
+        guard lock.withLock({ enabled }) else { return }
+        await refresh()
     }
 
     public func current() -> [String: String]? {
@@ -132,10 +145,12 @@ public final class UserShellEnvironment: @unchecked Sendable {
             let before = Self.fingerprint(Self.watchedPaths(home: home, zdotdir: zdotdir))
             let variables = await capture(shell, home, base)
             let fingerprint =
-                variables?["ZDOTDIR"] == zdotdir
-                ? before
-                : Self.fingerprint(
-                    Self.watchedPaths(home: home, zdotdir: variables?["ZDOTDIR"]))
+                variables.flatMap { captured in
+                    captured["ZDOTDIR"] == zdotdir
+                        ? nil
+                        : Self.fingerprint(
+                            Self.watchedPaths(home: home, zdotdir: captured["ZDOTDIR"]))
+                } ?? before
             self?.finishCapture(variables, fingerprint: fingerprint)
         }
     }
@@ -175,12 +190,28 @@ public final class UserShellEnvironment: @unchecked Sendable {
     }
 
     static func fingerprint(_ paths: [String]) -> [String] {
-        paths.map { path in
+        var entries: [String] = []
+        for path in paths {
             var info = stat()
-            guard stat(path, &info) == 0 else { return "-" }
-            return
-                "\(info.st_mtimespec.tv_sec).\(info.st_mtimespec.tv_nsec):\(info.st_size):\(info.st_ino)"
+            guard stat(path, &info) == 0 else {
+                entries.append("-")
+                continue
+            }
+            entries.append(signature(info))
+            guard info.st_mode & S_IFMT == S_IFDIR,
+                let children = try? FileManager.default.contentsOfDirectory(atPath: path)
+            else { continue }
+            for child in children.sorted() {
+                var childInfo = stat()
+                guard stat(path + "/" + child, &childInfo) == 0 else { continue }
+                entries.append(child + "=" + signature(childInfo))
+            }
         }
+        return entries
+    }
+
+    private static func signature(_ info: stat) -> String {
+        "\(info.st_mtimespec.tv_sec).\(info.st_mtimespec.tv_nsec):\(info.st_size):\(info.st_ino)"
     }
 
     public static func captureLoginEnvironment(
@@ -202,10 +233,14 @@ public final class UserShellEnvironment: @unchecked Sendable {
             environment: environment, currentDirectoryURL: home, timeout: captureTimeout,
             maximumOutputBytes: maximumOutputBytes, discardsStandardError: true,
             terminatesProcessGroup: true)
-        guard let result = try? await CLICommandRunner.run(request, onLine: { _ in }) else {
-            return nil
+        guard let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in }),
+            var variables = parse(result.outputData, begin: begin, end: end)
+        else { return nil }
+        if let agent = variables["SSH_AGENT_PID"], agent != base["SSH_AGENT_PID"] {
+            if let pid = pid_t(agent), pid > 1 { kill(pid, SIGTERM) }
+            variables.removeValue(forKey: "SSH_AUTH_SOCK")
         }
-        return parse(result.outputData, begin: begin, end: end)
+        return variables
     }
 
     static func parse(_ output: Data, begin: String, end: String) -> [String: String]? {
