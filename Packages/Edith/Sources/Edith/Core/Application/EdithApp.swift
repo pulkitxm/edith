@@ -52,7 +52,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         CLIWindowBridge.install()
         lastUsageEnabled =
             SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
-        broadcastSettings = NSDictionary(dictionary: SharedDefaults.store.dictionaryRepresentation())
+        broadcastSettings = NSDictionary(
+            dictionary: SharedDefaults.store.dictionaryRepresentation())
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main

@@ -125,8 +125,9 @@ final class RunningAppsModel {
         }
         let snapshots = operations.list()
         let operations = self.operations
-        let live = Set(snapshots.map(\.pid))
-        iconCache = iconCache.filter { live.contains($0.key) }
+        var live = Set<pid_t>()
+        for snapshot in snapshots { live.insert(snapshot.pid) }
+        for pid in iconCache.keys where !live.contains(pid) { iconCache[pid] = nil }
         for app in NSWorkspace.shared.runningApplications
         where app.processIdentifier > 0 && live.contains(app.processIdentifier)
             && iconCache[app.processIdentifier] == nil

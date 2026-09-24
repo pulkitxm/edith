@@ -702,9 +702,15 @@ final class DashboardModel {
     ]
 
     private func preferenceFingerprint() -> [String] {
-        Self.preferenceKeys.map { key in
-            preferences.object(forKey: key).map { "\($0)" } ?? ""
+        var fingerprint: [String] = []
+        for key in Self.preferenceKeys {
+            if let value = preferences.object(forKey: key) {
+                fingerprint.append("\(value)")
+            } else {
+                fingerprint.append("")
+            }
         }
+        return fingerprint
     }
 
     private func restore() {
@@ -770,8 +776,10 @@ final class DashboardModel {
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
         selectedPaths = reconciledPaths(selectedPaths)
-        preferences.setIfChanged(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
-        preferences.setIfChanged(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+        preferences.setIfChanged(
+            selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+        preferences.setIfChanged(
+            selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
     }
 
     private func reconciledPaths(_ paths: Set<String>) -> Set<String> {
@@ -797,7 +805,8 @@ final class DashboardModel {
         case .sources:
             d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
             d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
-            d.setIfChanged(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+            d.setIfChanged(
+                UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
         case .models:
             d.setIfChanged(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
         case .paths:

@@ -445,7 +445,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.herdrEnabled, .bool, group: "herdr",
             summary: "Herdr extension: live sessions on this Mac and SSH machines.",
-            fallback: .bool(false)),
+            fallback: .bool(false))
     ]
 
     private static let quinjet: [SettingDefinition] = [

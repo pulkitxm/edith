@@ -117,7 +117,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
         let base = baseEnvironment
         let capture = capture
         let zdotdir = lock.withLock { snapshot?.variables["ZDOTDIR"] }
-        Task.detached(priority: .utility) { [weak self] in
+        Task(priority: .utility) { [weak self] in
             let before = Self.fingerprint(Self.watchedPaths(home: home, zdotdir: zdotdir))
             let variables = await capture(shell, home, base)
             let fingerprint =

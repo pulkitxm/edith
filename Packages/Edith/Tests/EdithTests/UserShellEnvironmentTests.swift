@@ -19,7 +19,8 @@ import Testing
     }
 
     @Test func rejectsOutputWithoutMarkersOrPath() {
-        #expect(UserShellEnvironment.parse(Data("PATH=/usr/bin\0".utf8), begin: "B", end: "E") == nil)
+        #expect(
+            UserShellEnvironment.parse(Data("PATH=/usr/bin\0".utf8), begin: "B", end: "E") == nil)
         #expect(UserShellEnvironment.parse(Data("BHOME=/tmp\0E".utf8), begin: "B", end: "E") == nil)
     }
 
