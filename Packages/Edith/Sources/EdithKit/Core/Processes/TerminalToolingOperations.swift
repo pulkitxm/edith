@@ -107,7 +107,7 @@ public struct TerminalCompletionInstallOutcome: Equatable, Sendable {
 public enum TerminalToolingOperationExecution {
     public static func status(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = UserShellEnvironment.userEnvironment(),
         store: UserDefaults = SharedDefaults.store, fileManager: FileManager = .default
     ) -> TerminalToolingSnapshot {
         TerminalToolingSnapshot(
@@ -121,7 +121,7 @@ public enum TerminalToolingOperationExecution {
 
     public static func install(
         toolsDirectory: URL? = nil, into directory: URL? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = UserShellEnvironment.userEnvironment(),
         fileManager: FileManager = .default
     ) -> TerminalToolMutationOutcome {
         let result = CLIInstaller.install(
@@ -136,7 +136,7 @@ public enum TerminalToolingOperationExecution {
 
     public static func remove(
         from directory: URL? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = UserShellEnvironment.userEnvironment(),
         fileManager: FileManager = .default
     ) -> TerminalToolMutationOutcome {
         let result = CLIInstaller.uninstall(from: directory, fileManager: fileManager)

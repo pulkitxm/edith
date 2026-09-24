@@ -57,7 +57,7 @@ public struct SkillAgent: Identifiable, Equatable, Sendable {
 public enum SkillAgentCatalog {
     public static func detected(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = UserShellEnvironment.userEnvironment(),
         exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> [SkillAgent] {
         agents.filter { $0.isDetected(home: home, environment: environment, exists: exists) }

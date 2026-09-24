@@ -48,6 +48,23 @@ import Testing
         #expect(environment["TMPDIR"] == "/private/tmp/process")
     }
 
+    @Test func userEnvironmentUsesTheShellPathVerbatim() {
+        let environment = UserShellEnvironment.userEnvironment(
+            process: ["PATH": "/usr/bin:/bin", "EDITH_DATA_ROOT": "/private/tmp/edith-data"],
+            shell: [
+                "PATH": "/Users/example/.local/bin:/usr/bin", "CODEX_HOME": "/Users/example/.codex2",
+                "PWD": "/somewhere", "EDITH_DATA_ROOT": "/elsewhere",
+            ])
+
+        #expect(environment["PATH"] == "/Users/example/.local/bin:/usr/bin")
+        #expect(environment["CODEX_HOME"] == "/Users/example/.codex2")
+        #expect(environment["PWD"] == nil)
+        #expect(environment["EDITH_DATA_ROOT"] == "/private/tmp/edith-data")
+        #expect(
+            UserShellEnvironment.userEnvironment(process: ["PATH": "/usr/bin"], shell: nil)
+                == ["PATH": "/usr/bin"])
+    }
+
     @Test func capturesOnceAndRecapturesWhenAnRcFileChangesOrAges() async throws {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-shell-\(UUID().uuidString)")

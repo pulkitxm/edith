@@ -87,6 +87,17 @@ public final class UserShellEnvironment: @unchecked Sendable {
         }
     }
 
+    public static func userEnvironment(
+        process: [String: String] = ProcessInfo.processInfo.environment,
+        shell: [String: String]? = shared.current()
+    ) -> [String: String] {
+        var environment = process
+        for (key, value) in shell ?? [:] where key == "PATH" || imports(key) {
+            environment[key] = value
+        }
+        return environment
+    }
+
     public static func imports(_ key: String) -> Bool {
         !key.isEmpty && !sessionVariables.contains(key)
             && !sessionPrefixes.contains { key.hasPrefix($0) }
