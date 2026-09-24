@@ -1,9 +1,6 @@
 import Foundation
 
 public enum HerdrLaunchSettings {
-    // Deliberately separate from HerdrKind.logoName(for:) — that also returns "fx" for FX.sh, which is
-    // not a real herdr --kind slug (the live CLI's --kind enum has no fx/fx.sh entry). Reusing it would
-    // silently build a broken `agent start --kind fx`.
     public static func defaultHerdrSlug(for displayKind: String) -> String? {
         switch displayKind {
         case "Claude Code": "claude"
