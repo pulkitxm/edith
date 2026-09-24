@@ -24,5 +24,13 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
         JevFeature(
             id: "cli.ask", title: "Raw requests",
             detail: "ed jev ask sends a state and typed questions for scripts and agents."),
+        JevFeature(
+            id: "agents.attention", title: "Agent attention",
+            detail:
+                "Reads a coding agent's screen when it changes state and decides whether it needs you."
+        ),
+        JevFeature(
+            id: "agents.review", title: "Review readiness",
+            detail: "Decides whether a finished agent's changes are ready for you to review."),
     ]
 }
