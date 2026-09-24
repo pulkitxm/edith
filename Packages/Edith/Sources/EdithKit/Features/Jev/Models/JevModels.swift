@@ -53,9 +53,11 @@ extension JevQuestion: Codable {
         case "choice":
             let criteria = try container.decode([String: String].self, forKey: .criteria)
             self = .choice(
-                instructions, options: criteria.keys.sorted().map { JevOption($0, criteria[$0] ?? "") })
+                instructions,
+                options: criteria.keys.sorted().map { JevOption($0, criteria[$0] ?? "") })
         case "score":
-            self = .score(instructions, levels: try container.decode([String].self, forKey: .criteria))
+            self = .score(
+                instructions, levels: try container.decode([String].self, forKey: .criteria))
         case let other:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container, debugDescription: "unknown question type \(other)")

@@ -79,7 +79,8 @@ public struct JevClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw JevError.unavailable("TypeSafe could not be reached: \(error.localizedDescription)")
+            throw JevError.unavailable(
+                "TypeSafe could not be reached: \(error.localizedDescription)")
         }
         let http = response as? HTTPURLResponse
         if let error = Self.error(
@@ -98,7 +99,8 @@ public struct JevClient: Sendable {
         return .milliseconds(150 * (1 << attempt))
     }
 
-    public static func error(status: Int, data: Data, retryAfter: TimeInterval? = nil) -> JevError? {
+    public static func error(status: Int, data: Data, retryAfter: TimeInterval? = nil) -> JevError?
+    {
         switch status {
         case 200..<300: return nil
         case 401: return .unauthorized

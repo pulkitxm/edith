@@ -661,6 +661,12 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
+        JSONCase("ed jev status", ["jev", "status", "--json"]),
+        JSONCase("ed jev key show", ["jev", "key", "show", "--json"]),
+        JSONCase("ed jev key set", ["jev", "key", "set", "--json"], mutatesTheMachine: true),
+        JSONCase("ed jev key clear", ["jev", "key", "clear", "--json"]),
+        JSONCase(
+            "ed jev ask", ["jev", "ask", "--request", "/path/that/does/not/exist.json", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
         JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),

@@ -188,7 +188,9 @@ public actor JevEngine: JevDeciding {
     private func record(_ decision: JevDecision, fingerprint: Data) {
         decisions += 1
         latencies.append(decision.milliseconds)
-        if latencies.count > Self.latencyWindow { latencies.removeFirst(latencies.count - Self.latencyWindow) }
+        if latencies.count > Self.latencyWindow {
+            latencies.removeFirst(latencies.count - Self.latencyWindow)
+        }
         let moment = now()
         cache = cache.filter { moment.timeIntervalSince($0.value.at) < Self.cacheLifetime }
         cache[fingerprint] = (decision, moment)

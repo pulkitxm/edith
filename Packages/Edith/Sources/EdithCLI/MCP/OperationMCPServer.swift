@@ -76,12 +76,18 @@ public struct OperationMCPServer: Sendable {
     ) async -> CallTool.Result {
         guard let decider else {
             return CallTool.Result(
-                content: [.text(text: JevError.missingKey.localizedDescription, annotations: nil, _meta: nil)], isError: true)
+                content: [
+                    .text(
+                        text: JevError.missingKey.localizedDescription, annotations: nil, _meta: nil
+                    )
+                ], isError: true)
         }
         guard let request = parameters.arguments?["request"]?.stringValue,
             !request.trimmingCharacters(in: .whitespaces).isEmpty
         else {
-            return CallTool.Result(content: [.text(text: "Pass the request to route.", annotations: nil, _meta: nil)], isError: true)
+            return CallTool.Result(
+                content: [.text(text: "Pass the request to route.", annotations: nil, _meta: nil)],
+                isError: true)
         }
         do {
             let result = try await JevRouter(groups: findGroups()).route(
@@ -99,11 +105,13 @@ public struct OperationMCPServer: Sendable {
                 content: [
                     .text(
                         text: JSONSerializer.string(
-                            .object(["tools": .array(rows), "latencyMs": .int(result.milliseconds)])),
+                            .object(["tools": .array(rows), "latencyMs": .int(result.milliseconds)])
+                        ),
                         annotations: nil, _meta: nil)
                 ], isError: false)
         } catch {
-            return CallTool.Result(content: [.text(text: error.localizedDescription, annotations: nil, _meta: nil)],
+            return CallTool.Result(
+                content: [.text(text: error.localizedDescription, annotations: nil, _meta: nil)],
                 isError: true)
         }
     }

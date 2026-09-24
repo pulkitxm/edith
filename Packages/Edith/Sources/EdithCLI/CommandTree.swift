@@ -1070,6 +1070,7 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             arguments: [.free], destructivePolicy: .previewThenYes),
         "ed jev status": Spec(options: ["--json", "-h", "--help", "--version", "--probe"]),
+        "ed jev key show": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed jev key set": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed jev key clear": Spec(
             options: ["--json", "-h", "--help", "--version", "--yes"],

@@ -70,7 +70,8 @@ enum JevCLI {
 struct JevStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "Show whether a Jev key is set, which models it reaches and whether it has credits.")
+        abstract:
+            "Show whether a Jev key is set, which models it reaches and whether it has credits.")
 
     @Flag(name: .long, help: "Send one tiny decision to confirm the key works and has credits.")
     var probe = false
@@ -86,7 +87,9 @@ struct JevStatusCommand: AsyncParsableCommand {
                 return
             }
             var rows = [["state", status.summary], ["key", status.keyHint ?? "not set"]]
-            if !status.models.isEmpty { rows.append(["models", status.models.joined(separator: ", ")]) }
+            if !status.models.isEmpty {
+                rows.append(["models", status.models.joined(separator: ", ")])
+            }
             rows.append(["decisions", String(status.decisions)])
             if let median = status.medianMilliseconds { rows.append(["median", "\(median) ms"]) }
             if let message = status.message { rows.append(["message", message]) }
@@ -98,7 +101,30 @@ struct JevStatusCommand: AsyncParsableCommand {
 struct JevKeyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "key", abstract: "Set or remove the TypeSafe API key Edith uses for Jev.",
-        subcommands: [JevKeySetCommand.self, JevKeyClearCommand.self])
+        subcommands: [JevKeyShowCommand.self, JevKeySetCommand.self, JevKeyClearCommand.self],
+        defaultSubcommand: JevKeyShowCommand.self)
+}
+
+struct JevKeyShowCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show", abstract: "Show whether a key is saved and how it ends, never the key."
+    )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let status = try await JevCLI.run { try await $0.status(probe: false) }
+            guard !json else {
+                var fields: [String: JSONValue] = ["configured": .bool(status.isConfigured)]
+                if let hint = status.keyHint { fields["key"] = .string(hint) }
+                CLIOut.json(.object(fields))
+                return
+            }
+            CLIOut.out(status.keyHint.map { "saved, \($0)" } ?? "not set")
+        }
+    }
 }
 
 struct JevKeySetCommand: AsyncParsableCommand {
@@ -115,7 +141,8 @@ struct JevKeySetCommand: AsyncParsableCommand {
                 decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else {
-                throw CLIFailure.usage("stdin was empty", hint: "printf %s \"$KEY\" | ed jev key set")
+                throw CLIFailure.usage(
+                    "stdin was empty", hint: "printf %s \"$KEY\" | ed jev key set")
             }
             let status = try await JevCLI.run { try await $0.setKey(key) }
             guard !json else {
@@ -130,7 +157,8 @@ struct JevKeySetCommand: AsyncParsableCommand {
 
 struct JevKeyClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Remove the TypeSafe API key, which turns every Jev feature off.")
+        commandName: "clear",
+        abstract: "Remove the TypeSafe API key, which turns every Jev feature off.")
 
     @Flag(name: .long, help: "Confirm the removal.")
     var yes = false

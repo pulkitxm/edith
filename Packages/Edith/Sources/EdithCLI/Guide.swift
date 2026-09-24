@@ -361,6 +361,23 @@ public enum Guide {
         `ed companion stack down` keeps memory by default. `--wipe` removes the
         stack volumes, so export a restorable bundle before using it.
 
+        ## Jev decisions
+
+        Jev is TypeSafe's fast decision model. It answers typed questions (yes or
+        no, one of up to 255 options, or a score) in well under a second. Edith
+        uses it only after a key is saved in Settings > Jev or with `ed jev key
+        set`; without one, every feature keeps its own rules.
+
+        ```
+        printf %s "$KEY" | ed jev key set   store the key and check it
+        ed jev status --probe               key, models, credits and latency
+        ed jev key clear --yes              remove the key, Jev turns off
+        ed jev ask --request req.json       a raw state plus typed questions
+        ```
+
+        With a key, `ed mcp` also lists `edith_find`, which ranks Edith's tools
+        for a plain-language request.
+
         ## Usage and limits
 
         Usage numbers come from the same `usage.json` the dashboard reads, and limits

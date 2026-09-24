@@ -14,7 +14,8 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
     public static let catalog: [JevFeature] = [
         JevFeature(
             id: "mcp.find", title: "Tool finder for agents",
-            detail: "ed mcp lists edith_find, which ranks Edith's tools for a plain-language request."),
+            detail:
+                "ed mcp lists edith_find, which ranks Edith's tools for a plain-language request."),
         JevFeature(
             id: "cli.ask", title: "Raw requests",
             detail: "ed jev ask sends a state and typed questions for scripts and agents."),
