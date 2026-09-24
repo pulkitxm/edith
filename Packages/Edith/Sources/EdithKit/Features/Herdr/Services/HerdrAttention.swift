@@ -191,18 +191,19 @@ public enum HerdrAttentionClassifier {
             return base
         }
         var refined = base
-        if base.state != .permissionPrompt,
+        let pinned = [.approval, .answer, .error].contains(base.need)
+        if !pinned,
             let state = confident(decision.answer("state")).flatMap(HerdrAttentionState.init)
         {
             refined.state = state
         }
-        if base.state != .permissionPrompt,
+        if !pinned,
             let need = confident(decision.answer("need")).flatMap(HerdrAttentionNeed.init)
         {
             refined.need = need
         }
         if let interrupt = decision.noul("interrupt") {
-            refined.interrupt = base.state == .permissionPrompt || interrupt >= 0.5
+            refined.interrupt = pinned || interrupt >= 0.5
         }
         if refined.state == .done, let ready = decision.noul("ready_for_review") {
             refined.readyForReview = base.readyForReview && ready >= 0.5

@@ -269,6 +269,26 @@ private struct AttentionFixture {
         #expect(Set(request.questions.keys) == ["state", "interrupt", "need"])
     }
 
+    @Test func jevCannotSilenceAnAgentWaitingForAnAnswer() async throws {
+        let fixture = AttentionFixture { recorder in
+            ScriptedJev(
+                recorder: recorder,
+                answers: [
+                    "state": JevAnswer(
+                        type: "choice", choice: "working", probabilities: ["working": 0.97]),
+                    "interrupt": JevAnswer(type: "noul", noul: 0.02),
+                    "need": JevAnswer(
+                        type: "choice", choice: "nothing", probabilities: ["nothing": 0.97]),
+                ])
+        }
+        defer { fixture.close() }
+        fixture.recorder.screen = "Which database should the migration target?"
+        _ = try await fixture.observe([fixture.agent(.working)])
+        let notification = try #require(
+            try await fixture.observe([fixture.agent(.blocked)]).first?.notification)
+        #expect(notification.title == "Claude Code needs an answer")
+    }
+
     @Test func jevCanTurnAQuietFinishIntoAnError() async throws {
         let fixture = AttentionFixture(changes: 3) { recorder in
             ScriptedJev(
