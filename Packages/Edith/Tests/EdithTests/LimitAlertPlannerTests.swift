@@ -198,6 +198,59 @@ enum LimitAlertScenario {
         #expect(quiet.alerts.isEmpty)
     }
 
+    @Test func aResetThatMovesBackwardsIsIgnored() {
+        let codex = LimitAlertTarget(.codex, .week)
+        let now = S.start
+        let reset = now.addingTimeInterval(60 * S.hour)
+        let first = S.plan(codex, percent: 40, reset: reset, now: now)
+        let flipped = S.plan(
+            codex, percent: 99, reset: reset.addingTimeInterval(-46 * S.hour),
+            now: now.addingTimeInterval(300), ledger: first.ledger)
+        #expect(flipped.alerts.isEmpty)
+        #expect(flipped.ledger == first.ledger)
+        let restored = S.plan(
+            codex, percent: 41, reset: reset, now: now.addingTimeInterval(600),
+            ledger: flipped.ledger)
+        #expect(restored.alerts.isEmpty)
+    }
+
+    @Test func inspectorReadsTheHistoryAndHonoursWhatWasSent() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        let suite = "test.limit.alerts.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let now = S.start.addingTimeInterval(2 * S.hour)
+        let reset = S.start.addingTimeInterval(5 * S.hour)
+        var history = LimitsHistory(url: url)
+        for sample in S.samples(reset, from: S.start, to: now, percent: { 30 * S.hours($0) }) {
+            history.append(
+                session: LimitWindow(percent: sample.percent, resetsAt: reset),
+                week: LimitWindow(percent: 20, resetsAt: reset.addingTimeInterval(86_400)),
+                now: sample.date)
+        }
+        let verdicts = LimitAlertInspector.inspect(
+            clock: S.clock(now), defaults: defaults, historyURL: url, ledger: nil)
+        #expect(verdicts.map(\.assessment.target.id) == ["claude.session", "claude.week"])
+        #expect(verdicts.first?.alert?.kind == .onPace)
+        #expect(
+            verdicts.first?.summary(clock: S.clock(now))
+                == "Claude 5h: 60%, 30.0% an hour, cap around 3:20 PM")
+        var ledger = LimitAlertLedger()
+        var entry = LimitAlertLedger.Entry(resetsAt: reset)
+        entry.sent[LimitAlertKind.onPace.rawValue] = now.addingTimeInterval(-600)
+        entry.capAt = now.addingTimeInterval(80 * 60)
+        ledger.windows["claude.session"] = entry
+        let held = LimitAlertInspector.inspect(
+            clock: S.clock(now), defaults: defaults, historyURL: url, ledger: ledger)
+        #expect(held.first?.alert == nil)
+        #expect(held.first?.reason.hasPrefix("on-pace alert already sent") == true)
+    }
+
     @Test func weeklyOutlookGoesOutAtMostOncePerMorning() throws {
         let reset = S.start.addingTimeInterval(3 * 24 * S.hour)
         let windowStart = reset.addingTimeInterval(-weekly.duration)

@@ -67,7 +67,7 @@ simply has no `default` key rather than a null one.
 Read-only settings are left out of the document entirely, and there are more of
 them than the `perm*Granted` mirror of macOS permission state and the
 `last*BackupAt` timestamps: everything the app records about itself is read-only
-too, `micMuted`, `musicLastTrack`, `presenterAutoActive` and `notifSessionLevel`
+too, `micMuted`, `musicLastTrack`, `presenterAutoActive` and `lidAwakeActive`
 among them. `ed config import` would refuse all of it anyway.
 
 Examples

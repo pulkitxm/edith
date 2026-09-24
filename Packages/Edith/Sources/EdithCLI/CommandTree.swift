@@ -227,6 +227,7 @@ public enum CommandTree {
         "ed permissions refresh": Spec(options: ["--json"]),
         "ed permissions settings": Spec(options: ["--json"], arguments: [.permission]),
         "ed usage limits": Spec(options: ["--json", "--help", "--refresh"]),
+        "ed usage alerts": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed usage summary": Spec(
             options: ["--json", "--range", "--source", "--machine"],
             optionValues: ["--machine": .machine, "--range": .usageRange, "--source": .usageSource]),
