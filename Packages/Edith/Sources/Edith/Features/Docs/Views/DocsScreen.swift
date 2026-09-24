@@ -166,7 +166,6 @@ struct DocsScreen: View {
                     in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
         }
         .edithFieldSurface(focused: askFocused)
-        .onTapGesture { askFocused = true }
     }
 
     private func document(_ library: DocsLibrary, width: Double) -> some View {
