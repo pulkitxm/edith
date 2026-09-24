@@ -11,6 +11,14 @@ typealias HerdrLiveWatcher =
 
 typealias HerdrAgentCloser = @Sendable (HerdrAgent) async throws -> Void
 
+struct HerdrClosedTabRecord: Equatable {
+    let layout: HerdrLayout
+    let focused: String
+    let zoomed: String?
+    let agents: [HerdrAgent]
+    let rightNeighborID: String?
+}
+
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -82,6 +90,8 @@ final class HerdrStore {
     }
     var tabs: [HerdrTab] = []
     private(set) var sessions: [HerdrOpenTab] = []
+    private var closedTabHistory: [HerdrClosedTabRecord] = []
+    private let closedTabHistoryLimit = 10
     var refreshing = false
     var copiedID: String?
     var detailOpen = true {
@@ -929,10 +939,18 @@ final class HerdrStore {
     }
 
     private func closeTabs(_ predicate: (Int, HerdrTab) -> Bool) {
-        let ids = tabs.enumerated().flatMap { item in
-            predicate(item.offset, item.element) ? item.element.agentIDs : []
+        let matches = tabs.enumerated().filter { predicate($0.offset, $0.element) }
+        guard !matches.isEmpty else { return }
+        for (offset, tab) in matches {
+            let rightNeighborID = offset + 1 < tabs.count ? tabs[offset + 1].id : nil
+            let agentsInTab = tab.agentIDs.compactMap { session($0)?.agent }
+            closedTabHistory.append(
+                HerdrClosedTabRecord(
+                    layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
+                    agents: agentsInTab, rightNeighborID: rightNeighborID))
+            if closedTabHistory.count > closedTabHistoryLimit { closedTabHistory.removeFirst() }
         }
-        guard !ids.isEmpty else { return }
+        let ids = matches.flatMap { $0.element.agentIDs }
         closeSequentially(ids[...])
     }
 
@@ -1164,6 +1182,59 @@ final class HerdrStore {
     }
 
     var orderedTabIDs: [String] { [Self.boardID] + tabs.map(\.id) }
+
+    @discardableResult
+    func cycleTab(backwards: Bool) -> Bool {
+        let ids = orderedTabIDs
+        guard ids.count > 1, let index = ids.firstIndex(of: selectedTab) else { return false }
+        let next = backwards ? (index - 1 + ids.count) % ids.count : (index + 1) % ids.count
+        selectedTab = ids[next]
+        return true
+    }
+
+    @discardableResult
+    func closeFocusedTab() -> Bool {
+        guard selectedTab != Self.boardID else { return false }
+        closeTab(selectedTab)
+        return true
+    }
+
+    @discardableResult
+    func reopenLastClosedTab() -> Bool {
+        while let candidate = closedTabHistory.popLast() {
+            let liveAgents = candidate.agents.filter { recorded in
+                agents.contains { $0.id == recorded.id }
+            }
+            guard !liveAgents.isEmpty else { continue }
+            openReopenedTab(candidate, liveAgents: liveAgents)
+            return true
+        }
+        return false
+    }
+
+    private func openReopenedTab(_ record: HerdrClosedTabRecord, liveAgents: [HerdrAgent]) {
+        for agent in liveAgents where !sessions.contains(where: { $0.id == agent.id }) {
+            adoptSession(for: agent, showing: nil)
+        }
+        let liveIDs = Set(liveAgents.map(\.id))
+        var layout = record.layout
+        for pane in record.layout.panes where !liveIDs.contains(pane) {
+            layout = layout.removing(pane) ?? layout
+        }
+        var tab = HerdrTab(agentID: liveAgents[0].id)
+        tab.layout = layout
+        tab.focused = liveIDs.contains(record.focused) ? record.focused : liveAgents[0].id
+        tab.zoomed = record.zoomed.flatMap { liveIDs.contains($0) ? $0 : nil }
+        if let rightNeighborID = record.rightNeighborID,
+            let index = tabs.firstIndex(where: { $0.id == rightNeighborID })
+        {
+            tabs.insert(tab, at: index)
+        } else {
+            tabs.append(tab)
+        }
+        revealSpace(containing: liveAgents[0])
+        selectedTab = tab.id
+    }
 
     func moveTab(_ id: String, toIndexOf target: String) {
         guard id != target, id != Self.boardID else { return }

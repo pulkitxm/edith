@@ -296,6 +296,9 @@ enum SectionWindowMenu {
                         keyCode == 48 && flags.contains(.control)
                         && !flags.contains(.command)
                     guard controlTab else { return false }
+                    if sessionsIsOnScreen() {
+                        return HerdrStore.shared.cycleTab(backwards: flags.contains(.shift))
+                    }
                     return WorkspaceModel.shared.cycleTab(backwards: flags.contains(.shift))
                 }
                 switch command {
@@ -325,6 +328,10 @@ enum CloseCommand {
             window.performClose(nil)
             return true
         }
+        if sessionsIsOnScreen() {
+            _ = HerdrStore.shared.closeFocusedTab()
+            return true
+        }
         guard workspaceIsOnScreen else { return true }
         WorkspaceModel.shared.closeFocusedTab()
         return true
@@ -340,6 +347,12 @@ enum CloseCommand {
     private static func isMainWindow(_ window: NSWindow) -> Bool {
         window.identifier?.rawValue == MainWindowIdentifier.value
     }
+}
+
+@MainActor
+private func sessionsIsOnScreen() -> Bool {
+    SharedDefaults.store.string(forKey: AppStorageKeys.General.mainWindowSection)
+        == MainDestination.herdr.rawValue
 }
 
 @MainActor

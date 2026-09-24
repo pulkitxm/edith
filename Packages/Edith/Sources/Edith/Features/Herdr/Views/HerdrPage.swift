@@ -236,6 +236,8 @@ struct HerdrPage: View {
                 Button("") { openSpace(space) }
                     .keyboardShortcut("s", modifiers: [.command, .option])
             }
+            Button("") { store.reopenLastClosedTab() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
         }
         .opacity(0)
         .allowsHitTesting(false)
