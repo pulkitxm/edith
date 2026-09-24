@@ -5,10 +5,12 @@ struct HerdrNewAgentPopup: View {
     let store: HerdrStore
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
     @State private var model = HerdrNewAgentPopupModel()
     @State private var selectionIndex = 0
     @FocusState private var fieldFocused: Bool
 
+    private var dark: Bool { scheme == .dark }
     private var hosts: [HerdrHostSnapshot] { store.hosts }
 
     var body: some View {
@@ -55,7 +57,11 @@ struct HerdrNewAgentPopup: View {
                 }
             }
             Spacer()
-            if model.launching { ProgressView().controlSize(.small) }
+            if model.launching {
+                Text("Launching…")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(UIScale.pt(14))
     }
@@ -119,18 +125,10 @@ struct HerdrNewAgentPopup: View {
         return ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
-                    HStack(spacing: UIScale.pt(10)) {
+                    row(index: index) {
                         HerdrKindMark(kind: kind, size: UIScale.pt(16))
                         Text(kind).font(.system(size: UIScale.pt(12)))
                         Spacer()
-                    }
-                    .padding(.horizontal, UIScale.pt(14))
-                    .padding(.vertical, UIScale.pt(8))
-                    .background(index == selectionIndex ? Color.accentColor.opacity(0.15) : .clear)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectionIndex = index
-                        activateSelection()
                     }
                 }
                 if kinds.isEmpty {
@@ -146,7 +144,7 @@ struct HerdrNewAgentPopup: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(machines.enumerated()), id: \.element.id) { index, host in
                     let available = host.reachable && host.herdrPresent
-                    HStack(spacing: UIScale.pt(10)) {
+                    row(index: index) {
                         Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
                             .font(.system(size: UIScale.pt(13)))
                             .foregroundStyle(available ? .primary : .secondary)
@@ -160,15 +158,7 @@ struct HerdrNewAgentPopup: View {
                         }
                         Spacer()
                     }
-                    .padding(.horizontal, UIScale.pt(14))
-                    .padding(.vertical, UIScale.pt(8))
                     .opacity(available ? 1 : 0.5)
-                    .background(index == selectionIndex ? Color.accentColor.opacity(0.15) : .clear)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectionIndex = index
-                        activateSelection()
-                    }
                 }
                 if machines.isEmpty {
                     emptyState("No machines found")
@@ -189,10 +179,10 @@ struct HerdrNewAgentPopup: View {
         return ScrollView {
             LazyVStack(spacing: 0) {
                 if model.loadingWorkspaces {
-                    ProgressView().padding(UIScale.pt(20))
+                    HerdrSkeleton(dark: dark, rows: 4, card: false)
                 } else {
                     ForEach(Array(matches.enumerated()), id: \.element.id) { index, space in
-                        HStack(spacing: UIScale.pt(10)) {
+                        row(index: index) {
                             Image(systemName: "square.split.2x2")
                                 .font(.system(size: UIScale.pt(12)))
                             Text(space.label).font(.system(size: UIScale.pt(12)))
@@ -201,35 +191,14 @@ struct HerdrNewAgentPopup: View {
                                 .font(.system(size: UIScale.pt(10)))
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, UIScale.pt(14))
-                        .padding(.vertical, UIScale.pt(8))
-                        .background(
-                            index == selectionIndex ? Color.accentColor.opacity(0.15) : .clear
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectionIndex = index
-                            activateSelection()
-                        }
                     }
                     if showsCreateRow {
-                        HStack(spacing: UIScale.pt(10)) {
+                        row(index: matches.count) {
                             Image(systemName: "plus.square")
                                 .font(.system(size: UIScale.pt(12)))
                             Text("Create space “\(trimmedQuery)”").font(
                                 .system(size: UIScale.pt(12)))
                             Spacer()
-                        }
-                        .padding(.horizontal, UIScale.pt(14))
-                        .padding(.vertical, UIScale.pt(8))
-                        .background(
-                            matches.count == selectionIndex
-                                ? Color.accentColor.opacity(0.15) : .clear
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectionIndex = matches.count
-                            activateSelection()
                         }
                     }
                     if matches.isEmpty, !showsCreateRow {
@@ -238,6 +207,21 @@ struct HerdrNewAgentPopup: View {
                 }
             }
         }
+    }
+
+    private func row<Content: View>(
+        index: Int, @ViewBuilder content: () -> Content
+    ) -> some View {
+        Button {
+            selectionIndex = index
+            activateSelection()
+        } label: {
+            HStack(spacing: UIScale.pt(10)) { content() }
+                .padding(.horizontal, UIScale.pt(14))
+                .padding(.vertical, UIScale.pt(8))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.edith(.selection, selected: index == selectionIndex))
     }
 
     private var refreshRow: some View {
