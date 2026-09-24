@@ -47,19 +47,23 @@ import Testing
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-grid.png"), options: .atomic)
 
-        try dragEvidence(store: store, tabID: tabID, output: output)
-
         store.arrange(tabID, as: .focusLeft)
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-focus-left.png"), options: .atomic)
 
         let tab = try #require(store.currentTab)
+        guard case let .split(split) = tab.layout else { return }
+        store.resize(tabID, split: split.id, index: 0, by: -0.2)
+        store.saveArrangement(of: tabID, named: "Review")
+        store.arrange(tabID, as: .grid)
         try render(
             HerdrLayoutPopover(store: store, tab: tab, hideAgents: false)
                 .background(DashSkin.paper(true)),
             size: NSSize(width: 380, height: 420)
         )
         .write(to: output.appendingPathComponent("herdr-layout-popover.png"), options: .atomic)
+
+        try dragEvidence(store: store, tabID: tabID, output: output)
     }
 
     private func dragEvidence(store: HerdrStore, tabID: String, output: URL) throws {
@@ -85,10 +89,10 @@ import Testing
         drag.update(.agent(Self.agents[2]), at: CGPoint(x: canvas.midX, y: canvas.minY + 40))
         let bar = try #require(drag.snapBar)
         #expect(bar.expanded)
-        let thumbnail = try #require(bar.thumbnails.first { $0.arrangement == .focusLeft })
+        let thumbnail = try #require(bar.thumbnails.first { $0.template == .builtIn(.focusLeft) })
         let slot = thumbnail.slots[0]
         drag.update(.agent(Self.agents[2]), at: CGPoint(x: slot.midX, y: slot.midY))
-        #expect(drag.target == .slot(.focusLeft, 0))
+        #expect(drag.target == .slot(.builtIn(.focusLeft), 0))
         try render(HerdrPage(store: store, drag: drag), size: size)
             .write(to: output.appendingPathComponent("herdr-drag-layouts.png"), options: .atomic)
 

@@ -94,7 +94,7 @@ import Testing
         let bar = try #require(page.drag.snapBar)
         #expect(bar.expanded)
         #expect(bar.thumbnails.count == HerdrArrangement.options(for: 3).count)
-        let grid = try #require(bar.thumbnails.first { $0.arrangement == .focusRight })
+        let grid = try #require(bar.thumbnails.first { $0.template == .builtIn(.focusRight) })
         let slot = grid.slots[0]
         page.drag.update(.agent(page.agents[2]), at: CGPoint(x: slot.midX, y: slot.midY))
         page.drag.finish(.agent(page.agents[2]), at: CGPoint(x: slot.midX, y: slot.midY))
