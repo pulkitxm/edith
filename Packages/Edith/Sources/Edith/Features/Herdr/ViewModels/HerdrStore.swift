@@ -20,6 +20,12 @@ struct HerdrClosedTabRecord: Equatable {
     let rightNeighborID: String?
 }
 
+typealias HerdrNewAgentLauncher =
+    @Sendable (
+        _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
+        _ newSpaceLabel: String?
+    ) async throws -> Void
+
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -177,6 +183,7 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
+    private let newAgentLauncher: HerdrNewAgentLauncher
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
@@ -197,6 +204,21 @@ final class HerdrStore {
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
+        newAgentLauncher: @escaping HerdrNewAgentLauncher = {
+            kind, machine, existingSpace, newSpaceLabel in
+            let created: HerdrCreatedPane
+            if let existingSpace {
+                created = try await HerdrLaunchOperations.createTab(
+                    workspaceID: existingSpace.id, on: machine)
+            } else {
+                created = try await HerdrLaunchOperations.createWorkspace(
+                    label: newSpaceLabel ?? "New space", on: machine)
+            }
+            try await HerdrLaunchOperations.launchAgent(
+                kind: kind,
+                name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
+                pane: created.paneID, on: machine)
+        },
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
@@ -205,6 +227,7 @@ final class HerdrStore {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
+        self.newAgentLauncher = newAgentLauncher
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
@@ -1318,6 +1341,17 @@ final class HerdrStore {
     func uploadDroppedFiles(_ urls: [URL], for tab: HerdrOpenTab) async throws -> [String] {
         guard let machine = tab.machine else { throw HerdrQuinjetError.machineUnavailable }
         return try await TerminalDropTransfer.upload(urls, over: connection(for: machine))
+    }
+
+    func machine(for host: HerdrHostSnapshot) -> Machine? {
+        host.isLocal ? nil : machinesProvider().first { $0.id.uuidString == host.id }
+    }
+
+    func launchNewAgent(
+        kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
+        newSpaceLabel: String?
+    ) async throws {
+        try await newAgentLauncher(kind, machine(for: host), existingSpace, newSpaceLabel)
     }
 
     func attachRequest(
