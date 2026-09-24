@@ -14,6 +14,7 @@ final class DocsBrowser {
     private(set) var library: DocsLibrary?
     private(set) var location = DocsLocation(path: DocsLibrary.indexPath)
     private(set) var scroll = DocsScrollRequest(anchor: nil, serial: 0)
+    private(set) var revealSerial = 0
     private(set) var flashAnchor: String?
     private(set) var answer: DocsAnswer?
     private(set) var asking = false
@@ -41,13 +42,13 @@ final class DocsBrowser {
         library = loaded
     }
 
-    func open(_ target: DocsLocation) {
+    func open(_ target: DocsLocation, reveal: Bool = true) {
         guard library?.page(target.path) != nil else { return }
         if target != location {
             backStack.append(location)
             forwardStack.removeAll()
         }
-        show(target)
+        show(target, reveal: reveal)
     }
 
     func follow(_ link: DocsLink) {
@@ -112,8 +113,16 @@ final class DocsBrowser {
         resultsVisible = true
     }
 
+    func questionChanged() {
+        if !answerIsCurrent { resultsVisible = false }
+    }
+
+    private var answerIsCurrent: Bool {
+        answer?.request == question.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func moveSelection(_ offset: Int) {
-        guard let count = answer?.picks.count, count > 0 else { return }
+        guard answerIsCurrent, let count = answer?.picks.count, count > 0 else { return }
         resultsVisible = true
         selection = min(max(selection + offset, 0), count - 1)
     }
@@ -143,8 +152,9 @@ final class DocsBrowser {
         return true
     }
 
-    private func show(_ target: DocsLocation) {
+    private func show(_ target: DocsLocation, reveal: Bool = true) {
         location = target
+        if reveal { revealSerial += 1 }
         if let group = library?.page(target.path)?.group { expandedGroups.insert(group) }
         flashAnchor = target.anchor
         scroll = DocsScrollRequest(anchor: target.anchor, serial: scroll.serial + 1)

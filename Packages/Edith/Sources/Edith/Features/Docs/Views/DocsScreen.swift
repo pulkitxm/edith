@@ -137,6 +137,7 @@ struct DocsScreen: View {
             .focused($askFocused)
             .focusEffectDisabled()
             .onSubmit { Task { await browser.submit() } }
+            .onChange(of: browser.question) { browser.questionChanged() }
             .onKeyPress(.downArrow) {
                 browser.moveSelection(1)
                 return .handled
@@ -334,7 +335,7 @@ private struct DocsNavigator: View {
                     .padding(.bottom, UIScale.pt(16))
                 }
                 .scrollIndicators(.automatic)
-                .task(id: browser.location.path) {
+                .task(id: browser.revealSerial) {
                     try? await Task.sleep(for: .milliseconds(80))
                     proxy.scrollTo(browser.location.path, anchor: .center)
                 }
@@ -374,7 +375,7 @@ private struct DocsNavigator: View {
     private func pageRow(_ page: DocsPage, group: DocsGroup) -> some View {
         let selected = browser.location.path == page.path
         return Button {
-            browser.open(DocsLocation(path: page.path))
+            browser.open(DocsLocation(path: page.path), reveal: false)
         } label: {
             Text(DocsNavigation.title(of: page, in: group))
                 .font(

@@ -155,6 +155,14 @@ private func settledBitmap(
             await browser.ask(browser.question, decider: nil)
             let asked = try #require(
                 await settledBitmap(DocsScreen(browser: browser), scheme: scheme))
+            browser.moveSelection(1)
+            #expect(browser.selection == 1 && browser.resultsVisible)
+            browser.question = "restart the background agent"
+            browser.questionChanged()
+            #expect(!browser.resultsVisible)
+            browser.moveSelection(1)
+            #expect(!browser.resultsVisible)
+            #expect(browser.clearQuestion() && browser.answer == nil && browser.question.isEmpty)
             if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
                 let output = URL(fileURLWithPath: directory, isDirectory: true)
                 try FileManager.default.createDirectory(
