@@ -5,13 +5,14 @@ import SwiftUI
 
 struct SettingsPane: View {
     enum Tab: String, CaseIterable {
-        case general, permissions, agent, data, shortcuts, terminal, icloud, updates
+        case general, permissions, agent, jev, data, shortcuts, terminal, icloud, updates
 
         var label: String {
             switch self {
             case .general: return "General"
             case .permissions: return "Permissions"
             case .agent: return "Background agent"
+            case .jev: return "Jev"
             case .data: return "Data & backup"
             case .shortcuts: return "Shortcuts"
             case .terminal: return "Terminal"
@@ -25,6 +26,7 @@ struct SettingsPane: View {
             case .general: return "gearshape"
             case .permissions: return "hand.raised"
             case .agent: return "bolt.horizontal.circle"
+            case .jev: return "brain"
             case .data: return "externaldrive.badge.icloud"
             case .shortcuts: return "keyboard"
             case .terminal: return "apple.terminal"
@@ -38,6 +40,7 @@ struct SettingsPane: View {
             case .general: return "Appearance, window, and welcome tour"
             case .permissions: return "Privacy access used by enabled extensions"
             case .agent: return "The headless process that collects in the background"
+            case .jev: return "Fast typed decisions from TypeSafe's Jev model"
             case .data: return "Where Edith keeps things, and what leaves this Mac"
             case .shortcuts: return "Global and application keyboard shortcuts"
             case .terminal: return "Command line and terminal integration"
@@ -86,6 +89,7 @@ struct SettingsPane: View {
                 case .general: GeneralPane()
                 case .permissions: PermissionsPane()
                 case .agent: BackgroundAgentPane()
+                case .jev: JevSettingsPane()
                 case .data: DataBackupPane()
                 case .shortcuts: ShortcutsSettingsPane()
                 case .terminal: TerminalSettingsPane()
@@ -113,7 +117,7 @@ struct SettingsPane: View {
     private var contentMaximumWidth: CGFloat {
         switch tab.wrappedValue {
         case .permissions, .agent, .data: .infinity
-        case .general, .shortcuts, .terminal, .icloud, .updates: UIScale.pt(1180)
+        case .general, .jev, .shortcuts, .terminal, .icloud, .updates: UIScale.pt(1180)
         }
     }
 }
