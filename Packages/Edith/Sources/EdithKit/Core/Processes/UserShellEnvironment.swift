@@ -175,9 +175,12 @@ public final class UserShellEnvironment: @unchecked Sendable {
 
     static func watchedPaths(home: URL, zdotdir: String?) -> [String] {
         let zsh = zdotdir.map { URL(fileURLWithPath: $0) } ?? home
-        return [".zshenv", ".zprofile", ".zshrc", ".zlogin"].map {
-            zsh.appendingPathComponent($0).path
-        }
+        let zshDirectory =
+            zsh.standardizedFileURL == home.standardizedFileURL ? [] : [zsh.path]
+        return zshDirectory
+            + [".zshenv", ".zprofile", ".zshrc", ".zlogin"].map {
+                zsh.appendingPathComponent($0).path
+            }
             + [
                 ".zshenv", ".bash_profile", ".bash_login", ".profile", ".bashrc",
                 ".config/fish/config.fish", ".config/fish/conf.d",
