@@ -48,6 +48,18 @@ import Testing
         #expect(left == .center("a"))
     }
 
+    @Test func splitTabsHitTestTheirPaddedPanes() {
+        var tab = HerdrTab(agentID: "a")
+        tab.layout = .stack(.horizontal, ["a", "b"])
+        let frames = tab.layout.paneFrames(in: canvas, gap: 6)
+        let right = frames["b"] ?? .zero
+        let target = HerdrDropResolver.target(
+            at: CGPoint(x: right.midX, y: right.midY), geometry: geometry, tab: tab,
+            boardID: HerdrStore.boardID, snapBar: nil, previous: nil, gap: 6)
+        #expect(target == .center("b"))
+        #expect(right.minY == canvas.minY + 6)
+    }
+
     @Test func theOuterBandSpansTheWholeSideOfASplitTab() {
         var tab = HerdrTab(agentID: "a")
         tab.layout = .stack(.horizontal, ["a", "b"])

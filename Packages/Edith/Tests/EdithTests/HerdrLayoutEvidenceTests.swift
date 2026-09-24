@@ -74,7 +74,7 @@ import Testing
         let frames = try renderFrames(HerdrPage(store: store, drag: drag), size: size, drag: drag)
         let canvas = try #require(frames[HerdrDropGeometry.canvasKey])
         let right = try #require(
-            store.tab(pair)?.layout.frames(in: canvas, gap: UIScale.pt(6))[Self.agents[1].id])
+            store.tab(pair)?.layout.paneFrames(in: canvas, gap: UIScale.pt(6))[Self.agents[1].id])
 
         drag.update(.agent(Self.agents[2]), at: CGPoint(x: right.midX, y: right.midY))
         drag.update(.agent(Self.agents[2]), at: CGPoint(x: right.midX, y: right.maxY - 40))

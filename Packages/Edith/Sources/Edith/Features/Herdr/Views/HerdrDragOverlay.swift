@@ -56,7 +56,7 @@ struct HerdrDragOverlay: View {
         _ layout: HerdrLayout, canvas: CGRect, dragged: Set<String>, target: HerdrDropTarget
     ) -> some View {
         let gap = UIScale.pt(6)
-        let frames = layout.frames(in: canvas, gap: gap)
+        let frames = layout.paneFrames(in: canvas, gap: gap)
         return ZStack(alignment: .topLeading) {
             Rectangle()
                 .fill(DashSkin.paper(dark).opacity(0.55))

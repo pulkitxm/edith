@@ -153,8 +153,8 @@ enum HerdrDropResolver {
             return .outerEdge(side)
         }
         let frames: [String: CGRect] =
-            tab.zoomed.map { [$0: canvas] }
-            ?? tab.layout.frames(in: canvas, gap: tab.isSplit ? gap : 0)
+            tab.zoomed.map { [$0: tab.layout.content(in: canvas, gap: gap)] }
+            ?? tab.layout.paneFrames(in: canvas, gap: gap)
         guard let (id, frame) = frames.first(where: { $0.value.contains(point) }) else {
             return previous?.placesInCanvas == true ? previous : nil
         }

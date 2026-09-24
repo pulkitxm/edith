@@ -221,7 +221,7 @@ final class RenderedHerdrPage {
     func paneFrame(_ id: String) throws -> CGRect {
         let tab = try #require(store.tab(containing: id))
         return try #require(
-            tab.layout.frames(in: canvas(), gap: tab.isSplit ? UIScale.pt(6) : 0)[id])
+            tab.layout.paneFrames(in: canvas(), gap: UIScale.pt(6))[id])
     }
 
     func drag(_ item: HerdrDragItem, from start: CGPoint, to end: CGPoint) {
