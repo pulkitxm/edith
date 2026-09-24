@@ -6,6 +6,7 @@ struct FleetHomeView: View {
     let onSelect: (UUID) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.windowVisible) private var windowVisible
     @State private var cpuHistory: [Double] = []
     @State private var memHistory: [Double] = []
     @State private var companionMachineID: UUID?
@@ -32,8 +33,8 @@ struct FleetHomeView: View {
             .pageContent(compact)
         }
         .machineActivity(model.allMachines.map { model.session(for: $0.id) })
-        .task {
-            while !Task.isCancelled {
+        .task(id: windowVisible) {
+            while windowVisible, !Task.isCancelled {
                 let host = await Task.detached(priority: .utility) { () -> UUID? in
                     guard let deployment = CompanionDeploymentStore.load() else { return nil }
                     return deployment.isLocal ? Machine.localID : deployment.machineID

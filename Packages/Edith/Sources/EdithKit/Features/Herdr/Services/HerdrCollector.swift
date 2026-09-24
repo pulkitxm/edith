@@ -1,20 +1,40 @@
 import Foundation
 
+public typealias HerdrConnectionProvider = @Sendable (Machine) async throws -> SSHConnection
+
 public enum HerdrCollector {
     public static let commandTimeout: TimeInterval = 12
     public static let pathPrefix =
         "$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-    public static func collect(_ scope: HerdrCollectScope = .all) async -> [HerdrHostSnapshot] {
+    public static func collect(
+        _ scope: HerdrCollectScope = .all, connections: HerdrConnectionProvider? = nil
+    ) async -> [HerdrHostSnapshot] {
         switch scope {
         case .all:
             async let local = collectLocal()
-            let remotes = await collectRemotes(MachineRegistry.machines())
+            let remotes = await collectRemotes(MachineRegistry.machines()) { machine in
+                await collectRemote(machine, connections: connections)
+            }
             return await [local] + remotes
         case .local:
             return [await collectLocal()]
         case let .machine(machine):
-            return [await collectRemote(machine)]
+            return [await collectRemote(machine, connections: connections)]
+        }
+    }
+
+    public static func collectRemote(
+        _ machine: Machine, connections: HerdrConnectionProvider?
+    ) async -> HerdrHostSnapshot {
+        guard let connections else { return await collectRemote(machine) }
+        do {
+            return await collectRemote(machine, connection: try await connections(machine))
+        } catch {
+            return HerdrHostSnapshot(
+                id: machine.id.uuidString, name: machine.name, isLocal: false,
+                sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
+                error: error.localizedDescription)
         }
     }
 

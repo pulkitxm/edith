@@ -32,7 +32,7 @@ public final class SessionsJob: @unchecked Sendable {
             try await AgentNotificationService.collectSessions($0)
         },
         collect: @escaping @Sendable (HerdrCollectScope) async -> [HerdrHostSnapshot] = {
-            await HerdrCollector.collect($0)
+            await SessionsJob.collectOverPooledConnections($0)
         }
     ) {
         self.store = store
@@ -40,6 +40,14 @@ public final class SessionsJob: @unchecked Sendable {
         self.defaults = defaults
         self.notify = notify
         self.collect = collect
+    }
+
+    public static func collectOverPooledConnections(
+        _ scope: HerdrCollectScope
+    ) async -> [HerdrHostSnapshot] {
+        await HerdrCollector.collect(scope) { machine in
+            try await AgentMachineConnectionPool.shared.connection(for: machine)
+        }
     }
 
     public func run() async throws -> Data? {

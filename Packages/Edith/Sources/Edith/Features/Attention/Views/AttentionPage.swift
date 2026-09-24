@@ -6,6 +6,7 @@ struct AttentionPage: View {
     @State private var model = AttentionPageModel()
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.windowVisible) private var windowVisible
 
     var body: some View {
         ScrollView {
@@ -84,11 +85,12 @@ struct AttentionPage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .onChange(of: model.range) { model.reload() }
-        .task {
+        .task(id: windowVisible) {
+            guard windowVisible else { return }
             model.reload()
             await model.checkBrowser()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: .seconds(10), tolerance: .seconds(1))
                 model.reload(preserveSettings: model.needsSetup || model.section == .settings)
                 await model.checkBrowser()
             }
