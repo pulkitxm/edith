@@ -1,7 +1,18 @@
 import EdithKit
 import Foundation
 
-enum HerdrDropTransfer {
+enum TerminalDropTransfer {
+    static func upload(_ urls: [URL], over connection: SSHConnection) async throws -> [String] {
+        let directory = try await connection.temporaryDirectory()
+        var paths: [String] = []
+        for url in urls {
+            let path = remotePath(for: url, directory: directory)
+            try await connection.upload(localURL: url, toRemotePath: path)
+            paths.append(path)
+        }
+        return paths
+    }
+
     static func remotePath(
         for url: URL, directory: String,
         identifier: String = UUID().uuidString.lowercased()
