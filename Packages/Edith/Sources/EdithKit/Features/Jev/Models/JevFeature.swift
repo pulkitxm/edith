@@ -32,5 +32,10 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
         JevFeature(
             id: "agents.review", title: "Review readiness",
             detail: "Decides whether a finished agent's changes are ready for you to review."),
+        JevFeature(
+            id: "usage.limit-alerts", title: "Limit alerts that matter",
+            detail:
+                "On-pace, outlook and headroom limit alerts go out only when Jev judges them worth the interruption. Capped, almost capped, back and login alerts always go out."
+        ),
     ]
 }

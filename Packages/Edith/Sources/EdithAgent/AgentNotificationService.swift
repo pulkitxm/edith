@@ -2,30 +2,11 @@ import EdithKit
 import Foundation
 
 public actor AgentNotificationService {
-    private struct LevelState: Codable, Equatable {
-        var sessionLevel = UsageLevel.green.rawValue
-        var weeklyLevel = UsageLevel.green.rawValue
-        var sessionPacing = PacingZone.onTrack.rawValue
-        var weeklyPacing = PacingZone.onTrack.rawValue
+    public typealias HistoryLoader = @Sendable (Date) -> [LimitAlertTarget: [LimitAlertSample]]
+    public typealias JevResolver = @Sendable () async -> (any JevDeciding)?
+    public typealias ClockFactory = @Sendable (Date) -> LimitAlertClock
 
-        var value: LimitNotifierState {
-            var value = LimitNotifierState()
-            value.sessionLevel = UsageLevel(rawValue: sessionLevel) ?? .green
-            value.weeklyLevel = UsageLevel(rawValue: weeklyLevel) ?? .green
-            value.sessionPacing = PacingZone(rawValue: sessionPacing) ?? .onTrack
-            value.weeklyPacing = PacingZone(rawValue: weeklyPacing) ?? .onTrack
-            return value
-        }
-
-        init(_ value: LimitNotifierState = LimitNotifierState()) {
-            sessionLevel = value.sessionLevel.rawValue
-            weeklyLevel = value.weeklyLevel.rawValue
-            sessionPacing = value.sessionPacing.rawValue
-            weeklyPacing = value.weeklyPacing.rawValue
-        }
-    }
-
-    private struct Reminder: Codable, Equatable {
+    private struct Scheduled: Codable, Equatable {
         let notification: AgentNotification
         let fireAt: Date
         let expiresAt: Date
@@ -42,12 +23,9 @@ public actor AgentNotificationService {
 
     private struct State: Codable, Equatable {
         var deliveries: [String: AgentNotificationDelivery] = [:]
-        var levels = LevelState()
-        var session: LimitWindow?
-        var week: LimitWindow?
-        var reminders: [String: Reminder] = [:]
+        var ledger = LimitAlertLedger()
+        var scheduled: [String: Scheduled] = [:]
         var agents: [String: [String: TrackedAgent]] = [:]
-        var tokenExpiredAt: Date?
     }
 
     public static let shared = AgentNotificationService()
@@ -56,6 +34,9 @@ public actor AgentNotificationService {
     private let url: URL
     private let defaults: UserDefaults
     private let changed: @Sendable () -> Void
+    private let history: HistoryLoader
+    private let jev: JevResolver
+    private let clock: ClockFactory
     private let attention: AgentAttention
     private var state: State
     private var observation: NSObjectProtocol?
@@ -69,21 +50,31 @@ public actor AgentNotificationService {
     }
 
     public init(
-        url: URL = AppData.supportDir.appendingPathComponent("notifications.json"),
+        url: URL = LimitAlertLedger.outboxURL,
         defaults: UserDefaults = SharedDefaults.store,
         changed: @escaping @Sendable () -> Void = {
             IPC.post(AgentNotificationOperation.changed)
         },
+        history: @escaping HistoryLoader = { LimitsHistory.alertSamples(since: $0) },
+        jev: @escaping JevResolver = { await AgentNotificationService.decider(AgentJev.engine) },
+        clock: @escaping ClockFactory = { LimitAlertClock(now: $0) },
         attention: AgentAttention = .live
     ) {
         self.url = url
         self.defaults = defaults
         self.changed = changed
+        self.history = history
+        self.jev = jev
+        self.clock = clock
         self.attention = attention
         state =
             (try? Data(contentsOf: url)).flatMap {
                 try? AgentPayload.decode(State.self, from: $0)
             } ?? State()
+    }
+
+    public static func decider(_ engine: JevEngine) async -> (any JevDeciding)? {
+        await engine.isConfigured ? engine : nil
     }
 
     deinit {
@@ -116,28 +107,62 @@ public actor AgentNotificationService {
         try commit(next)
     }
 
-    public func evaluateLimits(_ snapshot: LimitsTopicSnapshot, now: Date = Date()) throws {
-        var next = state
-        let settings = NotifySettings.fromDefaults(defaults)
-        if let provider = snapshot.providers.first(where: { $0.provider == .claude }) {
-            if provider.error == nil {
-                next.session = provider.session
-                next.week = provider.week
+    public func evaluateLimits(_ snapshot: LimitsTopicSnapshot, now: Date = Date()) async throws {
+        let settings = LimitAlertSettings.fromDefaults(defaults)
+        guard settings.master else { return try reconcileSettings(now: now) }
+        let samples = history(now.addingTimeInterval(-LimitAlertPlanner.historySpan))
+        var assessments: [LimitAlertAssessment] = []
+        var problems: [LimitProvider: LimitLoginProblem] = [:]
+        var healthy: Set<LimitProvider> = []
+        for provider in snapshot.providers where settings.providers.contains(provider.provider) {
+            if let error = provider.error {
+                problems[provider.provider] = LimitLoginProblem(error: error)
+                continue
             }
-            if settings.master, settings.tokenExpired,
-                provider.error?.hasPrefix("Claude session expired") == true,
-                now.timeIntervalSince(next.tokenExpiredAt ?? .distantPast) >= 3600
-            {
-                enqueue(
-                    AgentNotification(
-                        identifier: Self.limitPrefix + "token_expired",
-                        title: "Claude token expired", body: "Run claude to log in again"),
-                    into: &next, now: now)
-                next.tokenExpiredAt = now
+            healthy.insert(provider.provider)
+            for target in LimitAlertTarget.all
+            where target.provider == provider.provider && settings.tracks(target) {
+                guard let window = provider.window(for: target.slot),
+                    (window.resetsAt ?? .distantFuture) > now
+                else { continue }
+                assessments.append(
+                    LimitAlertPlanner.assess(
+                        target, window: window, samples: samples[target] ?? [], now: now))
             }
         }
-        reconcileLimits(&next, settings: settings, now: now)
+        let plan = LimitAlertPlanner.plan(
+            assessments, problems: problems, healthy: healthy, ledger: state.ledger,
+            settings: settings, clock: clock(now))
+        let needsJev = plan.alerts.contains { !$0.kind.isCritical }
+        let gate = LimitAlertJevGate(decider: needsJev ? await jev() : nil)
+        var approved: [LimitAlert] = []
+        for alert in plan.alerts {
+            if await gate.allows(alert) { approved.append(alert) }
+        }
+        var next = state
+        next.ledger = plan.ledger
+        replaceScheduled(
+            Dictionary(
+                plan.scheduled.compactMap { alert in
+                    alert.fireAt.map {
+                        (
+                            alert.identifier,
+                            Scheduled(
+                                notification: Self.notification(alert), fireAt: $0,
+                                expiresAt: alert.expiresAt ?? $0)
+                        )
+                    }
+                }, uniquingKeysWith: { first, _ in first }), in: &next, now: now)
+        for alert in approved {
+            enqueue(
+                Self.notification(alert), into: &next, now: now,
+                expiresAt: alert.expiresAt ?? now.addingTimeInterval(86_400))
+        }
         try commit(next)
+    }
+
+    private static func notification(_ alert: LimitAlert) -> AgentNotification {
+        AgentNotification(identifier: alert.identifier, title: alert.title, body: alert.body)
     }
 
     public func evaluateSessions(_ hosts: [HerdrHostSnapshot], now: Date = Date()) async throws {
@@ -169,8 +194,16 @@ public actor AgentNotificationService {
 
     public func reconcileSettings(now: Date = Date()) throws {
         var next = state
-        next.deliveries = next.deliveries.filter { ($0.value.expiresAt ?? .distantFuture) > now }
-        reconcileLimits(&next, settings: NotifySettings.fromDefaults(defaults), now: now)
+        let settings = LimitAlertSettings.fromDefaults(defaults)
+        next.deliveries = next.deliveries.filter { identifier, delivery in
+            guard (delivery.expiresAt ?? .distantFuture) > now else { return false }
+            guard identifier.hasPrefix(Self.limitPrefix), delivery.notification != nil else {
+                return true
+            }
+            return settings.permits(identifier: identifier)
+        }
+        replaceScheduled(
+            next.scheduled.filter { settings.permits(identifier: $0.key) }, in: &next, now: now)
         purgeSessions(&next, settings: AgentAttentionSettings(defaults: defaults))
         try commit(next)
     }
@@ -245,67 +278,28 @@ public actor AgentNotificationService {
         }
     }
 
-    private func reconcileLimits(_ next: inout State, settings: NotifySettings, now: Date) {
-        let enabled =
-            settings.master
-            && defaults.bool(forKey: AppStorageKeys.Tabs.usageEnabled)
-            && (defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true)
-        guard enabled else {
-            next.levels = LevelState()
-            next.deliveries = next.deliveries.filter { !$0.key.hasPrefix(Self.limitPrefix) }
-            replaceReminders([:], in: &next)
-            return
-        }
-        let session = next.session.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
-        let week = next.week.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
-        var levels = next.levels.value
-        for alert in LimitNotifierLogic.decide(
-            session: session, week: week, settings: settings, state: &levels, now: now)
-        {
-            enqueue(
-                AgentNotification(
-                    identifier: Self.limitPrefix + alert.id, title: alert.title, body: alert.body),
-                into: &next, now: now)
-        }
-        next.levels = LevelState(levels)
-        var reminders: [String: Reminder] = [:]
-        let choices = [
-            (
-                "session", "Session", session, settings.reminderSession,
-                settings.reminderSessionOffsetMin
-            ),
-            ("weekly", "Weekly", week, settings.reminderWeekly, settings.reminderWeeklyOffsetMin),
-        ]
-        for (key, title, window, enabled, offset) in choices where enabled {
-            guard let reset = window?.resetsAt else { continue }
-            let identifier = "reminder_" + key
-            let fire = reset.addingTimeInterval(-Double(offset) * 60)
-            guard fire > now || next.reminders[identifier]?.expiresAt == reset else { continue }
-            reminders[identifier] = Reminder(
-                notification: AgentNotification(
-                    identifier: identifier,
-                    title: "\(title) resets in \(LimitNotifierLogic.offsetLabel(minutes: offset))",
-                    body: key == "session" ? "Save your spot or send it" : "Last lap on the cycle"),
-                fireAt: fire, expiresAt: reset)
-        }
-        replaceReminders(reminders, in: &next)
-    }
-
-    private func replaceReminders(_ reminders: [String: Reminder], in next: inout State) {
-        for identifier in Set(next.reminders.keys).union(reminders.keys) {
-            guard next.reminders[identifier] != reminders[identifier] else { continue }
-            let reminder = reminders[identifier]
+    private func replaceScheduled(
+        _ scheduled: [String: Scheduled], in next: inout State, now: Date
+    ) {
+        for identifier in Set(next.scheduled.keys).union(scheduled.keys) {
+            let previous = next.scheduled[identifier]
+            let wanted = scheduled[identifier]
+            guard previous != wanted else { continue }
+            if wanted == nil, let previous, previous.fireAt <= now { continue }
             next.deliveries[identifier] = AgentNotificationDelivery(
-                identifier: identifier, notification: reminder?.notification,
-                fireAt: reminder?.fireAt, expiresAt: reminder?.expiresAt)
+                identifier: identifier, notification: wanted?.notification,
+                fireAt: wanted?.fireAt, expiresAt: wanted?.expiresAt)
         }
-        next.reminders = reminders
+        next.scheduled = scheduled
     }
 
-    private func enqueue(_ notification: AgentNotification, into next: inout State, now: Date) {
+    private func enqueue(
+        _ notification: AgentNotification, into next: inout State, now: Date,
+        expiresAt: Date? = nil
+    ) {
         next.deliveries[notification.identifier] = AgentNotificationDelivery(
             identifier: notification.identifier, notification: notification,
-            expiresAt: now.addingTimeInterval(86_400))
+            expiresAt: expiresAt ?? now.addingTimeInterval(86_400))
         if next.deliveries.count > Self.maximumPending {
             let oldest = next.deliveries.values
                 .filter { $0.fireAt == nil && $0.notification != nil }

@@ -267,15 +267,15 @@ public enum AppStorageKeys {
     }
 
     public enum Notify {
+        public static let almostCapped = "notifyAlmostCapped"
+        public static let almostCappedPercent = "notifyAlmostCappedPercent"
+        public static let back = "notifyBack"
+        public static let capped = "notifyCapped"
+        public static let headroom = "notifyHeadroom"
+        public static let loginProblems = "notifyLoginProblems"
         public static let master = "notifyMaster"
-        public static let pacingHot = "notifyPacingHot"
-        public static let pacingWarning = "notifyPacingWarning"
-        public static let recovery = "notifyRecovery"
-        public static let reminderSession = "notifyReminderSession"
-        public static let reminderSessionOffsetMin = "notifyReminderSessionOffsetMin"
-        public static let reminderWeekly = "notifyReminderWeekly"
-        public static let reminderWeeklyOffsetMin = "notifyReminderWeeklyOffsetMin"
-        public static let tokenExpired = "notifyTokenExpired"
+        public static let onPace = "notifyOnPace"
+        public static let outlook = "notifyOutlook"
         public static let trackSession = "notifyTrackSession"
         public static let trackWeekly = "notifyTrackWeekly"
     }

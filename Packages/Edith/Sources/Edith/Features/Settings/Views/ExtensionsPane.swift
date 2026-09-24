@@ -1632,24 +1632,22 @@ private struct UsageRows: View {
         var trackSession = true
     @AppStorage(AppStorageKeys.Notify.trackWeekly, store: SharedDefaults.store) private
         var trackWeekly = true
-    @AppStorage(AppStorageKeys.Notify.recovery, store: SharedDefaults.store) private var recovery =
+    @AppStorage(AppStorageKeys.Notify.onPace, store: SharedDefaults.store) private var onPace =
         true
-    @AppStorage(AppStorageKeys.Notify.pacingWarning, store: SharedDefaults.store) private
-        var pacingWarning = true
-    @AppStorage(AppStorageKeys.Notify.pacingHot, store: SharedDefaults.store) private
-        var pacingHot = true
-    @AppStorage(AppStorageKeys.Notify.reminderSession, store: SharedDefaults.store) private
-        var reminderSession =
+    @AppStorage(AppStorageKeys.Notify.almostCapped, store: SharedDefaults.store) private
+        var almostCapped = true
+    @AppStorage(AppStorageKeys.Notify.almostCappedPercent, store: SharedDefaults.store) private
+        var almostCappedPercent = LimitAlertSettings.defaultAlmostCappedPercent
+    @AppStorage(AppStorageKeys.Notify.capped, store: SharedDefaults.store) private var capped =
+        true
+    @AppStorage(AppStorageKeys.Notify.back, store: SharedDefaults.store) private var back = true
+    @AppStorage(AppStorageKeys.Notify.outlook, store: SharedDefaults.store) private var outlook =
         false
-    @AppStorage(AppStorageKeys.Notify.reminderSessionOffsetMin, store: SharedDefaults.store)
-    private var reminderSessionOffset = 30
-    @AppStorage(AppStorageKeys.Notify.reminderWeekly, store: SharedDefaults.store) private
-        var reminderWeekly =
-        false
-    @AppStorage(AppStorageKeys.Notify.reminderWeeklyOffsetMin, store: SharedDefaults.store)
-    private var reminderWeeklyOffset = 120
-    @AppStorage(AppStorageKeys.Notify.tokenExpired, store: SharedDefaults.store) private
-        var tokenExpired = true
+    @AppStorage(AppStorageKeys.Notify.headroom, store: SharedDefaults.store) private
+        var headroom = false
+    @AppStorage(AppStorageKeys.Notify.loginProblems, store: SharedDefaults.store) private
+        var loginProblems = true
+    @State private var projections: [String] = []
     @State private var testSent = false
 
     private var hasProvider: Bool { claudeEnabled || codexEnabled }
@@ -1727,7 +1725,18 @@ private struct UsageRows: View {
                             "Smart color",
                             isOn: $smartColor.configured(AppStorageKeys.General.smartColor)
                         )
-                        if !smartColor {
+                        if smartColor {
+                            HStack {
+                                Text("Pacing margin")
+                                Spacer()
+                                Stepper(
+                                    "±\(Int(pacingMargin)) pp",
+                                    value: $pacingMargin.configured(
+                                        AppStorageKeys.Limits.pacingMargin),
+                                    in: 5...25, step: 5
+                                )
+                            }
+                        } else {
                             HStack {
                                 Text("Thresholds")
                                 Spacer()
@@ -1826,90 +1835,56 @@ private struct UsageRows: View {
         Section {
             Toggle("Enable alerts", isOn: alertsBinding)
             Group {
-                Toggle(
-                    isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession)
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Session (5h) alerts")
-                        InfoDot(
-                            "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
-                        )
-                    }
-                }
-                Toggle(
-                    isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly)
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Weekly alerts")
-                        InfoDot(
-                            "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
-                        )
-                    }
-                }
-                Toggle(
-                    "Back to green",
-                    isOn: $recovery.configured(AppStorageKeys.Notify.recovery)
-                )
+                LimitAlertToggle(
+                    "5-hour windows", detail: "Alerts for Claude and Codex 5-hour limits.",
+                    isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession))
+                LimitAlertToggle(
+                    "Weekly windows", detail: "Alerts for weekly limits, Fable included.",
+                    isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly))
+                LimitAlertToggle(
+                    "On pace to hit the cap",
+                    detail:
+                        "When your recent burn would hit the cap before the window resets, with the time it would.",
+                    isOn: $onPace.configured(AppStorageKeys.Notify.onPace))
                 HStack {
-                    Text("Pacing margin")
-                    Spacer()
+                    LimitAlertToggle(
+                        "Almost capped",
+                        detail: "Once per window when usage crosses the line, with what is left.",
+                        isOn: $almostCapped.configured(AppStorageKeys.Notify.almostCapped))
                     Stepper(
-                        "±\(Int(pacingMargin)) pp",
-                        value: $pacingMargin.configured(AppStorageKeys.Limits.pacingMargin),
-                        in: 5...25, step: 5
+                        "\(almostCappedPercent)%",
+                        value: $almostCappedPercent.configured(
+                            AppStorageKeys.Notify.almostCappedPercent),
+                        in: LimitAlertSettings.almostCappedRange, step: 5
                     )
+                    .disabled(!almostCapped)
                 }
-                Toggle(
-                    isOn: $pacingWarning.configured(AppStorageKeys.Notify.pacingWarning)
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Drifting / burning hot")
-                        InfoDot(
-                            "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
-                        )
-                    }
-                }
-                Toggle(
-                    "Token expired",
-                    isOn: $tokenExpired.configured(AppStorageKeys.Notify.tokenExpired)
-                )
-                HStack {
-                    Toggle(
-                        "Remind before session reset",
-                        isOn: $reminderSession.configured(AppStorageKeys.Notify.reminderSession)
-                    )
-                    Picker(
-                        "",
-                        selection: $reminderSessionOffset.configured(
-                            AppStorageKeys.Notify.reminderSessionOffsetMin)
-                    ) {
-                        Text("5 min").tag(5)
-                        Text("15 min").tag(15)
-                        Text("30 min").tag(30)
-                        Text("1 h").tag(60)
-                    }
-                    .labelsHidden().disabled(!reminderSession)
-                }
-                HStack {
-                    Toggle(
-                        "Remind before weekly reset",
-                        isOn: $reminderWeekly.configured(AppStorageKeys.Notify.reminderWeekly)
-                    )
-                    Picker(
-                        "",
-                        selection: $reminderWeeklyOffset.configured(
-                            AppStorageKeys.Notify.reminderWeeklyOffsetMin)
-                    ) {
-                        Text("1 h").tag(60)
-                        Text("2 h").tag(120)
-                        Text("6 h").tag(360)
-                        Text("12 h").tag(720)
-                    }
-                    .labelsHidden().disabled(!reminderWeekly)
-                }
+                LimitAlertToggle(
+                    "Capped", detail: "When a window hits 100%, with the time it comes back.",
+                    isOn: $capped.configured(AppStorageKeys.Notify.capped))
+                LimitAlertToggle(
+                    "Back after a reset",
+                    detail: "At the reset of a window that was capped or nearly capped.",
+                    isOn: $back.configured(AppStorageKeys.Notify.back))
+                LimitAlertToggle(
+                    "Weekly outlook",
+                    detail: "A morning note when a week is heading for a tight finish.",
+                    isOn: $outlook.configured(AppStorageKeys.Notify.outlook))
+                LimitAlertToggle(
+                    "Unused headroom",
+                    detail: "On the last day of a weekly window when half or more is unused.",
+                    isOn: $headroom.configured(AppStorageKeys.Notify.headroom))
+                LimitAlertToggle(
+                    "Login problems",
+                    detail: "Once when a provider login breaks, again only after it recovers.",
+                    isOn: $loginProblems.configured(AppStorageKeys.Notify.loginProblems))
             }
             .disabled(!notifyMaster)
             .opacity(notifyMaster ? 1 : 0.5)
+
+            ForEach(projections, id: \.self) { line in
+                Text(line).settingsCaption()
+            }
 
             HStack {
                 Button("Send test notification") {
@@ -1926,12 +1901,13 @@ private struct UsageRows: View {
             Text("Alerts")
         } footer: {
             Text(
-                "Alerts fire once per level or zone crossing, not on a repeating timer - staying in the same zone won't page you again."
+                "Alerts use your local clock and fire once per window. With a Jev key, on-pace, outlook and headroom alerts only go out when Jev thinks they are worth the interruption."
             )
             .font(.system(size: UIScale.pt(10)))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .task(id: notifyMaster) { projections = await LimitAlertInspector.previewLines() }
         .onChange(of: claudeEnabled) { reconcileProviders() }
         .onChange(of: codexEnabled) {
             if enabled && codexEnabled {
@@ -1988,6 +1964,27 @@ private struct UsageRows: View {
         $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar).wrappedValue =
             state.menuBarEnabled
         $notifyMaster.configured(AppStorageKeys.Notify.master).wrappedValue = state.alertsEnabled
+    }
+}
+
+private struct LimitAlertToggle: View {
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    init(_ title: String, detail: String, isOn: Binding<Bool>) {
+        self.title = title
+        self.detail = detail
+        _isOn = isOn
+    }
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title)
+                Text(detail).settingsCaption()
+            }
+        }
     }
 }
 
