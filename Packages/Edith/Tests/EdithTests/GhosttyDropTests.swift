@@ -114,6 +114,27 @@ import Testing
                 == "'https://example.com/?one=1&two=2'")
     }
 
+    @Test @MainActor func anInactiveTerminalStackedAboveDoesNotCatchTheDrop() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let visible = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        let stacked = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        for view in [visible, stacked] {
+            view.frame = container.bounds
+            container.addSubview(view)
+        }
+        let center = NSPoint(x: container.bounds.midX, y: container.bounds.midY)
+
+        stacked.setRenderingActive(false)
+        let reachesVisible = container.hitTest(center) === visible
+        #expect(reachesVisible)
+
+        stacked.setRenderingActive(true)
+        let reachesStacked = container.hitTest(center) === stacked
+        #expect(reachesStacked)
+    }
+
     @Test func promisedFilesAreRegisteredAsDropTypes() {
         let promiseTypes = Set(
             NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
