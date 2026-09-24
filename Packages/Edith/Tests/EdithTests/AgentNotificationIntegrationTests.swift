@@ -42,7 +42,10 @@ private struct NotificationFixture {
         defaults.set(false, forKey: AppStorageKeys.Notify.pacingWarning)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         service = AgentNotificationService(
-            url: root.appendingPathComponent("outbox.json"), defaults: defaults, changed: {})
+            url: root.appendingPathComponent("outbox.json"), defaults: defaults, changed: {},
+            attention: AgentAttention(
+                inspect: { _ in [:] }, decider: { nil }, appIsRunning: { false },
+                openAgent: { _ in }))
     }
 
     func close() {
@@ -175,9 +178,9 @@ private struct NotificationFixture {
             store: nil, isSubscribed: { false }, defaults: fixture.defaults,
             notify: { try await fixture.service.evaluateSessions($0, now: fixture.now) },
             collect: { scope in
-                if case .local = scope {} else { Issue.record("Expected local ambient collection") }
+                if case .machine = scope { Issue.record("Expected an ambient collection") }
                 return hosts
-            })
+            }, now: { fixture.now })
         #expect(try await job.run() != nil)
         let deliveries = try await fixture.service.pending(now: fixture.now)
         #expect(deliveries.map(\.identifier) == ["session.blocked.local|session|pane"])

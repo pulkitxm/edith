@@ -124,6 +124,8 @@ public enum IPC {
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = IPC.scopedName(
             "com.pulkit.edith.quinjetSessionOperationResult")
+        public static let requestOpenHerdrAgent = IPC.scopedName(
+            "com.pulkit.edith.requestOpenHerdrAgent")
     }
 
     public static func scopedName(

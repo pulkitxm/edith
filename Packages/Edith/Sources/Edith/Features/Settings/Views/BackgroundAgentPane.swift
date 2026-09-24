@@ -87,7 +87,17 @@ struct BackgroundAgentPane: View {
     @AppStorage(AgentSettingsKeys.pauseAmbientOnBattery, store: SharedDefaults.store) private
         var pauseAmbientOnBattery = false
     @AppStorage(AgentSettingsKeys.notifyWhenBlocked, store: SharedDefaults.store) private
-        var notifyWhenBlocked = false
+        var notifyWhenBlocked = true
+    @AppStorage(AgentSettingsKeys.notifyWhenFinished, store: SharedDefaults.store) private
+        var notifyWhenFinished = true
+    @AppStorage(AgentSettingsKeys.notifyOnErrors, store: SharedDefaults.store) private
+        var notifyOnErrors = true
+    @AppStorage(AgentSettingsKeys.notifyWhenStuck, store: SharedDefaults.store) private
+        var notifyWhenStuck = false
+    @AppStorage(AgentSettingsKeys.stuckMinutes, store: SharedDefaults.store) private
+        var stuckMinutes = AgentAttentionSettings.defaultStuckMinutes
+    @AppStorage(AgentSettingsKeys.openDiffWhenFinished, store: SharedDefaults.store) private
+        var openDiffWhenFinished = false
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
 
@@ -101,6 +111,7 @@ struct BackgroundAgentPane: View {
         Form {
             statusSection
             behaviourSection
+            notificationsSection
             jobsSection
             AgentTasksSection(
                 tasks: model.tasks, loading: model.tasksLoading && model.failure == nil)
@@ -173,11 +184,39 @@ struct BackgroundAgentPane: View {
             Toggle(
                 "Pause ambient jobs on battery",
                 isOn: $pauseAmbientOnBattery.configured(AgentSettingsKeys.pauseAmbientOnBattery))
-            Toggle(
-                "Notify when an agent blocks",
-                isOn: $notifyWhenBlocked.configured(AgentSettingsKeys.notifyWhenBlocked))
             Text("Jobs for open pages continue running on battery.")
                 .settingsCaption()
+        }
+    }
+
+    private var notificationsSection: some View {
+        Section("Coding agent notifications") {
+            Toggle(
+                "Needs approval or an answer",
+                isOn: $notifyWhenBlocked.configured(AgentSettingsKeys.notifyWhenBlocked))
+            Toggle(
+                "Finishes its work",
+                isOn: $notifyWhenFinished.configured(AgentSettingsKeys.notifyWhenFinished))
+            Toggle(
+                "Hits an error", isOn: $notifyOnErrors.configured(AgentSettingsKeys.notifyOnErrors))
+            Toggle(
+                "Looks stuck", isOn: $notifyWhenStuck.configured(AgentSettingsKeys.notifyWhenStuck))
+            if notifyWhenStuck {
+                Stepper(
+                    value: $stuckMinutes.configured(AgentSettingsKeys.stuckMinutes),
+                    in: AgentAttentionSettings.stuckMinutesRange
+                ) {
+                    Text("Stuck after \(stuckMinutes) minutes without screen progress")
+                }
+            }
+            Toggle(
+                "Open the diff when an agent finishes",
+                isOn: $openDiffWhenFinished.configured(AgentSettingsKeys.openDiffWhenFinished))
+            Text(
+                "Edith reads an agent's screen when its state changes. Remote machines are "
+                    + "checked every 2 minutes while no Edith window is open."
+            )
+            .settingsCaption()
         }
     }
 

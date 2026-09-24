@@ -92,7 +92,27 @@ public enum ConfigCatalog {
             fallback: .bool(false)),
         SettingDefinition(
             AgentSettingsKeys.notifyWhenBlocked, .bool, group: "agent",
-            summary: "Notify when a background agent job is blocked.", fallback: .bool(false)),
+            summary: "Notify when a coding agent needs approval or an answer.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenFinished, .bool, group: "agent",
+            summary: "Notify when a coding agent finishes its work.", fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyOnErrors, .bool, group: "agent",
+            summary: "Notify when a coding agent stops with an error.", fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenStuck, .bool, group: "agent",
+            summary: "Notify when a coding agent shows no progress on screen.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AgentSettingsKeys.stuckMinutes, .int, group: "agent",
+            summary: "Minutes without screen progress before an agent counts as stuck.",
+            integerRange: AgentAttentionSettings.stuckMinutesRange,
+            fallback: .int(AgentAttentionSettings.defaultStuckMinutes)),
+        SettingDefinition(
+            AgentSettingsKeys.openDiffWhenFinished, .bool, group: "agent",
+            summary: "Open the diff when a coding agent finishes with changes to review.",
+            fallback: .bool(false)),
         SettingDefinition(
             AgentService.stateKey, .string, group: "agent",
             summary: "Login Items registration state of the background agent.",

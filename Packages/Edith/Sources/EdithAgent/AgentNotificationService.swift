@@ -31,13 +31,21 @@ public actor AgentNotificationService {
         let expiresAt: Date
     }
 
+    private struct TrackedAgent: Codable, Equatable {
+        var status: HerdrAgentStatus
+        var since: Date
+        var checkedAt: Date?
+        var fingerprint: UInt64?
+        var stuck = false
+    }
+
     private struct State: Codable, Equatable {
         var deliveries: [String: AgentNotificationDelivery] = [:]
         var levels = LevelState()
         var session: LimitWindow?
         var week: LimitWindow?
         var reminders: [String: Reminder] = [:]
-        var blocked: [String: Set<String>] = [:]
+        var agents: [String: [String: TrackedAgent]] = [:]
         var tokenExpiredAt: Date?
     }
 
@@ -47,6 +55,7 @@ public actor AgentNotificationService {
     private let url: URL
     private let defaults: UserDefaults
     private let changed: @Sendable () -> Void
+    private let attention: AgentAttention
     private var state: State
     private var observation: NSObjectProtocol?
 
@@ -63,11 +72,13 @@ public actor AgentNotificationService {
         defaults: UserDefaults = SharedDefaults.store,
         changed: @escaping @Sendable () -> Void = {
             IPC.post(AgentNotificationOperation.changed)
-        }
+        },
+        attention: AgentAttention = .live
     ) {
         self.url = url
         self.defaults = defaults
         self.changed = changed
+        self.attention = attention
         state =
             (try? Data(contentsOf: url)).flatMap {
                 try? AgentPayload.decode(State.self, from: $0)
@@ -128,46 +139,103 @@ public actor AgentNotificationService {
         try commit(next)
     }
 
-    public func evaluateSessions(_ hosts: [HerdrHostSnapshot], now: Date = Date()) throws {
+    public func evaluateSessions(_ hosts: [HerdrHostSnapshot], now: Date = Date()) async throws {
+        let settings = AgentAttentionSettings(defaults: defaults)
         var next = state
-        guard blockedAlertsEnabled else {
-            next.blocked = [:]
-            next.deliveries = next.deliveries.filter { !$0.key.hasPrefix("session.blocked.") }
-            try commit(next)
-            return
-        }
-        for host in hosts where host.reachable && host.error == nil {
-            let blocked = host.agents.filter { $0.status == .blocked && !$0.isTerminal }
-            let previous = next.blocked[host.id] ?? []
-            for agent in blocked where !previous.contains(agent.id) {
-                enqueue(
-                    AgentNotification(
-                        identifier: "session.blocked." + agent.id,
-                        title: "Session needs attention",
-                        body:
-                            "\(agent.title.isEmpty ? agent.session : agent.title) on \(host.name) is waiting for you."
-                    ),
-                    into: &next, now: now)
-            }
-            next.blocked[host.id] = Set(blocked.map(\.id))
-        }
+        purgeSessions(&next, settings: settings)
+        let checks =
+            settings.anyEnabled ? track(hosts, settings: settings, into: &next, now: now) : []
         try commit(next)
+        guard !checks.isEmpty else { return }
+        let outcomes = await attention.resolve(checks, settings: settings)
+        var resolved = state
+        for outcome in outcomes {
+            if var tracked = resolved.agents[outcome.hostID]?[outcome.agentID],
+                tracked.status == .working, let fingerprint = outcome.fingerprint
+            {
+                tracked.fingerprint = fingerprint
+                tracked.stuck =
+                    outcome.notification?.identifier.hasPrefix("session.stuck.") ?? false
+                resolved.agents[outcome.hostID]?[outcome.agentID] = tracked
+            }
+            if let notification = outcome.notification {
+                enqueue(notification, into: &resolved, now: now)
+            }
+        }
+        purgeSessions(&resolved, settings: AgentAttentionSettings(defaults: defaults))
+        try commit(resolved)
     }
 
     public func reconcileSettings(now: Date = Date()) throws {
         var next = state
         next.deliveries = next.deliveries.filter { ($0.value.expiresAt ?? .distantFuture) > now }
         reconcileLimits(&next, settings: NotifySettings.fromDefaults(defaults), now: now)
-        if !blockedAlertsEnabled {
-            next.blocked = [:]
-            next.deliveries = next.deliveries.filter { !$0.key.hasPrefix("session.blocked.") }
-        }
+        purgeSessions(&next, settings: AgentAttentionSettings(defaults: defaults))
         try commit(next)
     }
 
-    private var blockedAlertsEnabled: Bool {
-        defaults.bool(forKey: AgentSettingsKeys.notifyWhenBlocked)
-            && defaults.bool(forKey: AppStorageKeys.Tabs.herdrEnabled)
+    private func track(
+        _ hosts: [HerdrHostSnapshot], settings: AgentAttentionSettings, into next: inout State,
+        now: Date
+    ) -> [AttentionCheck] {
+        var checks: [AttentionCheck] = []
+        let stall = TimeInterval(settings.stuckMinutes * 60)
+        for host in hosts where host.reachable && host.error == nil {
+            let known = next.agents[host.id] ?? [:]
+            var tracked: [String: TrackedAgent] = [:]
+            for agent in host.agents where !agent.isTerminal {
+                var entry = known[agent.id]
+                if agent.status != .unknown, entry?.status != agent.status {
+                    if let event = Self.event(from: entry?.status, to: agent.status),
+                        Self.wanted(event, settings: settings)
+                    {
+                        checks.append(AttentionCheck(agent: agent, hostID: host.id, event: event))
+                    }
+                    entry = TrackedAgent(status: agent.status, since: now)
+                } else if var current = entry, current.status == .working, settings.stuck,
+                    !current.stuck,
+                    now.timeIntervalSince(current.checkedAt ?? current.since) >= stall
+                {
+                    checks.append(
+                        AttentionCheck(
+                            agent: agent, hostID: host.id, event: .stalled,
+                            fingerprint: current.fingerprint))
+                    current.checkedAt = now
+                    entry = current
+                }
+                tracked[agent.id] = entry
+            }
+            next.agents[host.id] = tracked
+        }
+        return checks
+    }
+
+    static func event(from previous: HerdrAgentStatus?, to current: HerdrAgentStatus)
+        -> HerdrAttentionEvent?
+    {
+        switch current {
+        case .blocked: .blocked
+        case .done, .idle: previous == .working ? .finished : nil
+        case .working, .unknown: nil
+        }
+    }
+
+    private static func wanted(_ event: HerdrAttentionEvent, settings: AgentAttentionSettings)
+        -> Bool
+    {
+        switch event {
+        case .blocked: settings.blocked
+        case .finished: settings.finished || settings.errors || settings.openDiff
+        case .stalled: settings.stuck
+        }
+    }
+
+    private func purgeSessions(_ next: inout State, settings: AgentAttentionSettings) {
+        if !settings.anyEnabled { next.agents = [:] }
+        let enabled = [settings.blocked, settings.finished, settings.errors, settings.stuck]
+        for (kind, on) in zip(AgentAttention.kinds, enabled) where !on {
+            next.deliveries = next.deliveries.filter { !$0.key.hasPrefix("session.\(kind).") }
+        }
     }
 
     private func reconcileLimits(_ next: inout State, settings: NotifySettings, now: Date) {
