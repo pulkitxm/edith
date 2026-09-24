@@ -2,12 +2,11 @@ import EdithKit
 import SwiftUI
 
 struct HerdrLayoutPopover: View {
-    var store: HerdrStore
+    @Bindable var store: HerdrStore
     let tab: HerdrTab
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var naming = false
     @State private var layoutName = ""
 
@@ -34,6 +33,8 @@ struct HerdrLayoutPopover: View {
                 adjustments
             }
             additions
+            Divider()
+            motion
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(348))
@@ -168,6 +169,28 @@ struct HerdrLayoutPopover: View {
         }
     }
 
+    private var motion: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text("Animate Changes")
+                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text(
+                    store.animatesLayout
+                        ? "Tabs and panes glide into place" : "Tabs and panes switch instantly"
+                )
+                .font(.system(size: UIScale.pt(10)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            Spacer(minLength: 0)
+            Toggle("Animate Changes", isOn: $store.animatesLayout)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+        }
+        .help("Glide tabs and panes into place instead of switching instantly")
+    }
+
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content)
         -> some View
     {
@@ -205,7 +228,7 @@ struct HerdrLayoutPopover: View {
     }
 
     private func perform(_ change: () -> Void) {
-        withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), change)
+        withAnimation(store.layoutAnimation, change)
     }
 }
 
