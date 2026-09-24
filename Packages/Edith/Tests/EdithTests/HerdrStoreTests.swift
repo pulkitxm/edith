@@ -540,6 +540,68 @@ private actor HerdrWatchHarness {
         #expect(store.sessions.first?.view == .diff)
     }
 
+    @Test func launchNewAgentResolvesTheLocalHostToANilMachine() async throws {
+        actor Recorder {
+            var calls:
+                [(kind: String, machine: Machine?, space: HerdrWorkspaceSummary?, label: String?)] =
+                    []
+            func record(
+                _ kind: String, _ machine: Machine?, _ space: HerdrWorkspaceSummary?,
+                _ label: String?
+            ) {
+                calls.append((kind, machine, space, label))
+            }
+        }
+        let recorder = Recorder()
+        let store = HerdrStore(
+            newAgentLauncher: { kind, machine, space, label in
+                await recorder.record(kind, machine, space, label)
+            })
+
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "new-space")
+
+        let calls = await recorder.calls
+        #expect(calls.count == 1)
+        #expect(calls[0].kind == "Claude Code")
+        #expect(calls[0].machine == nil)
+        #expect(calls[0].space == nil)
+        #expect(calls[0].label == "new-space")
+    }
+
+    @Test func launchNewAgentResolvesARemoteHostToItsMachine() async throws {
+        let machine = Machine(name: "tuf-wired", host: "tuf-wired.local")
+        actor Recorder {
+            var machines: [Machine?] = []
+            func record(_ machine: Machine?) { machines.append(machine) }
+        }
+        let recorder = Recorder()
+        let store = HerdrStore(
+            newAgentLauncher: { _, machine, _, _ in await recorder.record(machine) },
+            machinesProvider: { [machine] })
+        let space = HerdrWorkspaceSummary(id: "w1", label: "edith", tabCount: 1, paneCount: 1)
+
+        try await store.launchNewAgent(
+            kind: "Codex",
+            host: HerdrHostSnapshot(
+                id: machine.id.uuidString, name: machine.name, isLocal: false, herdrPresent: true,
+                reachable: true),
+            existingSpace: space, newSpaceLabel: nil)
+
+        #expect(await recorder.machines == [machine])
+    }
+
+    @Test func launchNewAgentPropagatesLauncherErrors() async {
+        struct LaunchFailure: Error {}
+        let store = HerdrStore(newAgentLauncher: { _, _, _, _ in throw LaunchFailure() })
+        await #expect(throws: LaunchFailure.self) {
+            try await store.launchNewAgent(
+                kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+                newSpaceLabel: "x")
+        }
+    }
+
     private static func scratchDefaults() -> UserDefaults {
         let suite = "HerdrStoreTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
