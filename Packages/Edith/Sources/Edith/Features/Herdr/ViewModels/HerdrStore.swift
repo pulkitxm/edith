@@ -940,18 +940,26 @@ final class HerdrStore {
     }
 
     private func closeTabs(_ predicate: (Int, HerdrTab) -> Bool) {
-        let matches = tabs.enumerated().filter { predicate($0.offset, $0.element) }
-        guard !matches.isEmpty else { return }
-        for (offset, tab) in matches {
+        var matchedAny = false
+        var ids: [String] = []
+        for offset in tabs.indices {
+            let tab = tabs[offset]
+            guard predicate(offset, tab) else { continue }
+            matchedAny = true
             let rightNeighborID = offset + 1 < tabs.count ? tabs[offset + 1].id : nil
-            let agentsInTab = tab.agentIDs.compactMap { session($0)?.agent }
+            var agentsInTab: [HerdrAgent] = []
+            for agentID in tab.agentIDs {
+                guard let found = session(agentID)?.agent else { continue }
+                agentsInTab.append(found)
+            }
             closedTabHistory.append(
                 HerdrClosedTabRecord(
                     tabID: tab.id, layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
                     agents: agentsInTab, rightNeighborID: rightNeighborID))
             if closedTabHistory.count > closedTabHistoryLimit { closedTabHistory.removeFirst() }
+            for agentID in tab.agentIDs { ids.append(agentID) }
         }
-        let ids = matches.flatMap { $0.element.agentIDs }
+        guard matchedAny else { return }
         closeSequentially(ids[...])
     }
 
