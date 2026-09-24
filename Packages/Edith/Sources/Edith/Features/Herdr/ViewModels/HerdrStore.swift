@@ -140,6 +140,14 @@ final class HerdrStore {
                 spaceGroupingEnabled, forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
         }
     }
+    private(set) var savedArrangements: [HerdrSavedArrangement] = [] {
+        didSet {
+            guard savedArrangements != oldValue else { return }
+            defaults.set(
+                try? JSONEncoder().encode(savedArrangements),
+                forKey: AppStorageKeys.Herdr.savedArrangements)
+        }
+    }
     private(set) var collapsedSpaces: Set<String> = [] {
         didSet {
             guard collapsedSpaces != oldValue else { return }
@@ -205,6 +213,10 @@ final class HerdrStore {
             defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
         collapsedSpaceCounts = Self.spaceCounts(
             defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
+        savedArrangements =
+            defaults.data(forKey: AppStorageKeys.Herdr.savedArrangements).flatMap {
+                try? JSONDecoder().decode([HerdrSavedArrangement].self, from: $0)
+            } ?? []
         restoringDefaults = false
         machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
             Task { @MainActor in
@@ -716,13 +728,41 @@ final class HerdrStore {
     }
 
     func arrange(_ tabID: String, as arrangement: HerdrArrangement) {
+        arrange(tabID, as: .builtIn(arrangement))
+    }
+
+    func arrange(_ tabID: String, as template: HerdrLayoutTemplate) {
         guard let tab = tab(tabID) else { return }
         let ordered = [tab.focused] + tab.agentIDs.filter { $0 != tab.focused }
-        guard let layout = arrangement.layout(ordered) else { return }
+        guard let layout = template.layout(ordered) else { return }
         updateTab(tabID) { tab in
             tab.layout = layout
             tab.zoomed = nil
         }
+    }
+
+    func templates(for count: Int) -> [HerdrLayoutTemplate] {
+        HerdrLayoutTemplate.all(for: count, saved: savedArrangements)
+    }
+
+    func currentTemplate(of tabID: String) -> HerdrLayoutTemplate? {
+        tab(tabID).flatMap { HerdrLayoutTemplate.matching($0.layout, saved: savedArrangements) }
+    }
+
+    @discardableResult
+    func saveArrangement(of tabID: String, named name: String) -> HerdrSavedArrangement? {
+        guard let tab = tab(tabID), tab.isSplit else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let saved = HerdrSavedArrangement(
+            name: trimmed.isEmpty ? "Layout \(savedArrangements.count + 1)" : trimmed,
+            layout: tab.layout)
+        savedArrangements.removeAll { $0.shape.geometryMatches(saved.shape, tolerance: 0.001) }
+        savedArrangements.insert(saved, at: 0)
+        return saved
+    }
+
+    func deleteArrangement(_ id: UUID) {
+        savedArrangements.removeAll { $0.id == id }
     }
 
     func rotate(_ tabID: String) {
@@ -958,11 +998,11 @@ final class HerdrStore {
             else { return nil }
             return tab.layout.contains(agent.id)
                 ? tab.layout.swapping(agent.id, pane) : tab.layout.replacing(pane, with: agent.id)
-        case let .slot(arrangement, index):
+        case let .slot(template, index):
             guard case let .agent(agent) = item else { return nil }
             var order = base?.panes ?? []
             order.insert(agent.id, at: min(max(0, index), order.count))
-            return arrangement.layout(order)
+            return template.layout(order)
         case .tabBar, .intoTab, .newTab, .window:
             return nil
         }

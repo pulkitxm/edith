@@ -140,6 +140,33 @@ extension HerdrLayout {
         }
     }
 
+    public func shape() -> HerdrLayout {
+        let order = Dictionary(
+            panes.enumerated().map { ($0.element, String($0.offset)) },
+            uniquingKeysWith: { a, _ in a })
+        return mapPanes { order[$0] ?? $0 }
+    }
+
+    public func filled(with ids: [String]) -> HerdrLayout {
+        mapPanes { slot in
+            guard let index = Int(slot), ids.indices.contains(index) else { return slot }
+            return ids[index]
+        }
+        .renewingIDs()
+    }
+
+    public var splitIDs: [UUID] {
+        guard case let .split(split) = self else { return [] }
+        return [split.id] + split.children.flatMap(\.splitIDs)
+    }
+
+    private func renewingIDs() -> HerdrLayout {
+        guard case var .split(split) = self else { return self }
+        split.id = UUID()
+        split.children = split.children.map { $0.renewingIDs() }
+        return .split(split)
+    }
+
     public func rotated() -> HerdrLayout {
         switch self {
         case .pane:

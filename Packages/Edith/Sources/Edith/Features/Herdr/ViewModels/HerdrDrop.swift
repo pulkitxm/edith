@@ -12,7 +12,7 @@ enum HerdrDropTarget: Equatable {
     case edge(String, InsertSide)
     case outerEdge(InsertSide)
     case center(String)
-    case slot(HerdrArrangement, Int)
+    case slot(HerdrLayoutTemplate, Int)
     case tabBar(Int)
     case intoTab(String)
     case newTab
@@ -54,7 +54,7 @@ struct HerdrDropGeometry: Equatable {
 }
 
 struct HerdrSnapThumbnail: Equatable {
-    let arrangement: HerdrArrangement
+    let template: HerdrLayoutTemplate
     let frame: CGRect
     let slots: [CGRect]
 }
@@ -68,9 +68,9 @@ struct HerdrSnapBar: Equatable {
     static let trigger: CGFloat = 96
 
     static func make(
-        count: Int, canvas: CGRect, pointer: CGPoint, unit: CGFloat, wasExpanded: Bool
+        templates options: [HerdrLayoutTemplate], count: Int, canvas: CGRect, pointer: CGPoint,
+        unit: CGFloat, wasExpanded: Bool
     ) -> HerdrSnapBar? {
-        let options = HerdrArrangement.options(for: count)
         guard !options.isEmpty, canvas.width > 0 else { return nil }
         let size = CGSize(width: 64 * unit, height: 42 * unit)
         let spacing = 8 * unit
@@ -94,7 +94,7 @@ struct HerdrSnapBar: Equatable {
                 height: 26 * unit)
             return HerdrSnapBar(count: count, frame: pill, expanded: false, thumbnails: [])
         }
-        let thumbnails = options.enumerated().map { index, arrangement in
+        let thumbnails = options.enumerated().map { index, template in
             let row = index / perRow
             let column = index % perRow
             let frame = CGRect(
@@ -102,25 +102,25 @@ struct HerdrSnapBar: Equatable {
                 y: full.minY + padding + CGFloat(row) * (size.height + label + spacing),
                 width: size.width, height: size.height)
             return HerdrSnapThumbnail(
-                arrangement: arrangement, frame: frame,
-                slots: arrangement.slotFrames(
+                template: template, frame: frame,
+                slots: template.slotFrames(
                     count: count, in: frame.insetBy(dx: 4 * unit, dy: 4 * unit), gap: 2 * unit))
         }
         return HerdrSnapBar(count: count, frame: full, expanded: true, thumbnails: thumbnails)
     }
 
-    func slot(at point: CGPoint) -> (HerdrArrangement, Int)? {
+    func slot(at point: CGPoint) -> (HerdrLayoutTemplate, Int)? {
         for thumbnail in thumbnails where thumbnail.frame.insetBy(dx: -2, dy: -2).contains(point) {
             if let index = thumbnail.slots.firstIndex(where: {
                 $0.insetBy(dx: -1.5, dy: -1.5).contains(point)
             }) {
-                return (thumbnail.arrangement, index)
+                return (thumbnail.template, index)
             }
             let nearest = thumbnail.slots.indices.min { first, second in
                 Self.distance(point, thumbnail.slots[first])
                     < Self.distance(point, thumbnail.slots[second])
             }
-            return nearest.map { (thumbnail.arrangement, $0) }
+            return nearest.map { (thumbnail.template, $0) }
         }
         return nil
     }
@@ -309,8 +309,8 @@ final class HerdrDragCoordinator {
         let tab = store.currentTab
         if geometry.canvas.contains(location), let count = store.snapCount(for: item) {
             snapBar = HerdrSnapBar.make(
-                count: count, canvas: geometry.canvas, pointer: location, unit: unit,
-                wasExpanded: snapBar?.expanded == true)
+                templates: store.templates(for: count), count: count, canvas: geometry.canvas,
+                pointer: location, unit: unit, wasExpanded: snapBar?.expanded == true)
         } else {
             snapBar = nil
         }

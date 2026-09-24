@@ -97,26 +97,30 @@ import Testing
     @Test func theSnapBarExpandsNearTheTopAndPicksASlot() throws {
         let far = try #require(
             HerdrSnapBar.make(
-                count: 3, canvas: canvas, pointer: CGPoint(x: 700, y: 500), unit: 1,
+                templates: HerdrLayoutTemplate.all(for: 3, saved: []), count: 3, canvas: canvas,
+                pointer: CGPoint(x: 700, y: 500), unit: 1,
                 wasExpanded: false))
         #expect(!far.expanded)
         let near = try #require(
             HerdrSnapBar.make(
-                count: 3, canvas: canvas, pointer: CGPoint(x: 700, y: 130), unit: 1,
+                templates: HerdrLayoutTemplate.all(for: 3, saved: []), count: 3, canvas: canvas,
+                pointer: CGPoint(x: 700, y: 130), unit: 1,
                 wasExpanded: false))
         #expect(near.expanded)
-        #expect(near.thumbnails.map(\.arrangement) == HerdrArrangement.options(for: 3))
+        #expect(
+            near.thumbnails.map(\.template)
+                == HerdrArrangement.options(for: 3).map(HerdrLayoutTemplate.builtIn))
         let thumbnail = try #require(near.thumbnails.first)
         let slot = try #require(thumbnail.slots.last)
         let picked = try #require(near.slot(at: CGPoint(x: slot.midX, y: slot.midY)))
-        #expect(picked.0 == thumbnail.arrangement)
+        #expect(picked.0 == thumbnail.template)
         #expect(picked.1 == thumbnail.slots.count - 1)
         var tab = HerdrTab(agentID: "a")
         tab.layout = .stack(.horizontal, ["a", "b"])
         let target = HerdrDropResolver.target(
             at: CGPoint(x: slot.midX, y: slot.midY), geometry: geometry, tab: tab,
             boardID: HerdrStore.boardID, snapBar: near, previous: nil, gap: 6)
-        #expect(target == .slot(thumbnail.arrangement, thumbnail.slots.count - 1))
+        #expect(target == .slot(thumbnail.template, thumbnail.slots.count - 1))
     }
 
     @Test func droppingARailAgentOnAnEdgeOpensItBeside() throws {
@@ -181,7 +185,7 @@ import Testing
         store.open(claude)
         store.open(codex, beside: .right)
 
-        store.drop(.agent(opencode), on: .slot(.focusLeft, 0))
+        store.drop(.agent(opencode), on: .slot(.builtIn(.focusLeft), 0))
 
         let tab = try #require(store.currentTab)
         #expect(tab.agentIDs.first == opencode.id)

@@ -157,6 +157,7 @@ public enum AppStorageKeys {
         public static let spaceGroupingEnabled = "herdrSpaceGroupingEnabled"
         public static let collapsedSpaces = "herdrCollapsedSpaces"
         public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
+        public static let savedArrangements = "herdrSavedArrangements"
     }
 
     public enum Cleaner {

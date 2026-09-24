@@ -8,6 +8,8 @@ struct HerdrLayoutPopover: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var naming = false
+    @State private var layoutName = ""
 
     private var dark: Bool { scheme == .dark }
     private var count: Int { tab.agentIDs.count }
@@ -38,36 +40,49 @@ struct HerdrLayoutPopover: View {
     }
 
     private var arrangements: some View {
-        let current = HerdrArrangement.matching(tab.layout)
+        let current = store.currentTemplate(of: tab.id)
         return section("Arrange") {
             LazyVGrid(
                 columns: Array(
                     repeating: GridItem(.fixed(UIScale.pt(74)), spacing: UIScale.pt(6)), count: 4),
                 alignment: .leading, spacing: UIScale.pt(8)
             ) {
-                ForEach(HerdrArrangement.options(for: count)) { arrangement in
+                ForEach(store.templates(for: count)) { template in
                     Button {
-                        perform { store.arrange(tab.id, as: arrangement) }
+                        perform { store.arrange(tab.id, as: template) }
                     } label: {
                         VStack(spacing: UIScale.pt(4)) {
                             HerdrArrangementThumbnail(
-                                arrangement: arrangement, count: count,
-                                selected: arrangement == current, dark: dark)
-                            Text(arrangement.title)
-                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                                .foregroundStyle(
-                                    arrangement == current
-                                        ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
-                                )
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
+                                template: template, count: count,
+                                selected: template == current, dark: dark)
+                            HStack(spacing: UIScale.pt(3)) {
+                                if template.isSaved {
+                                    Image(systemName: "bookmark.fill")
+                                        .font(.system(size: UIScale.pt(8)))
+                                        .foregroundStyle(DashSkin.accent(dark))
+                                }
+                                Text(template.title)
+                            }
+                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .foregroundStyle(
+                                template == current ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
+                            )
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .accessibilityLabel(arrangement.title)
-                    .accessibilityAddTraits(arrangement == current ? .isSelected : [])
-                    .help("\(arrangement.title): the focused agent takes the highlighted spot")
+                    .accessibilityLabel(template.title)
+                    .accessibilityAddTraits(template == current ? .isSelected : [])
+                    .help("\(template.title): the focused agent takes the highlighted spot")
+                    .contextMenu {
+                        if case let .saved(saved) = template {
+                            Button("Delete Saved Layout", role: .destructive) {
+                                perform { store.deleteArrangement(saved.id) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -91,7 +106,22 @@ struct HerdrLayoutPopover: View {
                     tab.zoomed == nil ? "Zoom" : "Restore"
                 ) { store.toggleZoom(tab.focused) }
                 action("rectangle.split.3x1", "Separate") { store.separate(tab.id) }
+                action("bookmark", "Save") {
+                    layoutName = ""
+                    naming = true
+                }
             }
+        }
+        .alert("Save This Layout", isPresented: $naming) {
+            TextField("Name", text: $layoutName)
+            Button("Save") {
+                perform { store.saveArrangement(of: tab.id, named: layoutName) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Saved layouts show up here and while dragging whenever \(count) agents share a tab."
+            )
         }
     }
 
@@ -180,7 +210,7 @@ struct HerdrLayoutPopover: View {
 }
 
 struct HerdrArrangementThumbnail: View {
-    let arrangement: HerdrArrangement
+    let template: HerdrLayoutTemplate
     let count: Int
     let selected: Bool
     let dark: Bool
@@ -189,7 +219,7 @@ struct HerdrArrangementThumbnail: View {
     var body: some View {
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4)
-            let frames = arrangement.slotFrames(count: count, in: rect, gap: 2)
+            let frames = template.slotFrames(count: count, in: rect, gap: 2)
             for (index, frame) in frames.enumerated() {
                 let tint =
                     index == highlightedSlot

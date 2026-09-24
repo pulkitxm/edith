@@ -116,7 +116,7 @@ struct HerdrDragOverlay: View {
         case .center:
             drag.item.map { dragged($0).allSatisfy { store.session($0) != nil } } == true
                 ? "Swap places" : "Replace, the other agent gets its own tab"
-        case let .slot(arrangement, _): arrangement.title
+        case let .slot(template, _): template.title
         case .tabBar, .intoTab, .newTab, .window: nil
         }
     }
@@ -157,8 +157,8 @@ struct HerdrDragOverlay: View {
     @ViewBuilder
     private func snapBar(_ bar: HerdrSnapBar) -> some View {
         if bar.expanded {
-            let hovered: (HerdrArrangement, Int)? = {
-                if case let .slot(arrangement, index) = drag.target { return (arrangement, index) }
+            let hovered: (HerdrLayoutTemplate, Int)? = {
+                if case let .slot(template, index) = drag.target { return (template, index) }
                 return nil
             }()
             ZStack(alignment: .topLeading) {
@@ -171,10 +171,10 @@ struct HerdrDragOverlay: View {
                     .shadow(color: .black.opacity(dark ? 0.45 : 0.18), radius: 16, y: 6)
                     .frame(width: bar.frame.width, height: bar.frame.height)
                     .offset(x: bar.frame.minX, y: bar.frame.minY)
-                ForEach(bar.thumbnails, id: \.arrangement) { thumbnail in
+                ForEach(bar.thumbnails, id: \.template.id) { thumbnail in
                     thumbnailView(
                         thumbnail,
-                        hoveredSlot: hovered?.0 == thumbnail.arrangement ? hovered?.1 : nil)
+                        hoveredSlot: hovered?.0 == thumbnail.template ? hovered?.1 : nil)
                 }
             }
         } else {
@@ -216,15 +216,22 @@ struct HerdrDragOverlay: View {
                     .frame(width: max(0, slot.width), height: max(0, slot.height))
                     .offset(x: slot.minX - frame.minX, y: slot.minY - frame.minY)
             }
-            Text(thumbnail.arrangement.title)
-                .font(
-                    .system(size: UIScale.pt(9), weight: hoveredSlot == nil ? .medium : .semibold)
-                )
-                .foregroundStyle(hoveredSlot == nil ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(width: frame.width)
-                .offset(y: frame.height + UIScale.pt(2))
+            HStack(spacing: UIScale.pt(2)) {
+                if thumbnail.template.isSaved {
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: UIScale.pt(7)))
+                        .foregroundStyle(accent)
+                }
+                Text(thumbnail.template.title)
+            }
+            .font(
+                .system(size: UIScale.pt(9), weight: hoveredSlot == nil ? .medium : .semibold)
+            )
+            .foregroundStyle(hoveredSlot == nil ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(width: frame.width)
+            .offset(y: frame.height + UIScale.pt(2))
         }
         .offset(x: frame.minX, y: frame.minY)
     }
