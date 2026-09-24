@@ -11,16 +11,15 @@ struct HerdrPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
-    @State private var draggingTab: String?
-    @State private var dragTranslation: CGFloat = 0
-    @State private var tabFrames: [String: CGRect] = [:]
+    @State private var drag: HerdrDragCoordinator
     @State private var hoveredCard: String?
     @State private var railDragBaseWidth: Double?
     @State private var liveRailWidth: Double?
     @State private var layoutPopoverOpen = false
 
-    @MainActor init(store: HerdrStore? = nil) {
+    @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
+        _drag = State(initialValue: drag ?? HerdrDragCoordinator())
     }
 
     private var dark: Bool { scheme == .dark }
@@ -55,6 +54,7 @@ struct HerdrPage: View {
                         .allowsHitTesting(!onBoard)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .herdrDropFrame(HerdrDropGeometry.canvasKey)
                     if !onBoard, store.detailOpen, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents)
@@ -63,6 +63,11 @@ struct HerdrPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .overlay { HerdrDragOverlay(drag: drag, store: store, hideAgents: hideAgents) }
+        .herdrDropFrame(HerdrDropGeometry.pageKey)
+        .coordinateSpace(name: HerdrDragCoordinator.space)
+        .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
+        .environment(drag)
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
@@ -70,6 +75,15 @@ struct HerdrPage: View {
         .onAppear {
             HerdrAgentWindowDelegate.shared.onClose = { id in
                 store.reattach(id)
+            }
+            drag.store = store
+            drag.unit = UIScale.current
+            drag.gap = UIScale.pt(6)
+            drag.animation = Motion.animation(Motion.glide, reduceMotion: reduceMotion)
+            drag.onTearOff = { agent in
+                if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+                store.close(agent.id)
+                HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             }
         }
         .task(id: automaticActions) {
@@ -208,18 +222,6 @@ struct HerdrPage: View {
         .buttonStyle(.edith(.borderless))
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
-    }
-
-    private func reorder(id: String, location: CGPoint) {
-        guard
-            let target = tabFrames.first(where: { entry in
-                entry.key != id && entry.key != HerdrStore.boardID
-                    && location.x >= entry.value.minX && location.x <= entry.value.maxX
-            })
-        else { return }
-        guard target.key != id else { return }
-        store.moveTab(id, toIndexOf: target.key)
-        dragTranslation = 0
     }
 
     private var tabShortcuts: some View {
@@ -379,8 +381,7 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
         }
-        .coordinateSpace(name: HerdrTabFrames.space)
-        .onPreferenceChange(HerdrTabFrames.self) { tabFrames = $0 }
+        .herdrDropFrame(HerdrDropGeometry.tabBarKey)
         .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
@@ -493,30 +494,9 @@ struct HerdrPage: View {
             strokeWidth: selected ? 1.4 : 1
         )
         .contentShape(Rectangle())
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: HerdrTabFrames.self,
-                    value: [id: proxy.frame(in: .named(HerdrTabFrames.space))])
-            }
-        )
-        .offset(x: draggingTab == id ? dragTranslation : 0)
-        .zIndex(draggingTab == id ? 1 : 0)
+        .herdrDropFrame(HerdrDropGeometry.chipPrefix + id)
         .onTapGesture { store.selectedTab = id }
-        .gesture(
-            id == HerdrStore.boardID
-                ? nil
-                : DragGesture(minimumDistance: 6, coordinateSpace: .named(HerdrTabFrames.space))
-                    .onChanged { value in
-                        draggingTab = id
-                        dragTranslation = value.translation.width
-                        reorder(id: id, location: value.location)
-                    }
-                    .onEnded { _ in
-                        draggingTab = nil
-                        dragTranslation = 0
-                    }
-        )
+        .modifier(HerdrTabDrag(id: id))
         .contextMenu { tabContextMenu(id: id, closable: closable) }
         .help(
             agents.isEmpty
@@ -708,6 +688,7 @@ struct HerdrPage: View {
             }
         }
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: hovered)
+        .herdrDraggable(.agent(agent), simultaneous: true)
     }
 
     private var agentList: some View {
@@ -917,7 +898,12 @@ struct HerdrPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .help(selected ? "\(agent.title): open on the right" : agent.title)
+        .help(
+            selected
+                ? "\(agent.title): open on the right"
+                : "\(agent.title). Drag onto the right side to place it beside other agents."
+        )
+        .herdrDraggable(.agent(agent), simultaneous: true)
         .contextMenu { agentRowMenu(agent) }
     }
 
@@ -1022,13 +1008,15 @@ enum HerdrStatusColor {
     }
 }
 
-private struct HerdrTabFrames: PreferenceKey {
-    static let space = "herdr.tabs"
+private struct HerdrTabDrag: ViewModifier {
+    let id: String
 
-    static let defaultValue: [String: CGRect] = [:]
-
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
+    func body(content: Content) -> some View {
+        if id == HerdrStore.boardID {
+            content
+        } else {
+            content.herdrDraggable(.tab(id))
+        }
     }
 }
 

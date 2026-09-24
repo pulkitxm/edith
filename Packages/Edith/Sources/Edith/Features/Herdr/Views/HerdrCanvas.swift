@@ -194,6 +194,7 @@ struct HerdrPaneHeader: View {
         .frame(height: UIScale.pt(28))
         .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
         .contentShape(Rectangle())
+        .herdrDraggable(.agent(agent), simultaneous: true)
         .contextMenu { menuItems }
     }
 
