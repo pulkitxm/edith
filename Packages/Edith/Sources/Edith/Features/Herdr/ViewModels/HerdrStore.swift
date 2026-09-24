@@ -577,6 +577,7 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent, beside side: InsertSide) {
+        if session(agent.id) == nil, HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         guard let current = currentTab, !current.layout.contains(agent.id) else {
             open(agent)
             return
@@ -596,6 +597,10 @@ final class HerdrStore {
     }
 
     private func adoptSession(for agent: HerdrAgent, showing view: HerdrAgentView?) {
+        if detachedTabs[agent.id] != nil {
+            HerdrAgentWindow.close(agent.id)
+            reattach(agent.id)
+        }
         var session = makeTab(for: agent)
         if let view, !agent.isTerminal {
             session.view = view

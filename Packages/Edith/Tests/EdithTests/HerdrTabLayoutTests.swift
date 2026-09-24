@@ -256,6 +256,21 @@ import Testing
         #expect(!store.performLayoutKey(keyCode: 124, modifiers: [.command, .option], in: section))
     }
 
+    @Test func openingBesideTakesAnAgentBackFromItsWindow() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude)
+        _ = store.detachedTab(for: codex)
+
+        store.open(codex, beside: .right)
+        store.setView(.diff, for: codex.id)
+
+        #expect(store.detachedIDs.isEmpty)
+        #expect(store.currentTab?.agentIDs == [claude.id, codex.id])
+        #expect(store.session(codex.id)?.view == .diff)
+    }
+
     @Test func reopeningAnAgentInASharedTabFocusesIt() {
         let store = HerdrStore(defaults: Self.scratchDefaults())
         let claude = agent("Claude Code", pane: "a")
