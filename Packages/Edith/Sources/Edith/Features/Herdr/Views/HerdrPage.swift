@@ -68,6 +68,7 @@ struct HerdrPage: View {
         .coordinateSpace(name: HerdrDragCoordinator.space)
         .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
+        .onDisappear { drag.cancel() }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })

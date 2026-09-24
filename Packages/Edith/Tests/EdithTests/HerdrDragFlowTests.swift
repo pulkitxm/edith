@@ -117,6 +117,37 @@ import Testing
         #expect(torn?.id == page.agents[0].id)
     }
 
+    @Test func aShortWobbleNeverDrops() async throws {
+        let page = try await RenderedHerdrPage()
+        defer { page.close() }
+        page.store.selectBoard()
+        await page.settle()
+        let canvas = try page.canvas()
+        let start = CGPoint(x: canvas.midX, y: canvas.midY)
+
+        page.drag.update(.agent(page.agents[0]), at: start, from: start)
+        page.drag.finish(
+            .agent(page.agents[0]), at: CGPoint(x: start.x + 8, y: start.y), from: start)
+
+        #expect(page.store.tabs.isEmpty)
+    }
+
+    @Test func aNewGestureReplacesAStaleOne() async throws {
+        let page = try await RenderedHerdrPage()
+        defer { page.close() }
+        page.store.open(page.agents[0])
+        await page.settle()
+        let pane = try page.paneFrame(page.agents[0].id)
+        let edge = CGPoint(x: pane.maxX - 20, y: pane.midY)
+
+        page.drag.update(.agent(page.agents[2]), at: edge, from: CGPoint(x: 80, y: 300))
+        page.drag.cancel()
+        page.drag.update(.agent(page.agents[1]), at: edge, from: CGPoint(x: 80, y: 420))
+        page.drag.finish(.agent(page.agents[1]), at: edge, from: CGPoint(x: 80, y: 420))
+
+        #expect(page.store.currentTab?.agentIDs == [page.agents[0].id, page.agents[1].id])
+    }
+
     @Test func escapeCancelsADragInFlight() async throws {
         let page = try await RenderedHerdrPage()
         defer { page.close() }

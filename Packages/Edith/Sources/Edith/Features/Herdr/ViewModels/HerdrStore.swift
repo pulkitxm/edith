@@ -970,6 +970,11 @@ final class HerdrStore {
 
     func accepts(_ item: HerdrDragItem, _ target: HerdrDropTarget) -> Bool {
         let item = normalized(item)
+        if case let .agent(agent) = item, session(agent.id) == nil,
+            HerdrSpaceWindow.holds(agent: agent.id)
+        {
+            return false
+        }
         switch target {
         case .edge, .outerEdge, .center, .slot:
             return proposedLayout(item, target) != nil

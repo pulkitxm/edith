@@ -219,6 +219,7 @@ enum HerdrDropResolver {
 final class HerdrDragCoordinator {
     static let space = "herdr.page"
     static let springDelay: Duration = .milliseconds(550)
+    static let deadZone: CGFloat = 18
 
     private(set) var item: HerdrDragItem?
     private(set) var location: CGPoint = .zero
@@ -239,22 +240,25 @@ final class HerdrDragCoordinator {
     @ObservationIgnored private var springTarget: String?
     @ObservationIgnored private var keyMonitor: Any?
     @ObservationIgnored private var cancelled = false
+    @ObservationIgnored private var origin: CGPoint?
 
     var active: Bool { item != nil }
 
-    func update(_ item: HerdrDragItem, at point: CGPoint) {
+    func update(_ item: HerdrDragItem, at point: CGPoint, from start: CGPoint? = nil) {
+        if let start, start != origin {
+            reset()
+            origin = start
+        }
         guard !cancelled else { return }
-        if self.item == nil { begin(item) }
+        if self.item != item { begin(item) }
         location = point
         resolve()
     }
 
-    func finish(_ item: HerdrDragItem, at point: CGPoint) {
+    func finish(_ item: HerdrDragItem, at point: CGPoint, from start: CGPoint? = nil) {
+        update(item, at: point, from: start)
         defer { reset() }
-        guard !cancelled, self.item != nil else { return }
-        location = point
-        resolve()
-        guard let target, let store else { return }
+        guard !cancelled, self.item != nil, let target, let store else { return }
         if target == .window {
             if case let .agent(agent) = store.normalized(item) { onTearOff?(agent) }
             return
@@ -289,12 +293,19 @@ final class HerdrDragCoordinator {
         target = nil
         snapBar = nil
         cancelled = false
+        origin = nil
         stopSpring()
         removeKeyMonitor()
     }
 
     private func resolve() {
         guard let store, let item else { return }
+        if let origin, hypot(location.x - origin.x, location.y - origin.y) < Self.deadZone * unit {
+            snapBar = nil
+            target = nil
+            stopSpring()
+            return
+        }
         let tab = store.currentTab
         if geometry.canvas.contains(location), let count = store.snapCount(for: item) {
             snapBar = HerdrSnapBar.make(
@@ -374,8 +385,8 @@ private struct HerdrDraggable: ViewModifier {
             let gesture = DragGesture(
                 minimumDistance: 6, coordinateSpace: .named(HerdrDragCoordinator.space)
             )
-            .onChanged { drag.update(item, at: $0.location) }
-            .onEnded { drag.finish(item, at: $0.location) }
+            .onChanged { drag.update(item, at: $0.location, from: $0.startLocation) }
+            .onEnded { drag.finish(item, at: $0.location, from: $0.startLocation) }
             if simultaneous {
                 content.simultaneousGesture(gesture)
             } else {

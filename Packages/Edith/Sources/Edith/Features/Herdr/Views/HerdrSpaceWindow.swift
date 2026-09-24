@@ -55,6 +55,10 @@ enum HerdrSpaceWindow {
 
     static func has(_ spaceID: String) -> Bool { entries[spaceID] != nil }
 
+    static func holds(agent id: String) -> Bool {
+        entries.values.contains { entry in entry.model.tabs.contains { $0.agentID == id } }
+    }
+
     @discardableResult
     static func raise(_ spaceID: String) -> Bool {
         guard let entry = entries[spaceID] else { return false }
