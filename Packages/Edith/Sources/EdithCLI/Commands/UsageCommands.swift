@@ -13,8 +13,8 @@ struct UsageCommand: AsyncParsableCommand {
             """,
         subcommands: [
             UsageLimitsCommand.self, UsageAlertsCommand.self, UsageSummaryCommand.self,
-            UsageDailyCommand.self,
-            UsageModelsCommand.self, UsageProjectsCommand.self, UsageSourcesCommand.self,
+            UsageDailyCommand.self, UsageModelsCommand.self, UsageProjectsCommand.self,
+            UsageAttributionCommand.self, UsageSourcesCommand.self,
             UsageMachinesCommand.self, UsageExportCommand.self, UsageRefreshCommand.self,
         ],
         defaultSubcommand: UsageSummaryCommand.self)
@@ -420,10 +420,12 @@ struct UsageProjectsShowCommand: AsyncParsableCommand {
 
     static func hierarchyRows(_ summary: UsageProjectSummary) -> [[String]] {
         summary.folders.flatMap { folder in
+            let note = folder.attribution.map { " (attributed by \($0 == "jev" ? "Jev" : $0))" }
             var rows = [
                 row(
-                    type: "folder", name: folder.folderName, machine: folder.machineName ?? "local",
-                    path: folder.path, cost: folder.cost, tokens: folder.tokens)
+                    type: "folder", name: folder.folderName + (note ?? ""),
+                    machine: folder.machineName ?? "local", path: folder.path, cost: folder.cost,
+                    tokens: folder.tokens)
             ]
             rows += folder.chats.map {
                 chatRow($0, indent: "  ", machine: folder.machineName ?? "local")

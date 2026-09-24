@@ -1,4 +1,26 @@
+import EdithCore
 import Foundation
+
+public enum UsageAttributionOperation: String, CaseIterable, Sendable {
+    case list
+    case reset
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .list:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "usage.attribution.list"),
+                summary: "List how unknown and non-GitHub folders were matched to repositories.",
+                cli: ["usage", "attribution", "ls"], effect: .read)
+        case .reset:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "usage.attribution.reset"),
+                summary: "Forget every attribution decision so the next refresh decides again.",
+                cli: ["usage", "attribution", "reset"], effect: .destructive,
+                requiresPreview: true)
+        }
+    }
+}
 
 public struct UsageAttributionRepository: Codable, Sendable, Hashable {
     public var id: String

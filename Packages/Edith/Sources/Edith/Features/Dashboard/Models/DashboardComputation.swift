@@ -595,6 +595,7 @@ private struct ProjAccum {
     var fallbackTokens = 0.0
     var fallbackCost = 0.0
     var fallbackDays = Set<String>()
+    var attribution = ""
 
     mutating func absorb(
         _ p: DashUsage.Project, period: String, scale: DayScale,
@@ -873,6 +874,9 @@ private struct DashboardFilterComputer {
                         ?? ProjAccum(
                             name: folder.name, path: folder.path,
                             machineName: folder.machineName, machineID: folder.machineID)
+                    if folderAccum.attribution.isEmpty {
+                        folderAccum.attribution = p.attribution?.method ?? ""
+                    }
                     let scale = projectScale(
                         p, targetTokens: allocation.amount.tokens,
                         targetCost: allocation.amount.cost)
@@ -1274,7 +1278,8 @@ private struct DashboardFilterComputer {
                 daySet: allDays,
                 dur: mainChats.reduce(0) { $0 + $1.dur }
                     + worktrees.reduce(0) { $0 + $1.dur },
-                lastActive: lastActive, chats: mainChats, worktrees: worktrees)
+                lastActive: lastActive, chats: mainChats, worktrees: worktrees,
+                attribution: accum.attribution)
         }
 
         var rows: [ProjTreeRow] = []
@@ -1329,7 +1334,7 @@ private struct DashboardFilterComputer {
                 machineID: row.machineID, tokens: row.tokens, cost: row.cost,
                 share: targetCost > 0 ? row.cost / targetCost : 0, daySet: row.daySet,
                 dur: row.dur, lastActive: row.lastActive, chats: row.chats.map(chat),
-                worktrees: row.worktrees.map(worktree))
+                worktrees: row.worktrees.map(worktree), attribution: row.attribution)
         }
         return completed.map { row in
             return ProjTreeRow(

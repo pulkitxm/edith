@@ -226,7 +226,7 @@ enum CommandCrawler {
             "ed shelf", "ed cleaner", "ed maintenance", "ed machines docker compose",
             "ed machines docker compose logs", "ed machines forwards",
             "ed machines snippets", "ed machines power", "ed machines thermal",
-            "ed machines control", "ed usage projects",
+            "ed machines control", "ed usage projects", "ed usage attribution",
             "ed machines services", "ed apps",
             "ed agent", "ed agent tasks", "ed mcp", "ed tools", "ed download",
             "ed machines workspace",

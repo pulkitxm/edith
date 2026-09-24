@@ -2,6 +2,7 @@ import EdithKit
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 enum AttributionFixture {
@@ -346,5 +347,41 @@ final class AttributionScriptedDecider: JevDeciding, @unchecked Sendable {
         #expect(calls.count == 0)
         #expect(cache.decisions.values.allSatisfy { $0.method == .name })
         #expect(cache.decisions.count == 2)
+    }
+
+    @Test func theCommandLineListsAndResetsDecisions() async throws {
+        await CLIProbe.inWorld { world in
+            setenv(DataRoot.devOverrideVariable, world.sandbox.path, 1)
+            try? FileManager.default.createDirectory(
+                at: Repo.dataDir, withIntermediateDirectories: true)
+            let moved = UsageAttribution.attributed(
+                Fixture.document(), cache: UsageAttributionCache())
+            try? UsageDataFiles.write(moved, to: Repo.usageJSON)
+            try? UsageAttributionCache(decisions: [
+                "folder||folder:/tmp/scratch": Fixture.decision(nil)
+            ]).save()
+
+            let projects = await CLIProbe.capture(["usage", "projects", "show", "edith", "--json"])
+            let folders = projects.object?["folders"] as? [[String: Any]] ?? []
+            #expect(folders.contains { $0["attribution"] as? String == "name" })
+            let plain = await CLIProbe.capture(["usage", "projects", "show", "edith"])
+            #expect(plain.stdout.contains("feature-x (attributed by name)"))
+
+            let list = await CLIProbe.capture(["usage", "attribution", "ls", "--json"])
+            #expect(list.code == 0)
+            let first = list.array?.first as? [String: Any]
+            #expect(first?["scope"] as? String == "folder")
+            #expect(first?["method"] as? String == "jev")
+
+            let preview = await CLIProbe.capture(["usage", "attribution", "reset", "--json"])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(preview.object?["decisions"] as? Int == 1)
+            #expect(UsageAttributionCache.load().decisions.count == 1)
+            let applied = await CLIProbe.capture([
+                "usage", "attribution", "reset", "--yes", "--json",
+            ])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(UsageAttributionCache.load().decisions.isEmpty)
+        }
     }
 }

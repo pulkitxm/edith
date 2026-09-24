@@ -397,6 +397,8 @@ public enum Guide {
         ed usage projects open edith   open its validated link
         ed usage projects copy-link edith
         ed usage projects copy-chat <chat-id>
+        ed usage attribution ls         folders matched to a repository, and why
+        ed usage attribution reset --yes  forget those decisions
         ed usage sources
         ed usage export --card activity --output ./shares
         ed usage machines               machines counted with this Mac
@@ -419,6 +421,12 @@ public enum Guide {
         `show` selects by stable identity, visible name or URL. Duplicate names require
         the identity. `open`, `copy-link` and `copy-chat` use the same shared actions as
         the dashboard project drilldown.
+
+        After a refresh, an unknown or non-GitHub folder whose name or path clearly
+        names one known repository moves under it, and so does a chat whose title
+        does. With a Jev key, Jev picks a repository or none for the rest. Moved
+        folders keep their path, `show` marks them "attributed by name" or
+        "attributed by Jev", and `list --json` adds `attribution` per folder.
 
         A machine keeps its agent history on its own disk, so `ed usage machines
         collect` pipes the collector over SSH and runs it there, installing what is

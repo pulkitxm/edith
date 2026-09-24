@@ -250,6 +250,10 @@ public enum CommandTree {
             arguments: [.usageProject]),
         "ed usage projects copy-chat": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.usageChat]),
+        "ed usage attribution ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed usage attribution reset": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
         "ed usage sources": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed usage export": Spec(
             options: [
