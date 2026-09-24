@@ -113,7 +113,7 @@ struct HerdrLayoutPopover: View {
                         Button("Gather All Tabs") {
                             perform { store.gatherAll(into: tab.id) }
                         }
-                        .buttonStyle(.edith(.toolbar))
+                        .buttonStyle(.edith(.secondary))
                         .help("Show every open tab together in this one")
                     }
                     if !candidates.isEmpty {
