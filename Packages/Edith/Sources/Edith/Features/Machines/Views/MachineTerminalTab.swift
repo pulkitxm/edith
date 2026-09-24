@@ -434,15 +434,7 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        if let payload = TerminalDropPayload.files(from: sender.draggingPasteboard) {
-            return accept(payload)
-        }
-        let receivingPromises = TerminalDropPayload.receivePromisedFiles(
-            from: sender.draggingPasteboard
-        ) { [weak self] payload in
-            _ = self?.accept(payload)
-        }
-        if receivingPromises { return true }
+        if deliverDroppedFiles(from: sender.draggingPasteboard) { return true }
         if let rawURL = sender.draggingPasteboard.string(forType: .URL), !rawURL.isEmpty {
             send(Array(GhosttyTerminalView.quote(rawURL).utf8))
             return true
@@ -452,6 +444,16 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
         }
         send(Array(text.utf8))
         return true
+    }
+
+    private func deliverDroppedFiles(from pasteboard: NSPasteboard) -> Bool {
+        let receivingPromises = TerminalDropPayload.receivePromisedFiles(from: pasteboard) {
+            [weak self] payload in
+            _ = self?.accept(payload)
+        }
+        if receivingPromises { return true }
+        guard let payload = TerminalDropPayload.files(from: pasteboard) else { return false }
+        return accept(payload)
     }
 
     private func accept(_ payload: TerminalDropPayload) -> Bool {

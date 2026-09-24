@@ -53,15 +53,21 @@ public struct TerminalDropPayload: Sendable {
                 as? [NSFilePromiseReceiver], !receivers.isEmpty
         else { return false }
         guard let destination = temporaryDirectory() else { return false }
+        let collector = PromisedFileCollector(expected: receivers.count) { files in
+            guard !files.isEmpty else {
+                try? FileManager.default.removeItem(at: destination)
+                return
+            }
+            completion(TerminalDropPayload(files: files, temporaryFiles: Set(files)))
+        }
         let queue = OperationQueue()
         queue.qualityOfService = .userInitiated
         for receiver in receivers {
             receiver.receivePromisedFiles(
                 atDestination: destination, options: [:], operationQueue: queue
             ) { url, error in
-                guard error == nil else { return }
-                let payload = TerminalDropPayload(files: [url], temporaryFiles: [url])
-                Task { @MainActor in completion(payload) }
+                let received = error == nil ? url : nil
+                Task { @MainActor in collector.receive(received) }
             }
         }
         return true
@@ -180,6 +186,28 @@ public struct TerminalDropPayload: Sendable {
     }
 }
 
+@MainActor
+final class PromisedFileCollector {
+    private var remaining: Int
+    private var files: [URL] = []
+    private let finish: @MainActor ([URL]) -> Void
+
+    init(expected: Int, finish: @escaping @MainActor ([URL]) -> Void) {
+        remaining = expected
+        self.finish = finish
+    }
+
+    func receive(_ url: URL?) {
+        guard remaining > 0 else {
+            if let url { finish([url]) }
+            return
+        }
+        if let url { files.append(url) }
+        remaining -= 1
+        if remaining == 0 { finish(files) }
+    }
+}
+
 extension GhosttyTerminalView {
     static let dropTypes = Set(TerminalDropPayload.pasteboardTypes)
 
@@ -205,17 +233,19 @@ extension GhosttyTerminalView {
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         clearDropHighlight()
         window?.makeFirstResponder(self)
-        if let payload = TerminalDropPayload.files(from: sender.draggingPasteboard) {
-            return accept(payload)
-        }
-        let receivingPromises = TerminalDropPayload.receivePromisedFiles(
-            from: sender.draggingPasteboard
-        ) { [weak self] payload in
+        if deliverDroppedFiles(from: sender.draggingPasteboard) { return true }
+        guard let content = Self.dropped(from: sender.draggingPasteboard) else { return false }
+        return insertText(content)
+    }
+
+    func deliverDroppedFiles(from pasteboard: NSPasteboard) -> Bool {
+        let receivingPromises = TerminalDropPayload.receivePromisedFiles(from: pasteboard) {
+            [weak self] payload in
             _ = self?.accept(payload)
         }
         if receivingPromises { return true }
-        guard let content = Self.dropped(from: sender.draggingPasteboard) else { return false }
-        return insertText(content)
+        guard let payload = TerminalDropPayload.files(from: pasteboard) else { return false }
+        return accept(payload)
     }
 
     func accept(_ payload: TerminalDropPayload) -> Bool {
