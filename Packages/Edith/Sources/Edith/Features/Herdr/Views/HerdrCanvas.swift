@@ -146,18 +146,31 @@ struct HerdrPaneHeader: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
-            HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
-                .foregroundStyle(agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
-            Text(agent.title)
-                .font(.system(size: UIScale.pt(11), weight: focused ? .semibold : .medium))
-                .foregroundStyle(focused ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                .lineLimit(1)
-                .presenterTextBlur(hideAgents, fontSize: 11)
-            Text(agent.machineName)
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
-            Spacer(minLength: UIScale.pt(4))
+            Button {
+                store.focus(session.id)
+            } label: {
+                HStack(spacing: UIScale.pt(6)) {
+                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
+                        .foregroundStyle(
+                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                    Text(agent.title)
+                        .font(
+                            .system(size: UIScale.pt(11), weight: focused ? .semibold : .medium)
+                        )
+                        .foregroundStyle(focused ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                        .lineLimit(1)
+                        .presenterTextBlur(hideAgents, fontSize: 11)
+                    Text(agent.machineName)
+                        .font(DashSkin.mono(9))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                    Spacer(minLength: UIScale.pt(4))
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .help("Focus \(agent.title)")
             viewPicker
             iconButton(
                 zoomed
@@ -180,12 +193,6 @@ struct HerdrPaneHeader: View {
         .frame(height: UIScale.pt(28))
         .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
-                store.toggleZoom(session.id)
-            }
-        }
-        .onTapGesture { store.focus(session.id) }
         .contextMenu { menuItems }
     }
 
