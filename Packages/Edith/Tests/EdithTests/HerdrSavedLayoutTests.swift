@@ -68,6 +68,29 @@ import Testing
         #expect(store.savedArrangements.isEmpty)
     }
 
+    @Test func everyUseOfASavedLayoutGetsItsOwnSplits() throws {
+        let store = HerdrStore(
+            defaults: Self.scratchDefaults(), liveWatcher: { _ in }, machinesProvider: { [] })
+        let first = try threeAgentTab(in: store)
+        let saved = try #require(store.saveArrangement(of: first, named: "Mine"))
+        store.open(agent("d"))
+        store.open(agent("e"), beside: .right)
+        store.open(agent("f"), beside: .right)
+        let second = try #require(store.currentTab).id
+        store.arrange(first, as: .saved(saved))
+        store.arrange(second, as: .saved(saved))
+
+        let firstIDs = try #require(store.tab(first)).layout.splitIDs
+        let secondIDs = try #require(store.tab(second)).layout.splitIDs
+        #expect(Set(firstIDs).isDisjoint(with: secondIDs))
+        #expect(Set(firstIDs).isDisjoint(with: saved.shape.splitIDs))
+
+        store.selectedTab = first
+        store.drop(.tab(second), on: .edge(agent("a").id, .left))
+        let merged = try #require(store.tab(first)).layout.splitIDs
+        #expect(Set(merged).count == merged.count)
+    }
+
     @Test func draggingOntoASavedSlotUsesThatShape() throws {
         let store = HerdrStore(
             defaults: Self.scratchDefaults(), liveWatcher: { _ in }, machinesProvider: { [] })

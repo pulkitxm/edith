@@ -152,6 +152,19 @@ extension HerdrLayout {
             guard let index = Int(slot), ids.indices.contains(index) else { return slot }
             return ids[index]
         }
+        .renewingIDs()
+    }
+
+    public var splitIDs: [UUID] {
+        guard case let .split(split) = self else { return [] }
+        return [split.id] + split.children.flatMap(\.splitIDs)
+    }
+
+    private func renewingIDs() -> HerdrLayout {
+        guard case var .split(split) = self else { return self }
+        split.id = UUID()
+        split.children = split.children.map { $0.renewingIDs() }
+        return .split(split)
     }
 
     public func rotated() -> HerdrLayout {
