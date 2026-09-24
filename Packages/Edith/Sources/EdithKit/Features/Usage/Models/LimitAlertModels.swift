@@ -253,6 +253,7 @@ public struct LimitAlertLedger: Codable, Equatable, Sendable {
 
     public var windows: [String: Entry] = [:]
     public var login: [String: String] = [:]
+    public var outlookDay: String?
 
     public init() {}
 

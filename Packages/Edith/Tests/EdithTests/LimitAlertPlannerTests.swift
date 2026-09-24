@@ -270,6 +270,25 @@ enum LimitAlertScenario {
         )
     }
 
+    @Test func severalWeeklyWindowsShareOneOutlookEachMorning() {
+        let now = S.start.addingTimeInterval(-3 * S.hour)
+        let reset = S.start.addingTimeInterval(3 * 24 * S.hour)
+        var settings = S.settings
+        settings.outlook = true
+        let assessments = [weekly, LimitAlertTarget(.codex, .week)].map {
+            LimitAlertPlanner.assess(
+                $0, window: LimitWindow(percent: 50, resetsAt: reset), samples: [], now: now)
+        }
+        let plan = LimitAlertPlanner.plan(
+            assessments, ledger: LimitAlertLedger(), settings: settings, clock: S.clock(now))
+        #expect(plan.alerts.map(\.kind) == [.outlook])
+        #expect(plan.verdicts.last?.reason == "one outlook per morning already went out")
+        let again = LimitAlertPlanner.plan(
+            assessments, ledger: plan.ledger, settings: settings,
+            clock: S.clock(now.addingTimeInterval(S.hour)))
+        #expect(again.alerts.isEmpty)
+    }
+
     @Test func outlookReportsAFinishWhenTheWeekFitsAndSkipsQuietWeeks() {
         let now = S.start.addingTimeInterval(-3 * S.hour)
         let reset = S.start.addingTimeInterval(3 * 24 * S.hour)

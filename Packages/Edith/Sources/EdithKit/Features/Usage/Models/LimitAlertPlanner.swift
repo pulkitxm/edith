@@ -107,12 +107,21 @@ public enum LimitAlertPlanner {
     ) -> LimitAlertPlan {
         var plan = LimitAlertPlan(ledger: ledger)
         let recentlyActive = assessments.contains { $0.recentlyActive }
+        let today = clock.day(clock.now)
         for assessment in assessments {
             var entry = plan.ledger.windows[assessment.target.id] ?? .init()
-            let (alert, reason) = decide(
+            var (alert, reason) = decide(
                 assessment, entry: &entry, settings: settings, clock: clock,
                 recentlyActive: recentlyActive)
             plan.ledger.windows[assessment.target.id] = entry
+            if alert?.kind == .outlook {
+                if plan.ledger.outlookDay == today {
+                    alert = nil
+                    reason = "one outlook per morning already went out"
+                } else {
+                    plan.ledger.outlookDay = today
+                }
+            }
             if let alert { plan.alerts.append(alert) }
             plan.verdicts.append(
                 LimitAlertVerdict(assessment: assessment, alert: alert, reason: reason))
