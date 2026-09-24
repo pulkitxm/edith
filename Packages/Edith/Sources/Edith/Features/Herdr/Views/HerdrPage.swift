@@ -652,13 +652,13 @@ struct HerdrPage: View {
                                 spaceHeader(space)
                                 if !store.spaceIsCollapsed(space.id) {
                                     ForEach(space.agents) { agent in
-                                        agentRailEntry(agent)
+                                        agentRow(agent)
                                     }
                                 }
                             }
                         } else {
                             ForEach(listedAgents) { agent in
-                                agentRailEntry(agent)
+                                agentRow(agent)
                             }
                         }
                     }
@@ -750,21 +750,6 @@ struct HerdrPage: View {
         .padding(.bottom, UIScale.pt(3))
     }
 
-    private func agentRailEntry(_ agent: HerdrAgent) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            agentRow(agent)
-            if store.selectedTab == agent.id {
-                HerdrAgentViewToggle(
-                    selection: store.view(for: agent.id), compactStyle: true
-                ) { option in
-                    store.open(agent, showing: option)
-                }
-                .padding(.horizontal, UIScale.pt(8))
-                .padding(.bottom, UIScale.pt(4))
-            }
-        }
-    }
-
     private func railHeader(
         _ title: String, count: Int, collapsed: Bool, toggle: @escaping () -> Void
     ) -> some View {
@@ -823,7 +808,8 @@ struct HerdrPage: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, UIScale.pt(8))
+            .padding(.leading, UIScale.pt(12))
+            .padding(.trailing, UIScale.pt(8))
             .padding(.vertical, UIScale.pt(8))
             .widgetBar(
                 cornerRadius: 8,
@@ -832,9 +818,19 @@ struct HerdrPage: View {
                     ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear,
                 strokeWidth: selected ? 1.4 : 0
             )
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(DashSkin.accent(dark))
+                        .frame(width: UIScale.pt(3))
+                        .padding(.vertical, UIScale.pt(6))
+                        .padding(.leading, UIScale.pt(5))
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
+        .help(selected ? "\(agent.title): open on the right" : agent.title)
     }
 
     private func rowDetail(_ agent: HerdrAgent) -> String {
