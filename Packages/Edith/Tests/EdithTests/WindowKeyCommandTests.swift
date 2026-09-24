@@ -11,14 +11,20 @@ import Testing
         WindowKeyCommand.resolve(characters: characters, keyCode: keyCode, modifiers: modifiers)
     }
 
-    @Test func commandDigitsSelectByIndex() {
-        #expect(resolve("1") == .select(0))
-        #expect(resolve("8") == .select(7))
-        #expect(resolve("9") == .selectLast)
+    @Test func optionDigitsSelectByIndex() {
+        #expect(resolve("1", 0, .option) == .select(0))
+        #expect(resolve("8", 0, .option) == .select(7))
+        #expect(resolve("9", 0, .option) == .selectLast)
+    }
+
+    @Test func commandDigitsNoLongerSelectSidebarSections() {
+        #expect(resolve("1") == nil)
+        #expect(resolve("9") == nil)
     }
 
     @Test func commandZeroResetsZoomRatherThanSelecting() {
         #expect(resolve("0") == .zoomReset)
+        #expect(resolve("0", 0, .option) == nil)
     }
 
     @Test func zoomKeysCoverShiftedPlus() {

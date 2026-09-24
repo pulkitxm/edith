@@ -20,18 +20,21 @@ public enum WindowKeyCommand: Equatable, Sendable {
             guard active.subtracting(.shift) == .option else { return nil }
             return active.contains(.shift) ? .cycleBackward : .cycleForward
         }
-        guard active.subtracting(.shift) == .command, let characters else { return nil }
-        switch characters {
-        case "=", "+": return .zoomIn
-        case "-", "_": return .zoomOut
-        case "0": return .zoomReset
-        case "9": return .selectLast
-        default:
-            guard let digit = Int(characters), (1...directSelectLimit).contains(digit) else {
-                return nil
+        guard let characters else { return nil }
+        if active.subtracting(.shift) == .command {
+            switch characters {
+            case "=", "+": return .zoomIn
+            case "-", "_": return .zoomOut
+            case "0": return .zoomReset
+            default: return nil
             }
-            return .select(digit - 1)
         }
+        guard active.subtracting(.shift) == .option else { return nil }
+        if characters == "9" { return .selectLast }
+        guard let digit = Int(characters), (1...directSelectLimit).contains(digit) else {
+            return nil
+        }
+        return .select(digit - 1)
     }
 
     public static func resolvedIndex(

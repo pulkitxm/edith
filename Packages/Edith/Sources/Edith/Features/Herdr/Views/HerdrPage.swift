@@ -230,7 +230,7 @@ struct HerdrPage: View {
             ForEach(1...9, id: \.self) { number in
                 Button("") { store.selectTab(number: number) }
                     .keyboardShortcut(
-                        KeyEquivalent(Character("\(number)")), modifiers: .option)
+                        KeyEquivalent(Character("\(number)")), modifiers: .command)
             }
             if let space = store.agentSpaces.first {
                 Button("") { openSpace(space) }
