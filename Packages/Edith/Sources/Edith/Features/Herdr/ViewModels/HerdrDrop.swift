@@ -234,7 +234,6 @@ final class HerdrDragCoordinator {
     @ObservationIgnored weak var store: HerdrStore?
     @ObservationIgnored var gap: CGFloat = 6
     @ObservationIgnored var unit: CGFloat = 1
-    @ObservationIgnored var animation: Animation?
     @ObservationIgnored var onTearOff: ((HerdrAgent) -> Void)?
     @ObservationIgnored private var springTask: Task<Void, Never>?
     @ObservationIgnored private var springTarget: String?
@@ -263,7 +262,7 @@ final class HerdrDragCoordinator {
             if case let .agent(agent) = store.normalized(item) { onTearOff?(agent) }
             return
         }
-        withAnimation(animation) { store.drop(item, on: target) }
+        withAnimation(store.layoutAnimation) { store.drop(item, on: target) }
     }
 
     func cancel() {
@@ -333,7 +332,7 @@ final class HerdrDragCoordinator {
         springTask = Task { [weak self] in
             try? await Task.sleep(for: Self.springDelay)
             guard !Task.isCancelled, let self, self.target == .intoTab(id) else { return }
-            withAnimation(self.animation) { self.store?.selectedTab = id }
+            withAnimation(self.store?.layoutAnimation) { self.store?.selectedTab = id }
             self.springTarget = nil
             self.resolve()
         }
