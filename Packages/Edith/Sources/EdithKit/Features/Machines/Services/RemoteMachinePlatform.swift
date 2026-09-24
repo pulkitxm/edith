@@ -49,6 +49,22 @@ public enum PowerShell {
         "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
     }
 
+    public static func nativeArgument(_ value: String) -> String {
+        var escaped = ""
+        var backslashes = 0
+        for character in value {
+            if character == "\\" {
+                backslashes += 1
+                continue
+            }
+            let run = character == "\"" ? backslashes * 2 + 1 : backslashes
+            escaped += String(repeating: "\\", count: run) + String(character)
+            backslashes = 0
+        }
+        let quoted = value.contains { $0 == " " || $0 == "\t" }
+        return escaped + String(repeating: "\\", count: quoted ? backslashes * 2 : backslashes)
+    }
+
     public static func invocation(_ words: [String]) -> String? {
         guard let first = words.first else { return nil }
         let invocation = "& " + ([first] + words.dropFirst()).map(literal).joined(separator: " ")

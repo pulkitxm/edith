@@ -165,6 +165,7 @@ public enum AppStorageKeys {
         public static let animatesLayout = "herdrAnimatesLayout"
         public static let launchCommands = "herdrLaunchCommands"
         public static let pendingOpen = "herdrPendingOpen"
+        public static let launchDefaults = "herdrLaunchDefaults"
     }
 
     public enum Cleaner {
