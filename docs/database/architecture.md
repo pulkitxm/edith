@@ -2,7 +2,7 @@
 
 ## Boundary and dependency direction
 
-Database introduces a shared `EdithDatabase` library. The application, CLI, and MCP entry point depend on it. The library depends on `EdithKit` for application paths and established secure storage behavior, plus selected database drivers. It does not depend on SwiftUI or ArgumentParser.
+Database introduces a shared `EdithDatabase` library. The application, CLI, and MCP entry point depend on it. The library depends on `EdithCore` and selected database drivers. It does not depend on SwiftUI, ArgumentParser, or `EdithKit`, and `EdithKit` does not depend on it, so Edith Bar and the background agent never link the database drivers. The executables install the database readiness probe into `EdithKit` at launch.
 
 ```text
 Database views       ed database commands       MCP tools

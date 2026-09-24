@@ -1,4 +1,13 @@
 import EdithDatabase
+import EdithKit
+
+public enum DatabaseExtensionReadiness {
+    public static func install() {
+        ExtensionLifecycleProbeEnvironment.databaseReadiness = {
+            await DatabaseBrokerExtensionReadinessAdapter().readiness()
+        }
+    }
+}
 
 struct DatabaseBrokerExtensionReadinessAdapter: Sendable {
     private let ensureReady: @Sendable () async throws -> Void

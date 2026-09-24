@@ -1,5 +1,4 @@
 import EdithCore
-import EdithDatabase
 
 public enum UserOperationCatalog {
     private static let machineRegistrations: [RegisteredUserOperation] = {
