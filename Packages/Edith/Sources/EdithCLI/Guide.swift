@@ -454,6 +454,8 @@ public enum Guide {
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed herdr attach w3:p1N          attach this terminal to a live pane
+        ed herdr models codex           models, effort levels and fast mode per agent
+        ed herdr defaults set codex --model gpt-6-sol --effort high --fast on
         ed permissions ls
         ed permissions request calendar
         ed permissions settings screenRecording
@@ -474,6 +476,12 @@ public enum Guide {
         A missing binary is an empty host, not an error. `ed herdr command <pane>`
         prints the attach line, `ssh -tt` when the pane is remote. `attach` runs
         that same launch request in the current terminal.
+
+        `ed herdr models [<kind>]` lists the models, effort levels and fast mode each
+        agent offers, asked live from codex, opencode, pi and cursor (on this Mac or
+        `--machine`) and built in for Claude Code, Gemini and Amp. `ed herdr defaults
+        set <kind>` stores the model, effort and fast mode Edith passes whenever it
+        starts that agent; `none` clears a value.
 
         ## Attention and focus
 
