@@ -194,6 +194,42 @@ import Testing
         #expect(reachesStacked)
     }
 
+    @Test @MainActor func promisedFilesFromOneDropArriveTogether() {
+        var deliveries: [[URL]] = []
+        let collector = PromisedFileCollector(expected: 3) { deliveries.append($0) }
+        let first = URL(fileURLWithPath: "/tmp/drops/one.png")
+        let third = URL(fileURLWithPath: "/tmp/drops/three.png")
+
+        collector.receive(first)
+        collector.receive(nil)
+        #expect(deliveries.isEmpty)
+        collector.receive(third)
+
+        #expect(deliveries == [[first, third]])
+    }
+
+    @Test @MainActor func aDropWhosePromisesAllFailDeliversNothingUsable() {
+        var deliveries: [[URL]] = []
+        let collector = PromisedFileCollector(expected: 2) { deliveries.append($0) }
+
+        collector.receive(nil)
+        collector.receive(nil)
+
+        #expect(deliveries == [[]])
+    }
+
+    @Test @MainActor func aLatePromisedFileIsStillDelivered() {
+        var deliveries: [[URL]] = []
+        let collector = PromisedFileCollector(expected: 1) { deliveries.append($0) }
+        let first = URL(fileURLWithPath: "/tmp/drops/one.png")
+        let late = URL(fileURLWithPath: "/tmp/drops/late.png")
+
+        collector.receive(first)
+        collector.receive(late)
+
+        #expect(deliveries == [[first], [late]])
+    }
+
     @Test func promisedFilesAreRegisteredAsDropTypes() {
         let promiseTypes = Set(
             NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
