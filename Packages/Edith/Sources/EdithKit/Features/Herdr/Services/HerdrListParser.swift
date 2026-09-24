@@ -73,6 +73,44 @@ public enum HerdrListParser {
             hasPaneList: paneValues != nil)
     }
 
+    public static func workspaces(from text: String) -> [HerdrWorkspaceSummary] {
+        guard let json = firstJSON(in: text) else { return [] }
+        let payload = unwrap(json)
+        let values: [Any]
+        if let array = payload as? [Any] {
+            values = array
+        } else if let object = payload as? [String: Any] {
+            values = array(in: object, keys: ["workspaces"]) ?? []
+        } else {
+            values = []
+        }
+        return values.compactMap { value in
+            guard let object = value as? [String: Any] else { return nil }
+            guard let id = string(in: object, keys: ["workspace_id", "id"]) else { return nil }
+            return HerdrWorkspaceSummary(
+                id: id, label: string(in: object, keys: ["label", "name"]) ?? id,
+                tabCount: integer(in: object, keys: ["tab_count"]) ?? 0,
+                paneCount: integer(in: object, keys: ["pane_count"]) ?? 0)
+        }
+    }
+
+    public static func createdPane(from text: String) -> HerdrCreatedPane? {
+        guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
+        let payload = unwrap(json) as? [String: Any] ?? [:]
+        guard let rootPane = payload["root_pane"] as? [String: Any],
+            let paneID = string(in: rootPane, keys: ["pane_id", "id"])
+        else { return nil }
+        let tab = payload["tab"] as? [String: Any]
+        let workspace = payload["workspace"] as? [String: Any]
+        guard
+            let tabID = string(in: rootPane, keys: ["tab_id"])
+                ?? tab.flatMap({ string(in: $0, keys: ["tab_id", "id"]) }),
+            let workspaceID = string(in: rootPane, keys: ["workspace_id"])
+                ?? workspace.flatMap({ string(in: $0, keys: ["workspace_id", "id"]) })
+        else { return nil }
+        return HerdrCreatedPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+    }
+
     public static func eventName(in text: String) -> String? {
         guard let object = firstJSON(in: text) as? [String: Any] else { return nil }
         let raw =

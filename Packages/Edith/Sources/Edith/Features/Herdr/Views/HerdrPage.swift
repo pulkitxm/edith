@@ -16,6 +16,7 @@ struct HerdrPage: View {
     @State private var railDragBaseWidth: Double?
     @State private var liveRailWidth: Double?
     @State private var layoutPopoverOpen = false
+    @State private var launchSettingsPresented = false
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -96,6 +97,9 @@ struct HerdrPage: View {
         .agentTopic(.sessions, as: SessionsSnapshot.self, active: automaticActions) { snapshot in
             store.adopt(snapshot)
 
+        }
+        .sheet(isPresented: $launchSettingsPresented) {
+            HerdrLaunchSettingsSheet()
         }
     }
 
@@ -296,11 +300,22 @@ struct HerdrPage: View {
                 items: store.machineChoices.map { ($0.id, $0.name) },
                 isSelected: { $0 == store.machineFilter }
             ) { store.machineFilter = $0 }
-            pillRow(
-                items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
-                isSelected: { store.kindIsSelected($0) },
-                showsKindMark: true
-            ) { store.selectKind($0) }
+            HStack(spacing: UIScale.pt(6)) {
+                pillRow(
+                    items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
+                    isSelected: { store.kindIsSelected($0) },
+                    showsKindMark: true
+                ) { store.selectKind($0) }
+                Button {
+                    launchSettingsPresented = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                }
+                .buttonStyle(.edith(.borderless))
+                .help("Edit launch commands for each agent kind")
+            }
         }
     }
 

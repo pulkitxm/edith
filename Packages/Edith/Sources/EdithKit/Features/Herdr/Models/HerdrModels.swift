@@ -339,3 +339,29 @@ public struct HerdrSnapshotBoard: Equatable, Sendable {
         self.hasPaneList = hasPaneList
     }
 }
+
+public struct HerdrWorkspaceSummary: Identifiable, Equatable, Sendable {
+    public var id: String
+    public var label: String
+    public var tabCount: Int
+    public var paneCount: Int
+
+    public init(id: String, label: String, tabCount: Int, paneCount: Int) {
+        self.id = id
+        self.label = label
+        self.tabCount = tabCount
+        self.paneCount = paneCount
+    }
+}
+
+public struct HerdrCreatedPane: Equatable, Sendable {
+    public var workspaceID: String
+    public var tabID: String
+    public var paneID: String
+
+    public init(workspaceID: String, tabID: String, paneID: String) {
+        self.workspaceID = workspaceID
+        self.tabID = tabID
+        self.paneID = paneID
+    }
+}
