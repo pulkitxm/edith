@@ -236,7 +236,7 @@ private struct ShareCardFooter: View {
 @MainActor
 private enum ShareBrand {
     static let icon: NSImage = {
-        guard let url = Bundle.module.url(forResource: "appicon", withExtension: "png"),
+        guard let url = Bundle.module.url(forResource: "share-icon", withExtension: "png"),
             let icon = NSImage(contentsOf: url)
         else { preconditionFailure("Edith app icon is missing") }
         return icon

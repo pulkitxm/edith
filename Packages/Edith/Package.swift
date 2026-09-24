@@ -107,7 +107,6 @@ let targets: [Target] = [
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
-            .copy("../Edith/Resources/appicon.png"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
