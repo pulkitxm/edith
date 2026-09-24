@@ -77,8 +77,10 @@ public struct JevRouter: Sendable {
             ])
     }
 
-    public func route(_ intent: String, using client: JevClient) async throws -> JevRouteResult {
-        let first = try await client.decide(groupRequest(for: intent))
+    public func route(_ intent: String, using decider: JevDeciding, purpose: String) async throws
+        -> JevRouteResult
+    {
+        let first = try await decider.decide(groupRequest(for: intent), purpose: purpose)
         let ranked = first.answer("area")?.ranked() ?? []
         let expanded = ranked.prefix(groupsToExpand).compactMap { pick in
             groups.first { $0.id == pick.id }.map { ($0, pick.probability) }
@@ -92,7 +94,8 @@ public struct JevRouter: Sendable {
                 tasks.addTask {
                     guard group.members.count > 1 else { return (nil, group, weight) }
                     return (
-                        try await client.decide(memberRequest(for: intent, group: group)), group,
+                        try await decider.decide(
+                            memberRequest(for: intent, group: group), purpose: purpose), group,
                         weight
                     )
                 }
