@@ -13,11 +13,12 @@ struct HerdrPanePlacement {
         var result: [String: HerdrPanePlacement] = [:]
         for tab in store.tabs {
             let shown = active && tab.id == store.selectedTab
-            let frames = tab.layout.frames(in: rect, gap: tab.isSplit ? gap : 0)
+            let frames = tab.layout.paneFrames(in: rect, gap: gap)
+            let content = tab.layout.content(in: rect, gap: gap)
             for (id, frame) in frames {
                 if let zoomed = tab.zoomed {
                     result[id] = HerdrPanePlacement(
-                        tab: tab, frame: id == zoomed ? rect : frame,
+                        tab: tab, frame: id == zoomed ? content : frame,
                         visible: shown && id == zoomed)
                 } else {
                     result[id] = HerdrPanePlacement(tab: tab, frame: frame, visible: shown)
@@ -59,7 +60,7 @@ struct HerdrCanvas: View {
                     }
                 }
                 if active, let tab = store.currentTab, tab.isSplit, tab.zoomed == nil {
-                    ForEach(tab.layout.dividers(in: rect, gap: gap)) { divider in
+                    ForEach(tab.layout.paneDividers(in: rect, gap: gap)) { divider in
                         HerdrLayoutDividerHandle(
                             axis: divider.axis, dark: dark,
                             onDrag: { delta in

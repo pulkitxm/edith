@@ -220,6 +220,18 @@ extension HerdrLayout {
             HerdrSplit(id: split.id, axis: split.axis, children: children, ratios: ratios))
     }
 
+    public func content(in canvas: CGRect, gap: CGFloat) -> CGRect {
+        paneCount > 1 ? canvas.insetBy(dx: gap, dy: gap) : canvas
+    }
+
+    public func paneFrames(in canvas: CGRect, gap: CGFloat) -> [String: CGRect] {
+        frames(in: content(in: canvas, gap: gap), gap: paneCount > 1 ? gap : 0)
+    }
+
+    public func paneDividers(in canvas: CGRect, gap: CGFloat) -> [HerdrLayoutDivider] {
+        dividers(in: content(in: canvas, gap: gap), gap: gap)
+    }
+
     public func frames(in rect: CGRect, gap: CGFloat = 0) -> [String: CGRect] {
         var result: [String: CGRect] = [:]
         walk(in: rect, gap: gap) { node, frame in

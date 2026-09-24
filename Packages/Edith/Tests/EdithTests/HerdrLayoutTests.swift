@@ -80,6 +80,16 @@ import Testing
         #expect(abs((resized.equalized().frames(in: unit)["a"]?.width ?? 0) - 50) < 0.001)
     }
 
+    @Test func splitLayoutsKeepAGapFromTheCanvasEdges() {
+        let canvas = CGRect(x: 0, y: 0, width: 112, height: 100)
+        let split = HerdrLayout.stack(.horizontal, ["a", "b"])
+        let frames = split.paneFrames(in: canvas, gap: 6)
+        #expect(frames["a"] == CGRect(x: 6, y: 6, width: 47, height: 88))
+        #expect(frames["b"] == CGRect(x: 59, y: 6, width: 47, height: 88))
+        #expect(split.paneDividers(in: canvas, gap: 6).first?.rect.minX == 53)
+        #expect(HerdrLayout.pane("a").paneFrames(in: canvas, gap: 6)["a"] == canvas)
+    }
+
     @Test func dividersSitInTheGaps() {
         let layout = HerdrLayout.group(.horizontal, [.pane("a"), .stack(.vertical, ["b", "c"])])
         let rect = CGRect(x: 0, y: 0, width: 106, height: 106)

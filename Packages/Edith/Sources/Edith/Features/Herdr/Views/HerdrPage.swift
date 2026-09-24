@@ -355,7 +355,7 @@ struct HerdrPage: View {
                             let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
                             tabButton(
                                 id: tab.id,
-                                title: store.session(tab.focused)?.agent.title ?? "Agent",
+                                title: agents.first?.title ?? "Agent",
                                 closable: true, agents: agents, blurTitle: hideAgents)
                         }
                     }
@@ -428,9 +428,17 @@ struct HerdrPage: View {
                 AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
             }
             Text(title)
-                .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .lineLimit(1)
-                .presenterTextBlur(blurTitle, fontSize: 12)
+                .hidden()
+                .overlay(alignment: .leading) {
+                    Text(title)
+                        .font(
+                            .system(size: UIScale.pt(12), weight: selected ? .semibold : .medium)
+                        )
+                        .lineLimit(1)
+                        .presenterTextBlur(blurTitle, fontSize: 12)
+                }
             if agents.count > 1 {
                 Text("+\(agents.count - 1)")
                     .font(DashSkin.mono(9.5, weight: .semibold))
