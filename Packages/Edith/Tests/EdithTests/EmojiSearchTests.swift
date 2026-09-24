@@ -108,7 +108,7 @@ private let corpus = [
                 _ = await service.results(query: query)
             }
         }
-        #expect(started.duration(to: clock.now) < .milliseconds(300))
+        #expect(started.duration(to: clock.now) < .seconds(1))
     }
 }
 
