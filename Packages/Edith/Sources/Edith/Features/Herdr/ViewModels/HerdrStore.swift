@@ -682,6 +682,7 @@ final class HerdrStore {
         withAnimation(animation) {
             switch key {
             case let .focus(side): focusNeighbor(toward: side)
+            case let .cycle(backwards): cycleFocus(backwards: backwards)
             case .zoom: toggleZoom(tab.focused)
             }
         }
@@ -691,6 +692,19 @@ final class HerdrStore {
     func movePage(from old: NSWindow?, to new: NSWindow?) {
         if let old { pageWindows.remove(old) }
         if let new { pageWindows.add(new) }
+    }
+
+    func cycleFocus(backwards: Bool) {
+        guard let tab = currentTab, tab.isSplit,
+            let index = tab.agentIDs.firstIndex(of: tab.focused)
+        else { return }
+        let count = tab.agentIDs.count
+        let next = tab.agentIDs[(index + (backwards ? count - 1 : 1)) % count]
+        updateTab(tab.id) { tab in
+            tab.focused = next
+            if tab.zoomed != nil { tab.zoomed = next }
+        }
+        if let agent = session(next)?.agent { revealSpace(containing: agent) }
     }
 
     func toggleZoom(_ agentID: String) {
@@ -1070,11 +1084,14 @@ struct HerdrTab: Identifiable, Equatable {
 
 enum HerdrLayoutKey: Equatable {
     case focus(InsertSide)
+    case cycle(backwards: Bool)
     case zoom
 
     static func resolve(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> HerdrLayoutKey? {
         let flags = modifiers.chordOnly
         if flags == [.command, .shift], keyCode == 36 { return .zoom }
+        if keyCode == 50, flags == .option { return .cycle(backwards: false) }
+        if keyCode == 50, flags == [.option, .shift] { return .cycle(backwards: true) }
         guard flags == [.command, .option] else { return nil }
         switch keyCode {
         case 123: return .focus(.left)

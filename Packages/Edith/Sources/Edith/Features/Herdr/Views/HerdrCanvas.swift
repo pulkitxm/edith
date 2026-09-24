@@ -171,7 +171,7 @@ struct HerdrPaneHeader: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .help("Focus \(agent.title)")
+            .help("Focus \(agent.title). ⌥` moves to the next agent, ⌥⌘ arrows move by direction.")
             viewPicker
             iconButton(
                 zoomed

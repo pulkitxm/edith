@@ -199,6 +199,11 @@ import Testing
         #expect(HerdrLayoutKey.resolve(keyCode: 36, modifiers: [.command, .shift]) == .zoom)
         #expect(HerdrLayoutKey.resolve(keyCode: 123, modifiers: [.command]) == nil)
         #expect(HerdrLayoutKey.resolve(keyCode: 36, modifiers: [.command]) == nil)
+        #expect(HerdrLayoutKey.resolve(keyCode: 50, modifiers: .option) == .cycle(backwards: false))
+        #expect(
+            HerdrLayoutKey.resolve(keyCode: 50, modifiers: [.option, .shift])
+                == .cycle(backwards: true))
+        #expect(HerdrLayoutKey.resolve(keyCode: 50, modifiers: .command) == nil)
     }
 
     @Test func layoutKeysOnlyActInTheWindowShowingHerdr() {
@@ -269,6 +274,25 @@ import Testing
         #expect(store.detachedIDs.isEmpty)
         #expect(store.currentTab?.agentIDs == [claude.id, codex.id])
         #expect(store.session(codex.id)?.view == .diff)
+    }
+
+    @Test func optionBacktickCyclesFocusThroughThePanes() {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let agents = ["a", "b", "c"].map { agent("Codex", pane: $0) }
+        store.open(agents[0])
+        store.open(agents[1], beside: .right)
+        store.open(agents[2], beside: .bottom)
+        let page = NSWindow()
+        store.movePage(from: nil, to: page)
+
+        #expect(store.performLayoutKey(keyCode: 50, modifiers: .option, in: page))
+        #expect(store.currentTab?.focused == agents[0].id)
+        store.cycleFocus(backwards: false)
+        #expect(store.currentTab?.focused == agents[1].id)
+        #expect(store.performLayoutKey(keyCode: 50, modifiers: [.option, .shift], in: page))
+        #expect(store.currentTab?.focused == agents[0].id)
+        store.cycleFocus(backwards: true)
+        #expect(store.currentTab?.focused == agents[2].id)
     }
 
     @Test func reopeningAnAgentInASharedTabFocusesIt() {
