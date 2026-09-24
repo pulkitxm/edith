@@ -100,6 +100,17 @@ public final class UserShellEnvironment: @unchecked Sendable {
         }
     }
 
+    func settled() async {
+        await withCheckedContinuation { continuation in
+            let idle = lock.withLock { () -> Bool in
+                guard capturing else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if idle { continuation.resume() }
+        }
+    }
+
     public static func userEnvironment(
         process: [String: String] = ProcessInfo.processInfo.environment,
         shell: [String: String]? = shared.current()

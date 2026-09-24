@@ -82,7 +82,8 @@ import Testing
 
         #expect(environment.current() == nil)
         environment.enable()
-        #expect(await eventually { environment.current()?["PATH"] == "/v1" })
+        await environment.settled()
+        #expect(environment.current()?["PATH"] == "/v1")
 
         clock.advance(by: 6)
         #expect(environment.current()?["PATH"] == "/v1")
@@ -91,25 +92,21 @@ import Testing
         try Data("export PATH=/two:$PATH\n# edited\n".utf8).write(to: rc)
         clock.advance(by: 6)
         _ = environment.current()
-        #expect(await eventually { environment.current()?["PATH"] == "/v2" })
+        await environment.settled()
+        #expect(environment.current()?["PATH"] == "/v2")
 
         clock.advance(by: 6)
         _ = environment.current()
+        await environment.settled()
         #expect(captures.count == 2)
 
         clock.advance(by: UserShellEnvironment.maximumAge)
         _ = environment.current()
-        #expect(await eventually { environment.current()?["PATH"] == "/v3" })
+        await environment.settled()
+        #expect(environment.current()?["PATH"] == "/v3")
 
         await environment.refresh()
         #expect(environment.current()?["PATH"] == "/v4")
-    }
-
-    private func eventually(_ condition: () -> Bool) async -> Bool {
-        for _ in 0..<400 where !condition() {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        return condition()
     }
 
     @Test func fingerprintNoticesEditsInsideWatchedDirectories() throws {
