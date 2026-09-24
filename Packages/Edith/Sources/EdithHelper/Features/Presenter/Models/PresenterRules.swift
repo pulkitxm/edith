@@ -22,6 +22,11 @@ enum PresenterRules {
         let height: ClosedRange<Double>
     }
 
+    struct MeetingApp {
+        let owner: String
+        let name: String
+    }
+
     static let watchedBundleIDs: Set<String> = [
         "us.zoom.xos",
         "com.microsoft.teams2",
@@ -39,6 +44,24 @@ enum PresenterRules {
         "Cisco-Systems.Spark",
         "com.webex.meetingmanager",
         "com.apple.QuickTimePlayerX",
+    ]
+
+    static let meetingApps: [MeetingApp] = [
+        MeetingApp(owner: "zoom.us", name: "Zoom"),
+        MeetingApp(owner: "Microsoft Teams", name: "Teams"),
+        MeetingApp(owner: "MSTeams", name: "Teams"),
+        MeetingApp(owner: "FaceTime", name: "FaceTime"),
+        MeetingApp(owner: "Webex", name: "Webex"),
+        MeetingApp(owner: "Cisco Webex", name: "Webex"),
+        MeetingApp(owner: "Slack", name: "Slack"),
+        MeetingApp(owner: "Discord", name: "Discord"),
+        MeetingApp(owner: "Google Chrome", name: "Google Chrome"),
+        MeetingApp(owner: "Chromium", name: "Chromium"),
+        MeetingApp(owner: "Arc", name: "Arc"),
+        MeetingApp(owner: "Safari", name: "Safari"),
+        MeetingApp(owner: "Firefox", name: "Firefox"),
+        MeetingApp(owner: "Microsoft Edge", name: "Microsoft Edge"),
+        MeetingApp(owner: "Brave Browser", name: "Brave"),
     ]
 
     static let titleRules: [TitleRule] = [
@@ -81,11 +104,36 @@ enum PresenterRules {
             width: 200...420, height: 30...70)
     ]
 
+    static let systemOwners: Set<String> = [
+        "Window Server", "Dock", "SystemUIServer", "Control Center", "Notification Center",
+        "WindowManager",
+    ]
+
+    static let menuBarLayer = 24
+
     static func firstMatch(in windows: [PresenterWindowInfo], titlesAvailable: Bool) -> String? {
         if titlesAvailable, let reason = firstTitleMatch(in: windows) {
             return reason
         }
         return firstGeometryMatch(in: windows)
+    }
+
+    static func isListed(_ window: PresenterWindowInfo) -> Bool {
+        guard !systemOwners.contains(window.ownerName) else { return false }
+        if window.layer == 0 { return window.width >= 40 && window.height >= 20 }
+        return window.layer > 0 && window.layer < menuBarLayer && window.width >= 40
+            && window.width <= 1000 && window.height <= 160
+    }
+
+    static func meetingApp(in windows: [PresenterWindowInfo]) -> String? {
+        for window in windows where isListed(window) {
+            if let app = meetingApps.first(where: {
+                window.ownerName.range(of: $0.owner, options: [.caseInsensitive, .anchored]) != nil
+            }) {
+                return app.name
+            }
+        }
+        return nil
     }
 
     private static func firstTitleMatch(in windows: [PresenterWindowInfo]) -> String? {

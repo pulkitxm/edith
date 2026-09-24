@@ -95,6 +95,18 @@ import Testing
         #expect(PresenterRules.firstMatch(in: windows, titlesAvailable: false) == nil)
     }
 
+    @Test func meetingAppIsTheFrontmostListedCallApp() {
+        let windows = [
+            PresenterWindowInfo(ownerName: "Spotlight Search", title: "", width: 600, height: 60),
+            PresenterWindowInfo(
+                ownerName: "Dock", title: "", width: 900, height: 80, layer: 20),
+            PresenterWindowInfo(ownerName: "Slack", title: "Huddle", width: 900, height: 700),
+            PresenterWindowInfo(ownerName: "Google Chrome", title: "Meet", width: 900, height: 700),
+        ]
+        #expect(PresenterRules.meetingApp(in: windows) == "Slack")
+        #expect(PresenterRules.meetingApp(in: Array(windows.prefix(2))) == nil)
+    }
+
     @Test func everyCallAppIsWatched() {
         for id in [
             "com.apple.FaceTime", "Cisco-Systems.Spark", "org.mozilla.firefox",

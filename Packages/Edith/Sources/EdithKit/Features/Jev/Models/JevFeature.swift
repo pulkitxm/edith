@@ -37,5 +37,10 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
             detail:
                 "On-pace, outlook and headroom limit alerts go out only when Jev judges them worth the interruption. Capped, almost capped, back and login alerts always go out."
         ),
+        JevFeature(
+            id: "presenter.detect", title: "Presenter detection",
+            detail:
+                "When no built-in rule matches, asks whether the on-screen windows show a shared screen. Opt in under Presenter."
+        ),
     ]
 }

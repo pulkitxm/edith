@@ -908,6 +908,11 @@ public enum ConfigCatalog {
             AppStorageKeys.Presenter.detectMirroring, .bool, group: "presenter",
             summary: "Treat display mirroring as a share."),
         SettingDefinition(
+            AppStorageKeys.Presenter.askJev, .bool, group: "presenter",
+            summary:
+                "Ask Jev whether on-screen windows look like a shared screen. Sends window titles to TypeSafe.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Presenter.hideMenuBarNumbers, .bool, group: "presenter",
             summary: "Hide menu bar percentages while presenting."),
         SettingDefinition(

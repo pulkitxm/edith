@@ -64,24 +64,28 @@ struct PresenterWindowSource: Sendable {
 final class PresenterScanner: @unchecked Sendable {
     static let titlesLifetime: TimeInterval = 30
 
+    let jev: PresenterJevCheck
     private let source: PresenterWindowSource
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var titles: (available: Bool, at: Date)?
 
     init(
-        source: PresenterWindowSource = .live, now: @escaping @Sendable () -> Date = Date.init
+        source: PresenterWindowSource = .live, jev: PresenterJevCheck = .live,
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.source = source
+        self.jev = jev
         self.now = now
     }
 
     func scan() -> PresenterScan {
         let titlesAvailable = titlesAvailable()
         let windows = source.windows()
-        return PresenterScan(
-            windowReason: PresenterRules.firstMatch(in: windows, titlesAvailable: titlesAvailable),
-            recordingHit: source.recording())
+        let reason =
+            PresenterRules.firstMatch(in: windows, titlesAvailable: titlesAvailable)
+            ?? (titlesAvailable ? jev.reason(for: windows) : nil)
+        return PresenterScan(windowReason: reason, recordingHit: source.recording())
     }
 
     private func titlesAvailable() -> Bool {

@@ -292,6 +292,7 @@ public enum AppStorageKeys {
     }
 
     public enum Presenter {
+        public static let askJev = "presenterAskJev"
         public static let autoActive = "presenterAutoActive"
         public static let autoEnabled = "presenterAutoEnabled"
         public static let autoPaused = "presenterAutoPaused"
