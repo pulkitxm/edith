@@ -105,7 +105,7 @@ private struct ThemeEvidenceCard: View {
             }
 
             TerminalEvidence(
-                title: "Ghostty and SwiftTerm",
+                title: "Ghostty terminal",
                 palette: TerminalPalette.edith(dark: true, theme: theme)
             )
 

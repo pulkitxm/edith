@@ -17,7 +17,6 @@
 		9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		A191C1CE3CD44753BB045A59 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		AE432717A8BA5DF0A8AE3C81 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
-		B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CCC83B99D6204A92B3072609 /* SwiftTerm */; };
 		E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
 		F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithKit */; };
@@ -99,7 +98,6 @@
 				A191C1CE3CD44753BB045A59 /* (null) in Frameworks */,
 				5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */,
 				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
-				B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -195,7 +193,6 @@
 				6DBA5E0A0C4D4C9EB8F10002 /* EdithDatabase */,
 				D09B7FAF0E894B2E88306846 /* Highlighter */,
 				50E40C33BF204D7FBD48418B /* Sparkle */,
-				CCC83B99D6204A92B3072609 /* SwiftTerm */,
 			);
 			productName = EdithMain;
 			productReference = C42196203122A2922205077A /* EdithMain.app */;
@@ -246,7 +243,6 @@
 			packageReferences = (
 				4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */,
 				81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */,
-				B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E2CD9CF03028F1FD00967D47 /* Products */;
@@ -640,14 +636,6 @@
 				version = 2.9.6;
 			};
 		};
-		B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
-			requirement = {
-				kind = exactVersion;
-				version = 1.19.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -675,11 +663,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithKit;
-		};
-		CCC83B99D6204A92B3072609 /* SwiftTerm */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
-			productName = SwiftTerm;
 		};
 		D09B7FAF0E894B2E88306846 /* Highlighter */ = {
 			isa = XCSwiftPackageProductDependency;

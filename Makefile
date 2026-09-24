@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
@@ -22,10 +22,7 @@ ci:
 site-dev:
 	cd apps/site && python3 -m http.server 8000
 
-approve-package-plugins:
-	python3 scripts/approve-package-plugins.py
-
-cli: approve-package-plugins
+cli:
 	$(XCODEBUILD) -scheme ed -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
@@ -101,7 +98,7 @@ ci-promo:
 ci-swift-lint:
 	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 
-ci-swift-build: approve-package-plugins
+ci-swift-build:
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build

@@ -133,7 +133,6 @@ TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
 
 DERIVED=build
-python3 scripts/approve-package-plugins.py
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
   -destination 'platform=macOS,arch=arm64' \

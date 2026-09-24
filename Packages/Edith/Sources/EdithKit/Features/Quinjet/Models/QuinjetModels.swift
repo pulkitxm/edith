@@ -178,21 +178,6 @@ public struct QuinjetWorktree: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public enum QuinjetHostAction: Equatable, Sendable {
-    public static let oscCode = 6973
-
-    case openNewTab
-    case openWorktree
-
-    public init?(payload: String) {
-        switch payload {
-        case "quinjet;open-new-tab": self = .openNewTab
-        case "quinjet;open-worktree": self = .openWorktree
-        default: return nil
-        }
-    }
-}
-
 public enum QuinjetClientError: Error, Equatable, LocalizedError {
     case notInstalled
     case remoteNotInstalled(

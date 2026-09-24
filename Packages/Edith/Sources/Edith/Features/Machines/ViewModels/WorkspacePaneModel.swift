@@ -33,7 +33,7 @@ final class PaneViewStore {
     }
 
     func terminalView(tabID: UUID, machineID: UUID) -> NSView? {
-        terminals[Key(tab: tabID, machine: machineID)]?.terminalView
+        terminals[Key(tab: tabID, machine: machineID)]?.ghosttyView
     }
 
     func release(tabID: UUID) {
