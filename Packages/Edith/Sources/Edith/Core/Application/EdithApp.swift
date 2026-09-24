@@ -8,6 +8,7 @@ import SwiftUI
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
+    private var settingsBroadcastObserver: NSObjectProtocol?
     private var settingsBroadcastPending = false
     private var broadcastSettings: NSDictionary?
     private var lastUsageEnabled: Bool?
@@ -54,6 +55,9 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
         broadcastSettings = NSDictionary(
             dictionary: SharedDefaults.store.dictionaryRepresentation())
+        settingsBroadcastObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            Task { @MainActor in self?.adoptBroadcastSettings() }
+        }
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main
@@ -122,6 +126,12 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 self?.flushSettingsChangedBroadcast()
             }
         }
+    }
+
+    private func adoptBroadcastSettings() {
+        guard !settingsBroadcastPending else { return }
+        broadcastSettings = NSDictionary(
+            dictionary: SharedDefaults.store.dictionaryRepresentation())
     }
 
     private func flushSettingsChangedBroadcast() {

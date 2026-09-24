@@ -56,7 +56,15 @@ system, subscription, queue), an ambient cadence that runs with no window open,
 a live cadence that applies while an XPC subscriber holds its topic, and a
 power policy. Subscribing to a topic raises the cadence; dropping the last
 subscriber lowers it. A job whose ability is off reports `disabled` rather than
-running.
+running. While Low Power Mode is on or the Mac reports serious thermal
+pressure, ambient cadences stretch threefold; live cadences are unchanged.
+
+launchd starts the agent, Edith Bar and the app with a minimal environment, so
+each captures the user's login shell environment once (`$SHELL -l -i -c` around
+`env -0`) and refreshes it in the background when a zsh, bash, fish or
+`/etc/paths` file changes or after an hour. Every child process gets that
+environment with the shell's PATH first, so tools and exports from the user's
+rc files work without restarting Edith.
 
 The XPC hub listens on `com.pulkit.edith.agent`. Peers are authenticated with
 `NSXPCListener.setConnectionCodeSigningRequirement`, built from the agent's own
