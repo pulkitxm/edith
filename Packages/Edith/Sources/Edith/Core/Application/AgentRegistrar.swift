@@ -5,7 +5,7 @@ import ServiceManagement
 @MainActor
 final class AgentRegistrar {
     private let service = SMAppService.agent(plistName: AgentService.plistName)
-    private var refresh: DispatchWorkItem?
+    private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in self?.publish() }
     private var didRepair = false
 
     func registerAndRestartIfStale() {
@@ -87,12 +87,8 @@ final class AgentRegistrar {
             case .notFound: .notFound
             @unknown default: .notFound
             }
-        SharedDefaults.store.set(state.rawValue, forKey: AgentService.stateKey)
-        refresh?.cancel()
-        guard state == .awaitingApproval else { return }
-        let work = DispatchWorkItem { [weak self] in self?.publish() }
-        refresh = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+        SharedDefaults.store.setIfChanged(state.rawValue, forKey: AgentService.stateKey)
+        approvalRefresher.update(awaitingApproval: state == .awaitingApproval)
     }
 
     static func openLoginItemsSettings() {

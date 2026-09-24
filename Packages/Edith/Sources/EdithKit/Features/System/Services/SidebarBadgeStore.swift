@@ -8,19 +8,19 @@ public enum SidebarBadgeStore {
     public static func recordUpdates(
         available: Int, defaults: UserDefaults = SharedDefaults.store
     ) {
-        defaults.set(max(0, available), forKey: updatesAvailableKey)
+        defaults.setIfChanged(max(0, available), forKey: updatesAvailableKey)
     }
 
     public static func recordReclaimable(
         bytes: Int64, defaults: UserDefaults = SharedDefaults.store
     ) {
-        defaults.set(max(0, bytes), forKey: reclaimableBytesKey)
+        defaults.setIfChanged(Int(max(0, bytes)), forKey: reclaimableBytesKey)
     }
 
     public static func recordSessions(
         working: Int, defaults: UserDefaults = SharedDefaults.store
     ) {
-        defaults.set(max(0, working), forKey: sessionsWorkingKey)
+        defaults.setIfChanged(max(0, working), forKey: sessionsWorkingKey)
     }
 
     public static func updatesAvailable(_ defaults: UserDefaults = SharedDefaults.store) -> Int {

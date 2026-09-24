@@ -9,6 +9,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var settingsBroadcastPending = false
+    private var broadcastSettings: NSDictionary?
     private var lastUsageEnabled: Bool?
     private var appStarted = false
     private var launchCleanupTask: Task<Void, Never>?
@@ -39,7 +40,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         IPCTransport.enable()
         AgentCommandRouting.enable()
         if !AgentService.usesCustomService {
-            lidAwakeDaemonRegistrar.register()
             agentRegistrar.registerAndRestartIfStale()
         }
         applyConfiguredActivationPolicy()
@@ -51,6 +51,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         CLIWindowBridge.install()
         lastUsageEnabled =
             SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
+        broadcastSettings = NSDictionary(dictionary: SharedDefaults.store.dictionaryRepresentation())
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main
@@ -78,6 +79,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
+            StartupPhase(name: "main.lidAwakeDaemon") { [weak self] in
+                guard !AgentService.usesCustomService, let self else { return }
+                self.lidAwakeDaemonRegistrar.register()
+            },
         ])
     }
 
@@ -120,8 +125,11 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private func flushSettingsChangedBroadcast() {
         guard settingsBroadcastPending else { return }
         settingsBroadcastPending = false
+        defer { ProcessInfo.processInfo.enableSuddenTermination() }
+        let settings = NSDictionary(dictionary: SharedDefaults.store.dictionaryRepresentation())
+        guard settings != broadcastSettings else { return }
+        broadcastSettings = settings
         IPC.post(IPC.Name.settingsChanged)
-        ProcessInfo.processInfo.enableSuddenTermination()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -146,12 +154,15 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 private final class LidAwakeDaemonRegistrar {
     private static let fingerprintKey = "lidAwakePrivilegedHelperFingerprint"
 
     private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
     private var registrationInFlight = false
-    private var statusRefreshWorkItem: DispatchWorkItem?
+    private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in
+        self?.publishStatus()
+    }
 
     func register() {
         guard !registrationInFlight else { return }
@@ -169,13 +180,18 @@ private final class LidAwakeDaemonRegistrar {
             }
             registrationInFlight = true
             service.unregister { [weak self] error in
-                guard let self else { return }
-                self.registrationInFlight = false
-                guard error == nil else {
-                    self.publishStatus()
-                    return
+                let failed = error != nil
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.registrationInFlight = false
+                        guard !failed else {
+                            self.publishStatus()
+                            return
+                        }
+                        self.registerCurrent(fingerprint: fingerprint)
+                    }
                 }
-                self.registerCurrent(fingerprint: fingerprint)
             }
         case .notRegistered, .notFound:
             registerCurrent(fingerprint: fingerprint)
@@ -214,14 +230,8 @@ private final class LidAwakeDaemonRegistrar {
             case .notFound: "notFound"
             @unknown default: "notFound"
             }
-        SharedDefaults.store.set(state, forKey: LidAwakePrivilegedService.stateKey)
-        statusRefreshWorkItem?.cancel()
-        guard state == "awaitingApproval" else { return }
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.publishStatus()
-        }
-        statusRefreshWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+        SharedDefaults.store.setIfChanged(state, forKey: LidAwakePrivilegedService.stateKey)
+        approvalRefresher.update(awaitingApproval: state == "awaitingApproval")
     }
 
     private func persist(_ fingerprint: String?) {
