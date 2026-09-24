@@ -928,6 +928,197 @@ final class HerdrStore {
         detachFromLayout(id)
     }
 
+    func normalized(_ item: HerdrDragItem) -> HerdrDragItem {
+        guard case let .tab(id) = item, let tab = tab(id), !tab.isSplit,
+            let agent = session(tab.focused)?.agent
+        else { return item }
+        return .agent(agent)
+    }
+
+    func snapCount(for item: HerdrDragItem) -> Int? {
+        guard let tab = currentTab, case let .agent(agent) = normalized(item) else { return nil }
+        let count = tab.agentIDs.count + (tab.layout.contains(agent.id) ? 0 : 1)
+        return count >= 2 ? count : nil
+    }
+
+    func proposedLayout(_ item: HerdrDragItem, _ target: HerdrDropTarget) -> HerdrLayout? {
+        let item = normalized(item)
+        guard let tab = currentTab, let dragged = draggedNode(item) else { return nil }
+        if case let .tab(id) = item, id == tab.id { return nil }
+        let ids = dragged.node.panes
+        let base = ids.reduce(Optional(tab.layout)) { layout, id in layout?.removing(id) }
+        switch target {
+        case let .edge(pane, side):
+            guard let base, !ids.contains(pane), base.contains(pane) else { return nil }
+            return base.inserting(dragged.node, near: pane, side: side)
+        case let .outerEdge(side):
+            return base?.inserting(dragged.node, atEdge: side)
+        case let .center(pane):
+            guard case let .agent(agent) = item, agent.id != pane, tab.layout.contains(pane)
+            else { return nil }
+            return tab.layout.contains(agent.id)
+                ? tab.layout.swapping(agent.id, pane) : tab.layout.replacing(pane, with: agent.id)
+        case let .slot(arrangement, index):
+            guard case let .agent(agent) = item else { return nil }
+            var order = base?.panes ?? []
+            order.insert(agent.id, at: min(max(0, index), order.count))
+            return arrangement.layout(order)
+        case .tabBar, .intoTab, .newTab, .window:
+            return nil
+        }
+    }
+
+    func accepts(_ item: HerdrDragItem, _ target: HerdrDropTarget) -> Bool {
+        let item = normalized(item)
+        if case let .agent(agent) = item, session(agent.id) == nil,
+            HerdrSpaceWindow.holds(agent: agent.id)
+        {
+            return false
+        }
+        switch target {
+        case .edge, .outerEdge, .center, .slot:
+            return proposedLayout(item, target) != nil
+        case let .tabBar(index):
+            let moving: String?
+            switch item {
+            case let .tab(id):
+                moving = id
+            case let .agent(agent):
+                let source = tab(containing: agent.id)
+                moving = source?.isSplit == false ? source?.id : nil
+            }
+            guard let moving, let from = tabs.firstIndex(where: { $0.id == moving }) else {
+                return true
+            }
+            return index != from && index != from + 1
+        case let .intoTab(id):
+            guard let destination = tab(id) else { return false }
+            switch item {
+            case let .tab(source): return source != id
+            case let .agent(agent): return !destination.layout.contains(agent.id)
+            }
+        case .newTab, .window:
+            if case .agent = item { return true }
+            return false
+        }
+    }
+
+    func drop(_ item: HerdrDragItem, on target: HerdrDropTarget) {
+        let item = normalized(item)
+        guard accepts(item, target) else { return }
+        switch target {
+        case .edge, .outerEdge, .center, .slot:
+            place(item, target)
+        case let .tabBar(index):
+            insertTab(item, at: index)
+        case let .intoTab(id):
+            switch item {
+            case let .tab(source): merge(source, into: id)
+            case let .agent(agent): add(agent, into: id)
+            }
+        case .newTab:
+            guard case let .agent(agent) = item else { return }
+            if tab(containing: agent.id)?.isSplit == true {
+                moveToNewTab(agent.id)
+            } else {
+                open(agent)
+            }
+        case .window:
+            break
+        }
+    }
+
+    func moveTab(_ id: String, to index: Int) {
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = tabs.remove(at: from)
+        let destination = index > from ? index - 1 : index
+        tabs.insert(tab, at: min(max(0, destination), tabs.count))
+    }
+
+    private func draggedNode(_ item: HerdrDragItem) -> (node: HerdrLayout, focus: String)? {
+        switch item {
+        case let .agent(agent):
+            return (.pane(agent.id), agent.id)
+        case let .tab(id):
+            guard let tab = tab(id) else { return nil }
+            return (tab.layout, tab.focused)
+        }
+    }
+
+    private func place(_ item: HerdrDragItem, _ target: HerdrDropTarget) {
+        guard let current = currentTab, let layout = proposedLayout(item, target),
+            let dragged = draggedNode(item)
+        else { return }
+        var displaced: String?
+        switch item {
+        case let .agent(agent):
+            if session(agent.id) == nil {
+                adoptSession(for: agent, showing: nil)
+                if case let .center(pane) = target { displaced = pane }
+            } else if let source = tab(containing: agent.id), source.id != current.id {
+                if case let .center(pane) = target {
+                    updateTab(source.id) { tab in
+                        tab.layout = tab.layout.replacing(agent.id, with: pane)
+                        if tab.focused == agent.id { tab.focused = pane }
+                        if tab.zoomed == agent.id { tab.zoomed = pane }
+                    }
+                } else {
+                    detachFromLayout(agent.id)
+                }
+            }
+            revealSpace(containing: agent)
+        case let .tab(id):
+            tabs.removeAll { $0.id == id }
+        }
+        updateTab(current.id) { tab in
+            tab.layout = layout
+            tab.focused = dragged.focus
+            tab.zoomed = nil
+        }
+        if let displaced, let index = tabs.firstIndex(where: { $0.id == current.id }) {
+            tabs.insert(HerdrTab(agentID: displaced), at: index + 1)
+        }
+        selectedTab = current.id
+    }
+
+    private func insertTab(_ item: HerdrDragItem, at index: Int) {
+        switch item {
+        case let .tab(id):
+            moveTab(id, to: index)
+            selectedTab = id
+        case let .agent(agent):
+            if let source = tab(containing: agent.id), !source.isSplit {
+                moveTab(source.id, to: index)
+                selectedTab = source.id
+                return
+            }
+            if session(agent.id) == nil {
+                adoptSession(for: agent, showing: nil)
+            } else {
+                detachFromLayout(agent.id)
+            }
+            let tab = HerdrTab(agentID: agent.id)
+            tabs.insert(tab, at: min(max(0, index), tabs.count))
+            revealSpace(containing: agent)
+            selectedTab = tab.id
+        }
+    }
+
+    private func add(_ agent: HerdrAgent, into tabID: String) {
+        if session(agent.id) == nil {
+            adoptSession(for: agent, showing: nil)
+        } else {
+            detachFromLayout(agent.id)
+        }
+        updateTab(tabID) { tab in
+            tab.layout = Self.adding([agent.id], to: tab.layout)
+            tab.focused = agent.id
+            tab.zoomed = nil
+        }
+        revealSpace(containing: agent)
+        selectedTab = tabID
+    }
+
     func selectBoard() {
         selectedTab = Self.boardID
     }

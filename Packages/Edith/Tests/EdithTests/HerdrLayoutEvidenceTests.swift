@@ -47,6 +47,8 @@ import Testing
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-grid.png"), options: .atomic)
 
+        try dragEvidence(store: store, tabID: tabID, output: output)
+
         store.arrange(tabID, as: .focusLeft)
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-focus-left.png"), options: .atomic)
@@ -58,6 +60,50 @@ import Testing
             size: NSSize(width: 380, height: 420)
         )
         .write(to: output.appendingPathComponent("herdr-layout-popover.png"), options: .atomic)
+    }
+
+    private func dragEvidence(store: HerdrStore, tabID: String, output: URL) throws {
+        let pairTab = try #require(store.tab(containing: Self.agents[4].id)).id
+        store.selectedTab = tabID
+        store.separate(tabID)
+        store.selectedTab = try #require(store.tab(containing: Self.agents[0].id)).id
+        store.open(Self.agents[1], beside: .right)
+        let pair = try #require(store.currentTab).id
+        let drag = HerdrDragCoordinator()
+        let size = NSSize(width: 1440, height: 900)
+        let frames = try renderFrames(HerdrPage(store: store, drag: drag), size: size, drag: drag)
+        let canvas = try #require(frames[HerdrDropGeometry.canvasKey])
+        let right = try #require(
+            store.tab(pair)?.layout.paneFrames(in: canvas, gap: UIScale.pt(6))[Self.agents[1].id])
+
+        drag.update(.agent(Self.agents[2]), at: CGPoint(x: right.midX, y: right.midY))
+        drag.update(.agent(Self.agents[2]), at: CGPoint(x: right.midX, y: right.maxY - 40))
+        #expect(drag.target == .edge(Self.agents[1].id, .bottom))
+        try render(HerdrPage(store: store, drag: drag), size: size)
+            .write(to: output.appendingPathComponent("herdr-drag-split.png"), options: .atomic)
+
+        drag.update(.agent(Self.agents[2]), at: CGPoint(x: canvas.midX, y: canvas.minY + 40))
+        let bar = try #require(drag.snapBar)
+        #expect(bar.expanded)
+        let thumbnail = try #require(bar.thumbnails.first { $0.arrangement == .focusLeft })
+        let slot = thumbnail.slots[0]
+        drag.update(.agent(Self.agents[2]), at: CGPoint(x: slot.midX, y: slot.midY))
+        #expect(drag.target == .slot(.focusLeft, 0))
+        try render(HerdrPage(store: store, drag: drag), size: size)
+            .write(to: output.appendingPathComponent("herdr-drag-layouts.png"), options: .atomic)
+
+        let chip = try #require(frames[HerdrDropGeometry.chipPrefix + pairTab])
+        drag.update(.agent(Self.agents[2]), at: CGPoint(x: chip.minX + 4, y: chip.midY))
+        try render(HerdrPage(store: store, drag: drag), size: size)
+            .write(to: output.appendingPathComponent("herdr-drag-tab.png"), options: .atomic)
+        drag.cancel()
+    }
+
+    private func renderFrames(_ page: HerdrPage, size: NSSize, drag: HerdrDragCoordinator)
+        throws -> [String: CGRect]
+    {
+        _ = try render(page, size: size)
+        return drag.frames
     }
 
     private func render<Content: View>(_ content: Content, size: NSSize) throws -> Data {
