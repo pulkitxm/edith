@@ -52,7 +52,8 @@ import Testing
         let environment = UserShellEnvironment.userEnvironment(
             process: ["PATH": "/usr/bin:/bin", "EDITH_DATA_ROOT": "/private/tmp/edith-data"],
             shell: [
-                "PATH": "/Users/example/.local/bin:/usr/bin", "CODEX_HOME": "/Users/example/.codex2",
+                "PATH": "/Users/example/.local/bin:/usr/bin",
+                "CODEX_HOME": "/Users/example/.codex2",
                 "PWD": "/somewhere", "EDITH_DATA_ROOT": "/elsewhere",
             ])
 
