@@ -260,7 +260,7 @@ ci-workflows:
 	@command -v actionlint >/dev/null || { echo "actionlint missing: run make ci-tools" >&2; exit 1; }
 	@command -v zizmor >/dev/null || { echo "zizmor missing: run make ci-tools" >&2; exit 1; }
 	actionlint .github/workflows-disabled/*.yml
-	zizmor --persona=pedantic --min-severity=high --format=plain .github/workflows-disabled
+	zizmor --persona=pedantic --min-severity=high --format=plain .github/workflows-disabled/*.yml
 
 ci-security:
 	$(MAKE) ci-secrets ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy
