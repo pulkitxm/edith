@@ -19,11 +19,13 @@ public struct OperationMCPTool: Equatable, Sendable {
         requiresPreview = descriptor.requiresPreview
     }
 
+    public static let confirmationFlag = "--yes"
+
     public var isDestructive: Bool { effect == .destructive || requiresPreview }
 
     public func arguments(_ extra: [String], confirm: Bool) -> [String] {
         var options = ["--json"]
-        if isDestructive, confirm { options.append("--yes") }
+        if isDestructive, confirm { options.append(Self.confirmationFlag) }
         return route + options + extra
     }
 }

@@ -2,7 +2,7 @@ import Foundation
 
 public enum UsageAttributionAdvisor {
     public static let perRunLimit = 40
-    public static let threshold = 0.8
+    public static let threshold = 0.9
     public static let titleLimit = 80
     public static let titleCount = 5
     public static let purpose = "usage.attribution"
@@ -41,6 +41,12 @@ public enum UsageAttributionAdvisor {
         guard !repositories.isEmpty else { return cache }
         let matcher = UsageAttributionMatcher(repositories: repositories)
         var next = cache
+        for (key, decision) in next.decisions
+        where decision.method == .jev && decision.repository != nil
+            && (decision.confidence ?? 0) < threshold
+        {
+            next.decisions[key]?.repository = nil
+        }
         var questions: [Unit] = []
         for unit in units(document) where next.decisions[unit.key] == nil {
             let match =

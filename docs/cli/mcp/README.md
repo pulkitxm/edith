@@ -17,7 +17,8 @@ contract and the same exit semantics.
 
 Destructive routes keep the CLI's safety model. They preview by default and
 apply only when the call passes `confirm`, which adds `--yes`. An agent that
-forgets to confirm gets the preview, never the change.
+forgets to confirm gets the preview, never the change, and a call that slips
+`--yes` into `arguments` is refused, so `confirm` is the only way to apply.
 
 While a TypeSafe key is saved in Settings > Jev, the server also lists
 `edith_find`. It takes a plain-language `request` and returns the five likeliest

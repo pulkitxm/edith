@@ -367,3 +367,48 @@ import Testing
         #expect(BifrostWindowAction.allCases.count == 27)
     }
 }
+
+@Suite struct BifrostShellCommandTests {
+    @Test func placeholdersBecomeQuotedVariableReferences() {
+        let command = BifrostShellCommand(
+            name: "Echo", script: "echo {query} '{query}' \"{clipboard}\"")
+        let invocation = command.resolved(
+            context: BifrostPlaceholderContext(query: "q", clipboard: "c"))
+        #expect(
+            invocation.script
+                == "echo \"${EDITH_BIFROST_1}\" ''\"${EDITH_BIFROST_2}\"'' \"${EDITH_BIFROST_3}\"")
+        #expect(
+            invocation.environment
+                == ["EDITH_BIFROST_1": "q", "EDITH_BIFROST_2": "q", "EDITH_BIFROST_3": "c"])
+    }
+
+    @Test(arguments: [
+        ("printf %s {clipboard}", ""),
+        ("printf %s \"{clipboard}\"", ""),
+        ("printf %s '{clipboard}'", ""),
+        ("printf %s \"said: {clipboard}\"", "said: "),
+        ("printf %s 'said: {clipboard}'", "said: "),
+    ])
+    func hostileClipboardTextStaysData(script: String, prefix: String) async throws {
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bifrost-\(UUID().uuidString)").path
+        let hostile = "a b; touch \(marker) $(touch \(marker)) `touch \(marker)` 'q' \"d\""
+        let invocation = BifrostShellCommand(name: "Paste", script: script)
+            .resolved(context: BifrostPlaceholderContext(clipboard: hostile))
+        let output = try await LocalMachineCommandExecution.run(
+            invocation.script, environment: invocation.environment, timeout: 20
+        ).get()
+        #expect(output == prefix + hostile)
+        #expect(!FileManager.default.fileExists(atPath: marker))
+    }
+
+    @Test func formattedPlaceholdersStillExpand() {
+        let invocation = BifrostShellCommand(name: "Stamp", script: "echo {date:yyyy}")
+            .resolved(
+                context: BifrostPlaceholderContext(
+                    date: Date(timeIntervalSince1970: 1_790_000_000),
+                    timeZone: TimeZone(identifier: "UTC")!))
+        #expect(invocation.script == "echo \"${EDITH_BIFROST_1}\"")
+        #expect(invocation.environment["EDITH_BIFROST_1"] == "2026")
+    }
+}
