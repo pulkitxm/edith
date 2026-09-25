@@ -143,6 +143,35 @@ private struct AttentionFixture {
         #expect(fixture.recorder.opened.isEmpty)
     }
 
+    @Test func aShortTaskFinishedRightAfterApprovalStillNotifies() async throws {
+        let fixture = AttentionFixture(changes: 1)
+        defer { fixture.close() }
+        fixture.recorder.screen = "Do you want to create hello.txt?\n 1. Yes\n 3. No"
+        _ = try await fixture.observe([fixture.agent(.blocked)])
+        fixture.recorder.screen = "Created hello.txt"
+        let deliveries = try await fixture.observe([fixture.agent(.done)], minutes: 1)
+        let notification = try #require(
+            deliveries.first { $0.identifier.hasPrefix("session.finished.") }?.notification)
+        #expect(notification.identifier == "session.finished.local|s|p1")
+        #expect(notification.body.contains("1 file changed"))
+    }
+
+    @Test func approvalQuotesTheQuestionRatherThanAnOption() async throws {
+        let fixture = AttentionFixture()
+        defer { fixture.close() }
+        fixture.recorder.screen = """
+            Do you want to create hello.txt?
+             1. Yes
+             2. Yes, and switch to accept edits (auto-approve file edits) for this session
+             3. No
+            """
+        _ = try await fixture.observe([fixture.agent(.working)])
+        let notification = try #require(
+            try await fixture.observe([fixture.agent(.blocked)]).first?.notification)
+        #expect(notification.title == "Claude Code needs approval")
+        #expect(notification.body.hasSuffix("Do you want to create hello.txt?"))
+    }
+
     @Test func openingTheDiffOnFinishNeedsTheAppRunning() async throws {
         let fixture = AttentionFixture(changes: 2, appRunning: true)
         defer { fixture.close() }

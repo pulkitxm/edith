@@ -152,8 +152,9 @@ public enum HerdrAttentionClassifier {
         let lines = evidence.screen?.recentLines ?? []
         let promptLines = event == .blocked ? lines : Array(lines.suffix(4))
         if let prompt = promptLines.last(where: isPrompt) {
+            let question = promptLines.last { isPrompt($0) && $0.contains("?") } ?? prompt
             return HerdrAttentionVerdict(
-                state: .permissionPrompt, need: .approval, interrupt: true, reason: clean(prompt))
+                state: .permissionPrompt, need: .approval, interrupt: true, reason: clean(question))
         }
         let explain = evidence.screen?.explain
         if event == .blocked || explain?.visibleBlocker == true {

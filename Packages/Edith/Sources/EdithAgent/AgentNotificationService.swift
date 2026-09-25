@@ -215,7 +215,7 @@ public actor AgentNotificationService {
     {
         switch current {
         case .blocked: .blocked
-        case .done, .idle: previous == .working ? .finished : nil
+        case .done, .idle: previous == .working || previous == .blocked ? .finished : nil
         case .working, .unknown: nil
         }
     }
