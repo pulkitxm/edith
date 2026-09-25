@@ -22,7 +22,7 @@ cd Packages/Edith && ./test.sh
 ```
 
 Default builds are development builds. Each worktree builds its own app,
-`com.pulkit.edith.dev.<slot>`, displayed as "Edith (<slot>)", where the slot is the
+`com.pulkit.edith.dev.<slot>`, displayed as `Edith (<slot>)`, where the slot is the
 worktree folder name without the `edith-` prefix (`main` for the primary checkout).
 Its menu helper, background agent, settings, and data under `Edith Dev/<slot>` belong
 to that worktree alone, so several branches run side by side without touching each

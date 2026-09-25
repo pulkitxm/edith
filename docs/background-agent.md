@@ -14,8 +14,8 @@ Every worktree builds its own development identity. `build.sh` passes the worktr
 slot (its folder name without the `edith-` prefix, `main` for the primary checkout) as
 `EDITH_DEV_SLOT`, so the application is `com.pulkit.edith.dev.<slot>`, the menu bar is
 `com.pulkit.edith.dev.<slot>.helper`, and the daemon is
-`com.pulkit.edith.dev.<slot>.agent`. They display as Edith (<slot>) and Edith (<slot>)
-Menu Bar. Xcode runs use the `xcode` slot. Release identities remain unchanged.
+`com.pulkit.edith.dev.<slot>.agent`. They display as `Edith (<slot>)` and
+`Edith (<slot>) Menu Bar`. Xcode runs use the `xcode` slot. Release identities remain unchanged.
 
 The outermost containing application bundle determines the identity for the main
 executable, nested helper, and daemon. Each slot has its own preferences, IPC
