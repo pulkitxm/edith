@@ -134,6 +134,9 @@ public struct OperationMCPServer: Sendable {
         return server
     }
 
+    static let confirmationInArguments =
+        "Pass confirm: true to apply a change. --yes is not accepted inside arguments."
+
     static func call(_ parameters: CallTool.Parameters) async -> CallTool.Result {
         if parameters.name == findToolName { return await find(parameters) }
         guard let tool = OperationMCPCatalog.tool(named: parameters.name) else {
@@ -141,6 +144,10 @@ public struct OperationMCPServer: Sendable {
         }
         let arguments = (parameters.arguments?["arguments"]?.arrayValue ?? [])
             .compactMap(\.stringValue)
+        guard !arguments.contains(OperationMCPTool.confirmationFlag) else {
+            return CallTool.Result(
+                content: [.text(Self.confirmationInArguments)], isError: true)
+        }
         let confirm = parameters.arguments?["confirm"]?.boolValue ?? false
         let invocation = await OperationMCPRunner.run(
             tool, arguments: arguments, confirm: confirm)
