@@ -109,15 +109,34 @@ struct HerdrTerminalPanel: Equatable {
 }
 
 struct HerdrTerminalCloseRequest: Identifiable {
+    enum Scope: Equatable {
+        case tab
+        case terminal
+    }
+
     let id = UUID()
+    let scope: Scope
     let running: [String]
     let proceed: @MainActor () -> Void
 
+    var title: String {
+        scope == .tab ? "Close this tab?" : "Close this terminal?"
+    }
+
+    var confirmation: String {
+        scope == .tab ? "Close Anyway" : "Close Terminal"
+    }
+
     var message: String {
         let names = running.joined(separator: ", ")
-        return running.count == 1
-            ? "\(names) is still running in this tab's terminal. Closing the tab stops it."
-            : "\(names) are still running in this tab's terminals. Closing the tab stops them."
+        switch scope {
+        case .terminal:
+            return "\(names) is still running in this terminal. Closing it stops it."
+        case .tab:
+            return running.count == 1
+                ? "\(names) is still running in this tab's terminal. Closing the tab stops it."
+                : "\(names) are still running in this tab's terminals. Closing the tab stops them."
+        }
     }
 }
 
@@ -343,6 +362,27 @@ final class HerdrTerminalPanels {
         }
     }
 
+    func requestClose(_ id: String) {
+        guard terminals[id] != nil else { return }
+        guard HerdrTerminalSettings.load(defaults).confirmClose else {
+            close(id)
+            return
+        }
+        guard confirming.insert(id).inserted else { return }
+        Task {
+            await refresh(ids: [id])
+            confirming.remove(id)
+            guard let terminal = terminals[id] else { return }
+            guard terminal.running else {
+                close(id)
+                return
+            }
+            closeRequest = HerdrTerminalCloseRequest(
+                scope: .terminal, running: [terminal.title],
+                proceed: { [weak self] in self?.close(id) })
+        }
+    }
+
     func close(_ id: String) {
         guard let terminal = remove(id) else { return }
         terminal.holder.stop()
@@ -390,7 +430,8 @@ final class HerdrTerminalPanels {
             if running.isEmpty {
                 finish()
             } else {
-                closeRequest = HerdrTerminalCloseRequest(running: running, proceed: finish)
+                closeRequest = HerdrTerminalCloseRequest(
+                    scope: .tab, running: running, proceed: finish)
             }
         }
     }

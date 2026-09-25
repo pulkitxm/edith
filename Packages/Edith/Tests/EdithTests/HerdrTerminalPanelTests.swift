@@ -158,6 +158,54 @@ private actor HerdrPanelHerdr {
         try await eventually { await herdr.closed == [pane] }
     }
 
+    @Test func closingARunningTerminalAsksFirst() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.pane != nil }
+        let pane = try #require(store.terminalPanels.terminals[id]?.pane)
+        await herdr.run("npm", command: "npm run dev", in: pane)
+
+        store.terminalPanels.requestClose(id)
+        try await eventually { store.terminalPanels.closeRequest != nil }
+        let request = try #require(store.terminalPanels.closeRequest)
+        #expect(request.scope == .terminal)
+        #expect(request.title == "Close this terminal?")
+        #expect(request.message == "npm is still running in this terminal. Closing it stops it.")
+        #expect(store.terminalPanels.terminals[id] != nil)
+
+        store.terminalPanels.closeRequest = nil
+        #expect(store.terminalPanels.terminals[id] != nil)
+        #expect(await herdr.closed.isEmpty)
+
+        store.terminalPanels.requestClose(id)
+        try await eventually { store.terminalPanels.closeRequest != nil }
+        store.terminalPanels.closeRequest?.proceed()
+
+        #expect(store.terminalPanels.terminals[id] == nil)
+        try await eventually { await herdr.closed == [pane] }
+    }
+
+    @Test func closingAnIdleTerminalDoesNotAsk() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.process != nil }
+        let pane = try #require(store.terminalPanels.terminals[id]?.pane)
+
+        store.terminalPanels.requestClose(id)
+
+        try await eventually { store.terminalPanels.terminals[id] == nil }
+        #expect(store.terminalPanels.closeRequest == nil)
+        try await eventually { await herdr.closed == [pane] }
+    }
+
     @Test func closingATabWithIdleTerminalsClosesThemWithoutAsking() async throws {
         let herdr = HerdrPanelHerdr()
         let store = makeStore(herdr)
@@ -191,6 +239,7 @@ private actor HerdrPanelHerdr {
         try await eventually { store.terminalPanels.closeRequest != nil }
         let request = try #require(store.terminalPanels.closeRequest)
         #expect(request.running == ["npm"])
+        #expect(request.scope == .tab)
         #expect(store.tabs.map(\.id) == [owner])
         #expect(await herdr.closed.isEmpty)
 

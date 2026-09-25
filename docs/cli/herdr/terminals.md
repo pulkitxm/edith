@@ -26,7 +26,10 @@ machine, created the first time it is needed. Closing a terminal in Edith closes
 its Herdr tab, and Herdr removes the workspace once its last tab is gone. A
 terminal whose shell exits in Herdr disappears from Edith as well.
 
-## Closing tabs
+## Closing terminals and tabs
+
+The `×` next to a terminal closes it and its Herdr tab. When it is running
+something, Edith asks first and names what would stop.
 
 Closing an Edith tab closes its terminals and their Herdr tabs. When one of them
 is running something, Edith asks first and names what would stop. Tabs that are
@@ -49,7 +52,7 @@ same keys.
 | `herdrTerminalFontSize` | 9 to 24 | 13 | Text size |
 | `herdrTerminalStartFolder` | `agent`, `home` | `agent` | Where a new terminal starts |
 | `herdrTerminalStartupCommand` | any command | empty | Runs in every new terminal |
-| `herdrTerminalConfirmClose` | `true`, `false` | `true` | Ask before closing a tab whose terminals are running something |
+| `herdrTerminalConfirmClose` | `true`, `false` | `true` | Ask before closing a terminal, or a tab, that is running something |
 
 ```
 ed config set herdrTerminalStartupCommand 'source .venv/bin/activate'

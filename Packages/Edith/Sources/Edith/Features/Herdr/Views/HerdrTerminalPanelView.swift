@@ -227,7 +227,7 @@ private struct HerdrTerminalList: View {
             .accessibilityLabel("\(terminal.title), \(terminal.location)")
             .accessibilityAddTraits(selected ? .isSelected : [])
             iconButton("xmark", label: "Close \(terminal.title)") {
-                panels.close(terminal.id)
+                panels.requestClose(terminal.id)
             }
         }
         .padding(.leading, UIScale.pt(8))
@@ -293,7 +293,7 @@ struct HerdrTerminalSettingsView: View {
                     }
                 }
                 TextField("Startup command", text: $startupCommand, prompt: Text("None"))
-                Toggle("Ask before closing a tab with running terminals", isOn: $confirmClose)
+                Toggle("Ask before closing a running terminal", isOn: $confirmClose)
             }
         }
         .formStyle(.grouped)

@@ -483,7 +483,7 @@ public enum ConfigCatalog {
             summary: "Command run in every new agent-tab terminal.", fallback: .string("")),
         SettingDefinition(
             AppStorageKeys.Herdr.terminalConfirmClose, .bool, group: "herdr",
-            summary: "Ask before closing a tab whose terminals are running something.",
+            summary: "Ask before closing a terminal, or a tab, that is running something.",
             fallback: .bool(true)),
     ]
 

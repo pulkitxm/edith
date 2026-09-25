@@ -114,10 +114,10 @@ struct HerdrPage: View {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
         }
         .alert(
-            "Close this tab?", isPresented: terminalCloseRequested,
+            store.terminalPanels.closeRequest?.title ?? "", isPresented: terminalCloseRequested,
             presenting: store.terminalPanels.closeRequest
         ) { request in
-            Button("Close Anyway", role: .destructive) {
+            Button(request.confirmation, role: .destructive) {
                 store.terminalPanels.closeRequest = nil
                 request.proceed()
             }
