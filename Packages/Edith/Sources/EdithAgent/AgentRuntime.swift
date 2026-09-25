@@ -79,11 +79,12 @@ public actor AgentRuntime {
             await task.value
             completed.insert(id)
         }
+        store?.flush()
     }
 
     public var registeredOperations: Set<String> { Set(operations.keys) }
 
-    public func handshake() -> AgentHandshake {
+    public nonisolated func handshake() -> AgentHandshake {
         AgentHandshake(
             protocolVersion: AgentService.protocolVersion, build: build, startedAt: startedAt)
     }
