@@ -55,14 +55,12 @@ public enum AgentSearchTerms {
 
     public static func stem(_ word: String) -> String {
         guard word.count > 3, word.allSatisfy({ $0.isLetter }) else { return word }
+        let keepsS = word.hasSuffix("ss") || word.hasSuffix("us") || word.hasSuffix("is")
         for suffix in suffixes where word.hasSuffix(suffix) {
-            if suffix == "s", word.hasSuffix("ss") || word.hasSuffix("us") || word.hasSuffix("is")
-            {
-                continue
-            }
+            if suffix == "s", keepsS { continue }
             var root = String(word.dropLast(suffix.count))
             if suffix == "ies" || suffix == "ied" { root += "y" }
-            let minimum = suffix == "ed" ? 4 : 3
+            let minimum = suffix == "ed" || suffix == "ly" ? 4 : 3
             guard root.count >= minimum else { continue }
             return trimmingSilentE(root)
         }

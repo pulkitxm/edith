@@ -61,7 +61,7 @@ def stem(word):
             root = word[: -len(suffix)]
             if suffix in ("ies", "ied"):
                 root += "y"
-            if len(root) < (4 if suffix == "ed" else 3):
+            if len(root) < (4 if suffix in ("ed", "ly") else 3):
                 continue
             result = trim_e(root)
             break
@@ -409,7 +409,7 @@ def counts_of(digest, title):
 def matches(word, query):
     if word == query:
         return 1.0
-    if len(query) >= 3 and word.startswith(query):
+    if len(query) >= 4 and word.startswith(query):
         return PREFIX_WEIGHT
     if len(word) >= 4 and query.startswith(word):
         return PREFIX_WEIGHT

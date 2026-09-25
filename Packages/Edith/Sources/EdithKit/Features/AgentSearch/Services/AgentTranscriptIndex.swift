@@ -81,7 +81,9 @@ public actor AgentTranscriptIndex {
             picks = ranked.prefix(limit).map { (entries[$0.index], $0.score) }
         }
         let hits = picks.map { digest, score in
-            hit(for: digest, score: score, query: query, among: entries, machineID: request.machineID)
+            hit(
+                for: digest, score: score, query: query, among: entries,
+                machineID: request.machineID)
         }
         saveIfDue()
         scheduleEviction()

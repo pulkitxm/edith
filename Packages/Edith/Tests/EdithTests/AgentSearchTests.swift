@@ -110,7 +110,10 @@ struct AgentSearchFixture {
                     "payload": [
                         "type": "message", "role": "user",
                         "content": [
-                            ["type": "input_text", "text": "<environment_context>x</environment_context>"]
+                            [
+                                "type": "input_text",
+                                "text": "<environment_context>x</environment_context>",
+                            ]
                         ],
                     ],
                 ],
@@ -158,6 +161,11 @@ struct AgentSearchFixture {
         ] {
             #expect(Set(group.map(AgentSearchTerms.stem)).count == 1, "\(group)")
         }
+        #expect(AgentSearchTerms.stem("apply") == "apply")
+        #expect(AgentSearchTerms.stem("quickly") == "quick")
+        #expect(!AgentSearchTerms.matches("apply", any: ["app"]))
+        #expect(AgentSearchTerms.matches("optimizing", any: ["optim"]))
+        #expect(AgentSearchTerms.matches("optimizations", any: AgentSearchTerms.terms("optimizer")))
         #expect(AgentSearchTerms.stem("status") == "status")
         #expect(AgentSearchTerms.stem("process") == "process")
         #expect(AgentSearchTerms.stem("v2") == "v2")
@@ -208,7 +216,8 @@ struct AgentSearchFixture {
         try fixture.seed()
         let reply = await fixture.index().search(AgentSearchRequest(query: "  ", limit: 10))
         #expect(reply.hits.map(\.sessionID) == ["pi-4", "docs-2", "codex-3", "perf-1"])
-        let ranks = Dictionary(uniqueKeysWithValues: reply.hits.map { ($0.sessionID, $0.placeRank) })
+        let ranks = Dictionary(
+            uniqueKeysWithValues: reply.hits.map { ($0.sessionID, $0.placeRank) })
         #expect(ranks["docs-2"] == 0)
         #expect(ranks["perf-1"] == 1)
         #expect(ranks["pi-4"] == 0)
