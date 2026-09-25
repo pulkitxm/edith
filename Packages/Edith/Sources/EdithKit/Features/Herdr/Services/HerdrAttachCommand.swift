@@ -49,7 +49,8 @@ public func remoteHerdrCommand(
 ) -> String {
     let words = ["herdr"] + arguments
     if platform == .windows {
-        let values = arguments.map(PowerShell.literal).joined(separator: ", ")
+        let values = arguments.map { PowerShell.literal(PowerShell.nativeArgument($0)) }
+            .joined(separator: ", ")
         let script = """
             $command = Get-Command herdr.exe -ErrorAction SilentlyContinue |
                 Select-Object -First 1 -ExpandProperty Source

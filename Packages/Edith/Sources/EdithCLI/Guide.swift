@@ -48,6 +48,8 @@ public enum Guide {
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
+        ed docs ask "<request>"     the commands that handle a plain-language request
+        ed docs show <command>      the reference page for one command
         ed guide                    this text
         ed guide agent              repository instructions making an agent ed-aware
         ed guide --json             the complete parser command catalog
@@ -361,6 +363,23 @@ public enum Guide {
         `ed companion stack down` keeps memory by default. `--wipe` removes the
         stack volumes, so export a restorable bundle before using it.
 
+        ## Jev decisions
+
+        Jev is TypeSafe's fast decision model. It answers typed questions (yes or
+        no, one of up to 255 options, or a score) in well under a second. Edith
+        uses it only after a key is saved in Settings > Jev or with `ed jev key
+        set`; without one, every feature keeps its own rules.
+
+        ```
+        printf %s "$KEY" | ed jev key set   store the key and check it
+        ed jev status --probe               key, models, credits and latency
+        ed jev key clear --yes              remove the key, Jev turns off
+        ed jev ask --request req.json       a raw state plus typed questions
+        ```
+
+        With a key, `ed mcp` also lists `edith_find`, which ranks Edith's tools
+        for a plain-language request.
+
         ## Usage and limits
 
         Usage numbers come from the same `usage.json` the dashboard reads, and limits
@@ -369,6 +388,7 @@ public enum Guide {
 
         ```
         ed usage limits                 session and weekly, per provider
+        ed usage alerts                 burn rate, projected cap and the alert due now
         ed usage summary --range week   cost and tokens for a window
         ed usage daily --range month
         ed usage models
@@ -377,6 +397,8 @@ public enum Guide {
         ed usage projects open edith   open its validated link
         ed usage projects copy-link edith
         ed usage projects copy-chat <chat-id>
+        ed usage attribution ls         folders matched to a repository, and why
+        ed usage attribution reset --yes  forget those decisions
         ed usage sources
         ed usage export --card activity --output ./shares
         ed usage machines               machines counted with this Mac
@@ -399,6 +421,12 @@ public enum Guide {
         `show` selects by stable identity, visible name or URL. Duplicate names require
         the identity. `open`, `copy-link` and `copy-chat` use the same shared actions as
         the dashboard project drilldown.
+
+        After a refresh, an unknown or non-GitHub folder whose name or path clearly
+        names one known repository moves under it, and so does a chat whose title
+        does. With a Jev key, Jev picks a repository or none for the rest. Moved
+        folders keep their path, `show` marks them "attributed by name" or
+        "attributed by Jev", and `list --json` adds `attribution` per folder.
 
         A machine keeps its agent history on its own disk, so `ed usage machines
         collect` pipes the collector over SSH and runs it there, installing what is
@@ -426,6 +454,8 @@ public enum Guide {
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed herdr attach w3:p1N          attach this terminal to a live pane
+        ed herdr models codex           models, effort levels and fast mode per agent
+        ed herdr defaults set codex --model gpt-6-sol --effort high --fast on
         ed permissions ls
         ed permissions request calendar
         ed permissions settings screenRecording
@@ -446,6 +476,12 @@ public enum Guide {
         A missing binary is an empty host, not an error. `ed herdr command <pane>`
         prints the attach line, `ssh -tt` when the pane is remote. `attach` runs
         that same launch request in the current terminal.
+
+        `ed herdr models [<kind>]` lists the models, effort levels and fast mode each
+        agent offers, asked live from codex, opencode, pi and cursor (on this Mac or
+        `--machine`) and built in for Claude Code, Gemini and Amp. `ed herdr defaults
+        set <kind>` stores the model, effort and fast mode Edith passes whenever it
+        starts that agent; `none` clears a value.
 
         ## Attention and focus
 

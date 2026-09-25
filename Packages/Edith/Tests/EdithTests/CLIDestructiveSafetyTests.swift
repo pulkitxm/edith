@@ -17,6 +17,8 @@ import Testing
         "ed clipboard rm",
         "ed color clear",
         "ed companion erase",
+        "ed jev key clear",
+        "ed usage attribution reset",
         "ed companion forget",
         "ed companion db rebuild-derived",
         "ed companion db reindex",

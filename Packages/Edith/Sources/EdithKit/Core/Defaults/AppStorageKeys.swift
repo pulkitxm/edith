@@ -142,6 +142,10 @@ public enum AppStorageKeys {
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
 
+    public enum Jev {
+        public static let configured = "jevConfigured"
+    }
+
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
@@ -160,6 +164,8 @@ public enum AppStorageKeys {
         public static let savedArrangements = "herdrSavedArrangements"
         public static let animatesLayout = "herdrAnimatesLayout"
         public static let launchCommands = "herdrLaunchCommands"
+        public static let pendingOpen = "herdrPendingOpen"
+        public static let launchDefaults = "herdrLaunchDefaults"
     }
 
     public enum Cleaner {
@@ -262,15 +268,15 @@ public enum AppStorageKeys {
     }
 
     public enum Notify {
+        public static let almostCapped = "notifyAlmostCapped"
+        public static let almostCappedPercent = "notifyAlmostCappedPercent"
+        public static let back = "notifyBack"
+        public static let capped = "notifyCapped"
+        public static let headroom = "notifyHeadroom"
+        public static let loginProblems = "notifyLoginProblems"
         public static let master = "notifyMaster"
-        public static let pacingHot = "notifyPacingHot"
-        public static let pacingWarning = "notifyPacingWarning"
-        public static let recovery = "notifyRecovery"
-        public static let reminderSession = "notifyReminderSession"
-        public static let reminderSessionOffsetMin = "notifyReminderSessionOffsetMin"
-        public static let reminderWeekly = "notifyReminderWeekly"
-        public static let reminderWeeklyOffsetMin = "notifyReminderWeeklyOffsetMin"
-        public static let tokenExpired = "notifyTokenExpired"
+        public static let onPace = "notifyOnPace"
+        public static let outlook = "notifyOutlook"
         public static let trackSession = "notifyTrackSession"
         public static let trackWeekly = "notifyTrackWeekly"
     }
@@ -287,6 +293,7 @@ public enum AppStorageKeys {
     }
 
     public enum Presenter {
+        public static let askJev = "presenterAskJev"
         public static let autoActive = "presenterAutoActive"
         public static let autoEnabled = "presenterAutoEnabled"
         public static let autoPaused = "presenterAutoPaused"

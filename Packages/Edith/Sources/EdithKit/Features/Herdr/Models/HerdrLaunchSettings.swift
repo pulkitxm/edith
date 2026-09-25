@@ -1,6 +1,8 @@
 import Foundation
 
 public enum HerdrLaunchSettings {
+    public static let kinds = HerdrKind.filterLabels + [AgentLaunchKind.amp.rawValue]
+
     public static func defaultHerdrSlug(for displayKind: String) -> String? {
         switch displayKind {
         case "Claude Code": "claude"
@@ -12,6 +14,7 @@ public enum HerdrLaunchSettings {
         case "Gemini": "gemini"
         case "Grok": "grok"
         case "Cline": "cline"
+        case "Amp": "amp"
         default: nil
         }
     }
@@ -49,5 +52,32 @@ public enum HerdrLaunchSettings {
     ) -> Bool {
         guard let slug = defaultHerdrSlug(for: displayKind) else { return false }
         return command(for: displayKind, in: defaults) == slug
+    }
+
+    public static func options(
+        for displayKind: String, in defaults: UserDefaults = SharedDefaults.store
+    ) -> AgentLaunchOptions {
+        let stored =
+            defaults.dictionary(forKey: AppStorageKeys.Herdr.launchDefaults)?[displayKind]
+            as? [String: Any] ?? [:]
+        return AgentLaunchOptions(
+            model: stored["model"] as? String, effort: stored["effort"] as? String,
+            fast: stored["fast"] as? Bool ?? false)
+    }
+
+    public static func setOptions(
+        _ options: AgentLaunchOptions, for displayKind: String,
+        in defaults: UserDefaults = SharedDefaults.store
+    ) {
+        var stored = defaults.dictionary(forKey: AppStorageKeys.Herdr.launchDefaults) ?? [:]
+        if options.isEmpty {
+            stored.removeValue(forKey: displayKind)
+        } else {
+            var entry: [String: Any] = ["fast": options.fast]
+            entry["model"] = options.model
+            entry["effort"] = options.effort
+            stored[displayKind] = entry
+        }
+        defaults.set(stored, forKey: AppStorageKeys.Herdr.launchDefaults)
     }
 }

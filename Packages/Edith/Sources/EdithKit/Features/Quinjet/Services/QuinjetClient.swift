@@ -137,6 +137,18 @@ public struct QuinjetClient: Sendable {
             from: data)
     }
 
+    public func changeCount(at path: String, remote: QuinjetRemote? = nil) async throws -> Int {
+        let arguments = ["-C", remote?.resolve(path) ?? path, "status", "--json"]
+        let data: Data
+        if let remote {
+            try requireExecutable(on: remote)
+            data = try await executeRemote(remote, arguments)
+        } else {
+            data = try await execute(arguments)
+        }
+        return try decode(QuinjetStatusReading.self, from: data).changes.count
+    }
+
     private func decode<Value: Decodable>(_ type: Value.Type, from data: Data) throws -> Value {
         do {
             return try JSONDecoder().decode(type, from: data)
@@ -217,6 +229,14 @@ public struct QuinjetClient: Sendable {
         return CLICommandRequest(
             executableURL: executable, arguments: arguments, environment: environment)
     }
+}
+
+private struct QuinjetStatusReading: Decodable {
+    struct Change: Decodable {
+        let path: String
+    }
+
+    let changes: [Change]
 }
 
 private struct QuinjetCapabilities: Decodable {

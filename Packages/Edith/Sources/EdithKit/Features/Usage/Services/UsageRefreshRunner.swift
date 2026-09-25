@@ -325,6 +325,7 @@ public enum UsageRefreshRunner {
             UsageHistory.isValidDocument(merged)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
         var published = merged
+        let attribution = UsageAttributionCache.load(dataDir: dataDir)
         try UsageDataLock.withLock(dataDirectory: dataDir) {
             let current = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
@@ -342,6 +343,7 @@ public enum UsageRefreshRunner {
                 else { throw UsageDataFileError.unsafe(stagedUsage.path) }
                 published = rebased
             }
+            published = UsageAttribution.attributed(published, cache: attribution)
             try UsageDataFiles.write(
                 published, to: dataDir.appendingPathComponent("usage.json"))
         }

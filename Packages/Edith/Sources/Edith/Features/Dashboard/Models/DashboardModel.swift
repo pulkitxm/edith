@@ -101,7 +101,11 @@ struct DashUsage: Decodable {
                 + (cacheReadTokens ?? 0)
         }
     }
+    struct Attribution: Decodable {
+        let method: String?
+    }
     struct Project: Decodable {
+        let attribution: Attribution?
         let projectName: String?
         let repositoryID: String?
         let repositoryName: String?
@@ -314,6 +318,7 @@ struct ProjFolder: Identifiable, ProjSortable {
     let lastActive: String
     var chats: [ProjChat]
     var worktrees: [ProjWorktree]
+    var attribution = ""
     var days: Int { daySet.count }
     var sortName: String { displayName }
     var displayName: String {

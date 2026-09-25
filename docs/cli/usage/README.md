@@ -23,6 +23,7 @@ closed.
 | --- | --- |
 | `ed usage` | Runs `ed usage summary`, the default subcommand |
 | `ed usage limits` | Session and weekly rate limits per provider, newest observation per provider |
+| `ed usage alerts` | Burn rate, projected cap and the limit alert each tracked window would get now |
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
 | `ed usage models` | Tokens and attributable cost per model, with unassigned provider cost shown separately |
@@ -32,6 +33,9 @@ closed.
 | `ed usage projects open` | Open a repository from the drilldown in the browser |
 | `ed usage projects copy-link` | Copy a repository link from the drilldown |
 | `ed usage projects copy-chat` | Copy a chat identifier from the drilldown |
+| `ed usage attribution` | Runs `ed usage attribution ls`, the default subcommand |
+| `ed usage attribution ls` | How unknown and non-GitHub folders were matched to repositories |
+| `ed usage attribution reset` | Forget those decisions so the next refresh decides again |
 | `ed usage sources` | The agents that produced the history, with their ids |
 | `ed usage export` | Branded activity and milestone cards as PNG images |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
@@ -45,6 +49,7 @@ closed.
 ## Commands
 
 - [`ed usage limits`](./limits.md)
+- [`ed usage alerts`](./alerts.md)
 - [`ed usage summary`](./summary.md)
 - [`ed usage daily`](./daily.md)
 - [`ed usage models`](./models.md)
@@ -54,6 +59,7 @@ closed.
 - [`ed usage projects open`](./projects-open.md)
 - [`ed usage projects copy-link`](./projects-copy-link.md)
 - [`ed usage projects copy-chat`](./projects-copy-chat.md)
+- [`ed usage attribution`](./attribution.md)
 - [`ed usage sources`](./sources.md)
 - [`ed usage export`](./export.md)
 - [`ed usage machines`](./machines.md)

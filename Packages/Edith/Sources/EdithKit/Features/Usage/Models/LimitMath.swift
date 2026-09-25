@@ -75,10 +75,6 @@ public enum UsageLevel: Int, Comparable {
     }
 }
 
-public enum PacingZone: String {
-    case chill, onTrack, warning, hot
-}
-
 public enum LimitWindowKind: String {
     case session, weekly
     public var duration: TimeInterval { self == .session ? 5 * 3600 : 7 * 24 * 3600 }
@@ -160,8 +156,6 @@ public enum LimitMath {
     public static let projUpper = 1.4
     public static let absoluteLower = 0.50
     public static let absoluteUpper = 1.00
-    public static let risingChill = 0.30, risingWarning = 0.55, risingHot = 0.78
-    public static let fallingChill = 0.25, fallingWarning = 0.50, fallingHot = 0.73
 
     public static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
         guard a < b else { return x >= b ? 1 : 0 }
@@ -196,55 +190,5 @@ public enum LimitMath {
         let remaining = max(0, resetsAt.timeIntervalSince(now))
         let e = max(0.0, 1.0 - min(1.0, remaining / windowDuration))
         return combinedRisk(u: u, e: e, m: pacingMargin / 100)
-    }
-
-    public static func level(forRisk risk: Double) -> UsageLevel {
-        if risk >= 0.78 { return .red }
-        if risk >= 0.50 { return .orange }
-        return .green
-    }
-
-    public static func zone(forRisk risk: Double, previous: PacingZone? = nil) -> PacingZone {
-        let r = max(0, min(1, risk))
-        func rising() -> PacingZone {
-            if r >= risingHot { return .hot }
-            if r >= risingWarning { return .warning }
-            if r >= risingChill { return .onTrack }
-            return .chill
-        }
-        guard let previous else { return rising() }
-        switch previous {
-        case .chill: return rising()
-        case .onTrack:
-            if r >= risingHot { return .hot }
-            if r >= risingWarning { return .warning }
-            if r < fallingChill { return .chill }
-            return .onTrack
-        case .warning:
-            if r >= risingHot { return .hot }
-            if r < fallingChill { return .chill }
-            if r < fallingWarning { return .onTrack }
-            return .warning
-        case .hot:
-            if r < fallingChill { return .chill }
-            if r < fallingWarning { return .onTrack }
-            if r < fallingHot { return .warning }
-            return .hot
-        }
-    }
-
-    public static func pacingDelta(
-        utilization: Double, resetsAt: Date, windowDuration: TimeInterval, now: Date = Date()
-    ) -> Double {
-        let start = resetsAt.addingTimeInterval(-windowDuration)
-        let elapsed = min(max(now.timeIntervalSince(start) / windowDuration, 0), 1)
-        return utilization - elapsed * 100
-    }
-
-    public static func pacingZone(delta: Double, margin: Double) -> PacingZone {
-        if delta < -margin { return .chill }
-        if delta <= margin { return .onTrack }
-        if delta <= margin * 2 { return .warning }
-        return .hot
     }
 }

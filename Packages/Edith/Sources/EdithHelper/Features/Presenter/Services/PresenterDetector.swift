@@ -1,81 +1,102 @@
 import AppKit
 import CoreGraphics
-import Darwin
 import EdithKit
 import Foundation
 
+struct PresenterSystem {
+    var runningBundleIDs: () -> Set<String>
+    var remoteSessionActive: () -> Bool
+    var displayMirrored: () -> Bool
+    var announce: () -> Void
+
+    static var live: PresenterSystem {
+        PresenterSystem(
+            runningBundleIDs: {
+                Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+            },
+            remoteSessionActive: {
+                guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+                    return false
+                }
+                return (info["kCGSSessionOnConsoleKey"] as? Bool) == false
+            },
+            displayMirrored: {
+                var count: UInt32 = 0
+                CGGetActiveDisplayList(0, nil, &count)
+                guard count > 0 else { return false }
+                var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+                CGGetActiveDisplayList(count, &displays, &count)
+                return displays.contains { CGDisplayIsInMirrorSet($0) != 0 }
+            },
+            announce: { IPC.post(IPC.Name.presenterAutoActiveChanged) })
+    }
+}
+
 @MainActor
 final class PresenterDetector: FeatureModule {
-    static let watchedBundleIDs: Set<String> = [
-        "us.zoom.xos",
-        "com.microsoft.teams2",
-        "com.microsoft.teams",
-        "com.google.Chrome",
-        "com.apple.Safari",
-        "company.thebrowser.Browser",
-        "com.tinyspeck.slackmacgap",
-        "com.hnc.Discord",
-        "com.apple.QuickTimePlayerX",
-    ]
+    let scanner: PresenterScanner
+    private let system: PresenterSystem
+    private let defaults: UserDefaults
+    private let monitoring: Bool
 
-    private struct ScanOutcome: Sendable {
-        let windowReason: String?
-        let recordingHit: Bool
-    }
-
-    private final class ScanContext: @unchecked Sendable {
-        var titlesAvailable: Bool?
-        var titlesCheckedAt: TimeInterval = 0
-    }
-
-    private var gateApps: Set<String> = []
+    private var gateApps: Set<String>
     private var launchObserver: NSObjectProtocol?
     private var terminateObserver: NSObjectProtocol?
     private var screenParamsObserver: NSObjectProtocol?
     private var windowScanTimer: DispatchSourceTimer?
     private var sessionTimer: Timer?
     private let scanQueue = DispatchQueue(label: "presenterDetector.scan", qos: .utility)
-    private let scanContext = ScanContext()
 
-    private var debouncer = PresenterDebouncer()
-    private var currentReason: String?
-    private var paused: Bool
+    private var signals: PresenterSignals
+    private(set) var publishedActive: Bool
+    private(set) var publishedReason: String?
 
-    private var windowHit = false
-    private var windowReason: String?
-    private var recordingHit = false
-    private var sharingHit = false
-    private var mirrorHit = false
+    convenience init() {
+        self.init(
+            scanner: PresenterScanner(), system: .live, defaults: SharedDefaults.store,
+            monitoring: true)
+    }
 
-    private var publishedActive = false
-    private var publishedReason: String?
+    init(
+        scanner: PresenterScanner, system: PresenterSystem, defaults: UserDefaults,
+        monitoring: Bool
+    ) {
+        self.scanner = scanner
+        self.system = system
+        self.defaults = defaults
+        self.monitoring = monitoring
+        signals = PresenterSignals(
+            paused: defaults.bool(forKey: AppStorageKeys.Presenter.autoPaused))
+        publishedActive = defaults.bool(forKey: AppStorageKeys.Presenter.autoActive)
+        publishedReason = defaults.string(forKey: AppStorageKeys.Presenter.autoReason)
+        gateApps = system.runningBundleIDs().intersection(PresenterRules.watchedBundleIDs)
 
-    init() {
-        paused = SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoPaused)
-        publishedActive = SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoActive)
-        publishedReason = SharedDefaults.store.string(forKey: AppStorageKeys.Presenter.autoReason)
-        gateApps = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-            .intersection(Self.watchedBundleIDs)
-
-        launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            MainActor.assumeIsolated { self?.handleLaunch(note) }
-        }
-        terminateObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            MainActor.assumeIsolated { self?.handleTerminate(note) }
-        }
-        screenParamsObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkMirroring() }
+        if monitoring {
+            launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
+            ) { [weak self] note in
+                MainActor.assumeIsolated { self?.handleLaunch(note) }
+            }
+            terminateObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didTerminateApplicationNotification, object: nil,
+                queue: .main
+            ) { [weak self] note in
+                MainActor.assumeIsolated { self?.handleTerminate(note) }
+            }
+            screenParamsObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.refreshMirroring()
+                    self?.evaluate()
+                }
+            }
         }
 
         syncWindowScanTimer()
         syncSessionTimer()
-        checkMirroring()
+        refreshMirroring()
         evaluate()
     }
 
@@ -104,14 +125,33 @@ final class PresenterDetector: FeatureModule {
     }
 
     func pauseUntilShareEnds() {
-        paused = true
-        SharedDefaults.store.set(true, forKey: AppStorageKeys.Presenter.autoPaused)
+        signals.pause()
+        defaults.set(true, forKey: AppStorageKeys.Presenter.autoPaused)
         evaluate()
+    }
+
+    func applyScan(_ outcome: PresenterScan) {
+        guard scanning else { return }
+        signals.windowReason = outcome.windowReason
+        signals.recording = outcome.recordingHit
+        evaluate(scan: true)
+    }
+
+    func tickSession() {
+        signals.sharing = detectsSharing && system.remoteSessionActive()
+        refreshMirroring()
+        evaluate()
+    }
+
+    private var scanning: Bool { !gateApps.isEmpty }
+
+    private var detectsSharing: Bool {
+        defaults.object(forKey: AppStorageKeys.Presenter.detectScreenSharing) as? Bool ?? true
     }
 
     private func handleLaunch(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-            let id = app.bundleIdentifier, Self.watchedBundleIDs.contains(id)
+            let id = app.bundleIdentifier, PresenterRules.watchedBundleIDs.contains(id)
         else { return }
         gateApps.insert(id)
         syncWindowScanTimer()
@@ -124,15 +164,14 @@ final class PresenterDetector: FeatureModule {
         gateApps.remove(id)
         syncWindowScanTimer()
         if gateApps.isEmpty {
-            windowHit = false
-            windowReason = nil
-            recordingHit = false
+            signals.windowReason = nil
+            signals.recording = false
             evaluate()
         }
     }
 
     private func syncWindowScanTimer() {
-        guard !gateApps.isEmpty else {
+        guard monitoring, scanning else {
             windowScanTimer?.cancel()
             windowScanTimer = nil
             return
@@ -140,9 +179,9 @@ final class PresenterDetector: FeatureModule {
         guard windowScanTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: scanQueue)
         timer.schedule(deadline: .now(), repeating: 3, leeway: .seconds(1))
-        let context = scanContext
+        let scanner = scanner
         timer.setEventHandler { [weak self] in
-            let outcome = PresenterDetector.scanOutcome(context: context)
+            let outcome = scanner.scan()
             Task { @MainActor in self?.applyScan(outcome) }
         }
         timer.resume()
@@ -150,19 +189,16 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func syncSessionTimer() {
-        let detectSharing =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectScreenSharing)
-            as? Bool ?? true
-        guard detectSharing else {
+        guard detectsSharing else {
             sessionTimer?.invalidate()
             sessionTimer = nil
-            if sharingHit {
-                sharingHit = false
+            if signals.sharing {
+                signals.sharing = false
                 evaluate()
             }
             return
         }
-        guard sessionTimer == nil else { return }
+        guard monitoring, sessionTimer == nil else { return }
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickSession() }
         }
@@ -170,133 +206,31 @@ final class PresenterDetector: FeatureModule {
         tickSession()
     }
 
-    private nonisolated static func scanOutcome(context: ScanContext) -> ScanOutcome {
-        let now = ProcessInfo.processInfo.systemUptime
-        let titlesAvailable: Bool
-        if let cached = context.titlesAvailable, now - context.titlesCheckedAt < 30 {
-            titlesAvailable = cached
-        } else {
-            titlesAvailable = CGPreflightScreenCaptureAccess()
-            context.titlesAvailable = titlesAvailable
-            context.titlesCheckedAt = now
-        }
-        let windowReason = PresenterRules.firstMatch(
-            in: titlesAvailable ? currentWindows() : [], titlesAvailable: titlesAvailable)
-        let detectRecording =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
-            ?? true
-        return ScanOutcome(
-            windowReason: windowReason,
-            recordingHit: detectRecording && isProcessRunning(named: "screencapture"))
-    }
-
-    private func applyScan(_ outcome: ScanOutcome) {
-        guard windowScanTimer != nil else { return }
-        windowReason = outcome.windowReason
-        windowHit = outcome.windowReason != nil
-        recordingHit = outcome.recordingHit
-        evaluate()
-    }
-
-    private func tickSession() {
-        let detectSharing =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectScreenSharing)
-            as? Bool ?? true
-        sharingHit = detectSharing && Self.isRemoteSessionActive()
-        checkMirroring()
-        evaluate()
-    }
-
-    private func checkMirroring() {
+    private func refreshMirroring() {
         let detectMirroring =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectMirroring) as? Bool
-            ?? true
-        mirrorHit = detectMirroring && Self.isAnyDisplayMirrored()
-        evaluate()
+            defaults.object(forKey: AppStorageKeys.Presenter.detectMirroring) as? Bool ?? true
+        signals.mirroring = detectMirroring && system.displayMirrored()
     }
 
-    private func evaluate() {
-        let hit = windowHit || recordingHit || sharingHit || mirrorHit
-        if paused {
-            guard !PresenterPauseGate.stillPaused(hit: hit) else {
-                publish(active: false, reason: nil)
-                return
-            }
-            paused = false
-            SharedDefaults.store.set(false, forKey: AppStorageKeys.Presenter.autoPaused)
+    private func evaluate(scan: Bool = false) {
+        let wasPaused = signals.paused
+        let verdict = signals.evaluate(completedScan: scan || !scanning)
+        if wasPaused, !signals.paused {
+            defaults.set(false, forKey: AppStorageKeys.Presenter.autoPaused)
         }
-        let reason =
-            windowReason
-            ?? (recordingHit ? "Screen recording detected" : nil)
-            ?? (sharingHit ? "Screen Sharing detected" : nil)
-            ?? (mirrorHit ? "Mirrored display detected" : nil)
-        let active = debouncer.record(hit: hit)
-        currentReason = active ? (reason ?? currentReason) : nil
-        publish(active: active, reason: currentReason)
+        publish(active: verdict.active, reason: verdict.reason)
     }
 
     private func publish(active: Bool, reason: String?) {
         guard active != publishedActive || reason != publishedReason else { return }
         publishedActive = active
         publishedReason = reason
-        let d = SharedDefaults.store
-        d.set(active, forKey: AppStorageKeys.Presenter.autoActive)
+        defaults.set(active, forKey: AppStorageKeys.Presenter.autoActive)
         if let reason {
-            d.set(reason, forKey: AppStorageKeys.Presenter.autoReason)
+            defaults.set(reason, forKey: AppStorageKeys.Presenter.autoReason)
         } else {
-            d.removeObject(forKey: AppStorageKeys.Presenter.autoReason)
+            defaults.removeObject(forKey: AppStorageKeys.Presenter.autoReason)
         }
-        IPC.post(IPC.Name.presenterAutoActiveChanged)
-    }
-
-    private nonisolated static func currentWindows() -> [PresenterWindowInfo] {
-        guard
-            let list = CGWindowListCopyWindowInfo(
-                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
-        else { return [] }
-        return list.compactMap { info in
-            guard let owner = info[kCGWindowOwnerName as String] as? String else { return nil }
-            let title = info[kCGWindowName as String] as? String ?? ""
-            let bounds = info[kCGWindowBounds as String] as? [String: Any] ?? [:]
-            let width = bounds["Width"] as? Double ?? 0
-            let height = bounds["Height"] as? Double ?? 0
-            return PresenterWindowInfo(ownerName: owner, title: title, width: width, height: height)
-        }
-    }
-
-    private nonisolated static func isProcessRunning(named target: String) -> Bool {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
-        var size = 0
-        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return false }
-        size += size / 8
-        var buffer = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 4, &buffer, &size, nil, 0) == 0 else { return false }
-        let stride = MemoryLayout<kinfo_proc>.stride
-        let count = size / stride
-        return buffer.withUnsafeBytes { raw in
-            let procs = raw.bindMemory(to: kinfo_proc.self)
-            for i in 0..<count {
-                var comm = procs[i].kp_proc.p_comm
-                let name = withUnsafeBytes(of: &comm) { bytes in
-                    String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
-                }
-                if name == target { return true }
-            }
-            return false
-        }
-    }
-
-    private static func isRemoteSessionActive() -> Bool {
-        guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
-        return (info["kCGSSessionOnConsoleKey"] as? Bool) == false
-    }
-
-    private static func isAnyDisplayMirrored() -> Bool {
-        var count: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &count)
-        guard count > 0 else { return false }
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        CGGetActiveDisplayList(count, &displays, &count)
-        return displays.contains { CGDisplayIsInMirrorSet($0) != 0 }
+        system.announce()
     }
 }

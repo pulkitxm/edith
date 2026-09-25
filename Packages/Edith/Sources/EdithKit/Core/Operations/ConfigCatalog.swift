@@ -92,7 +92,27 @@ public enum ConfigCatalog {
             fallback: .bool(false)),
         SettingDefinition(
             AgentSettingsKeys.notifyWhenBlocked, .bool, group: "agent",
-            summary: "Notify when a background agent job is blocked.", fallback: .bool(false)),
+            summary: "Notify when a coding agent needs approval or an answer.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenFinished, .bool, group: "agent",
+            summary: "Notify when a coding agent finishes its work.", fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyOnErrors, .bool, group: "agent",
+            summary: "Notify when a coding agent stops with an error.", fallback: .bool(true)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenStuck, .bool, group: "agent",
+            summary: "Notify when a coding agent shows no progress on screen.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AgentSettingsKeys.stuckMinutes, .int, group: "agent",
+            summary: "Minutes without screen progress before an agent counts as stuck.",
+            integerRange: AgentAttentionSettings.stuckMinutesRange,
+            fallback: .int(AgentAttentionSettings.defaultStuckMinutes)),
+        SettingDefinition(
+            AgentSettingsKeys.openDiffWhenFinished, .bool, group: "agent",
+            summary: "Open the diff when a coding agent finishes with changes to review.",
+            fallback: .bool(false)),
         SettingDefinition(
             AgentService.stateKey, .string, group: "agent",
             summary: "Login Items registration state of the background agent.",
@@ -228,7 +248,7 @@ public enum ConfigCatalog {
             summary: "Percentage at which a limit turns red.", fallback: .int(85)),
         SettingDefinition(
             AppStorageKeys.Limits.pacingMargin, .number, group: "limits",
-            summary: "Percentage points ahead of pace before pacing alerts fire.",
+            summary: "Percentage points ahead of an even pace before smart color turns amber.",
             fallback: .double(10)),
     ]
 
@@ -283,54 +303,47 @@ public enum ConfigCatalog {
 
     private static let alerts: [SettingDefinition] = [
         SettingDefinition(
-            "notifSessionLevel", .int, group: "alerts",
-            summary: "Session threshold the last alert fired at.", fallback: .int(0),
-            scope: .standard, readOnly: true),
-        SettingDefinition(
-            "notifWeeklyLevel", .int, group: "alerts",
-            summary: "Weekly threshold the last alert fired at.", fallback: .int(0),
-            scope: .standard, readOnly: true),
-        SettingDefinition(
-            "notifSessionPacing", .string, group: "alerts",
-            summary: "Session pacing zone the last alert fired for.", scope: .standard,
-            readOnly: true),
-        SettingDefinition(
-            "notifWeeklyPacing", .string, group: "alerts",
-            summary: "Weekly pacing zone the last alert fired for.", scope: .standard,
-            readOnly: true),
-        SettingDefinition(
             AppStorageKeys.Notify.master, .bool, group: "alerts",
             summary: "Master switch for every usage notification.", fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Notify.trackSession, .bool, group: "alerts",
-            summary: "Alert when the session limit crosses a threshold."),
+            summary: "Send limit alerts for 5-hour windows.", fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Notify.trackWeekly, .bool, group: "alerts",
-            summary: "Alert when the weekly limit crosses a threshold."),
+            summary: "Send limit alerts for weekly windows, Fable included.",
+            fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.Notify.recovery, .bool, group: "alerts",
-            summary: "Alert when usage falls back into the green."),
+            AppStorageKeys.Notify.onPace, .bool, group: "alerts",
+            summary: "Alert when the recent burn rate would hit the cap before the reset.",
+            fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.Notify.pacingWarning, .bool, group: "alerts",
-            summary: "Alert when spend runs ahead of pace."),
+            AppStorageKeys.Notify.almostCapped, .bool, group: "alerts",
+            summary: "Alert once per window when usage crosses the almost-capped line.",
+            fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.Notify.pacingHot, .bool, group: "alerts",
-            summary: "Alert when spend is burning far ahead of pace."),
+            AppStorageKeys.Notify.almostCappedPercent, .int, group: "alerts",
+            summary: "Percentage that counts as almost capped.",
+            integerRange: LimitAlertSettings.almostCappedRange,
+            fallback: .int(LimitAlertSettings.defaultAlmostCappedPercent)),
         SettingDefinition(
-            AppStorageKeys.Notify.reminderSession, .bool, group: "alerts",
-            summary: "Remind before the session window resets."),
+            AppStorageKeys.Notify.capped, .bool, group: "alerts",
+            summary: "Alert when a window hits 100%, with its reset time.", fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.Notify.reminderSessionOffsetMin, .int, group: "alerts",
-            summary: "Minutes before the session reset to remind.", fallback: .int(15)),
+            AppStorageKeys.Notify.back, .bool, group: "alerts",
+            summary: "Alert at the reset of a window that was capped or nearly capped.",
+            fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.Notify.reminderWeekly, .bool, group: "alerts",
-            summary: "Remind before the weekly window resets."),
+            AppStorageKeys.Notify.outlook, .bool, group: "alerts",
+            summary: "Morning outlook when a weekly window is heading for a tight finish.",
+            fallback: .bool(false)),
         SettingDefinition(
-            AppStorageKeys.Notify.reminderWeeklyOffsetMin, .int, group: "alerts",
-            summary: "Minutes before the weekly reset to remind.", fallback: .int(60)),
+            AppStorageKeys.Notify.headroom, .bool, group: "alerts",
+            summary: "Alert on the last day of a weekly window when half or more is unused.",
+            fallback: .bool(false)),
         SettingDefinition(
-            AppStorageKeys.Notify.tokenExpired, .bool, group: "alerts",
-            summary: "Alert when a provider token expires."),
+            AppStorageKeys.Notify.loginProblems, .bool, group: "alerts",
+            summary: "Alert once when a provider login breaks, until it recovers.",
+            fallback: .bool(true)),
     ]
 
     private static let budget: [SettingDefinition] = [
@@ -450,6 +463,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Herdr.ghosttyTerminal, .bool, group: "herdr",
             summary: "Run Herdr terminals on the Ghostty engine instead of SwiftTerm.",
             fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Herdr.launchDefaults, .map, group: "herdr",
+            summary: "Model, effort and fast mode per agent kind when Edith starts an agent.",
+            fallback: .object([:])),
     ]
 
     private static let quinjet: [SettingDefinition] = [
@@ -894,6 +911,11 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Presenter.detectMirroring, .bool, group: "presenter",
             summary: "Treat display mirroring as a share."),
+        SettingDefinition(
+            AppStorageKeys.Presenter.askJev, .bool, group: "presenter",
+            summary:
+                "Ask Jev whether on-screen windows look like a shared screen. Sends window titles to TypeSafe.",
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Presenter.hideMenuBarNumbers, .bool, group: "presenter",
             summary: "Hide menu bar percentages while presenting."),

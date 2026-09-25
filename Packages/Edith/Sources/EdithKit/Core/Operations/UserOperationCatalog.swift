@@ -107,6 +107,9 @@ public enum UserOperationCatalog {
         var registrations = UsageProjectOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += UsageAttributionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -206,6 +209,15 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         registrations += HerdrOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += JevOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += HerdrLaunchOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += DocsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         return registrations
@@ -951,6 +963,19 @@ private extension LidAwakeOperation {
     }
 }
 
+private extension UsageAttributionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            commandLineOnly(
+                "the dashboard drilldown marks each attributed folder instead of listing decisions")
+        case .reset:
+            commandLineOnly(
+                "forgetting attribution decisions is a maintenance action with no app control")
+        }
+    }
+}
+
 private extension UsageProjectOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -1035,6 +1060,32 @@ private extension HerdrSessionOperation {
             UserInterfaceActionPlacement(
                 surface: "Extension settings", action: "check live Herdr sessions"),
         ])
+    }
+}
+
+private extension JevOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status: userInterface("Jev settings", "check the key and its credits")
+        case .keySet: userInterface("Jev settings", "save the TypeSafe API key")
+        case .keyClear: userInterface("Jev settings", "remove the TypeSafe API key", ["--yes"])
+        case .ask:
+            commandLineOnly(
+                "raw requests are a developer and agent tool; the app asks Jev from each feature")
+        }
+    }
+}
+
+private extension DocsOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list: userInterface("Docs page", "browse the reference pages")
+        case .show: userInterface("Docs page", "read one reference page", ["herdr", "ls"])
+        case .ask:
+            userInterface(
+                "Docs page", "ask which command handles a request", ["restart the background agent"]
+            )
+        }
     }
 }
 
@@ -1493,6 +1544,23 @@ private extension HerdrOperation {
                 "Herdr session tab", "copy the attach command for a pane", ["w3:p1N"])
         case .attach:
             userInterface("Herdr board", "attach to a live pane", ["w3:p1N"])
+        }
+    }
+}
+
+private extension HerdrLaunchOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .models:
+            userInterface(
+                "Agent launch settings", "browse an agent's models, effort levels and fast mode",
+                ["Codex"])
+        case .defaults:
+            userInterface("Agent launch settings", "review the launch defaults for every agent")
+        case .setDefaults:
+            userInterface(
+                "Agent launch settings", "choose the model, effort or fast mode for a launch",
+                ["Codex", "--model", "gpt-6-sol", "--effort", "high", "--fast", "on"])
         }
     }
 }

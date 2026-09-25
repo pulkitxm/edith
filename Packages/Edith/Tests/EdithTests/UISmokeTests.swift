@@ -38,6 +38,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
     view.subviews + view.subviews.flatMap { descendantViews(of: $0) }
 }
 
+@MainActor
+private func settledBitmap(
+    _ view: some View, scheme: ColorScheme, width: CGFloat = 1400, height: CGFloat = 900
+) async -> NSBitmapImageRep? {
+    let host = NSHostingView(
+        rootView: view.environment(\.automaticViewActionsEnabled, false)
+            .environment(\.colorScheme, scheme))
+    host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+    let window = TestWindowHost.window(contentRect: host.frame)
+    defer { window.orderOut(nil) }
+    window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+    window.contentView = host
+    window.layoutIfNeeded()
+    try? await Task.sleep(for: .milliseconds(900))
+    host.layoutSubtreeIfNeeded()
+    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+    host.cacheDisplay(in: host.bounds, to: rep)
+    return rep
+}
+
 @MainActor private func smokeUpdater() -> UpdaterModel {
     UpdaterModel(
         logURL: URL(fileURLWithPath: NSTemporaryDirectory())
@@ -111,6 +131,48 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HomebrewPageSkeleton()))
         #expect(renders(AppMaintenanceSectionSkeleton(section: .removal)))
         #expect(renders(AppMaintenanceSectionSkeleton(section: .history)))
+    }
+
+    @Test func docsPageRendersTablesCodeAndAskResultsInBothAppearances() async throws {
+        let library = try #require(DocsLibrary.bundled())
+        for scheme in [ColorScheme.light, .dark] {
+            let name = scheme == .dark ? "dark" : "light"
+            let browser = DocsBrowser(library: library)
+            browser.open(DocsLocation(path: "herdr/ls.md"))
+            #expect(
+                browser.page?.blocks.contains { if case .table = $0 { true } else { false } }
+                    == true)
+            let page = try #require(
+                await settledBitmap(DocsScreen(browser: browser), scheme: scheme))
+            #expect(page.pixelsWide > 0 && page.pixelsHigh > 0)
+            browser.question = "free up docker space on my server"
+            await browser.ask(browser.question, decider: nil)
+            #expect(browser.answer?.engine == .search)
+            #expect(browser.answer?.picks.first?.command.path == "ed machines docker prune")
+            browser.openSelection()
+            #expect(browser.location == DocsLocation(path: "machines-docker/prune.md"))
+            #expect(browser.goBack() && browser.location.path == "herdr/ls.md")
+            await browser.ask(browser.question, decider: nil)
+            let asked = try #require(
+                await settledBitmap(DocsScreen(browser: browser), scheme: scheme))
+            browser.moveSelection(1)
+            #expect(browser.selection == 1 && browser.resultsVisible)
+            browser.question = "restart the background agent"
+            browser.questionChanged()
+            #expect(!browser.resultsVisible)
+            browser.moveSelection(1)
+            #expect(!browser.resultsVisible)
+            #expect(browser.clearQuestion() && browser.answer == nil && browser.question.isEmpty)
+            if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: output, withIntermediateDirectories: true)
+                for (bitmap, label) in [(page, "page"), (asked, "ask")] {
+                    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                    try png.write(to: output.appendingPathComponent("docs-\(label)-\(name).png"))
+                }
+            }
+        }
     }
 
     @Test func homePageRenders() {

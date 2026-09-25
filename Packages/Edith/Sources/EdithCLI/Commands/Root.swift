@@ -41,6 +41,7 @@ public struct EdRoot: AsyncParsableCommand {
         version: edithCLIVersion,
         subcommands: [
             GuideCommand.self,
+            DocsCommandGroup.self,
             SchemaCommand.self,
             VersionCommand.self,
             StatusCommand.self,
@@ -76,6 +77,7 @@ public struct EdRoot: AsyncParsableCommand {
             DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
+            JevCommand.self,
             CompleteCommand.self,
         ])
 

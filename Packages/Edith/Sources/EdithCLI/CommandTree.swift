@@ -140,6 +140,13 @@ public enum CommandTree {
     static let specs: [String: Spec] = [
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
+        "ed docs ls": Spec(
+            options: ["--json", "-h", "--help", "--version", "--group"],
+            optionValues: ["--group": .free]),
+        "ed docs show": Spec(
+            options: ["--json", "-h", "--help", "--version"], repeatingArgument: .free),
+        "ed docs ask": Spec(
+            options: ["--json", "-h", "--help", "--version"], repeatingArgument: .free),
         "ed version": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed completions install": Spec(
@@ -220,6 +227,7 @@ public enum CommandTree {
         "ed permissions refresh": Spec(options: ["--json"]),
         "ed permissions settings": Spec(options: ["--json"], arguments: [.permission]),
         "ed usage limits": Spec(options: ["--json", "--help", "--refresh"]),
+        "ed usage alerts": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed usage summary": Spec(
             options: ["--json", "--range", "--source", "--machine"],
             optionValues: ["--machine": .machine, "--range": .usageRange, "--source": .usageSource]),
@@ -242,6 +250,10 @@ public enum CommandTree {
             arguments: [.usageProject]),
         "ed usage projects copy-chat": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.usageChat]),
+        "ed usage attribution ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed usage attribution reset": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
         "ed usage sources": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed usage export": Spec(
             options: [
@@ -325,6 +337,15 @@ public enum CommandTree {
         "ed herdr attach": Spec(
             options: ["--json", "-h", "--help", "--version", "--machine", "--session"],
             arguments: [.free]),
+        "ed herdr models": Spec(
+            options: ["--json", "-h", "--help", "--version", "--machine", "--refresh"],
+            arguments: [.free]),
+        "ed herdr defaults ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed herdr defaults set": Spec(
+            options: [
+                "--json", "-h", "--help", "--version", "--model", "--effort", "--fast",
+            ],
+            optionValues: ["--fast": .onOff], arguments: [.free]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),
@@ -1069,6 +1090,15 @@ public enum CommandTree {
         "ed companion erase": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed jev status": Spec(options: ["--json", "-h", "--help", "--version", "--probe"]),
+        "ed jev key show": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed jev key set": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed jev key clear": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed jev ask": Spec(
+            options: ["--json", "-h", "--help", "--version", "--request"],
+            optionValues: ["--request": .localPath]),
         "ed companion wipe": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             destructivePolicy: .previewThenYes),

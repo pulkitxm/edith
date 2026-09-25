@@ -26,6 +26,14 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
         self.fable = fable
         self.error = error
     }
+
+    public func window(for slot: LimitWindowSlot) -> LimitWindow? {
+        switch slot {
+        case .session: session
+        case .week: week
+        case .fable: fable
+        }
+    }
 }
 
 public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {

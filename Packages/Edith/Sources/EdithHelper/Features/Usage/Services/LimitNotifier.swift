@@ -54,4 +54,17 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         [.banner, .list, .sound]
     }
 
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+            let action = AgentNotification(
+                userInfo: response.notification.request.content.userInfo)?.action
+        else { return }
+        await MainActor.run {
+            HerdrOpenRequests.submit(action)
+            MainApp.open(section: "herdr")
+        }
+    }
+
 }

@@ -619,6 +619,12 @@ final class HerdrStore {
         open(agent, showing: nil)
     }
 
+    func open(_ request: HerdrOpenRequest) async {
+        if !agents.contains(where: { $0.id == request.agentID }) { await refresh() }
+        guard let agent = agents.first(where: { $0.id == request.agentID }) else { return }
+        open(agent, showing: request.view)
+    }
+
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
         revealSpace(containing: agent)
         if sessions.contains(where: { $0.id == agent.id }) {

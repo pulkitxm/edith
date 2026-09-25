@@ -592,6 +592,7 @@ enum JSONContract {
             "ed permissions settings",
             ["permissions", "settings", "calendar", "--json"], mutatesTheMachine: true),
         JSONCase("ed usage limits", ["usage", "limits", "--json"]),
+        JSONCase("ed usage alerts", ["usage", "alerts", "--json"]),
         JSONCase("ed usage summary", ["usage", "summary", "--json"]),
         JSONCase("ed usage daily", ["usage", "daily", "--json"]),
         JSONCase("ed usage models", ["usage", "models", "--json"]),
@@ -609,6 +610,8 @@ enum JSONContract {
             "ed usage projects copy-chat",
             ["usage", "projects", "copy-chat", "abc", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed usage attribution ls", ["usage", "attribution", "ls", "--json"]),
+        JSONCase("ed usage attribution reset", ["usage", "attribution", "reset", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
             "ed usage export", ["usage", "export", "--json"],
@@ -661,8 +664,23 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
+        JSONCase("ed docs ls", ["docs", "ls", "--json"]),
+        JSONCase("ed docs show", ["docs", "show", "herdr", "ls", "--json"]),
+        JSONCase("ed docs ask", ["docs", "ask", "restart the background agent", "--json"]),
+        JSONCase("ed jev status", ["jev", "status", "--json"]),
+        JSONCase("ed jev key show", ["jev", "key", "show", "--json"]),
+        JSONCase("ed jev key set", ["jev", "key", "set", "--json"], mutatesTheMachine: true),
+        JSONCase("ed jev key clear", ["jev", "key", "clear", "--json"]),
+        JSONCase(
+            "ed jev ask", ["jev", "ask", "--request", "/path/that/does/not/exist.json", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
+        JSONCase("ed herdr models", ["herdr", "models", "gemini", "--json"]),
+        JSONCase("ed herdr defaults ls", ["herdr", "defaults", "ls", "--json"]),
+        JSONCase(
+            "ed herdr defaults set",
+            ["herdr", "defaults", "set", "gemini", "--model", "pro", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),
         JSONCase(
             "ed quinjet worktrees",

@@ -19,6 +19,10 @@ Destructive routes keep the CLI's safety model. They preview by default and
 apply only when the call passes `confirm`, which adds `--yes`. An agent that
 forgets to confirm gets the preview, never the change.
 
+While a TypeSafe key is saved in Settings > Jev, the server also lists
+`edith_find`. It takes a plain-language `request` and returns the five likeliest
+tools with their summaries and probabilities. See [`ed jev`](../jev/README.md).
+
 The database tools from [`ed database mcp`](../database/mcp.md) are served
 here too, so one registration covers both surfaces.
 
