@@ -63,7 +63,7 @@ That builds `ed` in release configuration, runs
 `.build/release/ed completions install`. It is the supported way to get a
 working `ed` out of a checkout, and running `install` from the build product
 rather than from a link is the part that matters, for the reason in
-[`ed install`](#ed-install) below.
+[`ed install`](./install.md).
 
 ## Commands
 

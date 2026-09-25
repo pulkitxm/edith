@@ -212,6 +212,9 @@ public enum UserOperationCatalog {
         registrations += JevOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += DocsOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         return registrations
     }()
 
@@ -1051,6 +1054,19 @@ private extension JevOperation {
         case .ask:
             commandLineOnly(
                 "raw requests are a developer and agent tool; the app asks Jev from each feature")
+        }
+    }
+}
+
+private extension DocsOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list: userInterface("Docs page", "browse the reference pages")
+        case .show: userInterface("Docs page", "read one reference page", ["herdr", "ls"])
+        case .ask:
+            userInterface(
+                "Docs page", "ask which command handles a request", ["restart the background agent"]
+            )
         }
     }
 }
