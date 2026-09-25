@@ -110,7 +110,7 @@ describe("build install lifecycle", () => {
         { stdout: "pipe", stderr: "pipe", timeout: 30000 },
       );
       const output = new TextDecoder().decode(result.stderr);
-      expect(output).toContain("Ran 13 tests");
+      expect(output).toContain("Ran 14 tests");
       expect(output).toContain("OK");
       expect(result.exitCode).toBe(0);
     },
@@ -188,5 +188,28 @@ describe("build install lifecycle", () => {
 
   test("launches the installed bundle as a new application instance", () => {
     expect(script).toContain('open -n "/Applications/Edith.app"');
+  });
+
+  test("names each development build after its worktree folder", () => {
+    for (const [path, slot] of [
+      ["/fixture/edith", "main"],
+      ["/fixture/edith-openscreen", "openscreen"],
+      ["/fixture/edith-Herdr_New.Agent", "herdr-new-agent"],
+      ["/fixture/edith-", "main"],
+    ]) {
+      const result = Bun.spawnSync(
+        ["bash", "scripts/dev-slots.sh", "slot", path],
+        { stdout: "pipe", stderr: "pipe", timeout: 5000 },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(new TextDecoder().decode(result.stdout).trim()).toBe(slot);
+    }
+    expect(script).toContain('XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")');
+  });
+
+  test("never launches a production copy outside /Applications", () => {
+    expect(script).toContain('"$LSREGISTER" -u "$APP"');
+    expect(script).toContain('elif [ "$NO_OPEN" != 1 ]; then');
+    expect(script).not.toContain('[ "$NO_OPEN" = 1 ] || open "$APP"');
   });
 });

@@ -16,19 +16,27 @@ enum AgentEventJournal {
 
     static func append(_ event: AgentEvent, store: AgentStore?) {
         guard let store else { return }
+        let payload: Data
         do {
-            let payload = try AgentPayload.encode(event)
-            try store.write { database in
-                try database.execute(
-                    sql: "INSERT INTO agent_event (payload) VALUES (?)", arguments: [payload])
-                try database.execute(
-                    sql:
-                        "DELETE FROM agent_event WHERE sequence <= (SELECT MAX(sequence) - ? FROM agent_event)",
-                    arguments: [AgentDiagnostics.capacity])
-            }
+            payload = try AgentPayload.encode(event)
         } catch {
-            AgentLog.logger.error(
-                "Unable to save diagnostic event: \(error.localizedDescription, privacy: .private)")
+            logFailure(error)
+            return
         }
+        store.asyncWrite { database in
+            try database.execute(
+                sql: "INSERT INTO agent_event (payload) VALUES (?)", arguments: [payload])
+            try database.execute(
+                sql:
+                    "DELETE FROM agent_event WHERE sequence <= (SELECT MAX(sequence) - ? FROM agent_event)",
+                arguments: [AgentDiagnostics.capacity])
+        } failed: { error in
+            logFailure(error)
+        }
+    }
+
+    private static func logFailure(_ error: Error) {
+        AgentLog.logger.error(
+            "Unable to save diagnostic event: \(error.localizedDescription, privacy: .private)")
     }
 }

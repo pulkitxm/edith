@@ -217,6 +217,23 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual((installed / 'Contents/Resources/version').read_text(), 'new')
         install_app.verify_bundle(installed)
 
+    def test_staging_copy_leaves_launch_services_before_removal(self):
+        installed = self.bundle('Edith.app', 'old')
+        source = self.bundle('Build.app', 'new')
+        forgotten = []
+
+        def forget(path):
+            forgotten.append((path, path.exists()))
+
+        with patch.object(install_app, 'forget_registration', side_effect=forget):
+            install_app.install(source, installed)
+        self.assertEqual(len(forgotten), 1)
+        staged, existed = forgotten[0]
+        self.assertTrue(existed)
+        self.assertEqual(staged.name, 'Edith.app')
+        self.assertTrue(staged.parent.name.startswith('.Edith.app.install-'))
+        self.assertFalse(staged.exists())
+
     def test_atomic_swap_failure_preserves_original_and_running_process(self):
         installed = self.bundle('Edith.app', 'old')
         source = self.bundle('Build.app', 'new')
