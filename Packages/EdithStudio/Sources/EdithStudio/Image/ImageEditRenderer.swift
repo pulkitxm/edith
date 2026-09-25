@@ -534,13 +534,14 @@ public enum ImageEditRenderer {
         let font = CTFontCreateWithName("AppleColorEmoji" as CFString, size, nil)
         let attributed = NSAttributedString(string: value, attributes: [.font: font])
         let line = CTLineCreateWithAttributedString(attributed)
+        context.textMatrix = .identity
+        context.textPosition = .zero
         let bounds = CTLineGetImageBounds(line, context)
         let width = max(bounds.width, 1)
         let scale = min(1, rect.width / width)
         context.saveGState()
         context.translateBy(x: rect.midX, y: rect.midY)
         context.scaleBy(x: scale, y: scale)
-        context.textMatrix = .identity
         context.textPosition = CGPoint(x: -bounds.midX, y: -bounds.midY)
         CTLineDraw(line, context)
         context.restoreGState()

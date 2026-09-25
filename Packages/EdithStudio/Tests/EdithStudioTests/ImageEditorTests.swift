@@ -96,6 +96,32 @@ import Testing
                 == nil)
     }
 
+    @Test func stickerLandsInItsFrameAfterATextLayer() throws {
+        let space = try Workspace()
+        let url = space.url("plain.png")
+        let canvas = try #require(StudioImageOps.context(width: 1200, height: 800, opaque: true))
+        canvas.setFillColor(CGColor(srgbRed: 0.95, green: 0.9, blue: 0.8, alpha: 1))
+        canvas.fill(CGRect(x: 0, y: 0, width: 1200, height: 800))
+        try StudioImageIO.write(try #require(canvas.makeImage()), to: url, format: .png)
+        let source = try StudioImageIO.load(url)
+        var document = ImageEditDocument(source: url)
+        document.add(
+            .text("Beach day", at: StudioRect(x: 0.2, y: 0.12, width: 0.6, height: 0.12)))
+        document.add(
+            ImageLayer(
+                content: .sticker("🌴"),
+                frame: StudioRect(x: 0.44, y: 0.41, width: 0.12, height: 0.18)))
+        let output = try ImageEditRenderer.render(document: document, source: source)
+        var green = 0
+        for x in stride(from: 530, to: 670, by: 3) {
+            for y in stride(from: 330, to: 470, by: 3) {
+                let pixel = Fixtures.pixel(output, x: x, y: y)
+                if pixel.g > pixel.r + 40 && pixel.g > pixel.b + 40 && pixel.r < 200 { green += 1 }
+            }
+        }
+        #expect(green > 40)
+    }
+
     @Test func textStickerDrawingAndArrowLayersRender() throws {
         let space = try Workspace()
         let (url, source) = try quad(space)
