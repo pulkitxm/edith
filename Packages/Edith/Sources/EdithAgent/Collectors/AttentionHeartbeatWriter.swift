@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import EdithKit
 import Foundation
 
@@ -7,6 +8,32 @@ struct AttentionHeartbeatSample: Sendable {
     var event: AttentionEvent
     let processID: pid_t
     let captureWindowTitle: Bool
+    var counters: AttentionInputCounters? = nil
+}
+
+struct AttentionInputCounters: Equatable, Sendable {
+    var keys: UInt32
+    var clicks: UInt32
+    var scrolls: UInt32
+
+    static func read() -> AttentionInputCounters {
+        func count(_ type: CGEventType) -> UInt32 {
+            CGEventSource.counterForEventType(.combinedSessionState, eventType: type)
+        }
+        return AttentionInputCounters(
+            keys: count(.keyDown),
+            clicks: count(.leftMouseDown) &+ count(.rightMouseDown) &+ count(.otherMouseDown),
+            scrolls: count(.scrollWheel))
+    }
+
+    func signals(since previous: AttentionInputCounters) -> AttentionSignals {
+        func delta(_ now: UInt32, _ then: UInt32) -> Int {
+            now >= then ? Int(min(now - then, 100_000)) : 0
+        }
+        return AttentionSignals(
+            keys: delta(keys, previous.keys), clicks: delta(clicks, previous.clicks),
+            scrolls: delta(scrolls, previous.scrolls))
+    }
 }
 
 @MainActor

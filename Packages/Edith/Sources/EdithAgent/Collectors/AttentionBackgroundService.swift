@@ -13,7 +13,7 @@ public actor AttentionBackgroundService {
     private let repository: AttentionRepository
     private let tracking: AttentionTrackingRuntime
     private let cloudDirectory: URL
-    private let defaults: UserDefaults
+    private nonisolated(unsafe) let defaults: UserDefaults
     private let cloudAvailable: @Sendable () -> Bool
     private var server: AttentionIngestionServer?
     private var serverSettings: AttentionSettings?
@@ -24,6 +24,7 @@ public actor AttentionBackgroundService {
     private var refreshTask: Task<Void, Never>?
     private var summaryTasks: [UUID: Task<AttentionPageSnapshot, Error>] = [:]
     private var stopped = false
+    private var agentRecorder = AttentionAgentRecorder()
 
     public init(
         store: AgentStore, root: URL = AttentionPaths.root,
@@ -143,6 +144,23 @@ public actor AttentionBackgroundService {
         let spool = AttentionDeliverySpool(
             file: repository.directory.appendingPathComponent("delivery-spool.json"))
         return try await spool.health()
+    }
+
+    public nonisolated func tracksAgents() -> Bool {
+        let settings = repository.loadSettings()
+        return defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled) && settings.isEnabled
+            && settings.agentTrackingEnabled
+    }
+
+    public func recordAgents(_ hosts: [HerdrHostSnapshot], now: Date = Date()) throws {
+        guard !stopped else { return }
+        let observed = agentRecorder.observe(hosts, now: now)
+        guard !observed.isEmpty else { return }
+        try events.record(AttentionBatch(events: observed), now: now)
+    }
+
+    public nonisolated func updateContext(_ context: AttentionAppContext) {
+        AttentionContextBoard.shared.update(context)
     }
 
     public func record(_ batch: AttentionBatch) throws {
@@ -339,6 +357,13 @@ public enum AttentionBackgroundOperations {
         await runtime.register(operation: AttentionOperation.summary) { payload in
             let request = try AgentPayload.decode(AttentionSummaryRequest.self, from: payload)
             return try await AgentPayload.encode(service.summary(request))
+        }
+        await runtime.register(operation: AttentionOperation.context) { payload in
+            guard payload.count <= 8_192 else {
+                throw AgentError(.refused, "Attention context exceeds its size limit.")
+            }
+            service.updateContext(try AgentPayload.decode(AttentionAppContext.self, from: payload))
+            return Data()
         }
         await runtime.register(operation: AttentionOperation.backup) { _ in
             try await service.backup()

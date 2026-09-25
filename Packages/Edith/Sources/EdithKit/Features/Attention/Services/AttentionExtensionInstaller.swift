@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 
 public enum AttentionExtensionInstaller {
+    public static let version = "2.0.0"
+
     public static var bundledDirectory: URL? {
         Bundle.module.url(forResource: "ChromeExtension", withExtension: nil)
     }
@@ -24,6 +26,22 @@ public enum AttentionExtensionInstaller {
         }
         try manager.copyItem(at: source, to: destination)
         return destination
+    }
+
+    public static var installedVersion: String? {
+        let manifest = installedDirectory.appendingPathComponent("manifest.json")
+        guard let data = try? Data(contentsOf: manifest),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["version"] as? String
+    }
+
+    @discardableResult
+    public static func refreshIfOutdated() -> Bool {
+        guard FileManager.default.fileExists(atPath: installedDirectory.path),
+            installedVersion != version
+        else { return false }
+        return (try? install()) != nil
     }
 
     public static func reveal() throws {

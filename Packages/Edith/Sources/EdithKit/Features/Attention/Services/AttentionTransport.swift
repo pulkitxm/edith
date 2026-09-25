@@ -8,6 +8,20 @@ public enum AttentionOperation {
     public static let summary = "attention.summary"
     public static let backup = "attention.backup"
     public static let restore = "attention.restore"
+    public static let context = "attention.context"
+    public static let categorize = "attention.categorize"
+}
+
+public struct AttentionCategorizeReport: Codable, Equatable, Sendable {
+    public var entities: Int
+    public var titles: Int
+    public var available: Bool
+
+    public init(entities: Int = 0, titles: Int = 0, available: Bool) {
+        self.entities = entities
+        self.titles = titles
+        self.available = available
+    }
 }
 
 public struct AttentionBatch: Codable, Equatable, Sendable {
@@ -170,6 +184,21 @@ public enum AttentionBackgroundClient {
         let data = try await client.performInternalAsync(
             AttentionOperation.summary, payload: AgentPayload.encode(request), timeout: 30)
         return try AgentPayload.decode(AttentionPageSnapshot.self, from: data)
+    }
+
+    public static func publish(_ context: AttentionAppContext, client: AgentClient = .shared)
+        async throws
+    {
+        _ = try await client.performInternalAsync(
+            AttentionOperation.context, payload: AgentPayload.encode(context), timeout: 5)
+    }
+
+    public static func categorize(client: AgentClient = .shared) async throws
+        -> AttentionCategorizeReport
+    {
+        let data = try await client.performInternalAsync(
+            AttentionOperation.categorize, payload: Data(), timeout: 120)
+        return try AgentPayload.decode(AttentionCategorizeReport.self, from: data)
     }
 
     public static func backup(client: AgentClient = .shared) async throws {
