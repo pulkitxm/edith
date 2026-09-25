@@ -233,11 +233,11 @@ private struct HerdrTerminalList: View {
             .accessibilityLabel("\(terminal.title), \(terminal.location)")
             .accessibilityAddTraits(selected ? .isSelected : [])
             if closing {
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.75)
-                    .frame(width: UIScale.pt(18), height: UIScale.pt(18))
-                    .accessibilityLabel("Closing \(terminal.title)")
+                SkeletonGroup {
+                    SkeletonBlock(width: 10, height: 10, corner: 5)
+                }
+                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+                .accessibilityLabel("Closing \(terminal.title)")
             } else {
                 iconButton("xmark", label: "Close \(terminal.title)") {
                     panels.requestClose(terminal.id)
@@ -436,8 +436,9 @@ struct HerdrTerminalBusyBadge: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(8)) {
-            ProgressView()
-                .controlSize(.small)
+            SkeletonGroup {
+                SkeletonBlock(width: 12, height: 12, corner: 6)
+            }
             Text(title)
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(Color(nsColor: palette.foreground))

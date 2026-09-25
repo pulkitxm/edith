@@ -559,10 +559,10 @@ struct HerdrPage: View {
                 .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
             }
             if closable, store.terminalPanels.isChecking(id) {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: UIScale.pt(10), height: UIScale.pt(10))
-                    .accessibilityLabel("Closing")
+                SkeletonGroup {
+                    SkeletonBlock(width: 9, height: 9, corner: 4.5)
+                }
+                .accessibilityLabel("Closing")
             } else if closable {
                 Button {
                     store.closeTab(id)
