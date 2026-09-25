@@ -17,6 +17,36 @@ import Testing
         #expect(exitCodes[0] == nil)
     }
 
+    @Test @MainActor func anEmptyFrameDuringRehostingKeepsTheTerminalGrid() throws {
+        let environment = ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(
+                executable: "/bin/sh", arguments: ["-c", "cat"], environment: environment))
+        defer {
+            view.removeFromSuperview()
+            window.contentView = nil
+            view.shutdown()
+        }
+        let pane = NSSize(width: 446, height: 303)
+        window.contentView = NSView(frame: window.contentLayoutRect)
+        view.frame = NSRect(origin: .zero, size: pane)
+        window.contentView?.addSubview(view)
+        let surface = try #require(view.surface)
+        let laidOut = ghostty_surface_size(surface)
+
+        view.setFrameSize(.zero)
+        let collapsed = ghostty_surface_size(surface)
+        view.setFrameSize(pane)
+        let restored = ghostty_surface_size(surface)
+
+        #expect(laidOut.columns > 10)
+        #expect(collapsed.columns == laidOut.columns)
+        #expect(collapsed.rows == laidOut.rows)
+        #expect(restored.columns == laidOut.columns)
+        #expect(restored.rows == laidOut.rows)
+    }
+
     @Test @MainActor func anExitedChildCannotCloseTheSurfaceThatReusesItsSlot() async throws {
         let environment = ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))

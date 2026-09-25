@@ -257,7 +257,7 @@ public final class GhosttyTerminalView: NSView {
     }
 
     private func applySize() {
-        guard let surface else { return }
+        guard let surface, !bounds.isEmpty else { return }
         let scale = window?.backingScaleFactor ?? 2
         let width = UInt32(max(1, bounds.width * scale))
         let height = UInt32(max(1, bounds.height * scale))
