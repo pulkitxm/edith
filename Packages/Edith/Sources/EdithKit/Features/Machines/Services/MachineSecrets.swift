@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import Security
 
@@ -8,7 +9,7 @@ public enum MachineSecretKind: String, Sendable {
 }
 
 public enum MachineSecrets {
-    public static let service = "com.pulkit.edith.machines"
+    public static let service = AppBuildIdentity.keychainService("machines")
 
     public static func account(machineID: UUID, kind: MachineSecretKind) -> String {
         "\(machineID.uuidString).\(kind.rawValue)"

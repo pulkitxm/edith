@@ -79,10 +79,7 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
             return
         }
         lock.withLock { authenticated = true }
-        Task { [runtime] in
-            let value = await runtime.handshake()
-            reply(try? AgentPayload.encode(value), nil)
-        }
+        reply(try? AgentPayload.encode(runtime.handshake()), nil)
     }
 
     func snapshot(topic: String, reply: @escaping (Data?, String?) -> Void) {

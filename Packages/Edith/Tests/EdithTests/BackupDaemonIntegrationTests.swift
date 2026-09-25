@@ -181,5 +181,11 @@ private struct BackupDaemonFixture {
             AppData.resolveCloudDirectory(environment: [:], homeDirectory: local)
                 == local.appendingPathComponent(
                     "Library/Mobile Documents/com~apple~CloudDocs/Edith"))
+        #expect(
+            AppData.resolveCloudDirectory(
+                environment: [:], homeDirectory: local,
+                identifier: "com.pulkit.edith.dev.openscreen")
+                == local.appendingPathComponent(
+                    "Library/Application Support/Edith Dev/openscreen/iCloud"))
     }
 }

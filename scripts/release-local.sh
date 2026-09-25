@@ -119,6 +119,8 @@ for attempt in 1 2 3 4 5; do
   verify_status=$?
   [ "$attempt" -lt 5 ] && sleep 2
 done
+/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
+  -u "$PWD/dmg-root/Edith.app" 2>/dev/null || true
 rm -rf dmg-root
 [ "$verify_status" -eq 0 ] || { echo "release blocked: the DMG failed verification" >&2; exit 1; }
 

@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import Security
 
@@ -117,7 +118,7 @@ public enum CompanionSecretKind: String, CaseIterable, Sendable {
 }
 
 public enum CompanionSecrets {
-    public static let service = "com.pulkit.edith.companion"
+    public static let service = AppBuildIdentity.keychainService("companion")
 
     public static func set(_ secret: String, kind: CompanionSecretKind) {
         let data = Data(secret.utf8)
