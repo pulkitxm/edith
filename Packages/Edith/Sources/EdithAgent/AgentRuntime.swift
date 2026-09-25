@@ -81,9 +81,13 @@ public actor AgentRuntime {
         }
     }
 
+    public func flushJournal() {
+        store?.flush()
+    }
+
     public var registeredOperations: Set<String> { Set(operations.keys) }
 
-    public func handshake() -> AgentHandshake {
+    public nonisolated func handshake() -> AgentHandshake {
         AgentHandshake(
             protocolVersion: AgentService.protocolVersion, build: build, startedAt: startedAt)
     }

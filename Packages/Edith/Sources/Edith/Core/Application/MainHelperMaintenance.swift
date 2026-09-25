@@ -19,9 +19,11 @@ func launchHelperIfNeeded() async {
         }
     }
     guard !Task.isCancelled else { return }
-    let service = SMAppService.loginItem(identifier: helperBundleIdentifier)
-    if service.status != .enabled {
-        try? service.register()
+    if !AppBuildIdentity.isDevelopment {
+        let service = SMAppService.loginItem(identifier: helperBundleIdentifier)
+        if service.status != .enabled {
+            try? service.register()
+        }
     }
     let helperURL = Bundle.main.bundleURL
         .appendingPathComponent("Contents/Library/LoginItems/Edith.app")

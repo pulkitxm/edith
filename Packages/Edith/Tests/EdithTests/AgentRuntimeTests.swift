@@ -1,5 +1,6 @@
 import EdithCore
 import Foundation
+import GRDB
 import Testing
 
 @testable import EdithAgent
@@ -364,6 +365,23 @@ private final class PayloadBox: @unchecked Sendable {
 
         let names = try FileManager.default.contentsOfDirectory(atPath: root.path)
         #expect(!names.contains { $0.hasPrefix("edith.sqlite.pre-") })
+    }
+
+    @Test func latestAttentionEventByKindUsesAnIndex() throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
+
+        let plan = try store.read { database in
+            try Row.fetchAll(
+                database,
+                sql: "EXPLAIN QUERY PLAN SELECT payload FROM attention_event "
+                    + "WHERE kind = ? ORDER BY startedAt DESC LIMIT 1",
+                arguments: ["application"]
+            ).map { $0["detail"] as String }
+        }
+        #expect(plan.contains { $0.contains("USING INDEX attention_event_on_kind_startedAt") })
+        #expect(!plan.contains { $0.contains("TEMP B-TREE") })
     }
 
     @Test func theStoreIsInWALModeAndTheAgentIsTheOnlyWriter() throws {

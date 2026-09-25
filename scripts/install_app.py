@@ -17,6 +17,8 @@ from edith_fixture_copy import copy_fixture_file
 
 
 BSD_INFO = struct.Struct('=12I16s32s5Ii2Q')
+LSREGISTER = ('/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/'
+              'LaunchServices.framework/Versions/A/Support/lsregister')
 EXECUTABLES = (
     Path('Contents/MacOS/Edith'),
     Path('Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith'),
@@ -179,6 +181,10 @@ def exchange(source, destination, replacing):
         raise OSError(error, os.strerror(error), str(destination))
 
 
+def forget_registration(path):
+    subprocess.run([LSREGISTER, '-u', str(path)], capture_output=True, timeout=30)
+
+
 def install(source, destination, quit_application=request_quit, verify=verify_bundle):
     if sys.platform != 'darwin':
         raise RuntimeError('Application installation requires macOS.')
@@ -232,6 +238,7 @@ def install_locked(source, destination, quit_application, verify):
         completed = True
     finally:
         if not published or completed:
+            forget_registration(staged)
             shutil.rmtree(temporary)
         else:
             print(f'Retired application preserved at {staged}', file=sys.stderr)
