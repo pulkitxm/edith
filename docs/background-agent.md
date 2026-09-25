@@ -302,6 +302,10 @@ appears for the helper.
 - Process runners have timeouts, output limits, cancellation, and process-group cleanup.
 - Event history, task output, caches, and queues are bounded.
 - SQLite uses WAL mode for short concurrent reads while the daemon owns writes.
+- The daemon's launchd `ProcessType` is `Adaptive`, not `Background`. A `Background`
+  job is clamped to background QoS with throttled disk I/O, so under heavy system load
+  it can take minutes to answer a 4 second client request or finish a migration.
+  `Adaptive` keeps it low priority when idle and boosts it while it serves a client.
 - SwiftUI reads daemon snapshots and performs expensive formatting away from MainActor.
 
 When adding a feature, prefer an existing scheduled job for periodic state, a durable task
