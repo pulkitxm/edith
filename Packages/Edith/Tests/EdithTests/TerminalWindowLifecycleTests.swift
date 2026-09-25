@@ -8,16 +8,8 @@ import Testing
 
 @Suite(.serialized) @MainActor struct TerminalWindowLifecycleTests {
     @Test func explicitWindowCloseStopsOnlyItsTerminalAndHidingPreservesIt() async throws {
-        let key = AppStorageKeys.Herdr.ghosttyTerminal
-        let previous = SharedDefaults.store.object(forKey: key)
-        SharedDefaults.store.set(false, forKey: key)
-        defer {
-            if let previous {
-                SharedDefaults.store.set(previous, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
+        let engine = GhosttyEngineFixture(enabled: false)
+        defer { engine.restore() }
         let first = try await makeTerminal()
         defer { first.model.stopAll(); first.window.close(); first.session.stop() }
         let second = try await makeTerminal()
