@@ -294,16 +294,10 @@ public actor SSHConnection {
         let process = execProcess(command: command)
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
-        let stdoutBuffer = PipeBuffer()
-        let stderrBuffer = PipeBuffer()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        stdoutPipe.fileHandleForReading.readabilityHandler = {
-            PipeReading.consume($0, receive: stdoutBuffer.append)
-        }
-        stderrPipe.fileHandleForReading.readabilityHandler = {
-            PipeReading.consume($0, receive: stderrBuffer.append)
-        }
+        let stdout = PipeCollector(stdoutPipe.fileHandleForReading)
+        let stderr = PipeCollector(stderrPipe.fileHandleForReading)
         if let stdin {
             let stdinPipe = Pipe()
             process.standardInput = stdinPipe
@@ -319,12 +313,8 @@ public actor SSHConnection {
         } onCancel: {
             process.terminate()
         }
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
-        stdoutBuffer.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-        stderrBuffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
         return SSHExecResult(
-            status: status, stdout: stdoutBuffer.snapshot(), stderr: stderrBuffer.snapshot())
+            status: status, stdout: await stdout.collected(), stderr: await stderr.collected())
     }
 
     @discardableResult

@@ -19,12 +19,9 @@ public enum LocalMachineCommandExecution {
         process.arguments = arguments
         process.environment = environment
         let pipe = Pipe()
-        let buffer = MachineCommandBuffer()
         process.standardOutput = pipe
         process.standardError = pipe
-        pipe.fileHandleForReading.readabilityHandler = {
-            PipeReading.consume($0, receive: buffer.append)
-        }
+        let output = PipeCollector(pipe.fileHandleForReading)
         let stdinPipe: Pipe?
         if stdin != nil {
             let pipe = Pipe()
@@ -49,32 +46,12 @@ public enum LocalMachineCommandExecution {
         } onCancel: {
             process.terminate()
         }
-        pipe.fileHandleForReading.readabilityHandler = nil
-        buffer.append(pipe.fileHandleForReading.readDataToEndOfFile())
-        let text = String(decoding: buffer.snapshot(), as: UTF8.self)
+        let text = String(decoding: await output.collected(), as: UTF8.self)
         guard status == 0 else {
             return .failure(
                 SSHConnectionError.commandFailed(
                     command: commandLabel, status: status, stderr: text))
         }
         return .success(text)
-    }
-}
-
-private final class MachineCommandBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
-
-    func append(_ chunk: Data) {
-        guard !chunk.isEmpty else { return }
-        lock.lock()
-        data.append(chunk)
-        lock.unlock()
-    }
-
-    func snapshot() -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return data
     }
 }
