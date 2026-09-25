@@ -7,10 +7,17 @@ enum NotchGeometry {
     static let expandedHeaderBand: CGFloat = 40
     static let expandedMaxSize = CGSize(width: expandedWidth, height: 412)
 
-    static func expandedShapeSize(tab: NotchTab, hasMusic: Bool, notchHeight: CGFloat) -> CGSize {
+    static func expandedShapeSize(
+        tab: NotchTab, hasMusic: Bool, notchHeight: CGFloat,
+        browserSize: CGSize = NotchBrowserGeometry.defaultSize
+    ) -> CGSize {
+        if tab == .browser {
+            return NotchBrowserGeometry.shapeSize(browser: browserSize, notchHeight: notchHeight)
+        }
         let content: CGFloat =
             switch tab {
             case .home: hasMusic ? 158 : 148
+            case .browser: 0
             case .files: 210
             case .clipboard: 260
             case .audio: 162
@@ -46,6 +53,14 @@ enum NotchGeometry {
 
     static func panelSize(forShape shape: CGSize) -> CGSize {
         CGSize(width: shape.width + panelPadding.width, height: shape.height + panelPadding.height)
+    }
+
+    static func union(_ lhs: CGSize, _ rhs: CGSize) -> CGSize {
+        CGSize(width: max(lhs.width, rhs.width), height: max(lhs.height, rhs.height))
+    }
+
+    static func panelCapacity(forShape shape: CGSize) -> CGSize {
+        union(shape, expandedMaxSize)
     }
 
     static func shapeSize(inPanel panel: CGSize) -> CGSize {

@@ -72,7 +72,7 @@ struct NotchShelfContentView: View {
     private var expandedShape: CGSize {
         NotchGeometry.expandedShapeSize(
             tab: controller.activeTab, hasMusic: controller.nowPlaying != nil,
-            notchHeight: collapsedBase.height)
+            notchHeight: collapsedBase.height, browserSize: controller.browserSize(on: displayID))
     }
 
     private var shapeSize: CGSize {
@@ -158,13 +158,39 @@ struct NotchShelfContentView: View {
         }
     }
 
-    private var expanded: some View {
-        VStack(spacing: 6) {
-            header
-            tabContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    @ViewBuilder private var expanded: some View {
+        if controller.activeTab == .browser, let browser = controller.browser {
+            NotchBrowserPane(store: browser) { compactTabs }
+                .padding(.top, collapsedBase.height)
+        } else {
+            VStack(spacing: 6) {
+                header
+                tabContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .padding(.top, collapsedBase.height)
         }
-        .padding(.top, collapsedBase.height)
+    }
+
+    private var compactTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(visibleTabs, id: \.self) { tab in
+                let active = controller.activeTab == tab
+                Button {
+                    controller.selectTab(tab)
+                } label: {
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(active ? Color.black : Color.white.opacity(0.6))
+                        .frame(width: 26, height: 22)
+                        .background(
+                            active ? Color.white.opacity(0.9) : Color.clear, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.edith(.borderless))
+                .help(tab.title)
+            }
+        }
     }
 
     private var header: some View {
@@ -233,6 +259,7 @@ struct NotchShelfContentView: View {
     @ViewBuilder private var tabContent: some View {
         switch controller.activeTab {
         case .home: NotchHomeTab(controller: controller)
+        case .browser: EmptyView()
         case .files: filesCanvas
         case .clipboard: NotchClipboardTab(controller: controller)
         case .audio: NotchAudioTab()

@@ -10,6 +10,7 @@ final class AppServices {
     private(set) var keepAwake: KeepAwakeStore?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
+    private(set) var notchBrowser: NotchBrowserStore?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var bifrost: BifrostStore?
@@ -45,6 +46,11 @@ final class AppServices {
 
     static func audioMixerRuntimeEnabled(notchShelfEnabled: Bool, mixerEnabled: Bool) -> Bool {
         notchShelfEnabled && mixerEnabled
+    }
+
+    static func notchBrowserRuntimeEnabled(notchShelfEnabled: Bool, browserEnabled: Bool) -> Bool
+    {
+        notchShelfEnabled && browserEnabled
     }
 
     static func lidAwakeDisableRecovery(_ outcome: LidAwakeOutcome) -> String? {
@@ -257,11 +263,21 @@ final class AppServices {
         {
             MixerEngine.shared.shutdown()
         }
+        let browserOn = Self.notchBrowserRuntimeEnabled(
+            notchShelfEnabled: notchShelfOn,
+            browserEnabled: Self.extensionEnabled(AppStorageKeys.Notch.browserEnabled))
+        if !browserOn, let store = notchBrowser {
+            notchShelf?.attachBrowser(nil)
+            store.shutdown()
+            notchBrowser = nil
+        }
         if notchShelfOn, notchShelf == nil { notchShelf = NotchShelfController() }
         if !notchShelfOn, let controller = notchShelf {
             controller.shutdown()
             notchShelf = nil
         }
+        if browserOn, notchBrowser == nil { notchBrowser = NotchBrowserStore() }
+        notchShelf?.attachBrowser(notchBrowser)
         notchShelf?.attachLocalMusic(music)
 
         let colorPickerOn =

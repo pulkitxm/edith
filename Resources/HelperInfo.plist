@@ -22,6 +22,11 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Edith controls playback in Spotify and Apple Music from the notch.</string>
 	<key>NSAudioCaptureUsageDescription</key>
