@@ -164,7 +164,31 @@ final class AttributionScriptedDecider: JevDeciding, @unchecked Sendable {
     }
 }
 
+final class AttributionRunLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+
+    var entries: [String] { lock.withLock { stored } }
+
+    func append(_ entry: String) { lock.withLock { stored.append(entry) } }
+}
+
 @Suite struct UsageAttributionTests {
+    @Test func backgroundAdviceRunsOneAtATimeAndKeepsOnlyTheLatestFollowUp() async {
+        let queue = UsageAttributionQueue()
+        let log = AttributionRunLog()
+        let gate = AsyncStream<Void>.makeStream()
+        await queue.submit {
+            log.append("first")
+            for await _ in gate.stream { break }
+        }
+        await queue.submit { log.append("second") }
+        await queue.submit { log.append("third") }
+        gate.continuation.yield()
+        await queue.settled()
+        #expect(log.entries == ["first", "third"])
+    }
+
     typealias Fixture = AttributionFixture
 
     @Test func namesMoveFoldersAndChatsAndLeaveAmbiguityAlone() throws {

@@ -158,9 +158,10 @@ public final class UsageCollectorJob: @unchecked Sendable {
                     do {
                         let result = try await UsageRefreshRunner.run(
                             machinePolicy: request.machinePolicy, runID: request.runID)
-                        let engine = AgentJev.engine
-                        await UsageAttributionAdvisor.run(
-                            decider: await engine.isConfigured ? engine : nil)
+                        await UsageAttributionAdvisor.schedule {
+                            let engine = AgentJev.engine
+                            return await engine.isConfigured ? engine : nil
+                        }
                         return result
                     } catch UsageRefreshFailure.busy {
                         if ContinuousClock.now >= deadline {
