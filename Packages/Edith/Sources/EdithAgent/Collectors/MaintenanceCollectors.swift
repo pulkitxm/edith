@@ -9,10 +9,10 @@ public enum MachineHealthPolicy {
     }
 
     public static func shouldProbe(defaults: UserDefaults = SharedDefaults.store) -> Bool {
-        let settings = MachineHealthPolicySettings.current(defaults: defaults)
-        return shouldProbe(
-            machineCount: MachineRegistry.machines().count, notifyDown: settings.notifyDown,
-            notifyDiskFull: settings.notifyDiskFull)
+        shouldProbe(
+            machineCount: MachineRegistry.machines().count,
+            notifyDown: defaults.bool(forKey: AppStorageKeys.Machines.notifyDown),
+            notifyDiskFull: defaults.bool(forKey: AppStorageKeys.Machines.notifyDiskFull))
     }
 }
 
@@ -26,10 +26,6 @@ public struct MachineHealthJob: Sendable {
     }
 
     public func run() async throws -> Data? {
-        guard MachineHealthPolicy.shouldProbe() else {
-            return try AgentPayload.encode(
-                MachineHealthSnapshot(checkedAt: Date(), machines: [], skipped: true))
-        }
         let snapshot = await monitor.run()
         try? record(snapshot)
         return try AgentPayload.encode(snapshot)

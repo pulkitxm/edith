@@ -132,7 +132,8 @@ final class SweaterReconciler {
                 } else {
                     let wait = Task {
                         _ = try? await Task.sleep(
-                            for: .seconds(active ? 1 : 30), tolerance: .milliseconds(250))
+                            for: active ? .milliseconds(100) : .seconds(30),
+                            tolerance: .milliseconds(active ? 10 : 1_000))
                     }
                     self.idleWait = wait
                     await wait.value

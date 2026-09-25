@@ -187,11 +187,6 @@ actor AgentMachineConnectionPool {
 
     func connection(for machine: Machine) async throws -> SSHConnection {
         if let pending = preparing[machine] { return try await pending.value }
-        for (stale, connection) in connections where stale.id == machine.id && stale != machine {
-            connections[stale] = nil
-            order.removeAll { $0 == stale }
-            await connection.disconnect()
-        }
         let connection =
             connections[machine]
             ?? SSHConnection(machine: machine, controlSocketMode: .shared)

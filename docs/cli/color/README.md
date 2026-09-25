@@ -92,9 +92,7 @@ picking is an app request and uses exit 4 when it cannot be delivered.
   setting and wants the Screen Recording permission), but the history outlives
   the switch: turning the extension off stops new colours being recorded and
   leaves the ones already there readable.
-- The eyedropper's context menu in the menu bar panel lists the last eight
-  picks in hex, so `ed color ls --format hex --limit 8` prints exactly what that
-  menu shows.
+- `ed color ls --format hex --limit 8` prints the last eight picks in hex.
 - `--help` works on the group and on all four verbs, prints on stdout and exits 0.
 - `ed color pick` is safe to request without a TTY because it never reads stdin,
   but the sampler still requires a person at the logged-in desktop.

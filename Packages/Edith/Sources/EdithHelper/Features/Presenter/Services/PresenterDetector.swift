@@ -17,14 +17,6 @@ final class PresenterDetector: FeatureModule {
         "com.hnc.Discord",
         "com.apple.QuickTimePlayerX",
     ]
-    static let windowRuleBundleIDs: Set<String> = [
-        "us.zoom.xos",
-        "com.microsoft.teams2",
-        "com.microsoft.teams",
-        "com.google.Chrome",
-        "com.apple.Safari",
-        "company.thebrowser.Browser",
-    ]
 
     private struct ScanOutcome: Sendable {
         let windowReason: String?
@@ -34,13 +26,6 @@ final class PresenterDetector: FeatureModule {
     private final class ScanContext: @unchecked Sendable {
         var titlesAvailable: Bool?
         var titlesCheckedAt: TimeInterval = 0
-        private let lock = NSLock()
-        private var rulesApply = false
-
-        var windowRulesApply: Bool {
-            get { lock.withLock { rulesApply } }
-            set { lock.withLock { rulesApply = newValue } }
-        }
     }
 
     private var gateApps: Set<String> = []
@@ -147,7 +132,6 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func syncWindowScanTimer() {
-        scanContext.windowRulesApply = !gateApps.isDisjoint(with: Self.windowRuleBundleIDs)
         guard !gateApps.isEmpty else {
             windowScanTimer?.cancel()
             windowScanTimer = nil
@@ -196,10 +180,8 @@ final class PresenterDetector: FeatureModule {
             context.titlesAvailable = titlesAvailable
             context.titlesCheckedAt = now
         }
-        let windowReason =
-            context.windowRulesApply
-            ? PresenterRules.firstMatch(in: currentWindows(), titlesAvailable: titlesAvailable)
-            : nil
+        let windowReason = PresenterRules.firstMatch(
+            in: titlesAvailable ? currentWindows() : [], titlesAvailable: titlesAvailable)
         let detectRecording =
             SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
             ?? true

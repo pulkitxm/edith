@@ -1045,7 +1045,7 @@ final class SettingsBackup {
     private var queuedSettingsData: Data?
     private var queuedSettingsAt = Date.distantPast
     private var sweep: Timer?
-    nonisolated static let sweepInterval: TimeInterval = 60
+    nonisolated static let sweepInterval: TimeInterval = 30
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
 
@@ -1865,7 +1865,7 @@ final class SettingsBackup {
         guard !settingsRestorePending else { return }
         guard let data = snapshot() else { return }
         let now = Date()
-        guard data != queuedSettingsData || now.timeIntervalSince(queuedSettingsAt) >= 600 else {
+        guard data != queuedSettingsData || now.timeIntervalSince(queuedSettingsAt) >= 120 else {
             return
         }
         queuedSettingsData = data

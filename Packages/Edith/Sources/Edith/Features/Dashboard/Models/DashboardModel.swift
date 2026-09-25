@@ -482,7 +482,6 @@ final class DashboardModel {
 
     private let cal = Calendar.current
     private let preferences: UserDefaults
-    @ObservationIgnored private var restoredPreferences: [String]?
 
     init(preferences: UserDefaults = SharedDefaults.store) {
         self.preferences = preferences
@@ -690,27 +689,31 @@ final class DashboardModel {
     }
 
     func reloadPreferences() {
-        guard loaded, preferenceFingerprint() != restoredPreferences else { return }
+        guard loaded else { return }
+        let before = preferenceState
         restore()
+        guard preferenceState != before else { return }
         recompute()
     }
 
-    private static let preferenceKeys = [
-        "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion",
-        "dashModels", "dashPaths", "dashSort", "dashSortAsc", "projSort", "projSortAsc",
-        "dashHeatMetric",
-    ]
+    private struct PreferenceState: Equatable {
+        let range: String
+        let sources: Set<String>
+        let models: Set<String>
+        let paths: Set<String>
+        let sort: String
+        let sortAscending: Bool
+        let projectSort: String
+        let projectSortAscending: Bool
+        let heatMetric: String
+    }
 
-    private func preferenceFingerprint() -> [String] {
-        var fingerprint: [String] = []
-        for key in Self.preferenceKeys {
-            if let value = preferences.object(forKey: key) {
-                fingerprint.append("\(value)")
-            } else {
-                fingerprint.append("")
-            }
-        }
-        return fingerprint
+    private var preferenceState: PreferenceState {
+        PreferenceState(
+            range: encodeRange(range), sources: selectedSources, models: selectedModels,
+            paths: selectedPaths, sort: sortColumn.rawValue, sortAscending: sortAscending,
+            projectSort: projSortKey.rawValue, projectSortAscending: projSortAscending,
+            heatMetric: heatMetric.rawValue)
     }
 
     private func restore() {
@@ -755,7 +758,6 @@ final class DashboardModel {
         d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
         d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         d.setIfChanged(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
-        restoredPreferences = preferenceFingerprint()
     }
 
     private func reconcile() {

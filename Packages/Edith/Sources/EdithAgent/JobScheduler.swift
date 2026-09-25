@@ -272,12 +272,10 @@ public actor JobScheduler {
         let now = clock()
         for id in order {
             guard let state = states[id] else { continue }
-            let current = interval(for: state)
+            let current = interval(for: state, constrained: false)
             if current != state.interval {
                 states[id]?.interval = current
-                states[id]?.nextRun = current.map {
-                    max(now, (state.lastRun ?? now).addingTimeInterval($0))
-                }
+                states[id]?.nextRun = interval(for: state).map { now.addingTimeInterval($0) }
             }
             if !state.job.isEnabled() { cancel(id) }
         }
@@ -329,6 +327,10 @@ public actor JobScheduler {
     }
 
     private func interval(for state: State) -> TimeInterval? {
+        interval(for: state, constrained: power.isConstrained)
+    }
+
+    private func interval(for state: State, constrained: Bool) -> TimeInterval? {
         guard state.job.isEnabled() else { return nil }
         switch state.job.descriptor.power {
         case .pauseOnLock where power.isScreenLocked: return nil
@@ -338,7 +340,7 @@ public actor JobScheduler {
         let value = AgentCadenceMath.interval(
             for: state.job.descriptor.cadence, subscribers: state.subscribers,
             pauseAmbient: pauseAmbientOnBattery && power.isOnBattery,
-            constrained: power.isConstrained)
+            constrained: constrained)
         guard let value, value.isFinite, value > 0 else { return nil }
         return value
     }

@@ -477,11 +477,8 @@ final class MixerEngine {
             isMonitoring = true
             monitoringTask = Task { @MainActor [weak self] in
                 while !Task.isCancelled {
-                    let visible = (self?.visibleViewCount ?? 0) > 0
                     do {
-                        try await Task.sleep(
-                            for: .seconds(visible ? 1 : 3),
-                            tolerance: .milliseconds(visible ? 100 : 1_000))
+                        try await Task.sleep(for: .seconds(1))
                     } catch {
                         return
                     }
