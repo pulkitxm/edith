@@ -32,7 +32,13 @@ cli: approve-package-plugins
 
 icon:
 	@set -eu; \
+	CHROME="$${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"; \
 	ARTWORK="$(PKG)/Sources/Edith/Resources/appicon.png"; \
+	rm -f "$$ARTWORK"; \
+	"$$CHROME" --headless --disable-gpu --hide-scrollbars --allow-file-access-from-files \
+	  --force-color-profile=srgb --default-background-color=00000000 --window-size=1024,1024 \
+	  --screenshot="$(CURDIR)/$$ARTWORK" "file://$(CURDIR)/Resources/AppIcon.svg" >/dev/null 2>&1; \
+	test -s "$$ARTWORK"; \
 	rm -rf AppIcon.iconset && mkdir AppIcon.iconset; \
 	for s in 16 32 128 256 512; do \
 	  sips -z $$s $$s "$$ARTWORK" --out "AppIcon.iconset/icon_$${s}x$${s}.png" >/dev/null; \
@@ -43,7 +49,11 @@ icon:
 	sips -z 128 128 "$$ARTWORK" --out $(PKG)/Sources/EdithKit/Resources/share-icon.png >/dev/null; \
 	cp "$$ARTWORK" $(PKG)/Sources/EdithHelper/MenuBar.png; \
 	sips -c 942 942 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null; \
-	sips -z 80 80 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null
+	sips -z 80 80 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null; \
+	cp "$$ARTWORK" apps/site/app-icon.png; \
+	cp "$$ARTWORK" apps/promo-video/public/logo.png; \
+	sips -z 512 512 "$$ARTWORK" --out apps/site/app-icon-512.png >/dev/null; \
+	sips -z 180 180 "$$ARTWORK" --out apps/site/favicon-180.png >/dev/null
 
 wiki:
 	bun scripts/sync-wiki.mjs
