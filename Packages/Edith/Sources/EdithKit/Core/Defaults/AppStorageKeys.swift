@@ -166,6 +166,7 @@ public enum AppStorageKeys {
         public static let launchCommands = "herdrLaunchCommands"
         public static let pendingOpen = "herdrPendingOpen"
         public static let launchDefaults = "herdrLaunchDefaults"
+        public static let terminalPanelHeight = "herdrTerminalPanelHeight"
     }
 
     public enum Cleaner {

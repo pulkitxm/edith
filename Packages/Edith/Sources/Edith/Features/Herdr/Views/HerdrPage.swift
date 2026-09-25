@@ -39,24 +39,31 @@ struct HerdrPage: View {
                     if store.railOpen {
                         agentList
                             .frame(width: railDisplayWidth)
-                        HerdrHorizontalResizeHandle(
+                        HerdrResizeHandle(
                             label: "Resize the agent list",
                             onChanged: resizeRail,
                             onEnded: finishRailResize,
                             onReset: resetRailWidth)
                     }
-                    ZStack(alignment: .topLeading) {
-                        board.opacity(onBoard ? 1 : 0)
-                            .allowsHitTesting(onBoard)
-                        HerdrCanvas(
-                            store: store, launchEnabled: launchEnabled, hideAgents: hideAgents,
-                            active: !onBoard
-                        )
-                        .opacity(onBoard ? 0 : 1)
-                        .allowsHitTesting(!onBoard)
+                    VStack(spacing: 0) {
+                        ZStack(alignment: .topLeading) {
+                            board.opacity(onBoard ? 1 : 0)
+                                .allowsHitTesting(onBoard)
+                            HerdrCanvas(
+                                store: store, launchEnabled: launchEnabled,
+                                hideAgents: hideAgents, active: !onBoard
+                            )
+                            .opacity(onBoard ? 0 : 1)
+                            .allowsHitTesting(!onBoard)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .herdrDropFrame(HerdrDropGeometry.canvasKey)
+                        HerdrTerminalPanelView(
+                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
+                            maximumHeight: proxy.size.height - UIScale.pt(160),
+                            hideAgents: hideAgents)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .herdrDropFrame(HerdrDropGeometry.canvasKey)
                     if !onBoard, store.detailOpen, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents)
@@ -108,6 +115,26 @@ struct HerdrPage: View {
         .sheet(isPresented: $store.searchPresented) {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
         }
+        .alert(
+            "Close this tab?", isPresented: terminalCloseRequested,
+            presenting: store.terminalPanels.closeRequest
+        ) { request in
+            Button("Close Anyway", role: .destructive) {
+                store.terminalPanels.closeRequest = nil
+                request.proceed()
+            }
+            Button("Cancel", role: .cancel) {
+                store.terminalPanels.closeRequest = nil
+            }
+        } message: { request in
+            Text(request.message)
+        }
+    }
+
+    private var terminalCloseRequested: Binding<Bool> {
+        Binding(
+            get: { store.terminalPanels.closeRequest != nil },
+            set: { if !$0 { store.terminalPanels.closeRequest = nil } })
     }
 
     private func shown(_ session: HerdrOpenTab) -> HerdrOpenTab {
@@ -246,6 +273,29 @@ struct HerdrPage: View {
         .buttonStyle(.edith(.borderless))
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+    }
+
+    private var terminalToggle: some View {
+        let open = store.terminalPanels.isOpen(store.selectedTab)
+        return Button {
+            withAnimation(store.layoutAnimation) {
+                store.perform(.visibility)
+            }
+        } label: {
+            Image(systemName: "apple.terminal")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(open ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: open ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
+        }
+        .buttonStyle(.edith(.borderless))
+        .help(open ? "Hide terminals (⌃` or ⌘J)" : "Show terminals (⌃` or ⌘J)")
+        .accessibilityLabel(open ? "Hide terminals" : "Show terminals")
     }
 
     private var tabShortcuts: some View {
@@ -411,6 +461,8 @@ struct HerdrPage: View {
                 if let tab = store.currentTab {
                     layoutButton(for: tab)
                 }
+                terminalToggle
+                    .padding(.trailing, onBoard ? PageMetrics.gutter(compact) : 0)
                 if !onBoard {
                     detailToggle
                         .padding(.trailing, PageMetrics.gutter(compact))
