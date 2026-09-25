@@ -41,7 +41,12 @@ A production bundle only runs from `/Applications/Edith.app` or
 LaunchServices and the login items database resolve Edith by bundle identifier and
 a stray copy would take over the installed app's agent and menu bar. `build.sh
 --install` requires `--release`, and a Release build that is not installed is never
-opened and is removed from LaunchServices. Verify a signed development package with
+opened and is removed from LaunchServices. The installer and the DMG packaging step also
+remove their staging copies from LaunchServices, since launchd resolves the agent's
+`BundleProgram` through the parent bundle identifier and a record for a deleted copy
+leaves it failing with "Could not find and/or execute program". After re-registering
+for a new build, the app checks the agent again after 15 seconds and repairs the
+registration once if it does not answer. Verify a signed development package with
 `python3 scripts/test-development-identity-e2e.py`. This starts the packaged daemon
 on its worktree development service, checks its separate data directory, and runs
 a task through the packaged client. It refuses to replace a loaded development

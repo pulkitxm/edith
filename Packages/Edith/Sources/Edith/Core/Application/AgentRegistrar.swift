@@ -22,6 +22,10 @@ final class AgentRegistrar {
         }
         AgentBuildStamp.record()
         reregister(restartingRunningAgent: true)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            self?.repairIfUnreachable()
+        }
     }
 
     private func reregister(restartingRunningAgent: Bool) {

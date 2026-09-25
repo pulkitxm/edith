@@ -64,21 +64,21 @@ teardown_slot() {
   echo "removed development slot $slot"
 }
 
-bundle_identifier() {
-  /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true
-}
-
 gc() {
   local worktree app slot label directory
   local -a live=(xcode)
   while IFS= read -r worktree; do
     live+=("$(slot_for "$worktree")")
-    for app in "$worktree"/dist/Edith.app "$worktree"/build/Build/Products/*/Edith.app; do
-      [ "$(bundle_identifier "$app")" = "$PRODUCTION" ] || continue
-      "$LSREGISTER" -u "$app" 2>/dev/null || true
-      echo "removed $app from LaunchServices"
-    done
   done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+
+  while IFS= read -r app; do
+    case "$app" in /Applications/Edith.app | "$HOME/Applications/Edith.app") continue ;; esac
+    "$LSREGISTER" -u "$app" 2>/dev/null || true
+    echo "removed $app from LaunchServices"
+  done < <("$LSREGISTER" -dump 2>/dev/null | awk -v identifier="$PRODUCTION" '
+    /^path:/ { path = $0; sub(/^path: +/, "", path); sub(/ \(0x[0-9a-f]+\)$/, "", path) }
+    /^identifier:/ { matched = ($2 == identifier) }
+    /^-+$/ { if (matched && path != "") print path; matched = 0; path = "" }')
 
   is_live() {
     local candidate
