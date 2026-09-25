@@ -263,7 +263,7 @@ ci-security:
 
 ci-gitleaks:
 	@command -v gitleaks >/dev/null || { echo "gitleaks missing: run make ci-tools" >&2; exit 1; }
-	gitleaks git --no-banner --redact .
+	gitleaks git --no-banner --redact --log-opts="HEAD" .
 
 ci-cargo-audit:
 	@cargo audit --version >/dev/null 2>&1 || { echo "cargo-audit missing: run make ci-tools" >&2; exit 1; }
