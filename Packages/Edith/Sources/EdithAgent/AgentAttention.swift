@@ -21,6 +21,7 @@ public struct AgentAttention: Sendable {
         @Sendable ([HerdrAttentionProbe]) async -> [String: HerdrAttentionEvidence]
 
     public static let kinds = ["blocked", "finished", "error", "stuck"]
+    static let concurrencyLimit = 4
 
     var inspect: Inspect
     var decider: @Sendable () async -> JevDeciding?
@@ -57,14 +58,19 @@ public struct AgentAttention: Sendable {
         -> [AttentionOutcome]
     {
         let decider = await decider()
+        let hosts = Array(Dictionary(grouping: checks, by: \.hostID).values)
         return await withTaskGroup(of: [AttentionOutcome].self) { group in
-            for hostChecks in Dictionary(grouping: checks, by: \.hostID).values {
+            let limit = Self.concurrencyLimit
+            var outcomes: [AttentionOutcome] = []
+            for (offset, hostChecks) in hosts.enumerated() {
+                if offset >= limit, let finished = await group.next() {
+                    outcomes += finished
+                }
                 group.addTask {
                     await resolve(hostChecks, settings: settings, decider: decider)
                 }
             }
-            var outcomes: [AttentionOutcome] = []
-            for await hostOutcomes in group { outcomes += hostOutcomes }
+            for await finished in group { outcomes += finished }
             return outcomes
         }
     }
@@ -81,7 +87,12 @@ public struct AgentAttention: Sendable {
         }
         let evidence = await inspect(probes)
         let verdicts = await withTaskGroup(of: (Int, HerdrAttentionVerdict).self) { group in
+            let limit = Self.concurrencyLimit
+            var verdicts: [Int: HerdrAttentionVerdict] = [:]
             for (index, check) in hostChecks.enumerated() {
+                if index >= limit, let (finished, verdict) = await group.next() {
+                    verdicts[finished] = verdict
+                }
                 let item = evidence[check.agent.id] ?? HerdrAttentionEvidence()
                 let stalled =
                     check.fingerprint != nil && item.screen?.fingerprint == check.fingerprint
@@ -99,7 +110,6 @@ public struct AgentAttention: Sendable {
                     return (index, refined)
                 }
             }
-            var verdicts: [Int: HerdrAttentionVerdict] = [:]
             for await (index, verdict) in group { verdicts[index] = verdict }
             return verdicts
         }
