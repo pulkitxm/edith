@@ -1,7 +1,19 @@
 import Foundation
 
 enum LevelDBReaderError: Error, Equatable {
-    case missingDirectory, badTable
+    case missingDirectory, badTable, tooLarge
+}
+
+struct LevelDBLiveFiles: Equatable, Sendable {
+    let tables: Set<UInt64>
+    let oldestLog: UInt64
+    let previousLog: UInt64
+
+    func contains(number: UInt64, isLog: Bool) -> Bool {
+        isLog
+            ? number >= oldestLog || (previousLog != 0 && number == previousLog)
+            : tables.contains(number)
+    }
 }
 
 struct LevelDBEntry: Equatable, Sendable {
@@ -11,20 +23,105 @@ struct LevelDBEntry: Equatable, Sendable {
 }
 
 enum LevelDBReader {
-    static func liveEntries(inDirectory directory: URL) throws -> [Data: Data] {
+    static let defaultByteLimit = 96 * 1_048_576
+
+    static func liveEntries(inDirectory directory: URL, byteLimit: Int = defaultByteLimit)
+        throws -> [Data: Data]
+    {
         let manager = FileManager.default
         var isDirectory: ObjCBool = false
         guard manager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
             isDirectory.boolValue
         else { throw LevelDBReaderError.missingDirectory }
+        var attempt = 0
+        while true {
+            let version = currentManifest(in: directory)
+            let entries = try entries(in: directory, byteLimit: byteLimit)
+            attempt += 1
+            if version == currentManifest(in: directory) || attempt >= 3 { return entries }
+        }
+    }
+
+    static func liveFiles(inDirectory directory: URL) -> LevelDBLiveFiles? {
+        guard let name = currentManifest(in: directory),
+            let data = try? Data(contentsOf: directory.appendingPathComponent(name))
+        else { return nil }
+        return manifestLiveFiles(data)
+    }
+
+    static func manifestLiveFiles(_ data: Data) -> LevelDBLiveFiles? {
+        var tables: Set<UInt64> = []
+        var oldestLog: UInt64?
+        var previousLog: UInt64 = 0
+        for record in logRecords(data) {
+            var cursor = Cursor(bytes: [UInt8](record))
+            while cursor.remaining > 0 {
+                guard let tag = cursor.varint(bits: 32) else { return nil }
+                switch tag {
+                case 1:
+                    guard cursor.lengthPrefixed() != nil else { return nil }
+                case 2:
+                    guard let number = cursor.varint(bits: 64) else { return nil }
+                    oldestLog = number
+                case 3, 4:
+                    guard cursor.varint(bits: 64) != nil else { return nil }
+                case 5:
+                    guard cursor.varint(bits: 32) != nil, cursor.lengthPrefixed() != nil else {
+                        return nil
+                    }
+                case 6:
+                    guard cursor.varint(bits: 32) != nil, let number = cursor.varint(bits: 64)
+                    else { return nil }
+                    tables.remove(number)
+                case 7:
+                    guard cursor.varint(bits: 32) != nil, let number = cursor.varint(bits: 64),
+                        cursor.varint(bits: 64) != nil, cursor.lengthPrefixed() != nil,
+                        cursor.lengthPrefixed() != nil
+                    else { return nil }
+                    tables.insert(number)
+                case 9:
+                    guard let number = cursor.varint(bits: 64) else { return nil }
+                    previousLog = number
+                default:
+                    return nil
+                }
+            }
+        }
+        guard let oldestLog else { return nil }
+        return LevelDBLiveFiles(tables: tables, oldestLog: oldestLog, previousLog: previousLog)
+    }
+
+    private static func currentManifest(in directory: URL) -> String? {
+        guard
+            let text = try? String(
+                contentsOf: directory.appendingPathComponent("CURRENT"), encoding: .utf8)
+        else { return nil }
+        let name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.hasPrefix("MANIFEST-") && !name.contains("/") ? name : nil
+    }
+
+    private static func entries(in directory: URL, byteLimit: Int) throws -> [Data: Data] {
+        let manager = FileManager.default
+        let live = liveFiles(inDirectory: directory)
         let files = try manager.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil)
+            at: directory, includingPropertiesForKeys: [.fileSizeKey]
+        ).filter { file in
+            let suffix = file.pathExtension
+            guard ["log", "ldb", "sst"].contains(suffix) else { return false }
+            guard let live else { return true }
+            guard let number = UInt64(file.deletingPathExtension().lastPathComponent) else {
+                return false
+            }
+            return live.contains(number: number, isLog: suffix == "log")
+        }
+        let total = files.reduce(0) { sum, file in
+            sum + ((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        guard total <= byteLimit else { throw LevelDBReaderError.tooLarge }
         var winners: [Data: LevelDBEntry] = [:]
         for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             let suffix = file.pathExtension
-            guard ["log", "ldb", "sst"].contains(suffix),
-                let data = try? Data(contentsOf: file)
-            else { continue }
+            guard let data = try? Data(contentsOf: file) else { continue }
             let entries: [LevelDBEntry]
             if suffix == "log" {
                 entries = logRecords(data).flatMap { batchEntries($0) }

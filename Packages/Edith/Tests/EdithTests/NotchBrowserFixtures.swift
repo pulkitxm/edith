@@ -15,6 +15,7 @@ struct SyntheticChromeCookie {
     var sameSite = 1
     var updated = Date(timeIntervalSinceNow: -60)
     var encrypted = true
+    var partition = ""
 }
 
 struct SyntheticChromeProfile {
@@ -91,7 +92,7 @@ struct SyntheticChrome {
             throw CocoaError(.fileWriteUnknown)
         }
         let insert = """
-            INSERT INTO cookies VALUES(?, ?, '', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?, 2, 443, ?, 0, 0)
+            INSERT INTO cookies VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?, 2, 443, ?, 0, 0)
             """
         var prepared: OpaquePointer?
         guard sqlite3_prepare_v2(db, insert, -1, &prepared, nil) == SQLITE_OK,
@@ -109,20 +110,21 @@ struct SyntheticChrome {
                 : Data()
             sqlite3_bind_int64(statement, 1, updated)
             sqlite3_bind_text(statement, 2, cookie.host, -1, transient)
-            sqlite3_bind_text(statement, 3, cookie.name, -1, transient)
-            sqlite3_bind_text(statement, 4, cookie.encrypted ? "" : cookie.value, -1, transient)
+            sqlite3_bind_text(statement, 3, cookie.partition, -1, transient)
+            sqlite3_bind_text(statement, 4, cookie.name, -1, transient)
+            sqlite3_bind_text(statement, 5, cookie.encrypted ? "" : cookie.value, -1, transient)
             _ = blob.withUnsafeBytes { bytes in
-                sqlite3_bind_blob(statement, 5, bytes.baseAddress, Int32(blob.count), transient)
+                sqlite3_bind_blob(statement, 6, bytes.baseAddress, Int32(blob.count), transient)
             }
-            sqlite3_bind_text(statement, 6, cookie.path, -1, transient)
+            sqlite3_bind_text(statement, 7, cookie.path, -1, transient)
             sqlite3_bind_int64(
-                statement, 7, cookie.expires.map(ChromeCookieReader.chromeMicroseconds) ?? 0)
-            sqlite3_bind_int(statement, 8, cookie.secure ? 1 : 0)
-            sqlite3_bind_int(statement, 9, cookie.httpOnly ? 1 : 0)
-            sqlite3_bind_int(statement, 10, cookie.expires == nil ? 0 : 1)
+                statement, 8, cookie.expires.map(ChromeCookieReader.chromeMicroseconds) ?? 0)
+            sqlite3_bind_int(statement, 9, cookie.secure ? 1 : 0)
+            sqlite3_bind_int(statement, 10, cookie.httpOnly ? 1 : 0)
             sqlite3_bind_int(statement, 11, cookie.expires == nil ? 0 : 1)
-            sqlite3_bind_int(statement, 12, Int32(cookie.sameSite))
-            sqlite3_bind_int64(statement, 13, updated)
+            sqlite3_bind_int(statement, 12, cookie.expires == nil ? 0 : 1)
+            sqlite3_bind_int(statement, 13, Int32(cookie.sameSite))
+            sqlite3_bind_int64(statement, 14, updated)
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw CocoaError(.fileWriteUnknown)
             }

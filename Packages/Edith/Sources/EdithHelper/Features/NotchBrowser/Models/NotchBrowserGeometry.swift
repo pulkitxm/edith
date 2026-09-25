@@ -12,6 +12,10 @@ enum NotchBrowserGeometry {
     static var sideInset: CGFloat { NotchGeometry.expandedTopRadius }
     static var chromePadding: CGFloat { sideInset + contentInset }
 
+    static func available(screen: CGSize, notchHeight: CGFloat) -> CGSize {
+        CGSize(width: screen.width, height: max(0, screen.height - notchHeight))
+    }
+
     static func maximumSize(screen: CGSize) -> CGSize {
         CGSize(
             width: max(minimumSize.width, screen.width - 2 * screenMargin.width),

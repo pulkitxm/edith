@@ -254,6 +254,13 @@ import Testing
                 == CGSize(width: 900, height: 701))
     }
 
+    @Test func theNotchHeightComesOutOfTheAvailableHeight() {
+        let area = NotchBrowserGeometry.available(screen: screen, notchHeight: 38)
+        #expect(area == CGSize(width: 1512, height: 944))
+        let tallest = NotchBrowserGeometry.clamp(CGSize(width: 900, height: 5000), screen: area)
+        #expect(tallest.height + 38 <= screen.height)
+    }
+
     @Test func bottomHandleOnlyChangesHeight() {
         let size = NotchBrowserGeometry.resized(
             from: CGSize(width: 900, height: 600), edge: .bottom,

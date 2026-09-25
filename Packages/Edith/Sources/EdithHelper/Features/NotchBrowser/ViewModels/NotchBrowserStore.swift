@@ -50,6 +50,7 @@ final class NotchBrowserStore {
     @ObservationIgnored private var lastSync: Date?
     @ObservationIgnored private(set) var pendingSeeds: [String: [String: String]] = [:]
     @ObservationIgnored private var closedTabs: [URL] = []
+    @ObservationIgnored private var restoring = false
     @ObservationIgnored private var downloads: [ObjectIdentifier: URL] = [:]
     @ObservationIgnored private var faviconCache: [String: NSImage] = [:]
     @ObservationIgnored private var faviconTasks: [BrowserTab.ID: Task<Void, Never>] = [:]
@@ -202,7 +203,7 @@ final class NotchBrowserStore {
             let outcome = await Self.read(
                 target, userData: userData, key: cachedKey, keyProvider: keyProvider, since: since)
             guard !Task.isCancelled else { return }
-            self?.install(target, outcome: outcome)
+            self?.install(target, outcome: outcome, readStorage: since == nil)
         }
     }
 
@@ -223,7 +224,7 @@ final class NotchBrowserStore {
 
     private func install(
         _ target: ChromeProfile,
-        outcome: Result<(ChromeCookieKey, ChromeProfileSnapshot), Error>
+        outcome: Result<(ChromeCookieKey, ChromeProfileSnapshot), Error>, readStorage: Bool
     ) {
         switch outcome {
         case .failure(let error):
@@ -233,6 +234,7 @@ final class NotchBrowserStore {
             if target != profile {
                 closeAllTabs()
                 closedTabs = []
+                pendingSeeds = [:]
                 dataStore = dataStoreFactory(
                     ChromeProfileImporter.dataStoreIdentifier(
                         profile: target, userData: installation.userData))
@@ -244,15 +246,16 @@ final class NotchBrowserStore {
                 let applied = await ChromeProfileImporter.apply(
                     snapshot.cookies, to: dataStore.httpCookieStore)
                 guard !Task.isCancelled else { return }
-                self?.finishInstall(target, snapshot: snapshot, applied: applied)
+                self?.finishInstall(
+                    target, snapshot: snapshot, applied: applied, readStorage: readStorage)
             }
         }
     }
 
     private func finishInstall(
-        _ target: ChromeProfile, snapshot: ChromeProfileSnapshot, applied: Int
+        _ target: ChromeProfile, snapshot: ChromeProfileSnapshot, applied: Int, readStorage: Bool
     ) {
-        if !snapshot.localStorage.isEmpty { pendingSeeds = snapshot.localStorage }
+        if readStorage { pendingSeeds = snapshot.localStorage }
         cookieWatermark = snapshot.newestCookieUpdate ?? cookieWatermark
         lastSync = Date()
         let attaching = profile != target
@@ -280,8 +283,14 @@ final class NotchBrowserStore {
             newTab(searchEngine.home)
             return
         }
+        let selected = session.selected
+        restoring = true
         for url in urls { newTab(url, select: false) }
-        selectedTabID = tabs[min(max(session.selected, 0), tabs.count - 1)].id
+        restoring = false
+        selectedTabID = tabs[min(max(selected, 0), tabs.count - 1)].id
+        session.tabs = urls.map(\.absoluteString)
+        session.selected = min(max(selected, 0), tabs.count - 1)
+        sessionFile.save(session)
     }
 
     @discardableResult
@@ -574,7 +583,7 @@ final class NotchBrowserStore {
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.canChooseFiles = true
         let previous = NSWorkspace.shared.frontmostApplication
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let response = await panel.begin()
         if let previous, previous != NSRunningApplication.current { previous.activate() }
         window?.makeKey()
@@ -685,6 +694,7 @@ final class NotchBrowserStore {
     }
 
     private func saveSession() {
+        guard !restoring else { return }
         session.tabs = tabs.compactMap { tab in
             tab.url.flatMap { BrowserTab.origin(of: $0) != nil ? $0.absoluteString : nil }
         }

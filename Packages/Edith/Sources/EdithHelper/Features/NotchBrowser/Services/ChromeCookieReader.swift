@@ -70,18 +70,53 @@ enum ChromeCookieReader {
         guard fileManager.fileExists(atPath: database.path) else {
             throw ChromeCookieReaderError.missingDatabase
         }
-        let scratch = fileManager.temporaryDirectory
-            .appendingPathComponent("edith-cookies-\(UUID().uuidString)", isDirectory: true)
+        var lastError: Error = ChromeCookieReaderError.unreadable("the database kept changing")
+        for attempt in 0..<snapshotAttempts {
+            if attempt > 0 { Thread.sleep(forTimeInterval: 0.15) }
+            let scratch = fileManager.temporaryDirectory
+                .appendingPathComponent("edith-cookies-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fileManager.removeItem(at: scratch) }
+            do {
+                let copy = try snapshot(database, into: scratch, fileManager: fileManager)
+                return try rows(in: copy, key: key, updatedAfter: updatedAfter, now: now)
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    static let snapshotAttempts = 3
+    static let sidecarSuffixes = ["-journal", "-wal", "-shm"]
+
+    static func fingerprint(_ database: URL, fileManager: FileManager = .default) -> [String] {
+        ([""] + sidecarSuffixes).map { suffix in
+            let path = database.path + suffix
+            guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
+                return "\(suffix):absent"
+            }
+            let size = attributes[.size] as? Int ?? -1
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            return "\(suffix):\(size):\(modified)"
+        }
+    }
+
+    private static func snapshot(_ database: URL, into scratch: URL, fileManager: FileManager)
+        throws -> URL
+    {
         try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: scratch) }
+        let before = fingerprint(database, fileManager: fileManager)
         let copy = scratch.appendingPathComponent("Cookies")
         try fileManager.copyItem(at: database, to: copy)
-        for suffix in ["-journal", "-wal", "-shm"] {
+        for suffix in sidecarSuffixes {
             let sidecar = URL(fileURLWithPath: database.path + suffix)
             guard fileManager.fileExists(atPath: sidecar.path) else { continue }
-            try? fileManager.copyItem(at: sidecar, to: URL(fileURLWithPath: copy.path + suffix))
+            try fileManager.copyItem(at: sidecar, to: URL(fileURLWithPath: copy.path + suffix))
         }
-        return try rows(in: copy, key: key, updatedAfter: updatedAfter, now: now)
+        guard fingerprint(database, fileManager: fileManager) == before else {
+            throw ChromeCookieReaderError.unreadable("the database changed while it was copied")
+        }
+        return copy
     }
 
     private static func rows(in file: URL, key: ChromeCookieKey, updatedAfter: Date?, now: Date)
@@ -103,7 +138,10 @@ enum ChromeCookieReader {
             SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure,
             is_httponly, samesite, \(updatedColumn) FROM cookies
             """
-        if updatedAfter != nil { sql += " WHERE \(updatedColumn) > ?" }
+        var filters: [String] = []
+        if columns.contains("top_frame_site_key") { filters.append("top_frame_site_key = ''") }
+        if updatedAfter != nil { filters.append("\(updatedColumn) > ?") }
+        if !filters.isEmpty { sql += " WHERE " + filters.joined(separator: " AND ") }
         var prepared: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &prepared, nil) == SQLITE_OK, let statement = prepared
         else { throw ChromeCookieReaderError.unreadable(String(cString: sqlite3_errmsg(db))) }
@@ -157,8 +195,9 @@ enum ChromeCookieReader {
 
     private static func columnNames(_ db: OpaquePointer, table: String) -> Set<String> {
         var prepared: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &prepared, nil)
-            == SQLITE_OK, let statement = prepared
+        guard
+            sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &prepared, nil)
+                == SQLITE_OK, let statement = prepared
         else { return [] }
         defer { sqlite3_finalize(statement) }
         var names: Set<String> = []

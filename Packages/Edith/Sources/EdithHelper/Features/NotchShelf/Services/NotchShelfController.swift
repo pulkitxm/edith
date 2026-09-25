@@ -475,14 +475,20 @@ final class NotchShelfController: FeatureModule {
     }
 
     func browserSize(on id: CGDirectDisplayID) -> CGSize {
-        let screen = NSScreen.screens.first { $0.displayID == id }
-        return NotchBrowserGeometry.clamp(
-            browser?.size ?? NotchBrowserGeometry.defaultSize, screen: screen?.frame.size)
+        NotchBrowserGeometry.clamp(
+            browser?.size ?? NotchBrowserGeometry.defaultSize, screen: browserArea(on: id))
+    }
+
+    private func browserArea(on id: CGDirectDisplayID?) -> CGSize? {
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
+            return nil
+        }
+        let notchHeight = (id.flatMap { collapsedSizes[$0] } ?? NotchGeometry.fallbackSize).height
+        return NotchBrowserGeometry.available(screen: screen.frame.size, notchHeight: notchHeight)
     }
 
     private func browserScreenSize() -> CGSize? {
-        let id = expandedDisplay ?? builtinDisplayID
-        return NSScreen.screens.first { $0.displayID == id }?.frame.size
+        browserArea(on: expandedDisplay ?? builtinDisplayID)
     }
 
     private func updatePanelFrames() {

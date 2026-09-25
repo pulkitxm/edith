@@ -123,6 +123,37 @@ import WebKit
         #expect(cookies.map(\.name) == ["new"])
     }
 
+    @Test func partitionedCookiesStayBehind() throws {
+        let chrome = try SyntheticChrome(profiles: [
+            SyntheticChromeProfile(
+                directory: "Default", name: "Ada",
+                cookies: [
+                    SyntheticChromeCookie(host: ".embed.com", name: "first", value: "1"),
+                    SyntheticChromeCookie(
+                        host: ".embed.com", name: "third", value: "2",
+                        partition: "https://host.com"),
+                ])
+        ])
+        defer { chrome.remove() }
+        let cookies = try ChromeCookieReader.read(
+            database: chrome.root.appendingPathComponent("Default/Cookies"),
+            key: SyntheticChrome.key)
+        #expect(cookies.map(\.name) == ["first"])
+    }
+
+    @Test func snapshotFingerprintsNoticeWrites() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-fingerprint-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let database = folder.appendingPathComponent("Cookies")
+        try Data("one".utf8).write(to: database)
+        let first = ChromeCookieReader.fingerprint(database)
+        #expect(first == ChromeCookieReader.fingerprint(database))
+        try Data("journal".utf8).write(to: URL(fileURLWithPath: database.path + "-journal"))
+        #expect(first != ChromeCookieReader.fingerprint(database))
+    }
+
     @Test func wrongKeysSkipCookiesInsteadOfImportingGarbage() throws {
         let chrome = try SyntheticChrome(profiles: [
             SyntheticChromeProfile(
@@ -224,7 +255,10 @@ import WebKit
             SyntheticChromeProfile(
                 directory: "Default", name: "Mock Personal", email: "mock@example.com",
                 cookies: [SyntheticChromeCookie(host: host, name: "session", value: "mock-sid")],
-                localStorage: [storageOrigin: ["token": "mock-token"]]),
+                localStorage: [
+                    storageOrigin: ["token": "mock-token"],
+                    "https://unvisited.example": ["token": "mock-unvisited"],
+                ]),
             SyntheticChromeProfile(directory: "Profile 1", name: "Mock Work"),
         ])
         let sessionFolder = FileManager.default.temporaryDirectory
@@ -280,7 +314,7 @@ import WebKit
         store.attach(store.profiles[0])
         try await eventually { store.profile != nil && store.syncState == .idle }
         #expect(store.profile?.name == "Mock Personal")
-        #expect(store.syncSummary == "1 cookie from 1 site, local storage for 1")
+        #expect(store.syncSummary == "1 cookie from 1 site, local storage for 2")
         #expect(!store.showsSetup)
         #expect(store.tabs.count == 1)
         let tab = try #require(store.selectedTab)
@@ -288,7 +322,7 @@ import WebKit
         #expect(tab.title == "cookie=session=mock-sid storage=mock-token")
         let storageOrigin = try #require(BrowserTab.origin(of: harness.origin))
         try await eventually { store.pendingSeeds[storageOrigin] == nil }
-        #expect(store.pendingSeeds.isEmpty)
+        #expect(Array(store.pendingSeeds.keys) == ["https://unvisited.example"])
     }
 
     @Test func tabsOpenCloseReorderAndReopen() async throws {
@@ -329,6 +363,39 @@ import WebKit
         store.close(first)
         #expect(store.tabs.count == 1)
         #expect(store.tabs.first?.id != first.id)
+    }
+
+    @Test func switchingProfilesNeverCarriesAnotherProfilesStorage() async throws {
+        let harness = try await harness()
+        defer { harness.tearDown() }
+        let store = harness.store
+        store.attach(store.profiles[0])
+        try await eventually { store.profile?.directory == "Default" && store.syncState == .idle }
+        #expect(store.pendingSeeds["https://unvisited.example"] == ["token": "mock-unvisited"])
+        store.attach(store.profiles[1])
+        try await eventually { store.profile?.directory == "Profile 1" && store.syncState == .idle }
+        #expect(store.pendingSeeds.isEmpty)
+    }
+
+    @Test func restoringASessionKeepsTheSelectedTab() async throws {
+        let harness = try await harness()
+        defer { harness.tearDown() }
+        let file = BrowserSessionFile(url: harness.sessionFolder.appendingPathComponent("s.json"))
+        let second = harness.origin.appendingPathComponent("two")
+        file.save(
+            BrowserSession(
+                tabs: [harness.origin.absoluteString, second.absoluteString], selected: 1))
+        let store = NotchBrowserStore(
+            installation: harness.store.installation, sessionFile: file,
+            defaults: UserDefaults(suiteName: "test.notch-browser.\(UUID().uuidString)")!,
+            keyProvider: { SyntheticChrome.key },
+            dataStoreFactory: { _ in WKWebsiteDataStore.nonPersistent() })
+        defer { store.shutdown() }
+        store.attach(store.profiles[0])
+        try await eventually { store.tabs.count == 2 }
+        #expect(store.selectedTabID == store.tabs[1].id)
+        #expect(file.load().selected == 1)
+        #expect(file.load().tabs == [harness.origin.absoluteString, second.absoluteString])
     }
 
     @Test func holdOpenStateAndSizeChangesReachTheNotch() async throws {

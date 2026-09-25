@@ -104,7 +104,8 @@ import Testing
         #expect(LevelDBReader.batchEntries(Data([1, 2, 3])).isEmpty)
         let invalid = little(42, count: 8) + little(1, count: 4) + Data([2])
         #expect(LevelDBReader.batchEntries(invalid).isEmpty)
-        let badLength = little(42, count: 8) + little(1, count: 4)
+        let badLength =
+            little(42, count: 8) + little(1, count: 4)
             + Data([1, 255, 255, 255, 255, 31])
         #expect(LevelDBReader.batchEntries(badLength).isEmpty)
         let overflow = batch(sequence: .max, operations: [(key, value), (key, nil)])
@@ -221,10 +222,68 @@ import Testing
         #expect(live[theme] == latin1("dark"))
         #expect(live[removed] == nil)
         #expect(live[stable] == latin1("table"))
-        #expect(try ChromeLocalStorage.read(directory: directory) == [
-            origin: ["theme": "dark", "名前": "雪😀", "stable": "table"],
-            "http://localhost:3000": ["mode": "dev"],
-        ])
+        #expect(
+            try ChromeLocalStorage.read(directory: directory) == [
+                origin: ["theme": "dark", "名前": "雪😀", "stable": "table"],
+                "http://localhost:3000": ["mode": "dev"],
+            ])
+    }
+
+    @Test func manifestsTrackLiveTablesAndLogs() throws {
+        let manifest =
+            physical(versionEdit(logNumber: 9, added: [5, 7]), type: 1)
+            + physical(versionEdit(deleted: [5]), type: 1)
+        let live = try #require(LevelDBReader.manifestLiveFiles(manifest))
+        #expect(live.tables == [7])
+        #expect(live.oldestLog == 9)
+        #expect(live.contains(number: 7, isLog: false))
+        #expect(!live.contains(number: 5, isLog: false))
+        #expect(live.contains(number: 12, isLog: true))
+        #expect(!live.contains(number: 8, isLog: true))
+        #expect(LevelDBReader.manifestLiveFiles(physical(Data([99, 1]), type: 1)) == nil)
+        #expect(LevelDBReader.manifestLiveFiles(physical(versionEdit(added: [3]), type: 1)) == nil)
+    }
+
+    @Test func obsoleteFilesCannotResurrectDeletedValues() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cleared = storage("https://a.com", latin1("token"))
+        let kept = storage("https://a.com", latin1("theme"))
+        try table([LevelDBEntry(key: cleared, value: latin1("stale"), sequence: 3)])
+            .write(to: directory.appendingPathComponent("000005.ldb"))
+        try table([LevelDBEntry(key: kept, value: latin1("dark"), sequence: 4)])
+            .write(to: directory.appendingPathComponent("000007.ldb"))
+        try physical(batch(sequence: 1, operations: [(cleared, latin1("old log"))]), type: 1)
+            .write(to: directory.appendingPathComponent("000008.log"))
+        try physical(batch(sequence: 30, operations: [(kept, latin1("light"))]), type: 1)
+            .write(to: directory.appendingPathComponent("000011.log"))
+        let manifest =
+            physical(versionEdit(logNumber: 9, added: [5, 7]), type: 1)
+            + physical(versionEdit(deleted: [5]), type: 1)
+        try manifest.write(to: directory.appendingPathComponent("MANIFEST-000010"))
+        try Data("MANIFEST-000010\n".utf8).write(to: directory.appendingPathComponent("CURRENT"))
+        let live = try LevelDBReader.liveEntries(inDirectory: directory)
+        #expect(live[cleared] == nil)
+        #expect(live[kept] == latin1("light"))
+
+        try Data("MANIFEST-000099\n".utf8).write(to: directory.appendingPathComponent("CURRENT"))
+        let fallback = try LevelDBReader.liveEntries(inDirectory: directory)
+        #expect(fallback[cleared] == latin1("stale"))
+    }
+
+    @Test func oversizedStoresAreRefused() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try physical(batch(sequence: 1, operations: [(Data("k".utf8), latin1("v"))]), type: 1)
+            .write(to: directory.appendingPathComponent("000003.log"))
+        #expect(throws: LevelDBReaderError.tooLarge) {
+            try LevelDBReader.liveEntries(inDirectory: directory, byteLimit: 8)
+        }
+        #expect(try LevelDBReader.liveEntries(inDirectory: directory).count == 1)
     }
 
     @Test func missingDirectoryThrows() {
@@ -264,6 +323,19 @@ import Testing
         }
         result.append(payload)
         return result
+    }
+
+    private func versionEdit(
+        logNumber: UInt64? = nil, deleted: [UInt64] = [], added: [UInt64] = []
+    ) -> Data {
+        var edit = Data()
+        if let logNumber { edit += varint(2) + varint(logNumber) }
+        for file in deleted { edit += varint(6) + varint(0) + varint(file) }
+        for file in added {
+            edit += varint(7) + varint(0) + varint(file) + varint(100)
+            edit += varint(1) + Data([0x61]) + varint(1) + Data([0x7A])
+        }
+        return edit
     }
 
     private func physical(_ payload: Data, type: UInt8) -> Data {
