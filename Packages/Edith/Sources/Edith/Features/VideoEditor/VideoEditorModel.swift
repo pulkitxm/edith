@@ -25,7 +25,6 @@ final class VideoEditorModel {
     var captionDuration = 3.0
     var isRendering = false
     var isTranscribing = false
-    var exportQuality = "good"
     var gifFPS = 15
     var gifWidth = 0
     var gifLoop = true
@@ -325,11 +324,11 @@ final class VideoEditorModel {
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func export(gif: Bool) {
-        guard let pipeline else { return }
+    func export(gif: Bool, quality: VideoExportQuality = .source) {
+        guard let pipeline, let project else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [gif ? .gif : .mpeg4Movie]
-        panel.nameFieldStringValue = "\(project?.title ?? "Video").\(gif ? "gif" : "mp4")"
+        panel.nameFieldStringValue = "\(project.title).\(gif ? "gif" : "mp4")"
         panel.begin { [weak self] response in
             MainActor.assumeIsolated {
                 guard let self, response == .OK, let url = panel.url else { return }
@@ -341,7 +340,14 @@ final class VideoEditorModel {
                                 to: url, fps: self.gifFPS, maxWidth: self.gifWidth,
                                 loop: self.gifLoop)
                         } else {
-                            try await pipeline.exportMP4(to: url, quality: self.exportQuality)
+                            let render: VideoRenderPipeline
+                            if let dimension = quality.maxDimension {
+                                render = try await VideoRenderPipeline.make(
+                                    project: project, maxDimension: dimension)
+                            } else {
+                                render = pipeline
+                            }
+                            try await render.exportMP4(to: url)
                         }
                         self.lastExportURL = url
                     } catch { self.errorMessage = error.localizedDescription }
@@ -521,7 +527,7 @@ final class VideoEditorModel {
         })?.outputStart ?? pipeline.duration
     }
 
-    func adjustZoom(_ id: String, by seconds: Double, edge: String) {
+    func setZoomTiming(_ id: String, start: Double, end: Double) {
         guard let zoom = project?.zooms.first(where: { $0.id == id }),
             let clipID = zoom.raw["clipId"] as? String
                 ?? project?.clips.first(where: {
@@ -530,29 +536,15 @@ final class VideoEditorModel {
                 })?.id,
             let segments = pipeline?.segments.filter({ $0.clip.id == clipID }),
             let first = segments.first, let last = segments.last,
-            seconds.isFinite
+            start.isFinite, end.isFinite, end - start >= 0.1
         else { return }
         let bounds = first.outputStart...last.outputEnd
         func ruler(at output: Double) -> Double {
             let segment = segments.first(where: { output < $0.outputEnd }) ?? last
             return segment.rulerTime(at: output) * 1000
         }
-        let start = outputTime(forRulerTime: zoom.startMs / 1000)
-        let end = outputTime(forRulerTime: zoom.endMs / 1000)
-        var nextStart = zoom.startMs
-        var nextEnd = zoom.endMs
-        switch edge {
-        case "start":
-            nextStart = ruler(at: min(end - 0.1, max(bounds.lowerBound, start + seconds)))
-        case "end":
-            nextEnd = ruler(at: max(start + 0.1, min(bounds.upperBound, end + seconds)))
-        default:
-            let moved = max(
-                bounds.lowerBound,
-                min(bounds.upperBound - (end - start), start + seconds))
-            nextStart = ruler(at: moved)
-            nextEnd = ruler(at: moved + end - start)
-        }
+        let nextStart = ruler(at: max(bounds.lowerBound, min(bounds.upperBound, start)))
+        let nextEnd = ruler(at: max(bounds.lowerBound, min(bounds.upperBound, end)))
         let wasSelected = editingZoomID == id
         mutate { $0.updateZoomTiming(id, startMs: nextStart, endMs: nextEnd) }
         editingZoomID = id
