@@ -18,6 +18,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard AgentService.usesCustomService || InstalledLocation.permitsLaunch() else {
+            InstalledLocation.refuseLaunch()
+            return
+        }
         let launchTrace = PerformanceTrace.begin(.startup, "main.launch")
         defer { PerformanceTrace.end(launchTrace) }
         applyAppearance(

@@ -271,9 +271,22 @@ sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$APP"
 
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+if [ "$RELEASE" = 1 ]; then
+  "$LSREGISTER" -u "$BUILT" 2>/dev/null || true
+  "$LSREGISTER" -u "$APP" 2>/dev/null || true
+fi
+
 if [ "$INSTALL" = 1 ]; then
   python3 scripts/install_app.py "$APP" "/Applications/Edith.app"
   [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
-else
-  [ "$NO_OPEN" = 1 ] || open "$APP"
+elif [ "$RELEASE" = 1 ]; then
+  echo "built $APP; Edith only runs from /Applications, install it with --release --install"
+elif [ "$NO_OPEN" != 1 ]; then
+  pkill -f "^$PWD/$APP/Contents/" 2>/dev/null || true
+  for _ in $(seq 50); do
+    pgrep -f "^$PWD/$APP/Contents/" >/dev/null || break
+    sleep 0.2
+  done
+  open "$APP"
 fi
