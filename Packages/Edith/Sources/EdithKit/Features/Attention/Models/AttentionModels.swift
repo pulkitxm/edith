@@ -499,7 +499,9 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     }
 
     public func category(_ id: String) -> AttentionCategory {
-        categories.first { $0.id == id } ?? categories.first { $0.id == AttentionCatalog.unclassified }
+        categories.first { $0.id == id } ?? categories.first {
+            $0.id == AttentionCatalog.unclassified
+        }
             ?? AttentionCatalog.categories.last!
     }
 }

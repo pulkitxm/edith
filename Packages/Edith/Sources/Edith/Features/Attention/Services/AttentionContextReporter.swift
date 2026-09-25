@@ -62,7 +62,8 @@ final class AttentionContextReporter {
                 parts.append(context.title)
             }
         } else {
-            let stored = SharedDefaults.store.string(forKey: AppStorageKeys.General.mainWindowSection)
+            let stored = SharedDefaults.store.string(
+                forKey: AppStorageKeys.General.mainWindowSection)
             let destination =
                 window.flatMap(SectionWindow.destination(of:))
                 ?? stored.flatMap(MainDestination.init(rawValue:)) ?? .home

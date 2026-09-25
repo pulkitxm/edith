@@ -134,7 +134,8 @@ struct AttentionDayPanel: View {
                 }
                 AttentionKindLegend(kinds: summary.kinds, total: summary.activeDuration)
             }
-            if model.period.scope == .day, summary.agents.concurrency.contains(where: { $0.working > 0 })
+            if model.period.scope == .day,
+                summary.agents.concurrency.contains(where: { $0.working > 0 })
             {
                 Divider()
                 Text("Agents working")
@@ -179,7 +180,9 @@ struct AttentionCategoryPanel: View {
                             .buttonStyle(.edith(.borderless))
                         }
                         if summary.categories.count > 8 {
-                            let rest = summary.categories.dropFirst(8).reduce(0) { $0 + $1.duration }
+                            let rest = summary.categories.dropFirst(8).reduce(0) {
+                                $0 + $1.duration
+                            }
                             AttentionLegendRow(
                                 color: DashSkin.grid(dark),
                                 label: "\(summary.categories.count - 8) more",
@@ -301,7 +304,8 @@ struct AttentionEntityRow: View {
                 }
                 .buttonStyle(.edith(.borderless))
                 .accessibilityLabel(
-                    "\(entity.name), \(entity.category.name), \(AttentionFormat.duration(entity.duration))")
+                    "\(entity.name), \(entity.category.name), \(AttentionFormat.duration(entity.duration))"
+                )
                 VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
                     Text(AttentionFormat.duration(entity.duration))
                         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
@@ -449,7 +453,8 @@ struct AttentionTriagePanel: View {
                             }
                             .buttonStyle(.edith(.borderless))
                         }
-                        ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) { category in
+                        ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) {
+                            category in
                             Button {
                                 model.assign(entity: entity, to: category.id)
                             } label: {
@@ -567,7 +572,8 @@ struct AttentionSwitchingPanel: View {
         let dark = scheme == .dark
         AttentionPanel(
             "Attention span",
-            subtitle: "Switches ignore visits under ten seconds, so flicking past a window is not counted."
+            subtitle:
+                "Switches ignore visits under ten seconds, so flicking past a window is not counted."
         ) {
             HStack(spacing: UIScale.pt(18)) {
                 stat("Median stretch", AttentionFormat.duration(summary.medianStretch), dark)

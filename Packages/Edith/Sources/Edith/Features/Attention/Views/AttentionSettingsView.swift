@@ -222,7 +222,8 @@ private struct AttentionRulesEditor: View {
         let indices = model.settings.rules.indices.filter { index in
             guard !query.isEmpty else { return true }
             let rule = model.settings.rules[index]
-            return ([rule.name] + rule.bundleIDs + rule.domains + rule.urls + rule.keywords
+            return
+                ([rule.name] + rule.bundleIDs + rule.domains + rule.urls + rule.keywords
                 + rule.contexts).contains { $0.lowercased().contains(query) }
         }
         AttentionCard {

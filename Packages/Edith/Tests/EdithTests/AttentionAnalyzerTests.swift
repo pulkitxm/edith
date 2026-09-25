@@ -105,7 +105,9 @@ import Testing
         let unknown = classifier.classify(app("com.example.Unknown", "Mystery", at: 0, for: 1))
         #expect(unknown.categoryID == "design")
         #expect(unknown.source == .jev)
-        #expect(classifier.classify(app("com.apple.dt.Xcode", "Xcode", at: 0, for: 1)).categoryID == "coding")
+        #expect(
+            classifier.classify(app("com.apple.dt.Xcode", "Xcode", at: 0, for: 1)).categoryID
+                == "coding")
         let video = classifier.classify(
             AttentionEvent(
                 startedAt: start, duration: 1, source: .browser, appName: "Chrome",
@@ -250,7 +252,8 @@ import Testing
         ]
         var classifier = AttentionClassifier(settings: settings)
         let installed = classifier.classify(app("com.pulkit.edith", "Edith", at: 0, for: 1))
-        let slot = classifier.classify(app("com.pulkit.edith.dev.attention", "Edith", at: 0, for: 1))
+        let slot = classifier.classify(
+            app("com.pulkit.edith.dev.attention", "Edith", at: 0, for: 1))
         #expect(installed.entityID == AttentionEntityID.named("Edith"))
         #expect(slot.entityID == installed.entityID)
         #expect(installed.categoryID == "focus")
@@ -259,7 +262,8 @@ import Testing
 
     @Test func assigningAnEntityUpdatesOrCreatesTheRightRule() {
         var settings = AttentionSettings()
-        let created = settings.assign(entityID: AttentionEntityID.named("YouTube"), categoryID: "learning")
+        let created = settings.assign(
+            entityID: AttentionEntityID.named("YouTube"), categoryID: "learning")
         #expect(created?.domains == ["youtube.com", "youtu.be"])
         settings.assign(entityID: AttentionEntityID.named("youtube"), categoryID: "entertainment")
         #expect(settings.rules.count == 1)

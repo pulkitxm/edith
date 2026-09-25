@@ -71,12 +71,15 @@ struct AttentionBreakdownView: View {
                 }
             ) {
                 if dimensions.isEmpty {
-                    AttentionEmpty(text: "No activity to break down yet", symbol: "square.stack.3d.up")
+                    AttentionEmpty(
+                        text: "No activity to break down yet", symbol: "square.stack.3d.up")
                 } else if rows.isEmpty {
-                    AttentionEmpty(text: "Nothing matches the filters", symbol: "line.3.horizontal.decrease")
+                    AttentionEmpty(
+                        text: "Nothing matches the filters", symbol: "line.3.horizontal.decrease")
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(rows.prefix(80).enumerated()), id: \.element.id) { index, row in
+                        ForEach(Array(rows.prefix(80).enumerated()), id: \.element.id) {
+                            index, row in
                             if index > 0 { Divider().opacity(0.5) }
                             HStack(spacing: UIScale.pt(12)) {
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -106,7 +109,8 @@ struct AttentionBreakdownView: View {
                                     Text(
                                         row.interactions > 0
                                             ? "\(AttentionFormat.percent(row.duration, of: filteredTotal)) · \(AttentionFormat.count(row.interactions)) inputs"
-                                            : AttentionFormat.percent(row.duration, of: filteredTotal)
+                                            : AttentionFormat.percent(
+                                                row.duration, of: filteredTotal)
                                     )
                                     .font(.system(size: UIScale.pt(10)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -128,9 +132,10 @@ struct AttentionBreakdownView: View {
         let lines =
             ["\(field(title)),minutes,top category"]
             + rows.map { row in
-                let category = row.categories.max { $0.value < $1.value }.map {
-                    model.category($0.key).name
-                } ?? ""
+                let category =
+                    row.categories.max { $0.value < $1.value }.map {
+                        model.category($0.key).name
+                    } ?? ""
                 return
                     "\(field(row.label)),\(String(format: "%.1f", row.duration / 60)),\(field(category))"
             }

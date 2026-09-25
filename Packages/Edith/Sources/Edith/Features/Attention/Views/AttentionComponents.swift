@@ -225,7 +225,8 @@ struct AttentionMixBar: View {
                     AttentionPalette.category(settings.category(part.key), dark: dark)
                         .frame(
                             width: max(
-                                2, (width - CGFloat(parts.count - 1) * 2) * part.value / max(total, 1)
+                                2,
+                                (width - CGFloat(parts.count - 1) * 2) * part.value / max(total, 1)
                             ))
                 }
             }

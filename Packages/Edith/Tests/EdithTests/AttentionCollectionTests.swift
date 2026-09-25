@@ -35,8 +35,10 @@ import Testing
         #expect(second.first?.tag(AttentionTag.machine) == "tuf")
         #expect(second.first?.isSegment == true)
         #expect(
-            recorder.observe([host([agent("1", status: .working)])], now: now.addingTimeInterval(40))
-                .isEmpty)
+            recorder.observe(
+                [host([agent("1", status: .working)])], now: now.addingTimeInterval(40)
+            )
+            .isEmpty)
         let stopped = recorder.observe(
             [host([agent("1", status: .idle)])], now: now.addingTimeInterval(45))
         #expect(stopped.count == 1)
@@ -128,7 +130,10 @@ import Testing
                 service: "Spotify", bundleID: "com.spotify.client",
                 userInfo: ["Player State": "Paused", "Name": "Song"]) == nil)
         let edith = AttentionPlaybackParser.edith(
-            ["track": "Focus/Deep Work.mp3", "isPlaying": true, "duration": 200.0, "elapsed": 50.0],
+            [
+                "track": "Focus/Deep Work.mp3", "isPlaying": true, "duration": 200.0,
+                "elapsed": 50.0,
+            ],
             now: now)
         #expect(edith?.media.title == "Deep Work")
         #expect(edith?.media.album == "Focus")

@@ -106,7 +106,8 @@ private struct AttentionPeriodControl: View {
                             fill: active
                                 ? AnyShapeStyle(DashSkin.accent(dark))
                                 : AnyShapeStyle(DashSkin.paper2(dark)),
-                            stroke: active ? Color.clear : DashSkin.lineStrong(dark))
+                            stroke: active ? Color.clear : DashSkin.lineStrong(dark)
+                        )
                         .foregroundStyle(
                             active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
                 }

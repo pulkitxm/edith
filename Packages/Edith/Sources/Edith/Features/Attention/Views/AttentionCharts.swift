@@ -51,7 +51,8 @@ struct AttentionDayRibbon: View {
         let start = calendar.dateInterval(of: .hour, for: first)?.start ?? first
         let end = calendar.dateInterval(of: .hour, for: last)?.end ?? last
         let lower = max(day.start, start.addingTimeInterval(-3_600))
-        let upper = min(day.end, max(end.addingTimeInterval(3_600), lower.addingTimeInterval(21_600)))
+        let upper = min(
+            day.end, max(end.addingTimeInterval(3_600), lower.addingTimeInterval(21_600)))
         return lower...upper
     }
 
@@ -200,7 +201,10 @@ struct AttentionDailyStack: View {
                 )
                 .foregroundStyle(AttentionPalette.kind(value.kind, dark: dark))
                 .cornerRadius(2)
-                .opacity(hovered == nil || Calendar.current.isDate(value.bucket, inSameDayAs: hovered!.day) ? 1 : 0.5)
+                .opacity(
+                    hovered == nil
+                        || Calendar.current.isDate(value.bucket, inSameDayAs: hovered!.day)
+                        ? 1 : 0.5)
             }
             if let hovered {
                 RuleMark(x: .value("Day", hovered.day, unit: .day))
@@ -300,10 +304,11 @@ struct AttentionHourBars: View {
             ForEach(values) { value in
                 BarMark(
                     x: .value("Hour", value.hour), y: .value("Minutes", value.minutes),
-                    width: .fixed(UIScale.pt(14)))
-                    .foregroundStyle(AttentionPalette.kind(value.kind, dark: dark))
-                    .cornerRadius(2)
-                    .opacity(selected == nil || selected == value.hour ? 1 : 0.5)
+                    width: .fixed(UIScale.pt(14))
+                )
+                .foregroundStyle(AttentionPalette.kind(value.kind, dark: dark))
+                .cornerRadius(2)
+                .opacity(selected == nil || selected == value.hour ? 1 : 0.5)
             }
             if let selected, let kinds = byHour[selected] {
                 RuleMark(x: .value("Hour", selected))
@@ -325,7 +330,8 @@ struct AttentionHourBars: View {
                         .foregroundStyle(DashSkin.ink(dark))
                         .padding(UIScale.pt(6))
                         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(DashSkin.lineStrong(dark)))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8).stroke(DashSkin.lineStrong(dark)))
                     }
             }
         }
@@ -366,7 +372,8 @@ struct AttentionWeekHeatmap: View {
         let dark = scheme == .dark
         let byKey = Dictionary(uniqueKeysWithValues: cells.map { ($0.id, $0) })
         let peak = max(cells.map(\.active).max() ?? 1, 1)
-        let order = Array(Calendar.current.firstWeekday...7) + Array(1..<Calendar.current.firstWeekday)
+        let order =
+            Array(Calendar.current.firstWeekday...7) + Array(1..<Calendar.current.firstWeekday)
         let symbols = Calendar.current.shortWeekdaySymbols
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             ForEach(order, id: \.self) { weekday in
@@ -504,7 +511,8 @@ struct AttentionConcurrencyChart: View {
                         .foregroundStyle(DashSkin.ink(dark))
                         .padding(UIScale.pt(6))
                         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(DashSkin.lineStrong(dark)))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8).stroke(DashSkin.lineStrong(dark)))
                     }
             }
         }

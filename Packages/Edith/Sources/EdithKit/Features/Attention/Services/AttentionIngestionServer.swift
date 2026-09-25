@@ -193,7 +193,8 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             throw AgentError(.unavailable, "The Attention event store is unavailable.")
         }
         try sink.record(
-            AttentionBatch(events: Self.events(from: heartbeat, privacyLevel: settings.privacyLevel)))
+            AttentionBatch(
+                events: Self.events(from: heartbeat, privacyLevel: settings.privacyLevel)))
     }
 
     public static func events(

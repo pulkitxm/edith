@@ -79,7 +79,9 @@ import Testing
         #expect(yesterday.interval(now: now, calendar: calendar).duration == 86_400)
         let week = AttentionPeriod(scope: .week, anchor: now, calendar: calendar)
         #expect(week.interval(now: now, calendar: calendar).duration >= 6 * 86_400)
-        #expect(week.shifted(by: -1, calendar: calendar).interval(now: now, calendar: calendar).duration == 7 * 86_400)
+        #expect(
+            week.shifted(by: -1, calendar: calendar).interval(now: now, calendar: calendar).duration
+                == 7 * 86_400)
         let month = AttentionPeriod(scope: .month, anchor: now, calendar: calendar)
         #expect(month.interval(now: now, calendar: calendar).duration >= 29 * 86_400)
         #expect(month.comparePeriod == 30 * 86_400)

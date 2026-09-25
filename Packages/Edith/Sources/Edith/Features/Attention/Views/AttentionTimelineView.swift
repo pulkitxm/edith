@@ -17,7 +17,9 @@ struct AttentionTimelineBlock: Identifiable, Equatable {
 
     var detail: String? { details.max { $0.value < $1.value }?.key }
 
-    static func blocks(_ spans: [AttentionSpan], gap: TimeInterval = 120, minimum: TimeInterval = 45)
+    static func blocks(
+        _ spans: [AttentionSpan], gap: TimeInterval = 120, minimum: TimeInterval = 45
+    )
         -> [AttentionTimelineBlock]
     {
         var blocks: [AttentionTimelineBlock] = []

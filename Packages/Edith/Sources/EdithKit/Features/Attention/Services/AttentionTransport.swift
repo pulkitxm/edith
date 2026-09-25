@@ -127,7 +127,8 @@ public struct AttentionSummaryRequest: Codable, Sendable {
         guard let comparePeriod, comparePeriod > 0 else { return nil }
         return DateInterval(
             start: from.addingTimeInterval(-comparePeriod),
-            end: max(from.addingTimeInterval(-comparePeriod), to.addingTimeInterval(-comparePeriod)))
+            end: max(from.addingTimeInterval(-comparePeriod), to.addingTimeInterval(-comparePeriod))
+        )
     }
 }
 

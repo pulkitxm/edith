@@ -30,7 +30,8 @@ public enum AttentionCatalog {
 
     public static let descriptions: [String: String] = [
         "focus": "focused work that does not fit a more specific category",
-        "coding": "writing, reviewing, building or debugging software, terminals and developer tools",
+        "coding":
+            "writing, reviewing, building or debugging software, terminals and developer tools",
         "agents": "running, supervising or reviewing AI coding agents and their sessions",
         "ai": "chatting with AI assistants such as ChatGPT, Claude or Gemini",
         "design": "visual, product or interface design work",
@@ -126,7 +127,9 @@ public enum AttentionCatalog {
         rule(
             "slack", "Slack", "communication", apps: ["com.tinyspeck.slackmacgap"],
             sites: ["app.slack.com"]),
-        rule("discord", "Discord", "communication", apps: ["com.hnc.Discord"], sites: ["discord.com"]),
+        rule(
+            "discord", "Discord", "communication", apps: ["com.hnc.Discord"], sites: ["discord.com"]
+        ),
         rule(
             "telegram", "Telegram", "communication",
             apps: ["ru.keepcoder.Telegram", "org.telegram.desktop"], sites: ["web.telegram.org"]),
@@ -145,7 +148,8 @@ public enum AttentionCatalog {
         rule(
             "netflix", "Netflix", "entertainment", apps: ["com.netflix.Netflix"],
             sites: ["netflix.com"]),
-        rule("notion", "Notion", "writing", apps: ["notion.id"], sites: ["notion.so", "notion.site"]),
+        rule(
+            "notion", "Notion", "writing", apps: ["notion.id"], sites: ["notion.so", "notion.site"]),
         rule("figma", "Figma", "design", apps: ["com.figma.Desktop"], sites: ["figma.com"]),
         rule("linear", "Linear", "planning", apps: ["com.linear"], sites: ["linear.app"]),
         rule(
@@ -318,7 +322,7 @@ public enum AttentionCatalog {
         rule(
             "chat.web", "Chat", "communication",
             sites: [
-                "messenger.com",
+                "messenger.com"
             ]),
         rule(
             "meetings.web", "Meetings", "meetings",

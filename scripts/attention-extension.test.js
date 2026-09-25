@@ -18,6 +18,7 @@ function fixture() {
   let audibleTabs = [];
   let expectedVersion = "2.0.0";
   let reloads = 0;
+  let rejectNext = 0;
   const health = [];
   const local = { token: "fixture-token" };
   const session = {};
@@ -67,7 +68,11 @@ function fixture() {
       const event = JSON.parse(options.body);
       sent.push(event);
       if (offline) throw new Error("Offline fixture");
-      return { ok: true };
+      if (rejectNext > 0) {
+        rejectNext -= 1;
+        return { ok: false, status: 422 };
+      }
+      return { ok: true, status: 202 };
     },
     chrome: {
       storage: { local: storage(local), session: storage(session) },
@@ -119,6 +124,9 @@ function fixture() {
     },
     version(value) {
       expectedVersion = value;
+    },
+    reject(count) {
+      rejectNext = count;
     },
     tick: () => context.tick(),
     advance(seconds) {
@@ -362,4 +370,19 @@ test("the app announces the same extension version the manifest ships", () => {
   expect(installer).toContain(
     `public static let version = "${manifest.version}"`,
   );
+});
+
+test("a payload Edith rejects as malformed is dropped instead of blocking the queue", async () => {
+  const f = fixture();
+  await f.tick();
+  f.advance(30);
+  f.reject(1);
+  await f.tick();
+  expect(f.local.attentionQueue).toHaveLength(0);
+  expect(f.local.attentionRejectedEvents).toBe(1);
+  f.tab("https://second.example/");
+  f.advance(10);
+  await f.tick();
+  expect(f.sent.at(-1).domain).toBe("first.example");
+  expect(f.local.attentionQueue).toHaveLength(0);
 });

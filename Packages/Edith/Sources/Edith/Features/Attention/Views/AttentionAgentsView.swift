@@ -20,7 +20,8 @@ struct AttentionAgentsView: View {
             ) {
                 AttentionTile(
                     label: "Agent work", value: AttentionFormat.duration(agents.working),
-                    detail: AttentionFormat.delta(agents.working, model.summary.previous?.agentWorking),
+                    detail: AttentionFormat.delta(
+                        agents.working, model.summary.previous?.agentWorking),
                     tint: violet, symbol: "sparkles")
                 AttentionTile(
                     label: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
@@ -39,7 +40,8 @@ struct AttentionAgentsView: View {
                     label: "Leverage",
                     value: agents.attended > 0
                         ? String(format: "%.1f×", agents.working / agents.attended) : "n/a",
-                    detail: "agent time per minute you watched \(AttentionFormat.duration(agents.attended))",
+                    detail:
+                        "agent time per minute you watched \(AttentionFormat.duration(agents.attended))",
                     tint: violet, symbol: "arrow.up.right")
             }
             if agents.isEmpty {

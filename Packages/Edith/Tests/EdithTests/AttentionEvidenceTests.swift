@@ -243,7 +243,8 @@ private enum AttentionSyntheticWeek {
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = AttentionRepository(root: root)
         let calendar = Calendar.current
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))!
+        let yesterday = calendar.date(
+            byAdding: .day, value: -1, to: calendar.startOfDay(for: Date()))!
         let days = (0..<8).map { calendar.date(byAdding: .day, value: -$0, to: yesterday)! }
         var settings = AttentionSettings(
             isEnabled: true, trackingEnabled: true, browserTrackingEnabled: true)

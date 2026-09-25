@@ -28,7 +28,9 @@ struct AttentionFocusView: View {
                                     ? AttentionFormat.clock(remaining)
                                     : "Overtime \(AttentionFormat.clock(abs(remaining)))"
                             )
-                            .font(.system(size: UIScale.pt(30), weight: .semibold, design: .rounded))
+                            .font(
+                                .system(size: UIScale.pt(30), weight: .semibold, design: .rounded)
+                            )
                             .monospacedDigit()
                             ProgressView(value: min(1, elapsed / focus.plannedDuration))
                                 .tint(AttentionPalette.kind(.focus, dark: dark))
@@ -64,7 +66,8 @@ struct AttentionFocusView: View {
                     "Stretches of at least \(Int(model.settings.focusBlockMinimum / 60)) productive minutes. Interruptions up to two minutes are tolerated."
             ) {
                 if blocks.isEmpty {
-                    AttentionEmpty(text: "No deep work block in this period yet", symbol: "brain.head.profile")
+                    AttentionEmpty(
+                        text: "No deep work block in this period yet", symbol: "brain.head.profile")
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
@@ -101,9 +104,12 @@ struct AttentionFocusView: View {
                     }
                 }
             }
-            AttentionPanel("Focus sessions", subtitle: "Sessions you started from Edith or ed attention focus.") {
+            AttentionPanel(
+                "Focus sessions", subtitle: "Sessions you started from Edith or ed attention focus."
+            ) {
                 if model.focusSessions.isEmpty {
-                    AttentionEmpty(text: "No completed focus sessions in this period", symbol: "timer")
+                    AttentionEmpty(
+                        text: "No completed focus sessions in this period", symbol: "timer")
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(model.focusSessions.enumerated()), id: \.element.id) {
@@ -114,9 +120,12 @@ struct AttentionFocusView: View {
                                     Text(session.name.isEmpty ? "Focus" : session.name)
                                         .font(.system(size: UIScale.pt(12.5)))
                                         .foregroundStyle(DashSkin.ink(dark))
-                                    Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.system(size: UIScale.pt(10.5)))
-                                        .foregroundStyle(DashSkin.inkFaint(dark))
+                                    Text(
+                                        session.startedAt.formatted(
+                                            date: .abbreviated, time: .shortened)
+                                    )
+                                    .font(.system(size: UIScale.pt(10.5)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
                                 Spacer()
                                 Text(

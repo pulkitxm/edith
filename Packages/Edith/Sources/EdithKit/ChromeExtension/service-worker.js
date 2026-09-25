@@ -316,7 +316,12 @@ async function flush(settings) {
       body: JSON.stringify(attentionQueue[0]),
       signal: AbortSignal.timeout(5000)
     })
-    if (!response.ok) throw new Error(`Edith returned ${response.status}`)
+    if (response.status === 400 || response.status === 422) {
+      const { attentionRejectedEvents = 0 } = await chrome.storage.local.get("attentionRejectedEvents")
+      await chrome.storage.local.set({ attentionRejectedEvents: attentionRejectedEvents + 1 })
+    } else if (!response.ok) {
+      throw new Error(`Edith returned ${response.status}`)
+    }
     attentionQueue.shift()
     await chrome.storage.local.set({ attentionQueue })
   }

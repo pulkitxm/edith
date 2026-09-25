@@ -143,7 +143,8 @@ struct AttentionSummaryBuilder {
         categoryTotals[category.id, default: 0] += duration
         signals = signals.adding(interval.signals)
         let interactions = interval.signals?.interactions ?? 0
-        Self.splitByHour(interval.startedAt, interval.endedAt, calendar: calendar) { start, seconds in
+        Self.splitByHour(interval.startedAt, interval.endedAt, calendar: calendar) {
+            start, seconds in
             let day = calendar.startOfDay(for: start)
             var total = days[day] ?? AttentionDayTotal(day: day)
             total.active += seconds
@@ -217,13 +218,15 @@ struct AttentionSummaryBuilder {
                 summary.working += duration
                 edges.append((clipped.startedAt, 1))
                 edges.append((clipped.endedAt, -1))
-                Self.splitByHour(clipped.startedAt, clipped.endedAt, calendar: calendar) { start, seconds in
+                Self.splitByHour(clipped.startedAt, clipped.endedAt, calendar: calendar) {
+                    start, seconds in
                     let day = calendar.startOfDay(for: start)
                     var total = days[day] ?? AttentionDayTotal(day: day)
                     total.agentWorking += seconds
                     days[day] = total
                 }
-                Self.splitByBin(clipped.startedAt, clipped.endedAt, bin: bin, calendar: calendar) { start, seconds in
+                Self.splitByBin(clipped.startedAt, clipped.endedAt, bin: bin, calendar: calendar) {
+                    start, seconds in
                     bins[start, default: 0] += seconds
                 }
             } else {
@@ -306,7 +309,8 @@ struct AttentionSummaryBuilder {
                 total: values.reduce(0) { $0 + $1.duration })
         }
         .sorted { lhs, rhs in
-            let order = [AttentionDimension.entity, AttentionDimension.title, AttentionDimension.url]
+            let order =
+                [AttentionDimension.entity, AttentionDimension.title, AttentionDimension.url]
                 + AttentionTag.dimensions
             return (order.firstIndex(of: lhs.key) ?? 99) < (order.firstIndex(of: rhs.key) ?? 99)
         }
@@ -368,7 +372,8 @@ struct AttentionSummaryBuilder {
             daySwitches[calendar.startOfDay(for: current.start), default: 0] += 1
             let key = anchor.name + "\u{1F}" + current.name
             var transition =
-                transitions[key] ?? AttentionTransition(from: anchor.name, to: current.name, count: 0)
+                transitions[key]
+                ?? AttentionTransition(from: anchor.name, to: current.name, count: 0)
             transition.count += 1
             transitions[key] = transition
         }
@@ -421,7 +426,8 @@ struct AttentionSummaryBuilder {
     }
 
     private mutating func trackAttendance(_ interval: AttentionEvent) {
-        Self.splitByBin(interval.startedAt, interval.endedAt, bin: bin, calendar: calendar) { start, seconds in
+        Self.splitByBin(interval.startedAt, interval.endedAt, bin: bin, calendar: calendar) {
+            start, seconds in
             attentionBins[start, default: 0] += seconds
         }
         guard let tags = interval.tags, tags[AttentionTag.machine] != nil else { return }
@@ -518,7 +524,9 @@ struct AttentionSummaryBuilder {
                 start: interval.startedAt, end: interval.endedAt,
                 entityID: classification.entityID, name: classification.entityName,
                 categoryID: classification.categoryID,
-                detail: interval.windowTitle.map { String(AttentionText.cleanTitle($0).prefix(160)) }
+                detail: interval.windowTitle.map {
+                    String(AttentionText.cleanTitle($0).prefix(160))
+                }
                     ?? interval.domain,
                 tags: interval.tags, interactions: interactions))
     }
