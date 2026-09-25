@@ -385,7 +385,7 @@ final class HerdrTerminalPanels {
             var running: [String] = []
             for id in ids {
                 guard let terminal = terminals[id], terminal.running else { continue }
-                running.append(terminal.process?.command ?? terminal.title)
+                running.append(terminal.title)
             }
             if running.isEmpty {
                 finish()

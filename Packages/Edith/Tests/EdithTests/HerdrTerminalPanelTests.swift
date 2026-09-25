@@ -190,7 +190,7 @@ private actor HerdrPanelHerdr {
         store.closeTab(owner)
         try await eventually { store.terminalPanels.closeRequest != nil }
         let request = try #require(store.terminalPanels.closeRequest)
-        #expect(request.running == ["npm run dev"])
+        #expect(request.running == ["npm"])
         #expect(store.tabs.map(\.id) == [owner])
         #expect(await herdr.closed.isEmpty)
 
