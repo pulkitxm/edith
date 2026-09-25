@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 216 settings in 25
+reads, and `ed config` is that surface from the command line: 221 settings in 25
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.

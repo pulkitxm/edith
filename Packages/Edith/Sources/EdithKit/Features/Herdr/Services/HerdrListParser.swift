@@ -111,6 +111,62 @@ public enum HerdrListParser {
         return HerdrCreatedPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
     }
 
+    public static func spacePanes(
+        in board: HerdrSnapshotBoard, session: String, space: String = HerdrTerminalSpace.label
+    ) -> [HerdrSpacePane] {
+        var panes: [HerdrSpacePane] = []
+        for record in board.panes {
+            guard let workspace = record.workspaceID, board.labels[workspace] == space else {
+                continue
+            }
+            panes.append(HerdrSpacePane(session: session, pane: record.pane, cwd: record.cwd ?? ""))
+        }
+        return panes
+    }
+
+    public static func paneProcess(from text: String) -> HerdrPaneProcess? {
+        guard let json = firstJSON(in: text) as? [String: Any],
+            let payload = unwrap(json) as? [String: Any],
+            let info = payload["process_info"] as? [String: Any],
+            let processes = info["foreground_processes"] as? [[String: Any]],
+            !processes.isEmpty
+        else { return nil }
+        let group = integer(in: info, keys: ["foreground_process_group_id"])
+        let shell = integer(in: info, keys: ["shell_pid"])
+        let leader =
+            processes.first { integer(in: $0, keys: ["pid"]) == group } ?? processes[0]
+        guard
+            let name = string(in: leader, keys: ["argv0"]).map(processTitle)
+                ?? string(in: leader, keys: ["name"]),
+            !name.isEmpty
+        else { return nil }
+        return HerdrPaneProcess(
+            name: name, command: string(in: leader, keys: ["cmdline"]) ?? name,
+            running: group != nil && shell != nil && group != shell)
+    }
+
+    public static func scrollInfo(from text: String, pane: String? = nil) -> HerdrScrollInfo? {
+        guard let json = firstJSON(in: text),
+            let payload = unwrap(json) as? [String: Any]
+        else { return nil }
+        let container = payload["pane"] as? [String: Any] ?? payload
+        if let pane, let id = string(in: container, keys: ["pane_id"]), id != pane { return nil }
+        guard let scroll = container["scroll"] as? [String: Any],
+            let offset = integer(in: scroll, keys: ["offset_from_bottom"]),
+            let maximum = integer(in: scroll, keys: ["max_offset_from_bottom"]),
+            let rows = integer(in: scroll, keys: ["viewport_rows"])
+        else { return nil }
+        return HerdrScrollInfo(offset: offset, maximum: maximum, viewportRows: rows)
+    }
+
+    static func processTitle(_ argv0: String) -> String {
+        let words = argv0.split(separator: " ", maxSplits: 1)
+        guard let first = words.first else { return argv0 }
+        var program = (String(first) as NSString).lastPathComponent
+        if program.hasPrefix("-") { program.removeFirst() }
+        return words.count > 1 ? "\(program) \(words[1])" : program
+    }
+
     public static func eventName(in text: String) -> String? {
         guard let object = firstJSON(in: text) as? [String: Any] else { return nil }
         let raw =

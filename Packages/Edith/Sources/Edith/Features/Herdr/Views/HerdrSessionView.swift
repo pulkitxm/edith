@@ -4,11 +4,25 @@ import SwiftTerm
 import SwiftUI
 
 private struct HerdrResizeCursor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { CursorView() }
+    var axis = Axis.horizontal
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func makeNSView(context: Context) -> NSView {
+        let view = CursorView()
+        view.cursor = cursor
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? CursorView)?.cursor = cursor
+    }
+
+    private var cursor: NSCursor {
+        axis == .horizontal ? .resizeLeftRight : .resizeUpDown
+    }
 
     private final class CursorView: NSView {
+        var cursor = NSCursor.resizeLeftRight
+
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func updateTrackingAreas() {
@@ -22,11 +36,11 @@ private struct HerdrResizeCursor: NSViewRepresentable {
         }
 
         override func cursorUpdate(with event: NSEvent) {
-            NSCursor.resizeLeftRight.set()
+            cursor.set()
         }
 
         override func mouseEntered(with event: NSEvent) {
-            NSCursor.resizeLeftRight.set()
+            cursor.set()
         }
 
         override func mouseExited(with event: NSEvent) {
@@ -61,7 +75,8 @@ enum HerdrAgentTerminalOverlay: Equatable {
     }
 }
 
-struct HerdrHorizontalResizeHandle: View {
+struct HerdrResizeHandle: View {
+    var axis = Axis.horizontal
     let label: String
     let onChanged: (CGFloat) -> Void
     let onEnded: () -> Void
@@ -75,21 +90,23 @@ struct HerdrHorizontalResizeHandle: View {
 
     var body: some View {
         let active = hovered || dragging
+        let thickness = active ? UIScale.pt(3) : 1
+        let horizontal = axis == .horizontal
         ZStack {
             Rectangle()
                 .fill(active ? DashSkin.accent(dark) : DashSkin.lineStrong(dark).opacity(0.35))
-                .frame(width: active ? UIScale.pt(3) : 1)
+                .frame(width: horizontal ? thickness : nil, height: horizontal ? nil : thickness)
         }
-        .frame(width: UIScale.pt(9))
-        .frame(maxHeight: .infinity)
+        .frame(width: horizontal ? UIScale.pt(9) : nil, height: horizontal ? nil : UIScale.pt(9))
+        .frame(maxWidth: horizontal ? nil : .infinity, maxHeight: horizontal ? .infinity : nil)
         .contentShape(Rectangle())
-        .background(HerdrResizeCursor())
+        .background(HerdrResizeCursor(axis: axis))
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
         .gesture(
             DragGesture(coordinateSpace: .global)
                 .onChanged { value in
                     dragging = true
-                    onChanged(value.translation.width)
+                    onChanged(horizontal ? value.translation.width : value.translation.height)
                 }
                 .onEnded { _ in
                     dragging = false
