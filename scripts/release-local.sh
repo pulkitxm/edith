@@ -77,7 +77,7 @@ cleanup() {
   security list-keychains -d user -s $ORIG_KEYCHAINS >/dev/null 2>&1 || true
   security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
   if [ "$COMMITTED" -eq 0 ]; then
-    git checkout -- "${STAGED_FILES[@]}" >/dev/null 2>&1 || true
+    git checkout HEAD -- "${STAGED_FILES[@]}" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -155,6 +155,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 echo "==> committing the release through pukbot"
+git add "${STAGED_FILES[@]}"
 pukbot commit create --repo "$REPO" --branch main --as-app \
   --message "Release ${RELEASE_TAG}" "${STAGED_FILES[@]}" --json
 COMMITTED=1
