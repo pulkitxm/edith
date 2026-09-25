@@ -59,6 +59,8 @@ public enum AttentionTitleCorrelation {
 
     public static func overlap(_ window: String, _ page: String) -> Int {
         guard !window.isEmpty, !page.isEmpty else { return 0 }
+        if window.contains(page) { return page.utf8.count }
+        if page.contains(window) { return window.utf8.count }
         let left = Array(window.utf8)
         let right = Array(page.utf8)
         var previous = [Int](repeating: 0, count: right.count + 1)
@@ -80,7 +82,10 @@ public enum AttentionTitleCorrelation {
     }
 
     public static func corroborates(window: String, page: String) -> Bool {
-        let shared = overlap(window, page)
+        corroborates(shared: overlap(window, page), window: window, page: page)
+    }
+
+    public static func corroborates(shared: Int, window: String, page: String) -> Bool {
         guard shared >= minimumOverlap else { return false }
         return Double(shared) >= minimumRatio * Double(min(window.count, page.count))
     }

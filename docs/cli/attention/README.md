@@ -15,6 +15,8 @@ the collecting process; application duration does not.
 
 - [`ed attention status`](./status.md)
 - [`ed attention summary`](./summary.md)
+- [`ed attention breakdown`](./breakdown.md)
+- [`ed attention agents`](./agents.md)
 - [`ed attention timeline`](./timeline.md)
 - [`ed attention music`](./music.md)
 - [`ed attention categories`](./categories/README.md)
@@ -30,8 +32,15 @@ report agent failures instead of returning an empty summary.
 Summaries resolve overlap before totaling time. A browser heartbeat replaces the
 enclosing browser application for that interval, so Chrome and the active site are
 not counted twice. Idle application and video time stays visible as idle time but is
-not treated as engaged entertainment. Playing audio is reported separately by
-`music` even while the Mac is idle.
+not treated as engaged entertainment, except that a focused tab playing video
+counts as watching. Playing audio is reported separately by `music` even while the
+Mac is idle.
+
+Categories come from your rules first, then from a built-in catalog of common apps
+and sites, then from Jev when a key is configured. Rules can match bundle
+identifiers (with a trailing `*`), domains, URL prefixes, title keywords and Edith
+context such as `page=herdr` or `machine=build-box`, and the most specific match
+wins.
 
 ## Where to go next
 

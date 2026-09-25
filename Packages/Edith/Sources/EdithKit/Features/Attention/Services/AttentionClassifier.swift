@@ -1,0 +1,400 @@
+import Foundation
+
+public struct AttentionJevDecision: Codable, Equatable, Sendable {
+    public static let none = "none"
+
+    public var categoryID: String
+    public var confidence: Double
+    public var decidedAt: Date
+    public var productivity: AttentionProductivity?
+    public var sphere: AttentionSphere?
+
+    public init(
+        categoryID: String, confidence: Double, decidedAt: Date = Date(),
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
+    ) {
+        self.categoryID = categoryID
+        self.confidence = confidence
+        self.decidedAt = decidedAt
+        self.productivity = productivity
+        self.sphere = sphere
+    }
+
+    public var isDecisive: Bool { categoryID != Self.none }
+}
+
+public struct AttentionClassifications: Codable, Equatable, Sendable {
+    public var entities: [String: AttentionJevDecision]
+    public var titles: [String: AttentionJevDecision]
+
+    public init(
+        entities: [String: AttentionJevDecision] = [:],
+        titles: [String: AttentionJevDecision] = [:]
+    ) {
+        self.entities = entities
+        self.titles = titles
+    }
+
+    public static func titleKey(entityID: String, title: String) -> String {
+        entityID + "\u{1F}" + AttentionText.normalizedTitle(title)
+    }
+}
+
+public struct AttentionClassification: Equatable, Sendable {
+    public var entityID: String
+    public var entityName: String
+    public var categoryID: String
+    public var productivity: AttentionProductivity
+    public var sphere: AttentionSphere
+    public var source: AttentionCategorySource
+    public var confidence: Double?
+    public var domain: String?
+}
+
+public enum AttentionEntityID {
+    public static let namedPrefix = "name:"
+
+    public static func named(_ name: String) -> String {
+        namedPrefix + name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    public static func isNamed(_ id: String) -> Bool { id.hasPrefix(namedPrefix) }
+}
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+public enum AttentionText {
+    public static func domain(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let host = URL(string: raw)?.host ?? raw
+        var value = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if value.hasPrefix("www.") { value.removeFirst(4) }
+        return value.isEmpty ? nil : value
+    }
+
+    public static func location(_ raw: String?) -> String? {
+        guard let raw, let components = URLComponents(string: raw), let host = components.host
+        else { return nil }
+        var value = host.lowercased()
+        if value.hasPrefix("www.") { value.removeFirst(4) }
+        var path = components.path
+        while path.hasSuffix("/") { path.removeLast() }
+        return value + path.lowercased()
+    }
+
+    public static func pattern(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for scheme in ["https://", "http://"] where value.hasPrefix(scheme) {
+            value.removeFirst(scheme.count)
+        }
+        if value.hasPrefix("www.") { value.removeFirst(4) }
+        while value.hasSuffix("/") { value.removeLast() }
+        return value
+    }
+
+    public static func project(_ path: String) -> String? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: trimmed).lastPathComponent
+        return name.isEmpty || name == "/" || name == "~" ? nil : name
+    }
+
+    public static func cleanTitle(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("("), let close = value.firstIndex(of: ")"),
+            close > value.index(after: value.startIndex),
+            value[value.index(after: value.startIndex)..<close].allSatisfy(\.isNumber)
+        {
+            value = String(value[value.index(after: close)...])
+                .trimmingCharacters(in: .whitespaces)
+        }
+        return value
+    }
+
+    public static func normalizedTitle(_ raw: String) -> String {
+        String(cleanTitle(raw).lowercased().prefix(200))
+    }
+}
+
+public struct AttentionClassifier {
+    private struct Candidate {
+        var rule: AttentionIdentityRule
+        var isUser: Bool
+        var isIdentity: Bool
+    }
+
+    private let settings: AttentionSettings
+    private let classifications: AttentionClassifications
+    private let specific: [Candidate]
+    private let broad: [Candidate]
+    private var cache: [String: AttentionClassification] = [:]
+
+    public init(
+        settings: AttentionSettings, classifications: AttentionClassifications = .init(),
+        catalog: [AttentionIdentityRule] = AttentionCatalog.rules
+    ) {
+        self.settings = settings
+        self.classifications = classifications
+        let user = settings.rules.filter { !$0.isEmpty }.map {
+            Candidate(rule: $0, isUser: true, isIdentity: $0.isIdentity)
+        }
+        let builtIn = catalog.map {
+            Candidate(
+                rule: $0, isUser: false,
+                isIdentity: $0.isIdentity && AttentionCatalog.identityRuleIDs.contains($0.id))
+        }
+        let ordered = user + builtIn
+        specific = ordered.enumerated().filter { $0.element.rule.specificity > 1 }
+            .sorted {
+                if $0.element.isUser != $1.element.isUser { return $0.element.isUser }
+                if $0.element.rule.specificity != $1.element.rule.specificity {
+                    return $0.element.rule.specificity > $1.element.rule.specificity
+                }
+                return $0.offset < $1.offset
+            }
+            .map(\.element)
+        broad = ordered.filter { $0.rule.specificity == 1 }
+    }
+
+    public mutating func classify(_ event: AttentionEvent) -> AttentionClassification {
+        let key = [
+            event.source.rawValue, event.bundleID ?? event.appName ?? "", event.domain ?? "",
+            event.url ?? "", event.windowTitle ?? "",
+            (event.tags ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                .joined(separator: ","),
+        ].joined(separator: "\u{1F}")
+        if let cached = cache[key] { return cached }
+        let resolved = resolve(event)
+        cache[key] = resolved
+        return resolved
+    }
+
+    public func entityKey(for event: AttentionEvent) -> String {
+        if event.source == .browser, let domain = AttentionText.domain(event.domain ?? event.url) {
+            return "web:\(domain)"
+        }
+        return "app:\(event.bundleID ?? event.appName ?? "unknown")"
+    }
+
+    private func resolve(_ event: AttentionEvent) -> AttentionClassification {
+        let bundleID = event.source == .browser ? nil : event.bundleID?.lowercased()
+        let domain = AttentionText.domain(event.domain ?? event.url)
+        let location = AttentionText.location(event.url)
+        let title = event.windowTitle?.lowercased() ?? ""
+        let tags = event.tags ?? [:]
+        let fallbackID = entityKey(for: event)
+        let fallbackName: String =
+            if event.source == .browser, let domain { domain } else {
+                event.appName ?? event.bundleID ?? "Unknown application"
+            }
+
+        var identity: (candidate: Candidate, score: Int)?
+        var broadMatch: (candidate: Candidate, score: Int)?
+        for candidate in broad {
+            let score = targetScore(candidate.rule, bundleID: bundleID, domain: domain)
+            guard score > 0 else { continue }
+            if broadMatch == nil || score > broadMatch!.score
+                || (score == broadMatch!.score && candidate.isUser && !broadMatch!.candidate.isUser)
+            {
+                broadMatch = (candidate, score)
+            }
+            if candidate.isIdentity,
+                identity == nil || score > identity!.score
+                    || (score == identity!.score && candidate.isUser
+                        && !identity!.candidate.isUser)
+            {
+                identity = (candidate, score)
+            }
+        }
+        let entityID: String
+        let entityName: String
+        if let identity {
+            entityID = AttentionEntityID.named(identity.candidate.rule.name)
+            entityName = identity.candidate.rule.name
+        } else {
+            entityID = fallbackID
+            entityName = fallbackName
+        }
+
+        let matching = specific.filter {
+            matches(
+                $0.rule, bundleID: bundleID, domain: domain, location: location, title: title,
+                tags: tags)
+        }
+        var userBroad: (candidate: Candidate, score: Int)?
+        for candidate in broad where candidate.isUser {
+            let score = targetScore(candidate.rule, bundleID: bundleID, domain: domain)
+            if score > 0, userBroad == nil || score > userBroad!.score {
+                userBroad = (candidate, score)
+            }
+        }
+        let overrides =
+            matching.filter(\.isUser).map(\.rule)
+            + [userBroad?.candidate.rule]
+            .compactMap { $0 }
+        let productivityOverride = overrides.lazy.compactMap(\.productivity).first
+        let sphereOverride = overrides.lazy.compactMap(\.sphere).first
+
+        func result(
+            _ categoryID: String, _ source: AttentionCategorySource, _ confidence: Double?,
+            decision: AttentionJevDecision? = nil
+        ) -> AttentionClassification {
+            let category = settings.category(categoryID)
+            return AttentionClassification(
+                entityID: entityID, entityName: entityName, categoryID: category.id,
+                productivity: productivityOverride ?? decision?.productivity
+                    ?? category.productivity,
+                sphere: sphereOverride ?? decision?.sphere ?? category.sphere, source: source,
+                confidence: confidence, domain: domain)
+        }
+
+        if let candidate = matching.first {
+            return result(candidate.rule.categoryID, candidate.isUser ? .user : .catalog, nil)
+        }
+        if let windowTitle = event.windowTitle, !windowTitle.isEmpty,
+            let decision = classifications.titles[
+                AttentionClassifications.titleKey(entityID: fallbackID, title: windowTitle)],
+            decision.isDecisive
+        {
+            return result(decision.categoryID, .jev, decision.confidence, decision: decision)
+        }
+        if let broadMatch {
+            return result(
+                broadMatch.candidate.rule.categoryID,
+                broadMatch.candidate.isUser ? .user : .catalog, nil)
+        }
+        if let decision = classifications.entities[fallbackID], decision.isDecisive {
+            return result(decision.categoryID, .jev, decision.confidence, decision: decision)
+        }
+        return result(AttentionCatalog.unclassified, .none, nil)
+    }
+
+    private func targetScore(
+        _ rule: AttentionIdentityRule, bundleID: String?, domain: String?
+    ) -> Int {
+        if let bundleID {
+            for raw in rule.bundleIDs {
+                let pattern = raw.lowercased()
+                if pattern == bundleID { return 10_000 }
+                if pattern.hasSuffix("*"), bundleID.hasPrefix(pattern.dropLast()) { return 9_000 }
+            }
+        }
+        guard let domain else { return 0 }
+        var best = 0
+        for raw in rule.domains {
+            let candidate = AttentionText.pattern(raw)
+            guard !candidate.isEmpty else { continue }
+            if domain == candidate || domain.hasSuffix("." + candidate) {
+                best = max(best, candidate.count)
+            }
+        }
+        return best
+    }
+
+    private func matches(
+        _ rule: AttentionIdentityRule, bundleID: String?, domain: String?, location: String?,
+        title: String, tags: [String: String]
+    ) -> Bool {
+        if !rule.bundleIDs.isEmpty || !rule.domains.isEmpty {
+            guard targetScore(rule, bundleID: bundleID, domain: domain) > 0 else { return false }
+        }
+        if !rule.urls.isEmpty {
+            guard let location,
+                rule.urls.contains(where: {
+                    let pattern = AttentionText.pattern($0)
+                    return !pattern.isEmpty && location.hasPrefix(pattern)
+                })
+            else { return false }
+        }
+        if !rule.keywords.isEmpty {
+            guard
+                rule.keywords.contains(where: {
+                    let keyword = $0.trimmingCharacters(in: .whitespaces).lowercased()
+                    return !keyword.isEmpty && title.contains(keyword)
+                })
+            else { return false }
+        }
+        for context in rule.contexts {
+            let parts = context.split(separator: "=", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespaces).lowercased()
+            }
+            guard let key = parts.first, !key.isEmpty else { continue }
+            guard let value = tags.first(where: { $0.key.lowercased() == key })?.value else {
+                return false
+            }
+            if parts.count == 2, value.lowercased() != parts[1] { return false }
+        }
+        return true
+    }
+}
+
+extension AttentionSettings {
+    @discardableResult
+    public mutating func assign(
+        entityID: String, categoryID: String? = nil, name: String? = nil,
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil,
+        fallbackCategoryID: String = AttentionCatalog.unclassified
+    ) -> AttentionIdentityRule? {
+        func apply(_ rule: inout AttentionIdentityRule) {
+            if let categoryID { rule.categoryID = categoryID }
+            if let productivity { rule.productivity = productivity }
+            if let sphere { rule.sphere = sphere }
+        }
+        let parts = entityID.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, !parts[1].isEmpty else { return nil }
+        let value = parts[1]
+        let rename = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var indices: [Int]
+        switch parts[0] {
+        case "name":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity && rules[$0].name.lowercased() == value
+            }
+            if indices.isEmpty,
+                let template = AttentionCatalog.rules.first(where: {
+                    AttentionCatalog.identityRuleIDs.contains($0.id)
+                        && $0.name.lowercased() == value
+                })
+            {
+                rules.append(
+                    AttentionIdentityRule(
+                        name: rename?.isEmpty == false ? rename! : template.name,
+                        categoryID: categoryID ?? template.categoryID,
+                        bundleIDs: template.bundleIDs, domains: template.domains,
+                        productivity: productivity, sphere: sphere))
+                return rules.last
+            }
+        case "app":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity && rules[$0].bundleIDs.contains(value)
+            }
+        case "web":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity
+                    && rules[$0].domains.contains {
+                        AttentionText.pattern($0) == AttentionText.pattern(value)
+                    }
+            }
+        default:
+            return nil
+        }
+        if !indices.isEmpty {
+            for index in indices {
+                apply(&rules[index])
+                if let rename, !rename.isEmpty { rules[index].name = rename }
+            }
+            return rules[indices[0]]
+        }
+        guard parts[0] != "name" else { return nil }
+        rules.append(
+            AttentionIdentityRule(
+                name: rename?.isEmpty == false ? rename! : value,
+                categoryID: categoryID ?? fallbackCategoryID,
+                bundleIDs: parts[0] == "app" ? [value] : [],
+                domains: parts[0] == "web" ? [value] : [], productivity: productivity,
+                sphere: sphere))
+        return rules.last
+    }
+}

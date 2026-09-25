@@ -235,7 +235,8 @@ public enum CompletionEngine {
         case .usageShareCard: return UsageShareCard.allCases.map(\.rawValue) + ["all"]
         case .attentionRange:
             return ["today", "yesterday", "24h", "7d", "30d", "week", "month", "all"]
-        case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
+        case .attentionCategory: return AttentionCatalog.categories.map(\.id)
+        case .attentionBreakdown: return AttentionCLI.dimensions.keys.sorted()
         case .attentionEntity: return []
         case .appAction: return AppActions.all.map(\.name)
         case .runningApp: return runningApps

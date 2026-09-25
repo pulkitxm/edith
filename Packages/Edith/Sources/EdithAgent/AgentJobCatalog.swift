@@ -39,10 +39,14 @@ public enum AgentJobCatalog {
         let cleaner = CleanerEstimateJob(store: store)
         let backup = BackupJob(store: store)
         let companion = CompanionHealthJob(store: store)
-        let sessions = SessionsJob(store: store) {
-            guard let scheduler else { return false }
-            return await scheduler.subscriberCount(topic: .sessions) > 0
-        }
+        let sessions = SessionsJob(
+            store: store,
+            isSubscribed: {
+                guard let scheduler else { return false }
+                return await scheduler.subscriberCount(topic: .sessions) > 0
+            },
+            tracksAgents: { attention?.tracksAgents() ?? false },
+            observe: { hosts in try? await attention?.recordAgents(hosts) })
         return [
             "usage.refresh": { try await usage.run() },
             "usage.limits": { try await limits.run() },

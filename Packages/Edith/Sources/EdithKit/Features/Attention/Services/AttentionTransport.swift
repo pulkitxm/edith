@@ -8,6 +8,20 @@ public enum AttentionOperation {
     public static let summary = "attention.summary"
     public static let backup = "attention.backup"
     public static let restore = "attention.restore"
+    public static let context = "attention.context"
+    public static let categorize = "attention.categorize"
+}
+
+public struct AttentionCategorizeReport: Codable, Equatable, Sendable {
+    public var entities: Int
+    public var titles: Int
+    public var available: Bool
+
+    public init(entities: Int = 0, titles: Int = 0, available: Bool) {
+        self.entities = entities
+        self.titles = titles
+        self.available = available
+    }
 }
 
 public struct AttentionBatch: Codable, Equatable, Sendable {
@@ -97,46 +111,87 @@ public struct AttentionSummaryRequest: Codable, Sendable {
     public let from: Date
     public let to: Date
     public let settings: AttentionSettings?
+    public let comparePeriod: TimeInterval?
+    public let window: AttentionTimeWindow
+    public let parts: Set<AttentionSummaryPart>
 
-    public init(from: Date, to: Date, settings: AttentionSettings? = nil) {
+    public init(
+        from: Date, to: Date, settings: AttentionSettings? = nil,
+        comparePeriod: TimeInterval? = nil, window: AttentionTimeWindow = .all,
+        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases)
+    ) {
         self.from = from
         self.to = to
         self.settings = settings
+        self.comparePeriod = comparePeriod
+        self.window = window
+        self.parts = parts
+    }
+
+    public var previousInterval: DateInterval? {
+        guard let comparePeriod, comparePeriod > 0 else { return nil }
+        return DateInterval(
+            start: from.addingTimeInterval(-comparePeriod),
+            end: max(from.addingTimeInterval(-comparePeriod), to.addingTimeInterval(-comparePeriod))
+        )
     }
 }
 
 public struct AttentionPageSnapshot: Codable, Sendable {
-    public let settings: AttentionSettings
-    public let summary: AttentionSummary
-    public let events: [AttentionEvent]
-    public let focusSessions: [AttentionFocusSession]
-    public let activeFocus: AttentionFocusSession?
-    public let hasStoredEvents: Bool
+    public var settings: AttentionSettings
+    public var summary: AttentionSummary
+    public var focusSessions: [AttentionFocusSession]
+    public var activeFocus: AttentionFocusSession?
+    public var hasStoredEvents: Bool
+    public var classifications: AttentionClassifications
 
     public init(request: AttentionSummaryRequest, repository: AttentionRepository) {
         self.init(
             request: request, repository: repository,
             all: repository.events(from: request.from, to: request.to),
+            previous: request.previousInterval.map {
+                repository.events(from: $0.start, to: $0.end)
+            },
             hasStoredEvents: repository.hasEvents())
     }
 
     public init(
         request: AttentionSummaryRequest, repository: AttentionRepository,
-        all: [AttentionEvent], hasStoredEvents: Bool
+        all: [AttentionEvent], previous: [AttentionEvent]?, hasStoredEvents: Bool,
+        previousTotals: AttentionTotals? = nil, calendar: Calendar = .current
     ) {
         settings = request.settings ?? repository.loadSettings()
-        let analyzer = AttentionAnalyzer()
-        summary = analyzer.summary(
-            events: all, settings: settings, from: request.from, to: request.to)
-        let resolved = analyzer.resolvedPrimaryIntervals(
-            events: all, from: request.from, to: request.to)
-        let media = all.filter { !$0.isPrimaryAttention }
-        events = Array(
-            (resolved + media).sorted { $0.startedAt < $1.startedAt }.reversed().prefix(500))
+        classifications = repository.loadClassifications()
+        let analyzer = AttentionAnalyzer(calendar: calendar)
+        var summary = analyzer.summary(
+            events: request.window.apply(all, calendar: calendar), settings: settings,
+            classifications: classifications, from: request.from, to: request.to)
+        if !request.window.allDays {
+            summary.days.removeAll {
+                !request.window.allows(weekday: calendar.component(.weekday, from: $0.day))
+            }
+        }
+        if let previousTotals {
+            summary.previous = previousTotals
+        } else if let previous, let interval = request.previousInterval {
+            summary.previous =
+                analyzer.summary(
+                    events: request.window.apply(previous, calendar: calendar),
+                    settings: settings, classifications: classifications,
+                    from: interval.start, to: interval.end, detailed: false
+                ).totals
+        }
+        self.summary = summary
         focusSessions = Array(
             repository.focusSessions(from: request.from, to: request.to).reversed())
         activeFocus = repository.activeFocus()
         self.hasStoredEvents = hasStoredEvents
+    }
+
+    public func trimmed(to parts: Set<AttentionSummaryPart>) -> AttentionPageSnapshot {
+        var copy = self
+        copy.summary = summary.trimmed(to: parts)
+        return copy
     }
 }
 
@@ -147,6 +202,21 @@ public enum AttentionBackgroundClient {
         let data = try await client.performInternalAsync(
             AttentionOperation.summary, payload: AgentPayload.encode(request), timeout: 30)
         return try AgentPayload.decode(AttentionPageSnapshot.self, from: data)
+    }
+
+    public static func publish(_ context: AttentionAppContext, client: AgentClient = .shared)
+        async throws
+    {
+        _ = try await client.performInternalAsync(
+            AttentionOperation.context, payload: AgentPayload.encode(context), timeout: 5)
+    }
+
+    public static func categorize(client: AgentClient = .shared) async throws
+        -> AttentionCategorizeReport
+    {
+        let data = try await client.performInternalAsync(
+            AttentionOperation.categorize, payload: Data(), timeout: 120)
+        return try AgentPayload.decode(AttentionCategorizeReport.self, from: data)
     }
 
     public static func backup(client: AgentClient = .shared) async throws {

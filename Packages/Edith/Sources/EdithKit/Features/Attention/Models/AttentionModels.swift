@@ -5,6 +5,7 @@ public enum AttentionEventSource: String, Codable, CaseIterable, Sendable {
     case browser
     case media
     case manual
+    case agent
 }
 
 public enum AttentionPresence: String, Codable, CaseIterable, Sendable {
@@ -19,12 +20,167 @@ public enum AttentionPrivacyLevel: String, Codable, CaseIterable, Sendable {
     case detailed
 }
 
-public enum AttentionCategoryKind: String, Codable, CaseIterable, Sendable {
-    case focus
-    case communication
-    case entertainment
-    case neutral
-    case unclassified
+public enum AttentionProductivity: Int, Codable, CaseIterable, Comparable, Sendable {
+    case veryDistracting = -2
+    case distracting = -1
+    case neutral = 0
+    case productive = 1
+    case veryProductive = 2
+
+    public static let ranked: [AttentionProductivity] = [
+        .veryProductive, .productive, .neutral, .distracting, .veryDistracting,
+    ]
+
+    public static func < (lhs: AttentionProductivity, rhs: AttentionProductivity) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    public var key: String { String(rawValue) }
+
+    public var identifier: String {
+        switch self {
+        case .veryDistracting: "very_distracting"
+        case .distracting: "distracting"
+        case .neutral: "neutral"
+        case .productive: "productive"
+        case .veryProductive: "very_productive"
+        }
+    }
+
+    public init?(identifier: String) {
+        guard let match = Self.allCases.first(where: { $0.identifier == identifier }) else {
+            return nil
+        }
+        self = match
+    }
+
+    public var title: String {
+        switch self {
+        case .veryDistracting: "Very distracting"
+        case .distracting: "Distracting"
+        case .neutral: "Neutral"
+        case .productive: "Productive"
+        case .veryProductive: "Very productive"
+        }
+    }
+
+    public var meaning: String {
+        switch self {
+        case .veryDistracting: "pulls attention away from goals for no real return"
+        case .distracting: "mostly leisure or habit with little lasting value"
+        case .neutral: "necessary overhead, neither advancing nor hurting goals"
+        case .productive: "supports goals, such as learning, coordination or light work"
+        case .veryProductive: "directly produces work, such as building, writing or designing"
+        }
+    }
+
+    public var weight: Double { Double(rawValue + 2) }
+
+    public init(key: String) {
+        self = Int(key).flatMap(AttentionProductivity.init(rawValue:)) ?? .neutral
+    }
+}
+
+public enum AttentionSphere: String, Codable, CaseIterable, Sendable {
+    case work
+    case personal
+    case both
+
+    public var title: String {
+        switch self {
+        case .work: "Work"
+        case .personal: "Personal"
+        case .both: "Work and personal"
+        }
+    }
+}
+
+public enum AttentionTag {
+    public static let page = "page"
+    public static let machine = "machine"
+    public static let agent = "agent"
+    public static let project = "project"
+    public static let session = "session"
+    public static let view = "view"
+    public static let status = "status"
+    public static let repository = "repo"
+    public static let section = "section"
+    public static let search = "search"
+    public static let video = "video"
+    public static let channel = "channel"
+    public static let group = "group"
+    public static let document = "doc"
+    public static let track = "track"
+    public static let passive = "passive"
+    public static let site = "site"
+    public static let about = "about"
+
+    public static let domainSafe: Set<String> = [passive]
+
+    public static let edithSafe: Set<String> = [page, machine, agent, view, status]
+
+    public static func filtered(
+        _ tags: [String: String]?, privacyLevel: AttentionPrivacyLevel,
+        allowed: Set<String> = domainSafe
+    ) -> [String: String]? {
+        guard let tags else { return nil }
+        switch privacyLevel {
+        case .detailed: return tags
+        case .domains: return tags.filter { allowed.contains($0.key) }
+        case .applications: return nil
+        }
+    }
+
+    public static let dimensions = [
+        page, machine, agent, project, repository, section, channel, group, search, document,
+    ]
+
+    public static func title(_ key: String) -> String {
+        switch key {
+        case page: "Edith page"
+        case machine: "Machine"
+        case agent: "Agent"
+        case project: "Project"
+        case session: "Session"
+        case view: "View"
+        case status: "Status"
+        case repository: "Repository"
+        case section: "Site section"
+        case search: "Search"
+        case video: "Video"
+        case channel: "Channel"
+        case group: "Tab group"
+        case document: "Doc"
+        case track: "Track"
+        default: key.capitalized
+        }
+    }
+}
+
+public struct AttentionSignals: Codable, Equatable, Sendable {
+    public var keys: Int
+    public var clicks: Int
+    public var scrolls: Int
+    public var tabs: Int?
+
+    public init(keys: Int = 0, clicks: Int = 0, scrolls: Int = 0, tabs: Int? = nil) {
+        self.keys = max(0, keys)
+        self.clicks = max(0, clicks)
+        self.scrolls = max(0, scrolls)
+        self.tabs = tabs
+    }
+
+    public var isEmpty: Bool { keys == 0 && clicks == 0 && scrolls == 0 && tabs == nil }
+
+    public var interactions: Int { keys + clicks + scrolls }
+
+    public func adding(_ other: AttentionSignals?) -> AttentionSignals {
+        guard let other else { return self }
+        let tabs = [self.tabs, other.tabs].compactMap { $0 }.max()
+        return AttentionSignals(
+            keys: keys &+ other.keys, clicks: clicks &+ other.clicks,
+            scrolls: scrolls &+ other.scrolls, tabs: tabs)
+    }
 }
 
 public struct AttentionMedia: Codable, Equatable, Sendable {
@@ -48,6 +204,29 @@ public struct AttentionMedia: Codable, Equatable, Sendable {
     }
 }
 
+public struct AttentionAudibleTab: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var timestamp: Date
+    public var duration: TimeInterval
+    public var title: String
+    public var url: String?
+    public var domain: String?
+    public var kind: String
+
+    public init(
+        id: UUID = UUID(), timestamp: Date, duration: TimeInterval, title: String,
+        url: String? = nil, domain: String? = nil, kind: String = "audio"
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.duration = duration
+        self.title = title
+        self.url = url
+        self.domain = domain
+        self.kind = kind
+    }
+}
+
 public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
     public var id: UUID
     public var timestamp: Date
@@ -61,12 +240,17 @@ public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
     public var faviconURL: String?
     public var browserProfile: String?
     public var media: [AttentionMedia]
+    public var tags: [String: String]?
+    public var signals: AttentionSignals?
+    public var audible: [AttentionAudibleTab]?
 
     public init(
         id: UUID = UUID(), timestamp: Date, duration: TimeInterval, presence: AttentionPresence,
         appName: String, bundleID: String? = nil, url: String? = nil,
         domain: String? = nil, title: String? = nil, faviconURL: String? = nil,
-        browserProfile: String? = nil, media: [AttentionMedia] = []
+        browserProfile: String? = nil, media: [AttentionMedia] = [],
+        tags: [String: String]? = nil, signals: AttentionSignals? = nil,
+        audible: [AttentionAudibleTab]? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -80,6 +264,9 @@ public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
         self.faviconURL = faviconURL
         self.browserProfile = browserProfile
         self.media = media
+        self.tags = tags
+        self.signals = signals
+        self.audible = audible
     }
 }
 
@@ -115,6 +302,8 @@ public struct AttentionHistoryImport: Codable, Equatable, Sendable {
 }
 
 public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
+    public static let segmentPrefixes = ["browser:", "media:", "agent:"]
+
     public var id: String
     public var startedAt: Date
     public var duration: TimeInterval
@@ -128,13 +317,16 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
     public var faviconURL: String?
     public var browserProfile: String?
     public var media: AttentionMedia?
+    public var tags: [String: String]?
+    public var signals: AttentionSignals?
 
     public init(
         id: String = UUID().uuidString, startedAt: Date, duration: TimeInterval,
         source: AttentionEventSource, presence: AttentionPresence = .active,
         appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil,
         url: String? = nil, domain: String? = nil, faviconURL: String? = nil,
-        browserProfile: String? = nil, media: AttentionMedia? = nil
+        browserProfile: String? = nil, media: AttentionMedia? = nil,
+        tags: [String: String]? = nil, signals: AttentionSignals? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -149,6 +341,8 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
         self.faviconURL = faviconURL
         self.browserProfile = browserProfile
         self.media = media
+        self.tags = tags?.isEmpty == true ? nil : tags
+        self.signals = signals?.isEmpty == true ? nil : signals
     }
 
     public var endedAt: Date { startedAt.addingTimeInterval(duration) }
@@ -157,11 +351,30 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
         source == .application || source == .browser
     }
 
+    public var isSegment: Bool {
+        Self.segmentPrefixes.contains { id.hasPrefix($0) }
+    }
+
+    public func tag(_ key: String) -> String? {
+        tags?[key]
+    }
+
     public func clipped(from: Date, to: Date) -> AttentionEvent? {
         let start = max(startedAt, from)
         let end = min(endedAt, to)
         guard end > start else { return nil }
         var copy = self
+        if duration > 0, let signals, end.timeIntervalSince(start) < duration {
+            let low = max(0, min(1, start.timeIntervalSince(startedAt) / duration))
+            let high = max(0, min(1, end.timeIntervalSince(startedAt) / duration))
+            func portion(_ value: Int) -> Int {
+                Int((Double(value) * high).rounded(.down))
+                    - Int((Double(value) * low).rounded(.down))
+            }
+            copy.signals = AttentionSignals(
+                keys: portion(signals.keys), clicks: portion(signals.clicks),
+                scrolls: portion(signals.scrolls), tabs: signals.tabs)
+        }
         copy.startedAt = start
         copy.duration = end.timeIntervalSince(start)
         return copy
@@ -170,7 +383,8 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
     public func canMerge(with next: AttentionEvent, pulseTime: TimeInterval) -> Bool {
         guard source == next.source, presence == next.presence, appName == next.appName,
             bundleID == next.bundleID, windowTitle == next.windowTitle, url == next.url,
-            domain == next.domain, browserProfile == next.browserProfile, media == next.media
+            domain == next.domain, browserProfile == next.browserProfile, media == next.media,
+            (tags ?? [:]) == (next.tags ?? [:])
         else { return false }
         return next.startedAt.timeIntervalSince(endedAt) <= pulseTime
             && next.startedAt.timeIntervalSince(endedAt) >= -pulseTime
@@ -181,6 +395,9 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
         let end = max(endedAt, next.endedAt)
         copy.duration = end.timeIntervalSince(startedAt)
         copy.faviconURL = next.faviconURL ?? faviconURL
+        if let signals = next.signals {
+            copy.signals = (copy.signals ?? AttentionSignals()).adding(signals)
+        }
         return copy
     }
 }
@@ -188,15 +405,53 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
 public struct AttentionCategory: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var name: String
-    public var kind: AttentionCategoryKind
-    public var color: String
+    public var productivity: AttentionProductivity
+    public var sphere: AttentionSphere
 
-    public init(id: String, name: String, kind: AttentionCategoryKind, color: String) {
+    public init(
+        id: String, name: String, productivity: AttentionProductivity = .neutral,
+        sphere: AttentionSphere = .both
+    ) {
         self.id = id
         self.name = name
-        self.kind = kind
-        self.color = color
+        self.productivity = productivity
+        self.sphere = sphere
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, productivity, sphere, kind
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let identifier = try container.decode(String.self, forKey: .id)
+        id = identifier
+        name = try container.decode(String.self, forKey: .name)
+        let builtIn = AttentionCatalog.categories.first { $0.id == identifier }
+        let legacy: AttentionProductivity? =
+            switch try container.decodeIfPresent(String.self, forKey: .kind) {
+            case "focus": .productive
+            case "entertainment": .distracting
+            case .some: .neutral
+            case .none: nil
+            }
+        productivity =
+            try container.decodeIfPresent(AttentionProductivity.self, forKey: .productivity)
+            ?? builtIn?.productivity ?? legacy ?? .neutral
+        sphere =
+            try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)
+            ?? builtIn?.sphere ?? .both
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(productivity, forKey: .productivity)
+        try container.encode(sphere, forKey: .sphere)
+    }
+
+    public var isUnclassified: Bool { id == AttentionCatalog.unclassified }
 }
 
 public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable {
@@ -205,16 +460,63 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
     public var categoryID: String
     public var bundleIDs: [String]
     public var domains: [String]
+    public var urls: [String]
+    public var keywords: [String]
+    public var contexts: [String]
+    public var productivity: AttentionProductivity?
+    public var sphere: AttentionSphere?
 
     public init(
         id: String = UUID().uuidString, name: String, categoryID: String,
-        bundleIDs: [String] = [], domains: [String] = []
+        bundleIDs: [String] = [], domains: [String] = [], urls: [String] = [],
+        keywords: [String] = [], contexts: [String] = [],
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
     ) {
         self.id = id
         self.name = name
         self.categoryID = categoryID
         self.bundleIDs = bundleIDs
         self.domains = domains
+        self.urls = urls
+        self.keywords = keywords
+        self.contexts = contexts
+        self.productivity = productivity
+        self.sphere = sphere
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, categoryID, bundleIDs, domains, urls, keywords, contexts, productivity,
+            sphere
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        categoryID = try container.decode(String.self, forKey: .categoryID)
+        bundleIDs = try container.decodeIfPresent([String].self, forKey: .bundleIDs) ?? []
+        domains = try container.decodeIfPresent([String].self, forKey: .domains) ?? []
+        urls = try container.decodeIfPresent([String].self, forKey: .urls) ?? []
+        keywords = try container.decodeIfPresent([String].self, forKey: .keywords) ?? []
+        contexts = try container.decodeIfPresent([String].self, forKey: .contexts) ?? []
+        productivity = try container.decodeIfPresent(
+            AttentionProductivity.self, forKey: .productivity)
+        sphere = try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)
+    }
+
+    public var isIdentity: Bool {
+        (!bundleIDs.isEmpty || !domains.isEmpty) && urls.isEmpty && keywords.isEmpty
+            && contexts.isEmpty
+    }
+
+    public var isEmpty: Bool {
+        bundleIDs.isEmpty && domains.isEmpty && urls.isEmpty && keywords.isEmpty
+            && contexts.isEmpty
+    }
+
+    public var specificity: Int {
+        (urls.isEmpty ? 0 : 8) + (keywords.isEmpty ? 0 : 8) + (contexts.isEmpty ? 0 : 8)
+            + (bundleIDs.isEmpty && domains.isEmpty ? 0 : 1)
     }
 }
 
@@ -230,15 +532,24 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     public var serverToken: String
     public var categories: [AttentionCategory]
     public var rules: [AttentionIdentityRule]
+    public var agentTrackingEnabled: Bool
+    public var mediaTrackingEnabled: Bool
+    public var jevCategorizationEnabled: Bool
+    public var focusBlockMinimum: TimeInterval
+    public var ignoredBundleIDs: [String]
+    public var profileNote: String
 
     public init(
         isEnabled: Bool = false, trackingEnabled: Bool = false,
         browserTrackingEnabled: Bool = false,
-        idleThreshold: TimeInterval = 300, privacyLevel: AttentionPrivacyLevel = .domains,
-        windowTitlesEnabled: Bool = false, iCloudBackupEnabled: Bool = false,
+        idleThreshold: TimeInterval = 300, privacyLevel: AttentionPrivacyLevel = .detailed,
+        windowTitlesEnabled: Bool = true, iCloudBackupEnabled: Bool = false,
         serverPort: UInt16 = 52728, serverToken: String = UUID().uuidString,
-        categories: [AttentionCategory] = AttentionSettings.defaultCategories,
-        rules: [AttentionIdentityRule] = AttentionSettings.defaultRules
+        categories: [AttentionCategory] = AttentionCatalog.categories,
+        rules: [AttentionIdentityRule] = [], agentTrackingEnabled: Bool = true,
+        mediaTrackingEnabled: Bool = true, jevCategorizationEnabled: Bool = true,
+        focusBlockMinimum: TimeInterval = 1_500, ignoredBundleIDs: [String] = [],
+        profileNote: String = ""
     ) {
         self.isEnabled = isEnabled
         self.trackingEnabled = trackingEnabled
@@ -251,6 +562,13 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         self.serverToken = serverToken
         self.categories = categories
         self.rules = rules
+        self.agentTrackingEnabled = agentTrackingEnabled
+        self.mediaTrackingEnabled = mediaTrackingEnabled
+        self.jevCategorizationEnabled = jevCategorizationEnabled
+        self.focusBlockMinimum = focusBlockMinimum
+        self.ignoredBundleIDs = ignoredBundleIDs
+        self.profileNote = profileNote
+        normalizeCategories()
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -265,6 +583,12 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         case serverToken
         case categories
         case rules
+        case agentTrackingEnabled
+        case mediaTrackingEnabled
+        case jevCategorizationEnabled
+        case focusBlockMinimum
+        case ignoredBundleIDs
+        case profileNote
     }
 
     public init(from decoder: Decoder) throws {
@@ -282,41 +606,35 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         serverToken = try container.decode(String.self, forKey: .serverToken)
         categories = try container.decode([AttentionCategory].self, forKey: .categories)
         rules = try container.decode([AttentionIdentityRule].self, forKey: .rules)
+        agentTrackingEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .agentTrackingEnabled) ?? true
+        mediaTrackingEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .mediaTrackingEnabled) ?? true
+        jevCategorizationEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .jevCategorizationEnabled) ?? true
+        focusBlockMinimum =
+            try container.decodeIfPresent(TimeInterval.self, forKey: .focusBlockMinimum) ?? 1_500
+        ignoredBundleIDs =
+            try container.decodeIfPresent([String].self, forKey: .ignoredBundleIDs) ?? []
+        profileNote = try container.decodeIfPresent(String.self, forKey: .profileNote) ?? ""
+        normalizeCategories()
     }
 
-    public static let defaultCategories = [
-        AttentionCategory(id: "focus", name: "Focused work", kind: .focus, color: "5B8FF9"),
-        AttentionCategory(
-            id: "communication", name: "Communication", kind: .communication, color: "61DDAA"),
-        AttentionCategory(
-            id: "entertainment", name: "Entertainment", kind: .entertainment, color: "F6BD16"),
-        AttentionCategory(id: "neutral", name: "Neutral", kind: .neutral, color: "65789B"),
-        AttentionCategory(
-            id: "unclassified", name: "Unclassified", kind: .unclassified, color: "A0A7B4"),
-    ]
+    public mutating func normalizeCategories() {
+        var seen = Set<String>()
+        categories = categories.filter { seen.insert($0.id).inserted }
+        for category in AttentionCatalog.categories where !seen.contains(category.id) {
+            categories.append(category)
+            seen.insert(category.id)
+        }
+    }
 
-    public static let defaultRules = [
-        AttentionIdentityRule(
-            name: "WhatsApp", categoryID: "communication",
-            bundleIDs: ["net.whatsapp.WhatsApp", "net.whatsapp.WhatsAppSMB"],
-            domains: ["web.whatsapp.com"]),
-        AttentionIdentityRule(
-            name: "Slack", categoryID: "communication",
-            bundleIDs: ["com.tinyspeck.slackmacgap"], domains: ["app.slack.com"]),
-        AttentionIdentityRule(
-            name: "Discord", categoryID: "communication",
-            bundleIDs: ["com.hnc.Discord"], domains: ["discord.com"]),
-        AttentionIdentityRule(
-            name: "Spotify", categoryID: "entertainment",
-            bundleIDs: ["com.spotify.client"], domains: ["open.spotify.com"]),
-        AttentionIdentityRule(
-            name: "YouTube", categoryID: "entertainment", domains: ["youtube.com"]),
-        AttentionIdentityRule(
-            name: "Netflix", categoryID: "entertainment", domains: ["netflix.com"]),
-        AttentionIdentityRule(
-            name: "Prime Video", categoryID: "entertainment",
-            domains: ["primevideo.com"]),
-    ]
+    public func category(_ id: String) -> AttentionCategory {
+        categories.first { $0.id == id } ?? categories.first {
+            $0.id == AttentionCatalog.unclassified
+        }
+            ?? AttentionCatalog.categories.last!
+    }
 }
 
 public struct AttentionFocusSession: Codable, Equatable, Identifiable, Sendable {
@@ -338,77 +656,14 @@ public struct AttentionFocusSession: Codable, Equatable, Identifiable, Sendable 
     }
 }
 
-public struct AttentionEntity: Codable, Equatable, Identifiable, Sendable {
-    public var id: String
-    public var name: String
-    public var category: AttentionCategory
-    public var source: AttentionEventSource
-    public var duration: TimeInterval
-    public var bundleID: String?
-    public var faviconURL: String?
+public struct AttentionAppContext: Codable, Equatable, Sendable {
+    public var bundleID: String
+    public var tags: [String: String]
+    public var windowTitle: String?
 
-    public init(
-        id: String, name: String, category: AttentionCategory, source: AttentionEventSource,
-        duration: TimeInterval, bundleID: String? = nil, faviconURL: String? = nil
-    ) {
-        self.id = id
-        self.name = name
-        self.category = category
-        self.source = source
-        self.duration = duration
+    public init(bundleID: String, tags: [String: String], windowTitle: String? = nil) {
         self.bundleID = bundleID
-        self.faviconURL = faviconURL
-    }
-}
-
-public struct AttentionMusicSummary: Codable, Equatable, Identifiable, Sendable {
-    public var id: String
-    public var title: String
-    public var artist: String?
-    public var album: String?
-    public var service: String
-    public var duration: TimeInterval
-
-    public init(
-        id: String, title: String, artist: String?, album: String?, service: String,
-        duration: TimeInterval
-    ) {
-        self.id = id
-        self.title = title
-        self.artist = artist
-        self.album = album
-        self.service = service
-        self.duration = duration
-    }
-}
-
-public struct AttentionSummary: Codable, Equatable, Sendable {
-    public var from: Date
-    public var to: Date
-    public var activeDuration: TimeInterval
-    public var idleDuration: TimeInterval
-    public var focusedDuration: TimeInterval
-    public var communicationDuration: TimeInterval
-    public var entertainmentDuration: TimeInterval
-    public var contextSwitches: Int
-    public var entities: [AttentionEntity]
-    public var music: [AttentionMusicSummary]
-
-    public init(
-        from: Date, to: Date, activeDuration: TimeInterval, idleDuration: TimeInterval,
-        focusedDuration: TimeInterval, communicationDuration: TimeInterval,
-        entertainmentDuration: TimeInterval, contextSwitches: Int,
-        entities: [AttentionEntity], music: [AttentionMusicSummary]
-    ) {
-        self.from = from
-        self.to = to
-        self.activeDuration = activeDuration
-        self.idleDuration = idleDuration
-        self.focusedDuration = focusedDuration
-        self.communicationDuration = communicationDuration
-        self.entertainmentDuration = entertainmentDuration
-        self.contextSwitches = contextSwitches
-        self.entities = entities
-        self.music = music
+        self.tags = tags
+        self.windowTitle = windowTitle
     }
 }

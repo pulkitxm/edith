@@ -37,6 +37,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case usageRange
     case usageShareCard
     case attentionRange
+    case attentionBreakdown
     case attentionEntity
     case attentionCategory
     case downloadKind
@@ -391,6 +392,12 @@ public enum CommandTree {
         "ed attention status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention summary": Spec(
             options: ["--json", "--help", "--range"], optionValues: ["--range": .attentionRange]),
+        "ed attention breakdown": Spec(
+            options: ["--json", "--help", "--range", "--limit", "--by"],
+            optionValues: ["--range": .attentionRange, "--by": .attentionBreakdown]),
+        "ed attention agents": Spec(
+            options: ["--json", "--help", "--range", "--limit"],
+            optionValues: ["--range": .attentionRange]),
         "ed attention timeline": Spec(
             options: ["--json", "--help", "--range", "--limit"],
             optionValues: ["--range": .attentionRange]),
@@ -398,8 +405,9 @@ public enum CommandTree {
             options: ["--json", "--help", "--range", "--limit"],
             optionValues: ["--range": .attentionRange]),
         "ed attention categories ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention categories auto": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention categories set": Spec(
-            options: ["--json", "--help", "--name"],
+            options: ["--json", "--help", "--name", "--productivity", "--sphere"],
             arguments: [.attentionEntity, .attentionCategory]),
         "ed attention focus status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),

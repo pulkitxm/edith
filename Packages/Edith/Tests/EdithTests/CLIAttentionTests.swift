@@ -76,15 +76,20 @@ import Testing
                     source: .application, appName: "Writing", bundleID: "com.example.Writing"))
             let command = await CLIProbe.capture([
                 "attention", "categories", "set", "app:com.example.Writing", "focus",
-                "--name", "Writing", "--json",
+                "--name", "Writing", "--productivity", "very_productive", "--sphere", "work",
+                "--json",
             ])
             #expect(command.code == 0)
             #expect(command.object?["categoryID"] as? String == "focus")
+            #expect(command.object?["productivity"] as? String == "very_productive")
             let summary = await CLIProbe.capture([
                 "attention", "summary", "--range", "24h", "--json",
             ])
             #expect(summary.code == 0)
-            #expect((summary.object?["focusedSeconds"] as? NSNumber)?.doubleValue == 300)
+            #expect((summary.object?["productiveSeconds"] as? NSNumber)?.doubleValue == 300)
+            let levels = summary.object?["productivity"] as? [String: Any]
+            #expect((levels?["very_productive"] as? NSNumber)?.doubleValue == 300)
+            #expect((summary.object?["pulse"] as? NSNumber)?.doubleValue == 100)
         }
     }
 

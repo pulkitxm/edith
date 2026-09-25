@@ -29,6 +29,8 @@ public final class SessionsJob: @unchecked Sendable {
     private let defaults: UserDefaults
     private let notify: @Sendable ([HerdrHostSnapshot]) async throws -> Void
     private let now: @Sendable () -> Date
+    private let tracksAgents: @Sendable () -> Bool
+    private let observe: @Sendable ([HerdrHostSnapshot]) async -> Void
     private let lock = NSLock()
     private var remoteCollectedAt = Date.distantPast
     private var remoteHosts: [HerdrHostSnapshot] = []
@@ -44,8 +46,12 @@ public final class SessionsJob: @unchecked Sendable {
         collect: @escaping @Sendable (HerdrCollectScope) async -> [HerdrHostSnapshot] = {
             await HerdrCollector.collect($0)
         },
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        tracksAgents: @escaping @Sendable () -> Bool = { false },
+        observe: @escaping @Sendable ([HerdrHostSnapshot]) async -> Void = { _ in }
     ) {
+        self.tracksAgents = tracksAgents
+        self.observe = observe
         self.store = store
         self.isSubscribed = isSubscribed
         self.defaults = defaults
@@ -55,7 +61,7 @@ public final class SessionsJob: @unchecked Sendable {
     }
 
     public func run() async throws -> Data? {
-        let alerts = AgentAttentionSettings(defaults: defaults).anyEnabled
+        let alerts = AgentAttentionSettings(defaults: defaults).anyEnabled || tracksAgents()
         let subscribed = await isSubscribed()
         guard
             let scope = SessionsTally.scope(
@@ -65,6 +71,7 @@ public final class SessionsJob: @unchecked Sendable {
         let collected = await collect(scope)
         let snapshot = SessionsTally.snapshot(hosts: merged(collected, scope: scope))
         try await notify(collected)
+        await observe(snapshot.hosts)
         SidebarBadgeStore.recordSessions(working: snapshot.working)
         try? record(snapshot)
         return try AgentPayload.encode(snapshot)

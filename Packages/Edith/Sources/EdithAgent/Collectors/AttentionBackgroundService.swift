@@ -13,7 +13,7 @@ public actor AttentionBackgroundService {
     private let repository: AttentionRepository
     private let tracking: AttentionTrackingRuntime
     private let cloudDirectory: URL
-    private let defaults: UserDefaults
+    private nonisolated(unsafe) let defaults: UserDefaults
     private let cloudAvailable: @Sendable () -> Bool
     private var server: AttentionIngestionServer?
     private var serverSettings: AttentionSettings?
@@ -22,15 +22,24 @@ public actor AttentionBackgroundService {
     private var backupTask: Task<Void, Error>?
     private var restoreTask: Task<Void, Error>?
     private var refreshTask: Task<Void, Never>?
-    private var summaryTasks: [UUID: Task<AttentionPageSnapshot, Error>] = [:]
+    private var summaryTasks: [String: AttentionSummaryFlight] = [:]
+    private var summaryCache: [AttentionSummaryCacheEntry] = []
     private var stopped = false
+    private var agentRecorder = AttentionAgentRecorder()
+    private let decider: @Sendable () async -> JevDeciding?
+    private var categorizeTask: Task<AttentionCategorizeReport, Error>?
+    private var lastCategorizedAt: Date?
 
     public init(
         store: AgentStore, root: URL = AttentionPaths.root,
         cloudDirectory: URL = AppData.cloudDir.appendingPathComponent("Attention"),
         defaults: UserDefaults = SharedDefaults.store,
-        cloudAvailable: @escaping @Sendable () -> Bool = { AppData.cloudAvailable }
+        cloudAvailable: @escaping @Sendable () -> Bool = { AppData.cloudAvailable },
+        decider: @escaping @Sendable () async -> JevDeciding? = {
+            AgentJev.engine.isConfigured ? AgentJev.engine : nil
+        }
     ) {
+        self.decider = decider
         let events = AttentionEventStore(store: store)
         self.events = events
         let repository = AttentionRepository(root: root, eventSink: events)
@@ -42,10 +51,11 @@ public actor AttentionBackgroundService {
     }
 
     deinit {
+        categorizeTask?.cancel()
         backupTask?.cancel()
         restoreTask?.cancel()
         refreshTask?.cancel()
-        for task in summaryTasks.values { task.cancel() }
+        for flight in summaryTasks.values { flight.task.cancel() }
         server?.stop()
         if let observation { IPC.stopObserving(observation) }
     }
@@ -96,6 +106,12 @@ public actor AttentionBackgroundService {
             server = nil
             serverSettings = nil
         }
+        if enabled, settings.isEnabled, settings.jevCategorizationEnabled, categorizeTask == nil,
+            now.timeIntervalSince(lastCategorizedAt ?? .distantPast) >= 1_800
+        {
+            lastCategorizedAt = now
+            Task { _ = try? await self.categorize() }
+        }
         if settings.iCloudBackupEnabled, cloudAvailable(),
             now.timeIntervalSince(lastBackupAt ?? .distantPast) >= 900
         {
@@ -109,11 +125,14 @@ public actor AttentionBackgroundService {
 
     public func stop() async {
         stopped = true
+        let categorizing = categorizeTask
+        categorizeTask = nil
+        categorizing?.cancel()
         await tracking.stop()
         let backup = backupTask
         let restore = restoreTask
         let refresh = refreshTask
-        let summaries = Array(summaryTasks.values)
+        let summaries = summaryTasks.values.map(\.task)
         backupTask = nil
         restoreTask = nil
         refreshTask = nil
@@ -145,6 +164,73 @@ public actor AttentionBackgroundService {
         return try await spool.health()
     }
 
+    public func categorize(now: Date = Date()) async throws -> AttentionCategorizeReport {
+        guard !stopped else { throw CancellationError() }
+        if let categorizeTask { return try await categorizeTask.value }
+        let settings = repository.loadSettings()
+        guard settings.jevCategorizationEnabled, let decider = await decider() else {
+            return AttentionCategorizeReport(available: false)
+        }
+        try importSpool()
+        let events = events
+        let repository = repository
+        let task = Task.detached(priority: .utility) { () throws -> AttentionCategorizeReport in
+            let from = now.addingTimeInterval(-7 * 86_400)
+            let classifications = repository.loadClassifications()
+            let summary = AttentionAnalyzer().summary(
+                events: try events.events(from: from, to: now), settings: settings,
+                classifications: classifications, from: from, to: now)
+            let (next, report) = await AttentionJevCategorizer(
+                describeApp: { AttentionAppDescriptor.describe(bundleID: $0) }
+            ).run(
+                summary: summary, settings: settings, classifications: classifications,
+                decider: decider, now: now)
+            try Task.checkCancellation()
+            try repository.updateClassifications { current in
+                current.entities.merge(next.entities) { _, latest in latest }
+                current.titles.merge(next.titles) { _, latest in latest }
+            }
+            return report
+        }
+        categorizeTask = task
+        defer {
+            categorizeTask = nil
+            lastCategorizedAt = now
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    public nonisolated func tracksAgents() -> Bool {
+        let settings = repository.loadSettings()
+        return defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled) && settings.isEnabled
+            && settings.agentTrackingEnabled
+    }
+
+    public func recordAgents(_ hosts: [HerdrHostSnapshot], now: Date = Date()) throws {
+        guard !stopped else { return }
+        let settings = repository.loadSettings()
+        guard defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled), settings.isEnabled,
+            settings.agentTrackingEnabled
+        else {
+            agentRecorder = AttentionAgentRecorder()
+            return
+        }
+        var observed = agentRecorder.observe(hosts, now: now)
+        guard !observed.isEmpty else { return }
+        if !settings.windowTitlesEnabled {
+            for index in observed.indices { observed[index].windowTitle = nil }
+        }
+        try events.record(AttentionBatch(events: observed), now: now)
+    }
+
+    public nonisolated func updateContext(_ context: AttentionAppContext) {
+        AttentionContextBoard.shared.update(context)
+    }
+
     public func record(_ batch: AttentionBatch) throws {
         try importSpool()
         try events.record(batch)
@@ -160,32 +246,77 @@ public actor AttentionBackgroundService {
         return try events.hasEvents()
     }
 
-    public func summary(_ request: AttentionSummaryRequest) async throws -> AttentionPageSnapshot {
+    public func summary(_ request: AttentionSummaryRequest, now: Date = Date()) async throws
+        -> AttentionPageSnapshot
+    {
         guard !stopped else { throw CancellationError() }
-        guard summaryTasks.count < 2 else {
-            throw AgentError(
-                .unavailable, "Attention is processing two summaries. Try again shortly.")
-        }
         try importSpool()
+        let settings = request.settings ?? repository.loadSettings()
+        let key = try summaryKey(request, settings: settings)
+        let live = request.to > now.addingTimeInterval(-120)
+        if let index = summaryCache.firstIndex(where: { entry in
+            entry.key == key
+                && (live
+                    ? now.timeIntervalSince(entry.computedAt) <= 10
+                        && entry.to >= request.to.addingTimeInterval(-15)
+                    : entry.to == request.to)
+        }) {
+            let entry = summaryCache.remove(at: index)
+            summaryCache.insert(entry, at: 0)
+            return entry.snapshot.trimmed(to: request.parts)
+        }
+        if let flight = summaryTasks[key] {
+            return try await flight.task.value.trimmed(to: request.parts)
+        }
+        if summaryTasks.count >= 3,
+            let oldest = summaryTasks.min(by: { $0.value.startedAt < $1.value.startedAt })
+        {
+            oldest.value.task.cancel()
+            summaryTasks[oldest.key] = nil
+        }
         let events = events
         let repository = repository
-        let id = UUID()
-        let task = Task.detached(priority: .userInitiated) {
+        let full = AttentionSummaryRequest(
+            from: request.from, to: request.to, settings: settings,
+            comparePeriod: request.comparePeriod, window: request.window)
+        let task = Task.detached(priority: .userInitiated) { () throws -> AttentionPageSnapshot in
+            try Task.checkCancellation()
+            let previous = try full.previousInterval.map {
+                try events.events(from: $0.start, to: $0.end)
+            }
             try Task.checkCancellation()
             let result = try AttentionPageSnapshot(
-                request: request, repository: repository,
-                all: events.events(from: request.from, to: request.to),
+                request: full, repository: repository,
+                all: events.events(from: full.from, to: full.to), previous: previous,
                 hasStoredEvents: events.hasEvents())
             try Task.checkCancellation()
             return result
         }
-        summaryTasks[id] = task
-        defer { summaryTasks[id] = nil }
-        return try await withTaskCancellationHandler {
-            try await task.value
-        } onCancel: {
-            task.cancel()
-        }
+        let id = UUID()
+        summaryTasks[key] = AttentionSummaryFlight(id: id, task: task, startedAt: now)
+        defer { if summaryTasks[key]?.id == id { summaryTasks[key] = nil } }
+        let snapshot = try await task.value
+        summaryCache.removeAll { $0.key == key }
+        summaryCache.insert(
+            AttentionSummaryCacheEntry(
+                key: key, to: request.to, computedAt: Date(), snapshot: snapshot),
+            at: 0)
+        if summaryCache.count > 6 { summaryCache.removeLast(summaryCache.count - 6) }
+        return snapshot.trimmed(to: request.parts)
+    }
+
+    private func summaryKey(_ request: AttentionSummaryRequest, settings: AttentionSettings)
+        throws -> String
+    {
+        var settings = settings
+        settings.serverToken = ""
+        settings.serverPort = 0
+        let classifications = try AgentPayload.encode(repository.loadClassifications())
+        let identity = try AgentPayload.encode(
+            AttentionSummaryIdentity(
+                from: request.from, window: request.window, comparePeriod: request.comparePeriod,
+                settings: settings))
+        return "\(identity.hashValue)|\(classifications.hashValue)|\(identity.count)"
     }
 
     @discardableResult
@@ -336,6 +467,16 @@ public enum AttentionBackgroundOperations {
             let request = try AgentPayload.decode(AttentionSummaryRequest.self, from: payload)
             return try await AgentPayload.encode(service.summary(request))
         }
+        await runtime.register(operation: AttentionOperation.context) { payload in
+            guard payload.count <= 8_192 else {
+                throw AgentError(.refused, "Attention context exceeds its size limit.")
+            }
+            service.updateContext(try AgentPayload.decode(AttentionAppContext.self, from: payload))
+            return Data()
+        }
+        await runtime.register(operation: AttentionOperation.categorize) { _ in
+            try await AgentPayload.encode(service.categorize())
+        }
         await runtime.register(operation: AttentionOperation.backup) { _ in
             try await service.backup()
             return Data()
@@ -345,4 +486,24 @@ public enum AttentionBackgroundOperations {
             return Data()
         }
     }
+}
+
+struct AttentionSummaryFlight {
+    let id: UUID
+    let task: Task<AttentionPageSnapshot, Error>
+    let startedAt: Date
+}
+
+struct AttentionSummaryCacheEntry {
+    let key: String
+    let to: Date
+    let computedAt: Date
+    let snapshot: AttentionPageSnapshot
+}
+
+private struct AttentionSummaryIdentity: Encodable {
+    let from: Date
+    let window: AttentionTimeWindow
+    let comparePeriod: TimeInterval?
+    let settings: AttentionSettings
 }
