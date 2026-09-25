@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import Edith
 
@@ -96,5 +97,26 @@ import Testing
         #expect(
             VideoExportQuality.available(for: CGSize(width: 640, height: 360))
                 == [.source])
+    }
+
+    @Test func longZoomLengthCanReachTheNextZoomOrSourceEnd() throws {
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic.mov"), duration: 30, width: 640, height: 360)
+        project.addZoom(startMs: 1_000, endMs: 3_000, depth: 4, x: 0.5, y: 0.5)
+        let id = try #require(project.zooms.first?.id)
+        let model = VideoEditorModel()
+        defer { model.close() }
+        model.project = project
+        model.editingZoomID = id
+        #expect(model.maximumZoomDuration == 29)
+        project.updateZoom(id, duration: 14)
+        #expect(project.zooms.first?.endMs == 15_000)
+        project.addZoom(startMs: 20_000, endMs: 22_000, depth: 2, x: 0.5, y: 0.5)
+        model.project = project
+        #expect(model.maximumZoomDuration == 19)
+        model.setZoomDuration(25)
+        #expect(model.zoomDuration == 19)
+        #expect(model.project?.zooms.first?.endMs == 20_000)
     }
 }
