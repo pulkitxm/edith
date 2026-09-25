@@ -45,9 +45,10 @@ make release
 
 `make release` resolves the next version, builds and signs the release app,
 packages and verifies the DMG, generates the signed Sparkle appcast, stamps the
-version files and cask, commits and tags on `main`, pushes, and publishes the
-GitHub release with its assets through Pukbot. Use `make release-dry` to build
-and verify without committing or publishing.
+version files and cask, then commits and tags on `main` and publishes the GitHub
+release with its assets, all through Pukbot so the automated release commit is an
+app-authored bot commit. Use `make release-dry` to build and verify without
+committing or publishing.
 
 Requirements:
 

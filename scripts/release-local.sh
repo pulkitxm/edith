@@ -154,15 +154,22 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-echo "==> committing, tagging, and pushing"
-git commit "${STAGED_FILES[@]}" -m "Release ${RELEASE_TAG}"
-git tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"
+echo "==> committing the release through pukbot"
+pukbot commit create --repo "$REPO" --branch main --as-app \
+  --message "Release ${RELEASE_TAG}" "${STAGED_FILES[@]}" --json
 COMMITTED=1
-git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
+git fetch origin main --tags --quiet
+RELEASE_SHA="$(git rev-parse origin/main)"
+git reset --hard origin/main --quiet
+
+echo "==> tagging ${RELEASE_TAG} through pukbot"
+pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
+  --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json
+git fetch origin --tags --quiet
 
 echo "==> publishing the GitHub release"
 pukbot release create "$RELEASE_TAG" --repo "$REPO" --name "Edith $RELEASE_TAG" \
-  --target "$(git rev-parse HEAD)" --json
+  --target "$RELEASE_SHA" --json
 RELEASE_ID="$(gh api "repos/${REPO}/releases/tags/${RELEASE_TAG}" --jq .id)"
 [ -n "$RELEASE_ID" ] || { echo "release blocked: could not resolve the release id" >&2; exit 1; }
 pukbot release upload-asset "$RELEASE_ID" Edith.dmg --repo "$REPO" --json
