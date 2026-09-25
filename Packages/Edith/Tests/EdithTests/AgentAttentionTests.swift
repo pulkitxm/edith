@@ -86,11 +86,14 @@ private struct AttentionFixture {
         try? FileManager.default.removeItem(at: root)
     }
 
-    func agent(_ status: HerdrAgentStatus, pane: String = "p1") -> HerdrAgent {
+    func agent(_ status: HerdrAgentStatus, pane: String = "p1", sequence: Int? = nil)
+        -> HerdrAgent
+    {
         HerdrAgent(
             id: "local|s|\(pane)", machineID: "local", machineName: "This Mac",
             machineIsLocal: true, sshTarget: nil, session: "s", pane: pane, kind: "Claude Code",
-            status: status, title: "Fix login", workspace: "edith", cwd: "/work/edith")
+            status: status, title: "Fix login", workspace: "edith", cwd: "/work/edith",
+            stateSequence: sequence)
     }
 
     func observe(_ agents: [HerdrAgent], reachable: Bool = true, minutes: Double = 0)
@@ -154,6 +157,43 @@ private struct AttentionFixture {
             deliveries.first { $0.identifier.hasPrefix("session.finished.") }?.notification)
         #expect(notification.identifier == "session.finished.local|s|p1")
         #expect(notification.body.contains("1 file changed"))
+    }
+
+    @Test func aRunThatStartsAndFinishesBetweenPollsStillNotifies() async throws {
+        let fixture = AttentionFixture(changes: 1, appRunning: true)
+        defer { fixture.close() }
+        fixture.defaults.set(true, forKey: AgentSettingsKeys.openDiffWhenFinished)
+        fixture.recorder.screen = "Created fifth.txt"
+        #expect(try await fixture.observe([fixture.agent(.done, sequence: 681)]).isEmpty)
+        #expect(
+            try await fixture.observe([fixture.agent(.done, sequence: 681)], minutes: 1).isEmpty)
+        let deliveries = try await fixture.observe(
+            [fixture.agent(.done, sequence: 685)], minutes: 2)
+        let notification = try #require(deliveries.first?.notification)
+        #expect(notification.identifier == "session.finished.local|s|p1")
+        #expect(fixture.recorder.opened.map(\.view) == [.diff])
+    }
+
+    @Test func aNewQuestionOnAnAlreadyBlockedAgentNotifiesAgain() async throws {
+        let fixture = AttentionFixture()
+        defer { fixture.close() }
+        fixture.recorder.screen = "Do you want to create third.txt?\n 1. Yes\n 3. No"
+        let first = try #require(
+            try await fixture.observe([fixture.agent(.blocked, sequence: 3)]).first)
+        fixture.recorder.screen = "Do you want to create fourth.txt?\n 1. Yes\n 3. No"
+        let second = try #require(
+            try await fixture.observe([fixture.agent(.blocked, sequence: 5)], minutes: 1).first)
+        #expect(first.id != second.id)
+        #expect(second.notification?.body.hasSuffix("Do you want to create fourth.txt?") == true)
+    }
+
+    @Test func anIdleAgentThatRanWhileWatchedStaysQuiet() async throws {
+        let fixture = AttentionFixture(changes: 1)
+        defer { fixture.close() }
+        fixture.recorder.screen = "Created hello.txt"
+        #expect(try await fixture.observe([fixture.agent(.idle, sequence: 7)]).isEmpty)
+        #expect(
+            try await fixture.observe([fixture.agent(.idle, sequence: 11)], minutes: 1).isEmpty)
     }
 
     @Test func approvalQuotesTheQuestionRatherThanAnOption() async throws {

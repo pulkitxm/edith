@@ -37,6 +37,7 @@ public actor AgentNotificationService {
         var checkedAt: Date?
         var fingerprint: UInt64?
         var stuck = false
+        var sequence: Int?
     }
 
     private struct State: Codable, Equatable {
@@ -185,8 +186,11 @@ public actor AgentNotificationService {
             var tracked: [String: TrackedAgent] = [:]
             for agent in host.agents where !agent.isTerminal {
                 var entry = known[agent.id]
-                if agent.status != .unknown, entry?.status != agent.status {
-                    if let event = Self.event(from: entry?.status, to: agent.status),
+                let moved =
+                    agent.stateSequence != nil && entry?.sequence != nil
+                    && entry?.sequence != agent.stateSequence
+                if agent.status != .unknown, entry?.status != agent.status || moved {
+                    if let event = Self.event(from: entry?.status, to: agent.status, moved: moved),
                         Self.wanted(event, settings: settings)
                     {
                         checks.append(AttentionCheck(agent: agent, hostID: host.id, event: event))
@@ -203,6 +207,7 @@ public actor AgentNotificationService {
                     current.checkedAt = now
                     entry = current
                 }
+                entry?.sequence = agent.stateSequence
                 tracked[agent.id] = entry
             }
             next.agents[host.id] = tracked
@@ -210,12 +215,14 @@ public actor AgentNotificationService {
         return checks
     }
 
-    static func event(from previous: HerdrAgentStatus?, to current: HerdrAgentStatus)
-        -> HerdrAttentionEvent?
-    {
-        switch current {
+    static func event(
+        from previous: HerdrAgentStatus?, to current: HerdrAgentStatus, moved: Bool = false
+    ) -> HerdrAttentionEvent? {
+        let ran = previous == .working || previous == .blocked
+        return switch current {
         case .blocked: .blocked
-        case .done, .idle: previous == .working || previous == .blocked ? .finished : nil
+        case .done: ran || moved ? .finished : nil
+        case .idle: ran ? .finished : nil
         case .working, .unknown: nil
         }
     }
