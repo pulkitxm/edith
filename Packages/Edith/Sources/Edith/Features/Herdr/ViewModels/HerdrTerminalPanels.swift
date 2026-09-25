@@ -72,6 +72,7 @@ struct HerdrPanelTerminal: Identifiable {
     let session: String
     let cwd: String?
     let holder: TerminalSessionHolder
+    let scroll: HerdrTerminalScroll
     var pane: String?
     var process: HerdrPaneProcess?
     var failure: String?
@@ -173,7 +174,6 @@ enum HerdrTerminalPanelSizing {
 
 enum HerdrTerminalPanelKey: Equatable {
     case toggle
-    case visibility
     case new
 
     static func resolve(
@@ -182,7 +182,7 @@ enum HerdrTerminalPanelKey: Equatable {
         let flags = modifiers.chordOnly
         if keyCode == 50, flags == .control { return .toggle }
         if keyCode == 50, flags == [.control, .shift] { return .new }
-        if flags == .command, characters?.lowercased() == "j" { return .visibility }
+        if flags == .command, characters?.lowercased() == "j" { return .toggle }
         return nil
     }
 }
@@ -263,18 +263,6 @@ final class HerdrTerminalPanels {
     }
 
     func toggle(_ owner: String, host: HerdrPanelHost, cwd: String?) {
-        guard isOpen(owner) else {
-            show(owner, host: host, cwd: cwd)
-            return
-        }
-        if focusedOwner == owner {
-            hide(owner)
-        } else {
-            focusedOwner = owner
-        }
-    }
-
-    func toggleVisibility(_ owner: String, host: HerdrPanelHost, cwd: String?) {
         if isOpen(owner) {
             hide(owner)
         } else {
@@ -316,7 +304,8 @@ final class HerdrTerminalPanels {
     func newTerminal(in owner: String, host: HerdrPanelHost, cwd: String?) -> String {
         let id = UUID().uuidString
         terminals[id] = HerdrPanelTerminal(
-            id: id, host: host, session: session, cwd: cwd, holder: TerminalSessionHolder())
+            id: id, host: host, session: session, cwd: cwd, holder: TerminalSessionHolder(),
+            scroll: HerdrTerminalScroll())
         var panel = panels[owner] ?? HerdrTerminalPanel()
         panel.terminalIDs.append(id)
         panel.selectedID = id

@@ -132,6 +132,20 @@ public enum HerdrListParser {
             running: group != nil && shell != nil && group != shell)
     }
 
+    public static func scrollInfo(from text: String, pane: String? = nil) -> HerdrScrollInfo? {
+        guard let json = firstJSON(in: text),
+            let payload = unwrap(json) as? [String: Any]
+        else { return nil }
+        let container = payload["pane"] as? [String: Any] ?? payload
+        if let pane, let id = string(in: container, keys: ["pane_id"]), id != pane { return nil }
+        guard let scroll = container["scroll"] as? [String: Any],
+            let offset = integer(in: scroll, keys: ["offset_from_bottom"]),
+            let maximum = integer(in: scroll, keys: ["max_offset_from_bottom"]),
+            let rows = integer(in: scroll, keys: ["viewport_rows"])
+        else { return nil }
+        return HerdrScrollInfo(offset: offset, maximum: maximum, viewportRows: rows)
+    }
+
     static func processTitle(_ argv0: String) -> String {
         let words = argv0.split(separator: " ", maxSplits: 1)
         guard let first = words.first else { return argv0 }

@@ -328,11 +328,22 @@ private struct HerdrPanelTerminalView: View {
                 onFocus: onFocus
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .trailing) {
+                if terminal.holder.started {
+                    HerdrTerminalScrollbar(
+                        scroll: terminal.scroll, color: Color(nsColor: palette.foreground))
+                }
+            }
             TerminalDropTransferStatus(holder: terminal.holder)
             overlay
         }
         .background(Color(nsColor: palette.background))
         .task(id: "\(terminal.pane ?? "")|\(mouse.rawValue)") { await start() }
+        .task(id: terminal.pane) {
+            guard let pane = terminal.pane else { return }
+            await terminal.scroll.watch(
+                session: terminal.session, pane: pane, machine: terminal.host.machine)
+        }
     }
 
     @ViewBuilder
