@@ -101,7 +101,7 @@ struct JevSettingsPane: View {
             }
             HStack(spacing: UIScale.pt(8)) {
                 SecureField(
-                    model.status?.isConfigured == true ? "Replace the key" : "TypeSafe API key",
+                    model.status?.hasSavedKey == true ? "Replace the key" : "TypeSafe API key",
                     text: $model.draft
                 )
                 .textFieldStyle(.roundedBorder)
@@ -120,7 +120,7 @@ struct JevSettingsPane: View {
                 Button("Remove key", role: .destructive) {
                     Task { await model.remove() }
                 }
-                .disabled(model.status?.isConfigured != true || model.isBusy)
+                .disabled(model.status?.hasSavedKey != true || model.isBusy)
             }
             if case .failed(let message) = model.phase {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -175,7 +175,7 @@ struct JevSettingsPane: View {
         switch model.status?.state {
         case .ready: .green
         case .noCredits, .paused, .unreachable: .orange
-        case .keyRejected: .red
+        case .keyRejected, .keyUnreadable: .red
         case .notConfigured, .none: .secondary
         }
     }

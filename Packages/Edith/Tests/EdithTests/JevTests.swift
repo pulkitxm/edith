@@ -102,21 +102,33 @@ let jevNoulResponse = jevJSON([
 final class MemoryJevKeyStore: JevKeyStore, @unchecked Sendable {
     private let lock = NSLock()
     private var value: String?
+    private var unreadable: Bool
+    private let rejectsWrites: Bool
     private(set) var reads = 0
 
-    init(_ value: String? = nil) {
+    init(_ value: String? = nil, unreadable: Bool = false, rejectsWrites: Bool = false) {
         self.value = value
+        self.unreadable = unreadable
+        self.rejectsWrites = rejectsWrites
     }
 
-    func read() -> String? {
+    var stored: String? { lock.withLock { value } }
+
+    func read() -> JevKeyRead {
         lock.withLock {
             reads += 1
-            return value
+            if unreadable { return .unreadable }
+            return value.map(JevKeyRead.key) ?? .missing
         }
     }
 
-    func write(_ key: String?) {
-        lock.withLock { value = key }
+    func write(_ key: String?) -> Bool {
+        lock.withLock {
+            guard !rejectsWrites else { return false }
+            value = key
+            unreadable = false
+            return true
+        }
     }
 }
 
@@ -303,7 +315,7 @@ private let noulRequest = JevRequest(state: .text("x"), questions: ["ok": .noul(
         }
         #expect(await engine.status(probe: false).state == .keyRejected)
         await engine.setKey("typesafe-other-key")
-        #expect(store.read() == "typesafe-other-key")
+        #expect(store.stored == "typesafe-other-key")
         #expect(await engine.status(probe: false).state == .ready)
     }
 
@@ -317,12 +329,37 @@ private let noulRequest = JevRequest(state: .text("x"), questions: ["ok": .noul(
             onKeyChange: { if !$0 { changes.increment() } })
         #expect(await engine.isConfigured)
         await engine.setKey("   ")
-        #expect(store.read() == nil)
+        #expect(store.stored == nil)
         #expect(!(await engine.isConfigured))
         #expect(changes.count == 1)
         await #expect(throws: JevError.missingKey) {
             try await engine.decide(noulRequest, purpose: "test")
         }
+    }
+
+    @Test func anUnreadableKeyIsReportedAndNeverUsed() async throws {
+        let calls = JevCallCounter()
+        let engine = engine(store: MemoryJevKeyStore(unreadable: true), calls: calls)
+        await #expect(throws: JevError.missingKey) {
+            try await engine.decide(noulRequest, purpose: "test")
+        }
+        let status = await engine.status(probe: true)
+        #expect(status.state == .keyUnreadable)
+        #expect(!status.isConfigured)
+        #expect(status.hasSavedKey)
+        #expect(status.message == JevEngine.unreadableMessage)
+        #expect(calls.count == 0)
+        await engine.setKey("typesafe-test-key")
+        #expect(await engine.status(probe: false).state == .ready)
+    }
+
+    @Test func aKeyTheKeychainRefusesLeavesJevOffWithAReason() async throws {
+        let engine = engine(store: MemoryJevKeyStore(rejectsWrites: true))
+        await engine.setKey("typesafe-test-key")
+        let status = await engine.status(probe: false)
+        #expect(status.state == .keyUnreadable)
+        #expect(status.message == JevEngine.unsavedMessage)
+        #expect(!(await engine.isConfigured))
     }
 
     @Test func theRateWindowCapsRunawayCallers() async throws {

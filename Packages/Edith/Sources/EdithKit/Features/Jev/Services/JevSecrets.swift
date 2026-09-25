@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 public struct KeychainJevKeyStore: JevKeyStore {
@@ -7,33 +8,45 @@ public struct KeychainJevKeyStore: JevKeyStore {
 
     public init() {}
 
-    public func read() -> String? {
-        var query = Self.baseQuery()
+    public func read() -> JevKeyRead {
+        var query = Self.query()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-            let data = item as? Data
-        else { return nil }
-        let value = String(decoding: data, as: UTF8.self)
-        return value.isEmpty ? nil : value
+        switch SecItemCopyMatching(query as CFDictionary, &item) {
+        case errSecSuccess:
+            guard let data = item as? Data, !data.isEmpty else { return .missing }
+            return .key(String(decoding: data, as: UTF8.self))
+        case errSecItemNotFound:
+            return .missing
+        default:
+            return .unreadable
+        }
     }
 
-    public func write(_ key: String?) {
-        let query = Self.baseQuery()
+    public func write(_ key: String?) -> Bool {
+        let query = Self.query()
         guard let key, !key.isEmpty else {
-            SecItemDelete(query as CFDictionary)
-            return
+            let status = SecItemDelete(query as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
         }
         let data = Data(key.utf8)
-        let status = SecItemUpdate(
+        let updated = SecItemUpdate(
             query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var add = query
-            add[kSecValueData as String] = data
-            add[kSecAttrLabel as String] = "Edith Jev"
-            SecItemAdd(add as CFDictionary, nil)
-        }
+        if updated == errSecSuccess { return true }
+        if updated != errSecItemNotFound { SecItemDelete(query as CFDictionary) }
+        var add = Self.baseQuery()
+        add[kSecValueData as String] = data
+        add[kSecAttrLabel as String] = "Edith Jev"
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    private static func query() -> [String: Any] {
+        var query = baseQuery()
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        query[kSecUseAuthenticationContext as String] = context
+        return query
     }
 
     private static func baseQuery() -> [String: Any] {

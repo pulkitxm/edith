@@ -4,9 +4,15 @@ public protocol JevDeciding: Sendable {
     func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision
 }
 
+public enum JevKeyRead: Equatable, Sendable {
+    case missing
+    case key(String)
+    case unreadable
+}
+
 public protocol JevKeyStore: Sendable {
-    func read() -> String?
-    func write(_ key: String?)
+    func read() -> JevKeyRead
+    func write(_ key: String?) -> Bool
 }
 
 public struct JevStatus: Codable, Sendable, Equatable {
@@ -15,6 +21,7 @@ public struct JevStatus: Codable, Sendable, Equatable {
         case ready
         case noCredits
         case keyRejected
+        case keyUnreadable
         case paused
         case unreachable
     }
@@ -40,7 +47,9 @@ public struct JevStatus: Codable, Sendable, Equatable {
         self.checkedAt = checkedAt
     }
 
-    public var isConfigured: Bool { state != .notConfigured }
+    public var isConfigured: Bool { state != .notConfigured && state != .keyUnreadable }
+
+    public var hasSavedKey: Bool { state != .notConfigured }
 
     public var summary: String {
         switch state {
@@ -48,6 +57,7 @@ public struct JevStatus: Codable, Sendable, Equatable {
         case .ready: "Ready"
         case .noCredits: "No credits"
         case .keyRejected: "Key rejected"
+        case .keyUnreadable: "Key unreadable"
         case .paused: "Paused"
         case .unreachable: "Unreachable"
         }
@@ -61,6 +71,10 @@ public actor JevEngine: JevDeciding {
     public static let perMinuteLimit = 120
     public static let creditPause: TimeInterval = 600
     public static let latencyWindow = 50
+    public static let unreadableMessage =
+        "Edith can't read the saved TypeSafe key. Save it again in Settings > Jev."
+    public static let unsavedMessage =
+        "Edith couldn't save the key to the Keychain. Remove the Edith Jev item in Keychain Access, then save it again."
 
     private let store: JevKeyStore
     private let makeClient: ClientFactory
@@ -68,6 +82,7 @@ public actor JevEngine: JevDeciding {
     private let onKeyChange: @Sendable (Bool) -> Void
     private var key: String?
     private var loaded = false
+    private var keyProblem: String?
     private var pausedUntil: Date?
     private var pauseError: JevError?
     private var cache: [Data: (decision: JevDecision, at: Date)] = [:]
@@ -94,15 +109,16 @@ public actor JevEngine: JevDeciding {
     public func setKey(_ value: String?) {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         let next = trimmed?.isEmpty == false ? trimmed : nil
-        store.write(next)
-        key = next
+        let saved = store.write(next)
+        key = saved ? next : nil
+        keyProblem = saved ? nil : Self.unsavedMessage
         loaded = true
         pausedUntil = nil
         pauseError = nil
         cache.removeAll()
         lastModels = []
         lastChecked = nil
-        onKeyChange(next != nil)
+        onKeyChange(key != nil)
     }
 
     public func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {
@@ -132,7 +148,10 @@ public actor JevEngine: JevDeciding {
     }
 
     public func status(probe: Bool) async -> JevStatus {
-        guard let key = currentKey() else { return JevStatus(state: .notConfigured) }
+        guard let key = currentKey() else {
+            guard let keyProblem else { return JevStatus(state: .notConfigured) }
+            return JevStatus(state: .keyUnreadable, message: keyProblem)
+        }
         let hint = Self.hint(key)
         if probe {
             let client = makeClient(key)
@@ -178,7 +197,17 @@ public actor JevEngine: JevDeciding {
 
     private func currentKey() -> String? {
         if !loaded {
-            key = store.read()
+            switch store.read() {
+            case .key(let value):
+                key = value
+                keyProblem = nil
+            case .missing:
+                key = nil
+                keyProblem = nil
+            case .unreadable:
+                key = nil
+                keyProblem = Self.unreadableMessage
+            }
             loaded = true
             onKeyChange(key != nil)
         }
