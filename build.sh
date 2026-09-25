@@ -5,12 +5,18 @@ cd "$(dirname "$0")"
 usage() {
   cat >&2 <<'USAGE'
 usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
+       ./build.sh --teardown | --gc
 
   --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
   --release      Release configuration, Developer ID signing required
   --pr N         build PR N's branch from its worktree, creating one if needed
   --branch NAME  same, for a branch named directly
+  --teardown     stop this worktree's development build and delete its data
+  --gc           clean up development slots whose worktree is gone
+
+A development build runs as its own app, "Edith (<slot>)", where the slot comes
+from the worktree folder name. Only /Applications/Edith.app runs as Edith.
 
 Signing identity is EDITH_SIGN_IDENTITY, else the first available Developer ID
 Application, "Edith Dev", or Apple Development certificate, else ad-hoc.
@@ -55,6 +61,8 @@ while [ $# -gt 0 ]; do
     --release) RELEASE=1 ;;
     --pr) PR="${2:?--pr needs a PR number}"; shift ;;
     --branch) BRANCH="${2:?--branch needs a branch name}"; shift ;;
+    --teardown) exec scripts/dev-slots.sh teardown ;;
+    --gc) exec scripts/dev-slots.sh gc ;;
     *) usage ;;
   esac
   shift
@@ -128,6 +136,13 @@ CONFIG=Debug
 XCODE_BUILD_SETTINGS=(ARCHS=arm64)
 [ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize DEAD_CODE_STRIPPING=YES
   GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)
+AGENT_IDENTIFIER=com.pulkit.edith.agent
+if [ "$CONFIG" = Debug ]; then
+  SLOT="$(scripts/dev-slots.sh slot)"
+  AGENT_IDENTIFIER="com.pulkit.edith.dev.$SLOT.agent"
+  XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")
+  echo "development slot $SLOT (com.pulkit.edith.dev.$SLOT)"
+fi
 
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
@@ -180,28 +195,29 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" "$LAUNCH_AGENTS"
+mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
 cp "$AGENT_BUILD" "$AGENT"
-cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
-AGENT_IDENTIFIER=com.pulkit.edith.agent
-if [ "$CONFIG" = Debug ]; then
-  AGENT_IDENTIFIER=com.pulkit.edith.development.agent
-  python3 - "$LAUNCH_AGENTS" <<'PY'
-import pathlib
+mkdir -p "$LAUNCH_AGENTS"
+if [ "$CONFIG" = Release ]; then
+  cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
+else
+  python3 - Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/$AGENT_IDENTIFIER.plist" \
+    "$AGENT_IDENTIFIER" "$PWD/$AGENT" <<'PY'
 import plistlib
 import sys
 
-root = pathlib.Path(sys.argv[1])
-original = root / 'com.pulkit.edith.agent.plist'
-value = plistlib.loads(original.read_bytes())
-value['Label'] = 'com.pulkit.edith.development.agent'
-value['MachServices'] = {'com.pulkit.edith.development.agent': True}
-value['AssociatedBundleIdentifiers'] = ['com.pulkit.edith.development']
-destination = root / 'com.pulkit.edith.development.agent.plist'
-destination.write_bytes(plistlib.dumps(value))
-original.unlink()
+source, destination, label, program = sys.argv[1:]
+with open(source, 'rb') as handle:
+    value = plistlib.load(handle)
+for key in ('BundleProgram', 'KeepAlive', 'AssociatedBundleIdentifiers'):
+    value.pop(key)
+value['Label'] = label
+value['ProgramArguments'] = [program]
+value['MachServices'] = {label: True}
+with open(destination, 'wb') as handle:
+    plistlib.dump(value, handle)
 PY
 fi
 

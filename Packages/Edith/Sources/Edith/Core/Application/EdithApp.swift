@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import EdithLidAwakeSupport
 import Security
@@ -83,7 +84,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
             StartupPhase(name: "main.lidAwakeDaemon") { [weak self] in
-                guard !AgentService.usesCustomService, let self else { return }
+                guard !AgentService.usesCustomService, !AppBuildIdentity.isDevelopment, let self
+                else { return }
                 self.lidAwakeDaemonRegistrar.register()
             },
         ])
@@ -139,6 +141,22 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             showInitialWindow()
         }
         return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard appStarted, AppBuildIdentity.isDevelopment, !AgentService.usesCustomService else {
+            return .terminateNow
+        }
+        Task { [agentRegistrar] in
+            for helper in NSRunningApplication.runningApplications(
+                withBundleIdentifier: AppBuildIdentity.helper)
+            {
+                helper.terminate()
+            }
+            await agentRegistrar.unloadDevelopmentAgent()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

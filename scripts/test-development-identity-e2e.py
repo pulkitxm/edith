@@ -18,9 +18,13 @@ fixture = 'com.pulkit.edith.test.' + uuid.uuid4().hex
 env = isolated_test_environment(root, fixture)
 env.pop('EDITH_AGENT_MACH_SERVICE')
 env.pop('EDITH_DATA_ROOT')
-label = 'com.pulkit.edith.development.agent'
+bundle = repo / 'dist/Edith.app'
+identifier = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier']
+assert identifier.startswith('com.pulkit.edith.dev.'), identifier
+slot = identifier.removeprefix('com.pulkit.edith.dev.')
+label = identifier + '.agent'
 target = 'gui/' + str(os.getuid()) + '/' + label
-binary = repo / 'dist/Edith.app/Contents/MacOS'
+binary = bundle / 'Contents/MacOS'
 booted = False
 
 def call(args, check=True):
@@ -46,7 +50,7 @@ def wait_for(action, predicate):
     raise AssertionError(repr(latest))
 
 try:
-    assert call(['/bin/launchctl', 'print', target], check=False).returncode != 0, 'Development daemon already registered; refusing to replace it.'
+    assert call(['/bin/launchctl', 'print', target], check=False).returncode != 0, 'Development daemon for ' + slot + ' is loaded; quit that build or run ./build.sh --teardown first.'
     for key in ['suiteAgentsEnabled', 'suiteMaintenanceEnabled', 'suiteSystemEnabled', 'suiteDeskEnabled', 'suiteMediaEnabled', 'suiteDataEnabled', 'icloudBackup']:
         call(['/usr/bin/defaults', 'write', env['EDITH_SHARED_DEFAULTS_SUITE'], key, '-bool', 'false'])
     plist = root / 'agent.plist'
@@ -54,9 +58,9 @@ try:
     call(['/bin/launchctl', 'bootstrap', 'gui/' + str(os.getuid()), str(plist)])
     booted = True
     status = wait_for(lambda: cli('status'), lambda value: value['pid'] > 0)
-    assert str(root / 'home/Library/Application Support/Edith Development') in status['store'], status['store']
-    print('PASS: signed packaged client connects to the default development daemon service', flush=True)
-    print('PASS: packaged daemon uses an isolated Edith Development data directory', flush=True)
+    assert str(root / 'home/Library/Application Support/Edith Dev' / slot) in status['store'], status['store']
+    print('PASS: signed packaged client connects to its worktree development daemon service', flush=True)
+    print('PASS: packaged daemon uses an isolated Edith Dev/' + slot + ' data directory', flush=True)
     receipt = json.loads(call([str(binary / 'ed'), 'agent', 'tasks', 'exec', '--detach', '--json', '--', '/bin/sh', '-c', 'sleep 1; printf packaged-development-task']).stdout)
     finished = wait_for(lambda: cli('tasks', 'inspect', receipt['id']), lambda value: value['snapshot']['state'] == 'succeeded')
     result = json.loads(base64.b64decode(finished['result']))
