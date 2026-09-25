@@ -26,6 +26,32 @@ typealias HerdrNewAgentLauncher =
         _ newSpaceLabel: String?
     ) async throws -> HerdrCreatedPane
 
+typealias HerdrSessionResumer =
+    @Sendable (_ hit: AgentSearchHit, _ machine: Machine?) async throws -> HerdrCreatedPane
+
+enum HerdrSessionResume {
+    static func launch(_ hit: AgentSearchHit, on machine: Machine?) async throws
+        -> HerdrCreatedPane
+    {
+        let cwd = hit.cwd.isEmpty ? nil : hit.cwd
+        let spaces = try await HerdrLaunchOperations.listWorkspaces(on: machine)
+        let created: HerdrCreatedPane
+        if let space = spaces.first(where: { $0.label == hit.project }) {
+            created = try await HerdrLaunchOperations.createTab(
+                workspaceID: space.id, cwd: cwd, on: machine)
+        } else {
+            created = try await HerdrLaunchOperations.createWorkspace(
+                label: hit.project, cwd: cwd, on: machine)
+        }
+        let kind = hit.kind.displayName
+        try await HerdrLaunchOperations.launchAgent(
+            kind: kind, name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? hit.kind.rawValue,
+            pane: created.paneID, options: HerdrLaunchSettings.options(for: kind),
+            resuming: hit.resume, on: machine)
+        return created
+    }
+}
+
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -184,6 +210,7 @@ final class HerdrStore {
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
     private let newAgentLauncher: HerdrNewAgentLauncher
+    private let sessionResumer: HerdrSessionResumer
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
@@ -220,6 +247,9 @@ final class HerdrStore {
                 pane: created.paneID, on: machine)
             return created
         },
+        sessionResumer: @escaping HerdrSessionResumer = { hit, machine in
+            try await HerdrSessionResume.launch(hit, on: machine)
+        },
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
@@ -229,6 +259,7 @@ final class HerdrStore {
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.newAgentLauncher = newAgentLauncher
+        self.sessionResumer = sessionResumer
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
@@ -1374,6 +1405,16 @@ final class HerdrStore {
         } else {
             open(placeholder)
         }
+    }
+
+    func resumeSession(_ hit: AgentSearchHit, on host: HerdrHostSnapshot) async throws {
+        let created = try await sessionResumer(hit, machine(for: host))
+        open(
+            HerdrAgent.make(
+                machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
+                sshTarget: host.sshTarget, session: "default", pane: created.paneID,
+                kind: hit.kind.displayName, status: .unknown, title: hit.title,
+                workspace: hit.project, cwd: hit.cwd))
     }
 
     func attachRequest(
