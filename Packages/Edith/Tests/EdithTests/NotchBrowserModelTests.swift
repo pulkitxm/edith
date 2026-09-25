@@ -508,3 +508,58 @@ import Testing
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Notch.browserEnabled))
     }
 }
+
+@Suite struct NotchBrowserHidePolicyTests {
+    @Test func browserStaysOpenThroughSmallOvershoots() {
+        let shelf = NotchHidePolicy.policy(for: .files)
+        let browser = NotchHidePolicy.policy(for: .browser)
+        #expect(shelf == .shelf)
+        #expect(browser.keepInset > shelf.keepInset)
+        #expect(browser.closeGrace > shelf.closeGrace)
+        for policy in [shelf, browser] {
+            #expect(policy.trackingMargin > policy.keepInset)
+        }
+    }
+
+    @Test func pointerJustPastTheBrowserEdgeKeepsItOpen() {
+        let collapsed = CGRect(x: 700, y: 950, width: 180, height: 32)
+        let expanded = CGRect(x: 300, y: 300, width: 980, height: 682)
+        let justBelow = CGPoint(x: 790, y: 300 - 50)
+        #expect(
+            NotchGeometry.proximity(
+                point: justBelow, collapsedFrame: collapsed, expandedFrame: expanded,
+                keepInset: NotchHidePolicy.browser.keepInset) == .keepOpen)
+        #expect(
+            NotchGeometry.proximity(
+                point: justBelow, collapsedFrame: collapsed, expandedFrame: expanded,
+                keepInset: NotchHidePolicy.shelf.keepInset) == .outside)
+    }
+
+    @Test func gateUsesTheCurrentCloseGrace() {
+        var gate = NotchHoverGate(openDwell: 0.1, closeGrace: 0.4)
+        gate.forceOpen()
+        gate.closeGrace = NotchHidePolicy.browser.closeGrace
+        #expect(gate.sample(.outside, now: 10) == .schedule(deadline: 10.9))
+        #expect(gate.fire(now: 10.5) == .schedule(deadline: 10.9))
+        #expect(gate.fire(now: 10.9) == .closed)
+    }
+}
+
+@Suite @MainActor struct BrowserWebContainerTests {
+    @Test func rehostingNeverResizesThePageToNothing() {
+        let container = BrowserWebContainerView(frame: .zero)
+        let webView = NotchWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        container.show(webView)
+        #expect(webView.frame.size == CGSize(width: 900, height: 600))
+        container.setFrameSize(NSSize(width: 960, height: 620))
+        #expect(webView.frame.size == CGSize(width: 960, height: 620))
+        container.setFrameSize(.zero)
+        container.layout()
+        #expect(webView.frame.size == CGSize(width: 960, height: 620))
+        let other = NotchWebView(frame: .zero)
+        container.setFrameSize(NSSize(width: 800, height: 500))
+        container.show(other)
+        #expect(other.frame.size == CGSize(width: 800, height: 500))
+        #expect(webView.superview == nil)
+    }
+}

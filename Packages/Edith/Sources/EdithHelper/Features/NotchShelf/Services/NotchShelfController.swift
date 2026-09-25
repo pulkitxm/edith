@@ -107,10 +107,9 @@ final class NotchShelfController: FeatureModule {
     private var pointerInsideInterest = false
     private var gateDisplay: CGDirectDisplayID?
     private var gate = NotchHoverGate(
-        openDwell: NotchShelfController.openDwell, closeGrace: NotchShelfController.closeGrace)
+        openDwell: NotchShelfController.openDwell, closeGrace: NotchHidePolicy.shelf.closeGrace)
     private var gateWorkItem: DispatchWorkItem?
     static let openDwell: TimeInterval = 0.1
-    static let closeGrace: TimeInterval = 0.4
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
     private var panelSettleWorkItem: DispatchWorkItem?
@@ -327,7 +326,8 @@ final class NotchShelfController: FeatureModule {
     private func refreshInteractionRects() {
         var rects: [CGDirectDisplayID: CGRect] = [:]
         for (id, panel) in panels {
-            rects[id] = panel.frame.insetBy(dx: -40, dy: -40)
+            let margin = hidePolicy.trackingMargin
+            rects[id] = panel.frame.insetBy(dx: -margin, dy: -margin)
         }
         interactionRects = rects
     }
@@ -555,6 +555,10 @@ final class NotchShelfController: FeatureModule {
         syncFrames()
     }
 
+    private var hidePolicy: NotchHidePolicy {
+        NotchHidePolicy.policy(for: browser == nil ? .home : activeTab)
+    }
+
     private var browserHoldsOpen: Bool {
         activeTab == .browser && browser?.holdsOpen == true
     }
@@ -658,6 +662,7 @@ final class NotchShelfController: FeatureModule {
             proximity = .outside
         }
         if proximity != .outside, let id { gateDisplay = id }
+        gate.closeGrace = hidePolicy.closeGrace
         handleGate(gate.sample(proximity, now: monotonicNow()))
     }
 
@@ -706,7 +711,7 @@ final class NotchShelfController: FeatureModule {
             applyProximity(
                 NotchGeometry.proximity(
                     point: point, collapsedFrame: frames.collapsed,
-                    expandedFrame: frames.expanded),
+                    expandedFrame: frames.expanded, keepInset: hidePolicy.keepInset),
                 on: expandedDisplay)
         } else if currentAlert == nil {
             let id = notchDisplay(near: point)

@@ -133,12 +133,18 @@ struct NotchShelfContentView: View {
     }
 
     private var glide: Animation {
-        reduceMotion
-            ? .easeInOut(duration: 0.2) : .spring(response: 0.36, dampingFraction: 0.9)
+        if reduceMotion { return .easeInOut(duration: 0.2) }
+        if controller.activeTab == .browser { return .easeOut(duration: 0.16) }
+        return .spring(response: 0.36, dampingFraction: 0.9)
     }
 
     private var contentTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
+        if controller.activeTab == .browser {
+            return .asymmetric(
+                insertion: .opacity.animation(.easeOut(duration: 0.12)),
+                removal: .opacity.animation(.easeOut(duration: 0.06)))
+        }
         return .asymmetric(
             insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.08)),
             removal: .opacity.animation(.easeOut(duration: 0.1)))

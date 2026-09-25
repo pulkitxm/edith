@@ -91,9 +91,27 @@ final class BrowserWebContainerView: NSView {
         for view in subviews where view !== webView { view.removeFromSuperview() }
         guard let webView else { return }
         webView.removeFromSuperview()
-        webView.frame = bounds
-        webView.autoresizingMask = [.width, .height]
+        webView.autoresizingMask = []
+        layer?.backgroundColor = webView.underPageBackgroundColor.cgColor
         addSubview(webView)
+        fitWebView()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        fitWebView()
+    }
+
+    override func layout() {
+        super.layout()
+        fitWebView()
+    }
+
+    private func fitWebView() {
+        guard !bounds.isEmpty, let webView = subviews.first, webView.frame != bounds else {
+            return
+        }
+        webView.frame = bounds
     }
 }
 
