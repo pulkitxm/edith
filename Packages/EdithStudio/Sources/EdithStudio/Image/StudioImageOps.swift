@@ -76,7 +76,7 @@ public enum StudioImageOps {
         if width == image.width && height == image.height { return image }
         let downscale = width < image.width && height < image.height
         if downscale {
-            let input = CIImage(cgImage: image)
+            let input = CIImage(cgImage: image).clampedToExtent()
             let scale = Double(height) / Double(image.height)
             let aspect = (Double(width) / Double(image.width)) / scale
             let filter = CIFilter.lanczosScaleTransform()

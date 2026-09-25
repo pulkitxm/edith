@@ -24,10 +24,12 @@ public enum StudioProcess {
         process.standardOutput = stdout
         process.standardError = stderr
         let collector = StudioProcessCollector(limit: captureLimit, onLine: onOutputLine)
+        let streams = StudioStreamCompletion(count: 2)
         stdout.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
+                streams.finish(0)
             } else {
                 collector.receiveOutput(data)
             }
@@ -36,6 +38,7 @@ public enum StudioProcess {
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
+                streams.finish(1)
             } else {
                 collector.receiveError(data)
             }
@@ -59,9 +62,9 @@ public enum StudioProcess {
             let status = await exit.wait(deadline: deadline) {
                 stop(pid: pid)
             }
+            await streams.wait(timeout: status == nil ? 0.2 : 3)
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
-            collector.drain(stdout.fileHandleForReading, stderr.fileHandleForReading)
             if Task.isCancelled { throw StudioError.cancelled }
             guard let status else {
                 throw StudioError.failed("\(executable.lastPathComponent) timed out.")
@@ -79,6 +82,49 @@ public enum StudioProcess {
         DispatchQueue.global().asyncAfter(deadline: .now() + terminationGrace) {
             if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
         }
+    }
+}
+
+private final class StudioStreamCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var open: Set<Int>
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(count: Int) {
+        open = Set(0..<count)
+    }
+
+    func finish(_ stream: Int) {
+        lock.lock()
+        open.remove(stream)
+        let ready = open.isEmpty ? waiters : []
+        if open.isEmpty { waiters.removeAll() }
+        lock.unlock()
+        for waiter in ready { waiter.resume() }
+    }
+
+    func wait(timeout: TimeInterval) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if open.isEmpty {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
+                self?.expire()
+            }
+        }
+    }
+
+    private func expire() {
+        lock.lock()
+        let pending = waiters
+        waiters.removeAll()
+        lock.unlock()
+        for waiter in pending { waiter.resume() }
     }
 }
 
@@ -159,11 +205,6 @@ private final class StudioProcessCollector: @unchecked Sendable {
         errorData.append(data)
         if errorData.count > 64 << 10 { errorData = errorData.suffix(32 << 10) }
         lock.unlock()
-    }
-
-    func drain(_ output: FileHandle, _ error: FileHandle) {
-        if let rest = try? output.readToEnd(), !rest.isEmpty { receiveOutput(rest) }
-        if let rest = try? error.readToEnd(), !rest.isEmpty { receiveError(rest) }
     }
 
     var output: String {

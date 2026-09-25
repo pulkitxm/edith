@@ -314,7 +314,7 @@ public enum StudioImageIO {
     static func writeIcon(_ image: CGImage, to url: URL, format: StudioImageFormat) throws {
         let square = StudioImageOps.squared(image) ?? image
         let sizes =
-            format == .icns ? [16, 32, 64, 128, 256, 512, 1024] : [16, 24, 32, 48, 64, 128, 256]
+            format == .icns ? [16, 32, 64, 128, 256, 512, 1024] : [16, 24, 32, 48, 64, 256]
         guard
             let destination = CGImageDestinationCreateWithURL(
                 url as CFURL, format.utType.identifier as CFString, sizes.count, nil)

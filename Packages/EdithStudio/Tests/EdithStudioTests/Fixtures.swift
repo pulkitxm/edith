@@ -12,15 +12,27 @@ final class Workspace {
     let root: URL
     let output: URL
 
+    static let parent = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "edith-studio-tests", isDirectory: true)
+
+    static let sweep: Void = {
+        let manager = FileManager.default
+        let cutoff = Date().addingTimeInterval(-3600)
+        let entries =
+            (try? manager.contentsOfDirectory(
+                at: parent, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for entry in entries {
+            let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate
+            if let modified, modified < cutoff { try? manager.removeItem(at: entry) }
+        }
+    }()
+
     init() throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "edith-studio-tests-\(UUID().uuidString)", isDirectory: true)
+        _ = Self.sweep
+        root = Self.parent.appendingPathComponent(UUID().uuidString, isDirectory: true)
         output = root.appendingPathComponent("out", isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    }
-
-    deinit {
-        try? FileManager.default.removeItem(at: root)
     }
 
     func url(_ name: String) -> URL {
