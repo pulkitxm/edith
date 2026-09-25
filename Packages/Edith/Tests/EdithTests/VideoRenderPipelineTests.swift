@@ -249,6 +249,16 @@ import Testing
         #expect(outputSize == pipeline.canvas)
         #expect(try FileManager.default.attributesOfItem(atPath: mp4.path)[.size] as? Int ?? 0 > 0)
 
+        let compact = try await VideoRenderPipeline.make(project: project, maxDimension: 32)
+        #expect(compact.canvas == CGSize(width: 32, height: 18))
+        let compactMP4 = directory.appendingPathComponent("compact.mp4")
+        try await compact.exportMP4(to: compactMP4)
+        let compactTrack = try #require(
+            await AVURLAsset(url: compactMP4).loadTracks(withMediaType: .video).first)
+        #expect(try await compactTrack.load(.naturalSize) == compact.canvas)
+        let notUpscaled = try await VideoRenderPipeline.make(project: project, maxDimension: 3840)
+        #expect(notUpscaled.canvas == pipeline.canvas)
+
         let gif = directory.appendingPathComponent("output.gif")
         do { try pipeline.exportGIF(to: gif, fps: 5) } catch {
             Issue.record("GIF export failed: \(error)"); return
