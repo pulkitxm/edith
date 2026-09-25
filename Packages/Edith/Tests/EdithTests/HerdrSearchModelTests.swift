@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -351,5 +352,24 @@ private struct HerdrSearchDecider: JevDeciding {
         #expect(opened.agent.title == "Session abc")
         #expect(opened.agent.kind == "Claude Code")
         #expect(opened.agent.cwd == "/work/atlas")
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct SessionSearchCommandTests {
+    @Test func commandKOpensSearchOnlyInTheMainWindowOnSessions() {
+        let store = HerdrStore()
+        let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+        defer { main.orderOut(nil) }
+        main.identifier = NSUserInterfaceItemIdentifier(MainWindowIdentifier.value)
+        let other = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+        defer { other.orderOut(nil) }
+
+        #expect(!SessionSearchCommand.perform(in: nil, store: store, sessionsOnScreen: { true }))
+        #expect(!SessionSearchCommand.perform(in: other, store: store, sessionsOnScreen: { true }))
+        #expect(!SessionSearchCommand.perform(in: main, store: store, sessionsOnScreen: { false }))
+        #expect(!store.searchPresented)
+        #expect(SessionSearchCommand.perform(in: main, store: store, sessionsOnScreen: { true }))
+        #expect(store.searchPresented)
     }
 }

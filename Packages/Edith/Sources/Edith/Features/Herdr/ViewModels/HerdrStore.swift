@@ -102,6 +102,7 @@ final class HerdrStore {
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = []
+    var searchPresented = false
     var machineFilter = "all" {
         didSet {
             guard machineFilter != oldValue else { return }

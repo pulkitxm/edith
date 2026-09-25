@@ -18,7 +18,6 @@ struct HerdrPage: View {
     @State private var layoutPopoverOpen = false
     @State private var launchSettingsPresented = false
     @State private var newAgentPopupPresented = false
-    @State private var searchPopupPresented = false
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -106,7 +105,7 @@ struct HerdrPage: View {
         .sheet(isPresented: $newAgentPopupPresented) {
             HerdrNewAgentPopup(store: store)
         }
-        .sheet(isPresented: $searchPopupPresented) {
+        .sheet(isPresented: $store.searchPresented) {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
         }
     }
@@ -148,12 +147,12 @@ struct HerdrPage: View {
                     spacesWindowMenu
                     spaceGroupingToggle
                     Button {
-                        searchPopupPresented = true
+                        store.searchPresented = true
                     } label: {
                         Label("Search", systemImage: "magnifyingglass")
                     }
                     .buttonStyle(.edith(.toolbar))
-                    .help("Search agent sessions on every machine (⌘P)")
+                    .help("Search agent sessions on every machine (⌘K)")
                     Button {
                         newAgentPopupPresented = true
                     } label: {
@@ -264,8 +263,6 @@ struct HerdrPage: View {
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Button("") { newAgentPopupPresented = true }
                 .keyboardShortcut("n", modifiers: .command)
-            Button("") { searchPopupPresented = true }
-                .keyboardShortcut("p", modifiers: .command)
         }
         .opacity(0)
         .allowsHitTesting(false)

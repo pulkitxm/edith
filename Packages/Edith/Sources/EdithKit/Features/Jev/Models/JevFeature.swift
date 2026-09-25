@@ -50,7 +50,7 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
         JevFeature(
             id: AgentSearchJev.purpose, title: "Session search",
             detail:
-                "⌘P on Sessions picks the best matches for what you type from the agent sessions found on every machine."
+                "⌘K on Sessions picks the best matches for what you type from the agent sessions found on every machine."
         ),
     ]
 }
