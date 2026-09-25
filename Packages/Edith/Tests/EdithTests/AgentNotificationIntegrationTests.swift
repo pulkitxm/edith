@@ -339,6 +339,6 @@ private final class LimitAlertClientCounter: @unchecked Sendable {
 }
 
 private struct LimitAlertEmptyKeyStore: JevKeyStore {
-    func read() -> String? { nil }
-    func write(_ key: String?) {}
+    func read() -> JevKeyRead { .missing }
+    func write(_ key: String?) -> Bool { true }
 }
