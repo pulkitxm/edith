@@ -80,8 +80,12 @@ struct HerdrSearchPopup: View {
                 Text("Resuming…")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
-            } else if model.isBusy {
-                ProgressView().controlSize(.small)
+            } else if model.machineProgress.done < model.machineProgress.total {
+                let progress = model.machineProgress
+                ProgressView(value: Double(progress.done), total: Double(progress.total))
+                    .progressViewStyle(.linear)
+                    .frame(width: UIScale.pt(56))
+                    .help("\(progress.done) of \(progress.total) machines answered")
             }
         }
         .padding(.horizontal, UIScale.pt(14))

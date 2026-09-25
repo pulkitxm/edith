@@ -112,6 +112,8 @@ private struct HerdrSearchDecider: JevDeciding {
         #expect(model.sections[0].rows.map(\.id) == ["local|claude|l1", "local|claude|l2"])
         #expect(model.sections[1].state == .searching)
         #expect(model.isBusy)
+        #expect(model.machineProgress.done == 1)
+        #expect(model.machineProgress.total == 2)
         #expect(model.best == .hidden)
 
         await gate.release()

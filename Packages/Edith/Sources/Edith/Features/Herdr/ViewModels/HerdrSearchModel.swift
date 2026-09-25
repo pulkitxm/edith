@@ -113,6 +113,10 @@ final class HerdrSearchModel {
 
     var usesJev: Bool { best != .hidden }
 
+    var machineProgress: (done: Int, total: Int) {
+        HerdrSearchPlan.progress(sections)
+    }
+
     func visibleRows(in section: HerdrSearchSection) -> [HerdrSearchRow] {
         HerdrSearchPlan.visible(section, excluding: bestRows)
     }
@@ -279,6 +283,20 @@ enum HerdrSearchPlan {
                 state: host.reachable ? .searching : .offline,
                 rows: rows(for: host, hits: [], query: query))
         }
+    }
+
+    static func progress(_ sections: [HerdrSearchSection]) -> (done: Int, total: Int) {
+        var done = 0
+        var total = 0
+        for section in sections {
+            switch section.state {
+            case .offline: continue
+            case .ready, .failed: done += 1
+            case .searching, .indexing: break
+            }
+            total += 1
+        }
+        return (done, total)
     }
 
     static func reachable(_ hosts: [HerdrHostSnapshot]) -> [HerdrHostSnapshot] {
