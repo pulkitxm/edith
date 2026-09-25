@@ -55,11 +55,12 @@ public enum DocsAsk {
     public static func routeGroups(_ library: DocsLibrary) -> [JevRouteGroup] {
         let byArea = Dictionary(grouping: library.commands, by: \.area)
         return byArea.keys.sorted().map { area in
-            JevRouteGroup(
+            let commands = byArea[area] ?? []
+            let leaves = commands.filter { $0.route != area }
+            return JevRouteGroup(
                 id: area, summary: library.command(area)?.summary ?? area,
-                members: (byArea[area] ?? []).prefix(JevQuestion.maximumOptions).map {
-                    JevRouteCandidate(id: $0.route, summary: $0.summary)
-                })
+                members: (leaves.isEmpty ? commands : leaves).prefix(JevQuestion.maximumOptions)
+                    .map { JevRouteCandidate(id: $0.route, summary: $0.summary) })
         }
     }
 }

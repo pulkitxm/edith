@@ -283,8 +283,23 @@ enum DocsFixture {
         let groups = DocsAsk.routeGroups(DocsFixture.library)
         #expect(groups.count >= 2 && groups.count <= JevQuestion.maximumOptions)
         #expect(groups.allSatisfy { $0.members.count <= JevQuestion.maximumOptions })
-        #expect(groups.flatMap(\.members).count == DocsFixture.library.commands.count)
         #expect(
             groups.contains { $0.id == "music" && $0.members.contains { $0.id == "music pause" } })
+    }
+
+    @Test func routeGroupsOfferTheCommandsRatherThanTheGroupPage() {
+        let groups = DocsAsk.routeGroups(DocsFixture.library)
+        for group in groups where group.members.count > 1 {
+            #expect(
+                !group.members.contains { $0.id == group.id }, "\(group.id) offers its overview")
+        }
+        let routes = Set(groups.flatMap(\.members).map(\.id))
+        let leaves = DocsFixture.library.commands.filter { command in
+            command.route != command.area
+                || !DocsFixture.library.commands.contains {
+                    $0.area == command.area && $0.route != command.area
+                }
+        }
+        #expect(routes == Set(leaves.map(\.route)))
     }
 }
