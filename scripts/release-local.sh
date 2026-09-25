@@ -42,13 +42,15 @@ set +a
 : "${EDITH_SIGN_IDENTITY:?release blocked: EDITH_SIGN_IDENTITY missing from .env}"
 export EDITH_RELEASE_ALLOW_DEV_SIGNING="${EDITH_RELEASE_ALLOW_DEV_SIGNING:-1}"
 
-if [ "$(git branch --show-current)" != main ]; then
-  echo "release blocked: run from main" >&2
-  exit 1
-fi
-if [ -n "$(git status --porcelain)" ]; then
-  echo "release blocked: the working tree is not clean" >&2
-  exit 1
+if [ "$DRY_RUN" -eq 0 ]; then
+  if [ "$(git branch --show-current)" != main ]; then
+    echo "release blocked: run from main" >&2
+    exit 1
+  fi
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "release blocked: the working tree is not clean" >&2
+    exit 1
+  fi
 fi
 
 WWDR="$(find /Applications/Xcode*.app -iname 'AppleWWDRCA-2030.cer' 2>/dev/null | head -1)"
