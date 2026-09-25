@@ -39,8 +39,8 @@ private struct ScriptedJev: JevDeciding {
 }
 
 private struct EmptyKeyStore: JevKeyStore {
-    func read() -> String? { nil }
-    func write(_ key: String?) {}
+    func read() -> JevKeyRead { .missing }
+    func write(_ key: String?) -> Bool { true }
 }
 
 private struct AttentionFixture {
