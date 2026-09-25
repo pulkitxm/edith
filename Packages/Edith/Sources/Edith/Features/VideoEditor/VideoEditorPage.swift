@@ -24,15 +24,13 @@ struct VideoEditorPage: View {
     private enum EditorTool: String, CaseIterable {
         case zoom = "Zoom"
         case text = "Text"
-        case transition = "Transition"
     }
 
     @State private var model = VideoEditorModel()
     @State private var editorTool: EditorTool = .zoom
-    @State private var transitionDuration = 0.8
+    @State private var showingExport = false
+    @State private var pendingExport: (gif: Bool, quality: VideoExportQuality)?
     @State private var editingTextID: String?
-    @State private var trimIn = "0"
-    @State private var trimOut = "0"
     @State private var titleDraft = ""
     @State private var timelineZoom = 80.0
     @Environment(\.colorScheme) private var scheme
@@ -61,15 +59,21 @@ struct VideoEditorPage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Video editor")
+        .sheet(
+            isPresented: $showingExport,
+            onDismiss: {
+                guard let pendingExport else { return }
+                model.export(gif: pendingExport.gif, quality: pendingExport.quality)
+                self.pendingExport = nil
+            }
+        ) {
+            VideoExportSheet(model: model) { gif, quality in
+                pendingExport = (gif, quality)
+            }
+        }
         .onDisappear {
             model.player.pause()
             model.focusPlayer.pause()
-        }
-        .onChange(of: model.selectedClipID) { _, id in
-            if let clip = model.project?.clips.first(where: { $0.id == id }) {
-                trimIn = String(format: "%.2f", clip.start)
-                trimOut = String(format: "%.2f", clip.end)
-            }
         }
         .onChange(of: model.project?.title) { _, _ in
             titleDraft = model.project?.title ?? ""
@@ -128,14 +132,13 @@ struct VideoEditorPage: View {
                 Label("Projects", systemImage: "folder")
             }
             Button(
-                model.project?.clips.isEmpty == false ? "Add clips" : "Import video",
+                model.project?.clips.isEmpty == false ? "Add media" : "Import video",
                 systemImage: "square.and.arrow.down", action: model.importMedia
             )
             .buttonStyle(.borderedProminent)
             .help("Add video, audio, or images")
-            Menu {
-                Button("MP4 video", action: { model.export(gif: false) })
-                Button("Animated GIF", action: { model.export(gif: true) })
+            Button {
+                showingExport = true
             } label: {
                 Label(
                     model.isRendering ? "Exporting…" : "Export", systemImage: "square.and.arrow.up")
@@ -347,59 +350,16 @@ struct VideoEditorPage: View {
                         .frame(width: width, height: UIScale.pt(18))
                         ZStack(alignment: .topLeading) {
                             HStack(spacing: 0) {
-                                ForEach(
-                                    Array((model.project?.clips ?? []).enumerated()),
-                                    id: \.element.id
-                                ) {
-                                    index, clip in
+                                ForEach(model.project?.clips ?? []) { clip in
                                     let clipWidth = max(1, scale * timelineDuration(for: clip))
-                                    Button {
-                                        model.selectedClipID = clip.id
-                                        if let segment = model.pipeline?.segments.first(where: {
-                                            $0.clip.id == clip.id
-                                        }) {
-                                            model.seek(to: segment.outputStart)
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.accentColor.opacity(0.17))
+                                        .frame(width: clipWidth, height: UIScale.pt(52))
+                                        .overlay(alignment: .leading) {
+                                            Text("Video · \(timestamp(clip.duration))")
+                                                .font(.subheadline.weight(.medium))
+                                                .padding(.horizontal, UIScale.pt(10))
                                         }
-                                    } label: {
-                                        HStack {
-                                            Image(systemName: "film")
-                                            Text("Clip \(index + 1)").lineLimit(1)
-                                        }
-                                        .font(.subheadline.weight(.medium))
-                                        .padding(.horizontal, UIScale.pt(10))
-                                        .frame(
-                                            width: clipWidth, height: UIScale.pt(52),
-                                            alignment: .leading
-                                        )
-                                        .background(
-                                            model.selectedClipID == clip.id
-                                                ? Color.accentColor.opacity(0.34)
-                                                : Color.accentColor.opacity(0.17),
-                                            in: RoundedRectangle(cornerRadius: 8))
-                                    }
-                                    .buttonStyle(.borderless)
-                                }
-                            }
-                            if let clips = model.project?.clips {
-                                ForEach(clips.dropFirst()) { clip in
-                                    if let start = model.pipeline?.segments.first(where: {
-                                        $0.clip.id == clip.id
-                                    })?.outputStart {
-                                        Button {
-                                            model.selectedClipID = clip.id
-                                            editorTool = .transition
-                                        } label: {
-                                            Image(systemName: "square.on.square")
-                                                .font(.system(size: UIScale.pt(11), weight: .bold))
-                                                .frame(
-                                                    width: UIScale.pt(28), height: UIScale.pt(28)
-                                                )
-                                                .background(.regularMaterial, in: Circle())
-                                        }
-                                        .help("Transition between clips")
-                                        .offset(
-                                            x: start * scale - UIScale.pt(14), y: UIScale.pt(12))
-                                    }
                                 }
                             }
                         }
@@ -415,18 +375,30 @@ struct VideoEditorPage: View {
                             ForEach(model.project?.zooms ?? []) { zoom in
                                 let start = model.outputTime(forRulerTime: zoom.startMs / 1000)
                                 let end = model.outputTime(forRulerTime: zoom.endMs / 1000)
+                                let others = (model.project?.zooms ?? []).filter {
+                                    $0.id != zoom.id
+                                }
+                                let previous =
+                                    others.map {
+                                        model.outputTime(forRulerTime: $0.endMs / 1000)
+                                    }.filter { $0 <= start }.max() ?? 0
+                                let next =
+                                    others.map {
+                                        model.outputTime(forRulerTime: $0.startMs / 1000)
+                                    }.filter { $0 >= end }.min() ?? model.duration
                                 ZoomTimelineRegion(
                                     zoom: zoom,
-                                    width: max(UIScale.pt(25), (end - start) * scale),
+                                    start: start, end: end, lowerBound: previous,
+                                    upperBound: next, pointsPerSecond: scale,
                                     selected: model.editingZoomID == zoom.id,
                                     select: {
                                         editorTool = .zoom
                                         model.selectZoom(zoom)
                                     },
-                                    adjust: { seconds, edge in
-                                        model.adjustZoom(zoom.id, by: seconds, edge: edge)
-                                    },
-                                    secondsPerPoint: 1 / scale
+                                    adjust: { range in
+                                        model.setZoomTiming(
+                                            zoom.id, start: range.start, end: range.end)
+                                    }
                                 )
                                 .offset(x: start * scale)
                             }
@@ -499,7 +471,7 @@ struct VideoEditorPage: View {
                 .font(.headline)
             Button("Add video or image", systemImage: "plus", action: model.importMedia)
                 .buttonStyle(.borderedProminent)
-            Text("CLIPS")
+            Text("SOURCES")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, UIScale.pt(8))
@@ -518,7 +490,7 @@ struct VideoEditorPage: View {
                                 HStack {
                                     Image(systemName: "film")
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Clip \(index + 1)")
+                                        Text("Source \(index + 1)")
                                             .font(.subheadline.weight(.medium))
                                         Text(timestamp(clip.duration))
                                             .font(.caption.monospacedDigit())
@@ -554,24 +526,11 @@ struct VideoEditorPage: View {
                         Label(
                             tool.rawValue,
                             systemImage: tool == .zoom
-                                ? "plus.magnifyingglass"
-                                : tool == .text ? "textformat" : "square.on.square")
+                                ? "plus.magnifyingglass" : "textformat")
                     }
                     .buttonStyle(.bordered)
                     .tint(editorTool == tool ? .accentColor : .secondary)
                 }
-                Button("Split", systemImage: "scissors", action: model.splitAtPlayhead)
-                    .buttonStyle(.bordered)
-                    .disabled(model.pipeline == nil)
-                Menu {
-                    Button("Move earlier") { model.moveSelected(by: -1) }
-                    Button("Move later") { model.moveSelected(by: 1) }
-                    Button("Duplicate clip", action: model.duplicateSelected)
-                    Button("Delete clip", role: .destructive, action: model.removeSelected)
-                } label: {
-                    Label("Clip", systemImage: "ellipsis.circle")
-                }
-                .disabled(model.selectedClipID == nil)
                 Spacer(minLength: 0)
                 Button("Undo", systemImage: "arrow.uturn.backward", action: model.undo)
                     .disabled(!model.canUndo)
@@ -583,7 +542,6 @@ struct VideoEditorPage: View {
             switch editorTool {
             case .zoom: zoomControls
             case .text: textControls
-            case .transition: transitionControls
             }
         }
         .padding(.horizontal, UIScale.pt(18))
@@ -664,72 +622,6 @@ struct VideoEditorPage: View {
             Button("Add text", systemImage: "plus", action: model.addCaption)
                 .buttonStyle(.borderedProminent)
                 .disabled(model.pipeline == nil || model.captionText.isEmpty)
-        }
-    }
-
-    private var transitionControls: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            if let clips = model.project?.clips, clips.count > 1 {
-                let incomingID =
-                    clips.dropFirst().contains(where: {
-                        $0.id == model.selectedClipID
-                    }) ? model.selectedClipID ?? clips[1].id : clips[1].id
-                let current = model.project?.transitions.first(where: {
-                    $0.clipID == incomingID
-                })
-                Text("Between clips")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker(
-                    "Into",
-                    selection: Binding(
-                        get: { incomingID },
-                        set: { model.selectedClipID = $0 }
-                    )
-                ) {
-                    ForEach(Array(clips.dropFirst().enumerated()), id: \.element.id) {
-                        index, clip in
-                        Text("Clip \(index + 1) → \(index + 2)").tag(clip.id)
-                    }
-                }
-                .frame(width: UIScale.pt(170))
-                Picker(
-                    "Effect",
-                    selection: Binding(
-                        get: { current?.kind ?? "cut" },
-                        set: {
-                            model.setTransition(
-                                before: incomingID, kind: $0, duration: transitionDuration)
-                        }
-                    )
-                ) {
-                    Text("Cut").tag("cut")
-                    Text("Fade").tag("fade")
-                    Text("Flash").tag("flash")
-                }
-                .frame(width: UIScale.pt(125))
-                if let current {
-                    Slider(
-                        value: Binding(
-                            get: { current.duration },
-                            set: {
-                                transitionDuration = $0
-                                model.setTransition(
-                                    before: incomingID, kind: current.kind, duration: $0)
-                            }
-                        ), in: 0.2...2, step: 0.1
-                    )
-                    .frame(width: UIScale.pt(115))
-                    Text(String(format: "%.1fs", current.duration))
-                        .font(.caption.monospacedDigit())
-                }
-            } else {
-                Text("Add a second clip to create a transition.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button("Add clip", action: model.importMedia)
-                    .buttonStyle(.borderedProminent)
-            }
         }
     }
 
@@ -825,20 +717,31 @@ private struct EditorAnnotationRow: View {
 
 private struct ZoomTimelineRegion: View {
     let zoom: VideoProject.Zoom
-    let width: CGFloat
+    let start: Double
+    let end: Double
+    let lowerBound: Double
+    let upperBound: Double
+    let pointsPerSecond: CGFloat
     let selected: Bool
     let select: () -> Void
-    let adjust: (Double, String) -> Void
-    let secondsPerPoint: Double
-    @State private var dragOffset: CGFloat = 0
-    @State private var draggingEdge: String?
+    let adjust: (ZoomTimelineTiming.Range) -> Void
+    @State private var preview: ZoomTimelineTiming.Range?
+
+    private var displayed: ZoomTimelineTiming.Range {
+        preview ?? .init(start: start, end: end)
+    }
+
+    private var snapDistance: Double {
+        min(0.25, Double(UIScale.pt(12) / pointsPerSecond))
+    }
 
     var body: some View {
         HStack(spacing: 0) {
             Capsule()
                 .fill(.white.opacity(0.8))
-                .frame(width: UIScale.pt(7), height: UIScale.pt(22))
-                .padding(.leading, UIScale.pt(3))
+                .frame(width: UIScale.pt(5), height: UIScale.pt(22))
+                .frame(width: UIScale.pt(10), height: UIScale.pt(32))
+                .contentShape(Rectangle())
                 .gesture(drag("start"))
                 .accessibilityLabel("Drag zoom start")
             Button(action: select) {
@@ -850,15 +753,19 @@ private struct ZoomTimelineRegion: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .simultaneousGesture(drag("move"))
+            .highPriorityGesture(drag("move"))
             Capsule()
                 .fill(.white.opacity(0.8))
-                .frame(width: UIScale.pt(7), height: UIScale.pt(22))
-                .padding(.trailing, UIScale.pt(3))
+                .frame(width: UIScale.pt(5), height: UIScale.pt(22))
+                .frame(width: UIScale.pt(10), height: UIScale.pt(32))
+                .contentShape(Rectangle())
                 .gesture(drag("end"))
                 .accessibilityLabel("Drag zoom end")
         }
-        .frame(width: width, height: UIScale.pt(32))
+        .frame(
+            width: max(UIScale.pt(25), (displayed.end - displayed.start) * pointsPerSecond),
+            height: UIScale.pt(32)
+        )
         .background(
             selected ? Color.accentColor : Color.blue.opacity(0.75),
             in: RoundedRectangle(cornerRadius: 7)
@@ -867,7 +774,7 @@ private struct ZoomTimelineRegion: View {
             RoundedRectangle(cornerRadius: 7)
                 .strokeBorder(.white.opacity(selected ? 0.8 : 0), lineWidth: 1)
         }
-        .offset(x: draggingEdge == "move" ? dragOffset : 0)
+        .offset(x: (displayed.start - start) * pointsPerSecond)
         .accessibilityLabel("Zoom at \(String(format: "%.1f", zoom.startMs / 1000)) seconds")
     }
 
@@ -878,14 +785,54 @@ private struct ZoomTimelineRegion: View {
     private func drag(_ edge: String) -> some Gesture {
         DragGesture(minimumDistance: UIScale.pt(3))
             .onChanged { value in
-                draggingEdge = edge
-                dragOffset = value.translation.width
+                preview = ZoomTimelineTiming.adjust(
+                    .init(start: start, end: end),
+                    by: Double(value.translation.width / pointsPerSecond), edge: edge,
+                    lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
             }
             .onEnded { value in
-                draggingEdge = nil
-                dragOffset = 0
-                adjust(Double(value.translation.width) * secondsPerPoint, edge)
+                let result = ZoomTimelineTiming.adjust(
+                    .init(start: start, end: end),
+                    by: Double(value.translation.width / pointsPerSecond), edge: edge,
+                    lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
+                adjust(result)
+                preview = nil
             }
+    }
+}
+
+enum ZoomTimelineTiming {
+    struct Range: Equatable {
+        let start: Double
+        let end: Double
+    }
+
+    static func adjust(
+        _ original: Range, by delta: Double, edge: String,
+        lower: Double, upper: Double, snapDistance: Double = 0.14
+    ) -> Range {
+        guard delta.isFinite, upper - lower >= 0.1 else { return original }
+        let minimum = 0.1
+        func snap(_ value: Double, to target: Double) -> Double {
+            abs(value - target) <= snapDistance ? target : value
+        }
+        switch edge {
+        case "start":
+            let value = max(lower, min(original.end - minimum, original.start + delta))
+            return Range(
+                start: min(original.end - minimum, snap(value, to: lower)),
+                end: original.end)
+        case "end":
+            let value = min(upper, max(original.start + minimum, original.end + delta))
+            return Range(
+                start: original.start,
+                end: max(original.start + minimum, snap(value, to: upper)))
+        default:
+            let length = original.end - original.start
+            let value = max(lower, min(upper - length, original.start + delta))
+            let moved = snap(snap(value, to: lower), to: upper - length)
+            return Range(start: moved, end: moved + length)
+        }
     }
 }
 
