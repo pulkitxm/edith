@@ -71,6 +71,13 @@ public enum AttentionText {
         return value
     }
 
+    public static func project(_ path: String) -> String? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: trimmed).lastPathComponent
+        return name.isEmpty || name == "/" || name == "~" ? nil : name
+    }
+
     public static func normalizedTitle(_ raw: String) -> String {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("("), let close = value.firstIndex(of: ")"),

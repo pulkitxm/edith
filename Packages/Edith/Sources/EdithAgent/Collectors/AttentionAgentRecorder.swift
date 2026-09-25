@@ -69,20 +69,12 @@ struct AttentionAgentRecorder {
             AttentionTag.session: agent.id,
             AttentionTag.status: agent.status.rawValue,
         ]
-        if let project = project(agent.cwd) { tags[AttentionTag.project] = project }
+        if let project = AttentionText.project(agent.cwd) { tags[AttentionTag.project] = project }
         let title = agent.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return AttentionEvent(
             id: segment.id, startedAt: segment.startedAt,
             duration: segment.lastSeen.timeIntervalSince(segment.startedAt), source: .agent,
             appName: HerdrKind.displayName(for: agent.kind),
             windowTitle: title.isEmpty ? nil : String(title.prefix(300)), tags: tags)
-    }
-
-    static func project(_ cwd: String) -> String? {
-        let trimmed = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let name = URL(fileURLWithPath: trimmed).lastPathComponent
-        guard !name.isEmpty, name != "/", name != "~" else { return nil }
-        return name
     }
 }

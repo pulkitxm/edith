@@ -55,6 +55,10 @@ enum HerdrSpaceWindow {
 
     static func has(_ spaceID: String) -> Bool { entries[spaceID] != nil }
 
+    static func model(of window: NSWindow) -> HerdrSpaceWindowModel? {
+        entries.values.first { $0.window === window }?.model
+    }
+
     static func holds(agent id: String) -> Bool {
         entries.values.contains { entry in entry.model.tabs.contains { $0.agentID == id } }
     }
