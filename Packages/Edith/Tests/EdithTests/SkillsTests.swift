@@ -85,6 +85,36 @@ import Testing
         }
     }
 
+    @Test func repeatedHighlightsReuseTheRenderedText() async throws {
+        let first = try #require(
+            await SyntaxHighlighting.shared.highlight(
+                text: Self.markdown, language: "markdown", dark: true))
+        let second = try #require(
+            await SyntaxHighlighting.shared.highlight(
+                text: Self.markdown, language: "markdown", dark: true))
+        let light = try #require(
+            await SyntaxHighlighting.shared.highlight(
+                text: Self.markdown, language: "markdown", dark: false))
+        #expect(first === second)
+        #expect(first !== light)
+    }
+
+    @MainActor @Test func docsTablesAreMeasuredOnceAndOnlyTheTargetHeadingFlashes() {
+        let cell = { (text: String) in [DocsSpan(text)] }
+        let table = DocsTable(
+            alignments: [.leading, .leading], header: [cell("Flag"), cell("Meaning")],
+            rows: [[cell("--json"), cell("Print machine readable output for scripts")]])
+        let measured = DocsTableLayout.columns(table)
+        #expect(DocsTableLayout.columns(table).natural == measured.natural)
+        #expect(DocsTableLayout.widths(table, available: 10_000) == measured.natural)
+        #expect(DocsTableLayout.widths(table, available: 1) == measured.minimum)
+        let heading = DocsBlock.heading(
+            DocsHeading(level: 2, spans: [DocsSpan("Usage")], anchor: "usage"))
+        #expect(DocsBlockView.flash("usage", in: heading) == "usage")
+        #expect(DocsBlockView.flash("other", in: heading) == nil)
+        #expect(DocsBlockView.flash("usage", in: .paragraph([])) == nil)
+    }
+
     @MainActor @Test func markdownViewerAllowsSelectionButNotEditing() throws {
         _ = TestWindowHost.application
         let host = NSHostingView(

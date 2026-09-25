@@ -409,7 +409,7 @@ private struct DocsPageView: View {
                     ForEach(DocsBlockRow.rows(page.blocks)) { row in
                         DocsBlockView(
                             block: row.block, width: width, dark: dark,
-                            flashAnchor: browser.flashAnchor)
+                            flashAnchor: DocsBlockView.flash(browser.flashAnchor, in: row.block))
                     }
                 }
                 .frame(width: width, alignment: .leading)

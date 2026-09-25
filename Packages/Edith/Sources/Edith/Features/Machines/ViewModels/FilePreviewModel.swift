@@ -440,11 +440,36 @@ struct CodePreview: View {
 actor SyntaxHighlighting {
     static let shared = SyntaxHighlighting()
 
+    static let cacheLimit = 64
+    static let cacheableBytes = 16_384
+
+    private struct CacheKey: Hashable {
+        let text: String
+        let language: String?
+        let dark: Bool
+    }
+
     private var highlighter: Highlighter?
     private var currentTheme: String?
+    private var cache: [CacheKey: NSAttributedString] = [:]
+    private var cacheOrder: [CacheKey] = []
 
     func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
         guard text.count < 400_000 else { return nil }
+        let key =
+            text.utf8.count <= Self.cacheableBytes
+            ? CacheKey(text: text, language: language, dark: dark) : nil
+        if let key, let cached = cache[key] { return cached }
+        let result = render(text: text, language: language, dark: dark)
+        if let key, let result {
+            if cacheOrder.count >= Self.cacheLimit { cache[cacheOrder.removeFirst()] = nil }
+            cache[key] = result
+            cacheOrder.append(key)
+        }
+        return result
+    }
+
+    private func render(text: String, language: String?, dark: Bool) -> NSAttributedString? {
         let theme = dark ? "atom-one-dark" : "atom-one-light"
         if highlighter == nil {
             highlighter = Highlighter()
