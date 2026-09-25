@@ -693,6 +693,25 @@ public enum LimitsReport {
         ])
     }
 
+    public static func alert(_ verdict: LimitAlertVerdict) -> JSONValue {
+        let a = verdict.assessment
+        return .object([
+            "provider": .string(a.target.provider.rawValue),
+            "window": .string(a.target.slot.rawValue),
+            "label": .string(a.target.label),
+            "percent": .double(a.window.percent),
+            "resetsAt": .date(a.window.resetsAt),
+            "burnPerHour": .optional(a.burn.map { ($0.perHour * 10).rounded() / 10 }),
+            "burnMinutes": .optional(a.burn.map { Int(($0.lookback / 60).rounded()) }),
+            "active": .bool(a.active),
+            "projectedCapAt": .date(a.active ? a.projectedCapAt : nil),
+            "alert": .optional(verdict.alert?.kind.rawValue),
+            "title": .optional(verdict.alert?.title),
+            "body": .optional(verdict.alert?.body),
+            "reason": .string(verdict.reason),
+        ])
+    }
+
     public static func json(
         provider: LimitProvider, observedAt: Date, session: LimitWindow?, week: LimitWindow?
     ) -> JSONValue {

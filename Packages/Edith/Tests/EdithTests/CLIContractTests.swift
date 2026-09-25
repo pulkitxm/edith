@@ -592,6 +592,7 @@ enum JSONContract {
             "ed permissions settings",
             ["permissions", "settings", "calendar", "--json"], mutatesTheMachine: true),
         JSONCase("ed usage limits", ["usage", "limits", "--json"]),
+        JSONCase("ed usage alerts", ["usage", "alerts", "--json"]),
         JSONCase("ed usage summary", ["usage", "summary", "--json"]),
         JSONCase("ed usage daily", ["usage", "daily", "--json"]),
         JSONCase("ed usage models", ["usage", "models", "--json"]),

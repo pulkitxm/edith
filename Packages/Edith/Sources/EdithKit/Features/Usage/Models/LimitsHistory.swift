@@ -250,6 +250,33 @@ public struct LimitsHistory {
         }
     }
 
+    public static func alertSamples(since: Date, url: URL = LimitsHistory.url)
+        -> [LimitAlertTarget: [LimitAlertSample]]
+    {
+        var samples: [LimitAlertTarget: [LimitAlertSample]] = [:]
+        FileTail.scanLinesReversed(
+            url, maxScanBytes: maximumTailScanBytes,
+            shouldContinue: { !Task.isCancelled }
+        ) { data in
+            guard let row = try? decoder.decode(Row.self, from: data),
+                let date = EdithDate.parseISO(row.ts)
+            else { return true }
+            guard date >= since else { return false }
+            let provider = row.p ?? .claude
+            let windows: [(LimitWindowSlot, Double?, String?)] = [
+                (.session, row.s, row.sr), (.week, row.w, row.wr), (.fable, row.f, row.fr),
+            ]
+            for (slot, percent, reset) in windows {
+                guard let percent else { continue }
+                samples[LimitAlertTarget(provider, slot), default: []].append(
+                    LimitAlertSample(
+                        date: date, percent: percent, resetsAt: reset.flatMap(EdithDate.parseISO)))
+            }
+            return true
+        }
+        return samples.mapValues { $0.sorted { $0.date < $1.date } }
+    }
+
     private static func latestRows(
         url: URL, providers: Set<LimitProvider>
     ) -> [LimitProvider: Row] {

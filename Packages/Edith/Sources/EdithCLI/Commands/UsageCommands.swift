@@ -12,7 +12,8 @@ struct UsageCommand: AsyncParsableCommand {
             whether or not the app is open.
             """,
         subcommands: [
-            UsageLimitsCommand.self, UsageSummaryCommand.self, UsageDailyCommand.self,
+            UsageLimitsCommand.self, UsageAlertsCommand.self, UsageSummaryCommand.self,
+            UsageDailyCommand.self,
             UsageModelsCommand.self, UsageProjectsCommand.self, UsageSourcesCommand.self,
             UsageMachinesCommand.self, UsageExportCommand.self, UsageRefreshCommand.self,
         ],
@@ -137,6 +138,52 @@ struct UsageLimitsCommand: AsyncParsableCommand {
     private func resetText(_ date: Date) -> String {
         let seconds = max(0, date.timeIntervalSinceNow)
         return ByteFormatter.duration(seconds)
+    }
+}
+
+struct UsageAlertsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "alerts",
+        abstract: "What each tracked limit window would alert about now, and why.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            guard !LimitsHistory.availableProviders().isEmpty else {
+                throw CLIFailure.unavailable(
+                    "no limit history yet",
+                    hint: "enable the Agent Usage extension and let Edith poll once")
+            }
+            let clock = LimitAlertClock()
+            let verdicts = LimitAlertInspector.inspect(clock: clock)
+            let enabled = LimitAlertSettings.fromDefaults(SharedDefaults.store).master
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "enabled": .bool(enabled),
+                        "jevConfigured": .bool(JevAvailability.isConfigured()),
+                        "windows": .array(verdicts.map(LimitsReport.alert)),
+                    ]))
+                return
+            }
+            let rows = verdicts.map { verdict in
+                let a = verdict.assessment
+                return [
+                    a.target.label, String(format: "%.0f%%", a.window.percent),
+                    a.window.resetsAt.map(clock.moment) ?? "-",
+                    a.burn.map { String(format: "%.1f%%/h", $0.perHour) } ?? "-",
+                    a.active ? a.projectedCapAt.map(clock.moment) ?? "-" : "idle",
+                    verdict.alert?.kind.rawValue ?? "none", verdict.reason,
+                ]
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["WINDOW", "USED", "RESETS", "BURN", "CAP AROUND", "ALERT", "WHY"],
+                    rows: rows))
+            if !enabled { CLIOut.out("Limit alerts are off; this is what they would send.") }
+        }
     }
 }
 

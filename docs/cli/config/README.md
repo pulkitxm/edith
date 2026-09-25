@@ -56,9 +56,9 @@ not here cannot be set, and `import` skips it.
 - **Scope** is which defaults domain holds the value. `shared` is the
   `com.pulkit.edith.shared` suite that the app, its menu bar helper and `ed` all
   read, so a write there reaches Edith. `standard` is whichever process's own
-  domain is reading, which for `ed` is `ed`, not the app: those 15 keys are the
+  domain is reading, which for `ed` is `ed`, not the app: those 11 keys are the
   ones to read through their own command instead.
-- **read only** marks the 23 keys the app owns and maintains. `ed` reports them
+- **read only** marks the 19 keys the app owns and maintains. `ed` reports them
   and refuses to write them, exit 1.
 
 ### `appearance`
@@ -113,7 +113,7 @@ not here cannot be set, and `import` skips it.
 | `limitsProvider` | string: `claude`, `codex` | `claude` | shared | Provider shown first in the limits UI. |
 | `warnPercent` | int | `60` | shared | Percentage at which a limit turns amber. |
 | `critPercent` | int | `85` | shared | Percentage at which a limit turns red. |
-| `pacingMargin` | number | `10` | shared | Percentage points ahead of pace before pacing alerts fire. |
+| `pacingMargin` | number | `10` | shared | Percentage points ahead of an even pace before smart color turns amber. |
 
 ### `menubar`
 
@@ -136,21 +136,17 @@ not here cannot be set, and `import` skips it.
 
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
-| `notifSessionLevel` | int | `0` | standard, read only | Session threshold the last alert fired at. |
-| `notifWeeklyLevel` | int | `0` | standard, read only | Weekly threshold the last alert fired at. |
-| `notifSessionPacing` | string | none | standard, read only | Session pacing zone the last alert fired for. |
-| `notifWeeklyPacing` | string | none | standard, read only | Weekly pacing zone the last alert fired for. |
 | `notifyMaster` | bool | `false` | shared | Master switch for every usage notification. |
-| `notifyTrackSession` | bool | none | shared | Alert when the session limit crosses a threshold. |
-| `notifyTrackWeekly` | bool | none | shared | Alert when the weekly limit crosses a threshold. |
-| `notifyRecovery` | bool | none | shared | Alert when usage falls back into the green. |
-| `notifyPacingWarning` | bool | none | shared | Alert when spend runs ahead of pace. |
-| `notifyPacingHot` | bool | none | shared | Alert when spend is burning far ahead of pace. |
-| `notifyReminderSession` | bool | none | shared | Remind before the session window resets. |
-| `notifyReminderSessionOffsetMin` | int | `15` | shared | Minutes before the session reset to remind. |
-| `notifyReminderWeekly` | bool | none | shared | Remind before the weekly window resets. |
-| `notifyReminderWeeklyOffsetMin` | int | `60` | shared | Minutes before the weekly reset to remind. |
-| `notifyTokenExpired` | bool | none | shared | Alert when a provider token expires. |
+| `notifyTrackSession` | bool | `true` | shared | Send limit alerts for 5-hour windows. |
+| `notifyTrackWeekly` | bool | `true` | shared | Send limit alerts for weekly windows, Fable included. |
+| `notifyOnPace` | bool | `true` | shared | Alert when the recent burn rate would hit the cap before the reset. |
+| `notifyAlmostCapped` | bool | `true` | shared | Alert once per window when usage crosses the almost-capped line. |
+| `notifyAlmostCappedPercent` | int | `90` | shared | Percentage that counts as almost capped. |
+| `notifyCapped` | bool | `true` | shared | Alert when a window hits 100%, with its reset time. |
+| `notifyBack` | bool | `true` | shared | Alert at the reset of a window that was capped or nearly capped. |
+| `notifyOutlook` | bool | `false` | shared | Morning outlook when a weekly window is heading for a tight finish. |
+| `notifyHeadroom` | bool | `false` | shared | Alert on the last day of a weekly window when half or more is unused. |
+| `notifyLoginProblems` | bool | `true` | shared | Alert once when a provider login breaks, until it recovers. |
 
 ### `budget`
 
@@ -424,19 +420,17 @@ Nothing in this group exits 4, because nothing in it needs Edith to be running.
 `ed` all open, so writing one from the command line is the same act as clicking
 the switch. A `standard` setting lives in whatever `UserDefaults.standard` means
 for the process doing the reading, which for `ed` is `ed`'s own domain rather
-than the app's. Those 15 keys are `EdithMainWindowFullScreen`, `tab`,
-`notifSessionLevel`, `notifWeeklyLevel`, `notifSessionPacing`,
-`notifWeeklyPacing`, `SUEnableAutomaticChecks`, `SUScheduledCheckInterval`,
+than the app's. Those 11 keys are `EdithMainWindowFullScreen`, `tab`,
+`SUEnableAutomaticChecks`, `SUScheduledCheckInterval`,
 `SUAutomaticallyUpdate`, `musicLastTrack`, `musicLastPosition`,
 `musicWasPlaying`, `musicVolume`, `musicLooping` and `musicShuffling`. Setting
 one of them changes what `ed` sees, not what the app does, so drive the live
 ones through the command that owns them: `ed music volume 0.4` reaches the
 player, `ed config set musicVolume 0.4` does not.
 
-**Read only means the app writes it.** The 23 read-only keys are state the app
+**Read only means the app writes it.** The 19 read-only keys are state the app
 maintains and `ed` reports: the `perm*Granted` mirror of macOS permission state,
-the `last*BackupAt` timestamps, the four `notifSession*` and `notifWeekly*`
-records of which alert already fired, `musicFolderStale`, the `musicLast*` and
+the `last*BackupAt` timestamps, `musicFolderStale`, the `musicLast*` and
 `musicWasPlaying` resume state, the `presenterAuto*` share detection,
 `lidAwakeActive`, and `micMuted`. They show up in `ls`, `get` and `describe`, are
 refused by `set` and `unset` with exit 1, and are left out of `export` and
@@ -444,8 +438,8 @@ skipped by `import`.
 
 **A missing default is not the same as `false`.** Where the catalogue declares
 no default, the setting reads blank in the table and `null` in `--json` until
-something writes it, which is why most of the `notch*` and `notify*` switches
-look empty on a fresh install. `ed config ls --changed` is the honest view of
+something writes it, which is why most of the `notch*` switches look empty on
+a fresh install. `ed config ls --changed` is the honest view of
 what has actually been decided.
 
 **`--changed` compares against registered defaults too.** A setting counts as

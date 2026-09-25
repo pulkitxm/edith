@@ -380,6 +380,30 @@ import Testing
         #expect(text.split(separator: "\n").count == 2)
     }
 
+    @Test func alertSamplesCarryEveryWindowAndStopAtTheCutoff() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var history = LimitsHistory(url: url)
+        let reset = now.addingTimeInterval(86_400)
+        for step in 0..<4 {
+            history.append(
+                session: LimitWindow(percent: Double(10 + step), resetsAt: reset),
+                week: LimitWindow(percent: 40, resetsAt: reset),
+                fable: LimitWindow(percent: Double(20 + step), resetsAt: reset),
+                now: now.addingTimeInterval(Double(step) * 300))
+        }
+        history.append(
+            provider: .codex, session: nil, week: LimitWindow(percent: 7, resetsAt: reset),
+            now: now.addingTimeInterval(900))
+        let samples = LimitsHistory.alertSamples(since: now.addingTimeInterval(300), url: url)
+        #expect(samples[LimitAlertTarget(.claude, .fable)]?.map(\.percent) == [21, 22, 23])
+        #expect(samples[LimitAlertTarget(.claude, .session)]?.first?.resetsAt == reset)
+        #expect(samples[LimitAlertTarget(.codex, .week)]?.map(\.percent) == [7])
+        #expect(samples[LimitAlertTarget(.codex, .session)] == nil)
+    }
+
     @Test func rowsWithoutFableStillDecode() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-tests-\(UUID().uuidString)")

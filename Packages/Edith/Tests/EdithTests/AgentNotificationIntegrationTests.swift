@@ -37,12 +37,18 @@ private struct NotificationFixture {
         defaults.set(true, forKey: AppStorageKeys.Notify.master)
         defaults.set(true, forKey: AppStorageKeys.Tabs.usageEnabled)
         defaults.set(true, forKey: AppStorageKeys.Tabs.herdrEnabled)
-        defaults.set(false, forKey: AppStorageKeys.General.smartColor)
-        defaults.set(false, forKey: AppStorageKeys.Notify.pacingHot)
-        defaults.set(false, forKey: AppStorageKeys.Notify.pacingWarning)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        service = AgentNotificationService(
+        service = Self.service(root: root, defaults: defaults)
+    }
+
+    static func service(
+        root: URL, defaults: UserDefaults,
+        history: @escaping AgentNotificationService.HistoryLoader = { _ in [:] },
+        jev: @escaping AgentNotificationService.JevResolver = { nil }
+    ) -> AgentNotificationService {
+        AgentNotificationService(
             url: root.appendingPathComponent("outbox.json"), defaults: defaults, changed: {},
+            history: history, jev: jev, clock: { LimitAlertScenario.clock($0) },
             attention: AgentAttention(
                 inspect: { _ in [:] }, decider: { nil }, appIsRunning: { false },
                 openAgent: { _ in }))
@@ -53,14 +59,17 @@ private struct NotificationFixture {
         try? FileManager.default.removeItem(at: root)
     }
 
-    func limits(percent: Double = 95, error: String? = nil) -> LimitsTopicSnapshot {
+    func limits(
+        percent: Double = 95, error: String? = nil, resetsAt: Date? = nil
+    ) -> LimitsTopicSnapshot {
         LimitsTopicSnapshot(
             refreshedAt: now,
             providers: [
                 LimitsProviderSnapshot(
                     provider: .claude,
                     session: error == nil
-                        ? LimitWindow(percent: percent, resetsAt: now.addingTimeInterval(7200))
+                        ? LimitWindow(
+                            percent: percent, resetsAt: resetsAt ?? now.addingTimeInterval(7200))
                         : nil,
                     week: nil, error: error)
             ], failure: error)
@@ -91,26 +100,35 @@ private struct NotificationFixture {
         let result = try #require(try await job.run())
         #expect(try AgentPayload.decode(LimitsTopicSnapshot.self, from: result) == snapshot)
         let deliveries = try await fixture.service.pending(now: fixture.now)
-        #expect(deliveries.map(\.identifier) == ["limits.escalation_session"])
-        #expect(deliveries.first?.notification?.title == "5h almost capped")
+        #expect(
+            deliveries.map(\.identifier)
+                == ["limits.almost_capped.claude.session", "limits.back.claude.session"])
+        #expect(deliveries.first?.notification?.title == "Claude 5h at 95%")
+        #expect(deliveries.last?.fireAt == fixture.now.addingTimeInterval(7200))
     }
 
-    @Test func pendingAlertsSurviveDaemonRestartAndDeduplicateRepeatedSamples() async throws {
+    @Test func pendingAlertsSurviveDaemonRestartAndOnlyARealResetBringsThemBack() async throws {
         let fixture = try NotificationFixture()
         defer { fixture.close() }
         try await fixture.service.evaluateLimits(fixture.limits(), now: fixture.now)
         let before = try await fixture.service.pending(now: fixture.now)
-        let restarted = AgentNotificationService(
-            url: fixture.root.appendingPathComponent("outbox.json"),
-            defaults: fixture.defaults, changed: {})
+        let restarted = NotificationFixture.service(root: fixture.root, defaults: fixture.defaults)
         #expect(try await restarted.pending(now: fixture.now) == before)
         try await restarted.acknowledge(before.map(\.id))
         try await restarted.evaluateLimits(fixture.limits(), now: fixture.now)
         #expect(try await restarted.pending(now: fixture.now).isEmpty)
+        for minute in 1...30 {
+            let later = fixture.now.addingTimeInterval(Double(minute) * 60)
+            #expect(try await restarted.pending(now: later).isEmpty)
+        }
         try await restarted.evaluateLimits(fixture.limits(percent: 5), now: fixture.now)
-        #expect(
-            try await restarted.pending(now: fixture.now).map(\.identifier)
-                == ["limits.recovery_session"])
+        #expect(try await restarted.pending(now: fixture.now).isEmpty)
+        let fresh = fixture.limits(percent: 5, resetsAt: fixture.now.addingTimeInterval(5 * 3600))
+        try await restarted.evaluateLimits(fresh, now: fixture.now)
+        let back = try await restarted.pending(now: fixture.now)
+        #expect(back.map(\.identifier) == ["limits.back.claude.session"])
+        #expect(back.first?.fireAt == nil)
+        #expect(back.first?.notification?.body.contains("reset early") == true)
     }
 
     @Test func staleAcknowledgementCannotDeleteAReplacement() async throws {
@@ -128,45 +146,93 @@ private struct NotificationFixture {
         #expect(after.first?.id != before.first?.id)
     }
 
-    @Test func daemonSchedulesAndCancelsResetRemindersWhenSettingsChange() async throws {
+    @Test func togglingAnAlertOffPurgesQueuedAndScheduledDeliveries() async throws {
         let fixture = try NotificationFixture()
         defer { fixture.close() }
-        fixture.defaults.set(true, forKey: AppStorageKeys.Notify.reminderSession)
-        try await fixture.service.evaluateLimits(fixture.limits(percent: 5), now: fixture.now)
-        let scheduled = try await fixture.service.pending(now: fixture.now)
-        let reminder = try #require(scheduled.first { $0.identifier == "reminder_session" })
-        #expect(reminder.fireAt == fixture.now.addingTimeInterval(5400))
-        try await fixture.service.acknowledge(scheduled.map(\.id))
-        try await fixture.service.reconcileSettings(now: fixture.now.addingTimeInterval(5500))
-        #expect(
-            try await fixture.service.pending(now: fixture.now.addingTimeInterval(5500)).isEmpty)
-        fixture.defaults.set(false, forKey: AppStorageKeys.Notify.master)
+        try await fixture.service.evaluateLimits(fixture.limits(), now: fixture.now)
+        let queued = try await fixture.service.pending(now: fixture.now)
+        #expect(queued.count == 2)
+        try await fixture.service.acknowledge(
+            queued.filter { $0.fireAt != nil }.map(\.id))
+        fixture.defaults.set(false, forKey: AppStorageKeys.Notify.almostCapped)
+        let purged = try await fixture.service.pending(now: fixture.now)
+        #expect(purged.isEmpty)
+        fixture.defaults.set(false, forKey: AppStorageKeys.Notify.back)
         let cancelled = try await fixture.service.pending(now: fixture.now)
-        #expect(cancelled.map(\.identifier) == ["reminder_session"])
+        #expect(cancelled.map(\.identifier) == ["limits.back.claude.session"])
         #expect(cancelled.first?.notification == nil)
     }
 
-    @Test func pendingReminderReplaysAfterItsFireTimeUntilTheReset() async throws {
-        let fixture = try NotificationFixture()
-        defer { fixture.close() }
-        fixture.defaults.set(true, forKey: AppStorageKeys.Notify.reminderSession)
-        try await fixture.service.evaluateLimits(fixture.limits(percent: 5), now: fixture.now)
-        let pending = try await fixture.service.pending(now: fixture.now.addingTimeInterval(6000))
-        #expect(pending.contains { $0.identifier == "reminder_session" && $0.notification != nil })
-        let expired = try await fixture.service.pending(now: fixture.now.addingTimeInterval(7300))
-        #expect(!expired.contains { $0.notification != nil })
-    }
-
-    @Test func expiredTokenAlertsAreGeneratedAndThrottledByTheCollector() async throws {
+    @Test func loginProblemsNotifyOnceUntilTheProviderRecovers() async throws {
         let fixture = try NotificationFixture()
         defer { fixture.close() }
         let snapshot = fixture.limits(error: "Claude session expired - run claude to re-login")
         try await fixture.service.evaluateLimits(snapshot, now: fixture.now)
         let alerts = try await fixture.service.pending(now: fixture.now)
-        #expect(alerts.map(\.identifier) == ["limits.token_expired"])
+        #expect(alerts.map(\.identifier) == ["limits.login.claude"])
+        #expect(alerts.first?.notification?.title == "Claude session expired")
         try await fixture.service.acknowledge(alerts.map(\.id))
-        try await fixture.service.evaluateLimits(snapshot, now: fixture.now.addingTimeInterval(100))
+        for hour in 1...6 {
+            try await fixture.service.evaluateLimits(
+                snapshot, now: fixture.now.addingTimeInterval(Double(hour) * 3600))
+        }
         #expect(try await fixture.service.pending(now: fixture.now).isEmpty)
+        try await fixture.service.evaluateLimits(fixture.limits(percent: 10), now: fixture.now)
+        try await fixture.service.evaluateLimits(snapshot, now: fixture.now)
+        #expect(
+            try await fixture.service.pending(now: fixture.now).map(\.identifier)
+                == ["limits.login.claude"])
+    }
+
+    @Test func jevOnlyHoldsBackNonCriticalAlerts() async throws {
+        let fixture = try NotificationFixture()
+        defer { fixture.close() }
+        let probe = LimitAlertJevProbe(score: 0.1)
+        let reset = fixture.now.addingTimeInterval(3 * 3600)
+        let windowStart = reset.addingTimeInterval(-5 * 3600)
+        let history = LimitAlertScenario.samples(reset, from: windowStart, to: fixture.now) {
+            30 * $0.timeIntervalSince(windowStart) / 3600
+        }
+        let target = LimitAlertTarget(.claude, .session)
+        let service = NotificationFixture.service(
+            root: fixture.root, defaults: fixture.defaults, history: { _ in [target: history] },
+            jev: { probe })
+        try await service.evaluateLimits(
+            fixture.limits(percent: 60, resetsAt: reset), now: fixture.now)
+        #expect(probe.calls == 1)
+        #expect(try await service.pending(now: fixture.now).isEmpty)
+        try await service.evaluateLimits(
+            fixture.limits(percent: 100, resetsAt: reset), now: fixture.now.addingTimeInterval(300))
+        #expect(probe.calls == 1)
+        let capped = try await service.pending(now: fixture.now)
+        #expect(capped.map(\.identifier).contains("limits.capped.claude.session"))
+    }
+
+    @Test func noJevKeyMeansNoJevCalls() async throws {
+        let fixture = try NotificationFixture()
+        defer { fixture.close() }
+        let factory = LimitAlertClientCounter()
+        let engine = JevEngine(
+            store: LimitAlertEmptyKeyStore(),
+            makeClient: { key in
+                factory.record()
+                return JevClient(apiKey: key)
+            })
+        let reset = fixture.now.addingTimeInterval(3 * 3600)
+        let windowStart = reset.addingTimeInterval(-5 * 3600)
+        let history = LimitAlertScenario.samples(reset, from: windowStart, to: fixture.now) {
+            30 * $0.timeIntervalSince(windowStart) / 3600
+        }
+        let target = LimitAlertTarget(.claude, .session)
+        let service = NotificationFixture.service(
+            root: fixture.root, defaults: fixture.defaults, history: { _ in [target: history] },
+            jev: { await AgentNotificationService.decider(engine) })
+        try await service.evaluateLimits(
+            fixture.limits(percent: 60, resetsAt: reset), now: fixture.now)
+        let delivered = try await service.pending(now: fixture.now)
+        #expect(delivered.map(\.identifier) == ["limits.on_pace.claude.session"])
+        #expect(factory.count == 0)
+        #expect(await engine.status(probe: false).decisions == 0)
     }
 
     @Test func blockedSessionsAreDiscoveredWithoutASubscriber() async throws {
@@ -216,15 +282,15 @@ private struct NotificationFixture {
         defer { fixture.close() }
         let blocker = fixture.root.appendingPathComponent("blocked")
         try Data().write(to: blocker)
-        let service = AgentNotificationService(
-            url: blocker.appendingPathComponent("outbox.json"), defaults: fixture.defaults,
-            changed: {})
+        let service = NotificationFixture.service(root: blocker, defaults: fixture.defaults)
         await #expect(throws: (any Error).self) {
             try await service.evaluateLimits(fixture.limits(), now: fixture.now)
         }
         try FileManager.default.removeItem(at: blocker)
         try await service.evaluateLimits(fixture.limits(), now: fixture.now)
-        #expect(try await service.pending(now: fixture.now).count == 1)
+        #expect(
+            try await service.pending(now: fixture.now).map(\.identifier).contains(
+                "limits.almost_capped.claude.session"))
     }
 
     @Test func helperAcknowledgesOnlySuccessfulPresentation() async throws {
@@ -262,4 +328,17 @@ private struct NotificationFixture {
             operation: AgentNotificationOperation.pending, payload: Data())
         #expect(try AgentPayload.decode([AgentNotificationDelivery].self, from: empty).isEmpty)
     }
+}
+
+private final class LimitAlertClientCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var made = 0
+
+    func record() { lock.withLock { made += 1 } }
+    var count: Int { lock.withLock { made } }
+}
+
+private struct LimitAlertEmptyKeyStore: JevKeyStore {
+    func read() -> JevKeyRead { .missing }
+    func write(_ key: String?) -> Bool { true }
 }

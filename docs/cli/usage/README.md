@@ -23,6 +23,7 @@ closed.
 | --- | --- |
 | `ed usage` | Runs `ed usage summary`, the default subcommand |
 | `ed usage limits` | Session and weekly rate limits per provider, newest observation per provider |
+| `ed usage alerts` | Burn rate, projected cap and the limit alert each tracked window would get now |
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
 | `ed usage models` | Tokens and attributable cost per model, with unassigned provider cost shown separately |
@@ -45,6 +46,7 @@ closed.
 ## Commands
 
 - [`ed usage limits`](./limits.md)
+- [`ed usage alerts`](./alerts.md)
 - [`ed usage summary`](./summary.md)
 - [`ed usage daily`](./daily.md)
 - [`ed usage models`](./models.md)
