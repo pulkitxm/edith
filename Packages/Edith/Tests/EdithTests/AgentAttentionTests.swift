@@ -341,6 +341,28 @@ private struct AttentionFixture {
         #expect(fixture.recorder.requests.first?.questions["ready_for_review"] != nil)
     }
 
+    @Test func jevCannotSilenceAFinishTheUserAskedFor() async throws {
+        let fixture = AttentionFixture(changes: 2) { recorder in
+            ScriptedJev(
+                recorder: recorder,
+                answers: [
+                    "state": JevAnswer(
+                        type: "choice", choice: "done", probabilities: ["done": 0.97]),
+                    "interrupt": JevAnswer(type: "noul", noul: 0.38),
+                    "need": JevAnswer(
+                        type: "choice", choice: "nothing", probabilities: ["nothing": 0.84]),
+                    "ready_for_review": JevAnswer(type: "noul", noul: 0.68),
+                ])
+        }
+        defer { fixture.close() }
+        fixture.recorder.screen = "Wrote 1 line to goodbye.txt\nCrunched for 4s"
+        _ = try await fixture.observe([fixture.agent(.working)])
+        let notification = try #require(
+            try await fixture.observe([fixture.agent(.done)]).first?.notification)
+        #expect(notification.title == "Claude Code finished")
+        #expect(notification.action?.view == .diff)
+    }
+
     @Test func noKeyMeansNoJevCallAndTheRulesStillNotify() async throws {
         let recorder = AttentionRecorder()
         let engine = JevEngine(

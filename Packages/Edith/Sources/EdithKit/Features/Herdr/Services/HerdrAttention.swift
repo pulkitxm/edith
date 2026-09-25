@@ -203,8 +203,8 @@ public enum HerdrAttentionClassifier {
         {
             refined.need = need
         }
-        if let interrupt = decision.noul("interrupt") {
-            refined.interrupt = pinned || interrupt >= 0.5
+        if event == .stalled, !pinned, let interrupt = decision.noul("interrupt") {
+            refined.interrupt = interrupt >= 0.5
         }
         if refined.state == .done, let ready = decision.noul("ready_for_review") {
             refined.readyForReview = base.readyForReview && ready >= 0.5
