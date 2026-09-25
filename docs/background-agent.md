@@ -10,23 +10,42 @@ in the product, the resource policy, and the ordered end-to-end verification pro
 
 ## Process boundary
 
-Debug builds use `com.pulkit.edith.development` for the application,
-`com.pulkit.edith.development.helper` for the menu bar, and
-`com.pulkit.edith.development.agent` for the daemon. They display as Edith Development
-and Edith Development Menu Bar. Release identities remain unchanged.
+Every worktree builds its own development identity. `build.sh` passes the worktree's
+slot (its folder name without the `edith-` prefix, `main` for the primary checkout) as
+`EDITH_DEV_SLOT`, so the application is `com.pulkit.edith.dev.<slot>`, the menu bar is
+`com.pulkit.edith.dev.<slot>.helper`, and the daemon is
+`com.pulkit.edith.dev.<slot>.agent`. They display as Edith (<slot>) and Edith (<slot>)
+Menu Bar. Xcode runs use the `xcode` slot. Release identities remain unchanged.
 
-The containing application bundle determines the identity for the main executable,
-nested helper, and daemon. Development preferences, IPC channels, application data,
-caches, logs, and cloud directories are separate from the installed product.
-Development startup does not replace command-line symlinks or unregister retired
-production login items. Automatic production updates are disabled in development builds.
-`build.sh --install` requires `--release`; launch a development
-build from its build directory instead. Existing development bundles must be rebuilt
-to receive this separation. Verify a signed development package with
+The outermost containing application bundle determines the identity for the main
+executable, nested helper, and daemon. Each slot has its own preferences, IPC
+channels, and data, caches, and logs under `Edith Dev/<slot>`. Its cloud backups stay in
+`Application Support/Edith Dev/<slot>/iCloud` rather than iCloud Drive. Development
+startup does not replace command-line symlinks or unregister retired production login
+items. Automatic production updates are disabled in development builds.
+
+Development builds never use `SMAppService`. The daemon's property list inside the
+development bundle names `edithd` by absolute path, without `KeepAlive`. On launch the
+app loads it with `launchctl bootstrap` if it is missing and restarts it with
+`launchctl kickstart -k` if the running process predates the binary on disk. On quit it
+unloads the daemon and quits its menu helper. Development builds also skip the menu
+bar login item and the privileged lid-awake daemon, so nothing they do reaches a
+production registration. `build.sh` stops a worktree's running development processes
+before opening the new build. `build.sh --teardown` removes the current slot, and
+`build.sh --gc` removes slots whose worktree is gone, retires the old shared
+`com.pulkit.edith.development` identity, and removes production copies outside
+`/Applications` from LaunchServices.
+
+A production bundle only runs from `/Applications/Edith.app` or
+`~/Applications/Edith.app`. Anywhere else it explains that and quits, because
+LaunchServices and the login items database resolve Edith by bundle identifier and
+a stray copy would take over the installed app's agent and menu bar. `build.sh
+--install` requires `--release`, and a Release build that is not installed is never
+opened and is removed from LaunchServices. Verify a signed development package with
 `python3 scripts/test-development-identity-e2e.py`. This starts the packaged daemon
-on its default development service, checks its separate data directory, and runs
-a task through the packaged client. It refuses to replace an already registered
-development daemon and uses disposable fixture settings.
+on its worktree development service, checks its separate data directory, and runs
+a task through the packaged client. It refuses to replace a loaded development
+daemon for the same slot and uses disposable fixture settings.
 
 On macOS 26, Control Center can explicitly block a status item after Edith requests
 visibility. Inspect the `appStatusItems` log category for the helper bundle identifier

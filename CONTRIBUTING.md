@@ -21,10 +21,17 @@ documentation, tests, and code all help.
 cd Packages/Edith && ./test.sh
 ```
 
-Default builds run as Edith Development, with separate menu helper and daemon
-identities, settings, and application data. `--branch` and `--pr` select the source
-without enabling installation. `make install` and `make reinstall` build a Release
-configuration before replacing the installed app.
+Default builds are development builds. Each worktree builds its own app,
+`com.pulkit.edith.dev.<slot>`, displayed as "Edith (<slot>)", where the slot is the
+worktree folder name without the `edith-` prefix (`main` for the primary checkout).
+Its menu helper, background agent, settings, and data under `Edith Dev/<slot>` belong
+to that worktree alone, so several branches run side by side without touching each
+other or the installed app. Quitting a development build stops its agent and menu
+helper. `./build.sh --teardown` deletes the current worktree's slot, including its
+preferences and permission grants; `./build.sh --gc` does the same for slots whose
+worktree is gone. `--branch` and `--pr` select the source without enabling
+installation. `make install` and `make reinstall` build a Release configuration
+before replacing the installed app, and only `/Applications/Edith.app` runs as Edith.
 
 Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
@@ -35,7 +42,9 @@ builds `edithd`, the headless background agent, and `EdithLidAwakeHelper`, so
 every executable shares one compiled module graph. `build.sh` places the agent
 at `Contents/MacOS/edithd` with its LaunchAgent property list in
 `Contents/Library/LaunchAgents`, and the signed privileged helper with its
-launchd property list alongside.
+launchd property list alongside. A development bundle's property list names the
+agent by absolute path, and the app loads it with `launchctl bootstrap` instead of
+registering a login item.
 
 All Swift code lives in one SwiftPM package, `Packages/Edith`. The Xcode
 targets are folder-synchronized onto `Packages/Edith/Sources/*`, so a file
