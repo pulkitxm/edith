@@ -492,10 +492,13 @@ public enum Guide {
         ```
         ed attention status --json
         ed attention summary --range today --json
+        ed attention breakdown --by machine --range 7d --json
+        ed attention agents --range week --json
         ed attention timeline --range 24h --limit 100 --json
         ed attention music --range 30d --json
         ed attention categories ls --json
         ed attention categories set web:example.com focus --name Example
+        ed attention categories auto --json
         ed attention focus start --for 25m --name "Write proposal"
         ed attention focus status --json
         ed attention focus stop

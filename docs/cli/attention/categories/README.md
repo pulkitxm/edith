@@ -6,6 +6,7 @@ Lists categories and identity rules, or assigns an entity to a category.
 
 - [`ed attention categories ls`](./ls.md)
 - [`ed attention categories set`](./set.md)
+- [`ed attention categories auto`](./auto.md)
 
 A bare `ed attention categories` runs `ls`. Rules unify native bundle identifiers
 and browser domains under one identity, such as the native WhatsApp app and

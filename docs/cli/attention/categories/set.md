@@ -8,7 +8,9 @@ ed attention categories set <entity> <category> [--name <display-name>] [--json]
 ```
 
 Use an entity ID from `ed attention summary --json`. Accepted forms are
-`identity:<rule-id>`, `app:<bundle-id>`, and `web:<domain>`. The category can be
+`name:<identity name>`, `app:<bundle-id>`, and `web:<domain>`. A `name:` entity
+updates every rule with that name, or copies the built-in rule of that name into
+your rules. The category can be
 its ID or exact display name. `--name` sets the unified friendly name.
 
 ## Where to go next
