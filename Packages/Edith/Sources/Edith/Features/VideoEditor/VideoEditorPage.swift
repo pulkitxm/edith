@@ -404,6 +404,7 @@ struct VideoEditorPage: View {
                             }
                         }
                         .frame(width: width, height: UIScale.pt(38), alignment: .leading)
+                        .coordinateSpace(name: "zoomTimeline")
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 7)
                                 .fill(Color.orange.opacity(0.08))
@@ -580,7 +581,7 @@ struct VideoEditorPage: View {
                     value: Binding(
                         get: { model.zoomDuration },
                         set: { model.setZoomDuration($0) }
-                    ), in: 0.5...6, step: 0.5
+                    ), in: 0.1...max(0.5, model.maximumZoomDuration), step: 0.1
                 )
                 .frame(width: UIScale.pt(90))
                 Text(String(format: "%.1fs", model.zoomDuration))
@@ -735,15 +736,22 @@ private struct ZoomTimelineRegion: View {
         min(0.25, Double(UIScale.pt(12) / pointsPerSecond))
     }
 
+    private var handleWidth: CGFloat {
+        min(
+            UIScale.pt(18),
+            max(UIScale.pt(8), (displayed.end - displayed.start) * pointsPerSecond / 3))
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Capsule()
                 .fill(.white.opacity(0.8))
                 .frame(width: UIScale.pt(5), height: UIScale.pt(22))
-                .frame(width: UIScale.pt(10), height: UIScale.pt(32))
+                .frame(width: handleWidth, height: UIScale.pt(32))
                 .contentShape(Rectangle())
                 .gesture(drag("start"))
                 .accessibilityLabel("Drag zoom start")
+                .help("Drag to resize the start of this zoom")
             Button(action: select) {
                 Text(String(format: "%.1f×", magnification))
                     .font(.caption.weight(.semibold))
@@ -757,13 +765,14 @@ private struct ZoomTimelineRegion: View {
             Capsule()
                 .fill(.white.opacity(0.8))
                 .frame(width: UIScale.pt(5), height: UIScale.pt(22))
-                .frame(width: UIScale.pt(10), height: UIScale.pt(32))
+                .frame(width: handleWidth, height: UIScale.pt(32))
                 .contentShape(Rectangle())
                 .gesture(drag("end"))
                 .accessibilityLabel("Drag zoom end")
+                .help("Drag to resize the end of this zoom")
         }
         .frame(
-            width: max(UIScale.pt(25), (displayed.end - displayed.start) * pointsPerSecond),
+            width: max(UIScale.pt(32), (displayed.end - displayed.start) * pointsPerSecond),
             height: UIScale.pt(32)
         )
         .background(
@@ -783,21 +792,24 @@ private struct ZoomTimelineRegion: View {
     }
 
     private func drag(_ edge: String) -> some Gesture {
-        DragGesture(minimumDistance: UIScale.pt(3))
-            .onChanged { value in
-                preview = ZoomTimelineTiming.adjust(
-                    .init(start: start, end: end),
-                    by: Double(value.translation.width / pointsPerSecond), edge: edge,
-                    lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
-            }
-            .onEnded { value in
-                let result = ZoomTimelineTiming.adjust(
-                    .init(start: start, end: end),
-                    by: Double(value.translation.width / pointsPerSecond), edge: edge,
-                    lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
-                adjust(result)
-                preview = nil
-            }
+        DragGesture(
+            minimumDistance: UIScale.pt(edge == "move" ? 3 : 1),
+            coordinateSpace: .named("zoomTimeline")
+        )
+        .onChanged { value in
+            preview = ZoomTimelineTiming.adjust(
+                .init(start: start, end: end),
+                by: Double(value.translation.width / pointsPerSecond), edge: edge,
+                lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
+        }
+        .onEnded { value in
+            let result = ZoomTimelineTiming.adjust(
+                .init(start: start, end: end),
+                by: Double(value.translation.width / pointsPerSecond), edge: edge,
+                lower: lowerBound, upper: upperBound, snapDistance: snapDistance)
+            adjust(result)
+            preview = nil
+        }
     }
 }
 
