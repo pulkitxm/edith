@@ -25,18 +25,13 @@ public struct KeychainJevKeyStore: JevKeyStore {
     }
 
     public func write(_ key: String?) -> Bool {
-        let query = Self.query()
-        guard let key, !key.isEmpty else {
-            let status = SecItemDelete(query as CFDictionary)
-            return status == errSecSuccess || status == errSecItemNotFound
+        if read() != .missing {
+            let removed = SecItemDelete(Self.query() as CFDictionary)
+            guard removed == errSecSuccess || removed == errSecItemNotFound else { return false }
         }
-        let data = Data(key.utf8)
-        let updated = SecItemUpdate(
-            query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if updated == errSecSuccess { return true }
-        if updated != errSecItemNotFound { SecItemDelete(query as CFDictionary) }
+        guard let key, !key.isEmpty else { return true }
         var add = Self.baseQuery()
-        add[kSecValueData as String] = data
+        add[kSecValueData as String] = Data(key.utf8)
         add[kSecAttrLabel as String] = "Edith Jev"
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
