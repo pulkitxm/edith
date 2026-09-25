@@ -285,12 +285,12 @@ ci-trivy:
 	  --skip-dirs .wiki-build --skip-dirs .wiki-clone .
 
 ci-companion:
-	cd apps/companion && cargo clippy --all-targets --locked -- -D warnings
-	cd apps/companion && cargo test --locked
+	cd apps/companion && cargo +stable clippy --all-targets --locked -- -D warnings
+	cd apps/companion && cargo +stable test --locked
 
 ci-companion-migrate:
 	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
-	cd apps/companion && cargo run --locked -- --migrate-only
+	cd apps/companion && cargo +stable run --locked -- --migrate-only
 
 ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
