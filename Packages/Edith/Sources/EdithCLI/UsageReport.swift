@@ -55,7 +55,12 @@ public struct UsageProjectSourceBreakdown: Decodable, Sendable {
     public let byModel: [String: UsageProjectMeasure]?
 }
 
+public struct UsageProjectAttribution: Decodable, Sendable {
+    public let method: String?
+}
+
 public struct UsageProject: Decodable, Sendable {
+    public let attribution: UsageProjectAttribution?
     public let projectName: String?
     public let repositoryID: String?
     public let repositoryName: String?
@@ -100,9 +105,11 @@ public struct UsageProjectFolderSummary: Equatable, Sendable {
     public var tokens: Double
     public var chats: [UsageProjectChatSummary]
     public var worktrees: [UsageProjectWorktreeSummary]
+    public var attribution: String? = nil
 
     public var json: JSONValue {
         .object([
+            "attribution": .optional(attribution),
             "folderName": .string(folderName),
             "path": .optional(path),
             "machineName": .optional(machineName),
@@ -513,6 +520,7 @@ public enum UsageAnalysis {
                 worktrees: [])
         folder.cost += cost
         folder.tokens += tokens
+        folder.attribution = folder.attribution ?? project.attribution?.method
         addHierarchy(project, source: source, cost: cost, tokens: tokens, to: &folder)
         repository.folders[folderKey] = folder
         repositories[repositoryKey] = repository

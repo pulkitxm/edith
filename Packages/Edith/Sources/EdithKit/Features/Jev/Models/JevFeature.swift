@@ -22,6 +22,11 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
                 "The Docs page and ed docs ask pick the command that handles a plain-language request."
         ),
         JevFeature(
+            id: "usage.attribution", title: "Usage attribution",
+            detail:
+                "Matches unknown and non-GitHub folders in agent usage to one of your repositories, or keeps them apart."
+        ),
+        JevFeature(
             id: "cli.ask", title: "Raw requests",
             detail: "ed jev ask sends a state and typed questions for scripts and agents."),
         JevFeature(

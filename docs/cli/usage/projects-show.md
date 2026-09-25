@@ -8,7 +8,9 @@ ed usage projects show <repository> [--range <range>] [--json]
 
 The repository can be its stable identity, visible name or full URL. The plain
 report includes the identity, link, total cost and tokens, then a nested table of
-every folder, direct chat, worktree and worktree chat. Chat rows include the
+every folder, direct chat, worktree and worktree chat. A folder that
+[`ed usage attribution`](./attribution.md) moved here is marked
+`(attributed by name)` or `(attributed by Jev)`. Chat rows include the
 identifier accepted by `ed usage projects copy-chat`. JSON uses the same stable
 object shape as one item from `ed usage projects list --json`, with `chats` and
 `worktrees` arrays under every folder.

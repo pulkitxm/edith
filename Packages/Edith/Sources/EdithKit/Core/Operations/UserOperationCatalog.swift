@@ -108,6 +108,9 @@ public enum UserOperationCatalog {
         var registrations = UsageProjectOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += UsageAttributionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -954,6 +957,19 @@ private extension LidAwakeOperation {
         case .restoreOnQuit:
             userInterface(
                 "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
+        }
+    }
+}
+
+private extension UsageAttributionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            commandLineOnly(
+                "the dashboard drilldown marks each attributed folder instead of listing decisions")
+        case .reset:
+            commandLineOnly(
+                "forgetting attribution decisions is a maintenance action with no app control")
         }
     }
 }

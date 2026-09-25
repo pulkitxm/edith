@@ -10,7 +10,7 @@ public enum JevText {
     }
 
     static func redacted(_ word: String) -> String {
-        guard word.count >= secretLength, word.contains(where: \.isLetter),
+        guard word.count >= secretLength, !word.contains("/"), word.contains(where: \.isLetter),
             word.contains(where: \.isNumber)
         else { return word }
         return redaction

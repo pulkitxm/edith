@@ -18,6 +18,7 @@ struct ProjNode: Identifiable {
     let repositoryURL: String?
     let badge: Int
     var children: [ProjNode]?
+    var note: String?
 }
 
 enum ProjColumns {
@@ -263,7 +264,9 @@ private enum ProjectDrilldownNodes {
             cost: folder.cost, share: folder.share, days: folder.days, dur: folder.dur,
             lastActive: folder.lastActive, chatId: nil, repositoryURL: nil,
             badge: folder.nestedCount,
-            children: children.isEmpty ? nil : children)
+            children: children.isEmpty ? nil : children,
+            note: folder.attribution.isEmpty
+                ? nil : "attributed by \(folder.attribution == "jev" ? "Jev" : folder.attribution)")
     }
 
     private static func chatNodes(_ chats: [ProjChat], parent: String) -> [ProjNode] {
@@ -386,7 +389,16 @@ private struct ProjectRow: View {
     }
 
     private var rowLabel: some View {
-        Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1).truncationMode(.tail)
+        HStack(spacing: UIScale.pt(5)) {
+            Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1)
+                .truncationMode(.tail)
+            if let note = node.note {
+                Text(note)
+                    .font(.system(size: UIScale.pt(9)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+            }
+        }
     }
 
     private var repositoryTarget: UsageProjectTarget? {

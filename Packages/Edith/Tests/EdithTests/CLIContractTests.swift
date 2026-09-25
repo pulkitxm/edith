@@ -610,6 +610,8 @@ enum JSONContract {
             "ed usage projects copy-chat",
             ["usage", "projects", "copy-chat", "abc", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed usage attribution ls", ["usage", "attribution", "ls", "--json"]),
+        JSONCase("ed usage attribution reset", ["usage", "attribution", "reset", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
             "ed usage export", ["usage", "export", "--json"],
