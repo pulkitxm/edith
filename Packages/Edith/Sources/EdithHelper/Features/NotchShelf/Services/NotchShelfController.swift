@@ -468,10 +468,12 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func panelShape(for id: CGDirectDisplayID) -> CGSize {
-        guard expandedDisplay == id, activeTab == .browser, browser != nil else {
-            return NotchGeometry.expandedMaxSize
-        }
-        return NotchGeometry.panelCapacity(forShape: targetShapeSize(for: id))
+        let notchHeight = (collapsedSizes[id] ?? NotchGeometry.fallbackSize).height
+        return NotchGeometry.panelShape(
+            browserShape: browser.map { _ in
+                NotchBrowserGeometry.shapeSize(
+                    browser: browserSize(on: id), notchHeight: notchHeight)
+            })
     }
 
     func browserSize(on id: CGDirectDisplayID) -> CGSize {
@@ -581,13 +583,17 @@ final class NotchShelfController: FeatureModule {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
             let allowMouse: Bool
             if expandedDisplay == id {
-                allowMouse = true
+                allowMouse = NotchGeometry.expandedAcceptsPointer(
+                    cursor, shapeFrame: shapeFrame(of: panel),
+                    buttonPressed: NSEvent.pressedMouseButtons != 0,
+                    heldOpen: isSharing || browserHoldsOpen)
             } else if currentAlert != nil, id == builtinDisplayID {
                 allowMouse = shapeFrame(of: panel).contains(cursor)
             } else {
                 allowMouse = false
             }
-            panel.ignoresMouseEvents = fullScreenDisplays.contains(id) || !allowMouse
+            let ignores = fullScreenDisplays.contains(id) || !allowMouse
+            if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
         }
     }
 

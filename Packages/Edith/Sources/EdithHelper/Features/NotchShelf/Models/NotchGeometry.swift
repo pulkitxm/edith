@@ -63,6 +63,16 @@ enum NotchGeometry {
         union(shape, expandedMaxSize)
     }
 
+    static func panelShape(browserShape: CGSize?) -> CGSize {
+        browserShape.map(panelCapacity(forShape:)) ?? expandedMaxSize
+    }
+
+    static func expandedAcceptsPointer(
+        _ point: CGPoint, shapeFrame: CGRect, buttonPressed: Bool, heldOpen: Bool
+    ) -> Bool {
+        buttonPressed || heldOpen || openFrame(around: shapeFrame).contains(point)
+    }
+
     static func shapeSize(inPanel panel: CGSize) -> CGSize {
         CGSize(
             width: max(1, panel.width - panelPadding.width),

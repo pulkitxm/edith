@@ -254,6 +254,30 @@ import Testing
                 == CGSize(width: 900, height: 701))
     }
 
+    @Test func thePanelKeepsTheBrowserSizeSoAnimationsNeverResizeIt() {
+        #expect(NotchGeometry.panelShape(browserShape: nil) == NotchGeometry.expandedMaxSize)
+        #expect(
+            NotchGeometry.panelShape(browserShape: CGSize(width: 1000, height: 672))
+                == CGSize(width: 1000, height: 672))
+        #expect(
+            NotchGeometry.panelShape(browserShape: CGSize(width: 620, height: 300))
+                == CGSize(width: 620, height: NotchGeometry.expandedMaxSize.height))
+    }
+
+    @Test func clicksOutsideTheExpandedShapeFallThrough() {
+        let shape = CGRect(x: 100, y: 500, width: 400, height: 300)
+        func accepts(_ point: CGPoint, pressed: Bool = false, held: Bool = false) -> Bool {
+            NotchGeometry.expandedAcceptsPointer(
+                point, shapeFrame: shape, buttonPressed: pressed, heldOpen: held)
+        }
+        #expect(accepts(CGPoint(x: 300, y: 600)))
+        #expect(accepts(CGPoint(x: 97, y: 600)))
+        #expect(!accepts(CGPoint(x: 80, y: 600)))
+        #expect(!accepts(CGPoint(x: 300, y: 450)))
+        #expect(accepts(CGPoint(x: 300, y: 450), pressed: true))
+        #expect(accepts(CGPoint(x: 300, y: 450), held: true))
+    }
+
     @Test func theNotchHeightComesOutOfTheAvailableHeight() {
         let area = NotchBrowserGeometry.available(screen: screen, notchHeight: 38)
         #expect(area == CGSize(width: 1512, height: 944))
