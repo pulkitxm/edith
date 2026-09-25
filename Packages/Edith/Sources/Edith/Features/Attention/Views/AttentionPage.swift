@@ -3,10 +3,15 @@ import EdithKit
 import SwiftUI
 
 struct AttentionPage: View {
-    @State private var model = AttentionPageModel()
+    @State private var model: AttentionPageModel
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @Environment(\.windowVisible) private var windowVisible
+
+    @MainActor
+    init(model: AttentionPageModel? = nil) {
+        _model = State(initialValue: model ?? AttentionPageModel())
+    }
 
     var body: some View {
         ScrollView {
@@ -14,33 +19,13 @@ struct AttentionPage: View {
                 PageHeader(
                     title: { Text("Attention") },
                     trailing: {
-                        if !model.needsSetup,
-                            model.section == .overview || model.section == .timeline
-                        {
-                            Picker("Range", selection: $model.range) {
-                                ForEach(AttentionViewRange.allCases) { range in
-                                    Text(range.title).tag(range)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(width: compact ? 210 : 250)
+                        if !model.needsSetup, model.section.usesPeriod {
+                            AttentionPeriodControl(model: model)
                         }
                     },
                     accessory: {
                         if !model.needsSetup {
-                            HStack(spacing: 0) {
-                                Picker("Section", selection: $model.section) {
-                                    ForEach(AttentionPageSection.allCases) { section in
-                                        Text(section.title).tag(section)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.segmented)
-                                .frame(maxWidth: compact ? .infinity : 500, alignment: .leading)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            AttentionSectionBar(model: model)
                         }
                     })
 
@@ -72,6 +57,8 @@ struct AttentionPage: View {
                                     AttentionCollectingView(model: model)
                                 }
                             case .timeline: AttentionTimelineView(model: model)
+                            case .breakdown: AttentionBreakdownView(model: model)
+                            case .agents: AttentionAgentsView(model: model)
                             case .focus: AttentionFocusView(model: model)
                             case .settings: AttentionSettingsView(model: model)
                             }
@@ -84,17 +71,92 @@ struct AttentionPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
-        .onChange(of: model.range) { model.reload() }
         .task(id: windowVisible) {
             guard windowVisible else { return }
             model.reload()
             await model.checkBrowser()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10), tolerance: .seconds(1))
+                try? await Task.sleep(for: model.refreshInterval, tolerance: .seconds(2))
+                guard !Task.isCancelled else { return }
                 model.reload(preserveSettings: model.needsSetup || model.section == .settings)
                 await model.checkBrowser()
             }
         }
+    }
+}
+
+private struct AttentionPeriodControl: View {
+    let model: AttentionPageModel
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let dark = scheme == .dark
+        HStack(spacing: UIScale.pt(6)) {
+            ForEach(AttentionScope.allCases) { scope in
+                let active = model.period.scope == scope
+                Button {
+                    model.setScope(scope)
+                } label: {
+                    Text(scope.title)
+                        .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
+                        .padding(.horizontal, UIScale.pt(10))
+                        .padding(.vertical, UIScale.pt(5))
+                        .widgetBar(
+                            cornerRadius: 8,
+                            fill: active
+                                ? AnyShapeStyle(DashSkin.accent(dark))
+                                : AnyShapeStyle(DashSkin.paper2(dark)),
+                            stroke: active ? Color.clear : DashSkin.lineStrong(dark))
+                        .foregroundStyle(
+                            active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+                }
+                .buttonStyle(.edith(.borderless))
+            }
+            Divider().frame(height: UIScale.pt(18)).padding(.horizontal, UIScale.pt(4))
+            Button {
+                model.step(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .help("Previous period")
+            Text(model.period.title())
+                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+                .frame(minWidth: UIScale.pt(96))
+            Button {
+                model.step(1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .disabled(!model.canStepForward)
+            .help("Next period")
+            if model.canStepForward {
+                Button("Today") { model.showToday() }
+                    .buttonStyle(.edith(.secondary))
+            }
+        }
+    }
+}
+
+private struct AttentionSectionBar: View {
+    @Bindable var model: AttentionPageModel
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Picker("Section", selection: $model.section) {
+                ForEach(AttentionPageSection.allCases) { section in
+                    Text(section.title).tag(section)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(maxWidth: compact ? .infinity : UIScale.pt(620), alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -420,12 +482,12 @@ private struct AttentionCollectingView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)
                 HStack(spacing: 12) {
-                    StatusPill(
+                    AttentionStatusPill(
                         title: "Applications",
                         state: model.settings.isEnabled && model.settings.trackingEnabled
                             ? "Listening" : "Off",
                         good: model.settings.isEnabled && model.settings.trackingEnabled)
-                    StatusPill(
+                    AttentionStatusPill(
                         title: "Browser",
                         state: model.browserConnected
                             ? "Connected"
@@ -442,554 +504,104 @@ private struct AttentionCollectingView: View {
     }
 }
 
-private struct AttentionOverview: View {
-    @Bindable var model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
+struct AttentionCard<Content: View>: View {
+    @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: compact ? 145 : 180), spacing: 12)],
-                spacing: 12
-            ) {
-                AttentionMetricCard(
-                    title: "Active", value: attentionDuration(model.summary.activeDuration),
-                    detail: model.range.title, icon: "clock.fill", tint: .blue)
-                AttentionMetricCard(
-                    title: "Focused", value: attentionDuration(model.summary.focusedDuration),
-                    detail: percent(model.summary.focusedDuration, model.summary.activeDuration),
-                    icon: "scope", tint: .green)
-                AttentionMetricCard(
-                    title: "Entertainment",
-                    value: attentionDuration(model.summary.entertainmentDuration),
-                    detail: percent(
-                        model.summary.entertainmentDuration, model.summary.activeDuration),
-                    icon: "play.rectangle.fill", tint: .orange)
-                AttentionMetricCard(
-                    title: "Context switches", value: String(model.summary.contextSwitches),
-                    detail: switchCadence, icon: "arrow.triangle.2.circlepath", tint: .purple)
-            }
-
-            AttentionCard {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Attention distribution").font(.system(size: 15, weight: .semibold))
-                        Text("Only engaged foreground intervals")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text(attentionDuration(model.summary.activeDuration))
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                }
-                DistributionBar(summary: model.summary)
-                HStack(spacing: 18) {
-                    DistributionLegend(
-                        label: "Focus", color: .green, duration: model.summary.focusedDuration)
-                    DistributionLegend(
-                        label: "Communication", color: .blue,
-                        duration: model.summary.communicationDuration)
-                    DistributionLegend(
-                        label: "Entertainment", color: .orange,
-                        duration: model.summary.entertainmentDuration)
-                    DistributionLegend(label: "Other", color: .gray, duration: otherDuration)
-                }
-            }
-
-            AttentionCard {
-                HStack {
-                    Text("Where time went").font(.system(size: 15, weight: .semibold))
-                    Spacer()
-                    Text("Category changes reclassify history")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                if model.summary.entities.isEmpty {
-                    EmptyInline(text: "No active destinations in this range")
-                } else {
-                    ForEach(Array(model.summary.entities.prefix(15).enumerated()), id: \.element.id)
-                    { index, entity in
-                        if index > 0 { Divider() }
-                        EntityRow(entity: entity, total: model.summary.activeDuration, model: model)
-                    }
-                }
-            }
-
-            if !model.summary.music.isEmpty {
-                AttentionCard {
-                    HStack {
-                        Text("Listening").font(.system(size: 15, weight: .semibold))
-                        Spacer()
-                        Text(attentionDuration(model.summary.music.reduce(0) { $0 + $1.duration }))
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                    }
-                    ForEach(Array(model.summary.music.prefix(8).enumerated()), id: \.element.id) {
-                        index, item in
-                        if index > 0 { Divider() }
-                        HStack(spacing: 12) {
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.pink).frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title).lineLimit(1)
-                                Text(
-                                    [item.artist, item.album, item.service].compactMap { $0 }
-                                        .joined(separator: " · ")
-                                )
-                                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                            Spacer()
-                            Text(attentionDuration(item.duration))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                        }
-                        .padding(.vertical, 5)
-                    }
-                }
-            }
-        }
-    }
-
-    private var otherDuration: TimeInterval {
-        max(
-            0,
-            model.summary.activeDuration - model.summary.focusedDuration
-                - model.summary.communicationDuration - model.summary.entertainmentDuration)
-    }
-
-    private var switchCadence: String {
-        guard model.summary.activeDuration > 0 else { return "No active time" }
-        let hourly = Double(model.summary.contextSwitches) / model.summary.activeDuration * 3_600
-        return String(format: "%.1f per hour", hourly)
-    }
-
-    private func percent(_ value: TimeInterval, _ total: TimeInterval) -> String {
-        guard total > 0 else { return "0% of active time" }
-        return "\(Int((value / total * 100).rounded()))% of active time"
+        VStack(alignment: .leading, spacing: 13) { content }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                .regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(.primary.opacity(0.08), lineWidth: 1))
     }
 }
 
-private struct AttentionTimelineView: View {
-    @Bindable var model: AttentionPageModel
-    @State private var visibleCount = 100
+struct SetupStep: View {
+    let number: String
+    let title: String
+    let subtitle: String
 
     var body: some View {
-        let spans = Array(model.summary.spans.reversed())
-        AttentionCard {
-            HStack {
-                Text("Observed timeline").font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Text("\(spans.count) blocks")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            }
-            if spans.isEmpty {
-                EmptyInline(text: "No activity in \(model.range.title.lowercased())")
-            } else {
-                ForEach(Array(spans.prefix(visibleCount).enumerated()), id: \.element.id) {
-                    index, span in
-                    if index > 0 { Divider() }
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(span.name).lineLimit(1)
-                            Text(span.detail ?? "")
-                                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text(span.start.formatted(date: .omitted, time: .shortened))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                            Text(attentionDuration(span.duration))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-                if spans.count > visibleCount {
-                    Button("Show more") { visibleCount += 100 }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
-                }
+        HStack(alignment: .top, spacing: 11) {
+            Text(number)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .frame(width: 26, height: 26)
+                .background(Color.accentColor.opacity(0.14), in: Circle())
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 15, weight: .semibold))
+                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }
 }
 
-enum AttentionEventIconDescriptor: Equatable {
-    case application(bundleID: String?)
-    case website(URL?)
-    case symbol(String)
-
-    init(event: AttentionEvent) {
-        switch event.source {
-        case .application:
-            self = .application(bundleID: event.bundleID)
-        case .browser:
-            self = .website(Self.remoteURL(event.faviconURL))
-        case .media:
-            self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
-        case .manual:
-            self = .symbol("hand.tap")
-        case .agent:
-            self = .symbol("sparkles")
-        }
-    }
-
-    init(entity: AttentionEntity) {
-        if let faviconURL = Self.remoteURL(entity.faviconURL) {
-            self = .website(faviconURL)
-        } else if let bundleID = entity.bundleID, !bundleID.isEmpty {
-            self = .application(bundleID: bundleID)
-        } else {
-            switch entity.source {
-            case .application:
-                self = .application(bundleID: nil)
-            case .browser:
-                self = .website(nil)
-            case .media:
-                self = .symbol("music.note")
-            case .manual:
-                self = .symbol("hand.tap")
-            case .agent:
-                self = .symbol("sparkles")
-            }
-        }
-    }
-
-    private static func remoteURL(_ value: String?) -> URL? {
-        guard let value, let url = URL(string: value), let scheme = url.scheme?.lowercased(),
-            scheme == "https" || scheme == "http"
-        else { return nil }
-        return url
-    }
-}
-
-private struct AttentionEventIcon: View {
-    let event: AttentionEvent
+struct SourceLabel: View {
+    let icon: String
+    let title: String
+    let subtitle: String
 
     var body: some View {
-        AttentionResolvedIcon(
-            descriptor: AttentionEventIconDescriptor(event: event),
-            fallbackColor: event.presence == .active ? .accentColor : .secondary)
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
-private struct AttentionResolvedIcon: View {
-    let descriptor: AttentionEventIconDescriptor
-    let fallbackColor: Color
-    @State private var faviconImage: NSImage?
-    @State private var applicationImage: NSImage?
+struct GuideRow<Trailing: View>: View {
+    let number: Int
+    let text: String
+    @ViewBuilder var trailing: Trailing
 
-    private var faviconURL: URL? {
-        guard case .website(let url) = descriptor else { return nil }
-        return url
-    }
-
-    private var applicationBundleID: String? {
-        guard case .application(let bundleID) = descriptor else { return nil }
-        return bundleID
+    init(number: Int, text: String, @ViewBuilder trailing: () -> Trailing) {
+        self.number = number
+        self.text = text
+        self.trailing = trailing()
     }
 
     var body: some View {
-        Group {
-            switch descriptor {
-            case .application(let bundleID):
-                if let icon = applicationImage
-                    ?? AttentionApplicationIcon.cached(bundleID: bundleID)
-                {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                } else {
-                    fallback("macwindow")
-                }
-            case .website(let url):
-                if url != nil, let faviconImage {
-                    Image(nsImage: faviconImage)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                        .padding(3)
-                } else {
-                    fallback("globe")
-                }
-            case .symbol(let systemName):
-                fallback(systemName)
-            }
+        HStack(spacing: 10) {
+            Text(String(number)).font(.system(size: 10, weight: .bold)).frame(width: 21, height: 21)
+                .background(.secondary.opacity(0.12), in: Circle())
+            Text(text).font(.system(size: 12))
+            Spacer()
+            trailing
         }
-        .frame(width: 26, height: 26)
-        .accessibilityHidden(true)
-        .task(id: faviconURL) {
-            faviconImage = nil
-            guard let faviconURL,
-                let data = try? await AgentFaviconClient().data(for: faviconURL),
-                !Task.isCancelled
-            else { return }
-            faviconImage = NSImage(data: data)
-        }
-        .task(id: applicationBundleID) {
-            applicationImage = nil
-            guard let applicationBundleID,
-                AttentionApplicationIcon.cached(bundleID: applicationBundleID) == nil
-            else { return }
-            let icon = await AttentionApplicationIcon.resolve(bundleID: applicationBundleID)
-            guard !Task.isCancelled else { return }
-            applicationImage = icon
-        }
-    }
-
-    private func fallback(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 17, weight: .medium))
-            .foregroundStyle(fallbackColor)
     }
 }
 
-@MainActor
-private enum AttentionApplicationIcon {
-    private static var cache: [String: NSImage] = [:]
-
-    static func cached(bundleID: String?) -> NSImage? {
-        guard let bundleID, !bundleID.isEmpty else { return nil }
-        return cache[bundleID]
-    }
-
-    static func resolve(bundleID: String?) async -> NSImage? {
-        guard let bundleID, !bundleID.isEmpty else { return nil }
-        if let cached = cache[bundleID] { return cached }
-        let icon = await Task.detached { lookup(bundleID: bundleID) }.value
-        if let icon { cache[bundleID] = icon }
-        return icon
-    }
-
-    private nonisolated static func lookup(bundleID: String) -> NSImage? {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
-            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
-                NSWorkspace.shared.icon(forFile: $0.path)
-            }
+extension GuideRow where Trailing == EmptyView {
+    init(number: Int, text: String) {
+        self.init(number: number, text: text) { EmptyView() }
     }
 }
 
-private struct AttentionFocusView: View {
-    @Bindable var model: AttentionPageModel
-    @State private var focusName = ""
-    @State private var focusMinutes = 25
+struct SettingsTitle: View {
+    let title: String
+    let subtitle: String
+
+    init(_ title: String, subtitle: String) {
+        self.title = title
+        self.subtitle = subtitle
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            AttentionCard {
-                if let focus = model.activeFocus {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let elapsed = context.date.timeIntervalSince(focus.startedAt)
-                        let remaining = focus.plannedDuration - elapsed
-                        VStack(spacing: 14) {
-                            Image(systemName: "scope")
-                                .font(.system(size: 28)).foregroundStyle(.green)
-                            Text(focus.name).font(DashSkin.heading(25))
-                            Text(
-                                remaining >= 0
-                                    ? attentionClock(remaining)
-                                    : "Overtime \(attentionClock(abs(remaining)))"
-                            )
-                            .font(.system(size: 30, weight: .semibold, design: .rounded))
-                            ProgressView(value: min(1, elapsed / focus.plannedDuration))
-                                .tint(.green).frame(maxWidth: 420)
-                            Button("Finish focus session") { model.stopFocus() }
-                                .buttonStyle(.borderedProminent)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Start a focus session").font(.system(size: 16, weight: .semibold))
-                        TextField("What are you focusing on?", text: $focusName)
-                            .textFieldStyle(.roundedBorder)
-                        Picker("Duration", selection: $focusMinutes) {
-                            Text("25 minutes").tag(25)
-                            Text("45 minutes").tag(45)
-                            Text("60 minutes").tag(60)
-                            Text("90 minutes").tag(90)
-                        }
-                        .pickerStyle(.segmented)
-                        Button("Start focus") {
-                            model.startFocus(
-                                name: focusName, duration: TimeInterval(focusMinutes * 60))
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-
-            AttentionCard {
-                Text("Completed sessions").font(.system(size: 15, weight: .semibold))
-                if model.focusSessions.isEmpty {
-                    EmptyInline(text: "No completed focus sessions in this range")
-                } else {
-                    ForEach(Array(model.focusSessions.enumerated()), id: \.element.id) {
-                        index, session in
-                        if index > 0 { Divider() }
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(session.name)
-                                Text(
-                                    session.startedAt.formatted(
-                                        date: .abbreviated, time: .shortened)
-                                )
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(
-                                attentionDuration(
-                                    (session.endedAt ?? session.startedAt).timeIntervalSince(
-                                        session.startedAt))
-                            )
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                        }
-                        .padding(.vertical, 5)
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.system(size: 15, weight: .semibold))
+            Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 }
 
-private struct AttentionSettingsView: View {
-    @Bindable var model: AttentionPageModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            AttentionCard {
-                Toggle(
-                    isOn: Binding(
-                        get: { model.settings.isEnabled },
-                        set: { model.setAttentionEnabled($0) })
-                ) {
-                    SettingsTitle(
-                        "Enable Attention",
-                        subtitle:
-                            "Master switch for all collection. Turning it off stops application tracking and the local browser server without deleting history."
-                    )
-                }
-                .toggleStyle(.switch)
-            }
-
-            AttentionCard {
-                SettingsTitle(
-                    "Sources",
-                    subtitle: "Every setting required to start and stop collection is here.")
-                Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
-                    .disabled(!model.settings.isEnabled)
-                Toggle("Run local browser server", isOn: $model.settings.browserTrackingEnabled)
-                    .disabled(!model.settings.isEnabled)
-                Picker("Privacy level", selection: $model.settings.privacyLevel) {
-                    Text("Applications only").tag(AttentionPrivacyLevel.applications)
-                    Text("Domains").tag(AttentionPrivacyLevel.domains)
-                    Text("Detailed").tag(AttentionPrivacyLevel.detailed)
-                }
-                .disabled(!model.settings.isEnabled)
-                Toggle("Store window and page titles", isOn: $model.settings.windowTitlesEnabled)
-                    .disabled(!model.settings.isEnabled)
-                HStack {
-                    Picker("Idle after", selection: $model.settings.idleThreshold) {
-                        Text("1 minute").tag(TimeInterval(60))
-                        Text("3 minutes").tag(TimeInterval(180))
-                        Text("5 minutes").tag(TimeInterval(300))
-                        Text("10 minutes").tag(TimeInterval(600))
-                        Text("15 minutes").tag(TimeInterval(900))
-                    }
-                    Spacer()
-                    if model.settings.windowTitlesEnabled {
-                        Button("Accessibility access") { model.requestAccessibility() }
-                    }
-                }
-                .disabled(!model.settings.isEnabled)
-            }
-
-            BrowserInstallCard(model: model, showToken: true)
-
-            AttentionCard {
-                SettingsTitle(
-                    "iCloud backup",
-                    subtitle: "Snapshots stay in your own iCloud Drive under Edith/Attention.")
-                Toggle(
-                    "Back up attention data every 15 minutes",
-                    isOn: $model.settings.iCloudBackupEnabled)
-                HStack {
-                    Button("Back up now") { model.backupNow() }
-                        .disabled(model.transferringBackup)
-                    Button("Restore before tracking") { model.restoreBackup() }
-                        .disabled(
-                            model.transferringBackup || !model.cloudBackup.available
-                                || model.hasStoredEvents)
-                    Spacer()
-                    if let date = model.cloudBackup.lastBackupAt {
-                        Text("Last backup \(date.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            AttentionCard {
-                HStack {
-                    SettingsTitle(
-                        "Categories",
-                        subtitle:
-                            "Kinds drive focus and entertainment totals. Colors use six-digit hex.")
-                    Spacer()
-                    Button("Add category") { model.addCategory() }
-                }
-                ForEach(model.settings.categories.indices, id: \.self) { index in
-                    if index > 0 { Divider() }
-                    HStack(spacing: 10) {
-                        TextField("Name", text: $model.settings.categories[index].name)
-                        Picker("Kind", selection: $model.settings.categories[index].kind) {
-                            ForEach(AttentionCategoryKind.allCases, id: \.self) { kind in
-                                Text(kind.rawValue.capitalized).tag(kind)
-                            }
-                        }
-                        .frame(width: 150)
-                        TextField("Color", text: $model.settings.categories[index].color)
-                            .frame(width: 90)
-                        Button(role: .destructive) {
-                            model.removeCategory(at: index)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-
-            AttentionCard {
-                HStack {
-                    SettingsTitle(
-                        "Identity rules",
-                        subtitle:
-                            "Unify native bundle IDs and web domains under one configurable name.")
-                    Spacer()
-                    Button("Add rule") { model.addRule() }
-                }
-                ForEach(model.settings.rules.indices, id: \.self) { index in
-                    if index > 0 { Divider() }
-                    RuleEditor(
-                        rule: $model.settings.rules[index], categories: model.settings.categories
-                    ) {
-                        model.settings.rules.remove(at: index)
-                    }
-                    .padding(.vertical, 5)
-                }
-            }
-
-            HStack {
-                Text("Changes take effect in the menu bar collector after saving.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer()
-                Button("Save settings") { model.saveSettings() }
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-    }
-}
-
-private struct BrowserInstallCard: View {
+struct BrowserInstallCard: View {
     @Bindable var model: AttentionPageModel
     let showToken: Bool
 
@@ -1002,7 +614,7 @@ private struct BrowserInstallCard: View {
                         "Chrome, Chromium, Brave, Edge, Opera and Dia can load the same local extension."
                 )
                 Spacer()
-                StatusPill(
+                AttentionStatusPill(
                     title: "Local server",
                     state: !model.settings.isEnabled
                         ? "Disabled" : model.browserConnected ? "Connected" : "Waiting",
@@ -1046,321 +658,9 @@ private struct BrowserInstallCard: View {
                 }
             }
             Text(
-                "Deep mode is enabled inside the extension. It asks separately for website access and reads only playing media metadata. Standard tab tracking does not need page access."
+                "Version \(AttentionExtensionInstaller.version) reads the focused tab, page titles, searches, repositories, videos, playing media and typing, clicking and scrolling counts on every site. Updates install themselves when Edith ships a newer version."
             )
             .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
-}
-
-private struct AttentionCard<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 13) { content }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                .regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(.primary.opacity(0.08), lineWidth: 1))
-    }
-}
-
-private struct SetupStep: View {
-    let number: String
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Text(number)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .frame(width: 26, height: 26)
-                .background(Color.accentColor.opacity(0.14), in: Circle())
-                .foregroundStyle(Color.accentColor)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 15, weight: .semibold))
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct SourceLabel: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .semibold))
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct AttentionMetricCard: View {
-    let title: String
-    let value: String
-    let detail: String
-    let icon: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: icon).foregroundStyle(tint)
-                Spacer()
-                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            }
-            Text(value).font(.system(size: 24, weight: .semibold, design: .rounded))
-            Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-        }
-        .padding(15)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(tint.opacity(0.16)))
-    }
-}
-
-private struct DistributionBar: View {
-    let summary: AttentionSummary
-
-    var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 2) {
-                segment(summary.focusedDuration, color: .green, width: geometry.size.width)
-                segment(summary.communicationDuration, color: .blue, width: geometry.size.width)
-                segment(summary.entertainmentDuration, color: .orange, width: geometry.size.width)
-                segment(other, color: .gray.opacity(0.55), width: geometry.size.width)
-            }
-            .clipShape(Capsule())
-        }
-        .frame(height: 12)
-    }
-
-    private var other: TimeInterval {
-        max(
-            0,
-            summary.activeDuration - summary.focusedDuration - summary.communicationDuration
-                - summary.entertainmentDuration)
-    }
-
-    private func segment(_ value: TimeInterval, color: Color, width: CGFloat) -> some View {
-        color.frame(width: summary.activeDuration > 0 ? width * value / summary.activeDuration : 0)
-    }
-}
-
-private struct DistributionLegend: View {
-    let label: String
-    let color: Color
-    let duration: TimeInterval
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text("\(label) \(attentionDuration(duration))")
-                .font(.system(size: 10)).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct EntityRow: View {
-    let entity: AttentionEntity
-    let total: TimeInterval
-    @Bindable var model: AttentionPageModel
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8).fill(categoryColor.opacity(0.13))
-                AttentionResolvedIcon(
-                    descriptor: AttentionEventIconDescriptor(entity: entity),
-                    fallbackColor: categoryColor)
-            }
-            .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(entity.name).lineLimit(1)
-                    Text(entity.category.name)
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(categoryColor.opacity(0.12), in: Capsule())
-                }
-                ProgressView(value: total > 0 ? entity.duration / total : 0)
-                    .tint(categoryColor)
-            }
-            Spacer()
-            Text(attentionDuration(entity.duration))
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-            Menu {
-                ForEach(model.settings.categories) { category in
-                    Button(category.name) { model.assign(entity: entity, to: category.id) }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .frame(width: 24)
-        }
-        .padding(.vertical, 5)
-    }
-
-    private var categoryColor: Color {
-        colorFromHex(entity.category.color) ?? .secondary
-    }
-}
-
-private struct RuleEditor: View {
-    @Binding var rule: AttentionIdentityRule
-    let categories: [AttentionCategory]
-    let remove: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField("Identity name", text: $rule.name)
-                Picker("Category", selection: $rule.categoryID) {
-                    ForEach(categories) { category in Text(category.name).tag(category.id) }
-                }
-                .frame(width: 180)
-                Button(role: .destructive, action: remove) { Image(systemName: "trash") }
-                    .buttonStyle(.borderless)
-            }
-            HStack {
-                TextField(
-                    "Bundle IDs, comma separated",
-                    text: arrayBinding(\AttentionIdentityRule.bundleIDs))
-                TextField(
-                    "Domains, comma separated", text: arrayBinding(\AttentionIdentityRule.domains))
-            }
-            .font(.system(size: 11))
-        }
-    }
-
-    private func arrayBinding(_ keyPath: WritableKeyPath<AttentionIdentityRule, [String]>)
-        -> Binding<String>
-    {
-        Binding(
-            get: { rule[keyPath: keyPath].joined(separator: ", ") },
-            set: { value in
-                rule[keyPath: keyPath] = value.split(separator: ",").map {
-                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                }.filter { !$0.isEmpty }
-            })
-    }
-}
-
-private struct GuideRow<Trailing: View>: View {
-    let number: Int
-    let text: String
-    @ViewBuilder var trailing: Trailing
-
-    init(number: Int, text: String, @ViewBuilder trailing: () -> Trailing) {
-        self.number = number
-        self.text = text
-        self.trailing = trailing()
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(String(number)).font(.system(size: 10, weight: .bold)).frame(width: 21, height: 21)
-                .background(.secondary.opacity(0.12), in: Circle())
-            Text(text).font(.system(size: 12))
-            Spacer()
-            trailing
-        }
-    }
-}
-
-extension GuideRow where Trailing == EmptyView {
-    init(number: Int, text: String) {
-        self.init(number: number, text: text) { EmptyView() }
-    }
-}
-
-private struct SettingsTitle: View {
-    let title: String
-    let subtitle: String
-
-    init(_ title: String, subtitle: String) {
-        self.title = title
-        self.subtitle = subtitle
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 15, weight: .semibold))
-            Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct StatusPill: View {
-    let title: String
-    let state: String
-    let good: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(good ? Color.green : Color.orange).frame(width: 7, height: 7)
-            Text("\(title): \(state)").font(.system(size: 10, weight: .semibold))
-        }
-        .padding(.horizontal, 9).padding(.vertical, 6)
-        .background((good ? Color.green : Color.orange).opacity(0.1), in: Capsule())
-    }
-}
-
-private struct AttentionNotice: View {
-    let text: String
-    let error: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: error ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-            Text(text).font(.system(size: 11, weight: .medium))
-            Spacer()
-        }
-        .foregroundStyle(error ? Color.red : Color.green)
-        .padding(10)
-        .background(
-            (error ? Color.red : Color.green).opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
-    }
-}
-
-private struct EmptyInline: View {
-    let text: String
-
-    var body: some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity).padding(.vertical, 24)
-    }
-}
-
-private func attentionDuration(_ value: TimeInterval) -> String {
-    let seconds = max(0, Int(value.rounded()))
-    let hours = seconds / 3_600
-    let minutes = seconds % 3_600 / 60
-    if hours > 0 { return "\(hours)h \(minutes)m" }
-    if minutes > 0 { return "\(minutes)m" }
-    return "\(seconds)s"
-}
-
-private func attentionClock(_ value: TimeInterval) -> String {
-    let seconds = max(0, Int(value.rounded()))
-    return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-}
-
-private func colorFromHex(_ value: String) -> Color? {
-    let text = value.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-    guard text.count == 6, let number = UInt64(text, radix: 16) else { return nil }
-    return Color(
-        red: Double((number >> 16) & 0xFF) / 255,
-        green: Double((number >> 8) & 0xFF) / 255,
-        blue: Double(number & 0xFF) / 255)
 }

@@ -58,7 +58,7 @@ import Testing
                 startedAt: now.addingTimeInterval(-120), duration: 60,
                 source: .application, appName: "Writing", bundleID: "com.example.Writing"))
         let model = AttentionPageModel(repository: fixture.repository)
-        model.range = .week
+        model.period = AttentionPeriod(scope: .week)
         model.reload()
         await model.waitForReload()
         let entity = try #require(model.summary.entities.first)
@@ -68,10 +68,21 @@ import Testing
         #expect(model.summary.focusedDuration == 60)
     }
 
-    @Test func rangesCoverExpectedWindows() {
+    @Test func periodsCoverExpectedWindowsAndStepByTheirLength() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = Date(timeIntervalSince1970: 1_775_000_000)
-        #expect(AttentionViewRange.week.interval(now: now).duration >= 6 * 86_400)
-        #expect(AttentionViewRange.month.interval(now: now).duration >= 29 * 86_400)
+        let today = AttentionPeriod(scope: .day, anchor: now, calendar: calendar)
+        #expect(today.interval(now: now, calendar: calendar).start == calendar.startOfDay(for: now))
+        #expect(today.interval(now: now, calendar: calendar).end == now)
+        let yesterday = today.shifted(by: -1, calendar: calendar)
+        #expect(yesterday.interval(now: now, calendar: calendar).duration == 86_400)
+        let week = AttentionPeriod(scope: .week, anchor: now, calendar: calendar)
+        #expect(week.interval(now: now, calendar: calendar).duration >= 6 * 86_400)
+        #expect(week.shifted(by: -1, calendar: calendar).interval(now: now, calendar: calendar).duration == 7 * 86_400)
+        let month = AttentionPeriod(scope: .month, anchor: now, calendar: calendar)
+        #expect(month.interval(now: now, calendar: calendar).duration >= 29 * 86_400)
+        #expect(month.comparePeriod == 30 * 86_400)
     }
 
     @Test func timelineIconsUseApplicationBundlesAndWebsiteFavicons() {
