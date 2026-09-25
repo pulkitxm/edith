@@ -23,4 +23,5 @@ ignores:
   - build/**
   - apps/companion/target/**
   - apps/promo-video/node_modules/**
+  - extras/**
   - node_modules/**

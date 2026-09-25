@@ -103,6 +103,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "videoEditor", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "music", helper: true, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),

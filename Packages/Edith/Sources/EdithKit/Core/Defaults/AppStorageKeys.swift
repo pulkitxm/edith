@@ -323,6 +323,7 @@ public enum AppStorageKeys {
         public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let musicEnabled = "tabMusicEnabled"
+        public static let videoEditorEnabled = "tabVideoEditorEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let seoAuditEnabled = "tabSEOAuditEnabled"

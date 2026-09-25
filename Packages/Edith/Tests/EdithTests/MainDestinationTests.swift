@@ -21,6 +21,21 @@ import Testing
         }
     }
 
+    @Test func videoEditorFollowsItsMediaExtensionToggle() {
+        let name = "test.edith.video-editor-navigation.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let page = NavigationCatalog.page(.videoEditor)
+        #expect(page.parentID == "media")
+        #expect(page.abilityIDs == ["videoEditor"])
+        defaults.set(true, forKey: SuiteRegistry.suite(.media).defaultsKey)
+        #expect(!page.isVisible(in: defaults))
+        defaults.set(true, forKey: "tabVideoEditorEnabled")
+        #expect(page.isVisible(in: defaults))
+        defaults.set(false, forKey: SuiteRegistry.suite(.media).defaultsKey)
+        #expect(!page.isVisible(in: defaults))
+    }
+
     @Test func sidebarSectionsAreDisjointAndCoverAllDestinations() {
         let listed = MainDestination.homeItems + MainDestination.appItems
         #expect(Set(listed).count == listed.count)
@@ -65,7 +80,7 @@ import Testing
                 .appMaintenance,
                 .system, .runningApps,
                 .desk,
-                .media, .music, .calendar,
+                .media, .videoEditor, .music, .calendar,
                 .data, .database, .attention, .seoAudit,
             ])
     }

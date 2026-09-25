@@ -29,6 +29,7 @@ import Testing
         "windowSweatersEnabled",
         "presenterEnabled",
         "tabMusicEnabled",
+        "tabVideoEditorEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
         "notchAudioMixerEnabled",
@@ -51,7 +52,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "videoEditor", "music", "downloads", "notchShelf", "audioMixer", "calendar",
                 "database", "attention", "seoAudit",
             ])
     }
@@ -205,7 +206,8 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
-                "clipboard", "keystrokeHighlight", "notchShelf", "database", "attention",
+                "clipboard", "keystrokeHighlight", "videoEditor", "notchShelf", "database",
+                "attention",
             ])
     }
 
@@ -348,6 +350,7 @@ import Testing
             "focusDim": [.screenRecording],
             "windowSweaters": [],
             "presenter": [.screenRecording],
+            "videoEditor": [],
             "music": [],
             "downloads": [],
             "notchShelf": [],
@@ -379,6 +382,7 @@ import Testing
             "focusDim": [],
             "windowSweaters": [.accessibility],
             "presenter": [],
+            "videoEditor": [],
             "music": [],
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],

@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music",
+        "music", "videoEditor",
         "calendar",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
@@ -62,7 +62,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + music + videoEditor + calendar + clipboard + keystrokeHighlight + notch + focusDim
+        + presenter
         + windowSweaters + colorPicker + emoji + bifrost
         + micMute
         + backup + permissions + terminal
@@ -671,6 +672,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Music.backup, .bool, group: "music",
             summary: "Include the music folder in the iCloud backup."),
+    ]
+
+    private static let videoEditor: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.videoEditorEnabled, .bool, group: "videoEditor",
+            summary: "Video editor extension: edit imported clips and export videos.",
+            fallback: .bool(false))
     ]
 
     private static let calendar: [SettingDefinition] = [
