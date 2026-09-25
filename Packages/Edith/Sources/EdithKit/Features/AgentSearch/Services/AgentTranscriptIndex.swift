@@ -28,7 +28,7 @@ public struct AgentTranscriptRoots: Sendable, Equatable {
 public actor AgentTranscriptIndex {
     public static let shared = AgentTranscriptIndex(
         roots: .home(FileManager.default.homeDirectoryForCurrentUser),
-        store: DataRoot.caches.appendingPathComponent("agent-search/transcripts-v1.json"))
+        store: DataRoot.caches.appendingPathComponent("agent-search/transcripts-v2.json"))
 
     static let saveInterval: TimeInterval = 15
 
@@ -68,7 +68,7 @@ public actor AgentTranscriptIndex {
     public func search(_ request: AgentSearchRequest, now: Date = Date()) -> AgentSearchReply {
         let started = Date()
         let pending = refresh(budget: request.budget)
-        let entries = digests.values.filter(\.isSearchable).sorted { $0.path < $1.path }
+        let entries = Self.unique(digests.values)
         let query = AgentSearchTerms.terms(request.query)
         let limit = max(1, request.limit)
         let picks: [(AgentTranscriptDigest, Double)]
@@ -90,6 +90,20 @@ public actor AgentTranscriptIndex {
         return AgentSearchReply(
             machineID: request.machineID, hits: hits, indexed: entries.count, pending: pending,
             milliseconds: Int(Date().timeIntervalSince(started) * 1_000))
+    }
+
+    static func unique(_ digests: some Sequence<AgentTranscriptDigest>)
+        -> [AgentTranscriptDigest]
+    {
+        var newest: [String: AgentTranscriptDigest] = [:]
+        for digest in digests.sorted(by: { $0.path < $1.path }) where digest.isSearchable {
+            let key = "\(digest.kind.rawValue)|\(digest.sessionID)"
+            if let kept = newest[key], (kept.lastActivity ?? 0) >= (digest.lastActivity ?? 0) {
+                continue
+            }
+            newest[key] = digest
+        }
+        return newest.values.sorted { $0.path < $1.path }
     }
 
     public func flush() {

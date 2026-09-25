@@ -152,6 +152,30 @@ struct AgentSearchFixture {
     }
 }
 
+extension AgentSearchFixture {
+    func seedResumedCopies() throws {
+        try write(
+            ".claude/projects/-work-atlas/cont-9.jsonl",
+            [
+                Self.claudeUser(
+                    "perf-1", "Continue the launch optimizations from yesterday",
+                    cwd: "/work/atlas", at: "2026-09-24T10:00:00.000Z")
+            ])
+        try write(
+            ".codex/sessions/2026/09/24/rollout-codex-3b.jsonl",
+            [
+                [
+                    "type": "session_meta", "timestamp": "2026-09-24T08:00:00.000Z",
+                    "payload": ["id": "codex-3", "cwd": "/srv/billing"],
+                ],
+                [
+                    "type": "event_msg", "timestamp": "2026-09-24T08:00:02.000Z",
+                    "payload": ["type": "user_message", "message": "Round the invoices again"],
+                ],
+            ])
+    }
+}
+
 @Suite struct AgentSearchTermsTests {
     @Test func stemsMorphologicalVariantsTogether() {
         for group in [
@@ -250,6 +274,21 @@ struct AgentSearchFixture {
         #expect(again.hits.first?.sessionID == "docs-2")
     }
 
+    @Test func continuedAndResumedFilesStayUniqueSessions() async throws {
+        let fixture = try AgentSearchFixture()
+        try fixture.seed()
+        try fixture.seedResumedCopies()
+        let reply = await fixture.index().search(AgentSearchRequest(query: "", limit: 20))
+        let ids = reply.hits.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        #expect(ids.contains("local|claude|cont-9"))
+        #expect(ids.contains("local|claude|perf-1"))
+        let codex = reply.hits.filter { $0.sessionID == "codex-3" }
+        #expect(codex.count == 1)
+        #expect(codex.first?.path.hasSuffix("rollout-codex-3b.jsonl") == true)
+        #expect(reply.indexed == 5)
+    }
+
     @Test func partialLastLineWaitsForItsNewline() async throws {
         let fixture = try AgentSearchFixture()
         let url = try fixture.write(
@@ -345,6 +384,7 @@ struct AgentSearchFixture {
         else { return }
         let fixture = try AgentSearchFixture()
         try fixture.seed()
+        try fixture.seedResumedCopies()
         try fixture.write(
             ".claude/projects/-work-shop/wide.jsonl",
             [
@@ -358,7 +398,7 @@ struct AgentSearchFixture {
         let now = Date(timeIntervalSince1970: 1_790_000_000)
         for query in [
             "app optimizations", "invoice rounding", "optimize", "", "atlas docs",
-            "zebra migration", "किताब",
+            "zebra migration", "किताब", "launch optimizations", "invoices",
         ] {
             let request = AgentSearchRequest(query: query, machineID: "m1", limit: 5, budget: 30)
             let local = await fixture.index().search(request, now: now)

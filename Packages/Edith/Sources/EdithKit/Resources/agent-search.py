@@ -207,8 +207,6 @@ def injected(text):
 
 
 def read_claude(item, line, digest):
-    if not digest["sessionID"] and isinstance(item.get("sessionId"), str):
-        digest["sessionID"] = item["sessionId"]
     if item.get("isSidechain") is True:
         return
     kind = item.get("type")
@@ -551,7 +549,7 @@ def load(store):
     try:
         with open(store, "r") as handle:
             saved = json.load(handle)
-        if saved.get("version") == 1:
+        if saved.get("version") == 2:
             return {digest["path"]: digest for digest in saved.get("digests", [])}
     except (OSError, ValueError, AttributeError, KeyError, TypeError):
         pass
@@ -564,7 +562,7 @@ def save(store, digests):
         os.makedirs(directory, exist_ok=True)
         temporary = "%s.%d.tmp" % (store, os.getpid())
         with open(temporary, "w") as handle:
-            json.dump({"version": 1, "digests": sorted(digests.values(), key=lambda item: item["path"])}, handle)
+            json.dump({"version": 2, "digests": sorted(digests.values(), key=lambda item: item["path"])}, handle)
         os.replace(temporary, store)
     except OSError:
         pass
@@ -612,10 +610,16 @@ def search(request, home, store, now=None):
             pending = len(stale) - position
             break
     titles = codex_titles(home)
-    entries = sorted(
-        [digest for digest in digests.values() if digest["prompts"] or digest.get("namedTitle")],
-        key=lambda item: item["path"],
-    )
+    newest = {}
+    for digest in sorted(digests.values(), key=lambda item: item["path"]):
+        if not (digest["prompts"] or digest.get("namedTitle")):
+            continue
+        key = digest["kind"] + "|" + digest["sessionID"]
+        kept = newest.get(key)
+        if kept is not None and (kept.get("lastActivity") or 0) >= (digest.get("lastActivity") or 0):
+            continue
+        newest[key] = digest
+    entries = sorted(newest.values(), key=lambda item: item["path"])
     documents = []
     for digest in entries:
         title = title_of(digest, titles)
@@ -668,7 +672,7 @@ def main():
     request = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
     home = os.environ.get("EDITH_AGENT_SEARCH_HOME") or os.path.expanduser("~")
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-    store = os.environ.get("EDITH_AGENT_SEARCH_STORE") or os.path.join(cache, "edith", "agent-search", "transcripts-v1.json")
+    store = os.environ.get("EDITH_AGENT_SEARCH_STORE") or os.path.join(cache, "edith", "agent-search", "transcripts-v2.json")
     now = os.environ.get("EDITH_AGENT_SEARCH_NOW")
     sys.stdout.write(json.dumps(search(request, home, store, float(now) if now else None)))
     sys.stdout.write("\n")

@@ -100,9 +100,6 @@ public enum AgentTranscriptReader {
         _ object: [String: Any], line: UnsafeRawBufferPointer,
         into digest: inout AgentTranscriptDigest
     ) {
-        if digest.sessionID.isEmpty, let session = object["sessionId"] as? String {
-            digest.sessionID = session
-        }
         guard object["isSidechain"] as? Bool != true else { return }
         switch object["type"] as? String {
         case "ai-title":

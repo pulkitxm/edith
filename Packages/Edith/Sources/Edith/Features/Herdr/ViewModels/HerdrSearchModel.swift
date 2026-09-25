@@ -353,8 +353,9 @@ enum HerdrSearchPlan {
     {
         let live = host.agents.filter { !$0.isTerminal }
         var linked = Set<String>()
+        var seen = Set<String>()
         var found: [HerdrSearchRow] = []
-        for hit in hits {
+        for hit in hits where seen.insert(hit.id).inserted {
             let agent = link(hit, live: live, taken: linked)
             if let agent { linked.insert(agent.id) }
             found.append(
