@@ -6,6 +6,22 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func dayRibbonRangeStaysValidForBlocksFromAnotherDay() {
+        let day = DateInterval(start: Date(timeIntervalSince1970: 1_790_000_000), duration: 86_400)
+        let later = [day.end.addingTimeInterval(7_200), day.end.addingTimeInterval(9_000)]
+        let earlier = [day.start.addingTimeInterval(-9_000), day.start.addingTimeInterval(-60)]
+        let spanning = [day.start.addingTimeInterval(-600), day.end.addingTimeInterval(600)]
+        for dates in [later, earlier, spanning] {
+            let range = AttentionDayRibbon.visibleRange(dates, day: day)
+            #expect(range.lowerBound >= day.start)
+            #expect(range.upperBound <= day.end)
+        }
+        let inside = [day.start.addingTimeInterval(36_000), day.start.addingTimeInterval(40_000)]
+        let range = AttentionDayRibbon.visibleRange(inside + later, day: day)
+        #expect(range.lowerBound < inside[0])
+        #expect(range.upperBound > inside[1])
+    }
+
     @Test func pristineStoreShowsGuidedSetupWithoutActivity() async {
         let fixture = fixture()
         defer { fixture.cleanup() }

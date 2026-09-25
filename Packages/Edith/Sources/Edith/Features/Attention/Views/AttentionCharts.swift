@@ -44,7 +44,10 @@ struct AttentionDayRibbon: View {
     static func visibleRange(_ dates: [Date], day: DateInterval, calendar: Calendar = .current)
         -> ClosedRange<Date>
     {
-        guard let first = dates.min(), let last = dates.max() else { return day.start...day.end }
+        let inside = dates.filter { $0 >= day.start && $0 <= day.end }
+        guard let first = inside.min(), let last = inside.max() else {
+            return day.start...day.end
+        }
         let start = calendar.dateInterval(of: .hour, for: first)?.start ?? first
         let end = calendar.dateInterval(of: .hour, for: last)?.end ?? last
         let lower = max(day.start, start.addingTimeInterval(-3_600))
