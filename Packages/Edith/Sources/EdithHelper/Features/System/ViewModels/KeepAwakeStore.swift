@@ -51,6 +51,7 @@ final class KeepAwakeStore: FeatureModule {
         let timer = Timer(timeInterval: reconciliationInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.syncPreventSleep() }
         }
+        timer.tolerance = reconciliationInterval / 5
         reconciliationTimer = timer
         RunLoop.main.add(timer, forMode: .common)
         syncPreventSleep()

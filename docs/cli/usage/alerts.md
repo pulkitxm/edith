@@ -88,9 +88,11 @@ problems alert once per failure until the provider answers again, and never
 show up here.
 
 With a TypeSafe key saved, the agent asks Jev whether `on_pace`, `headroom` and
-`outlook` alerts are worth interrupting for and drops them below 0.35. Jev
-never holds back `capped`, `almost_capped`, `back` or login alerts, and this
-command always shows the deterministic verdict. When `enabled` is false the
+`outlook` alerts are worth interrupting for and holds them below 0.32. A held
+alert is not marked as sent, so the next check asks again and it goes out once
+Jev agrees, for example when you are back at the computer. Jev never holds back
+`capped`, `almost_capped`, `back` or login alerts, and this command always shows
+the deterministic verdict. When `enabled` is false the
 human output ends with a note that alerts are off.
 
 When no provider has ever been recorded the command exits 4 with `no limit

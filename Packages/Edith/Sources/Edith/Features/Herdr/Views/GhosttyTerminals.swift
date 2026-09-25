@@ -2,7 +2,9 @@ import EdithKit
 import Foundation
 
 enum GhosttyTerminals {
+    nonisolated(unsafe) static var defaults: UserDefaults = SharedDefaults.store
+
     static var enabled: Bool {
-        SharedDefaults.store.object(forKey: AppStorageKeys.Herdr.ghosttyTerminal) as? Bool ?? true
+        defaults.object(forKey: AppStorageKeys.Herdr.ghosttyTerminal) as? Bool ?? true
     }
 }

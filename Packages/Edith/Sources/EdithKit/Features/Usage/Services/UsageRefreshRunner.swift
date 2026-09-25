@@ -197,7 +197,7 @@ public enum UsageRefreshRunner {
         IPC.post(IPC.Name.usageRefreshStarted)
         defer { IPC.post(IPC.Name.usageRefreshFinished) }
 
-        var environment = ProcessInfo.processInfo.environment
+        var environment = CLIToolEnvironment.sanitized()
         environment["EDITH_USAGE_OUTPUT"] = stagedUsage.path
         environment["EDITH_USAGE_MACHINES_DIR"] = dataDir.appendingPathComponent("machines").path
 

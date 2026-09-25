@@ -1,5 +1,6 @@
 import EdithCore
 import Foundation
+import MCP
 import Testing
 
 @testable import EdithCLI
@@ -40,6 +41,18 @@ import Testing
         #expect(quit.isDestructive)
         #expect(!quit.arguments([], confirm: false).contains("--yes"))
         #expect(quit.arguments([], confirm: true).contains("--yes"))
+    }
+
+    @Test func yesInsideArgumentsIsRefusedSoOnlyConfirmApplies() async throws {
+        let result = await OperationMCPServer.call(
+            CallTool.Parameters(
+                name: "edith_app_quit", arguments: ["arguments": .array([.string("--yes")])]))
+        #expect(result.isError == true)
+        guard case let .text(text, _, _) = try #require(result.content.first) else {
+            Issue.record("expected a text result")
+            return
+        }
+        #expect(text == OperationMCPServer.confirmationInArguments)
     }
 
     @Test func aReadToolNeverGainsYes() throws {

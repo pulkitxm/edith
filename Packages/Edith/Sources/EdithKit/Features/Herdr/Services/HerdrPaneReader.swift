@@ -3,10 +3,12 @@ import Foundation
 public struct HerdrAttentionProbe: Equatable, Sendable {
     public var agent: HerdrAgent
     public var countChanges: Bool
+    public var readsExplain: Bool
 
-    public init(agent: HerdrAgent, countChanges: Bool) {
+    public init(agent: HerdrAgent, countChanges: Bool, readsExplain: Bool = true) {
         self.agent = agent
         self.countChanges = countChanges
+        self.readsExplain = readsExplain
     }
 }
 
@@ -76,7 +78,9 @@ public enum HerdrPaneReader {
                 HerdrPaneScreen(raw: text, explain: nil)
             }
             var item = HerdrAttentionEvidence(screen: screen)
-            if item.screen != nil, let explain = await run(explainArguments(for: agent)) {
+            if probe.readsExplain, item.screen != nil,
+                let explain = await run(explainArguments(for: agent))
+            {
                 item.screen?.explain = HerdrAgentExplain.parse(explain)
             }
             if probe.countChanges, !agent.cwd.isEmpty { item.changes = await changes(agent.cwd) }

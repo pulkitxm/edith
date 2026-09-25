@@ -187,12 +187,13 @@ public enum HerdrAttentionClassifier {
         _ base: HerdrAttentionVerdict, agent: HerdrAgent, event: HerdrAttentionEvent,
         evidence: HerdrAttentionEvidence, decider: JevDeciding
     ) async -> HerdrAttentionVerdict {
+        let pinned = [.approval, .answer, .error].contains(base.need)
+        guard !pinned else { return base }
         let request = request(agent: agent, event: event, evidence: evidence)
         guard let decision = try? await decider.decide(request, purpose: purpose) else {
             return base
         }
         var refined = base
-        let pinned = [.approval, .answer, .error].contains(base.need)
         if !pinned,
             let state = confident(decision.answer("state")).flatMap(HerdrAttentionState.init),
             event != .finished || ![.working, .looping].contains(state)

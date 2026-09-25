@@ -28,7 +28,8 @@ final class TerminalSessionHolder {
         let completion: @MainActor (Bool) -> Void
     }
 
-    private(set) var terminalView = EdithTerminalView.make()
+    @ObservationIgnored private var swiftTermView: EdithTerminalView?
+    @ObservationIgnored private var oscHandlers: [Int: @MainActor (String) -> Void] = [:]
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -112,10 +113,12 @@ final class TerminalSessionHolder {
         presentationGeneration += 1
         focusTask?.cancel()
         focusTask = nil
-        terminalView.terminal.resetToInitialState()
-        if started { terminalView.terminate() }
+        if let swiftTermView {
+            swiftTermView.terminal.resetToInitialState()
+            if started { swiftTermView.terminate() }
+        }
         clearQueuedGhosttyInput()
-        terminalView = EdithTerminalView.make()
+        swiftTermView = nil
         generation += 1
         started = false
         exitMessage = nil
@@ -312,8 +315,23 @@ final class TerminalSessionHolder {
         focusTask = nil
     }
 
+    var terminalView: EdithTerminalView {
+        if let swiftTermView { return swiftTermView }
+        let view = EdithTerminalView.make()
+        for (code, handler) in oscHandlers { Self.install(handler, code: code, on: view) }
+        swiftTermView = view
+        return view
+    }
+
     func registerOSCHandler(code: Int, handler: @escaping @MainActor (String) -> Void) {
-        terminalView.terminal.registerOscHandler(code: code) { bytes in
+        oscHandlers[code] = handler
+        if let swiftTermView { Self.install(handler, code: code, on: swiftTermView) }
+    }
+
+    private static func install(
+        _ handler: @escaping @MainActor (String) -> Void, code: Int, on view: EdithTerminalView
+    ) {
+        view.terminal.registerOscHandler(code: code) { bytes in
             guard let payload = String(bytes: bytes, encoding: .utf8) else { return }
             Task { @MainActor in handler(payload) }
         }

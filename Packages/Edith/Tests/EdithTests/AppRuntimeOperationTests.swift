@@ -177,9 +177,6 @@ import Testing
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/EdithHelper")
-        let developer = try String(
-            contentsOf: sources.appendingPathComponent(
-                "Features/System/Views/DeveloperPanel.swift"), encoding: .utf8)
         let system = try String(
             contentsOf: sources.appendingPathComponent(
                 "Features/System/ViewModels/SystemStore.swift"), encoding: .utf8)
@@ -196,14 +193,9 @@ import Testing
             contentsOf: sources.deletingLastPathComponent().appendingPathComponent(
                 "Edith/Core/Application/UpdaterModel.swift"), encoding: .utf8)
 
-        #expect(developer.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
         #expect(system.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
         #expect(menu.contains("AppRuntimeCenter().quitCompletely()"))
-        #expect(helper.contains("AppRuntimeCenter().quitCompletely()"))
         #expect(cli.contains("AppActions.runtime.perform(.relaunch)"))
-        #expect(!developer.contains("private func relaunch"))
-        #expect(!developer.contains("NSApp.terminate"))
-        #expect(!developer.contains("NSWorkspace.shared.openApplication"))
         #expect(!system.contains("task.executableURL"))
         #expect(!system.contains("NSApp.terminate"))
         #expect(!menu.contains("NSApp.terminate"))

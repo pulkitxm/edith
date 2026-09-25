@@ -31,6 +31,8 @@ public final class SessionsJob: @unchecked Sendable {
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var remoteCollectedAt = Date.distantPast
+    private var remoteHosts: [HerdrHostSnapshot] = []
+    private var recordedPayloads: [Data]?
 
     public init(
         store: AgentStore?,
@@ -60,9 +62,9 @@ public final class SessionsJob: @unchecked Sendable {
                 subscribed: subscribed, alerts: alerts, remoteDue: remoteDue())
         else { return nil }
         if case .all = scope { markRemoteCollected() }
-        let hosts = await collect(scope)
-        let snapshot = SessionsTally.snapshot(hosts: hosts)
-        try await notify(hosts)
+        let collected = await collect(scope)
+        let snapshot = SessionsTally.snapshot(hosts: merged(collected, scope: scope))
+        try await notify(collected)
         SidebarBadgeStore.recordSessions(working: snapshot.working)
         try? record(snapshot)
         return try AgentPayload.encode(snapshot)
@@ -76,12 +78,29 @@ public final class SessionsJob: @unchecked Sendable {
         lock.withLock { remoteCollectedAt = now() }
     }
 
+    private func merged(_ collected: [HerdrHostSnapshot], scope: HerdrCollectScope)
+        -> [HerdrHostSnapshot]
+    {
+        lock.withLock {
+            switch scope {
+            case .all:
+                remoteHosts = collected.filter { !$0.isLocal }
+                return collected
+            case .local:
+                return collected + remoteHosts
+            case .machine:
+                return collected
+            }
+        }
+    }
+
     private func record(_ snapshot: SessionsSnapshot) throws {
         guard let store else { return }
+        let payloads = try snapshot.hosts.map { try AgentPayload.encode($0) }
+        guard lock.withLock({ recordedPayloads != payloads }) else { return }
         try store.write { database in
             try database.execute(sql: "DELETE FROM session_snapshot")
-            for host in snapshot.hosts {
-                let payload = try AgentPayload.encode(host)
+            for (host, payload) in zip(snapshot.hosts, payloads) {
                 try database.execute(
                     sql: """
                         INSERT INTO session_snapshot (id, machine, capturedAt, payload)
@@ -90,5 +109,6 @@ public final class SessionsJob: @unchecked Sendable {
                     arguments: [host.id, host.name, snapshot.discoveredAt, payload])
             }
         }
+        lock.withLock { recordedPayloads = payloads }
     }
 }

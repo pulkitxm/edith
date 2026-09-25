@@ -95,10 +95,13 @@ private struct HerdrDetachedView: View {
     let launchEnabled: Bool
 
     var body: some View {
-        if let tab = store.detachedTab(id: agentID) {
-            HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
-                .environment(\.terminalLaunchEnabled, launchEnabled)
+        Group {
+            if let tab = store.detachedTab(id: agentID) {
+                HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
+                    .environment(\.terminalLaunchEnabled, launchEnabled)
+            }
         }
+        .agentTopic(.sessions, as: SessionsSnapshot.self) { store.adopt($0) }
     }
 }
 

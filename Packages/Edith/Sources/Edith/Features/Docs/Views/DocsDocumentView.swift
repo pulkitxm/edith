@@ -1,4 +1,5 @@
 import AppKit
+import EdithDocs
 import EdithKit
 import SwiftUI
 
@@ -100,6 +101,11 @@ struct DocsBlockView: View {
     let dark: Bool
     var flashAnchor: String?
     var depth = 0
+
+    static func flash(_ anchor: String?, in block: DocsBlock) -> String? {
+        guard case .heading(let heading) = block, heading.anchor == anchor else { return nil }
+        return anchor
+    }
 
     var body: some View {
         switch block {
@@ -279,7 +285,36 @@ enum DocsTableLayout {
     static let padding = 10.0
     static let longestWord = 220.0
 
+    static let cacheLimit = 256
+
+    struct Columns {
+        let minimum: [Double]
+        let natural: [Double]
+    }
+
+    private struct Key: Hashable {
+        let table: DocsTable
+        let scale: Double
+    }
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [Key: Columns] = [:]
+
     static func widths(_ table: DocsTable, available: Double) -> [Double] {
+        let measured = columns(table)
+        let minimum = measured.minimum
+        let natural = measured.natural
+        if natural.reduce(0, +) <= available { return natural }
+        let floor = minimum.reduce(0, +)
+        guard floor < available else { return minimum }
+        let slack = zip(natural, minimum).map { max(0, $0 - $1) }
+        let totalSlack = max(1, slack.reduce(0, +))
+        return zip(minimum, slack).map { $0 + (available - floor) * $1 / totalSlack }
+    }
+
+    static func columns(_ table: DocsTable) -> Columns {
+        let key = Key(table: table, scale: UIScale.pt(1))
+        if let cached = cacheLock.withLock({ cache[key] }) { return cached }
         let columns = table.header.count
         var minimum = Array(repeating: 0.0, count: columns)
         var natural = Array(repeating: 0.0, count: columns)
@@ -291,14 +326,13 @@ enum DocsTableLayout {
             }
         }
         let inset = UIScale.pt(padding) * 2
-        minimum = minimum.map { $0 + inset }
-        natural = natural.map { $0 + inset }
-        if natural.reduce(0, +) <= available { return natural }
-        let floor = minimum.reduce(0, +)
-        guard floor < available else { return minimum }
-        let slack = zip(natural, minimum).map { max(0, $0 - $1) }
-        let totalSlack = max(1, slack.reduce(0, +))
-        return zip(minimum, slack).map { $0 + (available - floor) * $1 / totalSlack }
+        let measured = Columns(
+            minimum: minimum.map { $0 + inset }, natural: natural.map { $0 + inset })
+        cacheLock.withLock {
+            if cache.count >= cacheLimit { cache.removeAll() }
+            cache[key] = measured
+        }
+        return measured
     }
 
     static func measure(_ spans: [DocsSpan], bold: Bool) -> (word: Double, line: Double) {

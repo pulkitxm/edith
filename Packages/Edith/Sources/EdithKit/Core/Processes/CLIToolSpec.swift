@@ -140,25 +140,34 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
 public enum CLIToolEnvironment {
     public static func sanitized(
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> [String: String] {
         var environment = processEnvironment
+        for (key, value) in shellEnvironment ?? [:]
+        where UserShellEnvironment.imports(key) && processEnvironment[key] == nil {
+            environment[key] = value
+        }
         environment.removeValue(forKey: "NO_COLOR")
         let directories = commonDirectories(
             processEnvironment: processEnvironment, fileManager: fileManager)
+        let shellPath = shellEnvironment?["PATH"]?.split(separator: ":").map(String.init) ?? []
         let existing = processEnvironment["PATH"]?.split(separator: ":").map(String.init) ?? []
-        environment["PATH"] = uniqueAllowedDirectories(directories + existing).joined(
-            separator: ":")
+        environment["PATH"] = uniqueAllowedDirectories(
+            directories.prefix(1) + shellPath + directories.dropFirst() + existing
+        ).joined(separator: ":")
         return environment
     }
 
     public static func executable(
         named name: String,
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> URL? {
         let environment = sanitized(
-            processEnvironment: processEnvironment, fileManager: fileManager)
+            processEnvironment: processEnvironment, shellEnvironment: shellEnvironment,
+            fileManager: fileManager)
         for directory in environment["PATH"]?.split(separator: ":").map(String.init) ?? [] {
             guard RestoredPathValidation.verdict(for: directory) == .keep else { continue }
             let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name)
@@ -183,8 +192,9 @@ public enum CLIToolEnvironment {
             at: nvmRoot, includingPropertiesForKeys: nil)
         {
             directories.insert(
-                contentsOf: versions.sorted { $0.lastPathComponent < $1.lastPathComponent }
-                    .reversed().map { $0.appendingPathComponent("bin").path }, at: 3)
+                contentsOf: versions.sorted {
+                    nodeVersionOrder($0.lastPathComponent, $1.lastPathComponent)
+                }.map { $0.appendingPathComponent("bin").path }, at: 3)
         }
         if let configuredHome = processEnvironment["HOME"], !configuredHome.isEmpty {
             directories.insert(
@@ -192,6 +202,17 @@ public enum CLIToolEnvironment {
                 at: 1)
         }
         return directories
+    }
+
+    static func nodeVersionOrder(_ lhs: String, _ rhs: String) -> Bool {
+        let left = versionComponents(lhs)
+        let right = versionComponents(rhs)
+        guard left != right else { return lhs > rhs }
+        return right.lexicographicallyPrecedes(left)
+    }
+
+    private static func versionComponents(_ name: String) -> [Int] {
+        name.drop { !$0.isNumber }.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
     }
 
     private static func uniqueAllowedDirectories(_ directories: [String]) -> [String] {

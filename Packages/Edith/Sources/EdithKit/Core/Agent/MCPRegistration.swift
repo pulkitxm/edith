@@ -23,13 +23,14 @@ public struct MCPServerEntry: Equatable, Sendable {
 
 public enum MCPRegistration {
     public static let serverName = "edith"
+    public static let arguments = ["mcp"]
     public static let exampleCall = "ed usage limits --json"
 
     public static func entry(
         commandPath: String = CLIInstaller.preferredDirectory().appendingPathComponent("ed").path
     ) -> MCPServerEntry {
         MCPServerEntry(
-            name: serverName, command: commandPath, arguments: ["database", "mcp"])
+            name: serverName, command: commandPath, arguments: arguments)
     }
 
     public static var claudeConfigURL: URL {
@@ -49,7 +50,8 @@ public enum MCPRegistration {
     public static func isRegistered(
         in document: [String: Any], name: String = serverName
     ) -> Bool {
-        (document["mcpServers"] as? [String: Any])?[name] != nil
+        let server = (document["mcpServers"] as? [String: Any])?[name] as? [String: Any]
+        return server?["args"] as? [String] == arguments
     }
 
     @discardableResult

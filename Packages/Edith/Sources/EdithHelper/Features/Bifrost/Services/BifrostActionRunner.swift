@@ -74,9 +74,10 @@ enum BifrostActionRunner {
         guard let entry = BifrostLibraryStore.shellCommand(id: id, in: defaults) else {
             return false
         }
-        let script = entry.resolved(context: context(argument: argument))
-        guard !script.isEmpty else { return false }
-        let outcome = await LocalMachineCommandExecution.run(script, timeout: 120)
+        let invocation = entry.resolved(context: context(argument: argument))
+        guard !invocation.script.isEmpty else { return false }
+        let outcome = await LocalMachineCommandExecution.run(
+            invocation.script, environment: invocation.environment, timeout: 120)
         switch outcome {
         case .success(let text):
             guard entry.showsOutput else { return true }

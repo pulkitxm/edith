@@ -23,6 +23,7 @@ public final class FileSystemWatcher: @unchecked Sendable {
     private let handler: @Sendable () -> Void
     private var stream: FSEventStreamRef?
     private var pending: DispatchWorkItem?
+    private var burstDeadline: DispatchTime?
 
     public init(
         paths: [URL], debounce: TimeInterval = 30,
@@ -52,10 +53,8 @@ public final class FileSystemWatcher: @unchecked Sendable {
         guard
             let created = FSEventStreamCreate(
                 kCFAllocatorDefault, callback, &context, paths as CFArray,
-                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 1.0,
-                FSEventStreamCreateFlags(
-                    kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents
-                        | kFSEventStreamCreateFlagUseCFTypes))
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 5.0,
+                FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes))
         else { return }
         FSEventStreamSetDispatchQueue(created, queue)
         FSEventStreamStart(created)
@@ -70,17 +69,22 @@ public final class FileSystemWatcher: @unchecked Sendable {
         self.stream = nil
         pending?.cancel()
         pending = nil
+        burstDeadline = nil
     }
 
     private func schedule() {
         queue.async { [weak self] in
             guard let self else { return }
+            let now = DispatchTime.now()
+            let deadline = self.burstDeadline ?? now + self.debounce * 4
+            self.burstDeadline = deadline
             self.pending?.cancel()
             let work = DispatchWorkItem { [weak self] in
+                self?.burstDeadline = nil
                 self?.handler()
             }
             self.pending = work
-            self.queue.asyncAfter(deadline: .now() + self.debounce, execute: work)
+            self.queue.asyncAfter(deadline: min(now + self.debounce, deadline), execute: work)
         }
     }
 

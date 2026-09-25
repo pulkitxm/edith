@@ -2,7 +2,7 @@ import Foundation
 
 public enum UsageAttributionAdvisor {
     public static let perRunLimit = 40
-    public static let threshold = 0.8
+    public static let threshold = 0.9
     public static let titleLimit = 80
     public static let titleCount = 5
     public static let purpose = "usage.attribution"
@@ -18,6 +18,14 @@ public enum UsageAttributionAdvisor {
         var sources: Set<String> = []
         var titles: [String] = []
         var cost = 0.0
+    }
+
+    private static let queue = UsageAttributionQueue()
+
+    public static func schedule(
+        dataDir: URL = Repo.dataDir, decider: @escaping @Sendable () async -> JevDeciding?
+    ) async {
+        await queue.submit { await run(dataDir: dataDir, decider: await decider()) }
     }
 
     public static func run(dataDir: URL = Repo.dataDir, decider: JevDeciding?) async {
@@ -41,6 +49,12 @@ public enum UsageAttributionAdvisor {
         guard !repositories.isEmpty else { return cache }
         let matcher = UsageAttributionMatcher(repositories: repositories)
         var next = cache
+        for (key, decision) in next.decisions
+        where decision.method == .jev && decision.repository != nil
+            && (decision.confidence ?? 0) < threshold
+        {
+            next.decisions[key]?.repository = nil
+        }
         var questions: [Unit] = []
         for unit in units(document) where next.decisions[unit.key] == nil {
             let match =
@@ -150,5 +164,36 @@ public enum UsageAttributionAdvisor {
         UsageAttributionDecision(
             method: method, repository: repository, confidence: confidence, folder: unit.folder,
             machine: unit.machine, title: unit.isChat ? unit.titles.first : nil, decidedAt: now)
+    }
+}
+
+actor UsageAttributionQueue {
+    private var running: Task<Void, Never>?
+    private var pending: (@Sendable () async -> Void)?
+
+    func submit(_ work: @escaping @Sendable () async -> Void) {
+        guard running == nil else {
+            pending = work
+            return
+        }
+        start(work)
+    }
+
+    func settled() async {
+        while let running { await running.value }
+    }
+
+    private func start(_ work: @escaping @Sendable () async -> Void) {
+        running = Task(priority: .utility) {
+            await work()
+            await self.finish()
+        }
+    }
+
+    private func finish() {
+        running = nil
+        guard let next = pending else { return }
+        pending = nil
+        start(next)
     }
 }

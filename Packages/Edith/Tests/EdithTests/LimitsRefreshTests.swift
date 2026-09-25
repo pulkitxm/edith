@@ -127,11 +127,6 @@ private final class MutableHistoryURL: @unchecked Sendable {
                 == now.addingTimeInterval(300))
     }
 
-    @Test func aRefreshDoesNotQueueItselfFromItsOwnStartNotification() {
-        #expect(UsageStore.acceptsExternalRefreshStart(updating: false))
-        #expect(!UsageStore.acceptsExternalRefreshStart(updating: true))
-    }
-
     @Test func usageStatusMappingDistinguishesPermissionFailures() {
         #expect(LimitsCollector.fetchError(statusCode: 401) == .unauthorized)
         #expect(LimitsCollector.fetchError(statusCode: 403) == .permissionDenied)

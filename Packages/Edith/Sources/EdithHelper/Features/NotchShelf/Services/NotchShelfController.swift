@@ -150,7 +150,7 @@ final class NotchShelfController: FeatureModule {
         dragMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
-            Task { @MainActor in self?.handleGlobalMouse(event) }
+            MainActor.assumeIsolated { self?.handleGlobalMouse(event) }
         }
         startMoveMonitor()
         startAlertsIfEnabled()
@@ -667,9 +667,9 @@ final class NotchShelfController: FeatureModule {
             }
         case .leftMouseDragged:
             guard openOnDrag else { return }
-            guard NSPasteboard(name: .drag).changeCount != lastDragChangeCount else { return }
             let point = NSEvent.mouseLocation
-            guard optionSatisfied(), let id = notchDisplay(near: point), isNearNotch(point, on: id)
+            guard let id = notchDisplay(near: point), isNearNotch(point, on: id),
+                NSPasteboard(name: .drag).changeCount != lastDragChangeCount, optionSatisfied()
             else { return }
             activeTab = .files
             expand(on: id)

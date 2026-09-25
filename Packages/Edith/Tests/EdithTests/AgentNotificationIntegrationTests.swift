@@ -208,6 +208,31 @@ private struct NotificationFixture {
         #expect(capped.map(\.identifier).contains("limits.capped.claude.session"))
     }
 
+    @Test func anAlertJevHeldGoesOutOnceJevLetsItThrough() async throws {
+        let fixture = try NotificationFixture()
+        defer { fixture.close() }
+        let probe = LimitAlertJevProbe(score: 0.1)
+        let reset = fixture.now.addingTimeInterval(3 * 3600)
+        let windowStart = reset.addingTimeInterval(-5 * 3600)
+        let later = fixture.now.addingTimeInterval(600)
+        let history = LimitAlertScenario.samples(reset, from: windowStart, to: later) {
+            30 * $0.timeIntervalSince(windowStart) / 3600
+        }
+        let target = LimitAlertTarget(.claude, .session)
+        let service = NotificationFixture.service(
+            root: fixture.root, defaults: fixture.defaults,
+            history: { _ in [target: history] }, jev: { probe })
+        try await service.evaluateLimits(
+            fixture.limits(percent: 60, resetsAt: reset), now: fixture.now)
+        #expect(try await service.pending(now: fixture.now).isEmpty)
+        probe.score = 0.6
+        try await service.evaluateLimits(fixture.limits(percent: 65, resetsAt: reset), now: later)
+        #expect(
+            try await service.pending(now: later).map(\.identifier)
+                == ["limits.on_pace.claude.session"])
+        #expect(probe.calls == 2)
+    }
+
     @Test func noJevKeyMeansNoJevCalls() async throws {
         let fixture = try NotificationFixture()
         defer { fixture.close() }

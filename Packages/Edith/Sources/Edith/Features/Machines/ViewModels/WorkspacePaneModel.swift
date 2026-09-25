@@ -33,7 +33,8 @@ final class PaneViewStore {
     }
 
     func terminalView(tabID: UUID, machineID: UUID) -> NSView? {
-        terminals[Key(tab: tabID, machine: machineID)]?.terminalView
+        guard let holder = terminals[Key(tab: tabID, machine: machineID)] else { return nil }
+        return GhosttyTerminals.enabled ? holder.ghosttyView : holder.terminalView
     }
 
     func release(tabID: UUID) {

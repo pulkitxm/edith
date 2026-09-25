@@ -133,15 +133,22 @@ public actor AgentNotificationService {
                         target, window: window, samples: samples[target] ?? [], now: now))
             }
         }
-        let plan = LimitAlertPlanner.plan(
+        let proposed = LimitAlertPlanner.plan(
             assessments, problems: problems, healthy: healthy, ledger: state.ledger,
             settings: settings, clock: clock(now))
-        let needsJev = plan.alerts.contains { !$0.kind.isCritical }
+        let needsJev = proposed.alerts.contains { !$0.kind.isCritical }
         let gate = LimitAlertJevGate(decider: needsJev ? await jev() : nil)
-        var approved: [LimitAlert] = []
-        for alert in plan.alerts {
-            if await gate.allows(alert) { approved.append(alert) }
+        var held: Set<String> = []
+        for alert in proposed.alerts where !alert.kind.isCritical {
+            if await !gate.allows(alert) { held.insert(alert.identifier) }
         }
+        let plan =
+            held.isEmpty
+            ? proposed
+            : LimitAlertPlanner.plan(
+                assessments, problems: problems, healthy: healthy, ledger: state.ledger,
+                settings: settings, clock: clock(now), held: held)
+        let approved = plan.alerts
         var next = state
         next.ledger = plan.ledger
         replaceScheduled(

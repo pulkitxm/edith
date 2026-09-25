@@ -17,6 +17,7 @@ struct RateLimitsDialsView: View {
         var selectedRaw =
         LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.windowVisible) private var windowVisible
 
     @State private var providers: [LimitProvider] = []
     @State private var reloadJob: Task<Void, Never>?
@@ -93,7 +94,8 @@ struct RateLimitsDialsView: View {
             shadow: .black.opacity(dark ? 0.32 : 0.05)
         )
         .task { reload() }
-        .task {
+        .task(id: windowVisible) {
+            guard windowVisible else { return }
             for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
             {
                 guard !Task.isCancelled else { return }
@@ -107,7 +109,9 @@ struct RateLimitsDialsView: View {
         ) { _ in
             reload()
         }
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 60, tolerance: 10, on: .main, in: .common).autoconnect()) {
+            _ in
+            guard windowVisible else { return }
             reload()
         }
         .onDisappear {
@@ -163,6 +167,7 @@ struct RateLimitsDialsView: View {
 }
 
 struct LimitsRefreshButton: View {
+    @Environment(\.windowVisible) private var windowVisible
     let dark: Bool
     var onRefreshed: () -> Void
     @State private var refreshing = false
@@ -192,7 +197,8 @@ struct LimitsRefreshButton: View {
         .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
         .help("Refresh limits now")
-        .task {
+        .task(id: windowVisible) {
+            guard windowVisible else { return }
             for await _ in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits) {
                 guard !Task.isCancelled else { return }
                 refreshing = false

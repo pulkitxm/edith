@@ -66,6 +66,7 @@ final class RunningAppsModel {
     private(set) var refreshing = false
 
     private var resourceBaseline: RunningAppResourceBaseline?
+    @ObservationIgnored private var iconCache: [pid_t: NSImage] = [:]
     private let operations: RunningAppOperationCenter
 
     var quitAllTargetCount: Int {
@@ -122,12 +123,18 @@ final class RunningAppsModel {
             refreshing = false
             loaded = true
         }
-        var icons: [pid_t: NSImage] = [:]
         let snapshots = operations.list()
         let operations = self.operations
-        for app in NSWorkspace.shared.runningApplications where app.processIdentifier > 0 {
-            icons[app.processIdentifier] = app.icon
+        var live = Set<pid_t>()
+        for snapshot in snapshots { live.insert(snapshot.pid) }
+        for pid in iconCache.keys where !live.contains(pid) { iconCache[pid] = nil }
+        for app in NSWorkspace.shared.runningApplications
+        where app.processIdentifier > 0 && live.contains(app.processIdentifier)
+            && iconCache[app.processIdentifier] == nil
+        {
+            iconCache[app.processIdentifier] = app.icon
         }
+        let icons = iconCache
         let previous = resourceBaseline
         let now = Date()
         let measured = await Task.detached(priority: .utility) {

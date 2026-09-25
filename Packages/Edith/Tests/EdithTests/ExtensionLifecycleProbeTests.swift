@@ -3,6 +3,7 @@ import Testing
 
 import EdithCore
 import EdithDatabase
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct ExtensionLifecycleProbeTests {

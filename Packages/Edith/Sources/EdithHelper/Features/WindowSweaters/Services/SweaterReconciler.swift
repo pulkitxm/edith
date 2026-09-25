@@ -84,9 +84,12 @@ enum SweaterSnapshot {
 final class SweaterReconciler {
     private static let interval = 0.05
     private static let livenessInterval = 0.25
+    private static let settleInterval = 1.0
 
     private unowned let tracker: SweaterWindowTracker
     private var task: Task<Void, Never>?
+    private var idleWait: Task<Void, Never>?
+    private var hotUntil = 0.0
     private var previous: [SkyLight.WindowID: SweaterObservedWindow] = [:]
     private var liveWindows: Set<SkyLight.WindowID> = []
     private var liveWindowsExpiry = 0.0
@@ -96,8 +99,14 @@ final class SweaterReconciler {
         self.tracker = tracker
     }
 
+    func wake() {
+        hotUntil = CFAbsoluteTimeGetCurrent() + Self.settleInterval
+        idleWait?.cancel()
+    }
+
     func start() {
         guard task == nil else { return }
+        hotUntil = CFAbsoluteTimeGetCurrent() + Self.settleInterval
         task = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -114,9 +123,22 @@ final class SweaterReconciler {
                         self.liveWindowsExpiry =
                             CFAbsoluteTimeGetCurrent() + Self.livenessInterval
                     }
-                    self.reconcile(snapshot.windows)
+                    if self.reconcile(snapshot.windows) {
+                        self.hotUntil = CFAbsoluteTimeGetCurrent() + Self.settleInterval
+                    }
                 }
-                try? await Task.sleep(for: .milliseconds(active ? 50 : 1000))
+                if active, CFAbsoluteTimeGetCurrent() < self.hotUntil {
+                    try? await Task.sleep(for: .seconds(Self.interval))
+                } else {
+                    let wait = Task {
+                        _ = try? await Task.sleep(
+                            for: active ? .milliseconds(100) : .seconds(30),
+                            tolerance: .milliseconds(active ? 10 : 1_000))
+                    }
+                    self.idleWait = wait
+                    await wait.value
+                    self.idleWait = nil
+                }
             }
         }
     }
@@ -124,6 +146,8 @@ final class SweaterReconciler {
     func stop() {
         task?.cancel()
         task = nil
+        idleWait?.cancel()
+        idleWait = nil
         previous.removeAll()
         liveWindows.removeAll()
         liveWindowsExpiry = 0
@@ -133,8 +157,14 @@ final class SweaterReconciler {
         liveWindows.isEmpty || liveWindows.contains(window)
     }
 
-    private func reconcile(_ snapshot: [SweaterObservedWindow]) {
-        guard !snapshot.isEmpty else { return }
+    @discardableResult
+    private func reconcile(_ snapshot: [SweaterObservedWindow]) -> Bool {
+        guard !snapshot.isEmpty else { return false }
+        let moved =
+            snapshot.contains { entry in
+                guard let before = previous[entry.window] else { return true }
+                return before.bounds != entry.bounds || before.alpha != entry.alpha
+            } || snapshot.count != previous.count
         let now = CFAbsoluteTimeGetCurrent()
         let settings = tracker.settings
         var observed = Dictionary(uniqueKeysWithValues: snapshot.map { ($0.window, $0) })
@@ -237,5 +267,6 @@ final class SweaterReconciler {
             observed[key]?.tracked = tracker.borders[key] != nil
         }
         previous = observed
+        return moved
     }
 }

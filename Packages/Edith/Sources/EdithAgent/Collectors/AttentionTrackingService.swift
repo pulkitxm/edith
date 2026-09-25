@@ -14,6 +14,7 @@ final class AttentionTrackingService {
     private let capture: @MainActor (Date, AttentionSettings, Bool) -> AttentionHeartbeatSample?
     private var locked = false
     private let writer: AttentionHeartbeatWriter
+    private let observing: Bool
     nonisolated(unsafe) private var shutdownTask: Task<Void, Never>?
 
     init(
@@ -31,10 +32,11 @@ final class AttentionTrackingService {
         self.capture = capture
         self.repository = repository
         settings = initialSettings ?? repository.loadSettings()
+        observing = observe
         previous = capture(now, settings, locked)
         if observe {
             installObservers()
-            startTimer()
+            syncTimer()
         }
     }
 
@@ -59,12 +61,23 @@ final class AttentionTrackingService {
         writeHeartbeat()
         settings = nextSettings
         previous = capture(Date(), settings, locked)
+        if observing { syncTimer() }
+    }
+
+    private func syncTimer() {
+        guard settings.isEnabled, settings.trackingEnabled else {
+            timer?.invalidate()
+            timer = nil
+            return
+        }
+        if timer == nil { startTimer() }
     }
 
     private func startTimer() {
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.writeHeartbeat() }
         }
+        timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -149,6 +162,7 @@ final class AttentionTrackingRuntime {
     func sync(_ settings: AttentionSettings) {
         guard !stopped else { return }
         if collector == nil {
+            guard settings.isEnabled, settings.trackingEnabled else { return }
             let writer = AttentionHeartbeatWriter(
                 spool: AttentionDeliverySpool(
                     file: repository.directory.appendingPathComponent("delivery-spool.json")),

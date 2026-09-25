@@ -4,6 +4,8 @@ import EdithCLI
 import EdithDatabase
 import Foundation
 
+DatabaseExtensionReadiness.install()
+
 switch ExecutableLaunch.destination(environment: ProcessInfo.processInfo.environment) {
 case .application:
     EdithApp.main()

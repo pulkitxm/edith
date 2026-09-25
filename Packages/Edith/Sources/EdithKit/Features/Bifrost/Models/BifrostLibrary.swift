@@ -91,8 +91,8 @@ public struct BifrostShellCommand: Identifiable, Codable, Hashable, Sendable {
             && !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    public func resolved(context: BifrostPlaceholderContext) -> String {
-        BifrostPlaceholder.expand(script, context: context)
+    public func resolved(context: BifrostPlaceholderContext) -> BifrostShellInvocation {
+        BifrostPlaceholder.shell(script, context: context)
     }
 }
 

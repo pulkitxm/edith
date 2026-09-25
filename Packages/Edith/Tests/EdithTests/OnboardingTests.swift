@@ -264,7 +264,19 @@ import Testing
         let entry = MCPRegistration.entry(commandPath: "/usr/local/bin/ed")
         #expect(entry.name == "edith")
         #expect(entry.command == "/usr/local/bin/ed")
-        #expect(entry.arguments == ["database", "mcp"])
+        #expect(entry.arguments == ["mcp"])
+    }
+
+    @Test func aDatabaseOnlyRegistrationIsUpgradedToEveryTool() {
+        let stale: [String: Any] = [
+            "mcpServers": ["edith": ["command": "/bin/ed", "args": ["database", "mcp"]]]
+        ]
+        #expect(!MCPRegistration.isRegistered(in: stale))
+        let merged = MCPRegistration.merged(
+            into: stale, entry: MCPRegistration.entry(commandPath: "/bin/ed"))
+        #expect(MCPRegistration.isRegistered(in: merged))
+        let server = (merged["mcpServers"] as? [String: Any])?["edith"] as? [String: Any]
+        #expect(server?["args"] as? [String] == ["mcp"])
     }
 
     @Test func registeringMergesRatherThanReplacingOtherServers() {
@@ -305,6 +317,6 @@ import Testing
         let line = MCPRegistration.entry(commandPath: "/bin/ed").codexLine
         #expect(line.contains("[mcp_servers.edith]"))
         #expect(line.contains("command = \"/bin/ed\""))
-        #expect(line.contains("\"database\", \"mcp\""))
+        #expect(line.contains("args = [\"mcp\"]"))
     }
 }

@@ -175,51 +175,18 @@ public enum HerdrCollector {
     }
 
     private static func runLocal(_ command: String) async -> CommandResult {
-        await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-c", command]
-            process.environment = CLIToolEnvironment.sanitized()
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-            process.standardInput = FileHandle.nullDevice
-            do {
-                try process.run()
-            } catch {
-                return CommandResult(status: 1, stdout: "", stderr: error.localizedDescription)
-            }
-            let status = await waitForExit(process, timeout: commandTimeout)
-            let stdout = String(
-                decoding: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            let stderr = String(
-                decoding: stderrPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            return CommandResult(status: status, stdout: stdout, stderr: stderr)
-        }.value
-    }
-
-    private static func waitForExit(_ process: Process, timeout: TimeInterval) async -> Int32 {
-        await withCheckedContinuation { continuation in
-            let gate = ResumeOnce()
-            let resume: @Sendable (Int32) -> Void = { status in
-                guard gate.claim() else { return }
-                continuation.resume(returning: status)
-            }
-            process.terminationHandler = { resume($0.terminationStatus) }
-            if !process.isRunning {
-                resume(process.terminationStatus)
-                return
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
-                if process.isRunning {
-                    process.terminate()
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-                        resume(process.terminationStatus)
-                    }
-                }
-            }
+        do {
+            let result = try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-c", command],
+                    environment: CLIToolEnvironment.sanitized(), timeout: commandTimeout,
+                    maximumOutputBytes: 16 << 20),
+                onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+            return CommandResult(
+                status: result.terminationStatus, stdout: result.standardOutput,
+                stderr: String(decoding: result.standardErrorData, as: UTF8.self))
+        } catch {
+            return CommandResult(status: 1, stdout: "", stderr: error.localizedDescription)
         }
     }
 
@@ -250,18 +217,5 @@ public enum HerdrCollector {
     private static func isPowerShellProgress(_ value: String) -> Bool {
         value.hasPrefix("#< CLIXML") && value.contains("Preparing modules for first use.")
             && !value.contains("<S S=\"Error\">")
-    }
-}
-
-private final class ResumeOnce: @unchecked Sendable {
-    private let lock = NSLock()
-    private var taken = false
-
-    func claim() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        if taken { return false }
-        taken = true
-        return true
     }
 }

@@ -5,6 +5,7 @@ struct SystemPage: View {
     @State private var model = RunningAppsModel()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.windowVisible) private var windowVisible
     @State private var confirmQuitAll = false
     @State private var pendingQuit: RunningAppRow?
 
@@ -46,10 +47,10 @@ struct SystemPage: View {
         } message: {
             Text("The app will close. Unsaved changes will prompt you first.")
         }
-        .task {
-            while !Task.isCancelled {
+        .task(id: windowVisible) {
+            while windowVisible, !Task.isCancelled {
                 await model.refresh()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(2), tolerance: .milliseconds(500))
             }
         }
     }
