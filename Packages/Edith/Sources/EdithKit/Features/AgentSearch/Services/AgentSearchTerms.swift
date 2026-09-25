@@ -35,7 +35,9 @@ public enum AgentSearchTerms {
 
     public static func terms(_ text: String) -> [String] {
         words(text).compactMap { word in
-            guard !stopWords.contains(word), word.count > 1 || word.first?.isNumber == true
+            let scalars = word.unicodeScalars
+            guard !stopWords.contains(word),
+                scalars.count > 1 || scalars.first?.properties.numericType != nil
             else { return nil }
             return stem(word)
         }
@@ -54,21 +56,32 @@ public enum AgentSearchTerms {
     }
 
     public static func stem(_ word: String) -> String {
-        guard word.count > 3, word.allSatisfy({ $0.isLetter }) else { return word }
+        let scalars = word.unicodeScalars
+        guard scalars.count > 3, scalars.allSatisfy(isLetter) else { return word }
         let keepsS = word.hasSuffix("ss") || word.hasSuffix("us") || word.hasSuffix("is")
         for suffix in suffixes where word.hasSuffix(suffix) {
             if suffix == "s", keepsS { continue }
-            var root = String(word.dropLast(suffix.count))
+            var root = String(String.UnicodeScalarView(scalars.dropLast(suffix.count)))
             if suffix == "ies" || suffix == "ied" { root += "y" }
             let minimum = suffix == "ed" || suffix == "ly" ? 4 : 3
-            guard root.count >= minimum else { continue }
+            guard root.unicodeScalars.count >= minimum else { continue }
             return trimmingSilentE(root)
         }
         return trimmingSilentE(word)
     }
 
     static func trimmingSilentE(_ word: String) -> String {
-        guard word.hasSuffix("e"), word.count > 3 else { return word }
-        return String(word.dropLast())
+        let scalars = word.unicodeScalars
+        guard scalars.last == "e", scalars.count > 3 else { return word }
+        return String(String.UnicodeScalarView(scalars.dropLast()))
+    }
+
+    static func isLetter(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter:
+            true
+        default:
+            false
+        }
     }
 }

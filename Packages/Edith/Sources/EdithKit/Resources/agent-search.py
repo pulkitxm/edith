@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 
 STOP = set(
     "a about after all also am an and any are as at be been but by can could did do does for "
@@ -33,6 +34,7 @@ TITLE_LIMIT = 80
 CHUNK = 4 << 20
 LINE_LIMIT = 2 << 20
 WORD = re.compile(r"[^\W_]+")
+UNICODE_WORD = []
 STAMP = re.compile(
     r"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(\.\d+)?(Z|[+-]\d\d:?\d\d)?"
 )
@@ -77,11 +79,32 @@ def trim_e(word):
     return word
 
 
+def word_pattern(text):
+    try:
+        text.encode("ascii")
+        return WORD
+    except UnicodeEncodeError:
+        pass
+    if not UNICODE_WORD:
+        marks = []
+        start = None
+        for code in range(0x300, 0x10000):
+            mark = unicodedata.category(chr(code)).startswith("M")
+            if mark and start is None:
+                start = code
+            elif not mark and start is not None:
+                marks.append("%s-%s" % (re.escape(chr(start)), re.escape(chr(code - 1))))
+                start = None
+        UNICODE_WORD.append(re.compile("(?:[^\\W_]|[" + "".join(marks) + "])+"))
+    return UNICODE_WORD[0]
+
+
 def terms(text):
+    lowered = text.lower()
     return [
         stem(word)
-        for word in WORD.findall(text.lower())
-        if word not in STOP and (len(word) > 1 or word[0].isdigit())
+        for word in word_pattern(lowered).findall(lowered)
+        if word not in STOP and (len(word) > 1 or word[0].isnumeric())
     ]
 
 
@@ -297,12 +320,14 @@ def consume(line, digest):
     return stamp
 
 
-def update(digest, path):
+def update(digest, path, deadline=None):
+    finished = True
     with open(path, "rb") as handle:
         handle.seek(digest["offset"])
         consumed = digest["offset"]
         carry = b""
         last = None
+        skipping = False
         while True:
             chunk = handle.read(CHUNK)
             if not chunk:
@@ -313,16 +338,28 @@ def update(digest, path):
                 end = carry.find(b"\n", start)
                 if end < 0:
                     break
-                if end - start <= LINE_LIMIT:
+                if skipping:
+                    skipping = False
+                elif end - start <= LINE_LIMIT:
                     stamp = consume(carry[start:end], digest)
                     if stamp:
                         last = stamp
                 start = end + 1
             consumed += start
             carry = carry[start:]
+            if len(carry) > LINE_LIMIT:
+                consumed += len(carry)
+                carry = b""
+                skipping = True
+            if len(chunk) < CHUNK:
+                break
+            if deadline is not None and time.time() > deadline:
+                finished = False
+                break
     digest["offset"] = consumed
     if last:
         touch(digest, parse_time(last))
+    return finished
 
 
 def candidates(home):
@@ -498,7 +535,7 @@ def window(text, query, limit):
     if len(text) <= limit:
         return text
     position = 0
-    for match in WORD.finditer(text):
+    for match in word_pattern(text).finditer(text):
         word = stem(match.group(0).lower())
         if any(matches(word, term) > 0 for term in query):
             position = match.start()
@@ -561,15 +598,19 @@ def search(request, home, store, now=None):
         if size < digest["offset"]:
             digest = new_digest(path, kind)
         try:
-            update(digest, path)
+            finished = update(digest, path, deadline)
         except (OSError, ValueError):
             continue
-        digest["size"] = size
-        digest["modified"] = modified
+        if finished:
+            digest["size"] = size
+            digest["modified"] = modified
         if not digest["sessionID"]:
             digest["sessionID"] = os.path.splitext(os.path.basename(path))[0]
         digests[path] = digest
         dirty = True
+        if not finished:
+            pending = len(stale) - position
+            break
     titles = codex_titles(home)
     entries = sorted(
         [digest for digest in digests.values() if digest["prompts"] or digest.get("namedTitle")],

@@ -65,17 +65,26 @@ public enum AgentSearchRemote {
 
 public actor AgentSearchService {
     public static let shared = AgentSearchService()
+    public static let superseded = "A newer search replaced this one."
+
+    public typealias RemoteSearch =
+        @Sendable (AgentSearchRequest, SSHConnection) async throws -> AgentSearchReply
 
     private let index: AgentTranscriptIndex
     private let machines: @Sendable () -> [Machine]
+    private let remote: RemoteSearch
     private var connections: [UUID: SSHConnection] = [:]
+    private var queues: [UUID: Task<Void, Never>] = [:]
+    private var latest: [UUID: UUID] = [:]
 
     public init(
         index: AgentTranscriptIndex = .shared,
-        machines: @escaping @Sendable () -> [Machine] = { MachineRegistry.machines() }
+        machines: @escaping @Sendable () -> [Machine] = { MachineRegistry.machines() },
+        remote: @escaping RemoteSearch = { try await AgentSearchRemote.search($0, over: $1) }
     ) {
         self.index = index
         self.machines = machines
+        self.remote = remote
     }
 
     public func search(_ request: AgentSearchRequest) async -> AgentSearchReply {
@@ -87,9 +96,25 @@ public actor AgentSearchService {
             return AgentSearchReply(
                 machineID: request.machineID, error: "This machine is no longer in Edith.")
         }
+        let token = UUID()
+        latest[machine.id] = token
+        let previous = queues[machine.id]
+        let work = Task { await self.queued(request, on: machine, token: token, after: previous) }
+        queues[machine.id] = Task { _ = await work.value }
+        return await work.value
+    }
+
+    private func queued(
+        _ request: AgentSearchRequest, on machine: Machine, token: UUID,
+        after previous: Task<Void, Never>?
+    ) async -> AgentSearchReply {
+        await previous?.value
+        guard latest[machine.id] == token else {
+            return AgentSearchReply(machineID: request.machineID, error: Self.superseded)
+        }
         let started = Date()
         do {
-            return try await AgentSearchRemote.search(request, over: connection(for: machine))
+            return try await remote(request, connection(for: machine))
         } catch {
             if !(error is AgentSearchRemoteError),
                 let stale = connections.removeValue(forKey: machine.id)

@@ -18,13 +18,18 @@ public enum AgentTranscriptReader {
     private static let toolResult = Array("\"tool_result\"".utf8)
     private static let textPart = Array("\"type\":\"text\"".utf8)
 
-    public static func update(_ digest: inout AgentTranscriptDigest, url: URL) throws {
+    @discardableResult
+    public static func update(
+        _ digest: inout AgentTranscriptDigest, url: URL, deadline: Date = .distantFuture
+    ) throws -> Bool {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         try handle.seek(toOffset: digest.offset)
         var carry = Data()
         var consumed = digest.offset
         var lastStamp: String?
+        var skipping = false
+        var finished = true
         while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
             carry.append(chunk)
             let used = carry.withUnsafeBytes { buffer -> Int in
@@ -34,7 +39,9 @@ public enum AgentTranscriptReader {
                     let found = memchr(base + start, 0x0A, buffer.count - start)
                 {
                     let end = base.distance(to: UnsafeRawPointer(found))
-                    if end - start <= lineLimit {
+                    if skipping {
+                        skipping = false
+                    } else if end - start <= lineLimit {
                         let line = UnsafeRawBufferPointer(rebasing: buffer[start..<end])
                         if let stamp = consume(line, into: &digest) { lastStamp = stamp }
                     }
@@ -44,9 +51,20 @@ public enum AgentTranscriptReader {
             }
             consumed += UInt64(used)
             carry.removeSubrange(0..<used)
+            if carry.count > lineLimit {
+                consumed += UInt64(carry.count)
+                carry.removeAll(keepingCapacity: true)
+                skipping = true
+            }
+            if chunk.count < chunkSize { break }
+            if Date() > deadline {
+                finished = false
+                break
+            }
         }
         digest.offset = consumed
         if let lastStamp { digest.touch(AgentTranscriptTime.parse(lastStamp)) }
+        return finished
     }
 
     static func consume(_ line: UnsafeRawBufferPointer, into digest: inout AgentTranscriptDigest)

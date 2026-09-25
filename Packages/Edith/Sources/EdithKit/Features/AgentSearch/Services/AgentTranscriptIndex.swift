@@ -118,31 +118,39 @@ public actor AgentTranscriptIndex {
                 pending = stale.count - position
                 break
             }
-            index(candidate)
+            if !index(candidate, deadline: deadline) {
+                pending = stale.count - position
+                break
+            }
         }
         loadCodexTitles()
         return pending
     }
 
-    private func index(_ candidate: Candidate) {
+    private func index(_ candidate: Candidate, deadline: Date) -> Bool {
         let path = candidate.url.path
         var digest = digests[path] ?? AgentTranscriptDigest(path: path, kind: candidate.kind)
         if candidate.size < digest.offset {
             digest = AgentTranscriptDigest(path: path, kind: candidate.kind)
         }
+        let finished: Bool
         do {
-            try AgentTranscriptReader.update(&digest, url: candidate.url)
+            finished = try AgentTranscriptReader.update(
+                &digest, url: candidate.url, deadline: deadline)
         } catch {
-            return
+            return true
         }
-        digest.size = candidate.size
-        digest.modified = candidate.modified
+        if finished {
+            digest.size = candidate.size
+            digest.modified = candidate.modified
+        }
         if digest.sessionID.isEmpty {
             digest.sessionID = candidate.url.deletingPathExtension().lastPathComponent
         }
         digests[path] = digest
         version += 1
         dirty = true
+        return finished
     }
 
     func candidates() -> [Candidate] {

@@ -64,8 +64,8 @@ enum AgentSearchRanker {
 
     static func matches(_ word: String, _ query: String) -> Double {
         if word == query { return 1 }
-        if query.count >= 4, word.hasPrefix(query) { return prefixWeight }
-        if word.count >= 4, query.hasPrefix(word) { return prefixWeight }
+        if query.unicodeScalars.count >= 4, word.hasPrefix(query) { return prefixWeight }
+        if word.unicodeScalars.count >= 4, query.hasPrefix(word) { return prefixWeight }
         return 0
     }
 

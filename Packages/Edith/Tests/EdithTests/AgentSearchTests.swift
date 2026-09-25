@@ -171,6 +171,11 @@ struct AgentSearchFixture {
         #expect(AgentSearchTerms.stem("v2") == "v2")
     }
 
+    @Test func keepsWordsWithCombiningMarksWhole() {
+        #expect(AgentSearchTerms.terms("किताब की दुकान") == ["किताब", "की", "दुकान"])
+        #expect(AgentSearchTerms.terms("café résumé") == ["café", "résumé"])
+    }
+
     @Test func dropsStopWordsAndSingleLetters() {
         #expect(
             AgentSearchTerms.terms("Make the app faster, please: a 2x win") == [
@@ -279,6 +284,48 @@ struct AgentSearchFixture {
         #expect(reply.hits.map(\.sessionID) == ["pi-4"])
     }
 
+    @Test func deadlineStopsBetweenChunksAndResumesFromTheOffset() throws {
+        let fixture = try AgentSearchFixture()
+        let filler = String(repeating: "lorem ipsum ", count: 40)
+        var lines: [[String: Any]] = []
+        for index in 0..<12_000 {
+            lines.append(
+                AgentSearchFixture.claudeUser(
+                    "big", "prompt \(index) \(filler)", cwd: "/work",
+                    at: "2026-09-20T10:00:00Z"))
+        }
+        let url = try fixture.write(".claude/projects/-work/big.jsonl", lines)
+        let size = try #require(
+            try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64)
+        #expect(size > UInt64(AgentTranscriptReader.chunkSize))
+        var digest = AgentTranscriptDigest(path: url.path, kind: .claude)
+        #expect(try !AgentTranscriptReader.update(&digest, url: url, deadline: .distantPast))
+        #expect(digest.offset > 0 && digest.offset < size)
+        #expect(try AgentTranscriptReader.update(&digest, url: url))
+        #expect(digest.offset == size)
+        #expect(digest.prompts.last?.hasPrefix("prompt 11999 ") == true)
+    }
+
+    @Test func oversizedLinesAreSkippedWithoutLosingTheNextLine() throws {
+        let fixture = try AgentSearchFixture()
+        let huge = AgentSearchFixture.claudeUser(
+            "wide", String(repeating: "x", count: AgentTranscriptReader.lineLimit + 10),
+            cwd: "/work", at: "2026-09-20T10:00:00Z")
+        let url = try fixture.write(
+            ".claude/projects/-work/wide.jsonl",
+            [
+                huge,
+                AgentSearchFixture.claudeUser(
+                    "wide", "zebra migration plan", cwd: "/work", at: "2026-09-20T10:01:00Z"),
+            ])
+        var digest = AgentTranscriptDigest(path: url.path, kind: .claude)
+        #expect(try AgentTranscriptReader.update(&digest, url: url))
+        #expect(digest.prompts == ["zebra migration plan"])
+        let size = try #require(
+            try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64)
+        #expect(digest.offset == size)
+    }
+
     @Test func promptsKeepTheOpeningAndTheLatest() {
         var digest = AgentTranscriptDigest(path: "/x", kind: .claude)
         for index in 0..<40 {
@@ -298,8 +345,21 @@ struct AgentSearchFixture {
         else { return }
         let fixture = try AgentSearchFixture()
         try fixture.seed()
+        try fixture.write(
+            ".claude/projects/-work-shop/wide.jsonl",
+            [
+                AgentSearchFixture.claudeUser(
+                    "wide", String(repeating: "x", count: AgentTranscriptReader.lineLimit + 10),
+                    cwd: "/work/shop", at: "2026-09-19T10:00:00Z"),
+                AgentSearchFixture.claudeUser(
+                    "wide", "zebra migration plan for the किताब दुकान catalogue", cwd: "/work/shop",
+                    at: "2026-09-19T10:01:00Z"),
+            ])
         let now = Date(timeIntervalSince1970: 1_790_000_000)
-        for query in ["app optimizations", "invoice rounding", "optimize", "", "atlas docs"] {
+        for query in [
+            "app optimizations", "invoice rounding", "optimize", "", "atlas docs",
+            "zebra migration", "किताब",
+        ] {
             let request = AgentSearchRequest(query: query, machineID: "m1", limit: 5, budget: 30)
             let local = await fixture.index().search(request, now: now)
             let process = Process()
@@ -316,6 +376,9 @@ struct AgentSearchFixture {
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             let remote = try AgentSearchRemote.decode(data, machineID: "m1")
+            if ["zebra migration", "किताब"].contains(query) {
+                #expect(local.hits.first?.sessionID == "wide", "\(query)")
+            }
             #expect(remote.hits.map(\.id) == local.hits.map(\.id), "\(query)")
             #expect(remote.hits.map(\.title) == local.hits.map(\.title), "\(query)")
             #expect(remote.hits.map(\.placeRank) == local.hits.map(\.placeRank), "\(query)")
@@ -336,5 +399,74 @@ struct AgentSearchFixture {
         let decoded = try JSONDecoder().decode(
             AgentSearchRequest.self, from: try #require(Data(base64Encoded: encoded)))
         #expect(decoded == request)
+    }
+}
+
+private actor AgentSearchServiceProbe {
+    private(set) var queries: [String] = []
+    private(set) var peak = 0
+    private var active = 0
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func enter(_ query: String) {
+        queries.append(query)
+        active += 1
+        peak = max(peak, active)
+    }
+
+    func leave() { active -= 1 }
+
+    func hold() async {
+        if released { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        released = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+}
+
+@Suite struct AgentSearchServiceTests {
+    @Test func remoteSearchesRunOneAtATimePerMachineAndSkipSupersededOnes() async throws {
+        let fixture = try AgentSearchFixture()
+        let machine = Machine(name: "devbox", host: "devbox.local")
+        let probe = AgentSearchServiceProbe()
+        let service = AgentSearchService(
+            index: fixture.index(), machines: { [machine] },
+            remote: { request, _ in
+                await probe.enter(request.query)
+                if request.query == "first" { await probe.hold() }
+                await probe.leave()
+                return AgentSearchReply(machineID: request.machineID, hits: [])
+            })
+        let id = machine.id.uuidString
+        let first = Task { await service.search(AgentSearchRequest(query: "first", machineID: id)) }
+        for _ in 0..<200 where await probe.queries.isEmpty {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let second = Task {
+            await service.search(AgentSearchRequest(query: "second", machineID: id))
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        let third = Task { await service.search(AgentSearchRequest(query: "third", machineID: id)) }
+        try await Task.sleep(for: .milliseconds(50))
+        await probe.release()
+        let replies = [await first.value, await second.value, await third.value]
+        #expect(replies[0].error == nil)
+        #expect(replies[1].error == AgentSearchService.superseded)
+        #expect(replies[2].error == nil)
+        #expect(await probe.queries == ["first", "third"])
+        #expect(await probe.peak == 1)
+    }
+
+    @Test func unknownMachinesAnswerWithAnError() async throws {
+        let fixture = try AgentSearchFixture()
+        let service = AgentSearchService(index: fixture.index(), machines: { [] })
+        let reply = await service.search(
+            AgentSearchRequest(query: "x", machineID: UUID().uuidString))
+        #expect(reply.error == "This machine is no longer in Edith.")
     }
 }
