@@ -119,17 +119,8 @@ enum PDFOptimizeTools {
                 continue
             }
             run.status("Reading page \(index + 1) of \(document.pageCount)")
-            let image = try StudioPDF.render(page, dpi: 240, maxPixels: 40_000_000)
-            let lines = try StudioVision.recognizeText(
-                in: image, language: language, accurate: accurate)
-            let size = StudioPDF.displaySize(page)
-            layers[index] = lines.map { line in
-                StudioPDF.TextLine(
-                    text: line.text,
-                    rect: CGRect(
-                        x: line.box.minX * size.width, y: line.box.minY * size.height,
-                        width: line.box.width * size.width, height: line.box.height * size.height))
-            }
+            let lines = try recognizedLines(on: page, language: language, accurate: accurate)
+            layers[index] = lines
             if !lines.isEmpty { recognizedPages += 1 }
             run.progress(Double(index + 1) / Double(document.pageCount) * 0.85)
         }
@@ -144,6 +135,21 @@ enum PDFOptimizeTools {
             }, progress: { run.progress(0.85 + $0 * 0.15) })
         run.note("Recognized text on \(recognizedPages) of \(document.pageCount) pages.")
         return [output]
+    }
+
+    static func recognizedLines(
+        on page: PDFPage, language: String = "auto", accurate: Bool = true
+    ) throws -> [StudioPDF.TextLine] {
+        let image = try StudioPDF.render(page, dpi: 240, maxPixels: 40_000_000)
+        let size = StudioPDF.displaySize(page)
+        return try StudioVision.recognizeText(in: image, language: language, accurate: accurate)
+            .map { line in
+                StudioPDF.TextLine(
+                    text: line.text,
+                    rect: CGRect(
+                        x: line.box.minX * size.width, y: line.box.minY * size.height,
+                        width: line.box.width * size.width, height: line.box.height * size.height))
+            }
     }
 
     static let repair = StudioTool(

@@ -40,6 +40,7 @@ ed studio run pdf.compress scan.pdf --set level=extreme
 ed studio run image.convert *.heic --set format=jpg --output-dir ~/Desktop/converted
 ed studio run video.to-gif demo.mov --set range=0:02-0:06 --set width=480
 ed studio run pdf.redact contract.pdf --set "terms=Jane Doe" --set phones=true
+ed studio run pdf.scan receipt-1.jpg receipt-2.jpg --set look=mono
 ```
 
 ## Where to go next

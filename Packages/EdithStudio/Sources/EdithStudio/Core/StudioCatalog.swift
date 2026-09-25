@@ -26,7 +26,7 @@ public enum StudioCatalog {
     public static let tools: [StudioTool] = {
         let all =
             PDFOrganizeTools.all + PDFOptimizeTools.all + PDFImageTools.all + PDFConvertTools.all
-            + PDFEditTools.all + [PDFComparison.tool] + registered
+            + PDFEditTools.all + [PDFComparison.tool, DocumentScan.tool] + registered
         var seen = Set<String>()
         return all.filter { seen.insert($0.id).inserted }
     }()
@@ -78,9 +78,10 @@ public enum StudioCatalog {
         "pdf.organize", "pdf.to-word", "pdf.to-images", "pdf.page-numbers", "pdf.watermark",
         "pdf.redact", "pdf.ocr", "pdf.rotate", "image.edit", "image.compress", "image.convert",
         "image.resize", "image.remove-background", "image.crop", "image.watermark",
-        "pdf.from-images", "video.edit", "video.compress", "video.convert", "video.trim",
-        "video.to-gif", "video.extract-audio", "audio.convert", "audio.trim", "audio.compress",
-        "document.to-pdf", "files.zip", "files.unzip", "ai.summarize",
+        "pdf.from-images", "pdf.scan", "video.edit", "video.compress", "video.convert",
+        "video.trim", "video.to-gif", "video.extract-audio", "audio.convert", "audio.trim",
+        "audio.compress", "document.to-pdf", "files.zip", "files.unzip", "ai.summarize",
+        "ai.translate", "ai.transcribe",
     ]
 
     public static func ranked(_ tools: [StudioTool]) -> [StudioTool] {
