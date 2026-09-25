@@ -145,9 +145,7 @@ public final class GhosttyRuntime {
         let file = directory.appendingPathComponent(
             "\(Self.stableHash(theme.configuration)).conf")
         do {
-            if !FileManager.default.fileExists(atPath: file.path) {
-                try theme.configuration.write(to: file, atomically: true, encoding: .utf8)
-            }
+            try theme.configuration.write(to: file, atomically: true, encoding: .utf8)
         } catch {
             log.error("could not write the terminal theme: \(error.localizedDescription)")
             ghostty_config_finalize(cfg)
