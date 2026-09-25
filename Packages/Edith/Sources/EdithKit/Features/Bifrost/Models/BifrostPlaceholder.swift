@@ -81,6 +81,28 @@ public enum BifrostPlaceholder {
         return output
     }
 
+    public static let shellVariablePrefix = "EDITH_BIFROST_"
+
+    public static func shell(
+        _ template: String, context: BifrostPlaceholderContext
+    ) -> BifrostShellInvocation {
+        var script = ""
+        var environment: [String: String] = [:]
+        var quoting = BifrostShellQuoting()
+        var cursor = template.startIndex
+        for (index, match) in matches(in: template).enumerated() {
+            let literal = template[cursor..<match.range.lowerBound]
+            quoting.advance(over: literal)
+            script += literal
+            let variable = shellVariablePrefix + String(index + 1)
+            environment[variable] = value(for: match, context: context)
+            script += quoting.reference(to: variable)
+            cursor = match.range.upperBound
+        }
+        script += template[cursor...]
+        return BifrostShellInvocation(script: script, environment: environment)
+    }
+
     private struct Match {
         let name: String
         let argument: String?
@@ -125,5 +147,53 @@ public enum BifrostPlaceholder {
         formatter.timeZone = context.timeZone
         formatter.dateFormat = format
         return formatter.string(from: context.date)
+    }
+}
+
+public struct BifrostShellInvocation: Equatable, Sendable {
+    public var script: String
+    public var environment: [String: String]
+
+    public init(script: String, environment: [String: String] = [:]) {
+        self.script = script
+        self.environment = environment
+    }
+}
+
+struct BifrostShellQuoting {
+    private enum State {
+        case bare
+        case single
+        case double
+    }
+
+    private var state = State.bare
+    private var escaped = false
+
+    mutating func advance(over text: Substring) {
+        for character in text {
+            if escaped {
+                escaped = false
+                continue
+            }
+            switch (state, character) {
+            case (.single, "'"): state = .bare
+            case (.single, _): break
+            case (_, "\\"): escaped = true
+            case (.bare, "'"): state = .single
+            case (.bare, "\""): state = .double
+            case (.double, "\""): state = .bare
+            default: break
+            }
+        }
+    }
+
+    mutating func reference(to variable: String) -> String {
+        escaped = false
+        return switch state {
+        case .bare: "\"${\(variable)}\""
+        case .double: "${\(variable)}"
+        case .single: "'\"${\(variable)}\"'"
+        }
     }
 }

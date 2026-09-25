@@ -2,10 +2,13 @@ import Foundation
 
 public enum LocalMachineCommandExecution {
     public static func run(
-        _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
+        _ command: String, environment: [String: String] = [:], stdin: Data? = nil,
+        timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
         await run(
             executable: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-lc", command],
+            environment: environment.isEmpty
+                ? nil : ProcessInfo.processInfo.environment.merging(environment) { $1 },
             commandLabel: command, stdin: stdin, timeout: timeout)
     }
 
