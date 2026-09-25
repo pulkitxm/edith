@@ -6,8 +6,7 @@ size and never reflow, and the panel can be dragged up to cover the whole tab.
 
 | Keys | What they do |
 | --- | --- |
-| `` ⌃` `` | Open the panel, focus it, or hide it when it already has focus |
-| `⌘J` | Show or hide the panel |
+| `` ⌃` `` or `⌘J` | Show or hide the panel |
 | `` ⌃⇧` `` | Open another terminal for the focused agent |
 
 The terminals are listed on the right of the panel, named after whatever is in

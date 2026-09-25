@@ -277,7 +277,7 @@ struct HerdrPage: View {
         let open = store.terminalPanels.isOpen(store.selectedTab)
         return Button {
             withAnimation(store.layoutAnimation) {
-                store.perform(.visibility)
+                store.perform(.toggle)
             }
         } label: {
             Image(systemName: "apple.terminal")

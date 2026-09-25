@@ -78,25 +78,25 @@ private actor HerdrPanelHerdr {
         #expect(store.terminalPanels.terminals[terminal.id]?.title == "zsh")
     }
 
-    @Test func controlBacktickFocusesThenHidesAndCommandJTogglesVisibility() async throws {
+    @Test func controlBacktickAndCommandJBothToggleThePanel() async throws {
         let herdr = HerdrPanelHerdr()
         let store = makeStore(herdr)
         store.open(agent("Codex", pane: "a"))
         let owner = store.selectedTab
-        store.perform(.toggle)
-        store.focus(store.tabs[0].focused)
+
+        #expect(store.performTerminalPanelKey(keyCode: 50, characters: "`", modifiers: .control))
         #expect(store.terminalPanels.isOpen(owner))
+        store.focus(store.tabs[0].focused)
         #expect(!store.terminalPanels.holdsFocus(owner))
 
-        store.perform(.toggle)
-        #expect(store.terminalPanels.holdsFocus(owner))
-        store.perform(.toggle)
+        #expect(store.performTerminalPanelKey(keyCode: 50, characters: "`", modifiers: .control))
         #expect(!store.terminalPanels.isOpen(owner))
 
         #expect(store.performTerminalPanelKey(keyCode: 38, characters: "j", modifiers: .command))
         #expect(store.terminalPanels.isOpen(owner))
+        #expect(store.terminalPanels.holdsFocus(owner))
         #expect(store.terminalPanels.terminals(of: owner).count == 1)
-        store.perform(.visibility)
+        #expect(store.performTerminalPanelKey(keyCode: 38, characters: "j", modifiers: .command))
         #expect(!store.terminalPanels.isOpen(owner))
         try await eventually { await herdr.openedSessions.count == 1 }
     }
@@ -423,7 +423,7 @@ private actor HerdrPanelHerdr {
                 keyCode: 50, characters: "~", modifiers: [.control, .shift]) == .new)
         #expect(
             HerdrTerminalPanelKey.resolve(keyCode: 38, characters: "j", modifiers: .command)
-                == .visibility)
+                == .toggle)
         #expect(
             HerdrTerminalPanelKey.resolve(keyCode: 50, characters: "`", modifiers: .option) == nil)
         #expect(

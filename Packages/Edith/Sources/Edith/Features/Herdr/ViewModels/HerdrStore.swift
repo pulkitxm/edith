@@ -1505,8 +1505,6 @@ final class HerdrStore {
         switch key {
         case .toggle:
             terminalPanels.toggle(owner, host: origin.host, cwd: origin.cwd)
-        case .visibility:
-            terminalPanels.toggleVisibility(owner, host: origin.host, cwd: origin.cwd)
         case .new:
             openTerminal(in: owner, from: origin)
         }
