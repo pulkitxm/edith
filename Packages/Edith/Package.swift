@@ -13,6 +13,7 @@ let products: [Product] = [
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
     .executable(name: "edithd", targets: ["edithd"]),
+    .executable(name: "EdithCameraExtension", targets: ["EdithCameraExtension"]),
 ]
 
 let dependencies: [Package.Dependency] = [
@@ -104,8 +105,17 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
+        name: "EdithCameraSupport",
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
+        name: "EdithCameraExtension",
+        dependencies: ["EdithCameraSupport"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
         name: "EdithKit",
-        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
+        dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
@@ -223,7 +233,7 @@ let targets: [Target] = [
         name: "EdithTests",
         dependencies: [
             "EdithCore", "Edith", "EdithDatabase", "EdithDocs", "EdithKit", "EdithLidAwakeSupport",
-            "EdithHelper", "EdithAgent",
+            "EdithHelper", "EdithAgent", "EdithCameraSupport",
             "EdithCLI", "Highlighter", "ed",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]

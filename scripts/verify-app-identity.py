@@ -38,4 +38,22 @@ signature = subprocess.run(
     ['codesign', '-dvv', str(root / 'Contents/MacOS/edithd')],
     capture_output=True, text=True, check=True)
 assert 'Identifier=' + agent in signature.stderr.splitlines()
-print('Application, menu helper, and daemon identities match: ' + identifier)
+camera_identifier = identifier + '.camera'
+camera_root = root / 'Contents/Library/SystemExtensions' / (camera_identifier + '.systemextension')
+camera = plistlib.loads((camera_root / 'Contents/Info.plist').read_bytes())
+assert camera['CFBundleIdentifier'] == camera_identifier, camera['CFBundleIdentifier']
+assert camera['CFBundleExecutable'] == camera_identifier
+assert camera['CFBundlePackageType'] == 'SYSX'
+assert camera['CFBundleVersion'] == main['CFBundleVersion']
+assert camera['CFBundleDisplayName'] == (f'Edith Camera ({slot})' if development else 'Edith Camera')
+assert (camera_root / 'Contents/MacOS' / camera_identifier).is_file()
+service = camera['CMIOExtension']['CMIOExtensionMachServiceName']
+assert service == camera_identifier or service.endswith('.' + camera_identifier), service
+entitlements = subprocess.run(
+    ['codesign', '-d', '--entitlements', '-', '--xml', str(camera_root)],
+    capture_output=True, check=True).stdout
+granted = plistlib.loads(entitlements) if entitlements.strip() else {}
+assert granted.get('com.apple.security.app-sandbox') is True, granted
+if service != camera_identifier:
+    assert granted.get('com.apple.security.application-groups') == [service], granted
+print('Application, menu helper, camera, and daemon identities match: ' + identifier)

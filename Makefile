@@ -214,6 +214,8 @@ verify-bundle: verify-release-build-settings
 	  done; \
 	done; exit 0
 	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
+	test 1 -eq "$$(find dist/Edith.app/Contents/Library/SystemExtensions -maxdepth 1 -name '*.camera.systemextension' | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension
 	codesign --verify --deep --strict dist/Edith.app
 
 

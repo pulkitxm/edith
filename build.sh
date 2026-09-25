@@ -221,6 +221,17 @@ with open(destination, 'wb') as handle:
 PY
 fi
 
+CAMERA_BUILD="$DERIVED/Build/Products/$CONFIG/EdithCameraExtension"
+test -f "$CAMERA_BUILD" || { echo "build did not produce $CAMERA_BUILD" >&2; exit 1; }
+APP_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
+CAMERA_IDENTIFIER="$APP_IDENTIFIER.camera"
+CAMERA="$APP/Contents/Library/SystemExtensions/$CAMERA_IDENTIFIER.systemextension"
+mkdir -p "$CAMERA/Contents/MacOS"
+cp "$CAMERA_BUILD" "$CAMERA/Contents/MacOS/$CAMERA_IDENTIFIER"
+python3 scripts/camera_extension.py info "$CAMERA/Contents/Info.plist" "$APP_IDENTIFIER" \
+  "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
+  "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" "$TEAM_ID"
+
 find "$APP" -type f -perm -u+x -print0 \
   | while IFS= read -r -d '' binary; do
       case "$(file -b "$binary")" in
@@ -252,14 +263,16 @@ fi
 sign() {
   find "$APP" -type f -name '._*' -delete
   dot_clean -m "$1"
-  local identifier
+  local identifier flags="$SIGN_FLAGS"
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
+  [ -z "${2:-}" ] || flags="$flags --entitlements $2"
+  [ -z "${3:-}" ] || flags="$flags $3"
   if [ -n "$TEAM_ID" ]; then
-    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS --requirements \
+    codesign --force --sign "$SIGN_IDENTITY" $flags --requirements \
       "=designated => identifier \"$identifier\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
       "$1"
   else
-    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
+    codesign --force --sign "$SIGN_IDENTITY" $flags "$1"
   fi
   find "$APP" -type f -name '._*' -delete
 }
@@ -285,7 +298,28 @@ for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/
 done
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
-sign "$APP"
+
+CAMERA_ENTITLEMENTS="$DERIVED/EdithCamera.entitlements"
+python3 scripts/camera_extension.py entitlements "$CAMERA_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
+if [ -n "${EDITH_CAMERA_PROVISIONING_PROFILE:-}" ]; then
+  python3 scripts/camera_extension.py profile "$EDITH_CAMERA_PROVISIONING_PROFILE" \
+    "$CAMERA_IDENTIFIER" "$TEAM_ID" ""
+  cp "$EDITH_CAMERA_PROVISIONING_PROFILE" "$CAMERA/Contents/embedded.provisionprofile"
+fi
+CAMERA_RUNTIME=""
+case "$SIGN_FLAGS" in *runtime*) ;; *) CAMERA_RUNTIME="--options runtime" ;; esac
+sign "$CAMERA" "$CAMERA_ENTITLEMENTS" "$CAMERA_RUNTIME"
+
+APP_ENTITLEMENTS=""
+if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then
+  [ -n "$TEAM_ID" ] || { echo "EDITH_APP_PROVISIONING_PROFILE needs a team signing identity" >&2; exit 1; }
+  python3 scripts/camera_extension.py profile "$EDITH_APP_PROVISIONING_PROFILE" \
+    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install
+  cp "$EDITH_APP_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
+  APP_ENTITLEMENTS="$DERIVED/EdithApp.entitlements"
+  python3 scripts/camera_extension.py app-entitlements "$APP_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
+fi
+sign "$APP" "$APP_ENTITLEMENTS"
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 if [ "$RELEASE" = 1 ]; then
