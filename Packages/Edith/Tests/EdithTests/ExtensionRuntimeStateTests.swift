@@ -283,6 +283,7 @@ import Testing
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
             ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
             ("audioMixer", "AudioMixerRows", "enabled", "ExtensionsPane.swift"),
+            ("notchBrowser", "NotchBrowserRows", "enabled", "ExtensionsPane.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

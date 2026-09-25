@@ -73,6 +73,7 @@ final class NotchShelfController: FeatureModule {
     private(set) var canToggleLidAwake = false
     private let lidAwakeOperationOwner = LidAwakeShelfOperationOwner()
     private(set) var usageStore: UsageStore?
+    private(set) weak var browser: NotchBrowserStore?
     private(set) var calendarStore: CalendarStore?
     private var externalVolume: Double = 0.7
     private var alertDetectors: NotchAlertDetectors?
@@ -106,12 +107,12 @@ final class NotchShelfController: FeatureModule {
     private var pointerInsideInterest = false
     private var gateDisplay: CGDirectDisplayID?
     private var gate = NotchHoverGate(
-        openDwell: NotchShelfController.openDwell, closeGrace: NotchShelfController.closeGrace)
+        openDwell: NotchShelfController.openDwell, closeGrace: NotchHidePolicy.shelf.closeGrace)
     private var gateWorkItem: DispatchWorkItem?
     static let openDwell: TimeInterval = 0.1
-    static let closeGrace: TimeInterval = 0.4
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
+    private var panelSettleWorkItem: DispatchWorkItem?
     private var pendingDragOutIDs: Set<UUID> = []
     private var internalDragItemIDs: Set<UUID> = []
     private var sharePickerDelegate: SharePickerDelegate?
@@ -258,8 +259,11 @@ final class NotchShelfController: FeatureModule {
         shelfOperationObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
+        panelSettleWorkItem?.cancel()
+        panelSettleWorkItem = nil
         gateWorkItem?.cancel()
         gateWorkItem = nil
+        browser = nil
         isSharing = false
         sharePickerDelegate = nil
         shareStagedFiles = nil
@@ -322,7 +326,8 @@ final class NotchShelfController: FeatureModule {
     private func refreshInteractionRects() {
         var rects: [CGDirectDisplayID: CGRect] = [:]
         for (id, panel) in panels {
-            rects[id] = panel.frame.insetBy(dx: -40, dy: -40)
+            let margin = hidePolicy.trackingMargin
+            rects[id] = panel.frame.insetBy(dx: -margin, dy: -margin)
         }
         interactionRects = rects
     }
@@ -389,7 +394,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func makePanel(id: CGDirectDisplayID) -> NSPanel {
-        let panel = NSPanel(
+        let panel = NotchPanel(
             contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: true)
         panel.isOpaque = false
@@ -436,7 +441,8 @@ final class NotchShelfController: FeatureModule {
         let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
         if expanded {
             return NotchGeometry.expandedShapeSize(
-                tab: activeTab, hasMusic: music, notchHeight: base.height)
+                tab: activeTab, hasMusic: music, notchHeight: base.height,
+                browserSize: browserSize(on: id))
         }
         if alert != nil, id == builtinDisplayID { return NotchGeometry.alertDropSize }
         return NotchGeometry.collapsedSize(base: base, hasLiveActivity: music)
@@ -449,7 +455,11 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func applyExactFrame(_ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID) {
-        let size = NotchGeometry.panelSize(forShape: NotchGeometry.expandedMaxSize)
+        let size = NotchGeometry.panelSize(forShape: panelShape(for: id))
+        applyFrame(panel, screen: screen, size: size)
+    }
+
+    private func applyFrame(_ panel: NSPanel, screen: NSScreen, size: CGSize) {
         panel.setFrame(
             NSRect(
                 origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size),
@@ -457,11 +467,109 @@ final class NotchShelfController: FeatureModule {
             display: true)
     }
 
+    private func panelShape(for id: CGDirectDisplayID) -> CGSize {
+        let notchHeight = (collapsedSizes[id] ?? NotchGeometry.fallbackSize).height
+        return NotchGeometry.panelShape(
+            browserShape: browser.map { _ in
+                NotchBrowserGeometry.shapeSize(
+                    browser: browserSize(on: id), notchHeight: notchHeight)
+            })
+    }
+
+    func browserSize(on id: CGDirectDisplayID) -> CGSize {
+        NotchBrowserGeometry.clamp(
+            browser?.size ?? NotchBrowserGeometry.defaultSize, screen: browserArea(on: id))
+    }
+
+    private func browserArea(on id: CGDirectDisplayID?) -> CGSize? {
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
+            return nil
+        }
+        let notchHeight = (id.flatMap { collapsedSizes[$0] } ?? NotchGeometry.fallbackSize).height
+        return NotchBrowserGeometry.available(screen: screen.frame.size, notchHeight: notchHeight)
+    }
+
+    private func browserScreenSize() -> CGSize? {
+        browserArea(on: expandedDisplay ?? builtinDisplayID)
+    }
+
+    private func updatePanelFrames() {
+        var settling = false
+        for screen in NSScreen.screens {
+            guard let id = screen.displayID, let panel = panels[id] else { continue }
+            let wanted = NotchGeometry.panelSize(forShape: panelShape(for: id))
+            let grown = NotchGeometry.union(panel.frame.size, wanted)
+            if grown != panel.frame.size { applyFrame(panel, screen: screen, size: grown) }
+            if grown != wanted { settling = true }
+        }
+        panelSettleWorkItem?.cancel()
+        panelSettleWorkItem = nil
+        refreshInteractionRects()
+        guard settling else { return }
+        let work = DispatchWorkItem { [weak self] in self?.settlePanelFrames() }
+        panelSettleWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.panelSettleDelay, execute: work)
+    }
+
+    static let panelSettleDelay: TimeInterval = 0.45
+
+    private func settlePanelFrames() {
+        panelSettleWorkItem = nil
+        for screen in NSScreen.screens {
+            guard let id = screen.displayID, let panel = panels[id] else { continue }
+            let wanted = NotchGeometry.panelSize(forShape: panelShape(for: id))
+            if panel.frame.size != wanted { applyFrame(panel, screen: screen, size: wanted) }
+        }
+        refreshInteractionRects()
+    }
+
+    private func updateKeyFocus() {
+        for (id, panel) in panels {
+            guard let panel = panel as? NotchPanel else { continue }
+            let accepts = expandedDisplay == id && activeTab == .browser && browser != nil
+            panel.acceptsKeyFocus = accepts
+            panel.keyEquivalentHandler =
+                accepts
+                ? { [weak self] event in self?.browser?.handleKeyEquivalent(event) ?? false }
+                : nil
+            guard !accepts, panel.isKeyWindow else { continue }
+            panel.orderOut(nil)
+            panel.orderFrontRegardless()
+        }
+    }
+
+    func makeExpandedPanelKey() {
+        guard let id = expandedDisplay, let panel = panels[id] as? NotchPanel,
+            panel.acceptsKeyFocus
+        else { return }
+        panel.makeKey()
+    }
+
+    func attachBrowser(_ store: NotchBrowserStore?) {
+        guard browser !== store else { return }
+        browser = store
+        store?.screenSize = { [weak self] in self?.browserScreenSize() }
+        store?.onSizeChange = { [weak self] in self?.syncFrames() }
+        store?.requestKeyFocus = { [weak self] in self?.makeExpandedPanelKey() }
+        if store == nil, activeTab == .browser { activeTab = .home }
+        syncFrames()
+    }
+
+    private var hidePolicy: NotchHidePolicy {
+        NotchHidePolicy.policy(for: browser == nil ? .home : activeTab)
+    }
+
+    private var browserHoldsOpen: Bool {
+        activeTab == .browser && browser?.holdsOpen == true
+    }
+
     private func syncFrames() {
+        updatePanelFrames()
         for screen in NSScreen.screens {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
             updateInteractiveShape(panel, id: id)
         }
+        updateKeyFocus()
         refreshMouseTransparency()
     }
 
@@ -479,13 +587,17 @@ final class NotchShelfController: FeatureModule {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
             let allowMouse: Bool
             if expandedDisplay == id {
-                allowMouse = true
+                allowMouse = NotchGeometry.expandedAcceptsPointer(
+                    cursor, shapeFrame: shapeFrame(of: panel),
+                    buttonPressed: NSEvent.pressedMouseButtons != 0,
+                    heldOpen: isSharing || browserHoldsOpen)
             } else if currentAlert != nil, id == builtinDisplayID {
                 allowMouse = shapeFrame(of: panel).contains(cursor)
             } else {
                 allowMouse = false
             }
-            panel.ignoresMouseEvents = fullScreenDisplays.contains(id) || !allowMouse
+            let ignores = fullScreenDisplays.contains(id) || !allowMouse
+            if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
         }
     }
 
@@ -550,6 +662,7 @@ final class NotchShelfController: FeatureModule {
             proximity = .outside
         }
         if proximity != .outside, let id { gateDisplay = id }
+        gate.closeGrace = hidePolicy.closeGrace
         handleGate(gate.sample(proximity, now: monotonicNow()))
     }
 
@@ -576,7 +689,7 @@ final class NotchShelfController: FeatureModule {
         case .opened:
             if let gateDisplay { expand(on: gateDisplay) }
         case .closed:
-            if isSharing {
+            if isSharing || browserHoldsOpen {
                 gate.forceOpen()
             } else {
                 collapseNow()
@@ -598,7 +711,7 @@ final class NotchShelfController: FeatureModule {
             applyProximity(
                 NotchGeometry.proximity(
                     point: point, collapsedFrame: frames.collapsed,
-                    expandedFrame: frames.expanded),
+                    expandedFrame: frames.expanded, keepInset: hidePolicy.keepInset),
                 on: expandedDisplay)
         } else if currentAlert == nil {
             let id = notchDisplay(near: point)

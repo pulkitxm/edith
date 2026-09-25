@@ -34,6 +34,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case siteAuditing
     case systemMetrics
     case usageCollection
+    case webBrowsing
     case windowDecoration
     case windowDimming
 }
