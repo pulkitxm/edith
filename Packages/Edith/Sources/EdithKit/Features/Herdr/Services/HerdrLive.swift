@@ -251,12 +251,13 @@ private final class SessionBag: @unchecked Sendable {
 
     private func hostLocked() -> HerdrHostSnapshot {
         let all = caches.values.flatMap(\.agents)
+        let terminals = caches.values.flatMap(\.terminals)
         let error = all.isEmpty ? errors.values.compactMap { $0 }.first : nil
         if machineIsLocal {
-            return .local(herdrPresent: true, agents: all, error: error)
+            return .local(herdrPresent: true, agents: all, terminals: terminals, error: error)
         }
         return HerdrHostSnapshot(
             id: machineID, name: machineName, isLocal: false, sshTarget: sshTarget,
-            herdrPresent: true, reachable: true, agents: all, error: error)
+            herdrPresent: true, reachable: true, agents: all, terminals: terminals, error: error)
     }
 }

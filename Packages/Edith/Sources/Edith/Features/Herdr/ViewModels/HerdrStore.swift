@@ -96,7 +96,9 @@ final class HerdrStore {
             revealSpace(containing: agent)
         }
     }
-    var tabs: [HerdrTab] = []
+    var tabs: [HerdrTab] = [] {
+        didSet { scheduleTerminalRetarget(from: oldValue) }
+    }
     private(set) var sessions: [HerdrOpenTab] = []
     private var closedTabHistory: [HerdrClosedTabRecord] = []
     private let closedTabHistoryLimit = 10
@@ -181,6 +183,8 @@ final class HerdrStore {
     }
 
     @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
+    @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
+    let terminalPanels: HerdrTerminalPanels
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
@@ -224,9 +228,11 @@ final class HerdrStore {
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
-        }
+        },
+        terminalPanels: HerdrTerminalPanels? = nil
     ) {
         self.defaults = defaults
+        self.terminalPanels = terminalPanels ?? HerdrTerminalPanels(defaults: defaults)
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.newAgentLauncher = newAgentLauncher
@@ -520,6 +526,7 @@ final class HerdrStore {
                 sessions[index].agent = updated
             }
         }
+        syncTerminals()
         if collapseSnapshotComplete {
             collapseCountsReady = true
             reconcileCollapseCounts()
@@ -722,6 +729,7 @@ final class HerdrStore {
     }
 
     func focus(_ agentID: String) {
+        terminalPanels.releaseFocus()
         guard let tab = tab(containing: agentID), tab.focused != agentID else { return }
         updateTab(tab.id) { $0.focused = agentID }
         if let agent = session(agentID)?.agent { revealSpace(containing: agent) }
@@ -985,11 +993,22 @@ final class HerdrStore {
     }
 
     private func closeTabs(_ predicate: (Int, HerdrTab) -> Bool) {
+        var tabIDs: [String] = []
+        for offset in tabs.indices where predicate(offset, tabs[offset]) {
+            tabIDs.append(tabs[offset].id)
+        }
+        guard !tabIDs.isEmpty else { return }
+        terminalPanels.confirmClosing(owners: tabIDs) { [weak self] in
+            self?.closeTabs(withIDs: Set(tabIDs))
+        }
+    }
+
+    private func closeTabs(withIDs tabIDs: Set<String>) {
         var matchedAny = false
         var ids: [String] = []
         for offset in tabs.indices {
             let tab = tabs[offset]
-            guard predicate(offset, tab) else { continue }
+            guard tabIDs.contains(tab.id) else { continue }
             matchedAny = true
             let rightNeighborID = offset + 1 < tabs.count ? tabs[offset + 1].id : nil
             var agentsInTab: [HerdrAgent] = []
@@ -1353,7 +1372,11 @@ final class HerdrStore {
     }
 
     func uploadDroppedFiles(_ urls: [URL], for tab: HerdrOpenTab) async throws -> [String] {
-        guard let machine = tab.machine else { throw HerdrQuinjetError.machineUnavailable }
+        try await uploadDroppedFiles(urls, to: tab.machine)
+    }
+
+    func uploadDroppedFiles(_ urls: [URL], to machine: Machine?) async throws -> [String] {
+        guard let machine else { throw HerdrQuinjetError.machineUnavailable }
         return try await TerminalDropTransfer.upload(urls, over: connection(for: machine))
     }
 
@@ -1398,25 +1421,125 @@ final class HerdrStore {
             return HerdrMachineTerminal.launchRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
         }
+        return try await controlRequest(
+            for: tab.agent, machine: tab.machine, environment: environment,
+            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable,
+            mouse: .buttons)
+    }
+
+    func attachRequest(
+        for terminal: HerdrPanelTerminal, environment: [String],
+        localExecutable: URL? = HerdrCollector.executable(),
+        bridgeExecutable: URL? = HerdrTerminalBridge.executable()
+    ) async throws -> TerminalLaunchRequest {
+        guard let agent = terminal.bridgeAgent else {
+            throw HerdrTerminalBridgeError.invalidSpecification
+        }
+        return try await controlRequest(
+            for: agent, machine: terminal.host.machine, environment: environment,
+            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable,
+            mouse: terminalSettings.mouse)
+    }
+
+    var terminalSettings: HerdrTerminalSettings { HerdrTerminalSettings.load(defaults) }
+
+    private func controlRequest(
+        for agent: HerdrAgent, machine: Machine?, environment: [String],
+        localExecutable: URL?, bridgeExecutable: URL?, mouse: HerdrTerminalMouse
+    ) async throws -> TerminalLaunchRequest {
         guard let bridgeExecutable else {
             throw HerdrTerminalBridgeError.executableUnavailable
         }
         let controller: TerminalLaunchRequest
-        if tab.agent.machineIsLocal {
+        if agent.machineIsLocal {
             controller = HerdrOperationExecution.localControlRequest(
-                for: tab.agent, environment: environment, executable: localExecutable)
+                for: agent, environment: environment, executable: localExecutable)
         } else {
-            guard let machine = tab.machine else {
+            guard let machine else {
                 throw HerdrQuinjetError.machineUnavailable
             }
             let connection = try await connection(for: machine)
             let platform = await connection.remotePlatform ?? .linux
             controller = HerdrOperationExecution.remoteControlRequest(
-                for: tab.agent, connection: connection, environment: environment,
+                for: agent, connection: connection, environment: environment,
                 platform: platform)
         }
         return try HerdrTerminalBridge.launchRequest(
-            bridgeExecutable: bridgeExecutable, controller: controller)
+            bridgeExecutable: bridgeExecutable, controller: controller, mouse: mouse)
+    }
+
+    func terminalOrigins(for owner: String) -> [HerdrTerminalOrigin] {
+        guard owner != Self.boardID, let tab = tab(owner) else { return [.local] }
+        let startFolder = terminalSettings.startFolder
+        var origins: [HerdrTerminalOrigin] = []
+        for agentID in tab.agentIDs {
+            guard let session = session(agentID) else { continue }
+            origins.append(HerdrTerminalOrigin(session, startFolder: startFolder))
+        }
+        return origins.isEmpty ? [.local] : origins
+    }
+
+    func terminalOrigin(for owner: String) -> HerdrTerminalOrigin {
+        let origins = terminalOrigins(for: owner)
+        let focused = tab(owner)?.focused
+        return origins.first { $0.id == focused } ?? origins[0]
+    }
+
+    func openTerminal(in owner: String, from origin: HerdrTerminalOrigin) {
+        terminalPanels.newTerminal(in: owner, host: origin.host, cwd: origin.cwd)
+    }
+
+    func performTerminalPanelKey(
+        keyCode: UInt16, characters: String?, modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        guard
+            let key = HerdrTerminalPanelKey.resolve(
+                keyCode: keyCode, characters: characters, modifiers: modifiers)
+        else { return false }
+        perform(key)
+        return true
+    }
+
+    func perform(_ key: HerdrTerminalPanelKey) {
+        let owner = selectedTab
+        let origin = terminalOrigin(for: owner)
+        switch key {
+        case .toggle:
+            terminalPanels.toggle(owner, host: origin.host, cwd: origin.cwd)
+        case .new:
+            openTerminal(in: owner, from: origin)
+        }
+    }
+
+    private func scheduleTerminalRetarget(from previous: [HerdrTab]) {
+        guard !terminalPanels.isEmpty, tabsBeforeRetarget == nil else { return }
+        tabsBeforeRetarget = previous
+        Task { @MainActor [weak self] in self?.retargetTerminals() }
+    }
+
+    func retargetTerminals() {
+        guard let previous = tabsBeforeRetarget else { return }
+        tabsBeforeRetarget = nil
+        terminalPanels.retarget(previous: previous, current: tabs, fallback: Self.boardID)
+        terminalPanels.rehome(fallback: Self.boardID, placement: terminalOwner)
+    }
+
+    func syncTerminals() {
+        terminalPanels.sync(hosts, machine: { machine(for: $0) }, placement: terminalOwner)
+        terminalPanels.rehome(fallback: Self.boardID, placement: terminalOwner)
+    }
+
+    func terminalOwner(for host: HerdrPanelHost, cwd: String?) -> String {
+        guard let cwd, !cwd.isEmpty else { return Self.boardID }
+        for tab in tabs {
+            for agentID in tab.agentIDs {
+                guard let agent = session(agentID)?.agent, !agent.isTerminal,
+                    agent.machineID == host.machineID, !agent.cwd.isEmpty
+                else { continue }
+                if cwd == agent.cwd || cwd.hasPrefix(agent.cwd + "/") { return tab.id }
+            }
+        }
+        return Self.boardID
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {

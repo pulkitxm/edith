@@ -112,7 +112,8 @@ struct HerdrPaneView: View {
             HerdrSessionView(
                 store: store, tab: shown, launchEnabled: launchEnabled,
                 hideAgents: hideAgents, presented: placement.visible,
-                wantsFocus: placement.visible && focused,
+                wantsFocus: placement.visible && focused
+                    && !store.terminalPanels.holdsFocus(tab.id),
                 onFocus: { store.focus(session.id) },
                 onSetView: { store.setView($0, for: session.id) },
                 showsDetails: false)

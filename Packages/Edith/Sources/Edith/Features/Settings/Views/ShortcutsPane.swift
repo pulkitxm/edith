@@ -69,6 +69,17 @@ struct ShortcutsSettingsPane: View {
                         .font(.system(size: UIScale.pt(12), weight: .medium))
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Toggle agent terminals") {
+                    Text("⌃` or ⌘J")
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("New agent terminal") {
+                    Text("⌃⇧`")
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .kerning(2)
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("Back") {
                     Text("⌘[")
                         .font(.system(size: UIScale.pt(12), weight: .medium))

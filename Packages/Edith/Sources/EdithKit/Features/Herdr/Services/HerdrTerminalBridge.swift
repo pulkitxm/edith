@@ -1,5 +1,24 @@
 import Foundation
 
+public enum HerdrTerminalMouse: String, Codable, CaseIterable, Sendable {
+    case scroll
+    case buttons
+
+    public var title: String {
+        switch self {
+        case .scroll: "Scroll only"
+        case .buttons: "Scroll and clicks"
+        }
+    }
+
+    var reportingModes: String {
+        switch self {
+        case .scroll: "\u{1B}[?1000h\u{1B}[?1006h"
+        case .buttons: "\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1006h"
+        }
+    }
+}
+
 public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
     public static let columnsToken = "{columns}"
     public static let rowsToken = "{rows}"
@@ -7,11 +26,13 @@ public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
     public let executable: String
     public let arguments: [String]
     public let environment: [String]
+    public let mouse: HerdrTerminalMouse
 
-    public init(controller: TerminalLaunchRequest) {
+    public init(controller: TerminalLaunchRequest, mouse: HerdrTerminalMouse = .buttons) {
         executable = controller.executable
         arguments = controller.arguments
         environment = controller.environment
+        self.mouse = mouse
     }
 
     public init(encoded: String) throws {
@@ -97,9 +118,12 @@ public enum HerdrTerminalScrollDirection: String, Sendable {
 }
 
 public enum HerdrTerminalBridge {
-    public static let startSequence = Data(
-        "\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1006h\u{1B}[?2004h\u{1B}[?7l"
-            .utf8)
+    public static func startSequence(for mouse: HerdrTerminalMouse) -> Data {
+        Data(
+            ("\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l"
+                + mouse.reportingModes + "\u{1B}[?2004h\u{1B}[?7l").utf8)
+    }
+
     public static let stopSequence = Data(
         "\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?2004l\u{1B}[?7h\u{1B}[?25h\u{1B}[?1049l"
             .utf8)
@@ -116,9 +140,12 @@ public enum HerdrTerminalBridge {
     }
 
     public static func launchRequest(
-        bridgeExecutable: URL, controller: TerminalLaunchRequest
+        bridgeExecutable: URL, controller: TerminalLaunchRequest,
+        mouse: HerdrTerminalMouse = .buttons
     ) throws -> TerminalLaunchRequest {
-        let specification = try HerdrTerminalBridgeSpecification(controller: controller).encoded()
+        let specification = try HerdrTerminalBridgeSpecification(
+            controller: controller, mouse: mouse
+        ).encoded()
         return TerminalLaunchRequest(
             executable: bridgeExecutable.path,
             arguments: ["herdr", "bridge", specification],

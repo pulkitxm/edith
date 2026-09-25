@@ -26,6 +26,7 @@ agent = identifier + '.agent'
 launch = read('Contents/Library/LaunchAgents/' + agent + '.plist')
 assert launch['Label'] == agent
 assert launch['MachServices'] == {agent: True}
+assert launch['ProcessType'] == 'Adaptive', launch.get('ProcessType')
 if development:
     program = [os.path.realpath(p) for p in launch['ProgramArguments']]
     assert program == [os.path.realpath(root / 'Contents/MacOS/edithd')], program

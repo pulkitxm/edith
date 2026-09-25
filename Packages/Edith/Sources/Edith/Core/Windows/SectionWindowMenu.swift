@@ -274,6 +274,13 @@ enum SectionWindowMenu {
                 {
                     return true
                 }
+                if window?.identifier?.rawValue == MainWindowIdentifier.value,
+                    sessionsIsOnScreen(),
+                    HerdrStore.shared.performTerminalPanelKey(
+                        keyCode: keyCode, characters: characters, modifiers: modifiers)
+                {
+                    return true
+                }
                 if let command = WorkspaceKeyCommand.resolve(
                     characters: characters, keyCode: keyCode, modifiers: modifiers)
                 {

@@ -39,7 +39,7 @@ struct HerdrPage: View {
                     if store.railOpen {
                         agentList
                             .frame(width: railDisplayWidth)
-                        HerdrHorizontalResizeHandle(
+                        HerdrResizeHandle(
                             label: "Resize the agent list",
                             onChanged: resizeRail,
                             onEnded: finishRailResize,
@@ -57,6 +57,11 @@ struct HerdrPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .herdrDropFrame(HerdrDropGeometry.canvasKey)
+                    .overlay(alignment: .bottom) {
+                        HerdrTerminalPanelView(
+                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
+                            maximumHeight: proxy.size.height, hideAgents: hideAgents)
+                    }
                     if !onBoard, store.detailOpen, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents)
@@ -108,6 +113,26 @@ struct HerdrPage: View {
         .sheet(isPresented: $store.searchPresented) {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
         }
+        .alert(
+            store.terminalPanels.closeRequest?.title ?? "", isPresented: terminalCloseRequested,
+            presenting: store.terminalPanels.closeRequest
+        ) { request in
+            Button(request.confirmation, role: .destructive) {
+                store.terminalPanels.closeRequest = nil
+                request.proceed()
+            }
+            Button("Cancel", role: .cancel) {
+                store.terminalPanels.closeRequest = nil
+            }
+        } message: { request in
+            Text(request.message)
+        }
+    }
+
+    private var terminalCloseRequested: Binding<Bool> {
+        Binding(
+            get: { store.terminalPanels.closeRequest != nil },
+            set: { if !$0 { store.terminalPanels.closeRequest = nil } })
     }
 
     private func shown(_ session: HerdrOpenTab) -> HerdrOpenTab {
@@ -246,6 +271,29 @@ struct HerdrPage: View {
         .buttonStyle(.edith(.borderless))
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+    }
+
+    private var terminalToggle: some View {
+        let open = store.terminalPanels.isOpen(store.selectedTab)
+        return Button {
+            withAnimation(store.layoutAnimation) {
+                store.perform(.toggle)
+            }
+        } label: {
+            Image(systemName: "apple.terminal")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(open ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: open ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
+        }
+        .buttonStyle(.edith(.borderless))
+        .help(open ? "Hide terminals (⌃` or ⌘J)" : "Show terminals (⌃` or ⌘J)")
+        .accessibilityLabel(open ? "Hide terminals" : "Show terminals")
     }
 
     private var tabShortcuts: some View {
@@ -411,6 +459,8 @@ struct HerdrPage: View {
                 if let tab = store.currentTab {
                     layoutButton(for: tab)
                 }
+                terminalToggle
+                    .padding(.trailing, onBoard ? PageMetrics.gutter(compact) : 0)
                 if !onBoard {
                     detailToggle
                         .padding(.trailing, PageMetrics.gutter(compact))
@@ -508,7 +558,12 @@ struct HerdrPage: View {
                 .buttonStyle(.edith(.borderless))
                 .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
             }
-            if closable {
+            if closable, store.terminalPanels.isChecking(id) {
+                SkeletonGroup {
+                    SkeletonBlock(width: 9, height: 9, corner: 4.5)
+                }
+                .accessibilityLabel("Closing")
+            } else if closable {
                 Button {
                     store.closeTab(id)
                 } label: {
