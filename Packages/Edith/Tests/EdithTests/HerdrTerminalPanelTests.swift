@@ -35,6 +35,10 @@ private actor HerdrPanelHerdr {
 
     var typed: [String] { ran.map(\.command) }
 
+    private(set) var stalled = Set<String>()
+
+    func stall(_ pane: String) { stalled.insert(pane) }
+
     func run(_ name: String, command: String, in pane: String) {
         processes[pane] = .live(HerdrPaneProcess(name: name, command: command, running: true))
     }
@@ -52,7 +56,12 @@ private actor HerdrPanelHerdr {
             open: { session, cwd, machine in
                 await self.open(session: session, cwd: cwd, machine: machine)
             },
-            state: { _, pane, _ in await self.state(pane) },
+            state: { _, pane, _ in
+                if await self.stalled.contains(pane) {
+                    try await Task.sleep(for: .seconds(30))
+                }
+                return await self.state(pane)
+            },
             close: { _, pane, _ in await self.close(pane) },
             run: { _, pane, command, _ in await self.type(command, in: pane) })
     }
@@ -187,6 +196,62 @@ private actor HerdrPanelHerdr {
 
         #expect(store.terminalPanels.terminals[id] == nil)
         try await eventually { await herdr.closed == [pane] }
+    }
+
+    @Test func closingShowsProgressUntilTheCheckAnswers() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.process != nil }
+
+        store.terminalPanels.requestClose(id)
+
+        #expect(store.terminalPanels.isChecking(id))
+        try await eventually { store.terminalPanels.terminals[id] == nil }
+        #expect(!store.terminalPanels.isChecking(id))
+    }
+
+    @Test func closingATabShowsProgressOnTheTab() async throws {
+        let store = makeStore(HerdrPanelHerdr())
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.pane != nil }
+
+        store.closeTab(owner)
+
+        #expect(store.terminalPanels.isChecking(owner))
+        try await eventually { store.tabs.isEmpty }
+        #expect(!store.terminalPanels.isChecking(owner))
+    }
+
+    @Test func aStalledCheckFallsBackToTheLastKnownState() async throws {
+        let herdr = HerdrPanelHerdr()
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(
+            defaults: defaults,
+            terminalPanels: HerdrTerminalPanels(
+                defaults: defaults, operations: herdr.operations,
+                checkTimeout: .milliseconds(100)))
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.process != nil }
+        let pane = try #require(store.terminalPanels.terminals[id]?.pane)
+        await herdr.stall(pane)
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        store.terminalPanels.requestClose(id)
+        try await eventually { store.terminalPanels.terminals[id] == nil }
+
+        #expect(clock.now - start < .seconds(2))
+        #expect(store.terminalPanels.closeRequest == nil)
     }
 
     @Test func closingAnIdleTerminalDoesNotAsk() async throws {

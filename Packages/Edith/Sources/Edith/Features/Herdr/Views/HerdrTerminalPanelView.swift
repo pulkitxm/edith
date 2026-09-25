@@ -62,6 +62,10 @@ struct HerdrTerminalPanelView: View {
                 .opacity(selected ? 1 : 0)
                 .allowsHitTesting(selected)
             }
+            if panels.isChecking(owner) {
+                HerdrTerminalBusyBadge(
+                    title: "Checking terminals…", palette: .edith(dark: dark))
+            }
         }
     }
 
@@ -186,6 +190,7 @@ private struct HerdrTerminalList: View {
 
     private func row(_ terminal: HerdrPanelTerminal) -> some View {
         let selected = panels.selectedID(in: owner) == terminal.id
+        let closing = panels.isChecking(terminal.id)
         return HStack(spacing: UIScale.pt(4)) {
             Button {
                 panels.select(terminal.id, in: owner)
@@ -206,12 +211,12 @@ private struct HerdrTerminalList: View {
                             .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text(terminal.location)
+                        Text(closing ? "Closing…" : terminal.location)
                             .font(DashSkin.mono(9))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .presenterTextBlur(hideAgents, fontSize: 9)
+                            .presenterTextBlur(hideAgents && !closing, fontSize: 9)
                     }
                     Spacer(minLength: 0)
                     if terminal.running {
@@ -224,12 +229,22 @@ private struct HerdrTerminalList: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
+            .opacity(closing ? 0.55 : 1)
             .accessibilityLabel("\(terminal.title), \(terminal.location)")
             .accessibilityAddTraits(selected ? .isSelected : [])
-            iconButton("xmark", label: "Close \(terminal.title)") {
-                panels.requestClose(terminal.id)
+            if closing {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.75)
+                    .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+                    .accessibilityLabel("Closing \(terminal.title)")
+            } else {
+                iconButton("xmark", label: "Close \(terminal.title)") {
+                    panels.requestClose(terminal.id)
+                }
             }
         }
+        .disabled(closing)
         .padding(.leading, UIScale.pt(8))
         .padding(.trailing, UIScale.pt(4))
         .padding(.vertical, UIScale.pt(5))
@@ -336,6 +351,9 @@ private struct HerdrPanelTerminalView: View {
             }
             TerminalDropTransferStatus(holder: terminal.holder)
             overlay
+            if store.terminalPanels.isChecking(terminal.id) {
+                HerdrTerminalBusyBadge(title: "Closing…", palette: palette)
+            }
         }
         .background(Color(nsColor: palette.background))
         .task(id: "\(terminal.pane ?? "")|\(mouse.rawValue)") { await start() }
@@ -409,5 +427,29 @@ private struct HerdrPanelTerminalView: View {
         } catch {
             store.terminalPanels.fail(terminal.id, error.localizedDescription)
         }
+    }
+}
+
+struct HerdrTerminalBusyBadge: View {
+    let title: String
+    let palette: TerminalPalette
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            ProgressView()
+                .controlSize(.small)
+            Text(title)
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(Color(nsColor: palette.foreground))
+        }
+        .padding(.horizontal, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(9))
+        .background(
+            Capsule()
+                .fill(Color(nsColor: palette.background).opacity(0.92))
+                .overlay(Capsule().strokeBorder(Color(nsColor: palette.foreground).opacity(0.15)))
+        )
+        .shadow(color: .black.opacity(0.25), radius: UIScale.pt(8), y: 2)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -176,9 +176,61 @@ enum HerdrTerminalPanelSizing {
     static let heightMinimum = 120.0
     static let listWidth = 184.0
     static let refreshInterval = Duration.seconds(2)
+    static let checkTimeout = Duration.seconds(3)
 
     static func height(_ value: Double, maximum: Double) -> Double {
         min(max(heightMinimum, maximum), max(heightMinimum, value))
+    }
+}
+
+struct HerdrPaneStateRequest: Sendable {
+    static let concurrency = 4
+
+    let id: String
+    let session: String
+    let pane: String
+    let machine: Machine?
+
+    static func run(
+        _ requests: [HerdrPaneStateRequest], operations: HerdrPanelTerminalOperations,
+        timeout: Duration
+    ) async -> [String: HerdrPaneState] {
+        await withTaskGroup(of: (String, HerdrPaneState?).self) { group in
+            var results: [String: HerdrPaneState] = [:]
+            var pending = requests.makeIterator()
+            var started = 0
+            while started < concurrency, let request = pending.next() {
+                group.addTask { (request.id, await request.state(operations, timeout: timeout)) }
+                started += 1
+            }
+            while let (id, state) = await group.next() {
+                if let state { results[id] = state }
+                if let request = pending.next() {
+                    group.addTask {
+                        (request.id, await request.state(operations, timeout: timeout))
+                    }
+                }
+            }
+            return results
+        }
+    }
+
+    private func state(_ operations: HerdrPanelTerminalOperations, timeout: Duration) async
+        -> HerdrPaneState?
+    {
+        let session = session
+        let pane = pane
+        let machine = machine
+        return await withTaskGroup(of: HerdrPaneState?.self) { group in
+            group.addTask { try? await operations.state(session, pane, machine) }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 }
 
@@ -235,17 +287,20 @@ final class HerdrTerminalPanels {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let operations: HerdrPanelTerminalOperations
     @ObservationIgnored private let session: String
-    @ObservationIgnored private var confirming = Set<String>()
+    @ObservationIgnored private let checkTimeout: Duration
+    private(set) var checking = Set<String>()
     @ObservationIgnored private var closing = Set<String>()
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
         operations: HerdrPanelTerminalOperations = .live,
-        session: String = HerdrTerminalSpace.defaultSession
+        session: String = HerdrTerminalSpace.defaultSession,
+        checkTimeout: Duration = HerdrTerminalPanelSizing.checkTimeout
     ) {
         self.defaults = defaults
         self.operations = operations
         self.session = session
+        self.checkTimeout = checkTimeout
         height =
             defaults.object(forKey: AppStorageKeys.Herdr.terminalPanelHeight) as? Double
             ?? HerdrTerminalPanelSizing.heightDefault
@@ -368,10 +423,10 @@ final class HerdrTerminalPanels {
             close(id)
             return
         }
-        guard confirming.insert(id).inserted else { return }
+        guard checking.insert(id).inserted else { return }
         Task {
             await refresh(ids: [id])
-            confirming.remove(id)
+            checking.remove(id)
             guard let terminal = terminals[id] else { return }
             guard terminal.running else {
                 close(id)
@@ -417,11 +472,11 @@ final class HerdrTerminalPanels {
             return
         }
         let key = Set(owners)
-        guard confirming.isDisjoint(with: key) else { return }
-        confirming.formUnion(key)
+        guard checking.isDisjoint(with: key) else { return }
+        checking.formUnion(key)
         Task {
             await refresh(ids: ids)
-            confirming.subtract(key)
+            checking.subtract(key)
             var running: [String] = []
             for id in ids {
                 guard let terminal = terminals[id], terminal.running else { continue }
@@ -543,14 +598,25 @@ final class HerdrTerminalPanels {
         if focusedOwner == owner { focusedOwner = destination }
     }
 
+    func isChecking(_ id: String) -> Bool {
+        checking.contains(id)
+    }
+
     private func refresh(ids: [String]) async {
+        var requests: [HerdrPaneStateRequest] = []
         for id in ids {
             guard let terminal = terminals[id], let pane = terminal.pane else { continue }
-            guard
-                let state = try? await operations.state(
-                    terminal.session, pane, terminal.host.machine),
-                terminals[id]?.pane == pane
+            requests.append(
+                HerdrPaneStateRequest(
+                    id: id, session: terminal.session, pane: pane,
+                    machine: terminal.host.machine))
+        }
+        let states = await HerdrPaneStateRequest.run(
+            requests, operations: operations, timeout: checkTimeout)
+        for request in requests {
+            guard let state = states[request.id], terminals[request.id]?.pane == request.pane
             else { continue }
+            let id = request.id
             switch state {
             case .missing:
                 remove(id)?.holder.stop()
