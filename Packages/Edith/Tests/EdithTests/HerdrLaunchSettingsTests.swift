@@ -77,11 +77,22 @@ import Testing
         #expect(
             launch.local
                 == [
-                    "agent", "start", "claude", "--kind", "claude", "--pane", "w5:p1",
+                    "agent", "start", "claude-w5-p1", "--kind", "claude", "--pane", "w5:p1",
                     "--timeout", "30000", "--", "--model", "opus", "--effort", "high",
                     "--settings", #"{"fastMode":true}"#,
                 ])
         #expect(launch.remote(.linux).hasSuffix(#"--settings '{"fastMode":true}'"#))
+    }
+
+    @Test func everyStartedAgentGetsItsOwnHerdrName() {
+        let defaults = Self.scratchDefaults()
+        let names = ["w5:pQ", "w5:pR"].map { pane in
+            HerdrLaunchOperations.agentLaunch(
+                kind: "OpenCode", name: "opencode", pane: pane, options: .none,
+                defaults: defaults
+            ).local[2]
+        }
+        #expect(names == ["opencode-w5-pQ", "opencode-w5-pR"])
     }
 
     @Test func anOverriddenCommandGetsTheSameFlagsTyped() {
