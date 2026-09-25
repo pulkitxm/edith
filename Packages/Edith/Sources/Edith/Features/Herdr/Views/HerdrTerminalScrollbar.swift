@@ -19,7 +19,7 @@ struct HerdrTerminalScrollbar: View {
                     Rectangle()
                         .fill(color.opacity(active ? 0.08 : 0))
                     Capsule()
-                        .fill(color.opacity(active ? 0.55 : 0.3))
+                        .fill(color.opacity(active ? 0.6 : 0.4))
                         .frame(width: UIScale.pt(active ? 8 : 5), height: length)
                         .padding(.trailing, UIScale.pt(2))
                         .offset(y: top)
