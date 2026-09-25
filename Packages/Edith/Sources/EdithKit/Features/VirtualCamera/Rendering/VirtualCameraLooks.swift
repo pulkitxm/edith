@@ -49,6 +49,19 @@ public enum VirtualCameraLooks {
         return result.cropped(to: extent)
     }
 
+    public static func thumbnails(
+        from reference: CGImage, renderer: VirtualCameraRenderer
+    ) -> [VirtualCameraLookPreset: CGImage] {
+        let image = CIImage(cgImage: reference)
+        let size = CGSize(width: reference.width, height: reference.height)
+        var result: [VirtualCameraLookPreset: CGImage] = [:]
+        for preset in VirtualCameraLookPreset.allCases {
+            let styled = apply(VirtualCameraLook(preset: preset), to: image)
+            result[preset] = renderer.cgImage(styled, size: size)
+        }
+        return result
+    }
+
     public static func preset(_ preset: VirtualCameraLookPreset, _ image: CIImage) -> CIImage {
         switch preset {
         case .natural:

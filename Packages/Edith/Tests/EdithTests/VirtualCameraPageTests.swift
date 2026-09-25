@@ -158,6 +158,34 @@ import Testing
         #expect(model.snapshot == snapshot)
     }
 
+    @Test func appearingKeepsEditsThatWereNotSavedYet() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.setZoom(2.5)
+        model.appear()
+        defer { model.disappear() }
+        #expect(model.composition.framing.zoom == 2.5)
+        #expect(VirtualCameraStore.load(defaults).composition.framing.zoom == 2.5)
+        var stored = VirtualCameraStore.load(defaults)
+        stored.composition.framing.zoom = 3
+        VirtualCameraStore.save(stored, to: defaults)
+        model.reloadState()
+        #expect(model.composition.framing.zoom == 3)
+    }
+
+    @Test func lookThumbnailsFollowTheReferenceFrame() throws {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        model.renderPreview(from: input)
+        #expect(model.lookThumbnails.isEmpty)
+        model.tab = .look
+        #expect(model.lookThumbnails.count == VirtualCameraLookPreset.allCases.count)
+        let reference = try #require(model.previewReference)
+        model.updateLookThumbnails(from: reference)
+        #expect(model.lookThumbnails[.noir]?.width == reference.width)
+    }
+
     @Test func previewFramesReachTheDisplay() throws {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -499,8 +527,18 @@ enum VirtualCameraSyntheticStudio {
         VirtualCameraPlaceholder.render(VirtualCameraPlaceholder.card(for: .offline), into: offline)
         try write(CIImage(cvPixelBuffer: offline), "extension-offline.png")
 
-        let (model, defaults, name) = VirtualCameraPageModelTests.model()
+        let name = "test.edith.virtual-camera-evidence.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
+        let model = VirtualCameraPageModel(
+            defaults: defaults,
+            pipeline: VirtualCameraPipeline(state: VirtualCameraState(), outputSize: size),
+            extensionManager: VirtualCameraExtensionManager(
+                environment: VirtualCameraExtensionEnvironment(
+                    bundleURL: URL(fileURLWithPath: "/Applications/Edith.app"),
+                    hasInstallEntitlement: { true }, deviceVisible: { true })),
+            accessProvider: { .denied },
+            sourceProvider: { VirtualCameraPageModelTests.sources })
         var state = model.state
         state.composition = VirtualCameraComposition(
             framing: VirtualCameraFraming(zoom: 1.7, centerX: 0.5, centerY: 0.44),
@@ -511,6 +549,16 @@ enum VirtualCameraSyntheticStudio {
                     enabled: true, title: "Ada Lovelace", subtitle: "Staff Engineer")))
         _ = try? VirtualCameraSceneLibrary.save("Interview", in: &state)
         model.update { $0 = state }
+        model.flushSave()
+        model.extensionManager.refresh()
+        let reference = try #require(
+            renderer.cgImage(
+                renderer.framedReference(
+                    VirtualCameraFrameInput(
+                        image: studio, composition: model.composition, mask: mask),
+                    output: VirtualCameraPipeline.referenceSize),
+                size: VirtualCameraPipeline.referenceSize))
+        model.updateLookThumbnails(from: reference)
         model.injectForTesting(
             snapshot: VirtualCameraSnapshot(
                 enabled: true, helperRunning: true, extensionInstalled: true, extensionBuild: "288",

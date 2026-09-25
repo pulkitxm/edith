@@ -25,6 +25,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     public static let widthSteps = [1280, 1920, 2560, 3840]
+    public static let referenceSize = CGSize(width: 224, height: 126)
+    public static let referenceInterval: TimeInterval = 1
     public static let privacyFrameRate = 15.0
 
     public let queue: DispatchQueue
@@ -51,6 +53,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var privacyTimer: DispatchSourceTimer?
     private var frameTimes: [TimeInterval] = []
     private var stats = Statistics()
+    private var referenceValue: CGImage?
+    private var referenceAt: TimeInterval?
 
     public init(
         state: VirtualCameraState, outputSize: CGSize, frameRate: Int = 30,
@@ -68,6 +72,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     public var statistics: Statistics { lock.withLock { stats } }
+
+    public var reference: CGImage? { lock.withLock { referenceValue } }
 
     public var currentState: VirtualCameraState { queue.sync { state } }
 
@@ -213,11 +219,17 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
                 source: oriented.extent.size, output: outputSize, at: time)
         }
         effectiveFraming = framing
-        let composed = renderer.compose(
-            VirtualCameraFrameInput(
-                image: image, composition: composition, framing: framing,
-                mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets),
-            output: outputSize)
+        let input = VirtualCameraFrameInput(
+            image: image, composition: composition, framing: framing,
+            mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets)
+        let composed = renderer.compose(input, output: outputSize)
+        if referenceAt.map({ time - $0 >= Self.referenceInterval || time < $0 }) ?? true {
+            referenceAt = time
+            let small = renderer.cgImage(
+                renderer.framedReference(input, output: Self.referenceSize),
+                size: Self.referenceSize)
+            lock.withLock { referenceValue = small }
+        }
         guard let buffer = makeBuffer() else { return nil }
         renderer.render(composed, into: buffer)
         lastLiveBuffer = buffer

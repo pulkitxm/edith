@@ -71,6 +71,25 @@ struct VirtualCameraPanelSection<Content: View>: View {
     }
 }
 
+struct VirtualCameraToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+    let dark: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            Spacer(minLength: UIScale.pt(8))
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+        }
+    }
+}
+
 struct VirtualCameraSliderRow: View {
     let title: String
     @Binding var value: Double
@@ -191,8 +210,12 @@ struct VirtualCameraFramePanel: View {
                     .labelsHidden()
                     .frame(width: UIScale.pt(180))
                 }
-                Toggle("Flip horizontally", isOn: model.binding(\.framing.flipHorizontal))
-                Toggle("Flip vertically", isOn: model.binding(\.framing.flipVertical))
+                VirtualCameraToggleRow(
+                    title: "Flip horizontally", isOn: model.binding(\.framing.flipHorizontal),
+                    dark: dark)
+                VirtualCameraToggleRow(
+                    title: "Flip vertically", isOn: model.binding(\.framing.flipVertical),
+                    dark: dark)
             }
             VirtualCameraPanelSection(
                 title: "Auto framing",
@@ -206,6 +229,7 @@ struct VirtualCameraFramePanel: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .frame(maxWidth: .infinity)
             }
             VirtualCameraPanelSection(
                 title: "Sharp zoom",
@@ -213,7 +237,9 @@ struct VirtualCameraFramePanel: View {
                     "Switch the camera to a higher resolution while zoomed in, when it has one.",
                 dark: dark
             ) {
-                Toggle("Use the camera's best resolution", isOn: model.stateBinding(\.sharpZoom))
+                VirtualCameraToggleRow(
+                    title: "Use the camera's best resolution",
+                    isOn: model.stateBinding(\.sharpZoom), dark: dark)
             }
         }
         .toggleStyle(.switch)
@@ -229,19 +255,14 @@ struct VirtualCameraLookPanel: View {
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
             VirtualCameraPanelSection(title: "Looks", dark: dark) {
-                LazyVGrid(columns: columns, spacing: UIScale.pt(6)) {
+                LazyVGrid(columns: columns, spacing: UIScale.pt(8)) {
                     ForEach(VirtualCameraLookPreset.allCases, id: \.self) { preset in
-                        let selected = model.composition.look.preset == preset
-                        Button(preset.title) {
+                        VirtualCameraLookTile(
+                            preset: preset, thumbnail: model.lookThumbnails[preset],
+                            selected: model.composition.look.preset == preset, dark: dark
+                        ) {
                             model.updateComposition { $0.look.preset = preset }
                         }
-                        .buttonStyle(.edith(.selection))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                .stroke(
-                                    selected ? DashSkin.accent(dark) : Color.clear, lineWidth: 1.5)
-                        )
-                        .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
                 if model.composition.look.preset != .natural {
@@ -290,6 +311,42 @@ struct VirtualCameraLookPanel: View {
                 .disabled(model.composition.look.isNeutral && model.composition.look.intensity == 1)
             }
         }
+    }
+}
+
+struct VirtualCameraLookTile: View {
+    let preset: VirtualCameraLookPreset
+    let thumbnail: CGImage?
+    let selected: Bool
+    let dark: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: UIScale.pt(4)) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6)).fill(Color.black)
+                    if let thumbnail {
+                        Image(decorative: thumbnail, scale: 1)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    }
+                }
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .stroke(
+                            selected ? DashSkin.accent(dark) : DashSkin.line(dark),
+                            lineWidth: selected ? 2 : 1))
+                Text(preset.title)
+                    .font(.system(size: UIScale.pt(11), weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+            }
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityLabel(preset.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -393,7 +450,9 @@ struct VirtualCameraOverlayPanel: View {
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
             VirtualCameraPanelSection(title: "Name tag", dark: dark) {
-                Toggle("Show a name tag", isOn: model.binding(\.overlays.nameTag.enabled))
+                VirtualCameraToggleRow(
+                    title: "Show a name tag", isOn: model.binding(\.overlays.nameTag.enabled),
+                    dark: dark)
                 if model.composition.overlays.nameTag.enabled {
                     TextField("Name", text: model.binding(\.overlays.nameTag.title))
                         .textFieldStyle(.roundedBorder)
@@ -418,7 +477,9 @@ struct VirtualCameraOverlayPanel: View {
                     choose: { model.chooseImage(for: .logo) },
                     remove: { model.removeImage(for: .logo) })
                 if model.composition.overlays.logo.imagePath != nil {
-                    Toggle("Show the logo", isOn: model.binding(\.overlays.logo.enabled))
+                    VirtualCameraToggleRow(
+                        title: "Show the logo", isOn: model.binding(\.overlays.logo.enabled),
+                        dark: dark)
                     VirtualCameraCornerPicker(
                         title: "Corner", selection: model.binding(\.overlays.logo.corner))
                     VirtualCameraSliderRow(
@@ -430,19 +491,27 @@ struct VirtualCameraOverlayPanel: View {
                 }
             }
             VirtualCameraPanelSection(title: "Clock", dark: dark) {
-                Toggle("Show the time", isOn: model.binding(\.overlays.clock.enabled))
+                VirtualCameraToggleRow(
+                    title: "Show the time", isOn: model.binding(\.overlays.clock.enabled),
+                    dark: dark)
                 if model.composition.overlays.clock.enabled {
                     VirtualCameraCornerPicker(
                         title: "Corner", selection: model.binding(\.overlays.clock.corner))
-                    Toggle("24-hour clock", isOn: model.binding(\.overlays.clock.twentyFourHour))
-                    Toggle("Seconds", isOn: model.binding(\.overlays.clock.showsSeconds))
+                    VirtualCameraToggleRow(
+                        title: "24-hour clock",
+                        isOn: model.binding(\.overlays.clock.twentyFourHour), dark: dark)
+                    VirtualCameraToggleRow(
+                        title: "Seconds", isOn: model.binding(\.overlays.clock.showsSeconds),
+                        dark: dark)
                 }
             }
             VirtualCameraPanelSection(
                 title: "Frame", detail: "Round the corners and set the picture inside a matte.",
                 dark: dark
             ) {
-                Toggle("Frame the picture", isOn: model.binding(\.overlays.border.enabled))
+                VirtualCameraToggleRow(
+                    title: "Frame the picture", isOn: model.binding(\.overlays.border.enabled),
+                    dark: dark)
                 if model.composition.overlays.border.enabled {
                     VirtualCameraSliderRow(
                         title: "Margin", value: model.binding(\.overlays.border.inset),
@@ -561,7 +630,9 @@ struct VirtualCameraOutputPanel: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                Toggle("Mirror the preview", isOn: model.stateBinding(\.mirrorPreview))
+                VirtualCameraToggleRow(
+                    title: "Mirror the preview", isOn: model.stateBinding(\.mirrorPreview),
+                    dark: dark)
                 Text(
                     "Mirroring only flips this preview. Apps receive the picture the right way round."
                 )

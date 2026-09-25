@@ -104,6 +104,7 @@ struct VirtualCameraStatusPill: View {
         .padding(.vertical, UIScale.pt(5))
         .background(Capsule().fill(DashSkin.paper2(dark)))
         .overlay(Capsule().stroke(DashSkin.line(dark)))
+        .fixedSize()
         .accessibilityElement(children: .combine)
     }
 }

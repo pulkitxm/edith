@@ -1,3 +1,4 @@
+import AppKit
 import CoreImage
 import CoreMediaIO
 import CoreVideo
@@ -141,6 +142,39 @@ enum VirtualCameraFixtures {
         let corner = VirtualCameraFixtures.pixel(card, x: 10, y: 10)
         #expect(corner.red < 200)
         #expect(pipeline.currentState.privacyMessage == "Back in five")
+    }
+
+    @Test func aSmallReferenceFrameIsKeptOncePerSecond() throws {
+        let pipeline = VirtualCameraPipeline(state: VirtualCameraState(), outputSize: output)
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        #expect(pipeline.reference == nil)
+        _ = pipeline.process(input, at: 5)
+        let first = try #require(pipeline.reference)
+        #expect(first.width == Int(VirtualCameraPipeline.referenceSize.width))
+        #expect(first.height == Int(VirtualCameraPipeline.referenceSize.height))
+        _ = pipeline.process(input, at: 5.5)
+        #expect(pipeline.reference === first)
+        _ = pipeline.process(input, at: 6.1)
+        #expect(pipeline.reference !== first)
+    }
+
+    @Test func lookThumbnailsCoverEveryPreset() throws {
+        let renderer = VirtualCameraRenderer()
+        let reference = try #require(
+            renderer.cgImage(
+                VirtualCameraRendererTests.quadrants(width: 224, height: 126),
+                size: CGSize(width: 224, height: 126)))
+        let thumbnails = VirtualCameraLooks.thumbnails(from: reference, renderer: renderer)
+        #expect(Set(thumbnails.keys) == Set(VirtualCameraLookPreset.allCases))
+        let size = CGSize(width: 224, height: 126)
+        let reader = VirtualCameraRendererTests()
+        let mono = try reader.pixels(CIImage(cgImage: try #require(thumbnails[.mono])), size: size)
+        let gray = mono(20, 20)
+        #expect(abs(gray.red - gray.green) < 8 && abs(gray.green - gray.blue) < 8)
+        let natural = try reader.pixels(
+            CIImage(cgImage: try #require(thumbnails[.natural])), size: size)
+        #expect(natural(20, 20).near(.red))
+        #expect(natural(20, 110).near(.blue))
     }
 
     @Test func stoppingClearsStatistics() throws {

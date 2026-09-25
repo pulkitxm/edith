@@ -287,6 +287,15 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         return result.cropped(to: CGRect(origin: .zero, size: output))
     }
 
+    public func framedReference(_ input: VirtualCameraFrameInput, output: CGSize) -> CIImage {
+        let framing = (input.framing ?? input.composition.framing).sanitized()
+        let oriented = Self.oriented(input.image, framing: framing)
+        let replaced = Self.backgroundReplaced(
+            oriented, mask: input.mask, background: input.composition.background,
+            assets: input.assets)
+        return Self.framed(replaced, framing: framing, output: output)
+    }
+
     public func compose(_ input: VirtualCameraFrameInput, output: CGSize) -> CIImage {
         let composition = input.composition
         let framing = (input.framing ?? composition.framing).sanitized()

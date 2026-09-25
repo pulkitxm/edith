@@ -52,8 +52,15 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var previewStatistics = VirtualCameraPipeline.Statistics()
     @Published private(set) var cameraAccess: AVAuthorizationStatus
     @Published private(set) var previewRunning = false
-    @Published var tab: VirtualCameraInspectorTab = .frame
+    @Published var tab: VirtualCameraInspectorTab = .frame {
+        didSet {
+            guard tab == .look, let reference = pipeline.reference, reference !== thumbnailSource
+            else { return }
+            updateLookThumbnails(from: reference)
+        }
+    }
     @Published var showsGrid = false
+    @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
     @Published var errorMessage: String?
 
     let display = VirtualCameraPreviewDisplay()
@@ -68,6 +75,8 @@ final class VirtualCameraPageModel: ObservableObject {
     private var statusTask: Task<Void, Never>?
     private var statsTimer: Timer?
     private var visible = false
+    private var thumbnailSource: CGImage?
+    private static let thumbnailRenderer = VirtualCameraRenderer()
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
@@ -118,7 +127,7 @@ final class VirtualCameraPageModel: ObservableObject {
     func appear() {
         guard !visible else { return }
         visible = true
-        reloadState()
+        if saveWork != nil { flushSave() } else { reloadState() }
         refreshSources()
         extensionManager.refresh()
         statusToken = IPC.observe(
@@ -164,6 +173,9 @@ final class VirtualCameraPageModel: ObservableObject {
 
     private func tick() {
         previewStatistics = pipeline.statistics
+        if tab == .look, let reference = pipeline.reference, reference !== thumbnailSource {
+            updateLookThumbnails(from: reference)
+        }
         extensionManager.refresh()
         let access = accessProvider()
         if access != cameraAccess {
@@ -171,6 +183,14 @@ final class VirtualCameraPageModel: ObservableObject {
             if access == .authorized { startPreview() }
         }
     }
+
+    func updateLookThumbnails(from reference: CGImage) {
+        thumbnailSource = reference
+        lookThumbnails = VirtualCameraLooks.thumbnails(
+            from: reference, renderer: Self.thumbnailRenderer)
+    }
+
+    var previewReference: CGImage? { pipeline.reference }
 
     func receive(_ decoded: VirtualCameraSnapshot?) {
         guard let decoded else { return }
