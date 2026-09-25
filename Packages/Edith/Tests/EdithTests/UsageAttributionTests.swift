@@ -297,9 +297,39 @@ final class AttributionRunLog: @unchecked Sendable {
         #expect(matcher.title("Write the api docs") == nil)
     }
 
+    @Test func aLikelyButUnsurePickIsLeftUnassigned() async throws {
+        let decider = AttributionScriptedDecider { state in
+            state["folder"] == "scratch" ? (Fixture.quinjet.id, 0.85) : ("none", 0.95)
+        }
+        let cache = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: UsageAttributionCache(), decider: decider)
+        let scratch = try #require(cache.decisions["folder||folder:/tmp/scratch"])
+        #expect(scratch.method == .jev)
+        #expect(scratch.repository == nil)
+    }
+
+    @Test func aCachedPickBelowTheThresholdIsReleasedWithoutAskingAgain() async throws {
+        let decider = AttributionScriptedDecider { _ in ("none", 0.95) }
+        var cache = UsageAttributionCache()
+        cache.decisions["folder||folder:/tmp/scratch"] = UsageAttributionDecision(
+            method: .jev, repository: Fixture.quinjet, confidence: 0.81, folder: "scratch",
+            machine: nil, title: nil, decidedAt: Date(timeIntervalSince1970: 1_790_000_000))
+        let next = await UsageAttributionAdvisor.advise(
+            Fixture.document(), cache: cache, decider: decider)
+        let scratch = try #require(next.decisions["folder||folder:/tmp/scratch"])
+        #expect(scratch.repository == nil)
+        #expect(scratch.confidence == 0.81)
+        #expect(
+            decider.requests.allSatisfy { request in
+                guard case .fields(let state) = request.state else { return true }
+                return state["folder"] != "scratch"
+            })
+    }
+
     @Test func jevDecidesTheRestAtOrAboveTheThreshold() async throws {
         let decider = AttributionScriptedDecider { state in
-            state["folder"] == "scratch" ? (Fixture.quinjet.id, 0.8) : ("none", 0.95)
+            state["folder"] == "scratch"
+                ? (Fixture.quinjet.id, UsageAttributionAdvisor.threshold) : ("none", 0.95)
         }
         let cache = await UsageAttributionAdvisor.advise(
             Fixture.document(), cache: UsageAttributionCache(), decider: decider)

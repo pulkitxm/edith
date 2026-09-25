@@ -35,13 +35,13 @@ enum LimitAlertScenario {
     static func plan(
         _ target: LimitAlertTarget, percent: Double, reset: Date?, now: Date,
         samples: [LimitAlertSample] = [], settings: LimitAlertSettings = settings,
-        ledger: LimitAlertLedger = LimitAlertLedger()
+        ledger: LimitAlertLedger = LimitAlertLedger(), held: Set<String> = []
     ) -> LimitAlertPlan {
         let assessment = LimitAlertPlanner.assess(
             target, window: LimitWindow(percent: percent, resetsAt: reset), samples: samples,
             now: now)
         return LimitAlertPlanner.plan(
-            [assessment], ledger: ledger, settings: settings, clock: clock(now))
+            [assessment], ledger: ledger, settings: settings, clock: clock(now), held: held)
     }
 
     static func simulate(
@@ -390,6 +390,26 @@ enum LimitAlertScenario {
         #expect(await LimitAlertJevGate(decider: nil).allows(onPace.alerts[0]))
     }
 
+    @Test func aHeldAlertIsNotRecordedSoItCanStillGoOutLater() throws {
+        let now = S.start.addingTimeInterval(2 * S.hour)
+        let reset = S.start.addingTimeInterval(5 * S.hour)
+        let history = S.samples(reset, from: S.start, to: now) { 30 * S.hours($0) }
+        let proposed = S.plan(session, percent: 60, reset: reset, now: now, samples: history)
+        let alert = try #require(proposed.alerts.first)
+        let held = S.plan(
+            session, percent: 60, reset: reset, now: now, samples: history,
+            held: [alert.identifier])
+        #expect(held.alerts.isEmpty)
+        #expect(held.verdicts.first?.reason == LimitAlertPlanner.heldReason)
+        #expect(held.ledger.windows[session.id]?.sent[LimitAlertKind.onPace.rawValue] == nil)
+        let later = now.addingTimeInterval(600)
+        let laterHistory = S.samples(reset, from: S.start, to: later) { 30 * S.hours($0) }
+        let released = S.plan(
+            session, percent: 65, reset: reset, now: later, samples: laterHistory,
+            ledger: held.ledger)
+        #expect(released.alerts.map(\.kind) == [.onPace])
+    }
+
     @Test func clockFormatsMomentsRelativeToToday() {
         let clock = S.clock(S.start)
         #expect(clock.moment(S.start.addingTimeInterval(4.5 * S.hour)) == "4:30 PM")
@@ -403,13 +423,17 @@ enum LimitAlertScenario {
 
 final class LimitAlertJevProbe: JevDeciding, @unchecked Sendable {
     private let lock = NSLock()
-    private let score: Double?
+    private var storedScore: Double?
     private var recorded: [JevRequest] = []
 
     init(score: Double?) {
-        self.score = score
+        storedScore = score
     }
 
+    var score: Double? {
+        get { lock.withLock { storedScore } }
+        set { lock.withLock { storedScore = newValue } }
+    }
     var calls: Int { lock.withLock { recorded.count } }
     var requests: [JevRequest] { lock.withLock { recorded } }
 

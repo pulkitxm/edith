@@ -103,7 +103,7 @@ public enum LimitAlertPlanner {
     public static func plan(
         _ assessments: [LimitAlertAssessment], problems: [LimitProvider: LimitLoginProblem] = [:],
         healthy: Set<LimitProvider> = [], ledger: LimitAlertLedger, settings: LimitAlertSettings,
-        clock: LimitAlertClock
+        clock: LimitAlertClock, held: Set<String> = []
     ) -> LimitAlertPlan {
         var plan = LimitAlertPlan(ledger: ledger)
         let recentlyActive = assessments.contains { $0.recentlyActive }
@@ -112,7 +112,7 @@ public enum LimitAlertPlanner {
             var entry = plan.ledger.windows[assessment.target.id] ?? .init()
             var (alert, reason) = decide(
                 assessment, entry: &entry, settings: settings, clock: clock,
-                recentlyActive: recentlyActive)
+                recentlyActive: recentlyActive, vetoed: held)
             plan.ledger.windows[assessment.target.id] = entry
             if alert?.kind == .outlook {
                 if plan.ledger.outlookDay == today {
@@ -157,9 +157,12 @@ public enum LimitAlertPlanner {
         case quiet(String)
     }
 
+    public static let heldReason = "held until it is worth interrupting you"
+
     private static func decide(
         _ a: LimitAlertAssessment, entry: inout LimitAlertLedger.Entry,
-        settings: LimitAlertSettings, clock: LimitAlertClock, recentlyActive: Bool
+        settings: LimitAlertSettings, clock: LimitAlertClock, recentlyActive: Bool,
+        vetoed: Set<String>
     ) -> (LimitAlert?, String) {
         let now = clock.now
         if let known = entry.resetsAt, let reported = a.window.resetsAt, known > now,
@@ -194,6 +197,8 @@ public enum LimitAlertPlanner {
         var held: String?
         for outcome in outcomes {
             switch outcome {
+            case .fire(let alert) where vetoed.contains(alert.identifier):
+                return (nil, heldReason)
             case .fire(let alert):
                 record(alert, a, in: &entry, clock: clock)
                 return (alert, alert.reason)

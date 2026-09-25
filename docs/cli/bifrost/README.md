@@ -123,7 +123,11 @@ travel with a settings backup and can be scripted. Each takes placeholders:
 Give one a keyword and it becomes a prefix: type `gh edith` and the bar runs the
 quicklink keyed `gh` with `edith` as `{query}`, skipping every other result. A
 keyword on its own is just a search. Values going into a web URL are
-percent-encoded; everywhere else they are inserted as typed.
+percent-encoded, and snippets and file quicklinks get them as typed. Shell
+commands never see the text itself: each placeholder becomes a quoted reference
+to an environment variable (`EDITH_BIFROST_1`, `EDITH_BIFROST_2`, ...) holding
+the value, so clipboard text such as `; rm -rf ~` stays data whether the
+placeholder sits bare, inside double quotes or inside single quotes.
 
 ## Notes and gotchas
 

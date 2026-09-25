@@ -1,7 +1,7 @@
 import Foundation
 
 public struct LimitAlertJevGate: Sendable {
-    public static let threshold = 0.35
+    public static let threshold = 0.32
     public static let minimumConfidence = 0.5
     public static let timeout: TimeInterval = 10
     public static let purpose = "limit-alerts"
