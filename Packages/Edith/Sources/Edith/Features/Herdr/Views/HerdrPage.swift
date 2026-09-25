@@ -17,6 +17,7 @@ struct HerdrPage: View {
     @State private var liveRailWidth: Double?
     @State private var layoutPopoverOpen = false
     @State private var launchSettingsPresented = false
+    @State private var newAgentPopupPresented = false
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -101,6 +102,9 @@ struct HerdrPage: View {
         .sheet(isPresented: $launchSettingsPresented) {
             HerdrLaunchSettingsSheet()
         }
+        .sheet(isPresented: $newAgentPopupPresented) {
+            HerdrNewAgentPopup(store: store)
+        }
     }
 
     private func shown(_ session: HerdrOpenTab) -> HerdrOpenTab {
@@ -139,6 +143,12 @@ struct HerdrPage: View {
                 HStack(spacing: UIScale.pt(10)) {
                     spacesWindowMenu
                     spaceGroupingToggle
+                    Button {
+                        newAgentPopupPresented = true
+                    } label: {
+                        Label("New Agent", systemImage: "plus")
+                    }
+                    .buttonStyle(.edith(.toolbar))
                     Button {
                         Task { await store.refresh() }
                     } label: {
@@ -241,6 +251,8 @@ struct HerdrPage: View {
             }
             Button("") { store.reopenLastClosedTab() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button("") { newAgentPopupPresented = true }
+                .keyboardShortcut("n", modifiers: .command)
         }
         .opacity(0)
         .allowsHitTesting(false)

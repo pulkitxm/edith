@@ -540,6 +540,97 @@ private actor HerdrWatchHarness {
         #expect(store.sessions.first?.view == .diff)
     }
 
+    @Test func launchNewAgentResolvesTheLocalHostToANilMachine() async throws {
+        actor Recorder {
+            var calls:
+                [(kind: String, machine: Machine?, space: HerdrWorkspaceSummary?, label: String?)] =
+                    []
+            func record(
+                _ kind: String, _ machine: Machine?, _ space: HerdrWorkspaceSummary?,
+                _ label: String?
+            ) {
+                calls.append((kind, machine, space, label))
+            }
+        }
+        let recorder = Recorder()
+        let store = HerdrStore(
+            newAgentLauncher: { kind, machine, space, label in
+                await recorder.record(kind, machine, space, label)
+                return HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
+            })
+
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "new-space")
+
+        let calls = await recorder.calls
+        #expect(calls.count == 1)
+        #expect(calls[0].kind == "Claude Code")
+        #expect(calls[0].machine == nil)
+        #expect(calls[0].space == nil)
+        #expect(calls[0].label == "new-space")
+        #expect(store.tabs.map(\.agentIDs) == [["local|default|w9:p1"]])
+        #expect(store.currentTab?.agentIDs == ["local|default|w9:p1"])
+        #expect(store.sessions.first?.agent.workspace == "new-space")
+    }
+
+    @Test func launchNewAgentResolvesARemoteHostToItsMachine() async throws {
+        let machine = Machine(name: "tuf-wired", host: "tuf-wired.local")
+        actor Recorder {
+            var machines: [Machine?] = []
+            func record(_ machine: Machine?) { machines.append(machine) }
+        }
+        let recorder = Recorder()
+        let store = HerdrStore(
+            newAgentLauncher: { _, machine, _, _ in
+                await recorder.record(machine)
+                return HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
+            },
+            machinesProvider: { [machine] })
+        let space = HerdrWorkspaceSummary(id: "w1", label: "edith", tabCount: 1, paneCount: 1)
+
+        try await store.launchNewAgent(
+            kind: "Codex",
+            host: HerdrHostSnapshot(
+                id: machine.id.uuidString, name: machine.name, isLocal: false, herdrPresent: true,
+                reachable: true),
+            existingSpace: space, newSpaceLabel: nil)
+
+        #expect(await recorder.machines == [machine])
+        #expect(store.sessions.first?.agent.workspace == "edith")
+    }
+
+    @Test func launchNewAgentOpensBesideTheCurrentTabWhenRequested() async throws {
+        let existing = agent("Claude Code", pane: "existing")
+        let store = HerdrStore(
+            newAgentLauncher: { _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
+            })
+        store.hosts = [.local(herdrPresent: true, agents: [existing])]
+        store.open(existing)
+        let existingTabID = store.selectedTab
+
+        try await store.launchNewAgent(
+            kind: "Codex", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "new-space", openBeside: true)
+
+        #expect(store.tabs.count == 1)
+        #expect(store.selectedTab == existingTabID)
+        #expect(store.currentTab?.isSplit == true)
+        #expect(store.currentTab?.agentIDs.contains("local|default|w9:p1") == true)
+    }
+
+    @Test func launchNewAgentPropagatesLauncherErrors() async {
+        struct LaunchFailure: Error {}
+        let store = HerdrStore(newAgentLauncher: { _, _, _, _ in throw LaunchFailure() })
+        await #expect(throws: LaunchFailure.self) {
+            try await store.launchNewAgent(
+                kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+                newSpaceLabel: "x")
+        }
+        #expect(store.tabs.isEmpty)
+    }
+
     private static func scratchDefaults() -> UserDefaults {
         let suite = "HerdrStoreTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
