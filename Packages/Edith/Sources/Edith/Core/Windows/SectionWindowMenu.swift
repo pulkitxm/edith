@@ -264,7 +264,8 @@ enum SectionWindowMenu {
                     return CloseCommand.perform(on: NSApp.keyWindow)
                 }
                 if flags == .command, characters?.lowercased() == "k",
-                    SessionSearchCommand.perform(in: window)
+                    SessionSearchCommand.perform(
+                        in: window, store: .shared, sessionsOnScreen: sessionsIsOnScreen)
                 {
                     return true
                 }
@@ -357,8 +358,7 @@ enum CloseCommand {
 @MainActor
 enum SessionSearchCommand {
     static func perform(
-        in window: NSWindow?, store: HerdrStore = .shared,
-        sessionsOnScreen: () -> Bool = sessionsIsOnScreen
+        in window: NSWindow?, store: HerdrStore, sessionsOnScreen: @MainActor () -> Bool
     ) -> Bool {
         guard window?.identifier?.rawValue == MainWindowIdentifier.value, sessionsOnScreen()
         else { return false }
@@ -368,7 +368,7 @@ enum SessionSearchCommand {
 }
 
 @MainActor
-func sessionsIsOnScreen() -> Bool {
+private func sessionsIsOnScreen() -> Bool {
     SharedDefaults.store.string(forKey: AppStorageKeys.General.mainWindowSection)
         == MainDestination.herdr.rawValue
 }
