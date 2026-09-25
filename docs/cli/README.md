@@ -60,6 +60,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [Video editor](./video-editor/README.md) | Import media, edit on a timeline, and export MP4 or GIF |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
+| [`ed camera`](./camera/README.md) | Edith Camera: framing, looks, backgrounds, overlays, scenes and pausing for any video app |
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |

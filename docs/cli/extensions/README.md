@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all thirty |
+| `ed extensions status [id]` | Summarises readiness for one extension or all thirty-two |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all thirty, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all thirty-two, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithCore is the single list every command here
-walks, and its order is the order `ls` prints. Thirty entries, in this order:
+walks, and its order is the order `ls` prints. Thirty-two entries, in this order:
 
 | ID | Name | Suite | What it does |
 | --- | --- | --- | --- |
@@ -77,17 +77,19 @@ walks, and its order is the order `ls` prints. Thirty entries, in this order:
 | `focusDim` | Focus Dim | Desk | Dims everything behind your active app |
 | `windowSweaters` | Window Sweaters | Desk | Knitted borders around your windows, in each app's own colours |
 | `presenter` | Presenter | Desk | Blurs sensitive numbers while sharing your screen |
+| `videoEditor` | Video editor | Media | Import clips, add zooms and text, then export your video |
 | `music` | Music | Media | Plays your local music folder, with media keys and a player bar |
 | `downloads` | Downloads | Media | Queue audio and video downloads that survive quitting the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `audioMixer` | Audio Mixer | Media | Per-app volume from the notch shelf |
 | `notchBrowser` | Notch Browser | Media | Tabbed web browsing in the notch, signed in with a Chrome profile |
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
+| `virtualCamera` | Virtual Camera | Media | Frame, zoom and style your camera, then pick Edith Camera in any call |
 | `database` | Database | Data | Explore databases and run guarded production mutations |
 | `attention` | Attention | Data | Understand where your time goes and protect focused work! |
 | `seoAudit` | Site Audit | Data | Crawl sitemaps, inspect page metadata, and keep every run local |
 
-The same thirty, with what each one is made of. `Key` is the preference the app
+The same thirty-two, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 twelve the welcome tour shows before you ask it for all of them.
 
@@ -114,12 +116,14 @@ twelve the welcome tour shows before you ask it for all of them.
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `windowSweaters` | `windowSweatersEnabled` | no | none | `accessibility` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `videoEditor` | `tabVideoEditorEnabled` | yes | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | none |
 | `downloads` | `downloadsEnabled` | no | none | none | `yt-dlp` | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none | none |
 | `audioMixer` | `notchAudioMixerEnabled` | no | none | `applicationAudio` | none | none |
 | `notchBrowser` | `notchBrowserEnabled` | no | none | none | none | none |
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
+| `virtualCamera` | `virtualCameraEnabled` | yes | `camera` | none | none | none |
 | `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `attention` | `tabAttentionEnabled` | yes | none | none | none | none |
 | `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
@@ -151,12 +155,14 @@ the current platform, and which missing implementations merely degrade it:
 | `focusDim` | `windowDimming` | none |
 | `windowSweaters` | `windowDecoration` | none |
 | `presenter` | `screenShareDetection` | none |
+| `videoEditor` | `localVideoEditing` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |
 | `downloads` | `mediaDownloads` | none |
 | `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `audioMixer` | `applicationAudio` | none |
 | `notchBrowser` | `webBrowsing` | none |
 | `calendar` | `calendarEvents` | none |
+| `virtualCamera` | `virtualCamera` | none |
 | `database` | `databaseBroker` | none |
 | `attention` | `runningApplications` | none |
 | `seoAudit` | `siteAuditing` | none |
