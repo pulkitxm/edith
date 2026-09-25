@@ -15,13 +15,18 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.272</string>
+	<string>0.0.274</string>
 	<key>CFBundleVersion</key>
-	<string>283</string>
+	<string>285</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Edith controls playback in Spotify and Apple Music from the notch.</string>
 	<key>NSAudioCaptureUsageDescription</key>

@@ -238,6 +238,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "audioMixer": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "notchBrowser": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 
     public let environment: ExtensionLifecycleProbeEnvironment

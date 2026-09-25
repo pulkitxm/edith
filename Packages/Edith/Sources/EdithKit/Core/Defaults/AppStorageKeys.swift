@@ -262,6 +262,8 @@ public enum AppStorageKeys {
         public static let alertPower = "notchAlertPower"
         public static let alertsEnabled = "notchAlertsEnabled"
         public static let audioMixerEnabled = "notchAudioMixerEnabled"
+        public static let browserEnabled = "notchBrowserEnabled"
+        public static let browserSearchEngine = "notchBrowserSearchEngine"
         public static let shelfEnabled = "notchShelfEnabled"
         public static let shelfHaptics = "notchShelfHaptics"
         public static let shelfKeepDuration = "notchShelfKeepDuration"

@@ -93,6 +93,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case calendar
     case notchShelf
     case audioMixer
+    case notchBrowser
     case clipboard
     case keystrokeHighlight
     case focusDim

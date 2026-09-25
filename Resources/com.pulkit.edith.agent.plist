@@ -14,7 +14,7 @@
 	<key>KeepAlive</key>
 	<true/>
 	<key>ProcessType</key>
-	<string>Background</string>
+	<string>Adaptive</string>
 	<key>AssociatedBundleIdentifiers</key>
 	<array>
 		<string>com.pulkit.edith</string>

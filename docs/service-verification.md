@@ -60,6 +60,7 @@ Use the actual build directory for the selected architecture and configuration. 
 | Downloads | Daemon queue restart and child cleanup fixture | A real download from an external media service |
 | Notch Shelf | Stored index, thumbnail, and service lifecycle tests | Drag and drop, camera preview, and device detection |
 | Audio Mixer | Injected tap lifecycle and gain tests | Actual audio permission and hardware processing |
+| Notch Browser | Chrome profile, cookie decryption, LevelDB local storage, tab and resize tests | A live Chrome profile and the Keychain prompt |
 | Calendar | Permission lifecycle and event reads | External account refresh and calendar changes |
 | Database | Broker readiness and adapter tests | Every configured external database and write operation |
 | Attention | Seven daemon and four durable-delivery fixture checks | Browser extension activity across supported browsers |
