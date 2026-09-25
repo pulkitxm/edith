@@ -62,6 +62,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
                 }
             }
         }
+        healthTimer?.tolerance = 2
     }
 
     private func installEventTap() -> Bool {

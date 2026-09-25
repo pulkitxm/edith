@@ -95,15 +95,23 @@ final class FocusDimEngine: FeatureModule {
         FocusDimHotKey.register()
         let previousMode = displayMode
         loadSettings()
-        guard CGPreflightScreenCaptureAccess(), FocusDimState.isActive() else {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = animationDuration
-                overlays.values.forEach { $0.animator().alphaValue = 0 }
-            }
+        guard FocusDimState.isActive(), CGPreflightScreenCaptureAccess() else {
+            let windows = Array(overlays.values)
+            NSAnimationContext.runAnimationGroup(
+                { ctx in
+                    ctx.duration = animationDuration
+                    windows.forEach { $0.animator().alphaValue = 0 }
+                },
+                completionHandler: {
+                    guard !FocusDimState.isActive() else { return }
+                    windows.forEach { $0.orderOut(nil) }
+                })
             return
         }
         if displayMode != previousMode {
             reposition(animateIn: false)
+        } else if overlays.values.contains(where: { !$0.isVisible }) {
+            reposition(animateIn: true)
         } else {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = animationDuration
@@ -146,8 +154,11 @@ final class FocusDimEngine: FeatureModule {
         let generation = repositionGeneration
         repositionTask?.cancel()
         repositionTask = nil
-        guard CGPreflightScreenCaptureAccess(), FocusDimState.isActive() else {
-            overlays.values.forEach { $0.alphaValue = 0 }
+        guard FocusDimState.isActive(), CGPreflightScreenCaptureAccess() else {
+            for overlay in overlays.values {
+                overlay.alphaValue = 0
+                overlay.orderOut(nil)
+            }
             return
         }
         let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1

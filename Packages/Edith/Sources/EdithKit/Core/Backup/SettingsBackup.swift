@@ -1043,6 +1043,8 @@ final class SettingsBackup {
     private var musicBackupTask: Task<Void, Never>?
     private var clipboardBackupTask: Task<Void, Never>?
     private var debounce: Timer?
+    private var queuedSettingsData: Data?
+    private var queuedSettingsAt = Date.distantPast
     private var sweep: Timer?
     nonisolated static let sweepInterval: TimeInterval = 30
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
@@ -1863,6 +1865,12 @@ final class SettingsBackup {
     func export() {
         guard !settingsRestorePending else { return }
         guard let data = snapshot() else { return }
+        let now = Date()
+        guard data != queuedSettingsData || now.timeIntervalSince(queuedSettingsAt) >= 120 else {
+            return
+        }
+        queuedSettingsData = data
+        queuedSettingsAt = now
         pendingSettingsData = data
         guard settingsExportTask == nil else { return }
         settingsExportGeneration += 1

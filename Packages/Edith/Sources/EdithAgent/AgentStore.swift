@@ -137,6 +137,7 @@ public final class AgentStore: @unchecked Sendable {
         var configuration = Configuration()
         configuration.prepareDatabase { database in
             try database.execute(sql: "PRAGMA journal_mode = WAL")
+            try database.execute(sql: "PRAGMA synchronous = NORMAL")
             try database.execute(sql: "PRAGMA foreign_keys = ON")
         }
         pool = try DatabasePool(path: url.path, configuration: configuration)

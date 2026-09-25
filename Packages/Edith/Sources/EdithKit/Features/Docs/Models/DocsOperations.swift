@@ -5,6 +5,8 @@ public enum DocsOperation: String, CaseIterable, Equatable, Sendable {
     case show
     case ask
 
+    public static let askPurpose = "docs.ask"
+
     public var descriptor: UserOperationDescriptor {
         switch self {
         case .list:

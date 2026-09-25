@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 
 public enum DocsAskEngine: String, Sendable, Codable {
@@ -22,7 +23,7 @@ public struct DocsAnswer: Sendable, Equatable {
 }
 
 public enum DocsAsk {
-    public static let purpose = "docs.ask"
+    public static let purpose = DocsOperation.askPurpose
     public static let minimumConfidence = 0.15
     public static let limit = 5
 

@@ -346,16 +346,8 @@ import Testing
     }
 
     @Test func ghosttySurfaceIdentitySurvivesRepresentableReconstruction() {
-        let key = AppStorageKeys.Herdr.ghosttyTerminal
-        let previous = SharedDefaults.store.object(forKey: key)
-        SharedDefaults.store.set(true, forKey: key)
-        defer {
-            if let previous {
-                SharedDefaults.store.set(previous, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
+        let engine = GhosttyEngineFixture(enabled: true)
+        defer { engine.restore() }
 
         let holder = TerminalSessionHolder()
         holder.start(executable: "/usr/bin/true", arguments: [], environment: [])
@@ -401,20 +393,15 @@ import Testing
     }
 
     @Test func ghosttyIsTheDefaultTerminalWithAnExplicitFallback() {
-        let key = AppStorageKeys.Herdr.ghosttyTerminal
-        let previous = SharedDefaults.store.object(forKey: key)
-        defer {
-            if let previous {
-                SharedDefaults.store.set(previous, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
+        let engine = GhosttyEngineFixture(enabled: nil)
+        defer { engine.restore() }
 
-        SharedDefaults.store.removeObject(forKey: key)
         #expect(GhosttyTerminals.enabled)
-        SharedDefaults.store.set(false, forKey: key)
+        engine.set(false)
         #expect(!GhosttyTerminals.enabled)
+        #expect(
+            ConfigCatalog.definition(for: AppStorageKeys.Herdr.ghosttyTerminal)?.fallback
+                == .bool(true))
     }
 
     @Test func ghosttyRendersOnlyWhileItsSurfaceIsVisible() {
@@ -451,16 +438,30 @@ import Testing
     private func withGhosttyEnabled(
         _ enabled: Bool, operation: () async throws -> Void
     ) async rethrows {
-        let key = AppStorageKeys.Herdr.ghosttyTerminal
-        let previous = SharedDefaults.store.object(forKey: key)
-        SharedDefaults.store.set(enabled, forKey: key)
-        defer {
-            if let previous {
-                SharedDefaults.store.set(previous, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
+        let engine = GhosttyEngineFixture(enabled: enabled)
+        defer { engine.restore() }
         try await operation()
+    }
+}
+
+struct GhosttyEngineFixture {
+    private let previous: UserDefaults
+    private let suiteName = "com.pulkit.edith.tests.ghostty.\(UUID().uuidString)"
+    private let store: UserDefaults
+
+    init(enabled: Bool?) {
+        previous = GhosttyTerminals.defaults
+        store = UserDefaults(suiteName: suiteName)!
+        if let enabled { store.set(enabled, forKey: AppStorageKeys.Herdr.ghosttyTerminal) }
+        GhosttyTerminals.defaults = store
+    }
+
+    func set(_ enabled: Bool) {
+        store.set(enabled, forKey: AppStorageKeys.Herdr.ghosttyTerminal)
+    }
+
+    func restore() {
+        GhosttyTerminals.defaults = previous
+        store.removePersistentDomain(forName: suiteName)
     }
 }

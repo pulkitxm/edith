@@ -695,8 +695,30 @@ final class DashboardModel {
 
     func reloadPreferences() {
         guard loaded else { return }
+        let before = preferenceState
         restore()
+        guard preferenceState != before else { return }
         recompute()
+    }
+
+    private struct PreferenceState: Equatable {
+        let range: String
+        let sources: Set<String>
+        let models: Set<String>
+        let paths: Set<String>
+        let sort: String
+        let sortAscending: Bool
+        let projectSort: String
+        let projectSortAscending: Bool
+        let heatMetric: String
+    }
+
+    private var preferenceState: PreferenceState {
+        PreferenceState(
+            range: encodeRange(range), sources: selectedSources, models: selectedModels,
+            paths: selectedPaths, sort: sortColumn.rawValue, sortAscending: sortAscending,
+            projectSort: projSortKey.rawValue, projectSortAscending: projSortAscending,
+            heatMetric: heatMetric.rawValue)
     }
 
     private func restore() {
@@ -705,7 +727,7 @@ final class DashboardModel {
         let d = preferences
         if let rs = d.string(forKey: "dashRange") {
             range = decodeRange(rs)
-            d.set(encodeRange(range), forKey: "dashRange")
+            d.setIfChanged(encodeRange(range), forKey: "dashRange")
         }
         let validSources = Set(allSources.map(\.id))
         let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
@@ -738,9 +760,9 @@ final class DashboardModel {
         }
         knownSources = validSources
         knownModels = validModels
-        d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
-        d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
-        d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+        d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
+        d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+        d.setIfChanged(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
     }
 
     private func reconcile() {
@@ -753,7 +775,7 @@ final class DashboardModel {
                 defaults: Set(defaultSources))
         selectedSources = keptSources
         knownSources = validSources
-        preferences.set(
+        preferences.setIfChanged(
             knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         let validModels = Set(allModels)
         let keptModels =
@@ -761,8 +783,10 @@ final class DashboardModel {
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
         selectedPaths = reconciledPaths(selectedPaths)
-        preferences.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
-        preferences.set(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+        preferences.setIfChanged(
+            selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+        preferences.setIfChanged(
+            selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
     }
 
     private func reconciledPaths(_ paths: Set<String>) -> Set<String> {
@@ -784,25 +808,26 @@ final class DashboardModel {
         let d = preferences
         switch setting {
         case .range:
-            d.set(encodeRange(range), forKey: "dashRange")
+            d.setIfChanged(encodeRange(range), forKey: "dashRange")
         case .sources:
-            d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
-            d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
-            d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+            d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
+            d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+            d.setIfChanged(
+                UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
         case .models:
-            d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+            d.setIfChanged(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
         case .paths:
-            d.set(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+            d.setIfChanged(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
         case .sort:
-            d.set(sortColumn.rawValue, forKey: "dashSort")
+            d.setIfChanged(sortColumn.rawValue, forKey: "dashSort")
         case .sortAscending:
-            d.set(sortAscending, forKey: "dashSortAsc")
+            d.setIfChanged(sortAscending, forKey: "dashSortAsc")
         case .projSort:
-            d.set(projSortKey.rawValue, forKey: "projSort")
+            d.setIfChanged(projSortKey.rawValue, forKey: "projSort")
         case .projSortAscending:
-            d.set(projSortAscending, forKey: "projSortAsc")
+            d.setIfChanged(projSortAscending, forKey: "projSortAsc")
         case .heatMetric:
-            d.set(heatMetric.rawValue, forKey: "dashHeatMetric")
+            d.setIfChanged(heatMetric.rawValue, forKey: "dashHeatMetric")
         }
     }
 

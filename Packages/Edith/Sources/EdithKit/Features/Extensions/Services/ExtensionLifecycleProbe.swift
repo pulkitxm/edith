@@ -20,6 +20,9 @@ public enum ExtensionToolReadiness: Equatable, Sendable {
 }
 
 public struct ExtensionLifecycleProbeEnvironment: Sendable {
+    nonisolated(unsafe) public static var databaseReadiness:
+        (@Sendable () async -> ExtensionAdapterReadiness)?
+
     public var isEnabled: @Sendable (ExtensionRegistryEntry) -> Bool
     public var grantedPermissions: @Sendable () -> [ExtensionPermission: Bool]
     public var toolReadiness: @Sendable (String) async -> ExtensionToolReadiness
@@ -75,8 +78,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
-            case "database":
-                await DatabaseBrokerExtensionReadinessAdapter().readiness()
+            case "database": await databaseReadiness?()
             case "companion": nil
             case "herdr": await herdrReadiness()
             default: await ExtensionLiveAdapters.readiness(for: id)

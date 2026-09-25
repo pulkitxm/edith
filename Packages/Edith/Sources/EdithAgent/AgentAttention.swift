@@ -21,6 +21,7 @@ public struct AgentAttention: Sendable {
         @Sendable ([HerdrAttentionProbe]) async -> [String: HerdrAttentionEvidence]
 
     public static let kinds = ["blocked", "finished", "error", "stuck"]
+    static let concurrencyLimit = 4
 
     var inspect: Inspect
     var decider: @Sendable () async -> JevDeciding?
@@ -57,36 +58,69 @@ public struct AgentAttention: Sendable {
         -> [AttentionOutcome]
     {
         let decider = await decider()
-        var outcomes: [AttentionOutcome] = []
-        for hostChecks in Dictionary(grouping: checks, by: \.hostID).values {
-            let probes = hostChecks.map { check in
-                HerdrAttentionProbe(
-                    agent: check.agent,
-                    countChanges: check.event == .finished
-                        && (settings.finished || settings.openDiff))
+        let hosts = Array(Dictionary(grouping: checks, by: \.hostID).values)
+        return await withTaskGroup(of: [AttentionOutcome].self) { group in
+            let limit = Self.concurrencyLimit
+            var outcomes: [AttentionOutcome] = []
+            for (offset, hostChecks) in hosts.enumerated() {
+                if offset >= limit, let finished = await group.next() {
+                    outcomes += finished
+                }
+                group.addTask {
+                    await resolve(hostChecks, settings: settings, decider: decider)
+                }
             }
-            let evidence = await inspect(probes)
-            for check in hostChecks {
+            for await finished in group { outcomes += finished }
+            return outcomes
+        }
+    }
+
+    private func resolve(
+        _ hostChecks: [AttentionCheck], settings: AgentAttentionSettings,
+        decider: JevDeciding?
+    ) async -> [AttentionOutcome] {
+        let probes = hostChecks.map { check in
+            HerdrAttentionProbe(
+                agent: check.agent,
+                countChanges: check.event == .finished && (settings.finished || settings.openDiff),
+                readsExplain: check.event != .blocked)
+        }
+        let evidence = await inspect(probes)
+        let verdicts = await withTaskGroup(of: (Int, HerdrAttentionVerdict).self) { group in
+            let limit = Self.concurrencyLimit
+            var verdicts: [Int: HerdrAttentionVerdict] = [:]
+            for (index, check) in hostChecks.enumerated() {
+                if index >= limit, let (finished, verdict) = await group.next() {
+                    verdicts[finished] = verdict
+                }
                 let item = evidence[check.agent.id] ?? HerdrAttentionEvidence()
-                let fingerprint = item.screen?.fingerprint
                 let stalled =
-                    check.fingerprint != nil && fingerprint == check.fingerprint
+                    check.fingerprint != nil && item.screen?.fingerprint == check.fingerprint
                     ? settings.stuckMinutes : nil
-                var verdict = HerdrAttentionClassifier.verdict(
+                let verdict = HerdrAttentionClassifier.verdict(
                     event: check.event, evidence: item, stalledMinutes: stalled)
-                if let decider, item.screen != nil {
-                    verdict = await HerdrAttentionClassifier.refine(
+                guard let decider, item.screen != nil else {
+                    group.addTask { (index, verdict) }
+                    continue
+                }
+                group.addTask {
+                    let refined = await HerdrAttentionClassifier.refine(
                         verdict, agent: check.agent, event: check.event, evidence: item,
                         decider: decider)
+                    return (index, refined)
                 }
-                outcomes.append(
-                    AttentionOutcome(
-                        agentID: check.agent.id, hostID: check.hostID, fingerprint: fingerprint,
-                        notification: notification(
-                            for: check, verdict: verdict, settings: settings)))
             }
+            for await (index, verdict) in group { verdicts[index] = verdict }
+            return verdicts
         }
-        return outcomes
+        return hostChecks.enumerated().map { index, check in
+            AttentionOutcome(
+                agentID: check.agent.id, hostID: check.hostID,
+                fingerprint: evidence[check.agent.id]?.screen?.fingerprint,
+                notification: verdicts[index].flatMap {
+                    notification(for: check, verdict: $0, settings: settings)
+                })
+        }
     }
 
     func notification(

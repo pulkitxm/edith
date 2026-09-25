@@ -74,6 +74,8 @@ struct CompanionPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.windowVisible) private var windowVisible
+    @State private var checkedSetup = false
     @Namespace private var tabGlow
     @State private var refreshTick = 0
     @State private var visited: Set<CompanionTab> = []
@@ -106,13 +108,13 @@ struct CompanionPage: View {
             }
             return true
         }
-        .task {
-            guard requestsEnabled else { return }
-            var first = true
+        .task(id: windowVisible) {
+            guard requestsEnabled, windowVisible else { return }
             while !Task.isCancelled {
                 await home.refresh()
-                if first {
-                    first = false
+                guard !Task.isCancelled else { return }
+                if !checkedSetup {
+                    checkedSetup = true
                     if CompanionDeploymentStore.load() == nil, !home.reachable,
                         !setupDeclined
                     {
@@ -121,7 +123,7 @@ struct CompanionPage: View {
                         select(.setup)
                     }
                 }
-                try? await Task.sleep(for: .seconds(20))
+                try? await Task.sleep(for: .seconds(20), tolerance: .seconds(2))
             }
         }
     }

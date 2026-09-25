@@ -40,7 +40,7 @@ public enum ClaudeShellProcessRunner {
             discardsStandardError: true,
             terminatesProcessGroup: true)
         do {
-            let result = try await CLICommandRunner.run(request) { _ in }
+            let result = try await CLICommandRunner.runLocal(request) { _ in }
             guard result.terminationStatus == 0 else { return .failed }
             return .output(result.outputData)
         } catch is CancellationError {
@@ -152,8 +152,11 @@ public struct ClaudeShellCredentialResolver: Sendable {
         guard startParts.count == 2 else { return .malformed }
         let endParts = startParts[1].components(separatedBy: end)
         guard endParts.count == 2 else { return .malformed }
-        let token = endParts[0]
-        guard !token.isEmpty else { return .missing }
+        return Self.resolution(token: endParts[0])
+    }
+
+    public static func resolution(token: String?) -> ClaudeShellCredentialResolution {
+        guard let token, !token.isEmpty else { return .missing }
         guard let credential = ClaudeOAuthCredential.transient(accessToken: token) else {
             return .malformed
         }
@@ -193,15 +196,25 @@ public final class ClaudeCredentialSession {
     private var rejectedAccessToken: String?
     private let persistedReader: PersistedReader
     private let shellReader: ShellReader
+    private let refreshShell: () async -> Void
 
     public init(
         persistedReader: @escaping PersistedReader = ClaudeCredentialStore.read,
         shellReader: @escaping ShellReader = {
-            await ClaudeShellCredentialResolver().resolve()
+            if let token = UserShellEnvironment.shared.current()?["CLAUDE_CODE_OAUTH_TOKEN"],
+                !token.isEmpty
+            {
+                return ClaudeShellCredentialResolver.resolution(token: token)
+            }
+            return await ClaudeShellCredentialResolver().resolve()
+        },
+        refreshShell: @escaping () async -> Void = {
+            await UserShellEnvironment.shared.refreshIfEnabled()
         }
     ) {
         self.persistedReader = persistedReader
         self.shellReader = shellReader
+        self.refreshShell = refreshShell
     }
 
     public func current() async -> ClaudeCredentialLookup {
@@ -211,7 +224,10 @@ public final class ClaudeCredentialSession {
 
     public func reload(rejectingAccessToken: String? = nil) async -> ClaudeCredentialLookup {
         cached = nil
-        if let rejectingAccessToken { rejectedAccessToken = rejectingAccessToken }
+        if let rejectingAccessToken {
+            rejectedAccessToken = rejectingAccessToken
+            await refreshShell()
+        }
         return await load()
     }
 

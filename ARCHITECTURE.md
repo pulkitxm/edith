@@ -18,6 +18,7 @@ and sensitive data remains on hosts chosen by the user.
 | `Packages/Edith/Sources/EdithKit` | Shared macOS models, services, defaults, agent protocol, paths, and update support. |
 | `Packages/Edith/Sources/EdithCore` | Platform-neutral suite, ability, and capability models. |
 | `Packages/Edith/Sources/EdithCLI` | Command tree, configuration, remote operations, and machine-readable output. |
+| `Packages/Edith/Sources/EdithDocs` | Bundled `ed` reference parsing, search, and Docs Ask ranking, linked only by the app and CLI so the helper and agent skip the Markdown parser. |
 | `Packages/Edith/Sources/EdithLidAwakeHelper` | Privileged lid-awake helper executable. |
 | `apps/companion` | Optional Rust service for private memory, retrieval, and media processing. |
 | `apps/site` | Static product and policy website deployed through GitHub Pages. |
@@ -56,7 +57,17 @@ system, subscription, queue), an ambient cadence that runs with no window open,
 a live cadence that applies while an XPC subscriber holds its topic, and a
 power policy. Subscribing to a topic raises the cadence; dropping the last
 subscriber lowers it. A job whose ability is off reports `disabled` rather than
-running.
+running. While Low Power Mode is on or the Mac reports serious thermal
+pressure, ambient cadences stretch threefold; live cadences are unchanged.
+
+launchd starts the agent, Edith Bar and the app with a minimal environment, so
+each captures the user's login shell environment once (`$SHELL -l -i -c` around
+`env -0`) and refreshes it in the background when a zsh, bash, fish or
+`/etc/paths` file changes or after an hour. Child processes get the shell's
+PATH first plus any exported variable they do not already set, so tools and
+exports from the user's rc files work without restarting Edith. Session,
+locale, SSH agent, dynamic loader and provider API key variables stay as
+launchd set them.
 
 The XPC hub listens on `com.pulkit.edith.agent`. Peers are authenticated with
 `NSXPCListener.setConnectionCodeSigningRequirement`, built from the agent's own

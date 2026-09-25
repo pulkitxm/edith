@@ -118,7 +118,7 @@ struct SkillInstallSheet: View {
                                     Text(
                                         agent.resolvedDirectory(
                                             home: FileManager.default.homeDirectoryForCurrentUser,
-                                            environment: ProcessInfo.processInfo.environment
+                                            environment: UserShellEnvironment.userEnvironment()
                                         ).path.replacingOccurrences(
                                             of: FileManager.default.homeDirectoryForCurrentUser
                                                 .path,

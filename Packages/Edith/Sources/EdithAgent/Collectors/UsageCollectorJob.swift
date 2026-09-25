@@ -151,15 +151,17 @@ public final class UsageCollectorJob: @unchecked Sendable {
         runner: @escaping @Sendable () async throws -> UsageRefreshResult = {
             let request = UsageMachineRefreshRequests.shared.take()
             let deadline = ContinuousClock.now.advanced(by: .seconds(900))
+            var retryDelay = Duration.milliseconds(150)
             do {
                 while true {
                     try Task.checkCancellation()
                     do {
                         let result = try await UsageRefreshRunner.run(
                             machinePolicy: request.machinePolicy, runID: request.runID)
-                        let engine = AgentJev.engine
-                        await UsageAttributionAdvisor.run(
-                            decider: await engine.isConfigured ? engine : nil)
+                        await UsageAttributionAdvisor.schedule {
+                            let engine = AgentJev.engine
+                            return await engine.isConfigured ? engine : nil
+                        }
                         return result
                     } catch UsageRefreshFailure.busy {
                         if ContinuousClock.now >= deadline {
@@ -169,7 +171,8 @@ public final class UsageCollectorJob: @unchecked Sendable {
                             throw UsageRefreshFailure.timedOut
                         }
                     }
-                    try await Task.sleep(for: .milliseconds(150))
+                    try await Task.sleep(for: retryDelay)
+                    retryDelay = min(retryDelay * 2, .seconds(5))
                 }
             } catch is CancellationError {
                 UsageRefreshRunner.recordFailure(

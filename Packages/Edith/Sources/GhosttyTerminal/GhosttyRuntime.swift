@@ -142,7 +142,8 @@ public final class GhosttyRuntime {
             .appendingPathComponent("edith-ghostty", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("\(abs(theme.configuration.hashValue)).conf")
+        let file = directory.appendingPathComponent(
+            "\(Self.stableHash(theme.configuration)).conf")
         do {
             try theme.configuration.write(to: file, atomically: true, encoding: .utf8)
         } catch {
@@ -153,6 +154,15 @@ public final class GhosttyRuntime {
         file.path.withCString { ghostty_config_load_file(cfg, $0) }
         ghostty_config_finalize(cfg)
         return cfg
+    }
+
+    static func stableHash(_ text: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 16)
     }
 
     private static func from(_ userdata: UnsafeMutableRawPointer?) -> GhosttyRuntime? {

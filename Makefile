@@ -40,6 +40,7 @@ icon:
 	done; \
 	iconutil -c icns AppIcon.iconset -o Resources/AppIcon.icns; \
 	rm -rf AppIcon.iconset; \
+	sips -z 128 128 "$$ARTWORK" --out $(PKG)/Sources/EdithKit/Resources/share-icon.png >/dev/null; \
 	cp "$$ARTWORK" $(PKG)/Sources/EdithHelper/MenuBar.png; \
 	sips -c 942 942 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null; \
 	sips -z 80 80 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null

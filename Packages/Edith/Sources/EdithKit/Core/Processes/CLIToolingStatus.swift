@@ -48,7 +48,7 @@ public struct CLIToolStatus: Equatable, Sendable {
 extension CLIInstaller {
     public static func status(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = UserShellEnvironment.userEnvironment(),
         fileManager: FileManager = .default
     ) -> CLIToolStatus {
         let target = preferredDirectory(home: home, fileManager: fileManager)

@@ -4,6 +4,7 @@ import Testing
 
 @testable import Edith
 @testable import EdithCLI
+@testable import EdithDocs
 
 enum DocsFixture {
     static let library: DocsLibrary = DocsLibrary.bundled()!

@@ -28,6 +28,19 @@ public final class PlaybackLevel: ObservableObject {
     public static let neutral = 0.5
 
     @Published public private(set) var level = PlaybackLevel.neutral
+    public private(set) var viewers = 0
+    public var onViewersChange: (() -> Void)?
+
+    public func attachViewer() {
+        viewers += 1
+        if viewers == 1 { onViewersChange?() }
+    }
+
+    public func detachViewer() {
+        guard viewers > 0 else { return }
+        viewers -= 1
+        if viewers == 0 { onViewersChange?() }
+    }
 
     public func update(_ value: Double) {
         let next = min(max(value, 0), 1)
@@ -82,6 +95,7 @@ private final class WaveBarsView: NSView {
     private var barColor = NSColor.white
     private var level = CGFloat(PlaybackLevel.neutral)
     private var levelObserver: AnyCancellable?
+    private var viewing = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -94,6 +108,19 @@ private final class WaveBarsView: NSView {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    deinit {
+        guard viewing else { return }
+        Task { @MainActor in PlaybackLevel.shared.detachViewer() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        let visible = window != nil
+        guard visible != viewing else { return }
+        viewing = visible
+        visible ? PlaybackLevel.shared.attachViewer() : PlaybackLevel.shared.detachViewer()
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

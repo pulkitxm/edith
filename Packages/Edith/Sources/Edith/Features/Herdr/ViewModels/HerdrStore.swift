@@ -511,9 +511,11 @@ final class HerdrStore {
     }
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
-        hosts = snapshots
+        if hosts != snapshots { hosts = snapshots }
         for index in sessions.indices {
-            if let updated = agents.first(where: { $0.id == sessions[index].id }) {
+            if let updated = agents.first(where: { $0.id == sessions[index].id }),
+                sessions[index].agent != updated
+            {
                 sessions[index].agent = updated
             }
         }

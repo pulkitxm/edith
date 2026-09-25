@@ -22,6 +22,7 @@ final class SweaterEngine: FeatureModule {
         self.tracker = tracker
         let reconciler = SweaterReconciler(tracker: tracker)
         self.reconciler = reconciler
+        tracker.onActivity = { [weak reconciler] in reconciler?.wake() }
         tracker.addExistingWindows()
         tracker.determineAndFocusActiveWindow()
         reconciler.start()
@@ -49,6 +50,7 @@ final class SweaterEngine: FeatureModule {
         let recreates =
             updated.excludedApps != current.excludedApps || updated.order != current.order
         current = updated
+        reconciler?.wake()
 
         if repaints { renderer.flushCache() }
         if !updated.active {

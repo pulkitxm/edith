@@ -17,7 +17,7 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
             detail:
                 "ed mcp lists edith_find, which ranks Edith's tools for a plain-language request."),
         JevFeature(
-            id: DocsAsk.purpose, title: "Docs Ask",
+            id: DocsOperation.askPurpose, title: "Docs Ask",
             detail:
                 "The Docs page and ed docs ask pick the command that handles a plain-language request."
         ),

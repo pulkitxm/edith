@@ -23,6 +23,11 @@ public struct AgentJob: Sendable {
 public protocol AgentPowerSource: Sendable {
     var isOnBattery: Bool { get }
     var isScreenLocked: Bool { get }
+    var isConstrained: Bool { get }
+}
+
+extension AgentPowerSource {
+    public var isConstrained: Bool { false }
 }
 
 public struct StaticPowerSource: AgentPowerSource {
@@ -267,17 +272,21 @@ public actor JobScheduler {
         let now = clock()
         for id in order {
             guard let state = states[id] else { continue }
-            let current = interval(for: state)
+            let current = interval(for: state, constrained: false)
             if current != state.interval {
                 states[id]?.interval = current
-                states[id]?.nextRun = current.map { now.addingTimeInterval($0) }
+                states[id]?.nextRun = interval(for: state).map { now.addingTimeInterval($0) }
             }
             if !state.job.isEnabled() { cancel(id) }
         }
-        let next = order.compactMap { states[$0]?.nextRun }.min()
+        let next = order.compactMap { id in
+            states[id].flatMap { $0.flight == nil ? $0.nextRun : nil }
+        }.min()
         let delay = min(30, max(0.05, next?.timeIntervalSince(now) ?? 30))
         timer = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            do {
+                try await Task.sleep(for: .seconds(delay), tolerance: .seconds(delay / 10))
+            } catch { return }
             guard !Task.isCancelled else { return }
             await self?.tick()
         }
@@ -318,6 +327,10 @@ public actor JobScheduler {
     }
 
     private func interval(for state: State) -> TimeInterval? {
+        interval(for: state, constrained: power.isConstrained)
+    }
+
+    private func interval(for state: State, constrained: Bool) -> TimeInterval? {
         guard state.job.isEnabled() else { return nil }
         switch state.job.descriptor.power {
         case .pauseOnLock where power.isScreenLocked: return nil
@@ -326,7 +339,8 @@ public actor JobScheduler {
         }
         let value = AgentCadenceMath.interval(
             for: state.job.descriptor.cadence, subscribers: state.subscribers,
-            pauseAmbient: pauseAmbientOnBattery && power.isOnBattery)
+            pauseAmbient: pauseAmbientOnBattery && power.isOnBattery,
+            constrained: constrained)
         guard let value, value.isFinite, value > 0 else { return nil }
         return value
     }

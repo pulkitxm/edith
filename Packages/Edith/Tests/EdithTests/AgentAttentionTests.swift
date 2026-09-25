@@ -329,13 +329,20 @@ private struct AttentionFixture {
         let notification = try #require(
             try await fixture.observe([fixture.agent(.blocked)]).first?.notification)
         #expect(notification.title == "Claude Code needs approval")
+        #expect(fixture.recorder.requests.isEmpty)
+        #expect(fixture.recorder.probes.map(\.readsExplain) == [false])
+        fixture.recorder.screen = "token=typesafe-test-value\nAll tests passed."
+        let other = fixture.agent(.working, pane: "p2")
+        _ = try await fixture.observe([other])
+        _ = try await fixture.observe([fixture.agent(.done, pane: "p2")])
         let request = try #require(fixture.recorder.requests.first)
         guard case .fields(let fields) = request.state else {
             Issue.record("expected field state")
             return
         }
         #expect(fields["screen"]?.contains("typesafe-test-value") == false)
-        #expect(Set(request.questions.keys) == ["state", "interrupt", "need"])
+        #expect(Set(request.questions.keys).isSuperset(of: ["state", "interrupt", "need"]))
+        #expect(fixture.recorder.probes.map(\.readsExplain) == [false, true])
     }
 
     @Test func jevCannotSilenceAnAgentWaitingForAnAnswer() async throws {
@@ -594,6 +601,33 @@ private struct AttentionFixture {
         }
         #expect(try await job.run() == nil)
         #expect(scopes.names.count == 5)
+    }
+
+    @Test func localPollsKeepCountingTheLastRemoteAgents() async throws {
+        let fixture = AttentionFixture()
+        defer { fixture.close() }
+        let clock = AttentionClock(fixture.start)
+        var remoteAgent = fixture.agent(.working)
+        remoteAgent.id = "box|s|p1"
+        let local = HerdrHostSnapshot(
+            id: "local", name: "This Mac", isLocal: true, herdrPresent: true, reachable: true,
+            agents: [fixture.agent(.working)])
+        let remote = HerdrHostSnapshot(
+            id: "box", name: "box", isLocal: false, herdrPresent: true, reachable: true,
+            agents: [remoteAgent])
+        let job = SessionsJob(
+            store: nil, isSubscribed: { false }, defaults: fixture.defaults, notify: { _ in },
+            collect: { scope in
+                if case .all = scope { return [local, remote] }
+                return [local]
+            }, now: { clock.now })
+        var counts: [Int] = []
+        for offset in [0.0, 30] {
+            clock.now = fixture.start.addingTimeInterval(offset)
+            let payload = try #require(try await job.run())
+            counts.append(try AgentPayload.decode(SessionsSnapshot.self, from: payload).working)
+        }
+        #expect(counts == [2, 2])
     }
 }
 

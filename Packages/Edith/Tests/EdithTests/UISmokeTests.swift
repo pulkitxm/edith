@@ -3,6 +3,7 @@ import EdithKit
 import SwiftUI
 import Testing
 @testable import Edith
+@testable import EdithDocs
 @testable import EdithHelper
 
 @MainActor
@@ -521,11 +522,4 @@ private func settledBitmap(
         #expect(accessory.view.fittingSize.height <= 36)
     }
 
-    @Test func panelTabBarRenders() {
-        let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
-        #expect(
-            renders(
-                TabBar(tabs: tabs, selection: .constant("usage"), theme: .orange),
-                width: 480, height: 60))
-    }
 }

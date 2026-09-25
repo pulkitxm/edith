@@ -34,12 +34,12 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         appStarted = true
+        UserShellEnvironment.shared.enable(after: .seconds(4))
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
         IPCTransport.enable()
         AgentCommandRouting.enable()
         if !AgentService.usesCustomService {
-            lidAwakeDaemonRegistrar.register()
             agentRegistrar.registerAndRestartIfStale()
         }
         applyConfiguredActivationPolicy()
@@ -78,6 +78,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
+            StartupPhase(name: "main.lidAwakeDaemon") { [weak self] in
+                guard !AgentService.usesCustomService, let self else { return }
+                self.lidAwakeDaemonRegistrar.register()
+            },
         ])
     }
 
@@ -146,12 +150,15 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 private final class LidAwakeDaemonRegistrar {
     private static let fingerprintKey = "lidAwakePrivilegedHelperFingerprint"
 
     private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
     private var registrationInFlight = false
-    private var statusRefreshWorkItem: DispatchWorkItem?
+    private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in
+        self?.publishStatus()
+    }
 
     func register() {
         guard !registrationInFlight else { return }
@@ -169,13 +176,18 @@ private final class LidAwakeDaemonRegistrar {
             }
             registrationInFlight = true
             service.unregister { [weak self] error in
-                guard let self else { return }
-                self.registrationInFlight = false
-                guard error == nil else {
-                    self.publishStatus()
-                    return
+                let failed = error != nil
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.registrationInFlight = false
+                        guard !failed else {
+                            self.publishStatus()
+                            return
+                        }
+                        self.registerCurrent(fingerprint: fingerprint)
+                    }
                 }
-                self.registerCurrent(fingerprint: fingerprint)
             }
         case .notRegistered, .notFound:
             registerCurrent(fingerprint: fingerprint)
@@ -214,14 +226,8 @@ private final class LidAwakeDaemonRegistrar {
             case .notFound: "notFound"
             @unknown default: "notFound"
             }
-        SharedDefaults.store.set(state, forKey: LidAwakePrivilegedService.stateKey)
-        statusRefreshWorkItem?.cancel()
-        guard state == "awaitingApproval" else { return }
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.publishStatus()
-        }
-        statusRefreshWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+        SharedDefaults.store.setIfChanged(state, forKey: LidAwakePrivilegedService.stateKey)
+        approvalRefresher.update(awaitingApproval: state == "awaitingApproval")
     }
 
     private func persist(_ fingerprint: String?) {

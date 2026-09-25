@@ -20,7 +20,7 @@ final class AgentNotificationPresentationBridge {
         retry = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(60))
+                    try await Task.sleep(for: .seconds(60), tolerance: .seconds(15))
                 } catch { return }
                 self?.refresh()
             }
