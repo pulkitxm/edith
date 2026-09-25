@@ -32,6 +32,10 @@ struct PresenterRows: View {
     private var detectScreenSharing = true
     @AppStorage(AppStorageKeys.Presenter.detectMirroring, store: SharedDefaults.store)
     private var detectMirroring = true
+    @AppStorage(AppStorageKeys.Presenter.askJev, store: SharedDefaults.store)
+    private var askJev = false
+    @AppStorage(AppStorageKeys.Jev.configured, store: SharedDefaults.store)
+    private var jevConfigured = false
 
     var body: some View {
         Group {
@@ -127,6 +131,17 @@ struct PresenterRows: View {
                                 "Blur when your display mirrors to a projector, TV, or AirPlay.")
                         }
                     }
+                    Toggle(
+                        isOn: $askJev.configured(AppStorageKeys.Presenter.askJev)
+                    ) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Ask Jev about shared screens")
+                            InfoDot(
+                                "When a call app is open and no built-in rule matches, Jev judges whether the on-screen windows show a shared screen. Needs a saved Jev key."
+                            )
+                        }
+                    }
+                    .disabled(!jevConfigured)
                 }
                 .disabled(!autoEnabled)
                 .opacity(autoEnabled ? 1 : 0.5)
@@ -134,7 +149,7 @@ struct PresenterRows: View {
                 Text("Auto detection")
             } footer: {
                 Text(
-                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics."
+                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics. Asking Jev also needs window titles: it sends the owner, title and size of up to 25 on-screen windows to TypeSafe, so they leave this Mac."
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
