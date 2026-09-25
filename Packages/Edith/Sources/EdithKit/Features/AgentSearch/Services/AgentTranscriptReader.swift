@@ -67,6 +67,18 @@ public enum AgentTranscriptReader {
         return finished
     }
 
+    static let headLimit = 256 << 10
+
+    static func head(_ digest: inout AgentTranscriptDigest, url: URL) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: headLimit) else { return }
+        for line in data.split(separator: 0x0A).prefix(20) {
+            line.withUnsafeBytes { buffer in _ = consume(buffer, into: &digest) }
+            if !digest.sessionID.isEmpty, !digest.cwd.isEmpty { return }
+        }
+    }
+
     static func consume(_ line: UnsafeRawBufferPointer, into digest: inout AgentTranscriptDigest)
         -> String?
     {
@@ -75,6 +87,7 @@ public enum AgentTranscriptReader {
             case .claude: claudeMarkers
             case .codex: codexMarkers
             case .pi: piMarkers
+            case .opencode: []
             }
         guard markers.contains(where: { contains(line, $0) }) else { return nil }
         if digest.kind == .claude, contains(line, toolResult) { return nil }
@@ -88,6 +101,7 @@ public enum AgentTranscriptReader {
         case .claude: readClaude(object, line: line, into: &digest)
         case .codex: readCodex(object, into: &digest)
         case .pi: readPi(object, into: &digest)
+        case .opencode: break
         }
         let stamp = object["timestamp"] as? String
         if digest.firstActivity == nil, let stamp {

@@ -30,7 +30,7 @@ public enum AgentOperations {
             return try await AgentPayload.encode(AgentSearchService.shared.search(request))
         }
         await runtime.registerShutdown(id: "sessions.search") {
-            await AgentTranscriptIndex.shared.flush()
+            await AgentSessionSearch.shared.flush()
         }
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)

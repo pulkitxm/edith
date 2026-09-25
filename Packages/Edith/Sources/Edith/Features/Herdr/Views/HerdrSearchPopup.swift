@@ -23,6 +23,7 @@ struct HerdrSearchPopup: View {
     }
 
     private var dark: Bool { scheme == .dark }
+    private var openAgents: [HerdrAgent] { store.listedAgents }
     private var hide: Bool { presenterState.active && presenterBlurAgents }
     private var queryTerms: [String] { AgentSearchTerms.terms(model.searchedQuery ?? "") }
 
@@ -30,13 +31,6 @@ struct HerdrSearchPopup: View {
         VStack(alignment: .leading, spacing: 0) {
             field
             Divider()
-            if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.danger)
-                    .padding(.horizontal, UIScale.pt(14))
-                    .padding(.vertical, UIScale.pt(8))
-            }
             results
             Divider()
             footer
@@ -44,10 +38,12 @@ struct HerdrSearchPopup: View {
         .frame(width: UIScale.pt(620), height: UIScale.pt(480))
         .onAppear {
             fieldFocused = true
-            model.search(hosts: store.hosts)
+            model.search(agents: openAgents, hosts: store.hosts)
         }
         .onDisappear { model.cancel() }
-        .onChange(of: model.query) { _, _ in model.queryChanged(hosts: store.hosts) }
+        .onChange(of: model.query) { _, _ in
+            model.queryChanged(agents: openAgents, hosts: store.hosts)
+        }
     }
 
     private var field: some View {
@@ -55,11 +51,10 @@ struct HerdrSearchPopup: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: UIScale.pt(14), weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField("Search agent sessions on every machine…", text: $model.query)
+            TextField("Search open agents by their history…", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: UIScale.pt(15)))
                 .focused($fieldFocused)
-                .disabled(model.resuming)
                 .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                     model.move(press.key == .upArrow ? -1 : 1)
                     return .handled
@@ -73,14 +68,12 @@ struct HerdrSearchPopup: View {
                     return .handled
                 }
                 .onKeyPress(.return) {
-                    if let action = model.submit(hosts: store.hosts) { perform(action) }
+                    if let agent = model.submit(agents: openAgents, hosts: store.hosts) {
+                        openAgent(agent)
+                    }
                     return .handled
                 }
-            if model.resuming {
-                Text("Resuming…")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.secondary)
-            } else if model.machineProgress.done < model.machineProgress.total {
+            if model.machineProgress.done < model.machineProgress.total {
                 let progress = model.machineProgress
                 ProgressView(value: Double(progress.done), total: Double(progress.total))
                     .progressViewStyle(.linear)
@@ -140,11 +133,11 @@ struct HerdrSearchPopup: View {
         let rows = model.visibleRows(in: section)
         ForEach(rows) { row(for: $0, showsMachine: false) }
         switch section.state {
-        case .searching:
-            HerdrSkeleton(dark: dark, rows: rows.isEmpty ? 3 : 1, card: false)
+        case .searching where rows.isEmpty:
+            HerdrSkeleton(dark: dark, rows: min(3, max(1, section.agents.count)), card: false)
                 .padding(.horizontal, UIScale.pt(8))
         case .ready where rows.isEmpty && section.rows.isEmpty:
-            note("No matching sessions")
+            note("No open agent matches")
         default:
             EmptyView()
         }
@@ -158,12 +151,13 @@ struct HerdrSearchPopup: View {
             return "Reading \(pending) more session\(pending == 1 ? "" : "s")…"
         case .ready:
             let count = section.rows.count
-            let found = count == 0 ? "No matches" : "\(count) found"
+            let found =
+                model.searchedQuery?.isEmpty == false
+                ? (count == 0 ? "No matches" : "\(count) of \(section.agents.count) open")
+                : "\(section.agents.count) open"
             return section.milliseconds.map { "\(found) · \($0) ms" } ?? found
         case .failed(let message):
             return message
-        case .offline:
-            return "Offline"
         }
     }
 
@@ -206,10 +200,10 @@ struct HerdrSearchPopup: View {
         let selected = row.id == model.selectedRow?.id
         return Button {
             model.select(row)
-            if let action = model.action(for: row) { perform(action) }
+            openAgent(row.agent)
         } label: {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                HerdrKindMark(kind: row.kind, size: UIScale.pt(15))
+                HerdrKindMark(kind: row.agent.kind, size: UIScale.pt(15))
                     .padding(.top, UIScale.pt(1))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     HStack(spacing: UIScale.pt(6)) {
@@ -217,9 +211,7 @@ struct HerdrSearchPopup: View {
                             .font(.system(size: UIScale.pt(12.5), weight: .medium))
                             .lineLimit(1)
                             .presenterTextBlur(hide, fontSize: 12.5)
-                        if let agent = row.agent {
-                            liveBadge(agent)
-                        }
+                        liveBadge(row.agent)
                         Spacer(minLength: 0)
                         if let date = row.hit?.lastActivityDate {
                             Text(date.formatted(.relative(presentation: .named)))
@@ -242,7 +234,7 @@ struct HerdrSearchPopup: View {
                         .presenterTextBlur(hide, fontSize: 9.5)
                 }
                 if selected {
-                    Text(row.agent == nil ? "Resume ↩" : "Open ↩")
+                    Text("Open ↩")
                         .font(.system(size: UIScale.pt(10), weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.top, UIScale.pt(1))
@@ -254,9 +246,8 @@ struct HerdrSearchPopup: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.selection, selected: selected))
-        .disabled(model.resuming)
         .id(row.id)
-        .help(row.agent == nil ? "Resume this session in a new Herdr agent" : "Open this agent")
+        .help("Open this agent")
     }
 
     private func liveBadge(_ agent: HerdrAgent) -> some View {
@@ -274,7 +265,7 @@ struct HerdrSearchPopup: View {
     }
 
     private func detail(_ row: HerdrSearchRow, showsMachine: Bool) -> String {
-        let parts = [row.kind, row.place, showsMachine ? row.hostName : ""]
+        let parts = [row.agent.kind, row.place, showsMachine ? row.agent.machineName : ""]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
@@ -320,24 +311,8 @@ struct HerdrSearchPopup: View {
             ? "Keyword search" : "Keyword search · add a Jev key in Settings for best matches"
     }
 
-    private func perform(_ action: HerdrSearchAction) {
-        switch action {
-        case .open(let agent):
-            dismiss()
-            open(agent)
-        case .resume(let hit, let host):
-            model.resuming = true
-            model.errorMessage = nil
-            Task {
-                do {
-                    try await store.resumeSession(hit, on: host)
-                    model.resuming = false
-                    dismiss()
-                } catch {
-                    model.resuming = false
-                    model.errorMessage = error.localizedDescription
-                }
-            }
-        }
+    private func openAgent(_ agent: HerdrAgent) {
+        dismiss()
+        open(agent)
     }
 }

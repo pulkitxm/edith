@@ -47,47 +47,81 @@ private struct HerdrSearchDecider: JevDeciding {
 @MainActor
 @Suite struct HerdrSearchModelTests {
     nonisolated static let remoteID = "7A3F0C2E-0000-4000-8000-000000000001"
-    nonisolated static let offlineID = "7A3F0C2E-0000-4000-8000-000000000002"
 
     nonisolated static func agent(
-        _ kind: String, pane: String, cwd: String, title: String, machineID: String = "local"
+        _ kind: String, pane: String, title: String, machineID: String = "local",
+        cwd: String = "/work/atlas", category: HerdrPaneCategory = .agent
     ) -> HerdrAgent {
         HerdrAgent.make(
             machineID: machineID, machineName: machineID == "local" ? "This Mac" : "devbox",
             machineIsLocal: machineID == "local", sshTarget: nil, session: "default", pane: pane,
-            kind: kind, status: .working, title: title, workspace: "atlas", cwd: cwd)
+            kind: kind, status: .working, title: title, workspace: "atlas", cwd: cwd,
+            category: category)
     }
 
-    nonisolated static func hit(
-        _ session: String, kind: AgentTranscriptKind = .claude, cwd: String = "/work/atlas",
-        rank: Int = 0, machineID: String = "local", score: Double = 1
-    ) -> AgentSearchHit {
+    nonisolated static func hit(_ agent: HerdrAgent, _ snippet: String, score: Double = 1)
+        -> AgentSearchHit
+    {
         AgentSearchHit(
-            machineID: machineID, kind: kind, sessionID: session, path: "/t/\(session).jsonl",
-            cwd: cwd, title: "Session \(session)", snippet: "about \(session)",
-            summary: "asked about \(session)", lastActivity: 1_790_000_000, score: score,
-            placeRank: rank)
+            id: agent.id, source: .transcript, sessionID: agent.pane, title: agent.title,
+            snippet: snippet, summary: "asked about \(snippet)", lastActivity: 1_790_000_000,
+            score: score)
     }
+
+    nonisolated static let launch = agent("Claude Code", pane: "p1", title: "Speed up launch")
+    nonisolated static let docs = agent("Claude Code", pane: "p2", title: "Onboarding docs")
+    nonisolated static let shell = agent(
+        "Terminal", pane: "t1", title: "zsh", category: .terminal)
+    nonisolated static let remote = agent(
+        "Codex", pane: "p9", title: "Billing export", machineID: remoteID)
 
     nonisolated static var hosts: [HerdrHostSnapshot] {
         [
-            .local(
-                herdrPresent: true,
-                agents: [agent("Claude Code", pane: "p1", cwd: "/work/atlas", title: "✳ Launch")]),
+            .local(herdrPresent: true, agents: [launch, docs, shell]),
             HerdrHostSnapshot(
                 id: remoteID, name: "devbox", isLocal: false, herdrPresent: true,
-                reachable: true),
+                reachable: true, agents: [remote]),
             HerdrHostSnapshot(
-                id: offlineID, name: "buildbox", isLocal: false, herdrPresent: false,
-                reachable: false),
+                id: "7A3F0C2E-0000-4000-8000-000000000002", name: "buildbox", isLocal: false,
+                herdrPresent: false, reachable: false),
         ]
     }
+
+    nonisolated static let agents = [launch, docs, shell, remote]
 
     func eventually(_ condition: @MainActor () -> Bool) async {
         for _ in 0..<300 where !condition() {
             try? await Task.sleep(for: .milliseconds(10))
         }
         #expect(condition())
+    }
+
+    @Test func listsOnlyOpenAgentsGroupedByMachine() {
+        let model = HerdrSearchModel(
+            searcher: { request in
+                try await Task.sleep(for: .seconds(30))
+                return AgentSearchReply(machineID: request.machineID)
+            }, decider: { nil })
+        model.search(agents: Self.agents, hosts: Self.hosts)
+        #expect(model.sections.map(\.name) == ["This Mac", "devbox"])
+        #expect(model.rows.map(\.id) == [Self.launch.id, Self.docs.id, Self.remote.id])
+        model.cancel()
+    }
+
+    @Test func sendsEveryOpenAgentAsATargetOnItsOwnMachine() async {
+        let calls = HerdrSearchCalls()
+        let model = HerdrSearchModel(
+            searcher: { request in
+                _ = calls.add(request)
+                return AgentSearchReply(machineID: request.machineID)
+            }, decider: { nil })
+        model.query = "launch"
+        model.search(agents: Self.agents, hosts: Self.hosts)
+        await eventually { model.machineProgress.done == 2 }
+        let requests = calls.all.sorted { $0.machineID < $1.machineID }
+        #expect(requests.map(\.machineID) == [Self.remoteID, "local"])
+        #expect(requests.map { $0.targets.map(\.pane) } == [["p9"], ["p1", "p2"]])
+        #expect(requests.allSatisfy { $0.query == "launch" })
     }
 
     @Test func streamsEachMachineAsItAnswersAndKeepsSkeletonsForTheRest() async {
@@ -97,48 +131,58 @@ private struct HerdrSearchDecider: JevDeciding {
                 if request.machineID == Self.remoteID {
                     await gate.wait()
                     return AgentSearchReply(
-                        machineID: request.machineID,
-                        hits: [Self.hit("r1", kind: .codex, machineID: Self.remoteID)],
+                        machineID: request.machineID, hits: [Self.hit(Self.remote, "invoices")],
                         milliseconds: 80)
                 }
                 return AgentSearchReply(
-                    machineID: request.machineID, hits: [Self.hit("l1"), Self.hit("l2", rank: 1)],
+                    machineID: request.machineID,
+                    hits: [Self.hit(Self.docs, "docs"), Self.hit(Self.launch, "launch")],
                     milliseconds: 4)
             }, decider: { nil })
         model.query = "launch"
-        model.search(hosts: Self.hosts)
-        #expect(model.sections.map(\.state) == [.searching, .searching, .offline])
-
+        model.search(agents: Self.agents, hosts: Self.hosts)
+        #expect(model.sections.map(\.state) == [.searching, .searching])
+        #expect(model.rows.isEmpty)
         await eventually { model.sections[0].state == .ready }
-        #expect(model.sections[0].rows.map(\.id) == ["local|claude|l1", "local|claude|l2"])
+        #expect(model.sections[0].rows.map(\.id) == [Self.docs.id, Self.launch.id])
+        #expect(model.sections[0].rows.first?.snippet == "docs")
         #expect(model.sections[1].state == .searching)
-        #expect(model.isBusy)
         #expect(model.machineProgress.done == 1)
         #expect(model.machineProgress.total == 2)
-        #expect(model.best == .hidden)
-
         await gate.release()
         await eventually { model.sections[1].state == .ready }
-        #expect(model.sections[1].rows.map(\.hit?.sessionID) == ["r1"])
-        #expect(model.sections[1].milliseconds == 80)
+        #expect(model.rows.map(\.id) == [Self.docs.id, Self.launch.id, Self.remote.id])
         #expect(!model.isBusy)
-        #expect(model.rows.count == 3)
     }
 
-    @Test func followsUpWhileAMachineIsStillReadingTranscripts() async {
+    @Test func emptyQueryKeepsSidebarOrderAndAddsSnippets() async {
+        let model = HerdrSearchModel(
+            searcher: { request in
+                AgentSearchReply(
+                    machineID: request.machineID, hits: [Self.hit(Self.docs, "latest prompt")])
+            }, decider: { HerdrSearchDecider(probabilities: ["s0": 1]) })
+        model.search(agents: [Self.launch, Self.docs], hosts: Self.hosts)
+        await eventually { model.sections.first?.state == .ready }
+        #expect(model.rows.map(\.id) == [Self.docs.id, Self.launch.id])
+        #expect(model.rows.first?.snippet == "latest prompt")
+        #expect(model.best == .hidden)
+    }
+
+    @Test func followsUpWhileAMachineIsStillReadingHistory() async {
         let calls = HerdrSearchCalls()
         let model = HerdrSearchModel(
             searcher: { request in
                 let count = calls.add(request)
                 return AgentSearchReply(
                     machineID: request.machineID,
-                    hits: count == 1 ? [] : [Self.hit("late")], pending: count == 1 ? 40 : 0)
+                    hits: count == 1 ? [] : [Self.hit(Self.launch, "late")],
+                    pending: count == 1 ? 1 : 0)
             }, decider: { nil })
         model.query = "late"
-        model.search(hosts: [.local(herdrPresent: true)])
+        model.search(agents: [Self.launch], hosts: Self.hosts)
         await eventually { model.sections[0].state == .ready }
         #expect(calls.all.count == 2)
-        #expect(model.sections[0].rows.map(\.hit?.sessionID) == ["late"])
+        #expect(model.rows.map(\.snippet) == ["late"])
     }
 
     @Test func machineErrorsStayInTheirSection() async {
@@ -148,9 +192,11 @@ private struct HerdrSearchDecider: JevDeciding {
                     return AgentSearchReply(
                         machineID: request.machineID, error: "python3 is not installed there.")
                 }
-                return AgentSearchReply(machineID: request.machineID, hits: [Self.hit("ok")])
+                return AgentSearchReply(
+                    machineID: request.machineID, hits: [Self.hit(Self.launch, "ok")])
             }, decider: { nil })
-        model.search(hosts: Array(Self.hosts.prefix(2)))
+        model.query = "ok"
+        model.search(agents: Self.agents, hosts: Self.hosts)
         await eventually { model.sections[1].state != .searching }
         #expect(model.sections[1].state == .failed("python3 is not installed there."))
         await eventually { model.sections[0].state == .ready }
@@ -162,9 +208,10 @@ private struct HerdrSearchDecider: JevDeciding {
                 try await Task.sleep(for: .seconds(30))
                 return AgentSearchReply(machineID: request.machineID)
             }, decider: { nil })
-        model.search(hosts: [.local(herdrPresent: true)])
+        model.query = "x"
+        model.search(agents: [Self.launch], hosts: Self.hosts)
         let stale = model.receive(
-            AgentSearchReply(machineID: "local", hits: [Self.hit("old")]), serial: 0)
+            AgentSearchReply(machineID: "local", hits: [Self.hit(Self.launch, "old")]), serial: 0)
         #expect(!stale)
         #expect(model.sections[0].state == .searching)
         model.cancel()
@@ -175,14 +222,13 @@ private struct HerdrSearchDecider: JevDeciding {
             searcher: { request in
                 AgentSearchReply(
                     machineID: request.machineID,
-                    hits: [Self.hit("a"), Self.hit("b", rank: 1), Self.hit("c", rank: 2)])
-            }, decider: { HerdrSearchDecider(probabilities: ["s2": 0.6, "s0": 0.3, "none": 0.1]) })
+                    hits: [Self.hit(Self.launch, "a"), Self.hit(Self.docs, "b")])
+            }, decider: { HerdrSearchDecider(probabilities: ["s1": 0.7, "none": 0.3]) })
         model.query = "app optimizations"
-        model.search(hosts: [.local(herdrPresent: true)])
+        model.search(agents: [Self.launch, Self.docs], hosts: Self.hosts)
         await eventually { if case .ready = model.best { true } else { false } }
-        #expect(model.bestRows.map(\.hit?.sessionID) == ["c", "a"])
-        #expect(model.visibleRows(in: model.sections[0]).map(\.hit?.sessionID) == ["b"])
-        #expect(model.rows.map(\.hit?.sessionID) == ["c", "a", "b"])
+        #expect(model.bestRows.map(\.id) == [Self.docs.id])
+        #expect(model.rows.map(\.id) == [Self.docs.id, Self.launch.id])
         #expect(model.usesJev)
     }
 
@@ -190,88 +236,30 @@ private struct HerdrSearchDecider: JevDeciding {
         let model = HerdrSearchModel(
             searcher: { request in
                 AgentSearchReply(
-                    machineID: request.machineID, hits: [Self.hit("a"), Self.hit("b", rank: 1)])
+                    machineID: request.machineID,
+                    hits: [Self.hit(Self.launch, "a"), Self.hit(Self.docs, "b")])
             }, decider: { HerdrSearchDecider(probabilities: ["none": 0.8, "s0": 0.2]) })
         model.query = "something unrelated"
-        model.search(hosts: [.local(herdrPresent: true)])
+        model.search(agents: [Self.launch, Self.docs], hosts: Self.hosts)
         await eventually { model.best == .noMatch }
-        #expect(model.rows.map(\.hit?.sessionID) == ["a", "b"])
+        #expect(model.rows.map(\.id) == [Self.launch.id, Self.docs.id])
     }
 
-    @Test func emptyQuerySkipsJevAndListsLiveAgentsFirst() async {
-        let model = HerdrSearchModel(
-            searcher: { request in
-                AgentSearchReply(machineID: request.machineID, hits: [Self.hit("recent", rank: 3)])
-            }, decider: { HerdrSearchDecider(probabilities: ["s0": 1]) })
-        model.search(hosts: [Self.hosts[0]])
-        #expect(model.rows.map(\.id) == ["local|default|p1"])
-        await eventually { model.sections[0].state == .ready }
-        #expect(model.best == .hidden)
-        #expect(model.rows.map(\.id) == ["local|default|p1", "local|claude|recent"])
-    }
-
-    @Test func enterRunsAChangedQueryThenOpensOrResumesTheSelection() async {
-        let host = Self.hosts[0]
+    @Test func enterRunsAChangedQueryThenOpensTheSelectedAgent() async {
         let model = HerdrSearchModel(
             searcher: { request in
                 AgentSearchReply(
                     machineID: request.machineID,
-                    hits: [Self.hit("live"), Self.hit("old", rank: 1)])
+                    hits: [Self.hit(Self.launch, "a"), Self.hit(Self.docs, "b")])
             }, decider: { nil })
         model.query = "launch"
-        #expect(model.submit(hosts: [host]) == nil)
-        await eventually { model.sections[0].state == .ready }
-        guard case .open(let agent) = model.submit(hosts: [host]) else {
-            Issue.record("expected the live agent")
-            return
-        }
-        #expect(agent.pane == "p1")
+        #expect(model.submit(agents: [Self.launch, Self.docs], hosts: Self.hosts) == nil)
+        await eventually { model.sections.first?.state == .ready }
+        #expect(model.submit(agents: [Self.launch, Self.docs], hosts: Self.hosts) == Self.launch)
         model.move(1)
-        #expect(model.submit(hosts: [host]) == .resume(Self.hit("old", rank: 1), host))
+        #expect(model.submit(agents: [Self.launch, Self.docs], hosts: Self.hosts) == Self.docs)
         model.move(1)
-        #expect(model.selectedRow?.hit?.sessionID == "live")
-        model.move(-1)
-        #expect(model.selectedRow?.hit?.sessionID == "old")
-    }
-}
-
-@Suite struct HerdrSearchPlanTests {
-    typealias Fixture = HerdrSearchModelTests
-
-    @Test func linksHitsToLiveAgentsByKindPlaceAndRecency() {
-        let host = HerdrHostSnapshot.local(
-            herdrPresent: true,
-            agents: [
-                Fixture.agent("Claude Code", pane: "p2", cwd: "/work/atlas/", title: "B"),
-                Fixture.agent("Claude Code", pane: "p1", cwd: "/work/atlas", title: "A"),
-                Fixture.agent("Codex", pane: "p3", cwd: "/srv/billing", title: "Invoices"),
-                HerdrAgent.make(
-                    machineID: "local", machineName: "This Mac", machineIsLocal: true,
-                    sshTarget: nil, session: "default", pane: "t1", kind: "Terminal",
-                    status: .idle, title: "zsh atlas", workspace: "atlas", cwd: "/work/atlas",
-                    category: .terminal),
-            ])
-        let rows = HerdrSearchPlan.rows(
-            for: host,
-            hits: [
-                Fixture.hit("newest"), Fixture.hit("older", rank: 1),
-                Fixture.hit("oldest", rank: 2),
-                Fixture.hit("pi", kind: .pi),
-            ], query: "atlas")
-        #expect(rows.map(\.agent?.pane) == ["p3", "p1", "p2", nil, nil])
-        #expect(rows.map(\.hit?.sessionID) == [nil, "newest", "older", "oldest", "pi"])
-    }
-
-    @Test func liveAgentsMatchTheirTitleSpaceAndFolder() {
-        let host = HerdrHostSnapshot.local(
-            herdrPresent: true,
-            agents: [
-                Fixture.agent("Codex", pane: "p3", cwd: "/srv/billing", title: "Invoice fixes"),
-                Fixture.agent("Claude Code", pane: "p1", cwd: "/work/atlas", title: "Launch"),
-            ])
-        let rows = HerdrSearchPlan.rows(for: host, hits: [], query: "invoices billing")
-        #expect(rows.map(\.agent?.pane) == ["p3"])
-        #expect(rows[0].project == "billing")
+        #expect(model.selectedRow?.id == Self.launch.id)
     }
 }
 
@@ -316,42 +304,6 @@ private struct HerdrSearchDecider: JevDeciding {
             meaning
                 == "Codex session in billing on branch fix/rounding (devbox): Invoice rounding. Fix the rounding"
         )
-    }
-}
-
-@Suite struct HerdrSessionResumeTests {
-    @Test func resumeArgumentsWrapTheLaunchFlags() {
-        let defaults = UserDefaults(suiteName: "test.herdr.resume.\(UUID().uuidString)")!
-        let claude = HerdrLaunchOperations.agentLaunch(
-            kind: "Claude Code", name: "claude", pane: "w1:p1",
-            options: AgentLaunchOptions(model: "opus"),
-            resuming: AgentTranscriptKind.claude.resume(sessionID: "abc", path: "/x"),
-            defaults: defaults)
-        #expect(claude.local.suffix(2) == ["--resume", "abc"])
-        #expect(claude.remote(.linux).contains("--resume abc"))
-        let codex = HerdrLaunchOperations.agentLaunch(
-            kind: "Codex", name: "codex", pane: "w1:p1", options: AgentLaunchOptions(model: "gpt"),
-            resuming: AgentTranscriptKind.codex.resume(sessionID: "def", path: "/y"),
-            defaults: defaults)
-        let joined = codex.local.joined(separator: " ")
-        #expect(joined.contains("resume def -m gpt"))
-    }
-
-    @MainActor
-    @Test func resumeOpensTheNewPaneAsATab() async throws {
-        let store = HerdrStore(
-            sessionResumer: { hit, machine in
-                #expect(machine == nil)
-                #expect(hit.sessionID == "abc")
-                return HerdrCreatedPane(workspaceID: "w2", tabID: "w2:t1", paneID: "w2:p4")
-            })
-        let hit = HerdrSearchModelTests.hit("abc")
-        try await store.resumeSession(hit, on: .local(herdrPresent: true))
-        let opened = try #require(store.sessions.last)
-        #expect(opened.agent.pane == "w2:p4")
-        #expect(opened.agent.title == "Session abc")
-        #expect(opened.agent.kind == "Claude Code")
-        #expect(opened.agent.cwd == "/work/atlas")
     }
 }
 

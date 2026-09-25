@@ -1,5 +1,16 @@
 import Foundation
 
+struct AgentSearchField: Sendable, Equatable {
+    let counts: [String: Int]
+    let length: Int
+
+    init(_ text: String) {
+        let terms = AgentSearchTerms.terms(text)
+        counts = terms.reduce(into: [:]) { $0[$1, default: 0] += 1 }
+        length = terms.count
+    }
+}
+
 struct AgentSearchDocument: Sendable {
     static let weights: [Double] = [3, 2, 1.5, 0.6]
 
@@ -7,23 +18,14 @@ struct AgentSearchDocument: Sendable {
     let lengths: [Int]
     let lastActivity: Double?
 
-    init(fields: [String], lastActivity: Double?) {
-        let terms = fields.map(AgentSearchTerms.terms)
-        counts = terms.map { list in list.reduce(into: [:]) { $0[$1, default: 0] += 1 } }
-        lengths = terms.map(\.count)
+    init(fields: [AgentSearchField], lastActivity: Double?) {
+        counts = fields.map(\.counts)
+        lengths = fields.map(\.length)
         self.lastActivity = lastActivity
     }
 
-    init(digest: AgentTranscriptDigest, title: String) {
-        let components = digest.cwd.split(separator: "/").suffix(3).joined(separator: " ")
-        let place = [
-            components, digest.branch ?? "", digest.pullRequest ?? "", digest.kind.rawValue,
-        ].joined(separator: " ")
-        self.init(
-            fields: [
-                title, place, digest.prompts.joined(separator: " "),
-                digest.replies.joined(separator: " "),
-            ], lastActivity: digest.lastActivity)
+    init(fields: [String], lastActivity: Double?) {
+        self.init(fields: fields.map(AgentSearchField.init), lastActivity: lastActivity)
     }
 }
 

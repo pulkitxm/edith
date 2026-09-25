@@ -5,25 +5,20 @@ import Observation
 typealias HerdrSessionSearcher = @Sendable (AgentSearchRequest) async throws -> AgentSearchReply
 
 struct HerdrSearchRow: Identifiable, Equatable {
-    let id: String
-    let hostID: String
-    let hostName: String
+    let agent: HerdrAgent
     let hit: AgentSearchHit?
-    let agent: HerdrAgent?
 
-    var title: String { hit?.title ?? agent?.title ?? "" }
-    var kind: String { agent?.kind ?? hit?.kind.displayName ?? "" }
+    var id: String { agent.id }
+    var title: String { agent.title }
     var snippet: String { hit?.snippet ?? "" }
 
     var project: String {
-        if let hit { return hit.project }
-        guard let agent else { return "" }
         let folder = (agent.cwd as NSString).lastPathComponent
         return folder.isEmpty ? agent.workspace : folder
     }
 
     var place: String {
-        [project, hit?.branch ?? agent?.workspace ?? ""].filter { !$0.isEmpty }
+        [project, agent.workspace].filter { !$0.isEmpty }
             .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
             .joined(separator: " · ")
     }
@@ -34,13 +29,13 @@ enum HerdrSearchSectionState: Equatable {
     case indexing(Int)
     case ready
     case failed(String)
-    case offline
 }
 
 struct HerdrSearchSection: Identifiable, Equatable {
     let id: String
     let name: String
     let isLocal: Bool
+    let agents: [HerdrAgent]
     var state: HerdrSearchSectionState
     var rows: [HerdrSearchRow]
     var milliseconds: Int?
@@ -53,19 +48,12 @@ enum HerdrSearchBest: Equatable {
     case noMatch
 }
 
-enum HerdrSearchAction: Equatable {
-    case open(HerdrAgent)
-    case resume(AgentSearchHit, HerdrHostSnapshot)
-}
-
 @MainActor
 @Observable
 final class HerdrSearchModel {
     nonisolated static let debounce: Duration = .milliseconds(250)
     nonisolated static let jevDelay: Duration = .milliseconds(300)
     nonisolated static let followUpDelay: Duration = .milliseconds(120)
-    nonisolated static let perMachineLimit = 12
-    nonisolated static let liveLimit = 6
     nonisolated static let jevPerMachine = 8
     nonisolated static let concurrencyLimit = 4
 
@@ -74,13 +62,10 @@ final class HerdrSearchModel {
     private(set) var sections: [HerdrSearchSection] = []
     private(set) var best: HerdrSearchBest = .hidden
     private(set) var searchedQuery: String?
-    var resuming = false
-    var errorMessage: String?
 
     @ObservationIgnored private let searcher: HerdrSessionSearcher
     @ObservationIgnored private let decider: @MainActor () -> JevDeciding?
     @ObservationIgnored private var serial = 0
-    @ObservationIgnored private var hosts: [HerdrHostSnapshot] = []
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var jevTask: Task<Void, Never>?
@@ -121,50 +106,46 @@ final class HerdrSearchModel {
         HerdrSearchPlan.visible(section, excluding: bestRows)
     }
 
-    func queryChanged(hosts: [HerdrHostSnapshot]) {
+    func queryChanged(agents: [HerdrAgent], hosts: [HerdrHostSnapshot]) {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             try? await Task.sleep(for: Self.debounce)
             guard !Task.isCancelled else { return }
-            self?.search(hosts: hosts)
+            self?.search(agents: agents, hosts: hosts)
         }
     }
 
-    func submit(hosts: [HerdrHostSnapshot]) -> HerdrSearchAction? {
+    func submit(agents: [HerdrAgent], hosts: [HerdrHostSnapshot]) -> HerdrAgent? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed != searchedQuery {
-            search(hosts: hosts)
+            search(agents: agents, hosts: hosts)
             return nil
         }
-        return selectedRow.flatMap(action(for:))
+        return selectedRow?.agent
     }
 
-    func search(hosts: [HerdrHostSnapshot]) {
+    func search(agents: [HerdrAgent], hosts: [HerdrHostSnapshot]) {
         debounceTask?.cancel()
         searchTask?.cancel()
         jevTask?.cancel()
         serial += 1
         let serial = serial
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let targets = hosts.isEmpty ? [HerdrHostSnapshot.local(herdrPresent: false)] : hosts
-        self.hosts = targets
         searchedQuery = query
-        errorMessage = nil
         best = .hidden
-        sections = HerdrSearchPlan.sections(for: targets, query: query)
+        sections = HerdrSearchPlan.sections(agents: agents, hosts: hosts, query: query)
         selectedID = rows.first?.id
         let searcher = searcher
-        let reachable = HerdrSearchPlan.reachable(targets)
+        let requests = HerdrSearchPlan.requests(sections: sections, query: query)
         searchTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
-                var waiting = reachable[...]
+                var waiting = requests[...]
                 var running = 0
                 while !waiting.isEmpty || running > 0 {
-                    while running < Self.concurrencyLimit, let host = waiting.popFirst() {
+                    while running < Self.concurrencyLimit, let request = waiting.popFirst() {
                         group.addTask {
                             await Self.stream(
-                                host: host, query: query, serial: serial, searcher: searcher,
-                                into: self)
+                                request, serial: serial, searcher: searcher, into: self)
                         }
                         running += 1
                     }
@@ -176,16 +157,16 @@ final class HerdrSearchModel {
     }
 
     nonisolated static func stream(
-        host: HerdrHostSnapshot, query: String, serial: Int, searcher: HerdrSessionSearcher,
+        _ request: AgentSearchRequest, serial: Int, searcher: HerdrSessionSearcher,
         into model: HerdrSearchModel?
     ) async {
-        let request = AgentSearchRequest(query: query, machineID: host.id, limit: perMachineLimit)
         while !Task.isCancelled {
             let reply: AgentSearchReply
             do {
                 reply = try await searcher(request)
             } catch {
-                reply = AgentSearchReply(machineID: host.id, error: error.localizedDescription)
+                reply = AgentSearchReply(
+                    machineID: request.machineID, error: error.localizedDescription)
             }
             guard !Task.isCancelled, await model?.receive(reply, serial: serial) == true else {
                 return
@@ -197,14 +178,13 @@ final class HerdrSearchModel {
     @discardableResult
     func receive(_ reply: AgentSearchReply, serial: Int) -> Bool {
         guard serial == self.serial,
-            let index = sections.firstIndex(where: { $0.id == reply.machineID }),
-            let host = hosts.first(where: { $0.id == reply.machineID })
+            let index = sections.firstIndex(where: { $0.id == reply.machineID })
         else { return false }
         if let error = reply.error {
             sections[index].state = .failed(error)
         } else {
             sections[index].rows = HerdrSearchPlan.rows(
-                for: host, hits: reply.hits, query: searchedQuery ?? "")
+                for: sections[index].agents, hits: reply.hits, query: searchedQuery ?? "")
             sections[index].state = reply.pending > 0 ? .indexing(reply.pending) : .ready
             sections[index].milliseconds = reply.milliseconds
         }
@@ -227,14 +207,6 @@ final class HerdrSearchModel {
 
     var selectedRow: HerdrSearchRow? {
         rows.first { $0.id == selectedID } ?? rows.first
-    }
-
-    func action(for row: HerdrSearchRow) -> HerdrSearchAction? {
-        if let agent = row.agent { return .open(agent) }
-        guard let hit = row.hit, let host = hosts.first(where: { $0.id == row.hostID }) else {
-            return nil
-        }
-        return .resume(hit, host)
     }
 
     func cancel() {
@@ -276,31 +248,57 @@ final class HerdrSearchModel {
 }
 
 enum HerdrSearchPlan {
-    static func sections(for hosts: [HerdrHostSnapshot], query: String) -> [HerdrSearchSection] {
-        hosts.map { host in
-            HerdrSearchSection(
-                id: host.id, name: host.name, isLocal: host.isLocal,
-                state: host.reachable ? .searching : .offline,
-                rows: rows(for: host, hits: [], query: query))
+    static func sections(
+        agents: [HerdrAgent], hosts: [HerdrHostSnapshot], query: String
+    ) -> [HerdrSearchSection] {
+        let open = agents.filter { !$0.isTerminal }
+        let grouped = Dictionary(grouping: open, by: \.machineID)
+        let listed = hosts.map(\.id)
+        let extra = grouped.keys.filter { !listed.contains($0) }.sorted()
+        return (listed + extra).compactMap { machineID in
+            guard let members = grouped[machineID], let first = members.first else { return nil }
+            let name = hosts.first { $0.id == machineID }?.name ?? first.machineName
+            return HerdrSearchSection(
+                id: machineID, name: name, isLocal: first.machineIsLocal, agents: members,
+                state: .searching,
+                rows: query.isEmpty ? members.map { HerdrSearchRow(agent: $0, hit: nil) } : [])
         }
+    }
+
+    static func requests(sections: [HerdrSearchSection], query: String)
+        -> [AgentSearchRequest]
+    {
+        sections.map { section in
+            AgentSearchRequest(
+                query: query, machineID: section.id,
+                targets: section.agents.map(AgentSearchTarget.init(agent:)))
+        }
+    }
+
+    static func rows(for agents: [HerdrAgent], hits: [AgentSearchHit], query: String)
+        -> [HerdrSearchRow]
+    {
+        let byID = Dictionary(agents.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        var rows: [HerdrSearchRow] = []
+        for hit in hits where seen.insert(hit.id).inserted {
+            guard let agent = byID[hit.id] else { continue }
+            rows.append(HerdrSearchRow(agent: agent, hit: hit))
+        }
+        guard query.isEmpty else { return rows }
+        let rest = agents.filter { !seen.contains($0.id) }
+        return rows + rest.map { HerdrSearchRow(agent: $0, hit: nil) }
     }
 
     static func progress(_ sections: [HerdrSearchSection]) -> (done: Int, total: Int) {
         var done = 0
-        var total = 0
         for section in sections {
             switch section.state {
-            case .offline: continue
             case .ready, .failed: done += 1
             case .searching, .indexing: break
             }
-            total += 1
         }
-        return (done, total)
-    }
-
-    static func reachable(_ hosts: [HerdrHostSnapshot]) -> [HerdrHostSnapshot] {
-        hosts.filter(\.reachable)
+        return (done, sections.count)
     }
 
     static func flatten(best: [HerdrSearchRow], sections: [HerdrSearchSection])
@@ -334,9 +332,9 @@ enum HerdrSearchPlan {
             AgentSearchCandidate(
                 id: row.id,
                 meaning: AgentSearchJev.meaning(
-                    kind: row.kind, project: row.project, branch: row.hit?.branch,
-                    machine: row.hostName, title: row.title,
-                    summary: row.hit?.summary ?? row.agent?.workspace ?? ""))
+                    kind: row.agent.kind, project: row.project, branch: nil,
+                    machine: row.agent.machineName, title: row.title,
+                    summary: row.hit?.summary ?? row.agent.workspace))
         }
     }
 
@@ -346,53 +344,5 @@ enum HerdrSearchPlan {
             candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let rows = picks.compactMap { lookup[$0] }
         return rows.isEmpty ? .noMatch : .ready(rows)
-    }
-
-    static func rows(for host: HerdrHostSnapshot, hits: [AgentSearchHit], query: String)
-        -> [HerdrSearchRow]
-    {
-        let live = host.agents.filter { !$0.isTerminal }
-        var linked = Set<String>()
-        var seen = Set<String>()
-        var found: [HerdrSearchRow] = []
-        for hit in hits where seen.insert(hit.id).inserted {
-            let agent = link(hit, live: live, taken: linked)
-            if let agent { linked.insert(agent.id) }
-            found.append(
-                HerdrSearchRow(
-                    id: hit.id, hostID: host.id, hostName: host.name, hit: hit, agent: agent))
-        }
-        let terms = AgentSearchTerms.terms(query)
-        let matching = live.filter { agent in
-            !linked.contains(agent.id)
-                && AgentSearchTerms.covers(
-                    [agent.title, agent.workspace, agent.cwd, agent.kind].joined(separator: " "),
-                    all: terms)
-        }
-        let liveRows = matching.prefix(HerdrSearchModel.liveLimit).map { agent in
-            HerdrSearchRow(
-                id: agent.id, hostID: host.id, hostName: host.name, hit: nil, agent: agent)
-        }
-        return liveRows + found
-    }
-
-    static func link(_ hit: AgentSearchHit, live: [HerdrAgent], taken: Set<String>)
-        -> HerdrAgent?
-    {
-        let place = standardized(hit.cwd)
-        guard !place.isEmpty else { return nil }
-        let matching = live.filter {
-            AgentTranscriptKind(herdrKind: $0.kind) == hit.kind && standardized($0.cwd) == place
-        }
-        .sorted { $0.id < $1.id }
-        guard matching.indices.contains(hit.placeRank) else { return nil }
-        let agent = matching[hit.placeRank]
-        return taken.contains(agent.id) ? nil : agent
-    }
-
-    static func standardized(_ path: String) -> String {
-        var trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        while trimmed.count > 1, trimmed.hasSuffix("/") { trimmed.removeLast() }
-        return trimmed
     }
 }

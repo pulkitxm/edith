@@ -1,10 +1,6 @@
 import Foundation
 
 public struct AgentTranscriptDigest: Codable, Sendable, Equatable {
-    public static let promptLimit = 500
-    public static let promptsLimit = 6_000
-    public static let replyLimit = 300
-    public static let repliesLimit = 3_000
     public static let titleLimit = 80
 
     public var path: String
@@ -48,23 +44,15 @@ public struct AgentTranscriptDigest: Codable, Sendable, Equatable {
     }
 
     mutating func addPrompt(_ raw: String) {
-        let text = Self.clean(raw, limit: Self.promptLimit)
+        let text = Self.clean(raw)
         guard !text.isEmpty, prompts.last != text else { return }
         prompts.append(text)
-        var total = prompts.reduce(0) { $0 + $1.count }
-        while total > Self.promptsLimit, prompts.count > 2 {
-            total -= prompts.remove(at: 1).count
-        }
     }
 
     mutating func addReply(_ raw: String) {
-        let text = Self.clean(raw, limit: Self.replyLimit)
+        let text = Self.clean(raw)
         guard !text.isEmpty, replies.last != text else { return }
         replies.append(text)
-        var total = replies.reduce(0) { $0 + $1.count }
-        while total > Self.repliesLimit, replies.count > 1 {
-            total -= replies.removeFirst().count
-        }
     }
 
     mutating func touch(_ timestamp: Double?) {
@@ -73,8 +61,11 @@ public struct AgentTranscriptDigest: Codable, Sendable, Equatable {
         lastActivity = max(lastActivity ?? timestamp, timestamp)
     }
 
+    static func clean(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
     static func clean(_ text: String, limit: Int) -> String {
-        let collapsed = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return String(collapsed.prefix(limit))
+        String(clean(text).prefix(limit))
     }
 }

@@ -36,7 +36,6 @@ public enum AgentSearchRemote {
     public static func decode(_ data: Data, machineID: String) throws -> AgentSearchReply {
         var reply = try JSONDecoder().decode(AgentSearchReply.self, from: data)
         reply.machineID = machineID
-        reply.hits = reply.hits.map { $0.assigning(machineID: machineID) }
         return reply
     }
 
@@ -70,7 +69,7 @@ public actor AgentSearchService {
     public typealias RemoteSearch =
         @Sendable (AgentSearchRequest, SSHConnection) async throws -> AgentSearchReply
 
-    private let index: AgentTranscriptIndex
+    private let local: AgentSessionSearch
     private let machines: @Sendable () -> [Machine]
     private let remote: RemoteSearch
     private var connections: [UUID: SSHConnection] = [:]
@@ -78,18 +77,18 @@ public actor AgentSearchService {
     private var latest: [UUID: UUID] = [:]
 
     public init(
-        index: AgentTranscriptIndex = .shared,
+        local: AgentSessionSearch = .shared,
         machines: @escaping @Sendable () -> [Machine] = { MachineRegistry.machines() },
         remote: @escaping RemoteSearch = { try await AgentSearchRemote.search($0, over: $1) }
     ) {
-        self.index = index
+        self.local = local
         self.machines = machines
         self.remote = remote
     }
 
     public func search(_ request: AgentSearchRequest) async -> AgentSearchReply {
         guard request.machineID != HerdrHostSnapshot.localID else {
-            return await index.search(request)
+            return await local.search(request)
         }
         guard let machine = machines().first(where: { $0.id.uuidString == request.machineID })
         else {

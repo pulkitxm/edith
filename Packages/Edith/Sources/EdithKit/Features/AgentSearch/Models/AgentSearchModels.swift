@@ -4,45 +4,23 @@ public enum AgentTranscriptKind: String, Codable, CaseIterable, Sendable {
     case claude
     case codex
     case pi
-
-    public var displayName: String {
-        switch self {
-        case .claude: "Claude Code"
-        case .codex: "Codex"
-        case .pi: "Pi"
-        }
-    }
+    case opencode
 
     public init?(herdrKind: String) {
         switch HerdrKind.displayName(for: herdrKind) {
         case "Claude Code": self = .claude
         case "Codex": self = .codex
         case "Pi": self = .pi
+        case "OpenCode": self = .opencode
         default: return nil
-        }
-    }
-
-    public func resume(sessionID: String, path: String) -> AgentSessionResume {
-        switch self {
-        case .claude: AgentSessionResume(leading: [], trailing: ["--resume", sessionID])
-        case .codex: AgentSessionResume(leading: ["resume", sessionID], trailing: [])
-        case .pi: AgentSessionResume(leading: [], trailing: ["--session", path])
         }
     }
 }
 
-public struct AgentSessionResume: Sendable, Equatable {
-    public var leading: [String]
-    public var trailing: [String]
-
-    public init(leading: [String], trailing: [String]) {
-        self.leading = leading
-        self.trailing = trailing
-    }
-
-    public func wrapping(_ arguments: [String]) -> [String] {
-        leading + arguments + trailing
-    }
+public enum AgentSearchSource: String, Codable, Sendable {
+    case transcript
+    case terminal
+    case none
 }
 
 public enum AgentSearchOperation {
@@ -50,99 +28,91 @@ public enum AgentSearchOperation {
     public static let internalOperations = [search]
 }
 
-public struct AgentSearchRequest: Codable, Sendable, Equatable {
-    public static let defaultLimit = 12
+public struct AgentSearchTarget: Codable, Sendable, Equatable {
+    public var id: String
+    public var kind: String
+    public var session: String
+    public var pane: String
+    public var cwd: String
+    public var title: String
 
+    public init(
+        id: String, kind: String, session: String, pane: String, cwd: String, title: String
+    ) {
+        self.id = id
+        self.kind = kind
+        self.session = session
+        self.pane = pane
+        self.cwd = cwd
+        self.title = title
+    }
+
+    public init(agent: HerdrAgent) {
+        self.init(
+            id: agent.id, kind: agent.kind, session: agent.session, pane: agent.pane,
+            cwd: agent.cwd, title: agent.title)
+    }
+}
+
+public struct AgentSearchRequest: Codable, Sendable, Equatable {
     public var query: String
     public var machineID: String
-    public var limit: Int
+    public var targets: [AgentSearchTarget]
     public var budget: Double
 
     public init(
         query: String, machineID: String = HerdrHostSnapshot.localID,
-        limit: Int = AgentSearchRequest.defaultLimit, budget: Double = 1.5
+        targets: [AgentSearchTarget], budget: Double = 1.5
     ) {
         self.query = query
         self.machineID = machineID
-        self.limit = limit
+        self.targets = targets
         self.budget = budget
     }
 }
 
 public struct AgentSearchHit: Codable, Sendable, Equatable, Hashable, Identifiable {
     public var id: String
-    public var machineID: String
-    public var kind: AgentTranscriptKind
-    public var sessionID: String
-    public var path: String
-    public var cwd: String
-    public var branch: String?
-    public var pullRequest: String?
+    public var source: AgentSearchSource
+    public var sessionID: String?
     public var title: String
     public var snippet: String
     public var summary: String
     public var lastActivity: Double?
     public var score: Double
-    public var placeRank: Int
 
     public init(
-        machineID: String, kind: AgentTranscriptKind, sessionID: String, path: String,
-        cwd: String, branch: String? = nil, pullRequest: String? = nil, title: String,
-        snippet: String, summary: String, lastActivity: Double?, score: Double,
-        placeRank: Int
+        id: String, source: AgentSearchSource, sessionID: String? = nil, title: String,
+        snippet: String, summary: String, lastActivity: Double?, score: Double
     ) {
-        id = "\(machineID)|\(kind.rawValue)|\(sessionID)"
-        self.machineID = machineID
-        self.kind = kind
+        self.id = id
+        self.source = source
         self.sessionID = sessionID
-        self.path = path
-        self.cwd = cwd
-        self.branch = branch
-        self.pullRequest = pullRequest
         self.title = title
         self.snippet = snippet
         self.summary = summary
         self.lastActivity = lastActivity
         self.score = score
-        self.placeRank = placeRank
-    }
-
-    public var project: String {
-        let name = (cwd as NSString).lastPathComponent
-        return name.isEmpty ? cwd : name
-    }
-
-    public var resume: AgentSessionResume {
-        kind.resume(sessionID: sessionID, path: path)
     }
 
     public var lastActivityDate: Date? {
         lastActivity.map { Date(timeIntervalSince1970: $0) }
-    }
-
-    public func assigning(machineID: String) -> AgentSearchHit {
-        AgentSearchHit(
-            machineID: machineID, kind: kind, sessionID: sessionID, path: path, cwd: cwd,
-            branch: branch, pullRequest: pullRequest, title: title, snippet: snippet,
-            summary: summary, lastActivity: lastActivity, score: score, placeRank: placeRank)
     }
 }
 
 public struct AgentSearchReply: Codable, Sendable, Equatable {
     public var machineID: String
     public var hits: [AgentSearchHit]
-    public var indexed: Int
     public var pending: Int
     public var error: String?
     public var milliseconds: Int
 
     public init(
-        machineID: String, hits: [AgentSearchHit] = [], indexed: Int = 0, pending: Int = 0,
-        error: String? = nil, milliseconds: Int = 0
+        machineID: String, hits: [AgentSearchHit] = [], pending: Int = 0, error: String? = nil,
+        milliseconds: Int = 0
     ) {
         self.machineID = machineID
         self.hits = hits
-        self.indexed = indexed
         self.pending = pending
         self.error = error
         self.milliseconds = milliseconds

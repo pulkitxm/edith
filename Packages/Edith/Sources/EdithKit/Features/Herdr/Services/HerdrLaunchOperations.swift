@@ -73,27 +73,24 @@ public enum HerdrLaunchOperations {
 
     public static func launchAgent(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
-        resuming resume: AgentSessionResume? = nil, on machine: Machine?
+        on machine: Machine?
     ) async throws {
         var catalog: AgentLaunchCatalog?
         if let launchKind = AgentLaunchKind(kind: kind) {
             catalog = await AgentLaunchCatalogs.shared.cached(for: launchKind, on: machine)
         }
         let launch = agentLaunch(
-            kind: kind, name: name, pane: pane, options: options, catalog: catalog,
-            resuming: resume)
+            kind: kind, name: name, pane: pane, options: options, catalog: catalog)
         _ = try await run(
             local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
     }
 
     public static func agentLaunch(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
-        catalog: AgentLaunchCatalog? = nil, resuming resume: AgentSessionResume? = nil,
-        defaults: UserDefaults = SharedDefaults.store
+        catalog: AgentLaunchCatalog? = nil, defaults: UserDefaults = SharedDefaults.store
     ) -> HerdrAgentLaunch {
-        let launchArguments = AgentLaunchArguments.launchArguments(
+        let agentArguments = AgentLaunchArguments.launchArguments(
             kind: kind, options: options, catalog: catalog)
-        let agentArguments = resume?.wrapping(launchArguments) ?? launchArguments
         if HerdrLaunchSettings.usesHerdrAgentStart(for: kind, in: defaults),
             let slug = HerdrLaunchSettings.defaultHerdrSlug(for: kind)
         {

@@ -4,6 +4,9 @@ import json
 import math
 import os
 import re
+import shutil
+import sqlite3
+import subprocess
 import sys
 import time
 import unicodedata
@@ -26,11 +29,9 @@ B = 0.75
 PREFIX_WEIGHT = 0.6
 RECENCY_BOOST = 0.2
 RECENCY_DAYS = 14.0
-PROMPT_LIMIT = 500
-PROMPTS_LIMIT = 6000
-REPLY_LIMIT = 300
-REPLIES_LIMIT = 3000
 TITLE_LIMIT = 80
+TERMINAL_LINES = 4000
+HERDR_TIMEOUT = 10
 CHUNK = 4 << 20
 LINE_LIMIT = 2 << 20
 WORD = re.compile(r"[^\W_]+")
@@ -108,8 +109,9 @@ def terms(text):
     ]
 
 
-def clean(text, limit):
-    return " ".join(text.split())[:limit]
+def clean(text, limit=None):
+    collapsed = " ".join(text.split())
+    return collapsed if limit is None else collapsed[:limit]
 
 
 def parse_time(value):
@@ -128,17 +130,15 @@ def parse_time(value):
     return float(seconds)
 
 
-def new_digest(path, kind):
+def new_digest(path, kind, session=""):
     return {
-        "path": path, "kind": kind, "sessionID": "", "cwd": "", "branch": None,
+        "path": path, "kind": kind, "sessionID": session, "cwd": "", "branch": None,
         "pullRequest": None, "namedTitle": None, "prompts": [], "replies": [],
         "firstActivity": None, "lastActivity": None, "offset": 0, "size": 0, "modified": 0.0,
     }
 
 
-def title_of(digest, titles):
-    if digest["kind"] == "codex" and not digest.get("namedTitle") and digest["sessionID"] in titles:
-        return titles[digest["sessionID"]]
+def title_of(digest):
     if digest.get("namedTitle"):
         return digest["namedTitle"]
     if digest["prompts"]:
@@ -157,25 +157,17 @@ def summary_of(digest):
 
 
 def add_prompt(digest, raw):
-    text = clean(raw, PROMPT_LIMIT)
+    text = clean(raw)
     prompts = digest["prompts"]
-    if not text or (prompts and prompts[-1] == text):
-        return
-    prompts.append(text)
-    total = sum(len(item) for item in prompts)
-    while total > PROMPTS_LIMIT and len(prompts) > 2:
-        total -= len(prompts.pop(1))
+    if text and not (prompts and prompts[-1] == text):
+        prompts.append(text)
 
 
 def add_reply(digest, raw):
-    text = clean(raw, REPLY_LIMIT)
+    text = clean(raw)
     replies = digest["replies"]
-    if not text or (replies and replies[-1] == text):
-        return
-    replies.append(text)
-    total = sum(len(item) for item in replies)
-    while total > REPLIES_LIMIT and len(replies) > 1:
-        total -= len(replies.pop(0))
+    if text and not (replies and replies[-1] == text):
+        replies.append(text)
 
 
 def touch(digest, stamp):
@@ -360,50 +352,6 @@ def update(digest, path, deadline=None):
     return finished
 
 
-def candidates(home):
-    found = []
-    claude = os.path.join(home, ".claude", "projects")
-    for project in scan(claude):
-        if project.is_dir() and not project.name.startswith("."):
-            for entry in scan(project.path):
-                add_candidate(found, entry, "claude")
-    for kind, roots in (
-        ("codex", [os.path.join(home, ".codex", "sessions"), os.path.join(home, ".codex", "archived_sessions")]),
-        ("pi", [os.path.join(home, ".pi", "agent", "sessions")]),
-    ):
-        for root in roots:
-            for directory, folders, files in os.walk(root):
-                folders[:] = [name for name in folders if not name.startswith(".")]
-                for name in files:
-                    if name.endswith(".jsonl") and not name.startswith("."):
-                        path = os.path.join(directory, name)
-                        try:
-                            info = os.stat(path)
-                        except OSError:
-                            continue
-                        found.append((path, kind, info.st_size, info.st_mtime))
-    return found
-
-
-def scan(path):
-    try:
-        return list(os.scandir(path))
-    except OSError:
-        return []
-
-
-def add_candidate(found, entry, kind):
-    if entry.name.startswith(".") or not entry.name.endswith(".jsonl"):
-        return
-    try:
-        if not entry.is_file():
-            return
-        info = entry.stat()
-    except OSError:
-        return
-    found.append((entry.path, kind, info.st_size, info.st_mtime))
-
-
 def codex_titles(home):
     titles = {}
     try:
@@ -422,23 +370,12 @@ def codex_titles(home):
     return titles
 
 
-def fields_of(digest, title):
-    components = " ".join([part for part in digest["cwd"].split("/") if part][-3:])
-    place = " ".join([components, digest.get("branch") or "", digest.get("pullRequest") or "", digest["kind"]])
-    return [title, place, " ".join(digest["prompts"]), " ".join(digest["replies"])]
-
-
-def counts_of(digest, title):
-    counts = []
-    lengths = []
-    for text in fields_of(digest, title):
-        bag = {}
-        words = terms(text)
-        for word in words:
-            bag[word] = bag.get(word, 0) + 1
-        counts.append(bag)
-        lengths.append(len(words))
-    return {"title": title, "offset": digest["offset"], "counts": counts, "lengths": lengths}
+def field(text):
+    bag = {}
+    words = terms(text)
+    for word in words:
+        bag[word] = bag.get(word, 0) + 1
+    return [bag, len(words)]
 
 
 def matches(word, query):
@@ -549,7 +486,7 @@ def load(store):
     try:
         with open(store, "r") as handle:
             saved = json.load(handle)
-        if saved.get("version") == 2:
+        if saved.get("version") == 3:
             return {digest["path"]: digest for digest in saved.get("digests", [])}
     except (OSError, ValueError, AttributeError, KeyError, TypeError):
         pass
@@ -562,109 +499,494 @@ def save(store, digests):
         os.makedirs(directory, exist_ok=True)
         temporary = "%s.%d.tmp" % (store, os.getpid())
         with open(temporary, "w") as handle:
-            json.dump({"version": 2, "digests": sorted(digests.values(), key=lambda item: item["path"])}, handle)
+            json.dump({"version": 3, "digests": sorted(digests.values(), key=lambda item: item["path"])}, handle)
         os.replace(temporary, store)
     except OSError:
         pass
 
 
-def search(request, home, store, now=None):
-    started = time.time()
-    now = started if now is None else now
-    digests = load(store)
-    found = candidates(home)
-    present = set(item[0] for item in found)
-    dirty = False
-    for path in list(digests.keys()):
-        if path not in present:
-            del digests[path]
-            dirty = True
-    stale = [
-        item for item in found
-        if item[0] not in digests
-        or digests[item[0]]["size"] != item[2]
-        or digests[item[0]]["modified"] != item[3]
-    ]
-    stale.sort(key=lambda item: -item[3])
-    deadline = started + float(request.get("budget", 1.5))
-    pending = 0
-    for position, (path, kind, size, modified) in enumerate(stale):
-        if position > 0 and time.time() > deadline:
-            pending = len(stale) - position
+KINDS = {
+    "claude code": "claude", "claude": "claude", "claude-code": "claude",
+    "codex": "codex", "openai-codex": "codex", "pi": "pi", "py": "pi", "pi-coding-agent": "pi",
+    "opencode": "opencode", "open-code": "opencode", "opencode2": "opencode",
+}
+
+
+def transcript_kind(kind):
+    return KINDS.get(kind.strip().lower())
+
+
+def herdr_binary(home):
+    configured = os.environ.get("EDITH_AGENT_SEARCH_HERDR")
+    if configured:
+        return configured
+    found = shutil.which("herdr")
+    if found:
+        return found
+    for candidate in (".local/bin/herdr", ".cargo/bin/herdr"):
+        path = os.path.join(home, candidate)
+        if os.access(path, os.X_OK):
+            return path
+    for path in ("/opt/homebrew/bin/herdr", "/usr/local/bin/herdr"):
+        if os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def run_herdr(binary, arguments):
+    if not binary:
+        return None
+    try:
+        result = subprocess.run(
+            [binary] + arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=HERDR_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.decode("utf-8", "replace")
+
+
+def first_json(text):
+    stripped = text.strip()
+    try:
+        return json.loads(stripped)
+    except ValueError:
+        pass
+    starts = [index for index in (stripped.find("{"), stripped.find("[")) if index >= 0]
+    if not starts:
+        return None
+    try:
+        return json.loads(stripped[min(starts):])
+    except ValueError:
+        return None
+
+
+def agent_sessions(snapshot):
+    item = first_json(snapshot or "")
+    try:
+        agents = item["result"]["snapshot"]["agents"]
+    except (TypeError, KeyError):
+        return {}
+    sessions = {}
+    for agent in agents:
+        if not isinstance(agent, dict):
+            continue
+        pane = agent.get("pane_id")
+        session = agent.get("agent_session")
+        value = session.get("value") if isinstance(session, dict) else None
+        if isinstance(pane, str) and isinstance(value, str) and value:
+            sessions[pane] = value
+    return sessions
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def live_claude(home):
+    folder = os.path.join(home, ".claude", "sessions")
+    found = []
+    for entry in scan(folder):
+        if not entry.name.endswith(".json"):
+            continue
+        try:
+            with open(entry.path, "r") as handle:
+                item = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        pid = item.get("pid")
+        session = item.get("sessionId")
+        if isinstance(pid, int) and isinstance(session, str) and alive(pid):
+            started = item.get("startedAt") or 0
+            found.append({"id": session, "cwd": item.get("cwd") or "", "modified": float(started) / 1000})
+    return found
+
+
+def scan(path):
+    try:
+        return list(os.scandir(path))
+    except OSError:
+        return []
+
+
+def claude_file(home, session):
+    for project in scan(os.path.join(home, ".claude", "projects")):
+        if project.is_dir() and not project.name.startswith("."):
+            path = os.path.join(project.path, session + ".jsonl")
+            if os.path.isfile(path):
+                return path
+    return None
+
+
+def roots(home, kind):
+    if kind == "codex":
+        return [os.path.join(home, ".codex", "sessions"), os.path.join(home, ".codex", "archived_sessions")]
+    if kind == "pi":
+        return [os.path.join(home, ".pi", "agent", "sessions")]
+    return []
+
+
+def head(path, kind):
+    digest = new_digest(path, kind)
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(256 << 10)
+    except OSError:
+        return digest
+    for line in data.split(b"\n")[:20]:
+        consume(line, digest)
+        if digest["sessionID"] and digest["cwd"]:
             break
-        digest = digests.get(path) or new_digest(path, kind)
+    return digest
+
+
+def metas(home, kind):
+    found = []
+    for root in roots(home, kind):
+        for directory, folders, files in os.walk(root):
+            folders[:] = [name for name in folders if not name.startswith(".")]
+            for name in files:
+                if not name.endswith(".jsonl") or name.startswith("."):
+                    continue
+                path = os.path.join(directory, name)
+                try:
+                    modified = os.stat(path).st_mtime
+                except OSError:
+                    continue
+                digest = head(path, kind)
+                found.append({"path": path, "id": digest["sessionID"], "cwd": digest["cwd"], "modified": modified})
+    found.sort(key=lambda item: -item["modified"])
+    return found
+
+
+def opencode_database(home):
+    data = os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+    return os.path.join(data, "opencode", "opencode.db")
+
+
+def opencode_rows(database, sql, arguments):
+    if not os.path.isfile(database):
+        return []
+    try:
+        connection = sqlite3.connect("file:%s?mode=ro" % database, uri=True, timeout=0.5)
+        try:
+            return connection.execute(sql, arguments).fetchall()
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return []
+
+
+def opencode_sessions(database):
+    rows = opencode_rows(database, "select id, directory, coalesce(title, ''), time_updated from session_v2", ())
+    return [{"id": row[0], "cwd": row[1] or "", "title": row[2] or "", "modified": float(row[3] or 0) / 1000} for row in rows]
+
+
+def opencode_digest(database, session):
+    digest = new_digest(database + "#" + session["id"], "opencode", session["id"])
+    digest["cwd"] = session["cwd"]
+    if session["title"]:
+        digest["namedTitle"] = clean(session["title"], TITLE_LIMIT)
+    rows = opencode_rows(
+        database, "select type, data, time_created from session_message where session_id = ? order by seq",
+        (session["id"],),
+    )
+    for kind, data, created in rows:
+        try:
+            item = json.loads(data)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        if kind == "user":
+            if isinstance(item.get("text"), str):
+                add_prompt(digest, item["text"])
+        elif kind == "assistant":
+            for text in texts(item.get("content")):
+                add_reply(digest, text)
+        else:
+            continue
+        touch(digest, float(created or 0) / 1000)
+    return digest
+
+
+def standardized(path):
+    trimmed = (path or "").strip()
+    while len(trimmed) > 1 and trimmed.endswith("/"):
+        trimmed = trimmed[:-1]
+    return trimmed
+
+
+def normalized_title(title):
+    index = 0
+    while index < len(title) and not title[index].isalnum():
+        index += 1
+    return clean(title[index:]).lower()
+
+
+class Engine(object):
+    def __init__(self, home, store, herdr):
+        self.home = home
+        self.store = store
+        self.herdr = herdr
+        self.digests = load(store)
+        self.dirty = False
+        self.titles = None
+        self.metas = {}
+        self.opencode = None
+
+    def codex_titles(self):
+        if self.titles is None:
+            self.titles = codex_titles(self.home)
+        return self.titles
+
+    def meta_list(self, kind):
+        if kind not in self.metas:
+            self.metas[kind] = metas(self.home, kind)
+        return self.metas[kind]
+
+    def opencode_list(self):
+        if self.opencode is None:
+            self.opencode = opencode_sessions(opencode_database(self.home))
+        return self.opencode
+
+    def link(self, kind, value):
+        if value.startswith("/") and os.path.isfile(value):
+            return ("file", value, kind)
+        if kind == "claude":
+            path = claude_file(self.home, value)
+            return ("file", path, kind) if path else None
+        if kind in ("codex", "pi"):
+            for meta in self.meta_list(kind):
+                if meta["id"] == value or value in meta["path"]:
+                    return ("file", meta["path"], kind)
+            return None
+        for session in self.opencode_list():
+            if session["id"] == value:
+                return ("opencode", session)
+        return None
+
+    def known_title(self, kind, session, deadline):
+        if kind == "claude":
+            path = claude_file(self.home, session)
+            if not path:
+                return None
+            digest, _ = self.read(path, kind, deadline)
+            return title_of(digest) if digest else None
+        if kind == "codex":
+            return self.codex_titles().get(session)
+        if kind == "pi":
+            for meta in self.meta_list("pi"):
+                if meta["id"] == session:
+                    digest, _ = self.read(meta["path"], "pi", deadline)
+                    return title_of(digest) if digest else None
+            return None
+        for item in self.opencode_list():
+            if item["id"] == session:
+                return item["title"]
+        return None
+
+    def title_matches(self, kind, session, pane_title, deadline):
+        wanted = normalized_title(pane_title)
+        if not wanted:
+            return False
+        known = self.known_title(kind, session, deadline)
+        if not known:
+            return False
+        have = normalized_title(known)
+        return bool(have) and (have.startswith(wanted) or wanted.startswith(have))
+
+    def resolve(self, targets, herdr_links, deadline):
+        links = {}
+        claimed = set()
+        unlinked = []
+        for target in targets:
+            kind = transcript_kind(target["kind"])
+            if kind is None:
+                links[target["id"]] = ("terminal",)
+                continue
+            value = herdr_links.get(target["session"] + "|" + target["pane"])
+            link = self.link(kind, value) if value else None
+            if link is None:
+                unlinked.append(target)
+                continue
+            links[target["id"]] = link
+            claimed.add(value)
+        live = None
+        for target in unlinked:
+            kind = transcript_kind(target["kind"])
+            place = standardized(target["cwd"])
+            if kind == "claude":
+                if live is None:
+                    live = live_claude(self.home)
+                candidates = [item for item in live if standardized(item["cwd"]) == place]
+            elif kind in ("codex", "pi"):
+                candidates = [item for item in self.meta_list(kind) if standardized(item["cwd"]) == place]
+            else:
+                candidates = [item for item in self.opencode_list() if standardized(item["cwd"]) == place]
+            available = sorted([item for item in candidates if item["id"] not in claimed], key=lambda item: -item["modified"])
+            chosen = None
+            for item in available:
+                if self.title_matches(kind, item["id"], target["title"], deadline):
+                    chosen = item
+                    break
+            if chosen is None and available:
+                chosen = available[0]
+            link = self.link(kind, chosen["id"]) if chosen else None
+            if link is None:
+                links[target["id"]] = ("terminal",)
+                continue
+            claimed.add(chosen["id"])
+            links[target["id"]] = link
+        return links
+
+    def read(self, path, kind, deadline):
+        try:
+            info = os.stat(path)
+        except OSError:
+            return self.digests.get(path), True
+        size = info.st_size
+        modified = info.st_mtime
+        digest = self.digests.get(path) or new_digest(path, kind)
+        if digest["size"] == size and digest["modified"] == modified:
+            return digest, True
         if size < digest["offset"]:
             digest = new_digest(path, kind)
         try:
             finished = update(digest, path, deadline)
         except (OSError, ValueError):
-            continue
+            return self.digests.get(path), True
         if finished:
             digest["size"] = size
             digest["modified"] = modified
         if not digest["sessionID"]:
             digest["sessionID"] = os.path.splitext(os.path.basename(path))[0]
-        digests[path] = digest
-        dirty = True
-        if not finished:
-            pending = len(stale) - position
-            break
-    titles = codex_titles(home)
-    newest = {}
-    for digest in sorted(digests.values(), key=lambda item: item["path"]):
-        if not (digest["prompts"] or digest.get("namedTitle")):
-            continue
-        key = digest["kind"] + "|" + digest["sessionID"]
-        kept = newest.get(key)
-        if kept is not None and (kept.get("lastActivity") or 0) >= (digest.get("lastActivity") or 0):
-            continue
-        newest[key] = digest
-    entries = sorted(newest.values(), key=lambda item: item["path"])
-    documents = []
-    for digest in entries:
-        title = title_of(digest, titles)
-        cached = digest.get("index")
-        if not cached or cached.get("title") != title or cached.get("offset") != digest["offset"]:
-            cached = counts_of(digest, title)
-            digest["index"] = cached
-            dirty = True
-        documents.append({
-            "counts": cached["counts"], "lengths": cached["lengths"],
-            "lastActivity": digest.get("lastActivity"),
-        })
-    query = terms(request.get("query", ""))
-    limit = max(1, int(request.get("limit", 12)))
-    if query:
-        picks = [(entries[index], score) for index, score in rank(query, documents, now)[:limit]]
-    else:
-        recent = sorted(entries, key=lambda item: -(item.get("lastActivity") or 0))[:limit]
-        picks = [(digest, 0.0) for digest in recent]
-    machine = request.get("machineID", "")
-    hits = []
-    for digest, score in picks:
-        title = title_of(digest, titles)
-        if query:
-            text = snippet(list(reversed(digest["prompts"])) + list(reversed(digest["replies"])) + [title], query)
+        if kind == "codex" and not digest.get("namedTitle"):
+            title = self.codex_titles().get(digest["sessionID"])
+            if title:
+                digest["namedTitle"] = title
+        self.digests[path] = digest
+        self.dirty = True
+        return digest, finished
+
+    def body(self, digest):
+        count = len(digest["prompts"]) + len(digest["replies"])
+        cached = digest.get("body")
+        if not cached or cached.get("offset") != digest["offset"] or cached.get("count") != count:
+            cached = {
+                "offset": digest["offset"], "count": count,
+                "prompts": field(" ".join(digest["prompts"])),
+                "replies": field(" ".join(digest["replies"])),
+            }
+            digest["body"] = cached
+            if not digest["path"].endswith("#" + digest["sessionID"]):
+                self.dirty = True
+        return cached["prompts"], cached["replies"]
+
+    def document(self, target, history):
+        folder = " ".join([part for part in target["cwd"].split("/") if part][-3:])
+        place = " ".join([folder, target["kind"]])
+        kind, value = history
+        if kind == "transcript":
+            prompts, replies = self.body(value)
+            fields = [
+                field(target["title"] + " " + title_of(value)),
+                field(" ".join([place, value.get("branch") or "", value.get("pullRequest") or ""])),
+                prompts, replies,
+            ]
+            last = value.get("lastActivity")
+        elif kind == "terminal":
+            fields = [field(target["title"]), field(place), field(value), field("")]
+            last = None
         else:
-            text = (digest["prompts"][-1] if digest["prompts"] else "")[:160]
-        place_rank = len([
-            other for other in entries
-            if other["kind"] == digest["kind"] and other["cwd"] == digest["cwd"]
-            and (other.get("lastActivity") or 0) > (digest.get("lastActivity") or 0)
-        ])
-        hits.append({
-            "id": "%s|%s|%s" % (machine, digest["kind"], digest["sessionID"]),
-            "machineID": machine, "kind": digest["kind"], "sessionID": digest["sessionID"],
-            "path": digest["path"], "cwd": digest["cwd"], "branch": digest.get("branch"),
-            "pullRequest": digest.get("pullRequest"), "title": title, "snippet": text,
-            "summary": summary_of(digest), "lastActivity": digest.get("lastActivity"),
-            "score": score, "placeRank": place_rank,
-        })
-    if dirty:
-        save(store, digests)
+            fields = [field(target["title"]), field(place), field(""), field("")]
+            last = None
+        return {"counts": [item[0] for item in fields], "lengths": [item[1] for item in fields], "lastActivity": last}
+
+    def search(self, request, now=None):
+        started = time.time()
+        now = started if now is None else now
+        targets = request.get("targets") or []
+        herdr_links = {}
+        for session in sorted(set(target["session"] for target in targets)):
+            snapshot = run_herdr(self.herdr, ["--session", session, "api", "snapshot"])
+            for pane, value in agent_sessions(snapshot).items():
+                herdr_links[session + "|" + pane] = value
+        deadline = started + float(request.get("budget", 1.5))
+        links = self.resolve(targets, herdr_links, deadline)
+        pending = 0
+        histories = {}
+        for target in targets:
+            link = links.get(target["id"], ("terminal",))
+            if link[0] == "file":
+                digest, finished = self.read(link[1], link[2], deadline)
+                if not finished:
+                    pending += 1
+                histories[target["id"]] = ("transcript", digest) if digest else ("missing", None)
+            elif link[0] == "opencode":
+                histories[target["id"]] = ("transcript", opencode_digest(opencode_database(self.home), link[1]))
+            else:
+                text = run_herdr(self.herdr, [
+                    "--session", target["session"], "pane", "read", target["pane"], "--source", "recent",
+                    "--lines", str(TERMINAL_LINES),
+                ])
+                histories[target["id"]] = ("terminal", text) if text is not None else ("missing", None)
+        query = terms(request.get("query", ""))
+        documents = [self.document(target, histories[target["id"]]) for target in targets]
+        if query:
+            order = rank(query, documents, now)
+        else:
+            order = [(index, 0.0) for index in range(len(targets))]
+        hits = [hit_for(targets[index], histories[targets[index]["id"]], score, query) for index, score in order]
+        used = set(link[1] for link in links.values() if link[0] == "file")
+        for path in list(self.digests.keys()):
+            if path not in used:
+                del self.digests[path]
+                self.dirty = True
+        if self.dirty:
+            save(self.store, self.digests)
+        return {
+            "machineID": request.get("machineID", ""), "hits": hits, "pending": pending, "error": None,
+            "milliseconds": int((time.time() - started) * 1000),
+        }
+
+
+def hit_for(target, history, score, query):
+    kind, value = history
+    if kind == "transcript":
+        if query:
+            text = snippet(list(reversed(value["prompts"])) + list(reversed(value["replies"])) + [title_of(value)], query)
+        else:
+            text = (value["prompts"][-1] if value["prompts"] else "")[:160]
+        return {
+            "id": target["id"], "source": "transcript", "sessionID": value["sessionID"],
+            "title": title_of(value), "snippet": text, "summary": summary_of(value),
+            "lastActivity": value.get("lastActivity"), "score": score,
+        }
+    if kind == "terminal":
+        lines = [clean(line) for line in value.splitlines()]
+        lines = [line for line in lines if line]
+        if query:
+            text = snippet(list(reversed(lines)), query)
+        else:
+            text = (lines[-1] if lines else "")[:160]
+        return {
+            "id": target["id"], "source": "terminal", "sessionID": None, "title": target["title"],
+            "snippet": text, "summary": " ".join(lines[-3:])[:320], "lastActivity": None, "score": score,
+        }
     return {
-        "machineID": machine, "hits": hits, "indexed": len(entries), "pending": pending,
-        "error": None, "milliseconds": int((time.time() - started) * 1000),
+        "id": target["id"], "source": "none", "sessionID": None, "title": target["title"], "snippet": "",
+        "summary": "", "lastActivity": None, "score": score,
     }
 
 
@@ -672,9 +994,10 @@ def main():
     request = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
     home = os.environ.get("EDITH_AGENT_SEARCH_HOME") or os.path.expanduser("~")
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-    store = os.environ.get("EDITH_AGENT_SEARCH_STORE") or os.path.join(cache, "edith", "agent-search", "transcripts-v2.json")
+    store = os.environ.get("EDITH_AGENT_SEARCH_STORE") or os.path.join(cache, "edith", "agent-search", "sessions-v3.json")
     now = os.environ.get("EDITH_AGENT_SEARCH_NOW")
-    sys.stdout.write(json.dumps(search(request, home, store, float(now) if now else None)))
+    engine = Engine(home, store, herdr_binary(home))
+    sys.stdout.write(json.dumps(engine.search(request, float(now) if now else None)))
     sys.stdout.write("\n")
 
 
