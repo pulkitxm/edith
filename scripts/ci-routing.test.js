@@ -1,14 +1,20 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows-disabled/ci.yml", "utf8");
 const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
 const swiftCache = Bun.YAML.parse(
   readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
 );
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
-const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
-const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
+const pagesWorkflow = readFileSync(
+  ".github/workflows-disabled/pages.yml",
+  "utf8",
+);
+const wikiWorkflow = readFileSync(
+  ".github/workflows-disabled/wiki-sync.yml",
+  "utf8",
+);
 
 const areaPatterns = new Map(
   [...ciWorkflow.matchAll(/area ([a-z_]+) '([^']+)'/g)].map(

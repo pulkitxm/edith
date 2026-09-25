@@ -1,15 +1,13 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
-const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows-disabled/ci.yml", "utf8");
 const releaseStateScript = readFileSync(
   "scripts/publish-release-state.sh",
   "utf8",
 );
 const makefile = readFileSync("Makefile", "utf8");
 const buildScript = readFileSync("build.sh", "utf8");
-const contributing = readFileSync("CONTRIBUTING.md", "utf8");
-const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const workflow = Bun.YAML.parse(ciWorkflow);
 const { version, dmg, publish } = workflow.jobs;
 const releaseWorkflow = ciWorkflow;
@@ -59,7 +57,7 @@ function publicationContext() {
 }
 
 test("release preparation belongs to the same CI run and starts after routing", () => {
-  expect(existsSync(".github/workflows/release.yml")).toBe(false);
+  expect(existsSync(".github/workflows-disabled/release.yml")).toBe(false);
   expect(workflow.jobs["release-build"]).toBeUndefined();
   expect(workflow.jobs.ci).toBeUndefined();
   expect(version.needs).toBe("changes");
@@ -408,9 +406,10 @@ test("superseded release cuts finish cleanly without publishing", () => {
   expect(releaseWorkflow).toContain('exit "$PUBLISH_STATUS"');
 });
 
-test("the obsolete tag-only manual release path is retired", () => {
-  expect(makefile).not.toMatch(/^release:/m);
-  expect(makefile).not.toContain("make release");
-  expect(contributing).not.toContain("make release");
-  expect(homebrewInternals).not.toContain("make release");
+test("releases are cut locally while CI is parked", () => {
+  expect(existsSync("scripts/release-local.sh")).toBe(true);
+  expect(makefile).toMatch(/^release:/m);
+  expect(makefile).toContain("scripts/release-local.sh");
+  const agents = readFileSync("AGENTS.md", "utf8");
+  expect(agents).toContain("make release");
 });
