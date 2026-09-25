@@ -250,7 +250,7 @@ ci-markdown:
 
 ci-links:
 	@command -v lychee >/dev/null || { echo "lychee missing: run make ci-tools" >&2; exit 1; }
-	lychee --config lychee.toml './**/*.md'
+	GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" lychee --config lychee.toml './**/*.md'
 
 ci-workflows:
 	@command -v actionlint >/dev/null || { echo "actionlint missing: run make ci-tools" >&2; exit 1; }
