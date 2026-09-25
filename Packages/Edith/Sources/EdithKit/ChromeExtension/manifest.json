@@ -2,14 +2,21 @@
   "manifest_version": 3,
   "name": "Edith Attention",
   "description": "Private, local-first attention and browser activity tracking for Edith.",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "minimum_chrome_version": "120",
-  "permissions": ["alarms", "history", "idle", "scripting", "storage", "tabs", "windows"],
-  "host_permissions": ["http://127.0.0.1/*"],
-  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["alarms", "history", "idle", "storage", "tabs", "tabGroups", "windows"],
+  "host_permissions": ["http://127.0.0.1/*", "http://*/*", "https://*/*"],
   "background": {
     "service_worker": "service-worker.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Edith Attention"

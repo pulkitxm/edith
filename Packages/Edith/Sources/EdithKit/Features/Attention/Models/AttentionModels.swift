@@ -47,7 +47,7 @@ public enum AttentionTag {
     public static let view = "view"
     public static let status = "status"
     public static let repository = "repo"
-    public static let github = "github"
+    public static let section = "section"
     public static let search = "search"
     public static let video = "video"
     public static let channel = "channel"
@@ -57,7 +57,7 @@ public enum AttentionTag {
     public static let passive = "passive"
 
     public static let dimensions = [
-        page, machine, agent, project, repository, github, channel, group, search, document,
+        page, machine, agent, project, repository, section, channel, group, search, document,
     ]
 
     public static func title(_ key: String) -> String {
@@ -70,7 +70,7 @@ public enum AttentionTag {
         case view: "View"
         case status: "Status"
         case repository: "Repository"
-        case github: "GitHub page"
+        case section: "Site section"
         case search: "Search"
         case video: "Video"
         case channel: "Channel"

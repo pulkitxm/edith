@@ -1,5 +1,5 @@
 const fields = ["profile", "port", "token", "idleThreshold", "enabled"]
-const defaults = { profile: "Default", port: 52728, token: "", idleThreshold: 300, enabled: true, mediaEnabled: false }
+const defaults = { profile: "Default", port: 52728, token: "", idleThreshold: 300, enabled: true }
 
 async function load() {
   const values = { ...defaults, ...(await chrome.storage.local.get(defaults)) }
@@ -9,7 +9,6 @@ async function load() {
     field.addEventListener("change", save)
     if (field.type !== "checkbox") field.addEventListener("input", save)
   }
-  await renderDeep()
   await renderStatus(values)
 }
 
@@ -36,30 +35,7 @@ async function renderStatus(values = null) {
   status.textContent = connected ? "Connected" : state.connectionStatus === "offline" ? "Edith offline" : "Setup needed"
   status.className = `status ${connected ? "good" : "warn"}`
   status.title = state.lastError || state.lastConnectedAt || ""
-}
-
-async function renderDeep() {
-  const allowed = await chrome.permissions.contains({ origins: ["http://*/*", "https://*/*"] })
-  const button = document.getElementById("deep")
-  button.textContent = allowed ? "Disable deep mode" : "Enable deep mode"
-  button.className = allowed ? "active" : ""
-  await chrome.storage.local.set({ mediaEnabled: allowed })
-}
-
-async function toggleDeep() {
-  const origins = ["http://*/*", "https://*/*"]
-  const allowed = await chrome.permissions.contains({ origins })
-  if (allowed) {
-    await chrome.scripting.unregisterContentScripts({ ids: ["edith-media"] }).catch(() => {})
-    await chrome.permissions.remove({ origins })
-  } else {
-    const granted = await chrome.permissions.request({ origins })
-    if (granted) {
-      await chrome.scripting.unregisterContentScripts({ ids: ["edith-media"] }).catch(() => {})
-      await chrome.scripting.registerContentScripts([{ id: "edith-media", matches: origins, js: ["media.js"], runAt: "document_idle", persistAcrossSessions: true }])
-    }
-  }
-  await renderDeep()
+  document.getElementById("version").textContent = `Version ${chrome.runtime.getManifest().version}`
 }
 
 async function testConnection(interactive = true) {
@@ -122,7 +98,6 @@ async function forget() {
   location.reload()
 }
 
-document.getElementById("deep").addEventListener("click", toggleDeep)
 document.getElementById("test").addEventListener("click", testConnection)
 document.getElementById("history").addEventListener("click", importHistory)
 document.getElementById("forget").addEventListener("click", forget)
