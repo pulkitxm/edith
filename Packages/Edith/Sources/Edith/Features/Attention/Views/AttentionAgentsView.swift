@@ -150,7 +150,7 @@ private struct AttentionAgentSessions: View {
     var body: some View {
         let dark = scheme == .dark
         AttentionPanel("Sessions", subtitle: "Every agent that worked in this period.") {
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(Array(sessions.prefix(limit).enumerated()), id: \.element.id) {
                     index, session in
                     if index > 0 { Divider().opacity(0.5) }

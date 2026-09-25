@@ -112,15 +112,20 @@ public struct AttentionSummaryRequest: Codable, Sendable {
     public let to: Date
     public let settings: AttentionSettings?
     public let comparePeriod: TimeInterval?
+    public let window: AttentionTimeWindow
+    public let parts: Set<AttentionSummaryPart>
 
     public init(
         from: Date, to: Date, settings: AttentionSettings? = nil,
-        comparePeriod: TimeInterval? = nil
+        comparePeriod: TimeInterval? = nil, window: AttentionTimeWindow = .all,
+        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases)
     ) {
         self.from = from
         self.to = to
         self.settings = settings
         self.comparePeriod = comparePeriod
+        self.window = window
+        self.parts = parts
     }
 
     public var previousInterval: DateInterval? {
@@ -133,12 +138,12 @@ public struct AttentionSummaryRequest: Codable, Sendable {
 }
 
 public struct AttentionPageSnapshot: Codable, Sendable {
-    public let settings: AttentionSettings
-    public let summary: AttentionSummary
-    public let focusSessions: [AttentionFocusSession]
-    public let activeFocus: AttentionFocusSession?
-    public let hasStoredEvents: Bool
-    public let classifications: AttentionClassifications
+    public var settings: AttentionSettings
+    public var summary: AttentionSummary
+    public var focusSessions: [AttentionFocusSession]
+    public var activeFocus: AttentionFocusSession?
+    public var hasStoredEvents: Bool
+    public var classifications: AttentionClassifications
 
     public init(request: AttentionSummaryRequest, repository: AttentionRepository) {
         self.init(
@@ -153,20 +158,26 @@ public struct AttentionPageSnapshot: Codable, Sendable {
     public init(
         request: AttentionSummaryRequest, repository: AttentionRepository,
         all: [AttentionEvent], previous: [AttentionEvent]?, hasStoredEvents: Bool,
-        previousTotals: AttentionTotals? = nil
+        previousTotals: AttentionTotals? = nil, calendar: Calendar = .current
     ) {
         settings = request.settings ?? repository.loadSettings()
         classifications = repository.loadClassifications()
-        let analyzer = AttentionAnalyzer()
+        let analyzer = AttentionAnalyzer(calendar: calendar)
         var summary = analyzer.summary(
-            events: all, settings: settings, classifications: classifications,
-            from: request.from, to: request.to)
+            events: request.window.apply(all, calendar: calendar), settings: settings,
+            classifications: classifications, from: request.from, to: request.to)
+        if !request.window.allDays {
+            summary.days.removeAll {
+                !request.window.allows(weekday: calendar.component(.weekday, from: $0.day))
+            }
+        }
         if let previousTotals {
             summary.previous = previousTotals
         } else if let previous, let interval = request.previousInterval {
             summary.previous =
                 analyzer.summary(
-                    events: previous, settings: settings, classifications: classifications,
+                    events: request.window.apply(previous, calendar: calendar),
+                    settings: settings, classifications: classifications,
                     from: interval.start, to: interval.end, detailed: false
                 ).totals
         }
@@ -175,6 +186,12 @@ public struct AttentionPageSnapshot: Codable, Sendable {
             repository.focusSessions(from: request.from, to: request.to).reversed())
         activeFocus = repository.activeFocus()
         self.hasStoredEvents = hasStoredEvents
+    }
+
+    public func trimmed(to parts: Set<AttentionSummaryPart>) -> AttentionPageSnapshot {
+        var copy = self
+        copy.summary = summary.trimmed(to: parts)
+        return copy
     }
 }
 

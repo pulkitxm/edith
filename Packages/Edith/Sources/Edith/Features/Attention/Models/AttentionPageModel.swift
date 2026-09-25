@@ -26,80 +26,14 @@ enum AttentionPageSection: String, CaseIterable, Identifiable {
     }
 
     var usesPeriod: Bool { self != .settings }
-}
 
-enum AttentionScope: String, CaseIterable, Identifiable {
-    case day
-    case week
-    case month
-
-    var id: String { rawValue }
-
-    var title: String {
+    var part: AttentionSummaryPart {
         switch self {
-        case .day: "Day"
-        case .week: "Week"
-        case .month: "30 days"
-        }
-    }
-
-    var days: Int {
-        switch self {
-        case .day: 1
-        case .week: 7
-        case .month: 30
-        }
-    }
-
-    var previousTitle: String {
-        switch self {
-        case .day: "the day before"
-        case .week: "the week before"
-        case .month: "the 30 days before"
-        }
-    }
-}
-
-struct AttentionPeriod: Equatable {
-    var scope: AttentionScope
-    var anchor: Date
-
-    init(scope: AttentionScope = .day, anchor: Date = Date(), calendar: Calendar = .current) {
-        self.scope = scope
-        self.anchor = calendar.startOfDay(for: anchor)
-    }
-
-    func interval(now: Date = Date(), calendar: Calendar = .current) -> DateInterval {
-        let end = calendar.date(byAdding: .day, value: 1, to: anchor) ?? anchor
-        let start = calendar.date(byAdding: .day, value: 1 - scope.days, to: anchor) ?? anchor
-        return DateInterval(start: start, end: max(start, min(end, now)))
-    }
-
-    var comparePeriod: TimeInterval { TimeInterval(scope.days) * 86_400 }
-
-    func isCurrent(now: Date = Date(), calendar: Calendar = .current) -> Bool {
-        calendar.isDate(anchor, inSameDayAs: now)
-    }
-
-    func shifted(by steps: Int, calendar: Calendar = .current) -> AttentionPeriod {
-        var next = self
-        next.anchor =
-            calendar.date(byAdding: .day, value: steps * scope.days, to: anchor) ?? anchor
-        return next
-    }
-
-    func title(now: Date = Date(), calendar: Calendar = .current) -> String {
-        let interval = interval(now: now, calendar: calendar)
-        switch scope {
-        case .day:
-            if calendar.isDateInToday(anchor) { return "Today" }
-            if calendar.isDateInYesterday(anchor) { return "Yesterday" }
-            return anchor.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        case .week, .month:
-            let last = calendar.date(byAdding: .day, value: scope.days - 1, to: interval.start)
-            let from = interval.start.formatted(.dateTime.month(.abbreviated).day())
-            let to = (last ?? anchor).formatted(.dateTime.month(.abbreviated).day())
-            return "\(from) to \(to)"
+        case .overview, .settings: .overview
+        case .timeline: .timeline
+        case .breakdown: .breakdown
+        case .agents: .agents
+        case .focus: .focus
         }
     }
 }
@@ -107,10 +41,16 @@ struct AttentionPeriod: Equatable {
 @MainActor
 @Observable
 final class AttentionPageModel {
-    var section: AttentionPageSection = .overview
-    var period = AttentionPeriod()
+    var section: AttentionPageSection = .overview {
+        didSet { if section != oldValue { ensurePart() } }
+    }
+    private(set) var period = AttentionPeriod()
+    private(set) var window = AttentionTimeWindow.all
     var settings = AttentionSettings()
-    var summary: AttentionSummary
+    private(set) var summary: AttentionSummary
+    private(set) var dayRibbon: [AttentionRibbonBlock] = []
+    private(set) var timeline: [AttentionTimelineDay] = []
+    private(set) var triage: [AttentionEntity] = []
     var focusSessions: [AttentionFocusSession] = []
     var activeFocus: AttentionFocusSession?
     var classifications = AttentionClassifications()
@@ -119,11 +59,15 @@ final class AttentionPageModel {
     var message: String?
     var errorMessage: String?
     var breakdownDimension = AttentionDimension.entity
-    var levelFilter: AttentionProductivity?
-    var sphereFilter: AttentionSphere?
-    var categoryFilter: String?
-    var search = ""
+    private(set) var levelFilter: AttentionProductivity?
+    private(set) var sphereFilter: AttentionSphere?
+    private(set) var categoryFilter: String?
+    private(set) var search = ""
+    var searchText = "" {
+        didSet { if searchText != oldValue { scheduleSearch() } }
+    }
     private(set) var loaded = false
+    private(set) var pending = false
     private(set) var hasStoredEvents = false
     private(set) var transferringBackup = false
     private(set) var categorizing = false
@@ -131,6 +75,9 @@ final class AttentionPageModel {
     private let repository: AttentionRepository
     private var reloadTask: Task<Void, Never>?
     private var reloadGeneration = 0
+    private var loadedParts: Set<AttentionSummaryPart> = []
+    private var timelineTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
 
     init(repository: AttentionRepository = AttentionRepository()) {
         self.repository = repository
@@ -143,36 +90,78 @@ final class AttentionPageModel {
     }
 
     var hasActivity: Bool {
-        !summary.entities.isEmpty || summary.idleDuration > 0 || !summary.agents.isEmpty
+        !summary.categories.isEmpty || summary.idleDuration > 0 || !summary.agents.isEmpty
     }
 
     var refreshInterval: Duration {
-        period.isCurrent() ? .seconds(period.scope == .day ? 15 : 60) : .seconds(300)
+        guard period.isCurrent() else { return .seconds(900) }
+        return period.isSingleDay ? .seconds(30) : .seconds(120)
     }
 
     var cloudBackup: AttentionCloudBackup { AttentionCloudBackup() }
 
     func category(_ id: String) -> AttentionCategory { settings.category(id) }
 
-    func setScope(_ scope: AttentionScope) {
-        guard period.scope != scope else { return }
-        period.scope = scope
-        reload()
+    func select(_ preset: AttentionRangePreset) {
+        setPeriod(AttentionPeriod(preset))
+    }
+
+    func selectRange(from: Date, to: Date) {
+        setPeriod(AttentionPeriod.custom(from: from, to: to))
     }
 
     func step(_ steps: Int) {
         let next = period.shifted(by: steps)
-        guard next.anchor <= Calendar.current.startOfDay(for: Date()) else { return }
-        period = next
-        reload()
+        guard next.start <= Date() else { return }
+        setPeriod(next)
     }
 
     func showToday() {
-        period = AttentionPeriod(scope: period.scope)
-        reload()
+        setPeriod(AttentionPeriod(.today))
     }
 
     var canStepForward: Bool { !period.isCurrent() }
+
+    func setPeriod(_ next: AttentionPeriod) {
+        guard next != period else { return }
+        period = next
+        startLoading()
+    }
+
+    func setDays(_ weekdays: Set<Int>) {
+        setWindow(
+            AttentionTimeWindow(
+                weekdays: weekdays, startHour: window.startHour, endHour: window.endHour))
+    }
+
+    func toggleDay(_ weekday: Int) {
+        var days = window.allDays ? Set(1...7) : window.weekdays
+        if days.contains(weekday) { days.remove(weekday) } else { days.insert(weekday) }
+        guard !days.isEmpty else { return }
+        setDays(days)
+    }
+
+    func setHours(start: Int, end: Int) {
+        setWindow(AttentionTimeWindow(weekdays: window.weekdays, startHour: start, endHour: end))
+    }
+
+    func setWindow(_ next: AttentionTimeWindow) {
+        guard next != window else { return }
+        window = next
+        startLoading()
+    }
+
+    private func startLoading() {
+        loadedParts = []
+        pending = true
+        reload()
+    }
+
+    private func ensurePart() {
+        guard loaded, !loadedParts.contains(section.part) else { return }
+        pending = true
+        reload()
+    }
 
     func reload(preserveSettings: Bool = false) {
         reloadTask?.cancel()
@@ -180,15 +169,21 @@ final class AttentionPageModel {
         let generation = reloadGeneration
         let repository = repository
         let period = period
+        let window = window
+        let parts = loadedParts.union([section.part])
         let knownSettings = settings
+        let current = summary
+        let filter = spanFilter
         reloadTask = Task.detached { [weak self] in
             do {
                 let state = try await AttentionPageModel.loadState(
-                    repository: repository, period: period,
-                    settings: preserveSettings ? knownSettings : nil)
+                    repository: repository, period: period, window: window, parts: parts,
+                    settings: preserveSettings ? knownSettings : nil, current: current,
+                    filter: filter)
                 guard !Task.isCancelled else { return }
                 await self?.publish(
-                    state, preserveSettings: preserveSettings, generation: generation)
+                    state, parts: parts, preserveSettings: preserveSettings,
+                    generation: generation)
             } catch {
                 guard !Task.isCancelled else { return }
                 await self?.publishFailure(error.localizedDescription, generation: generation)
@@ -198,19 +193,30 @@ final class AttentionPageModel {
 
     func waitForReload() async {
         await reloadTask?.value
+        await timelineTask?.value
     }
 
-    private func publish(_ state: AttentionPageState, preserveSettings: Bool, generation: Int) {
+    private func publish(
+        _ state: AttentionPageState, parts: Set<AttentionSummaryPart>, preserveSettings: Bool,
+        generation: Int
+    ) {
         guard !Task.isCancelled, reloadGeneration == generation else { return }
         reloadTask = nil
-        if !preserveSettings { settings = state.settings }
-        summary = state.summary
-        activeFocus = state.activeFocus
-        focusSessions = state.focusSessions
-        classifications = state.classifications
+        if !preserveSettings, settings != state.settings { settings = state.settings }
+        if let derived = state.derived {
+            summary = derived.summary
+            dayRibbon = derived.dayRibbon
+            timeline = derived.timeline
+            triage = derived.triage
+        }
+        if activeFocus != state.activeFocus { activeFocus = state.activeFocus }
+        if focusSessions != state.focusSessions { focusSessions = state.focusSessions }
+        if classifications != state.classifications { classifications = state.classifications }
         hasStoredEvents = state.hasStoredEvents
         extensionInstalled = state.extensionInstalled
+        loadedParts = parts
         loaded = true
+        pending = false
         errorMessage = nil
     }
 
@@ -219,28 +225,76 @@ final class AttentionPageModel {
         reloadTask = nil
         errorMessage = message
         loaded = true
+        pending = false
     }
 
     nonisolated private static func loadState(
-        repository: AttentionRepository, period: AttentionPeriod, settings: AttentionSettings?
+        repository: AttentionRepository, period: AttentionPeriod, window: AttentionTimeWindow,
+        parts: Set<AttentionSummaryPart>, settings: AttentionSettings?,
+        current: AttentionSummary, filter: AttentionSpanFilter
     ) async throws -> AttentionPageState {
         let interval = period.interval()
         let request = AttentionSummaryRequest(
             from: interval.start, to: interval.end, settings: settings,
-            comparePeriod: period.comparePeriod)
+            comparePeriod: period.comparePeriod, window: window, parts: parts)
         let snapshot: AttentionPageSnapshot
         if repository.resolvedEventSink is AgentAttentionSink {
             snapshot = try await AttentionBackgroundClient.summary(request)
         } else {
             snapshot = AttentionPageSnapshot(request: request, repository: repository)
+                .trimmed(to: parts)
         }
+        try Task.checkCancellation()
+        let derived: AttentionPageDerivedState? =
+            snapshot.summary == current
+            ? nil
+            : AttentionPageDerivedState(
+                summary: snapshot.summary,
+                dayRibbon: period.isSingleDay
+                    ? AttentionPageDerived.dayRibbon(snapshot.summary) : [],
+                timeline: parts.contains(.timeline)
+                    ? AttentionPageDerived.timeline(snapshot.summary, filter: filter) : [],
+                triage: triage(snapshot.summary))
         return AttentionPageState(
-            settings: snapshot.settings, summary: snapshot.summary,
+            settings: snapshot.settings, derived: derived,
             activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
             classifications: snapshot.classifications,
             hasStoredEvents: snapshot.hasStoredEvents,
             extensionInstalled: FileManager.default.fileExists(
                 atPath: AttentionExtensionInstaller.installedDirectory.path))
+    }
+
+    var spanFilter: AttentionSpanFilter {
+        AttentionSpanFilter(
+            level: levelFilter, sphere: sphereFilter, category: categoryFilter, search: search)
+    }
+
+    private func refilterTimeline() {
+        timelineTask?.cancel()
+        guard loadedParts.contains(.timeline) else { return }
+        let summary = summary
+        let filter = spanFilter
+        timelineTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let days = AttentionPageDerived.timeline(summary, filter: filter)
+            guard !Task.isCancelled else { return }
+            await self?.publishTimeline(days, filter: filter)
+        }
+    }
+
+    private func publishTimeline(_ days: [AttentionTimelineDay], filter: AttentionSpanFilter) {
+        guard filter == spanFilter else { return }
+        timeline = days
+    }
+
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        let text = searchText
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let self, self.searchText == text else { return }
+            self.search = text
+            self.refilterTimeline()
+        }
     }
 
     func saveSettings() {
@@ -354,8 +408,6 @@ final class AttentionPageModel {
         return nil
     }
 
-    var triage: [AttentionEntity] { Self.triage(summary) }
-
     var quickCategories: [AttentionCategory] { Self.quickCategories(settings) }
 
     nonisolated static func triage(_ summary: AttentionSummary) -> [AttentionEntity] {
@@ -456,9 +508,10 @@ final class AttentionPageModel {
         browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
     }
 
-    func filter(category id: String, navigate: Bool = true) {
+    func filter(category id: String?, navigate: Bool = true) {
         clearSelection()
         categoryFilter = id
+        refilterTimeline()
         if navigate { section = .breakdown }
     }
 
@@ -466,12 +519,14 @@ final class AttentionPageModel {
         let active = levelFilter == level
         clearSelection()
         levelFilter = active ? nil : level
+        refilterTimeline()
     }
 
     func toggle(sphere: AttentionSphere) {
         let active = sphereFilter == sphere
         clearSelection()
         sphereFilter = active ? nil : sphere
+        refilterTimeline()
     }
 
     func matches(
@@ -482,13 +537,6 @@ final class AttentionPageModel {
         if let levelFilter { return levels[levelFilter.key] ?? 0 }
         if let sphereFilter { return spheres[sphereFilter.rawValue] ?? 0 }
         return Self.total(categories)
-    }
-
-    func matches(_ span: AttentionSpan) -> Bool {
-        if let categoryFilter, span.categoryID != categoryFilter { return false }
-        if let levelFilter, span.productivity != levelFilter { return false }
-        if let sphereFilter, span.sphere != sphereFilter { return false }
-        return true
     }
 
     nonisolated static func total(_ values: [String: TimeInterval]) -> TimeInterval {
@@ -516,13 +564,23 @@ final class AttentionPageModel {
 
     func clearFilters() {
         clearSelection()
+        searchTask?.cancel()
+        searchText = ""
         search = ""
+        refilterTimeline()
     }
+}
+
+private struct AttentionPageDerivedState: Sendable {
+    var summary: AttentionSummary
+    var dayRibbon: [AttentionRibbonBlock]
+    var timeline: [AttentionTimelineDay]
+    var triage: [AttentionEntity]
 }
 
 private struct AttentionPageState: Sendable {
     var settings: AttentionSettings
-    var summary: AttentionSummary
+    var derived: AttentionPageDerivedState?
     var activeFocus: AttentionFocusSession?
     var focusSessions: [AttentionFocusSession]
     var classifications: AttentionClassifications

@@ -79,7 +79,7 @@ struct AttentionBreakdownView: View {
                     AttentionEmpty(
                         text: "Nothing matches the filters", symbol: "line.3.horizontal.decrease")
                 } else {
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         ForEach(Array(rows.prefix(80).enumerated()), id: \.element.id) {
                             index, row in
                             if index > 0 { Divider().opacity(0.5) }

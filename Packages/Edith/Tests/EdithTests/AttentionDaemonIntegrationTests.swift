@@ -396,4 +396,35 @@ private struct AttentionDaemonFixture {
             #expect(AttentionHTTPRequest.parse(data) == nil)
         }
     }
+
+    @Test func summariesAreCachedTrimmedAndWindowed() async throws {
+        let fixture = try AttentionDaemonFixture()
+        defer { Task { await fixture.close() } }
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        let past = now.addingTimeInterval(-7_200)
+        try await fixture.service.record(
+            AttentionBatch(events: [fixture.event(at: past, duration: 600)]))
+        let request = AttentionSummaryRequest(
+            from: past.addingTimeInterval(-60), to: past.addingTimeInterval(900),
+            parts: [.overview])
+        let first = try await fixture.service.summary(request, now: now)
+        #expect(first.summary.activeDuration == 600)
+        #expect(
+            first.summary.dimensions.allSatisfy {
+                AttentionSummaryPart.overviewDimensions.contains($0.key)
+            })
+        try await fixture.service.record(
+            AttentionBatch(events: [fixture.event(at: past.addingTimeInterval(700), duration: 60)]))
+        let cached = try await fixture.service.summary(
+            AttentionSummaryRequest(
+                from: request.from, to: request.to, parts: [.breakdown]), now: now)
+        #expect(cached.summary.activeDuration == 600)
+        #expect(cached.summary.entities.isEmpty)
+        #expect(!cached.summary.dimensions.isEmpty)
+        let hour = Calendar.current.component(.hour, from: past)
+        let other = AttentionTimeWindow(startHour: (hour + 2) % 24, endHour: (hour + 3) % 24 + 1)
+        let windowed = try await fixture.service.summary(
+            AttentionSummaryRequest(from: request.from, to: request.to, window: other), now: now)
+        #expect(windowed.summary.activeDuration == 0)
+    }
 }

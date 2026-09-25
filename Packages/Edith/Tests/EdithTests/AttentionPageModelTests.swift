@@ -58,8 +58,7 @@ import Testing
                 startedAt: now.addingTimeInterval(-120), duration: 60,
                 source: .application, appName: "Writing", bundleID: "com.example.Writing"))
         let model = AttentionPageModel(repository: fixture.repository)
-        model.period = AttentionPeriod(scope: .week)
-        model.reload()
+        model.select(.last7)
         await model.waitForReload()
         let entity = try #require(model.summary.entities.first)
         #expect(entity.name == "Writing")
@@ -68,23 +67,80 @@ import Testing
         #expect(model.summary.productiveDuration == 60)
     }
 
-    @Test func periodsCoverExpectedWindowsAndStepByTheirLength() {
+    @Test func tabsLoadTheirOwnPartsAndFiltersRunOffTheMainPath() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let now = Date()
+        try fixture.repository.saveSettings(
+            AttentionSettings(isEnabled: true, trackingEnabled: true))
+        for (offset, app) in [
+            ("com.apple.dt.Xcode", "Xcode"), ("com.tinyspeck.slackmacgap", "Slack"),
+        ]
+        .enumerated() {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: now.addingTimeInterval(Double(-600 + offset * 300)), duration: 240,
+                    source: .application, appName: app.1, bundleID: app.0))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        #expect(model.timeline.isEmpty)
+        #expect(!model.dayRibbon.isEmpty)
+        model.section = .timeline
+        #expect(model.pending)
+        await model.waitForReload()
+        #expect(!model.pending)
+        #expect(model.timeline.first?.blocks.count == 2)
+        model.searchText = "slack"
+        try await Task.sleep(for: .milliseconds(400))
+        await model.waitForReload()
+        #expect(model.timeline.first?.blocks.map(\.name) == ["Slack"])
+        model.toggle(level: .veryProductive)
+        await model.waitForReload()
+        #expect(model.timeline.first?.blocks.isEmpty == true)
+    }
+
+    @Test func presetsCoverTheirDaysAndStepByTheirLength() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = Date(timeIntervalSince1970: 1_775_000_000)
-        let today = AttentionPeriod(scope: .day, anchor: now, calendar: calendar)
-        #expect(today.interval(now: now, calendar: calendar).start == calendar.startOfDay(for: now))
-        #expect(today.interval(now: now, calendar: calendar).end == now)
+        let today = AttentionPeriod(.today, now: now, calendar: calendar)
+        #expect(today.start == calendar.startOfDay(for: now))
+        #expect(today.interval(now: now).end == now)
+        #expect(today.isSingleDay)
         let yesterday = today.shifted(by: -1, calendar: calendar)
-        #expect(yesterday.interval(now: now, calendar: calendar).duration == 86_400)
-        let week = AttentionPeriod(scope: .week, anchor: now, calendar: calendar)
-        #expect(week.interval(now: now, calendar: calendar).duration >= 6 * 86_400)
-        #expect(
-            week.shifted(by: -1, calendar: calendar).interval(now: now, calendar: calendar).duration
-                == 7 * 86_400)
-        let month = AttentionPeriod(scope: .month, anchor: now, calendar: calendar)
-        #expect(month.interval(now: now, calendar: calendar).duration >= 29 * 86_400)
-        #expect(month.comparePeriod == 30 * 86_400)
+        #expect(yesterday.days(calendar: calendar) == 1)
+        #expect(yesterday.end == today.start)
+        let week = AttentionPeriod(.last7, now: now, calendar: calendar)
+        #expect(week.days(calendar: calendar) == 7)
+        #expect(week.shifted(by: -1, calendar: calendar).end == week.start)
+        let month = AttentionPeriod(.lastMonth, now: now, calendar: calendar)
+        let earlier = month.shifted(by: -1, calendar: calendar)
+        #expect(calendar.component(.day, from: earlier.start) == 1)
+        #expect(earlier.end == month.start)
+        let custom = AttentionPeriod.custom(
+            from: now, to: now.addingTimeInterval(-2 * 86_400), calendar: calendar)
+        #expect(custom.days(calendar: calendar) == 3)
+        #expect(custom.preset == .custom)
+        #expect(AttentionPeriod(.last90, now: now, calendar: calendar).showsSpans == false)
+    }
+
+    @Test func dayAndHourWindowsKeepOnlyMatchingTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let monday = calendar.date(from: DateComponents(year: 2026, month: 9, day: 21, hour: 8))!
+        let event = AttentionEvent(
+            startedAt: monday, duration: 3 * 3_600, source: .application, appName: "Xcode",
+            signals: AttentionSignals(keys: 300))
+        let work = AttentionTimeWindow(startHour: 9, endHour: 10).apply([event], calendar: calendar)
+        #expect(work.count == 1)
+        #expect(work.first?.duration == 3_600)
+        #expect(work.first?.signals?.keys == 100)
+        let weekends = AttentionTimeWindow(weekdays: AttentionTimeWindow.weekends)
+        #expect(weekends.apply([event], calendar: calendar).isEmpty)
+        let overnight = AttentionTimeWindow(startHour: 22, endHour: 9)
+        #expect(overnight.apply([event], calendar: calendar).first?.duration == 3_600)
     }
 
     @Test func timelineIconsUseApplicationBundlesAndWebsiteFavicons() {

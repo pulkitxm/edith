@@ -2,7 +2,7 @@ import Charts
 import EdithKit
 import SwiftUI
 
-struct AttentionRibbonBlock: Identifiable, Equatable {
+struct AttentionRibbonBlock: Identifiable, Equatable, Sendable {
     var id: Date { start }
     var start: Date
     var end: Date
@@ -12,9 +12,7 @@ struct AttentionRibbonBlock: Identifiable, Equatable {
 
     var duration: TimeInterval { end.timeIntervalSince(start) }
 
-    static func blocks(
-        _ spans: [AttentionSpan], settings: AttentionSettings, gap: TimeInterval = 60
-    ) -> [AttentionRibbonBlock] {
+    static func blocks(_ spans: [AttentionSpan], gap: TimeInterval = 60) -> [AttentionRibbonBlock] {
         var blocks: [AttentionRibbonBlock] = []
         for span in spans.sorted(by: { $0.start < $1.start }) {
             let level = span.productivity
@@ -37,8 +35,7 @@ struct AttentionRibbonBlock: Identifiable, Equatable {
 }
 
 struct AttentionDayRibbon: View {
-    let spans: [AttentionSpan]
-    let settings: AttentionSettings
+    let blocks: [AttentionRibbonBlock]
     let day: DateInterval
     var height: CGFloat = 46
     @State private var selected: Date?
@@ -58,8 +55,7 @@ struct AttentionDayRibbon: View {
 
     var body: some View {
         let dark = scheme == .dark
-        let blocks = AttentionRibbonBlock.blocks(spans, settings: settings)
-        let range = Self.visibleRange(spans.flatMap { [$0.start, $0.end] }, day: day)
+        let range = Self.visibleRange(blocks.flatMap { [$0.start, $0.end] }, day: day)
         let hours = range.upperBound.timeIntervalSince(range.lowerBound) / 3_600
         let hovered = selected.flatMap { date in
             blocks.first { $0.start <= date && date < $0.end }
@@ -80,7 +76,7 @@ struct AttentionDayRibbon: View {
                         position: .top, spacing: UIScale.pt(4),
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
-                        AttentionRibbonTooltip(block: hovered, settings: settings)
+                        AttentionRibbonTooltip(block: hovered)
                     }
             }
         }
@@ -104,7 +100,6 @@ struct AttentionDayRibbon: View {
 
 private struct AttentionRibbonTooltip: View {
     let block: AttentionRibbonBlock
-    let settings: AttentionSettings
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {

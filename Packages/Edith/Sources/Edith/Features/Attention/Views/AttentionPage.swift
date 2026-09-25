@@ -64,6 +64,9 @@ struct AttentionPage: View {
                             }
                         }
                     }
+                    .opacity(model.pending && model.section.usesPeriod ? 0.45 : 1)
+                    .allowsHitTesting(!(model.pending && model.section.usesPeriod))
+                    .animation(.easeOut(duration: 0.15), value: model.pending)
                 } placeholder: {
                     AttentionPageSkeleton(model: model)
                 }
@@ -87,32 +90,59 @@ struct AttentionPage: View {
 
 private struct AttentionPeriodControl: View {
     let model: AttentionPageModel
+    @State private var customOpen = false
+    @State private var customFrom = Date()
+    @State private var customTo = Date()
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
         HStack(spacing: UIScale.pt(6)) {
-            ForEach(AttentionScope.allCases) { scope in
-                let active = model.period.scope == scope
-                Button {
-                    model.setScope(scope)
-                } label: {
-                    Text(scope.title)
-                        .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-                        .padding(.horizontal, UIScale.pt(10))
-                        .padding(.vertical, UIScale.pt(5))
-                        .widgetBar(
-                            cornerRadius: 8,
-                            fill: active
-                                ? AnyShapeStyle(DashSkin.accent(dark))
-                                : AnyShapeStyle(DashSkin.paper2(dark)),
-                            stroke: active ? Color.clear : DashSkin.lineStrong(dark)
-                        )
-                        .foregroundStyle(
-                            active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
-                }
-                .buttonStyle(.edith(.borderless))
+            ForEach([AttentionRangePreset.today, .last7, .last30], id: \.self) { preset in
+                chip(
+                    preset == .today ? "Today" : preset == .last7 ? "7 days" : "30 days",
+                    active: model.period == AttentionPeriod(preset), dark: dark
+                ) { model.select(preset) }
             }
+            Menu {
+                ForEach(Array(AttentionRangePreset.groups.enumerated()), id: \.offset) { _, group in
+                    Section {
+                        ForEach(group) { preset in
+                            Button(preset.title) { model.select(preset) }
+                        }
+                    }
+                }
+                Button("Custom range…") {
+                    customFrom = model.period.start
+                    customTo = model.period.lastDay
+                    customOpen = true
+                }
+            } label: {
+                Label("Range", systemImage: "calendar")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.edith(.secondary))
+            .fixedSize()
+            .popover(isPresented: $customOpen, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    Text("Custom range").font(.system(size: 13, weight: .semibold))
+                    DatePicker(
+                        "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
+                    DatePicker(
+                        "To", selection: $customTo, in: ...Date(), displayedComponents: .date)
+                    HStack {
+                        Spacer()
+                        Button("Show") {
+                            model.selectRange(from: customFrom, to: customTo)
+                            customOpen = false
+                        }
+                        .buttonStyle(.edith(.primary))
+                    }
+                }
+                .padding(16)
+                .frame(width: 280)
+            }
+            AttentionWindowMenu(model: model)
             Divider().frame(height: UIScale.pt(18)).padding(.horizontal, UIScale.pt(4))
             Button {
                 model.step(-1)
@@ -133,10 +163,90 @@ private struct AttentionPeriodControl: View {
             .buttonStyle(.edith(.iconOnly))
             .disabled(!model.canStepForward)
             .help("Next period")
-            if model.canStepForward {
-                Button("Today") { model.showToday() }
-                    .buttonStyle(.edith(.secondary))
+        }
+    }
+
+    private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Text(title)
+                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(5))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: active
+                        ? AnyShapeStyle(DashSkin.accent(dark))
+                        : AnyShapeStyle(DashSkin.paper2(dark)),
+                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
+                )
+                .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+        }
+        .buttonStyle(.edith(.borderless))
+    }
+}
+
+private struct AttentionWindowMenu: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        let window = model.window
+        Menu {
+            Section("Days") {
+                ForEach(AttentionDayFilter.allCases) { filter in
+                    toggle(
+                        filter.title,
+                        on: window.weekdays == filter.weekdays || (filter == .all && window.allDays)
+                    ) {
+                        model.setDays(filter.weekdays)
+                    }
+                }
+                Menu("Pick days") {
+                    let symbols = Calendar.current.weekdaySymbols
+                    ForEach(1...7, id: \.self) { weekday in
+                        toggle(symbols[weekday - 1], on: window.allows(weekday: weekday)) {
+                            model.toggleDay(weekday)
+                        }
+                    }
+                }
             }
+            Section("Hours") {
+                ForEach(AttentionHourFilter.allCases) { filter in
+                    toggle(
+                        filter.title,
+                        on: window.startHour == filter.hours.0 && window.endHour == filter.hours.1
+                    ) { model.setHours(start: filter.hours.0, end: filter.hours.1) }
+                }
+                Menu("Starting at") {
+                    ForEach(0..<24, id: \.self) { hour in
+                        toggle(String(format: "%02d:00", hour), on: window.startHour == hour) {
+                            model.setHours(start: hour, end: window.endHour)
+                        }
+                    }
+                }
+                Menu("Ending at") {
+                    ForEach(1...24, id: \.self) { hour in
+                        toggle(String(format: "%02d:00", hour % 24), on: window.endHour == hour) {
+                            model.setHours(start: window.startHour, end: hour)
+                        }
+                    }
+                }
+            }
+            if !window.isAll {
+                Button("Reset to all days and hours") { model.setWindow(.all) }
+            }
+        } label: {
+            Label(window.isAll ? "All hours" : window.title, systemImage: "clock")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.edith(window.isAll ? .secondary : .primary))
+        .fixedSize()
+    }
+
+    private func toggle(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
         }
     }
 }

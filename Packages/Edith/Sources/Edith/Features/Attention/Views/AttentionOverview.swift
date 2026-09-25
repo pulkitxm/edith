@@ -8,7 +8,7 @@ struct AttentionOverview: View {
     private var summary: AttentionSummary { model.summary }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
             AttentionHeadline(model: model)
             AttentionDayPanel(model: model)
             columns {
@@ -120,25 +120,25 @@ struct AttentionDayPanel: View {
         let interval = model.period.interval()
         let day = DateInterval(start: interval.start, duration: 86_400)
         let range = AttentionDayRibbon.visibleRange(
-            summary.spans.flatMap { [$0.start, $0.end] }
+            model.dayRibbon.flatMap { [$0.start, $0.end] }
                 + summary.agents.concurrency.filter { $0.working > 0 }.map(\.start), day: day)
         AttentionPanel(
-            model.period.scope == .day ? "Your day" : "Day by day",
-            subtitle: model.period.scope == .day
+            model.period.isSingleDay ? "Your day" : "Day by day",
+            subtitle: model.period.isSingleDay
                 ? "Every stretch of attention, shaded by how productive it was. Hover to see what it was."
                 : "Active time per day, split by productivity."
         ) {
             if summary.activeDuration == 0 {
                 AttentionEmpty(text: "No active time in this period", symbol: "moon.zzz")
             } else {
-                if model.period.scope == .day {
-                    AttentionDayRibbon(spans: summary.spans, settings: model.settings, day: day)
+                if model.period.isSingleDay {
+                    AttentionDayRibbon(blocks: model.dayRibbon, day: day)
                 } else {
                     AttentionDailyStack(days: summary.days, settings: model.settings)
                 }
                 AttentionLevelLegend(levels: summary.levels, total: summary.activeDuration)
             }
-            if model.period.scope == .day,
+            if model.period.isSingleDay,
                 summary.agents.concurrency.contains(where: { $0.working > 0 })
             {
                 Divider()
@@ -179,14 +179,14 @@ struct AttentionHoursPanel: View {
     var body: some View {
         let summary = model.summary
         AttentionPanel(
-            model.period.scope == .day ? "Hour by hour" : "When you work",
-            subtitle: model.period.scope == .day
+            model.period.isSingleDay ? "Hour by hour" : "When you work",
+            subtitle: model.period.isSingleDay
                 ? "Active minutes in each hour, split by productivity."
                 : "Active time by weekday and hour. Darker is busier."
         ) {
             if summary.hours.isEmpty {
                 AttentionEmpty(text: "No active hours yet", symbol: "clock")
-            } else if model.period.scope == .day {
+            } else if model.period.isSingleDay {
                 AttentionHourBars(cells: summary.hours)
             } else {
                 AttentionWeekHeatmap(cells: summary.hours)
@@ -221,7 +221,7 @@ struct AttentionEntitiesPanel: View {
             if entities.isEmpty {
                 AttentionEmpty(text: "No active apps or sites in this period")
             } else {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(Array(shown.enumerated()), id: \.element.id) { index, entity in
                         if index > 0 { Divider().opacity(0.6) }
                         AttentionEntityRow(

@@ -37,10 +37,10 @@ private enum AttentionSyntheticWeek {
 
     static let activities: [Activity] = [
         Activity(
-            app: "Xcode", bundle: "com.apple.dt.Xcode", title: "OrbitKit — SyncEngine.swift",
+            app: "Xcode", bundle: "com.apple.dt.Xcode", title: "OrbitKit · SyncEngine.swift",
             minutes: 12...38),
         Activity(
-            app: "Ghostty", bundle: "com.mitchellh.ghostty", title: "swift test — orbit",
+            app: "Ghostty", bundle: "com.mitchellh.ghostty", title: "swift test · orbit",
             minutes: 4...14),
         Activity(
             app: "Google Chrome", bundle: "com.google.Chrome",
@@ -66,7 +66,7 @@ private enum AttentionSyntheticWeek {
             app: "Edith", bundle: "com.pulkit.edith", title: "Usage",
             tags: ["page": "dashboard"], minutes: 2...5),
         Activity(
-            app: "Slack", bundle: "com.tinyspeck.slackmacgap", title: "#launch — Acme",
+            app: "Slack", bundle: "com.tinyspeck.slackmacgap", title: "#launch · Acme",
             minutes: 2...9),
         Activity(
             app: "WhatsApp", bundle: "net.whatsapp.WhatsApp", title: "WhatsApp", minutes: 1...5),
@@ -259,31 +259,34 @@ private enum AttentionSyntheticWeek {
         }
 
         let model = AttentionPageModel(repository: repository)
-        model.period = AttentionPeriod(scope: .day, anchor: yesterday)
-        model.reload()
+        model.selectRange(from: yesterday, to: yesterday)
         await model.waitForReload()
         #expect(model.summary.activeDuration > 6 * 3_600)
         #expect(!model.summary.agents.isEmpty)
         try render(model, height: 2_330, to: output.appendingPathComponent("overview-day.png"))
 
         model.section = .timeline
+        await model.waitForReload()
         try render(model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionTag.machine
+        await model.waitForReload()
         try render(model, height: 900, to: output.appendingPathComponent("breakdown-machine.png"))
 
-        model.period = AttentionPeriod(scope: .week, anchor: yesterday)
         model.section = .overview
-        model.reload()
+        await model.waitForReload()
+        model.selectRange(from: days[6], to: yesterday)
         await model.waitForReload()
         try render(model, height: 2_340, to: output.appendingPathComponent("overview-week.png"))
 
         model.section = .agents
+        await model.waitForReload()
         try render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionTag.repository
+        await model.waitForReload()
         try render(model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
     }
 
