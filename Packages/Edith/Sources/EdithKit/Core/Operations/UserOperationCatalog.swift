@@ -215,6 +215,9 @@ public enum UserOperationCatalog {
         registrations += JevOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += HerdrLaunchOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += DocsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1542,6 +1545,23 @@ private extension HerdrOperation {
                 "Herdr session tab", "copy the attach command for a pane", ["w3:p1N"])
         case .attach:
             userInterface("Herdr board", "attach to a live pane", ["w3:p1N"])
+        }
+    }
+}
+
+private extension HerdrLaunchOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .models:
+            userInterface(
+                "Agent launch settings", "browse an agent's models, effort levels and fast mode",
+                ["Codex"])
+        case .defaults:
+            userInterface("Agent launch settings", "review the launch defaults for every agent")
+        case .setDefaults:
+            userInterface(
+                "Agent launch settings", "choose the model, effort or fast mode for a launch",
+                ["Codex", "--model", "gpt-6-sol", "--effort", "high", "--fast", "on"])
         }
     }
 }

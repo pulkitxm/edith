@@ -675,6 +675,12 @@ enum JSONContract {
             "ed jev ask", ["jev", "ask", "--request", "/path/that/does/not/exist.json", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
+        JSONCase("ed herdr models", ["herdr", "models", "gemini", "--json"]),
+        JSONCase("ed herdr defaults ls", ["herdr", "defaults", "ls", "--json"]),
+        JSONCase(
+            "ed herdr defaults set",
+            ["herdr", "defaults", "set", "gemini", "--model", "pro", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),
         JSONCase(
             "ed quinjet worktrees",

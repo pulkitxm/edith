@@ -463,6 +463,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Herdr.ghosttyTerminal, .bool, group: "herdr",
             summary: "Run Herdr terminals on the Ghostty engine instead of SwiftTerm.",
             fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Herdr.launchDefaults, .map, group: "herdr",
+            summary: "Model, effort and fast mode per agent kind when Edith starts an agent.",
+            fallback: .object([:])),
     ]
 
     private static let quinjet: [SettingDefinition] = [

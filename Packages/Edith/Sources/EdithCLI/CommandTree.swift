@@ -337,6 +337,15 @@ public enum CommandTree {
         "ed herdr attach": Spec(
             options: ["--json", "-h", "--help", "--version", "--machine", "--session"],
             arguments: [.free]),
+        "ed herdr models": Spec(
+            options: ["--json", "-h", "--help", "--version", "--machine", "--refresh"],
+            arguments: [.free]),
+        "ed herdr defaults ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed herdr defaults set": Spec(
+            options: [
+                "--json", "-h", "--help", "--version", "--model", "--effort", "--fast",
+            ],
+            optionValues: ["--fast": .onOff], arguments: [.free]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),

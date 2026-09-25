@@ -326,7 +326,7 @@ struct HerdrPage: View {
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 }
                 .buttonStyle(.edith(.borderless))
-                .help("Edit launch commands for each agent kind")
+                .help("Edit the launch command, model, effort and fast mode for each agent kind")
             }
         }
     }

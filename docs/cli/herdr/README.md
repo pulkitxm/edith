@@ -22,6 +22,9 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr ls` | Live sessions on this Mac and every SSH machine |
 | `ed herdr command <pane>` | The attach line for one pane |
 | `ed herdr attach <pane>` | Attach this terminal to one pane |
+| `ed herdr models [<kind>]` | Models, effort levels and fast mode each agent offers |
+| `ed herdr defaults` | The model, effort and fast mode every launch uses |
+| `ed herdr defaults set <kind>` | Change those launch defaults for one kind |
 
 `ed herdr list` is an alias for `ed herdr ls`.
 
@@ -30,14 +33,16 @@ to the `herdr` CLI, not to the Edith window.
 - [`ed herdr ls`](./ls.md)
 - [`ed herdr command`](./command.md)
 - [`ed herdr attach`](./attach.md)
+- [`ed herdr models`](./models.md)
+- [`ed herdr defaults`](./defaults.md)
 
 ## Exit codes
 
 | Code | When |
 | --- | --- |
 | 0 | The listing printed, including when Herdr is missing or no panes are live |
-| 2 | The command line was wrong: an unknown flag, or `command` with no pane |
-| 3 | `--machine` named no configured machine, or `command` named no pane |
+| 2 | The command line was wrong: an unknown flag, `command` with no pane, or `defaults set` with options the model cannot take |
+| 3 | `--machine` named no configured machine, `command` named no pane, or `models` / `defaults set` named a kind with no launch options |
 
 Nothing in this group exits 1 or 4. A down SSH machine is an error string on
 that host and `reachable: false`, not an unavailable CLI. Plain output prints
