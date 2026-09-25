@@ -194,7 +194,8 @@ public enum HerdrAttentionClassifier {
         var refined = base
         let pinned = [.approval, .answer, .error].contains(base.need)
         if !pinned,
-            let state = confident(decision.answer("state")).flatMap(HerdrAttentionState.init)
+            let state = confident(decision.answer("state")).flatMap(HerdrAttentionState.init),
+            event != .finished || ![.working, .looping].contains(state)
         {
             refined.state = state
         }
@@ -211,7 +212,8 @@ public enum HerdrAttentionClassifier {
         }
         if refined.state != .done { refined.readyForReview = false }
         if refined.state != base.state || refined.readyForReview != base.readyForReview {
-            refined.reason = defaultReason(refined, base: base)
+            refined.reason = defaultReason(
+                refined, base: base, lines: evidence.screen?.recentLines ?? [])
         }
         return refined
     }
@@ -277,11 +279,11 @@ public enum HerdrAttentionClassifier {
     }
 
     private static func defaultReason(
-        _ verdict: HerdrAttentionVerdict, base: HerdrAttentionVerdict
+        _ verdict: HerdrAttentionVerdict, base: HerdrAttentionVerdict, lines: [String]
     ) -> String {
         switch verdict.state {
-        case .waitingInput: "waiting for your answer"
-        case .error: "stopped with an error"
+        case .waitingInput: lines.last { $0.contains("?") }.map(clean) ?? "waiting for your answer"
+        case .error: lines.last(where: isError).map(clean) ?? "stopped with an error"
         case .looping: "it keeps repeating itself"
         case .done: verdict.readyForReview ? base.reason : "finished"
         case .working, .permissionPrompt: base.reason

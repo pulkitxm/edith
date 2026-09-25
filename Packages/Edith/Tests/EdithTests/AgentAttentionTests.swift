@@ -358,6 +358,55 @@ private struct AttentionFixture {
         #expect(notification.title == "Claude Code needs an answer")
     }
 
+    @Test func jevCannotCallAStoppedAgentStillWorking() async throws {
+        let fixture = AttentionFixture(changes: 3, appRunning: true) { recorder in
+            ScriptedJev(
+                recorder: recorder,
+                answers: [
+                    "state": JevAnswer(
+                        type: "choice", choice: "working", probabilities: ["working": 0.81]),
+                    "interrupt": JevAnswer(type: "noul", noul: 0.51),
+                    "need": JevAnswer(
+                        type: "choice", choice: "review", probabilities: ["review": 0.8]),
+                    "ready_for_review": JevAnswer(type: "noul", noul: 0.9),
+                ])
+        }
+        defer { fixture.close() }
+        fixture.defaults.set(true, forKey: AgentSettingsKeys.openDiffWhenFinished)
+        fixture.recorder.screen = "Updated LoginView.swift and AuthClient.swift. All 42 tests pass."
+        _ = try await fixture.observe([fixture.agent(.working)])
+        let notification = try #require(
+            try await fixture.observe([fixture.agent(.done)], minutes: 1).first?.notification)
+        #expect(notification.title == "Claude Code finished")
+        #expect(notification.body.hasSuffix("ready for review, 3 files changed"))
+        #expect(fixture.recorder.opened.map(\.view) == [.diff])
+    }
+
+    @Test func aFinishThatEndsInAQuestionQuotesIt() async throws {
+        let fixture = AttentionFixture(changes: 1) { recorder in
+            ScriptedJev(
+                recorder: recorder,
+                answers: [
+                    "state": JevAnswer(
+                        type: "choice", choice: "waiting_input",
+                        probabilities: ["waiting_input": 0.9]),
+                    "interrupt": JevAnswer(type: "noul", noul: 0.65),
+                    "need": JevAnswer(
+                        type: "choice", choice: "answer", probabilities: ["answer": 0.9]),
+                ])
+        }
+        defer { fixture.close() }
+        fixture.recorder.screen = """
+            The crash comes from a force unwrap in AuthClient.swift when the token is nil.
+            I did not change any files. Want me to fix it?
+            """
+        _ = try await fixture.observe([fixture.agent(.working)])
+        let notification = try #require(
+            try await fixture.observe([fixture.agent(.done)], minutes: 1).first?.notification)
+        #expect(notification.title == "Claude Code needs an answer")
+        #expect(notification.body.hasSuffix("I did not change any files. Want me to fix it?"))
+    }
+
     @Test func jevCanTurnAQuietFinishIntoAnError() async throws {
         let fixture = AttentionFixture(changes: 3) { recorder in
             ScriptedJev(
