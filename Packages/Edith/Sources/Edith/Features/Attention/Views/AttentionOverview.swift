@@ -409,10 +409,7 @@ struct AttentionTriagePanel: View {
                 Button {
                     model.categorizeNow()
                 } label: {
-                    HStack(spacing: UIScale.pt(5)) {
-                        if model.categorizing { ProgressView().controlSize(.mini) }
-                        Text(model.categorizing ? "Asking Jev" : "Ask Jev")
-                    }
+                    Text(model.categorizing ? "Asking Jev" : "Ask Jev")
                 }
                 .buttonStyle(.edith(.secondary))
                 .disabled(model.categorizing || !model.settings.jevCategorizationEnabled)

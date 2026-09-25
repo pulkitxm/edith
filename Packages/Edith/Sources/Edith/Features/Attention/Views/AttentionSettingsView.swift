@@ -77,10 +77,7 @@ struct AttentionSettingsView: View {
                     Button {
                         model.categorizeNow()
                     } label: {
-                        HStack(spacing: 6) {
-                            if model.categorizing { ProgressView().controlSize(.mini) }
-                            Text(model.categorizing ? "Asking Jev" : "Categorize now")
-                        }
+                        Text(model.categorizing ? "Asking Jev" : "Categorize now")
                     }
                     .buttonStyle(.edith(.secondary))
                     .disabled(model.categorizing || !model.settings.jevCategorizationEnabled)
