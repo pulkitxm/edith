@@ -226,29 +226,7 @@ final class AttentionPageModel {
 
     func assign(entity: AttentionEntity, to categoryID: String) {
         var next = settings
-        if entity.id.hasPrefix("identity:") {
-            let id = String(entity.id.dropFirst("identity:".count))
-            guard let index = next.rules.firstIndex(where: { $0.id == id }) else { return }
-            next.rules[index].categoryID = categoryID
-        } else if entity.id.hasPrefix("app:") {
-            let bundleID = String(entity.id.dropFirst("app:".count))
-            if let index = next.rules.firstIndex(where: { $0.bundleIDs.contains(bundleID) }) {
-                next.rules[index].categoryID = categoryID
-            } else {
-                next.rules.append(
-                    AttentionIdentityRule(
-                        name: entity.name, categoryID: categoryID, bundleIDs: [bundleID]))
-            }
-        } else if entity.id.hasPrefix("web:") {
-            let domain = String(entity.id.dropFirst("web:".count))
-            if let index = next.rules.firstIndex(where: { $0.domains.contains(domain) }) {
-                next.rules[index].categoryID = categoryID
-            } else {
-                next.rules.append(
-                    AttentionIdentityRule(
-                        name: entity.name, categoryID: categoryID, domains: [domain]))
-            }
-        }
+        guard next.assign(entityID: entity.id, categoryID: categoryID) != nil else { return }
         settings = next
         saveSettings()
     }

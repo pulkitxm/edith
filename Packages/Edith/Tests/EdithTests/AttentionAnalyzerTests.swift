@@ -241,4 +241,51 @@ import Testing
         #expect(settings.rules.first?.keywords == [])
         #expect(settings.agentTrackingEnabled)
     }
+
+    @Test func sameNamedUserAndCatalogRulesShareOneEntity() {
+        var settings = AttentionSettings()
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "Edith", categoryID: "focus", bundleIDs: ["com.pulkit.edith"])
+        ]
+        var classifier = AttentionClassifier(settings: settings)
+        let installed = classifier.classify(app("com.pulkit.edith", "Edith", at: 0, for: 1))
+        let slot = classifier.classify(app("com.pulkit.edith.dev.attention", "Edith", at: 0, for: 1))
+        #expect(installed.entityID == AttentionEntityID.named("Edith"))
+        #expect(slot.entityID == installed.entityID)
+        #expect(installed.categoryID == "focus")
+        #expect(slot.categoryID == "agents")
+    }
+
+    @Test func assigningAnEntityUpdatesOrCreatesTheRightRule() {
+        var settings = AttentionSettings()
+        let created = settings.assign(entityID: AttentionEntityID.named("YouTube"), categoryID: "learning")
+        #expect(created?.domains == ["youtube.com", "youtu.be"])
+        settings.assign(entityID: AttentionEntityID.named("youtube"), categoryID: "entertainment")
+        #expect(settings.rules.count == 1)
+        #expect(settings.rules.first?.categoryID == "entertainment")
+        settings.assign(entityID: "web:example.com", categoryID: "coding", name: "Example")
+        #expect(settings.rules.last?.name == "Example")
+        #expect(settings.assign(entityID: "nonsense", categoryID: "coding") == nil)
+        var classifier = AttentionClassifier(settings: settings)
+        #expect(
+            classifier.classify(
+                AttentionEvent(
+                    startedAt: start, duration: 1, source: .browser, appName: "Chrome",
+                    domain: "www.example.com")
+            ).categoryID == "coding")
+    }
+
+    @Test func notificationCountsAreStrippedFromTitles() {
+        #expect(AttentionText.cleanTitle("(12) Home / X") == "Home / X")
+        #expect(AttentionText.cleanTitle("(beta) Notes") == "(beta) Notes")
+        #expect(AttentionText.cleanTitle("() Empty") == "() Empty")
+    }
+
+    @Test func browsersWithoutPageDetailAreNeutralNotUnclassified() {
+        var classifier = AttentionClassifier(settings: AttentionSettings())
+        #expect(
+            classifier.classify(app("com.google.Chrome", "Google Chrome", at: 0, for: 1))
+                .categoryID == "neutral")
+    }
 }

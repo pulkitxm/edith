@@ -42,73 +42,92 @@ extension AttentionAnalyzer {
         let contested = contestedClaims(
             browsers, candidates: candidates, slotByTime: slotByTime, slotCount: slotCount)
         var winners = [Int?](repeating: nil, count: slotCount)
+        var cache = AttentionCorroborationCache()
         for slot in 0..<slotCount {
             winners[slot] = winner(
                 foreground: foreground[slot], claimed: claimed[slot],
-                contested: contested[slot], candidates: candidates)
+                contested: contested[slot], candidates: candidates, cache: &cache)
         }
         return (
             candidates, boundaries,
-            settled(winners, boundaries: boundaries, candidates: candidates)
+            settled(winners, boundaries: boundaries, keys: identities(candidates))
         )
     }
 
-    private func identity(_ index: Int?, candidates: [AttentionEvent]) -> String? {
-        guard let index else { return nil }
-        let event = candidates[index]
-        return [
-            event.source.rawValue, event.presence.rawValue,
-            event.bundleID ?? event.appName ?? "", event.domain ?? "",
-            event.browserProfile ?? "", event.windowTitle ?? "", event.url ?? "",
-            (event.tags ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-                .joined(separator: ","),
-        ].joined(separator: "\u{1F}")
+    private func identities(_ candidates: [AttentionEvent]) -> [Int] {
+        var interned: [String: Int] = [:]
+        return candidates.map { event in
+            let key = [
+                event.source.rawValue, event.presence.rawValue,
+                event.bundleID ?? event.appName ?? "", event.domain ?? "",
+                event.browserProfile ?? "", event.windowTitle ?? "", event.url ?? "",
+                (event.tags ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                    .joined(separator: ","),
+            ].joined(separator: "\u{1F}")
+            if let existing = interned[key] { return existing }
+            interned[key] = interned.count
+            return interned.count - 1
+        }
     }
 
-    private func settled(
-        _ winners: [Int?], boundaries: [Date], candidates: [AttentionEvent]
-    ) -> [Int?] {
+    private func settled(_ winners: [Int?], boundaries: [Date], keys: [Int]) -> [Int?] {
         guard winners.count > 1 else { return winners }
-        var runs: [(low: Int, high: Int, key: String?, seconds: TimeInterval)] = []
+        func key(_ index: Int?) -> Int { index.map { keys[$0] } ?? -1 }
+        var low: [Int] = []
+        var high: [Int] = []
+        var runKeys: [Int] = []
+        var seconds: [TimeInterval] = []
         for slot in winners.indices {
-            let key = identity(winners[slot], candidates: candidates)
-            let seconds = boundaries[slot + 1].timeIntervalSince(boundaries[slot])
-            if var last = runs.last, last.key == key {
-                last.high = slot + 1
-                last.seconds += seconds
-                runs[runs.count - 1] = last
+            let current = key(winners[slot])
+            let length = boundaries[slot + 1].timeIntervalSince(boundaries[slot])
+            if let last = runKeys.indices.last, runKeys[last] == current {
+                high[last] = slot + 1
+                seconds[last] += length
             } else {
-                runs.append((slot, slot + 1, key, seconds))
+                low.append(slot)
+                high.append(slot + 1)
+                runKeys.append(current)
+                seconds.append(length)
             }
         }
+        let count = runKeys.count
+        var previous = Array(-1..<(count - 1))
+        var next = Array(1...count)
+        var removed = [Bool](repeating: false, count: count)
+        var alive = count
         var index = 0
-        while index < runs.count {
-            guard runs.count > 1, runs[index].seconds < Self.sliver else {
-                index += 1
+        while index >= 0, index < count {
+            guard alive > 1, seconds[index] < Self.sliver else {
+                index = next[index]
                 continue
             }
-            let previous = index > 0 ? runs[index - 1].seconds : -1
-            let following = index + 1 < runs.count ? runs[index + 1].seconds : -1
-            let target = previous >= following ? index - 1 : index + 1
-            runs[target].low = min(runs[target].low, runs[index].low)
-            runs[target].high = max(runs[target].high, runs[index].high)
-            runs[target].seconds += runs[index].seconds
-            runs.remove(at: index)
-            index = max(0, min(index, runs.count) - 1)
+            let before = previous[index]
+            let after = next[index] < count ? next[index] : -1
+            let beforeSeconds = before >= 0 ? seconds[before] : -1
+            let afterSeconds = after >= 0 ? seconds[after] : -1
+            let target = beforeSeconds >= afterSeconds ? before : after
+            low[target] = min(low[target], low[index])
+            high[target] = max(high[target], high[index])
+            seconds[target] += seconds[index]
+            if before >= 0 { next[before] = next[index] }
+            if after >= 0 { previous[after] = before }
+            removed[index] = true
+            alive -= 1
+            index = before >= 0 ? before : after
         }
         var result = winners
-        for run in runs {
+        for node in 0..<count where !removed[node] {
+            let expected = runKeys[node]
             let winner =
-                winners[run.low..<run.high].first {
-                    identity($0, candidates: candidates) == run.key
-                } ?? winners[run.low]
-            for slot in run.low..<run.high { result[slot] = winner }
+                winners[low[node]..<high[node]].first { key($0) == expected } ?? winners[low[node]]
+            for slot in low[node]..<high[node] { result[slot] = winner }
         }
         return result
     }
 
     private func winner(
-        foreground: Int?, claimed: Int?, contested: [Int]?, candidates: [AttentionEvent]
+        foreground: Int?, claimed: Int?, contested: [Int]?, candidates: [AttentionEvent],
+        cache: inout AttentionCorroborationCache
     ) -> Int? {
         guard let claimed else { return foreground }
         guard let foreground else { return claimed }
@@ -116,22 +135,20 @@ extension AttentionAnalyzer {
         guard AttentionBrowserIdentity.isBrowser(bundleID: front.bundleID, appName: front.appName)
         else { return foreground }
         guard let contested else { return claimed }
-        return corroborated(contested, candidates: candidates, window: front.windowTitle)
+        return corroborated(contested, candidates: candidates, window: foreground, cache: &cache)
             ?? foreground
     }
 
     private func corroborated(
-        _ claims: [Int], candidates: [AttentionEvent], window: String?
+        _ claims: [Int], candidates: [AttentionEvent], window: Int,
+        cache: inout AttentionCorroborationCache
     ) -> Int? {
-        let normalizedWindow = AttentionTitleCorrelation.normalized(window)
-        guard !normalizedWindow.isEmpty else { return nil }
+        guard !cache.title(window, candidates: candidates).isEmpty else { return nil }
         var best: (score: Int, index: Int)?
         var ambiguous = false
         for index in claims {
-            let page = AttentionTitleCorrelation.normalized(candidates[index].windowTitle)
-            guard AttentionTitleCorrelation.corroborates(window: normalizedWindow, page: page)
+            guard let score = cache.score(window: window, page: index, candidates: candidates)
             else { continue }
-            let score = AttentionTitleCorrelation.overlap(normalizedWindow, page)
             guard let current = best else {
                 best = (score, index)
                 continue
@@ -223,5 +240,29 @@ extension AttentionAnalyzer {
 
     private func priority(_ event: AttentionEvent) -> Int {
         event.presence == .active ? 2 : 1
+    }
+}
+
+struct AttentionCorroborationCache {
+    private var titles: [Int: String] = [:]
+    private var scores: [String: [String: Int?]] = [:]
+
+    mutating func title(_ index: Int, candidates: [AttentionEvent]) -> String {
+        if let cached = titles[index] { return cached }
+        let value = AttentionTitleCorrelation.normalized(candidates[index].windowTitle)
+        titles[index] = value
+        return value
+    }
+
+    mutating func score(window: Int, page: Int, candidates: [AttentionEvent]) -> Int? {
+        let windowTitle = title(window, candidates: candidates)
+        let pageTitle = title(page, candidates: candidates)
+        if let cached = scores[windowTitle]?[pageTitle] { return cached }
+        let shared = AttentionTitleCorrelation.overlap(windowTitle, pageTitle)
+        let value: Int? =
+            AttentionTitleCorrelation.corroborates(
+                shared: shared, window: windowTitle, page: pageTitle) ? shared : nil
+        scores[windowTitle, default: [:]][pageTitle] = .some(value)
+        return value
     }
 }

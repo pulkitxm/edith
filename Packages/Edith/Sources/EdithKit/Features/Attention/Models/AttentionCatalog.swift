@@ -58,7 +58,7 @@ public enum AttentionCatalog {
         "com.apple.loginwindow", "com.apple.ScreenSaver.Engine", "com.apple.screensaver",
     ]
 
-    public static let edithBundleIDs = ["com.pulkit.edith", "com.pulkit.edith.development"]
+    public static let edithBundleIDs = ["com.pulkit.edith", "com.pulkit.edith.*"]
 
     public static let identityRuleIDs: Set<String> = Set(
         (products + [edithPages[0]]).map(\.id))
@@ -166,10 +166,7 @@ public enum AttentionCatalog {
         rule("nova", "Nova", "coding", apps: ["com.panic.Nova"]),
         rule(
             "jetbrains", "JetBrains", "coding",
-            apps: [
-                "com.jetbrains.intellij", "com.jetbrains.pycharm", "com.jetbrains.WebStorm",
-                "com.jetbrains.goland", "com.jetbrains.rider", "com.google.android.studio",
-            ]),
+            apps: ["com.jetbrains.*", "com.google.android.studio"]),
         rule(
             "terminal", "Terminal", "coding",
             apps: [
@@ -243,6 +240,14 @@ public enum AttentionCatalog {
         rule(
             "games.apps", "Games", "games",
             apps: ["com.valvesoftware.steam", "com.epicgames.EpicGamesLauncher"]),
+        rule(
+            "browsers", "Browser", "neutral",
+            apps: [
+                "com.google.Chrome", "com.google.Chrome.*", "company.thebrowser.Browser",
+                "company.thebrowser.dia", "com.brave.Browser", "com.microsoft.edgemac",
+                "com.apple.Safari", "org.mozilla.firefox", "com.operasoftware.Opera",
+                "com.vivaldi.Vivaldi", "org.chromium.Chromium",
+            ]),
         rule(
             "system", "System", "neutral",
             apps: [

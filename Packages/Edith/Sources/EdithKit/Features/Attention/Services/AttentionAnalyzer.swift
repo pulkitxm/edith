@@ -468,9 +468,7 @@ struct AttentionSummaryBuilder {
     }
 
     private func detailName(_ interval: AttentionEvent) -> String? {
-        if let title = interval.windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !title.isEmpty
-        {
+        if let title = interval.windowTitle.map(AttentionText.cleanTitle), !title.isEmpty {
             return String(title.prefix(200))
         }
         return AttentionText.location(interval.url)
@@ -520,7 +518,8 @@ struct AttentionSummaryBuilder {
                 start: interval.startedAt, end: interval.endedAt,
                 entityID: classification.entityID, name: classification.entityName,
                 categoryID: classification.categoryID,
-                detail: interval.windowTitle.map { String($0.prefix(160)) } ?? interval.domain,
+                detail: interval.windowTitle.map { String(AttentionText.cleanTitle($0).prefix(160)) }
+                    ?? interval.domain,
                 tags: interval.tags, interactions: interactions))
     }
 

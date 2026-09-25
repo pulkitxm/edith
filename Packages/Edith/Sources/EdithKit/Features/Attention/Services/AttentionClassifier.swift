@@ -42,6 +42,16 @@ public struct AttentionClassification: Equatable, Sendable {
     public var domain: String?
 }
 
+public enum AttentionEntityID {
+    public static let namedPrefix = "name:"
+
+    public static func named(_ name: String) -> String {
+        namedPrefix + name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    public static func isNamed(_ id: String) -> Bool { id.hasPrefix(namedPrefix) }
+}
+
 public enum AttentionText {
     public static func domain(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
@@ -78,15 +88,20 @@ public enum AttentionText {
         return name.isEmpty || name == "/" || name == "~" ? nil : name
     }
 
-    public static func normalizedTitle(_ raw: String) -> String {
+    public static func cleanTitle(_ raw: String) -> String {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("("), let close = value.firstIndex(of: ")"),
+            close > value.index(after: value.startIndex),
             value[value.index(after: value.startIndex)..<close].allSatisfy(\.isNumber)
         {
             value = String(value[value.index(after: close)...])
                 .trimmingCharacters(in: .whitespaces)
         }
-        return String(value.lowercased().prefix(200))
+        return value
+    }
+
+    public static func normalizedTitle(_ raw: String) -> String {
+        String(cleanTitle(raw).lowercased().prefix(200))
     }
 }
 
@@ -151,7 +166,7 @@ public struct AttentionClassifier {
     }
 
     private func resolve(_ event: AttentionEvent) -> AttentionClassification {
-        let bundleID = event.bundleID?.lowercased()
+        let bundleID = event.source == .browser ? nil : event.bundleID?.lowercased()
         let domain = AttentionText.domain(event.domain ?? event.url)
         let location = AttentionText.location(event.url)
         let title = event.windowTitle?.lowercased() ?? ""
@@ -183,9 +198,7 @@ public struct AttentionClassifier {
         let entityID: String
         let entityName: String
         if let identity {
-            entityID =
-                identity.candidate.isUser
-                ? "identity:\(identity.candidate.rule.id)" : "catalog:\(identity.candidate.rule.id)"
+            entityID = AttentionEntityID.named(identity.candidate.rule.name)
             entityName = identity.candidate.rule.name
         } else {
             entityID = fallbackID
@@ -228,8 +241,12 @@ public struct AttentionClassifier {
     private func targetScore(
         _ rule: AttentionIdentityRule, bundleID: String?, domain: String?
     ) -> Int {
-        if let bundleID, rule.bundleIDs.contains(where: { $0.lowercased() == bundleID }) {
-            return 10_000
+        if let bundleID {
+            for raw in rule.bundleIDs {
+                let pattern = raw.lowercased()
+                if pattern == bundleID { return 10_000 }
+                if pattern.hasSuffix("*"), bundleID.hasPrefix(pattern.dropLast()) { return 9_000 }
+            }
         }
         guard let domain else { return 0 }
         var best = 0
@@ -277,5 +294,64 @@ public struct AttentionClassifier {
             if parts.count == 2, value.lowercased() != parts[1] { return false }
         }
         return true
+    }
+}
+
+extension AttentionSettings {
+    @discardableResult
+    public mutating func assign(
+        entityID: String, categoryID: String, name: String? = nil
+    ) -> AttentionIdentityRule? {
+        let parts = entityID.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, !parts[1].isEmpty else { return nil }
+        let value = parts[1]
+        let rename = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var indices: [Int]
+        switch parts[0] {
+        case "name":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity && rules[$0].name.lowercased() == value
+            }
+            if indices.isEmpty,
+                let template = AttentionCatalog.rules.first(where: {
+                    AttentionCatalog.identityRuleIDs.contains($0.id)
+                        && $0.name.lowercased() == value
+                })
+            {
+                rules.append(
+                    AttentionIdentityRule(
+                        name: rename?.isEmpty == false ? rename! : template.name,
+                        categoryID: categoryID, bundleIDs: template.bundleIDs,
+                        domains: template.domains))
+                return rules.last
+            }
+        case "app":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity && rules[$0].bundleIDs.contains(value)
+            }
+        case "web":
+            indices = rules.indices.filter {
+                rules[$0].isIdentity
+                    && rules[$0].domains.contains {
+                        AttentionText.pattern($0) == AttentionText.pattern(value)
+                    }
+            }
+        default:
+            return nil
+        }
+        if !indices.isEmpty {
+            for index in indices {
+                rules[index].categoryID = categoryID
+                if let rename, !rename.isEmpty { rules[index].name = rename }
+            }
+            return rules[indices[0]]
+        }
+        guard parts[0] != "name" else { return nil }
+        rules.append(
+            AttentionIdentityRule(
+                name: rename?.isEmpty == false ? rename! : value, categoryID: categoryID,
+                bundleIDs: parts[0] == "app" ? [value] : [],
+                domains: parts[0] == "web" ? [value] : []))
+        return rules.last
     }
 }

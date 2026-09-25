@@ -190,36 +190,12 @@ enum AttentionCLI {
                 "there is no attention category named \(value)",
                 hint: "run `ed attention categories ls`")
         }
-        let parts = entity.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2, ["identity", "app", "web"].contains(parts[0]),
-            !parts[1].isEmpty
+        guard let rule = settings.assign(entityID: entity, categoryID: category.id, name: name)
         else {
             throw CLIFailure.usage(
                 "\(entity) is not an entity ID",
                 hint: "use an id from `ed attention summary --json`")
         }
-        let type = parts[0]
-        let value = parts[1]
-        let index: Int?
-        switch type {
-        case "identity": index = settings.rules.firstIndex { $0.id == value }
-        case "app": index = settings.rules.firstIndex { $0.bundleIDs.contains(value) }
-        default:
-            index = settings.rules.firstIndex {
-                $0.domains.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-        }
-        if let index {
-            settings.rules[index].categoryID = category.id
-            if let name, !name.isEmpty { settings.rules[index].name = name }
-            try save(settings: settings)
-            return settings.rules[index]
-        }
-        let inferredName = name?.isEmpty == false ? name! : value
-        let rule = AttentionIdentityRule(
-            name: inferredName, categoryID: category.id,
-            bundleIDs: type == "app" ? [value] : [], domains: type == "web" ? [value] : [])
-        settings.rules.append(rule)
         try save(settings: settings)
         return rule
     }
