@@ -2,7 +2,8 @@ import Foundation
 
 public enum HerdrAgentCloseCommand {
     public static func arguments(for agent: HerdrAgent) -> [String] {
-        ["--session", agent.session, "agent", "send-keys", agent.pane, "ctrl+c", "ctrl+c"]
+        HerdrSessionCommand.scoped(
+            ["pane", "send-keys", agent.pane, "ctrl+c"], session: agent.session)
     }
 
     public static func shellLine(
@@ -38,13 +39,18 @@ public struct HerdrAgentCloseSteps: Sendable {
 
 public enum HerdrAgentCloseExecution {
     public static let attempts = 2
+    public static let pressGap = Duration.milliseconds(250)
 
     public static func close(_ agent: HerdrAgent) async throws {
         let machine = try machine(for: agent)
         let arguments = HerdrAgentCloseCommand.arguments(for: agent)
         try await close(
             steps: HerdrAgentCloseSteps(
-                interrupt: { _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine) },
+                interrupt: {
+                    _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine)
+                    try await Task.sleep(for: pressGap)
+                    _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine)
+                },
                 state: {
                     try await HerdrPaneOperations.state(
                         session: agent.session, pane: agent.pane, on: machine)
@@ -56,7 +62,7 @@ public enum HerdrAgentCloseExecution {
     }
 
     public static func close(
-        steps: HerdrAgentCloseSteps, patience: Duration = .seconds(4),
+        steps: HerdrAgentCloseSteps, patience: Duration = .seconds(3),
         interval: Duration = .milliseconds(250)
     ) async throws {
         for _ in 0..<attempts {

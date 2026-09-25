@@ -205,20 +205,44 @@ import Testing
         #expect(object["modifiers"] as? Int == 7)
     }
 
-    @Test func bridgeEnablesHoverAndButtonMouseReporting() {
-        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
+    @Test func bridgeNeverAsksForHoverReports() {
         let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
+        for mouse in HerdrTerminalMouse.allCases {
+            let start = String(
+                decoding: HerdrTerminalBridge.startSequence(for: mouse), as: UTF8.self)
+            #expect(start.contains("\u{1B}[?1000h"))
+            #expect(start.contains("\u{1B}[?1006h"))
+            #expect(!start.contains("\u{1B}[?1003h"))
+        }
+        let buttons = String(
+            decoding: HerdrTerminalBridge.startSequence(for: .buttons), as: UTF8.self)
+        let scroll = String(
+            decoding: HerdrTerminalBridge.startSequence(for: .scroll), as: UTF8.self)
+        #expect(buttons.contains("\u{1B}[?1002h"))
+        #expect(!scroll.contains("\u{1B}[?1002h"))
         for mode in ["1000", "1002", "1003", "1006"] {
-            #expect(start.contains("\u{1B}[?\(mode)h"))
             #expect(stop.contains("\u{1B}[?\(mode)l"))
         }
     }
 
     @Test func bridgeLeavesFocusReportingOff() {
-        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
         let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
-        #expect(!start.contains("?1004"))
+        for mouse in HerdrTerminalMouse.allCases {
+            let start = String(
+                decoding: HerdrTerminalBridge.startSequence(for: mouse), as: UTF8.self)
+            #expect(!start.contains("?1004"))
+        }
         #expect(!stop.contains("?1004"))
+    }
+
+    @Test func bridgeCarriesTheMousePolicy() throws {
+        let controller = TerminalLaunchRequest(
+            executable: "/usr/local/bin/herdr", arguments: [], environment: [])
+        let request = try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: URL(fileURLWithPath: "/Applications/Edith.app/Contents/MacOS/ed"),
+            controller: controller, mouse: .scroll)
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        #expect(decoded.mouse == .scroll)
     }
 
     @Test func closingAnAgentInterruptsItAndThenClosesItsPane() {
@@ -228,11 +252,11 @@ import Testing
             title: "Work", workspace: "edith", cwd: "/repo")
         #expect(
             HerdrAgentCloseCommand.arguments(for: agent) == [
-                "--session", "work session", "agent", "send-keys", "w2:p1", "ctrl+c", "ctrl+c",
+                "--session", "work session", "pane", "send-keys", "w2:p1", "ctrl+c",
             ])
         let line = HerdrAgentCloseCommand.shellLine(for: agent)
-        #expect(line.contains("agent send-keys"))
-        #expect(line.contains("ctrl+c ctrl+c"))
+        #expect(line.contains("pane send-keys"))
+        #expect(line.contains("ctrl+c"))
         #expect(
             HerdrPaneCloseCommand.arguments(session: agent.session, pane: agent.pane) == [
                 "--session", "work session", "pane", "close", "w2:p1",
@@ -250,8 +274,8 @@ import Testing
 
         #expect(line.hasPrefix("powershell.exe "))
         #expect(!line.contains("export PATH"))
-        #expect(script?.contains("agent', 'send-keys'") == true)
-        #expect(script?.contains("'ctrl+c', 'ctrl+c'") == true)
+        #expect(script?.contains("'pane', 'send-keys'") == true)
+        #expect(script?.contains("'w2:p1', 'ctrl+c'") == true)
     }
 
     @Test func aPlainPaneIsNotListedAsAnAgent() {
