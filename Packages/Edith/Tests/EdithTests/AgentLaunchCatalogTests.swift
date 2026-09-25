@@ -236,4 +236,25 @@ private final class FetchLog: @unchecked Sendable {
         #expect(await catalogs.catalog(for: .claude) == AgentLaunchKind.claude.builtIn)
         #expect(log.count == 4)
     }
+
+    @Test func overlappingLoadsShareOneFetchAndACancelledLoadStillCachesTheResult() async {
+        let log = FetchLog()
+        let gate = AsyncStream<Void>.makeStream()
+        let catalogs = AgentLaunchCatalogs(
+            lifetime: 60, clock: { log.date() },
+            fetch: { kind, refresh, _ in
+                log.record(kind, refresh)
+                for await _ in gate.stream { break }
+                return Self.codexJSON
+            })
+        let cancelled = Task { await catalogs.catalog(for: .codex) }
+        let waiting = Task { await catalogs.catalog(for: .codex) }
+        while log.count == 0 { await Task.yield() }
+        cancelled.cancel()
+        gate.continuation.yield()
+        #expect(await waiting.value.source == .cli("codex"))
+        _ = await cancelled.value
+        #expect(log.count == 1)
+        #expect(await catalogs.cached(for: .codex).source == .cli("codex"))
+    }
 }

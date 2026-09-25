@@ -82,6 +82,7 @@ public actor AgentLaunchCatalogs {
     private let lifetime: TimeInterval
     private let clock: @Sendable () -> Date
     private var entries: [String: (catalog: AgentLaunchCatalog, stored: Date)] = [:]
+    private var inFlight: [String: Task<String?, Never>] = [:]
 
     public init(
         lifetime: TimeInterval = 600, clock: @escaping @Sendable () -> Date = { Date() },
@@ -100,7 +101,12 @@ public actor AgentLaunchCatalogs {
         if !refresh, let entry = entries[key], clock().timeIntervalSince(entry.stored) < lifetime {
             return entry.catalog
         }
-        let output = await fetch(kind, refresh, machine)
+        let flight = "\(key)|\(refresh)"
+        let fetch = fetch
+        let task = inFlight[flight] ?? Task { await fetch(kind, refresh, machine) }
+        inFlight[flight] = task
+        let output = await task.value
+        if inFlight[flight] == task { inFlight[flight] = nil }
         let catalog = output.flatMap { AgentLaunchCatalogParser.catalog(kind, from: $0) }
         let resolved = catalog ?? kind.builtIn
         entries[key] = (resolved, clock())
