@@ -89,6 +89,7 @@ enum AgentNotificationDeliveryWorker {
         content.title = notification.title
         content.body = notification.body
         content.sound = .default
+        content.userInfo = notification.userInfo
         let trigger: UNNotificationTrigger?
         if let fireAt = delivery.fireAt, fireAt > Date() {
             trigger = UNCalendarNotificationTrigger(

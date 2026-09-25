@@ -99,6 +99,23 @@ import Testing
         #expect(agents[0].pane == "w1:p8")
     }
 
+    @Test func readsTheStateChangeSequenceFromSnapshotsAndLists() {
+        let snapshot = """
+            {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w8:p1","agent":"claude","agent_status":"done","workspace_id":"w8"}],"agents":[{"agent":"claude","agent_status":"done","pane_id":"w8:p1","state_change_seq":685,"workspace_id":"w8"}],"workspaces":[]}}}
+            """
+        let fromSnapshot = HerdrListParser.agents(
+            fromSnapshot: snapshot, session: "default", machineID: "local",
+            machineName: "This Mac", machineIsLocal: true, sshTarget: nil)
+        #expect(fromSnapshot.map(\.stateSequence) == [685])
+        let list = """
+            {"id":"cli:agent:list","result":{"agents":[{"agent":"claude","agent_status":"done","pane_id":"w8:p1","state_change_seq":681}],"type":"agent_list"}}
+            """
+        let fromList = HerdrListParser.agents(
+            from: list, session: "default", machineID: "local", machineName: "This Mac",
+            machineIsLocal: true, sshTarget: nil)
+        #expect(fromList.map(\.stateSequence) == [681])
+    }
+
     @Test func snapshotUnionsPanesWhenAgentsDropsTheRow() {
         let json = """
             {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w3:p1N","agent":"opencode","agent_status":"working","terminal_title_stripped":"Image Query","workspace_id":"w3","foreground_cwd":"/srv/app"},{"pane_id":"w3:p1Q","agent":null,"agent_status":"unknown","workspace_id":"w3"}],"agents":[],"workspaces":[{"label":"quinjet","workspace_id":"w3"}]}}}

@@ -362,19 +362,20 @@ import Testing
     }
 
     @Test func discoveryStopsEntirelyWhenNothingWatchesAndAlertsAreOff() {
-        #expect(SessionsTally.scope(subscribed: false, blockAlerts: false) == nil)
+        #expect(SessionsTally.scope(subscribed: false, alerts: false, remoteDue: true) == nil)
     }
 
-    @Test func blockAlertsKeepALocalOnlyAmbientPoll() {
-        let scope = SessionsTally.scope(subscribed: false, blockAlerts: true)
-        guard case .local = scope else {
-            Issue.record("expected a local scope, got \(String(describing: scope))")
+    @Test func alertsKeepALocalAmbientPollAndWidenWhenRemoteHostsAreDue() {
+        let local = SessionsTally.scope(subscribed: false, alerts: true, remoteDue: false)
+        let remote = SessionsTally.scope(subscribed: false, alerts: true, remoteDue: true)
+        guard case .local = local, case .all = remote else {
+            Issue.record("expected local then every host, got \(String(describing: local))")
             return
         }
     }
 
     @Test func aSubscriberWidensDiscoveryToEveryHost() {
-        let scope = SessionsTally.scope(subscribed: true, blockAlerts: false)
+        let scope = SessionsTally.scope(subscribed: true, alerts: false, remoteDue: false)
         guard case .all = scope else {
             Issue.record("expected every host, got \(String(describing: scope))")
             return

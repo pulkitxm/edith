@@ -25,6 +25,11 @@ public enum AgentService {
 public enum AgentSettingsKeys {
     public static let pauseAmbientOnBattery = "agentPauseAmbientOnBattery"
     public static let notifyWhenBlocked = "agentNotifyWhenBlocked"
+    public static let notifyWhenFinished = "agentNotifyWhenFinished"
+    public static let notifyOnErrors = "agentNotifyOnErrors"
+    public static let notifyWhenStuck = "agentNotifyWhenStuck"
+    public static let stuckMinutes = "agentStuckMinutes"
+    public static let openDiffWhenFinished = "agentOpenDiffWhenFinished"
 }
 
 public enum AgentRegistrationState: String, CaseIterable, Codable, Sendable {

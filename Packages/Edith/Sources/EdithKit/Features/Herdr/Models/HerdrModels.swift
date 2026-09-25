@@ -156,12 +156,13 @@ public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var workspace: String
     public var cwd: String
     public var category: HerdrPaneCategory
+    public var stateSequence: Int?
 
     public init(
         id: String, machineID: String, machineName: String, machineIsLocal: Bool,
         sshTarget: String?, session: String, pane: String, kind: String,
         status: HerdrAgentStatus, title: String, workspace: String, cwd: String,
-        category: HerdrPaneCategory = .agent
+        category: HerdrPaneCategory = .agent, stateSequence: Int? = nil
     ) {
         self.id = id
         self.machineID = machineID
@@ -176,18 +177,21 @@ public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.workspace = workspace
         self.cwd = cwd
         self.category = category
+        self.stateSequence = stateSequence
     }
 
     public static func make(
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         session: String, pane: String, kind: String, status: HerdrAgentStatus, title: String,
-        workspace: String, cwd: String, category: HerdrPaneCategory = .agent
+        workspace: String, cwd: String, category: HerdrPaneCategory = .agent,
+        stateSequence: Int? = nil
     ) -> HerdrAgent {
         HerdrAgent(
             id: "\(machineID)|\(session)|\(pane)",
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
             sshTarget: sshTarget, session: session, pane: pane, kind: kind, status: status,
-            title: title, workspace: workspace, cwd: cwd, category: category)
+            title: title, workspace: workspace, cwd: cwd, category: category,
+            stateSequence: stateSequence)
     }
 
     public var isTerminal: Bool { category == .terminal }
@@ -273,10 +277,12 @@ public struct HerdrPaneRecord: Equatable, Sendable {
     public var workspaceID: String?
     public var cwd: String?
     public var revision: Int?
+    public var stateSequence: Int?
 
     public init(
         pane: String, kindRaw: String? = nil, statusRaw: String? = nil, title: String? = nil,
-        workspaceID: String? = nil, cwd: String? = nil, revision: Int? = nil
+        workspaceID: String? = nil, cwd: String? = nil, revision: Int? = nil,
+        stateSequence: Int? = nil
     ) {
         self.pane = pane
         self.kindRaw = kindRaw
@@ -285,6 +291,7 @@ public struct HerdrPaneRecord: Equatable, Sendable {
         self.workspaceID = workspaceID
         self.cwd = cwd
         self.revision = revision
+        self.stateSequence = stateSequence
     }
 
     public var looksLikeAgent: Bool {
@@ -319,7 +326,8 @@ public struct HerdrPaneRecord: Equatable, Sendable {
             title: incoming.title ?? title,
             workspaceID: incoming.workspaceID ?? workspaceID,
             cwd: incoming.cwd ?? cwd,
-            revision: incoming.revision ?? revision)
+            revision: incoming.revision ?? revision,
+            stateSequence: incoming.stateSequence ?? stateSequence)
     }
 }
 

@@ -181,7 +181,8 @@ public enum HerdrListParser {
                 in: object, keys: ["terminal_title_stripped", "title", "terminal_title"]),
             workspaceID: string(in: object, keys: ["workspace_id"]),
             cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]),
-            revision: integer(in: object, keys: ["revision"]))
+            revision: integer(in: object, keys: ["revision"]),
+            stateSequence: integer(in: object, keys: ["state_change_seq"]))
     }
 
     static func integer(in object: [String: Any], keys: [String]) -> Int? {
@@ -241,7 +242,8 @@ public enum HerdrListParser {
             machineID: context.machineID, machineName: context.machineName,
             machineIsLocal: context.machineIsLocal, sshTarget: context.sshTarget,
             session: context.session, pane: record.pane, kind: kind, status: status, title: title,
-            workspace: workspace, cwd: cwd)
+            workspace: workspace, cwd: cwd,
+            stateSequence: record.stateSequence ?? previous?.stateSequence)
     }
 
     public static func agents(
@@ -320,7 +322,7 @@ public enum HerdrListParser {
             sshTarget: sshTarget, session: session, pane: pane,
             kind: HerdrKind.displayName(for: kindRaw),
             status: HerdrAgentStatus.parse(statusRaw), title: title, workspace: workspace,
-            cwd: cwd)
+            cwd: cwd, stateSequence: integer(in: object, keys: ["state_change_seq"]))
     }
 
     public static func firstJSON(in text: String) -> Any? {
