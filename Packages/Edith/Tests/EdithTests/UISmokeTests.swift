@@ -3,6 +3,7 @@ import EdithKit
 import SwiftUI
 import Testing
 @testable import Edith
+@testable import EdithDocs
 @testable import EdithHelper
 
 @MainActor

@@ -18,6 +18,7 @@ and sensitive data remains on hosts chosen by the user.
 | `Packages/Edith/Sources/EdithKit` | Shared macOS models, services, defaults, agent protocol, paths, and update support. |
 | `Packages/Edith/Sources/EdithCore` | Platform-neutral suite, ability, and capability models. |
 | `Packages/Edith/Sources/EdithCLI` | Command tree, configuration, remote operations, and machine-readable output. |
+| `Packages/Edith/Sources/EdithDocs` | Bundled `ed` reference parsing, search, and Docs Ask ranking, linked only by the app and CLI so the helper and agent skip the Markdown parser. |
 | `Packages/Edith/Sources/EdithLidAwakeHelper` | Privileged lid-awake helper executable. |
 | `apps/companion` | Optional Rust service for private memory, retrieval, and media processing. |
 | `apps/site` | Static product and policy website deployed through GitHub Pages. |

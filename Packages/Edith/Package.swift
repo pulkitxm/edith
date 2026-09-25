@@ -105,14 +105,16 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithKit",
-        dependencies: [
-            "EdithCore", "EdithLidAwakeSupport",
-            .product(name: "Markdown", package: "swift-markdown"),
-        ],
+        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
         ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithDocs",
+        dependencies: ["EdithKit", .product(name: "Markdown", package: "swift-markdown")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
@@ -134,6 +136,7 @@ let targets: [Target] = [
             "EdithCore",
             "EdithDatabase",
             "EdithDatabaseMCP",
+            "EdithDocs",
             "EdithKit",
             "EdithLidAwakeSupport",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -189,6 +192,7 @@ let targets: [Target] = [
         name: "Edith",
         dependencies: [
             "EdithDatabase",
+            "EdithDocs",
             "EdithKit",
             "EdithLidAwakeSupport",
             "GhosttyTerminal",
@@ -218,7 +222,7 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
+            "EdithCore", "Edith", "EdithDatabase", "EdithDocs", "EdithKit", "EdithLidAwakeSupport",
             "EdithHelper", "EdithAgent",
             "EdithCLI", "Highlighter", "ed",
         ],

@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 
 public struct DocsSource: Codable, Sendable, Hashable {

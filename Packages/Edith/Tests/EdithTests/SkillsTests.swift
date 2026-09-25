@@ -5,6 +5,7 @@ import Testing
 
 @testable import Edith
 @testable import EdithCore
+@testable import EdithDocs
 @testable import EdithKit
 
 @Suite struct SkillsTests {

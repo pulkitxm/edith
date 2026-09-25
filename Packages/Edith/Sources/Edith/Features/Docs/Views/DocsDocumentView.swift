@@ -1,4 +1,5 @@
 import AppKit
+import EdithDocs
 import EdithKit
 import SwiftUI
 
