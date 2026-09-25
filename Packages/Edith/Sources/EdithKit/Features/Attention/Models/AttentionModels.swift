@@ -56,6 +56,22 @@ public enum AttentionTag {
     public static let track = "track"
     public static let passive = "passive"
 
+    public static let domainSafe: Set<String> = [passive]
+
+    public static let edithSafe: Set<String> = [page, machine, agent, view, status]
+
+    public static func filtered(
+        _ tags: [String: String]?, privacyLevel: AttentionPrivacyLevel,
+        allowed: Set<String> = domainSafe
+    ) -> [String: String]? {
+        guard let tags else { return nil }
+        switch privacyLevel {
+        case .detailed: return tags
+        case .domains: return tags.filter { allowed.contains($0.key) }
+        case .applications: return nil
+        }
+    }
+
     public static let dimensions = [
         page, machine, agent, project, repository, section, channel, group, search, document,
     ]
@@ -290,11 +306,15 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
         guard end > start else { return nil }
         var copy = self
         if duration > 0, let signals, end.timeIntervalSince(start) < duration {
-            let share = end.timeIntervalSince(start) / duration
+            let low = max(0, min(1, start.timeIntervalSince(startedAt) / duration))
+            let high = max(0, min(1, end.timeIntervalSince(startedAt) / duration))
+            func portion(_ value: Int) -> Int {
+                Int((Double(value) * high).rounded(.down))
+                    - Int((Double(value) * low).rounded(.down))
+            }
             copy.signals = AttentionSignals(
-                keys: Int((Double(signals.keys) * share).rounded()),
-                clicks: Int((Double(signals.clicks) * share).rounded()),
-                scrolls: Int((Double(signals.scrolls) * share).rounded()), tabs: signals.tabs)
+                keys: portion(signals.keys), clicks: portion(signals.clicks),
+                scrolls: portion(signals.scrolls), tabs: signals.tabs)
         }
         copy.startedAt = start
         copy.duration = end.timeIntervalSince(start)

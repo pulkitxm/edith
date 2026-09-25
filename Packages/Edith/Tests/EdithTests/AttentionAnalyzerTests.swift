@@ -292,4 +292,22 @@ import Testing
             classifier.classify(app("com.google.Chrome", "Google Chrome", at: 0, for: 1))
                 .categoryID == "neutral")
     }
+
+    @Test func splittingAnIntervalKeepsItsInputCountsExact() {
+        var browser = AttentionEvent(
+            id: "browser:one", startedAt: start, duration: 60, source: .browser,
+            appName: "Chrome", windowTitle: "Docs", domain: "example.com")
+        browser.signals = AttentionSignals(keys: 61, clicks: 7, scrolls: 13)
+        var events = [browser]
+        for index in 0..<6 {
+            events.append(
+                app(
+                    "com.google.Chrome", "Google Chrome", at: Double(index) * 10, for: 10,
+                    title: "Docs - Google Chrome \(index)"))
+        }
+        let result = summary(events, length: 120)
+        #expect(result.signals.keys == 61)
+        #expect(result.signals.clicks == 7)
+        #expect(result.signals.scrolls == 13)
+    }
 }

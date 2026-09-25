@@ -8,10 +8,17 @@ extension AttentionAnalyzer {
         var result: [AttentionEvent] = []
         for slot in resolution.winners.indices {
             guard let winner = resolution.winners[slot] else { continue }
-            var selected = resolution.candidates[winner]
-            selected.startedAt = resolution.boundaries[slot]
-            selected.duration = resolution.boundaries[slot + 1].timeIntervalSince(
-                resolution.boundaries[slot])
+            let start = resolution.boundaries[slot]
+            let end = resolution.boundaries[slot + 1]
+            var selected: AttentionEvent
+            if let portion = resolution.candidates[winner].clipped(from: start, to: end) {
+                selected = portion
+            } else {
+                selected = resolution.candidates[winner]
+                selected.startedAt = start
+                selected.duration = end.timeIntervalSince(start)
+                selected.signals = nil
+            }
             if let last = result.last, last.canMerge(with: selected, pulseTime: 0) {
                 result[result.count - 1] = last.merged(with: selected)
             } else {
@@ -120,7 +127,9 @@ extension AttentionAnalyzer {
             let expected = runKeys[node]
             let winner =
                 winners[low[node]..<high[node]].first { key($0) == expected } ?? winners[low[node]]
-            for slot in low[node]..<high[node] { result[slot] = winner }
+            for slot in low[node]..<high[node] where key(winners[slot]) != expected {
+                result[slot] = winner
+            }
         }
         return result
     }

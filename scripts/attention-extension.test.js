@@ -15,6 +15,7 @@ function fixture() {
   let offline = false;
   let sequence = 0;
   let title = "Fixture";
+  let tabId = 1;
   let audibleTabs = [];
   let expectedVersion = "2.0.0";
   let reloads = 0;
@@ -83,7 +84,7 @@ function fixture() {
       },
       tabs: {
         query: async (query) =>
-          query?.audible ? audibleTabs : [{ id: 1, url, title }],
+          query?.audible ? audibleTabs : [{ id: tabId, url, title }],
         onActivated: listener("tab"),
         onUpdated: listener("updated"),
         onRemoved: listener("removed"),
@@ -135,8 +136,9 @@ function fixture() {
     focus(value) {
       focused = value;
     },
-    tab(value) {
+    tab(value, id = tabId) {
       url = value;
+      tabId = id;
     },
     idle(value) {
       presence = value;
@@ -305,11 +307,48 @@ test("background audible tabs are reported as their own segments", async () => {
   expect(second.domain).toBe("music.youtube.com");
 });
 
-test("a newer bundled version reloads the extension", async () => {
+test("a newer bundled version reloads the extension once", async () => {
   const f = fixture();
   f.version("2.1.0");
   await f.tick();
   expect(f.reloads()).toBe(1);
+  f.session.lastHealthCheck = 0;
+  f.advance(400);
+  await f.tick();
+  expect(f.reloads()).toBe(1);
+});
+
+test("audio from the tab that was just in front is not backdated", async () => {
+  const f = fixture();
+  await f.tick();
+  f.advance(20);
+  f.audible([
+    { id: 1, url: "https://first.example/", title: "Fixture", audible: true },
+  ]);
+  f.tab("https://second.example/", 2);
+  await f.tick();
+  f.advance(20);
+  await f.tick();
+  const audio = f.sent.flatMap((item) => item.audible || []);
+  expect(audio.length).toBeGreaterThan(0);
+  expect(Math.max(...audio.map((entry) => entry.duration))).toBe(20);
+});
+
+test("a replaced queued segment keeps background audio it carried", async () => {
+  const f = fixture();
+  f.audible([
+    { id: 7, url: "https://radio.example/", title: "Radio", audible: true },
+  ]);
+  await f.tick();
+  f.offline(true);
+  f.advance(30);
+  await f.tick();
+  f.audible([]);
+  f.advance(30);
+  await f.tick();
+  expect(f.local.attentionQueue).toHaveLength(1);
+  expect(f.local.attentionQueue[0].audible).toHaveLength(1);
+  expect(f.local.attentionQueue[0].audible[0].title).toBe("Radio");
 });
 
 test("rapid events do not invent one-second intervals", async () => {

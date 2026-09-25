@@ -209,8 +209,18 @@ public actor AttentionBackgroundService {
 
     public func recordAgents(_ hosts: [HerdrHostSnapshot], now: Date = Date()) throws {
         guard !stopped else { return }
-        let observed = agentRecorder.observe(hosts, now: now)
+        let settings = repository.loadSettings()
+        guard defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled), settings.isEnabled,
+            settings.agentTrackingEnabled
+        else {
+            agentRecorder = AttentionAgentRecorder()
+            return
+        }
+        var observed = agentRecorder.observe(hosts, now: now)
         guard !observed.isEmpty else { return }
+        if !settings.windowTitlesEnabled {
+            for index in observed.indices { observed[index].windowTitle = nil }
+        }
         try events.record(AttentionBatch(events: observed), now: now)
     }
 

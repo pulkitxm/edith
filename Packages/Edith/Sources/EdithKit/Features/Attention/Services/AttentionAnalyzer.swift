@@ -259,12 +259,17 @@ struct AttentionSummaryBuilder {
             var cursor = binStart(from)
             var points: [AttentionConcurrencyPoint] = []
             while cursor < to {
+                let next =
+                    bin >= 86_400
+                    ? (calendar.date(byAdding: .day, value: 1, to: cursor)
+                        ?? cursor.addingTimeInterval(bin))
+                    : cursor.addingTimeInterval(bin)
                 let working = bins[cursor] ?? 0
                 points.append(
                     AttentionConcurrencyPoint(
-                        start: cursor, working: working / bin,
+                        start: cursor, working: working / next.timeIntervalSince(cursor),
                         attention: attentionBins[cursor] ?? 0))
-                cursor = cursor.addingTimeInterval(bin)
+                cursor = next
             }
             summary.concurrency = points
         }

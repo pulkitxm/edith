@@ -194,36 +194,40 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         }
         try sink.record(
             AttentionBatch(
-                events: Self.events(from: heartbeat, privacyLevel: settings.privacyLevel)))
+                events: Self.events(
+                    from: heartbeat, privacyLevel: settings.privacyLevel,
+                    media: settings.mediaTrackingEnabled)))
     }
 
     public static func events(
-        from heartbeat: AttentionBrowserHeartbeat, privacyLevel: AttentionPrivacyLevel
+        from heartbeat: AttentionBrowserHeartbeat, privacyLevel: AttentionPrivacyLevel,
+        media: Bool = true
     ) -> [AttentionEvent] {
         var events: [AttentionEvent] = []
         if heartbeat.duration > 0 {
             let event = browserEvent(from: heartbeat, privacyLevel: privacyLevel)
             events.append(event)
-            for (index, media) in heartbeat.media.enumerated() where media.playing {
+            for (index, playing) in heartbeat.media.enumerated() where media && playing.playing {
                 events.append(
                     AttentionEvent(
                         id: "\(event.id):media:\(index)",
                         startedAt: event.startedAt, duration: event.duration, source: .media,
                         presence: heartbeat.presence, appName: heartbeat.appName,
                         bundleID: heartbeat.bundleID, domain: event.domain,
-                        browserProfile: heartbeat.browserProfile, media: sanitized(media)))
+                        browserProfile: heartbeat.browserProfile, media: sanitized(playing)))
             }
         }
-        for tab in heartbeat.audible ?? [] where tab.duration > 0 {
-            let domain = (tab.domain ?? tab.url.flatMap { URLComponents(string: $0)?.host })?
-                .lowercased()
+        for tab in heartbeat.audible ?? [] where media && tab.duration > 0 {
+            let domain =
+                privacyLevel == .applications
+                ? nil
+                : (tab.domain ?? tab.url.flatMap { URLComponents(string: $0)?.host })?.lowercased()
             events.append(
                 AttentionEvent(
                     id: "browser:audible:\(tab.id.uuidString)", startedAt: tab.timestamp,
                     duration: max(0, min(tab.duration, 3_600)), source: .media,
                     presence: .active, appName: heartbeat.appName, bundleID: heartbeat.bundleID,
-                    domain: privacyLevel == .applications ? nil : domain,
-                    browserProfile: heartbeat.browserProfile,
+                    domain: domain, browserProfile: heartbeat.browserProfile,
                     media: AttentionMedia(
                         title: privacyLevel == .detailed
                             ? String(tab.title.prefix(300)) : (domain ?? heartbeat.appName),
@@ -258,12 +262,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             guard !key.isEmpty, !value.isEmpty, result.count < 24 else { return }
             result[key] = value
         }
-        if privacyLevel != .detailed {
-            for key in [AttentionTag.search, AttentionTag.video, AttentionTag.channel] {
-                tags[key] = nil
-            }
-        }
-        if privacyLevel == .applications { tags = [:] }
+        tags = AttentionTag.filtered(tags, privacyLevel: privacyLevel) ?? [:]
         return AttentionEvent(
             id: "browser:\(heartbeat.id.uuidString)",
             startedAt: heartbeat.timestamp, duration: max(0, min(heartbeat.duration, 3_600)),

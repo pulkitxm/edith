@@ -136,7 +136,7 @@ async function tabCount() {
   }
 }
 
-async function observe(settings) {
+async function observe(settings, now) {
   const tab = await activeTab()
   if (!tab?.url || !/^https?:/.test(tab.url) || tab.incognito) return null
   const idle = await chrome.idle.queryState(Number(settings.idleThreshold))
@@ -152,7 +152,7 @@ async function observe(settings) {
   }
   const observation = {
     tabId: tab.id,
-    timestamp: Date.now(),
+    timestamp: now,
     presence,
     appName: browserName(),
     url: tab.url,
@@ -204,7 +204,7 @@ function payloadFor(previous, segment) {
   }
 }
 
-async function audibleSegments(now, activeTabId, elapsed) {
+async function audibleSegments(now, activeTabId, previousTabId, elapsed) {
   const { attentionAudible = {} } = await chrome.storage.session.get("attentionAudible")
   let tabs = []
   try {
@@ -219,7 +219,7 @@ async function audibleSegments(now, activeTabId, elapsed) {
     const existing = attentionAudible[tab.id]
     const segment = existing && existing.key === key && now - existing.lastSeen <= 60000 && now - existing.startedAt < segmentLimit
       ? { ...existing, lastSeen: now }
-      : { id: crypto.randomUUID(), key, startedAt: now - Math.min(elapsed, 60) * 1000, lastSeen: now }
+      : { id: crypto.randomUUID(), key, startedAt: tab.id === previousTabId ? now : now - Math.min(elapsed, 60) * 1000, lastSeen: now }
     next[tab.id] = segment
     if (segment.lastSeen > segment.startedAt) {
       entries.push({
@@ -239,6 +239,15 @@ async function audibleSegments(now, activeTabId, elapsed) {
 
 async function enqueue(payload) {
   const { attentionQueue = [], attentionDroppedEvents = 0 } = await chrome.storage.local.get({ attentionQueue: [], attentionDroppedEvents: 0 })
+  const replaced = attentionQueue.find(item => item.id === payload.id)
+  if (replaced?.audible?.length) {
+    const kept = new Map((payload.audible || []).map(entry => [entry.id, entry]))
+    for (const entry of replaced.audible) {
+      const current = kept.get(entry.id)
+      if (!current || current.duration < entry.duration) kept.set(entry.id, entry)
+    }
+    payload.audible = [...kept.values()]
+  }
   const next = [...attentionQueue.filter(item => item.id !== payload.id), payload]
   if (next.length <= 4096 && new TextEncoder().encode(JSON.stringify(next)).length <= 4 * 1024 * 1024) {
     await chrome.storage.local.set({ attentionQueue: next })
@@ -254,8 +263,8 @@ async function capture() {
     await chrome.storage.local.set({ connectionStatus: "setup", lastError: "Finish setup in extension settings." })
     return
   }
-  const current = await observe(settings)
   const now = Date.now()
+  const current = await observe(settings, now)
   const { attentionPrevious: previous, attentionSegment: stored } = await chrome.storage.session.get(["attentionPrevious", "attentionSegment"])
   const elapsed = previous ? (now - previous.timestamp) / 1000 : 0
   let segment = null
@@ -269,7 +278,7 @@ async function capture() {
     }
     payload = payloadFor(previous, segment)
   }
-  const audible = await audibleSegments(now, current?.tabId ?? previous?.tabId, elapsed)
+  const audible = await audibleSegments(now, current?.tabId ?? previous?.tabId, previous?.tabId, elapsed)
   if (payload) {
     if (audible.length) payload.audible = audible
     await enqueue(payload)
@@ -300,8 +309,9 @@ async function checkHealth(settings, force) {
   const body = typeof response.json === "function" ? await response.json().catch(() => ({})) : {}
   const expected = body?.extension
   const running = chrome.runtime.getManifest?.().version
-  if (expected && running && expected !== running && chrome.runtime.reload) {
-    await chrome.storage.local.set({ lastError: `Updating to ${expected}` })
+  const { attentionReloadedFor } = await chrome.storage.local.get("attentionReloadedFor")
+  if (expected && running && expected !== running && attentionReloadedFor !== expected && chrome.runtime.reload) {
+    await chrome.storage.local.set({ lastError: `Updating to ${expected}`, attentionReloadedFor: expected })
     chrome.runtime.reload()
   }
 }

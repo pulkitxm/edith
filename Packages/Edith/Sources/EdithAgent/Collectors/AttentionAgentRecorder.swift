@@ -4,6 +4,7 @@ import Foundation
 struct AttentionAgentRecorder {
     static let maximumGap: TimeInterval = 300
     static let emitInterval: TimeInterval = 20
+    static let segmentLimit: TimeInterval = 6 * 3_600
 
     private struct Segment {
         var id: String
@@ -24,6 +25,15 @@ struct AttentionAgentRecorder {
                 seen.insert(agent.id)
                 var segment: Segment
                 if let existing = segments[agent.id], existing.agent.status == agent.status,
+                    now.timeIntervalSince(existing.lastSeen) <= Self.maximumGap,
+                    now.timeIntervalSince(existing.startedAt) > Self.segmentLimit
+                {
+                    if let final = Self.flush(existing) { events.append(final) }
+                    segment = Segment(
+                        id: "agent:\(agent.id):\(Int(existing.lastSeen.timeIntervalSince1970))",
+                        agent: agent, startedAt: existing.lastSeen, lastSeen: now,
+                        emitted: existing.lastSeen)
+                } else if let existing = segments[agent.id], existing.agent.status == agent.status,
                     now.timeIntervalSince(existing.lastSeen) <= Self.maximumGap
                 {
                     segment = existing

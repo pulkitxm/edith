@@ -155,7 +155,15 @@ final class AttentionTrackingService {
             let key = item.key
             active.insert(key)
             var segment =
-                mediaSegments[key].flatMap { now.timeIntervalSince($0.lastSeen) <= 60 ? $0 : nil }
+                mediaSegments[key].flatMap {
+                    now.timeIntervalSince($0.lastSeen) <= 60
+                        && now.timeIntervalSince($0.startedAt) <= 3_600 ? $0 : nil
+                }
+                ?? mediaSegments[key].flatMap {
+                    now.timeIntervalSince($0.lastSeen) <= 60
+                        ? (id: "media:\(UUID().uuidString)", startedAt: $0.lastSeen, lastSeen: now)
+                        : nil
+                }
                 ?? (
                     id: "media:\(UUID().uuidString)", startedAt: now.addingTimeInterval(-since),
                     lastSeen: now
@@ -187,13 +195,17 @@ final class AttentionTrackingService {
         let presence: AttentionPresence =
             locked || away ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
         let context = AttentionContextBoard.shared.context(for: app.bundleIdentifier, now: now)
+        let contextTitle = settings.windowTitlesEnabled ? context?.windowTitle : nil
         return AttentionHeartbeatSample(
             event: AttentionEvent(
                 startedAt: now, duration: 0, source: .application,
                 presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier,
-                windowTitle: context?.windowTitle, tags: context?.tags),
+                windowTitle: contextTitle,
+                tags: AttentionTag.filtered(
+                    context?.tags, privacyLevel: settings.privacyLevel,
+                    allowed: AttentionTag.edithSafe)),
             processID: app.processIdentifier,
-            captureWindowTitle: settings.windowTitlesEnabled && context?.windowTitle == nil,
+            captureWindowTitle: settings.windowTitlesEnabled && contextTitle == nil,
             counters: AttentionInputCounters.read())
     }
 }

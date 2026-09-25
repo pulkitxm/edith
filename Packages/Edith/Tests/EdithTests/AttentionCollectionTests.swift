@@ -97,8 +97,38 @@ import Testing
         #expect(detailed[1].isSegment)
         let domains = AttentionIngestionServer.events(from: heartbeat, privacyLevel: .domains)
         #expect(domains[0].tag("search") == nil)
-        #expect(domains[0].tag("repo") == "pulkit/edith")
+        #expect(domains[0].tag("repo") == nil)
+        #expect(domains[0].tags == nil)
         #expect(domains[1].media?.title == "music.youtube.com")
+        let applications = AttentionIngestionServer.events(
+            from: heartbeat, privacyLevel: .applications)
+        #expect(applications[1].domain == nil)
+        #expect(applications[1].media?.title == "Chrome")
+        let silent = AttentionIngestionServer.events(
+            from: heartbeat, privacyLevel: .detailed, media: false)
+        #expect(silent.count == 1)
+        #expect(silent.allSatisfy { $0.source == .browser })
+    }
+
+    @Test func agentSegmentsRotateLongBeforeTheStorageLimit() {
+        var recorder = AttentionAgentRecorder()
+        _ = recorder.observe([host([agent("1", status: .working)])], now: now)
+        var ids = Set<String>()
+        var total: TimeInterval = 0
+        var last: [String: TimeInterval] = [:]
+        for step in 1...100 {
+            for event in recorder.observe(
+                [host([agent("1", status: .working)])],
+                now: now.addingTimeInterval(Double(step) * 240))
+            {
+                ids.insert(event.id)
+                last[event.id] = event.duration
+                #expect(event.duration <= AttentionAgentRecorder.segmentLimit + 240)
+            }
+        }
+        total = last.values.reduce(0, +)
+        #expect(ids.count >= 2)
+        #expect(total == 100 * 240)
     }
 
     @Test func segmentUpsertsKeepTheLongestVersion() throws {
