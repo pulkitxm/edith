@@ -221,7 +221,7 @@ import Testing
         #expect(!stop.contains("?1004"))
     }
 
-    @Test func closingAnAgentInterruptsItWithoutClosingItsPane() {
+    @Test func closingAnAgentInterruptsItAndThenClosesItsPane() {
         let agent = HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
             session: "work session", pane: "w2:p1", kind: "Claude Code", status: .working,
@@ -233,7 +233,10 @@ import Testing
         let line = HerdrAgentCloseCommand.shellLine(for: agent)
         #expect(line.contains("agent send-keys"))
         #expect(line.contains("ctrl+c ctrl+c"))
-        #expect(!line.contains("pane close"))
+        #expect(
+            HerdrPaneCloseCommand.arguments(session: agent.session, pane: agent.pane) == [
+                "--session", "work session", "pane", "close", "w2:p1",
+            ])
     }
 
     @Test func closingAWindowsAgentUsesPowerShellInsteadOfUnixExports() {

@@ -111,6 +111,28 @@ public enum HerdrListParser {
         return HerdrCreatedPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
     }
 
+    public static func paneProcess(from text: String) -> HerdrPaneProcess? {
+        guard let json = firstJSON(in: text) as? [String: Any],
+            let payload = unwrap(json) as? [String: Any],
+            let info = payload["process_info"] as? [String: Any],
+            let processes = info["foreground_processes"] as? [[String: Any]],
+            !processes.isEmpty
+        else { return nil }
+        let group = integer(in: info, keys: ["foreground_process_group_id"])
+        let shell = integer(in: info, keys: ["shell_pid"])
+        let leader =
+            processes.first { integer(in: $0, keys: ["pid"]) == group } ?? processes[0]
+        let launched =
+            string(in: leader, keys: ["argv0"]).map { ($0 as NSString).lastPathComponent }
+        let trimmed = launched.map { $0.hasPrefix("-") ? String($0.dropFirst()) : $0 }
+        guard let name = trimmed ?? string(in: leader, keys: ["name"]), !name.isEmpty else {
+            return nil
+        }
+        return HerdrPaneProcess(
+            name: name, command: string(in: leader, keys: ["cmdline"]) ?? name,
+            running: group != nil && shell != nil && group != shell)
+    }
+
     public static func eventName(in text: String) -> String? {
         guard let object = firstJSON(in: text) as? [String: Any] else { return nil }
         let raw =
