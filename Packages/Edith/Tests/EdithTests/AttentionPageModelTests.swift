@@ -16,7 +16,7 @@ import Testing
         #expect(model.needsSetup)
         #expect(model.hasActivity == false)
         #expect(model.summary.entities.isEmpty)
-        #expect(model.events.isEmpty)
+        #expect(model.summary.spans.isEmpty)
     }
 
     @Test func completingSetupPersistsRealSourceChoices() async {
@@ -108,7 +108,7 @@ import Testing
     }
 
     @Test func summaryIconsPreferFaviconsThenApplicationBundles() {
-        let category = AttentionSettings.defaultCategories[0]
+        let category = AttentionCatalog.categories[0]
         let website = AttentionEntity(
             id: "github", name: "github.com", category: category, source: .browser,
             duration: 30, bundleID: "com.google.Chrome",

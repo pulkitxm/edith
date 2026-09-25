@@ -58,7 +58,6 @@ final class AttentionPageModel {
     var range: AttentionViewRange = .today
     var settings = AttentionSettings()
     var summary: AttentionSummary
-    var events: [AttentionEvent] = []
     var focusSessions: [AttentionFocusSession] = []
     var activeFocus: AttentionFocusSession?
     var browserConnected = false
@@ -76,10 +75,7 @@ final class AttentionPageModel {
     init(repository: AttentionRepository = AttentionRepository()) {
         self.repository = repository
         let interval = AttentionViewRange.today.interval()
-        summary = AttentionSummary(
-            from: interval.start, to: interval.end, activeDuration: 0, idleDuration: 0,
-            focusedDuration: 0, communicationDuration: 0, entertainmentDuration: 0,
-            contextSwitches: 0, entities: [], music: [])
+        summary = AttentionSummary(from: interval.start, to: interval.end)
     }
 
     var needsSetup: Bool {
@@ -119,7 +115,6 @@ final class AttentionPageModel {
         reloadTask = nil
         if !preserveSettings { settings = state.settings }
         summary = state.summary
-        events = state.events
         activeFocus = state.activeFocus
         focusSessions = state.focusSessions
         hasStoredEvents = state.hasStoredEvents
@@ -148,7 +143,7 @@ final class AttentionPageModel {
             snapshot = AttentionPageSnapshot(request: request, repository: repository)
         }
         return AttentionPageState(
-            settings: snapshot.settings, summary: snapshot.summary, events: snapshot.events,
+            settings: snapshot.settings, summary: snapshot.summary,
             activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
             hasStoredEvents: snapshot.hasStoredEvents,
             extensionInstalled: FileManager.default.fileExists(
@@ -326,7 +321,6 @@ final class AttentionPageModel {
 private struct AttentionPageState: Sendable {
     var settings: AttentionSettings
     var summary: AttentionSummary
-    var events: [AttentionEvent]
     var activeFocus: AttentionFocusSession?
     var focusSessions: [AttentionFocusSession]
     var hasStoredEvents: Bool

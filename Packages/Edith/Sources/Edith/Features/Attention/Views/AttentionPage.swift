@@ -570,64 +570,43 @@ private struct AttentionTimelineView: View {
     @State private var visibleCount = 100
 
     var body: some View {
+        let spans = Array(model.summary.spans.reversed())
         AttentionCard {
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Observed timeline").font(.system(size: 15, weight: .semibold))
-                    Text(
-                        "Native and browser observations are both retained; summaries resolve their overlap."
-                    )
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+                Text("Observed timeline").font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Text("\(model.events.count) events")
+                Text("\(spans.count) blocks")
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
             }
-            if model.events.isEmpty {
-                EmptyInline(text: "No events in \(model.range.title.lowercased())")
+            if spans.isEmpty {
+                EmptyInline(text: "No activity in \(model.range.title.lowercased())")
             } else {
-                ForEach(Array(model.events.prefix(visibleCount).enumerated()), id: \.element.id) {
-                    index, event in
+                ForEach(Array(spans.prefix(visibleCount).enumerated()), id: \.element.id) {
+                    index, span in
                     if index > 0 { Divider() }
                     HStack(spacing: 12) {
-                        AttentionEventIcon(event: event)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(eventTitle(event)).lineLimit(1)
-                            Text(eventDetail(event))
+                            Text(span.name).lineLimit(1)
+                            Text(span.detail ?? "")
                                 .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text(event.startedAt.formatted(date: .omitted, time: .shortened))
+                            Text(span.start.formatted(date: .omitted, time: .shortened))
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
-                            Text(attentionDuration(event.duration))
+                            Text(attentionDuration(span.duration))
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 6)
                 }
-                if model.events.count > visibleCount {
-                    Button("Show \(min(100, model.events.count - visibleCount)) more events") {
-                        visibleCount += 100
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 6)
+                if spans.count > visibleCount {
+                    Button("Show more") { visibleCount += 100 }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
-    }
-
-    private func eventTitle(_ event: AttentionEvent) -> String {
-        event.media?.title ?? event.domain ?? event.appName ?? "Unknown activity"
-    }
-
-    private func eventDetail(_ event: AttentionEvent) -> String {
-        let parts = [
-            event.source.rawValue, event.presence.rawValue, event.browserProfile,
-            event.media?.artist, event.windowTitle,
-        ].compactMap { $0 }
-        return parts.joined(separator: " · ")
     }
 }
 
@@ -646,6 +625,8 @@ enum AttentionEventIconDescriptor: Equatable {
             self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
         case .manual:
             self = .symbol("hand.tap")
+        case .agent:
+            self = .symbol("sparkles")
         }
     }
 
@@ -664,6 +645,8 @@ enum AttentionEventIconDescriptor: Equatable {
                 self = .symbol("music.note")
             case .manual:
                 self = .symbol("hand.tap")
+            case .agent:
+                self = .symbol("sparkles")
             }
         }
     }

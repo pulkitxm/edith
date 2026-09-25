@@ -112,12 +112,12 @@ private struct AttentionDaemonFixture {
         let now = Date()
         try await fixture.service.record(
             AttentionBatch(events: [fixture.event(at: now.addingTimeInterval(-30))]))
-        let category = AttentionSettings.defaultCategories[0]
+        let category = AttentionCatalog.categories[0]
         let settings = AttentionSettings(categories: [category, category])
         let summary = try await fixture.service.summary(
             AttentionSummaryRequest(from: now.addingTimeInterval(-60), to: now, settings: settings))
         #expect(summary.hasStoredEvents)
-        #expect(summary.events.count == 1)
+        #expect(summary.summary.entities.count == 1)
         await fixture.close()
     }
 
@@ -271,7 +271,7 @@ private struct AttentionDaemonFixture {
         let events = try fixture.events.events(from: now, to: now.addingTimeInterval(20))
         #expect(events.count == 1)
         #expect(events.first?.domain == "example.com")
-        #expect(events.first?.url == nil)
+        #expect(events.first?.url == "https://example.com/private")
         fixture.defaults.set(false, forKey: AppStorageKeys.Tabs.attentionEnabled)
         let stopped = try #require(try await fixture.service.run())
         #expect(try AgentPayload.decode(AttentionRuntimeSnapshot.self, from: stopped).port == nil)
@@ -286,7 +286,7 @@ private struct AttentionDaemonFixture {
         let snapshot = try await fixture.service.summary(
             AttentionSummaryRequest(from: now.addingTimeInterval(-60), to: now))
         #expect(snapshot.hasStoredEvents)
-        #expect(snapshot.events.count == 1)
+        #expect(snapshot.summary.spans.count == 1)
         #expect(snapshot.summary.activeDuration == 30)
         #expect(!fixture.repository.hasEvents())
     }

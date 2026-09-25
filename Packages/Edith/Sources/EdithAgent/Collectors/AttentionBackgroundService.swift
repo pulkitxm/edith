@@ -172,9 +172,13 @@ public actor AttentionBackgroundService {
         let id = UUID()
         let task = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
+            let previous = try request.previousInterval.map {
+                try events.events(from: $0.start, to: $0.end)
+            }
+            try Task.checkCancellation()
             let result = try AttentionPageSnapshot(
                 request: request, repository: repository,
-                all: events.events(from: request.from, to: request.to),
+                all: events.events(from: request.from, to: request.to), previous: previous,
                 hasStoredEvents: events.hasEvents())
             try Task.checkCancellation()
             return result

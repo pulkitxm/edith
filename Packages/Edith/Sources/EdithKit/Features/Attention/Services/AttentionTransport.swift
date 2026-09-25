@@ -97,42 +97,65 @@ public struct AttentionSummaryRequest: Codable, Sendable {
     public let from: Date
     public let to: Date
     public let settings: AttentionSettings?
+    public let comparePeriod: TimeInterval?
 
-    public init(from: Date, to: Date, settings: AttentionSettings? = nil) {
+    public init(
+        from: Date, to: Date, settings: AttentionSettings? = nil,
+        comparePeriod: TimeInterval? = nil
+    ) {
         self.from = from
         self.to = to
         self.settings = settings
+        self.comparePeriod = comparePeriod
+    }
+
+    public var previousInterval: DateInterval? {
+        guard let comparePeriod, comparePeriod > 0 else { return nil }
+        return DateInterval(
+            start: from.addingTimeInterval(-comparePeriod),
+            end: max(from.addingTimeInterval(-comparePeriod), to.addingTimeInterval(-comparePeriod)))
     }
 }
 
 public struct AttentionPageSnapshot: Codable, Sendable {
     public let settings: AttentionSettings
     public let summary: AttentionSummary
-    public let events: [AttentionEvent]
     public let focusSessions: [AttentionFocusSession]
     public let activeFocus: AttentionFocusSession?
     public let hasStoredEvents: Bool
+    public let classifications: AttentionClassifications
 
     public init(request: AttentionSummaryRequest, repository: AttentionRepository) {
         self.init(
             request: request, repository: repository,
             all: repository.events(from: request.from, to: request.to),
+            previous: request.previousInterval.map {
+                repository.events(from: $0.start, to: $0.end)
+            },
             hasStoredEvents: repository.hasEvents())
     }
 
     public init(
         request: AttentionSummaryRequest, repository: AttentionRepository,
-        all: [AttentionEvent], hasStoredEvents: Bool
+        all: [AttentionEvent], previous: [AttentionEvent]?, hasStoredEvents: Bool,
+        previousTotals: AttentionTotals? = nil
     ) {
         settings = request.settings ?? repository.loadSettings()
+        classifications = repository.loadClassifications()
         let analyzer = AttentionAnalyzer()
-        summary = analyzer.summary(
-            events: all, settings: settings, from: request.from, to: request.to)
-        let resolved = analyzer.resolvedPrimaryIntervals(
-            events: all, from: request.from, to: request.to)
-        let media = all.filter { !$0.isPrimaryAttention }
-        events = Array(
-            (resolved + media).sorted { $0.startedAt < $1.startedAt }.reversed().prefix(500))
+        var summary = analyzer.summary(
+            events: all, settings: settings, classifications: classifications,
+            from: request.from, to: request.to)
+        if let previousTotals {
+            summary.previous = previousTotals
+        } else if let previous, let interval = request.previousInterval {
+            summary.previous =
+                analyzer.summary(
+                    events: previous, settings: settings, classifications: classifications,
+                    from: interval.start, to: interval.end, detailed: false
+                ).totals
+        }
+        self.summary = summary
         focusSessions = Array(
             repository.focusSessions(from: request.from, to: request.to).reversed())
         activeFocus = repository.activeFocus()
