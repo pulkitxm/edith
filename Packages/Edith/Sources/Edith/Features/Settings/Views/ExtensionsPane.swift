@@ -1055,6 +1055,7 @@ private struct ExtensionDetailRows: View {
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
+            case .videoEditor: VideoEditorRows()
             case .music:
                 MusicRows()
                 MusicBarRows()
@@ -1144,6 +1145,23 @@ private struct MusicBarRows: View {
             Text("The chevron at the right end of the bar toggles the collapsed state too.")
                 .settingsCaption()
         }
+    }
+}
+
+private struct VideoEditorRows: View {
+    @AppStorage(AppStorageKeys.Tabs.videoEditorEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Video editor") {
+            Text(
+                "Import video, images, and audio. Add zooms, text, and transitions on the timeline, then export an MP4 or GIF."
+            )
+            .settingsCaption()
+            Button("Open Video editor") { SectionWindow.open(.videoEditor) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

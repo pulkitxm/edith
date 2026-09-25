@@ -59,6 +59,12 @@ public enum UsageRefreshFollower {
                             events: collected, seconds: seconds, startedAt: startedAt)
                     }
                 }
+                if runID != nil,
+                    Date().timeIntervalSince(startedAt) < min(startTimeout, 0.5)
+                {
+                    try await Task.sleep(for: pollInterval)
+                    continue
+                }
                 throw UsageRefreshFailure.exited(
                     -1, "the refresh that was already running stopped without finishing")
             }

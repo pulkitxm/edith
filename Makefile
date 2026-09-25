@@ -287,7 +287,7 @@ ci-trivy:
 	  --skip-dirs Packages/Edith/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
 	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs $(PKG)/Vendor/GhosttyKit.xcframework \
-	  --skip-dirs $(PKG)/Vendor/GhosttyResources .
+	  --skip-dirs $(PKG)/Vendor/GhosttyResources --skip-dirs extras .
 
 ci-companion:
 	cd apps/companion && cargo +stable clippy --all-targets --locked -- -D warnings

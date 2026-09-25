@@ -6,6 +6,7 @@ ignore: |
   **/.build/**
   apps/companion/target/**
   apps/promo-video/node_modules/**
+  extras/**
   build/**
   node_modules/**
 

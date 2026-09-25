@@ -76,7 +76,7 @@ public enum SuiteRegistry {
             symbolName: "hand.tap", defaultsKey: "suiteDeskEnabled"),
         SuiteDescriptor(
             id: .media, title: "Media",
-            subtitle: "Music, downloads, the notch shelf, the audio mixer and your calendar.",
+            subtitle: "Video editing, music, downloads, the notch shelf and your calendar.",
             symbolName: "play.rectangle.on.rectangle", defaultsKey: "suiteMediaEnabled"),
         SuiteDescriptor(
             id: .data, title: "Data",

@@ -673,6 +673,35 @@ public enum ExtensionLifecycleCatalog {
                     "ed lid-awake status --json")
             ]),
         descriptor(
+            "videoEditor", "Make polished edits from video, image and audio files.",
+            workflows: [
+                instruction(
+                    "import", "Import media",
+                    "Add a video or image, then arrange clips on the timeline."),
+                instruction(
+                    "edit", "Edit and export",
+                    "Split clips, focus with zoom, add text and transitions, then export an MP4."),
+            ],
+            prerequisites: [
+                instruction(
+                    "media", "Choose a video or image",
+                    "Keep imported files accessible so the project can play them again.")
+            ],
+            examples: ["ed extensions enable videoEditor", "ed extensions list --json"],
+            docs: [documentation("guide", "Video editor guide", "docs/cli/video-editor/README.md")],
+            recovery: [
+                instruction(
+                    "relink", "Find missing media",
+                    "Open the project and select the original video when prompted.",
+                    "ed extensions enable videoEditor")
+            ],
+            verification: [
+                instruction(
+                    "status", "Check the extension",
+                    "Confirm Video editor is enabled in the Media suite.",
+                    "ed extensions list --json")
+            ]),
+        descriptor(
             "music", "Play and organize a local music library with system media controls.",
             workflows: [
                 instruction(

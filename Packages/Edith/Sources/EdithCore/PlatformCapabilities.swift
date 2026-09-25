@@ -19,6 +19,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case inputSuppression
     case keystrokeObservation
     case localMusicPlayback
+    case localVideoEditing
     case localTerminal
     case machineManagement
     case mediaControls
