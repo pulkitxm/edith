@@ -48,8 +48,7 @@ final class AppServices {
         notchShelfEnabled && mixerEnabled
     }
 
-    static func notchBrowserRuntimeEnabled(notchShelfEnabled: Bool, browserEnabled: Bool) -> Bool
-    {
+    static func notchBrowserRuntimeEnabled(notchShelfEnabled: Bool, browserEnabled: Bool) -> Bool {
         notchShelfEnabled && browserEnabled
     }
 

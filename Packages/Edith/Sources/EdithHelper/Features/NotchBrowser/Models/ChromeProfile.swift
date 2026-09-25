@@ -64,7 +64,9 @@ enum ChromeProfileParser {
             let cache = profile["info_cache"] as? [String: [String: Any]]
         else { return [] }
         let order = (profile["profiles_order"] as? [String]) ?? []
-        let directories = order.filter { cache[$0] != nil } + cache.keys.sorted(by: directoryOrder)
+        let directories =
+            order.filter { cache[$0] != nil }
+            + cache.keys.sorted(by: directoryOrder)
             .filter { !order.contains($0) }
         return directories.compactMap { directory in
             guard let info = cache[directory] else { return nil }

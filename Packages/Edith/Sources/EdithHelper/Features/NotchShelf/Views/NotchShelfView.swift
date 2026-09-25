@@ -184,7 +184,8 @@ struct NotchShelfContentView: View {
                         .foregroundStyle(active ? Color.black : Color.white.opacity(0.6))
                         .frame(width: 26, height: 22)
                         .background(
-                            active ? Color.white.opacity(0.9) : Color.clear, in: Capsule())
+                            active ? Color.white.opacity(0.9) : Color.clear, in: Capsule()
+                        )
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.edith(.borderless))
