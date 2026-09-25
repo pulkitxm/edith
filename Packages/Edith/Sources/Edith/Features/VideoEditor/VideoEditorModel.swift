@@ -47,6 +47,20 @@ final class VideoEditorModel {
     var duration: Double { pipeline?.duration ?? 0 }
     var canUndo: Bool { !undoHistory.isEmpty }
     var canRedo: Bool { !redoHistory.isEmpty }
+    var maximumZoomDuration: Double {
+        guard let editingZoomID, let project,
+            let zoom = project.zooms.first(where: { $0.id == editingZoomID }),
+            let clip = project.clips.first(where: { $0.id == zoom.raw["clipId"] as? String })
+        else { return 6 }
+        var next = Double.greatestFiniteMagnitude
+        for candidate in project.zooms where candidate.id != editingZoomID {
+            if candidate.startMs > zoom.startMs {
+                next = min(next, candidate.startMs)
+            }
+        }
+        let upper = min((clip.timelineStart + clip.duration) * 1000, next)
+        return max(0.1, (upper - zoom.startMs) / 1000)
+    }
 
     init() {
         refreshRecentProjects()
@@ -553,7 +567,6 @@ final class VideoEditorModel {
             zoomDuration = (zoom.endMs - zoom.startMs) / 1000
             focusX = zoom.focusX
             focusY = zoom.focusY
-            seek(to: outputTime(forRulerTime: (zoom.startMs + zoom.endMs) / 2000))
         }
         if !wasSelected { updateFocusPreview() }
         rebuild(refreshFocusPreview: false)
@@ -578,9 +591,9 @@ final class VideoEditorModel {
     }
 
     func setZoomDuration(_ duration: Double) {
-        zoomDuration = duration
+        zoomDuration = min(maximumZoomDuration, duration)
         guard let editingZoomID else { return }
-        mutate { $0.updateZoom(editingZoomID, duration: duration) }
+        mutate { $0.updateZoom(editingZoomID, duration: zoomDuration) }
         rebuild(refreshFocusPreview: false)
     }
 

@@ -957,7 +957,7 @@ struct VideoProject {
                 clips.first(where: { $0.id == ranges[index]["clipId"] as? String })
                 .map { ($0.timelineStart + $0.duration) * 1000 }
                 ?? Double.greatestFiniteMagnitude
-            let end = min(clipEnd, start + min(8, max(0.5, duration)) * 1000)
+            let end = min(clipEnd, start + max(0.1, duration) * 1000)
             ranges[index]["endMs"] = end
             if let clip = clips.first(where: { $0.id == ranges[index]["clipId"] as? String }) {
                 ranges[index]["sourceEndSec"] = clip.start + end / 1000 - clip.timelineStart
