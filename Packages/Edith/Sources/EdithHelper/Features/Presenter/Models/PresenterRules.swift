@@ -138,16 +138,11 @@ enum PresenterRules {
 
     private static func firstTitleMatch(in windows: [PresenterWindowInfo]) -> String? {
         for window in windows {
-            for rule in titleRules
-            where rule.owners.contains(where: {
-                window.ownerName.localizedCaseInsensitiveContains($0)
-            }
-            ) {
-                if rule.titles.contains(where: {
-                    window.title.localizedCaseInsensitiveContains($0)
-                }) {
-                    return rule.reason
-                }
+            for rule in rules(for: window.ownerName).titles
+            where rule.titles.contains(where: {
+                window.title.localizedCaseInsensitiveContains($0)
+            }) {
+                return rule.reason
             }
         }
         return nil
@@ -155,16 +150,35 @@ enum PresenterRules {
 
     private static func firstGeometryMatch(in windows: [PresenterWindowInfo]) -> String? {
         for window in windows {
-            for rule in geometryRules
-            where rule.owners.contains(where: {
-                window.ownerName.localizedCaseInsensitiveContains($0)
-            }
-            ) {
-                if rule.width.contains(window.width), rule.height.contains(window.height) {
-                    return rule.reason
-                }
+            for rule in rules(for: window.ownerName).geometry
+            where rule.width.contains(window.width) && rule.height.contains(window.height) {
+                return rule.reason
             }
         }
         return nil
+    }
+
+    struct OwnerRules {
+        let titles: [TitleRule]
+        let geometry: [GeometryRule]
+    }
+
+    static let ownerCacheLimit = 512
+    private static let ownerCacheLock = NSLock()
+    nonisolated(unsafe) private static var ownerCache: [String: OwnerRules] = [:]
+
+    static func rules(for owner: String) -> OwnerRules {
+        if let cached = ownerCacheLock.withLock({ ownerCache[owner] }) { return cached }
+        let matches: ([String]) -> Bool = { owners in
+            owners.contains { owner.localizedCaseInsensitiveContains($0) }
+        }
+        let rules = OwnerRules(
+            titles: titleRules.filter { matches($0.owners) },
+            geometry: geometryRules.filter { matches($0.owners) })
+        ownerCacheLock.withLock {
+            if ownerCache.count >= ownerCacheLimit { ownerCache.removeAll() }
+            ownerCache[owner] = rules
+        }
+        return rules
     }
 }

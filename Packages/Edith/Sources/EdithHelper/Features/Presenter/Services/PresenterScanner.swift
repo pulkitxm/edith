@@ -47,14 +47,19 @@ struct PresenterWindowSource: Sendable {
         guard sysctl(&mib, 4, &buffer, &size, nil, 0) == 0 else { return false }
         let stride = MemoryLayout<kinfo_proc>.stride
         let count = size / stride
+        let name = Array(target.utf8)
+        let commLength = MemoryLayout.size(ofValue: kinfo_proc().kp_proc.p_comm)
+        guard name.count < commLength, !name.contains(0),
+            let commOffset = MemoryLayout<kinfo_proc>.offset(of: \kinfo_proc.kp_proc.p_comm)
+        else { return false }
         return buffer.withUnsafeBytes { raw in
-            let procs = raw.bindMemory(to: kinfo_proc.self)
-            for i in 0..<count {
-                var comm = procs[i].kp_proc.p_comm
-                let name = withUnsafeBytes(of: &comm) { bytes in
-                    String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
+            for index in 0..<count {
+                let start = index * stride + commOffset
+                if raw[start + name.count] == 0,
+                    raw[start..<start + name.count].elementsEqual(name)
+                {
+                    return true
                 }
-                if name == target { return true }
             }
             return false
         }

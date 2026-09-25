@@ -35,11 +35,12 @@ final class PresenterJevCheck: @unchecked Sendable {
         guard enabled(), let app = PresenterRules.meetingApp(in: windows),
             let decider = decider()
         else { return nil }
-        let fingerprint = Self.summary(of: windows)
         return lock.withLock {
             let moment = now()
             let due = askedAt.map { moment.timeIntervalSince($0) >= Self.interval } ?? true
-            if answer?.fingerprint != fingerprint, inFlight == nil, due {
+            guard inFlight == nil, due else { return answer?.reason }
+            let fingerprint = Self.summary(of: windows)
+            if answer?.fingerprint != fingerprint {
                 askedAt = moment
                 inFlight = Task {
                     await self.ask(decider, fingerprint: fingerprint, app: app)

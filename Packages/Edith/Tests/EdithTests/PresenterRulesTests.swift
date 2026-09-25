@@ -2,6 +2,20 @@ import Testing
 @testable import EdithHelper
 
 @Suite struct PresenterRulesTests {
+    @Test func processLookupMatchesWholeNamesOnly() {
+        #expect(PresenterWindowSource.isProcessRunning(named: "launchd"))
+        #expect(!PresenterWindowSource.isProcessRunning(named: "launch"))
+        #expect(!PresenterWindowSource.isProcessRunning(named: "edith-no-such-process"))
+    }
+
+    @Test func ownerRulesAreResolvedOncePerOwnerName() {
+        let zoom = PresenterRules.rules(for: "zoom.us")
+        #expect(zoom.titles.map(\.reason) == ["Zoom share detected"])
+        #expect(zoom.geometry.map(\.reason) == ["Zoom share detected"])
+        #expect(PresenterRules.rules(for: "Google Chrome Helper").titles.count == 1)
+        #expect(PresenterRules.rules(for: "Terminal").titles.isEmpty)
+    }
+
     @Test func matchesZoomShareTitle() {
         let windows = [
             PresenterWindowInfo(
