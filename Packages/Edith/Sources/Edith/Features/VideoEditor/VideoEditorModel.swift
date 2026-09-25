@@ -52,10 +52,12 @@ final class VideoEditorModel {
             let zoom = project.zooms.first(where: { $0.id == editingZoomID }),
             let clip = project.clips.first(where: { $0.id == zoom.raw["clipId"] as? String })
         else { return 6 }
-        let next =
-            project.zooms.filter {
-                $0.id != editingZoomID && $0.startMs > zoom.startMs
-            }.map(\.startMs).min() ?? Double.greatestFiniteMagnitude
+        var next = Double.greatestFiniteMagnitude
+        for candidate in project.zooms where candidate.id != editingZoomID {
+            if candidate.startMs > zoom.startMs {
+                next = min(next, candidate.startMs)
+            }
+        }
         let upper = min((clip.timelineStart + clip.duration) * 1000, next)
         return max(0.1, (upper - zoom.startMs) / 1000)
     }

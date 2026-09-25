@@ -115,5 +115,8 @@ import Testing
         project.addZoom(startMs: 20_000, endMs: 22_000, depth: 2, x: 0.5, y: 0.5)
         model.project = project
         #expect(model.maximumZoomDuration == 19)
+        model.setZoomDuration(25)
+        #expect(model.zoomDuration == 19)
+        #expect(model.project?.zooms.first?.endMs == 20_000)
     }
 }
