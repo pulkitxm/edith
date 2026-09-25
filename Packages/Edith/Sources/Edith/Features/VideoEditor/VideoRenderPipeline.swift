@@ -3,6 +3,83 @@ import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
 
+enum ZoomAnimation {
+    struct State {
+        let scale: Double
+        let x: Double
+        let y: Double
+
+        static let identity = State(scale: 1, x: 0.5, y: 0.5)
+    }
+
+    private static func ease(_ fraction: Double) -> Double {
+        let value = min(1, max(0, fraction))
+        return value * value * (3 - 2 * value)
+    }
+
+    private static func mix(_ from: State, _ to: State, fraction: Double) -> State {
+        let weight = ease(fraction)
+        return State(
+            scale: from.scale + (to.scale - from.scale) * weight,
+            x: from.x + (to.x - from.x) * weight,
+            y: from.y + (to.y - from.y) * weight)
+    }
+
+    static func sample(
+        at timeMs: Double, zooms: [VideoProject.Zoom], cursor: CGPoint? = nil
+    ) -> State {
+        let ordered = zooms.sorted { $0.startMs < $1.startMs }
+        func state(_ zoom: VideoProject.Zoom) -> State {
+            let automatic = zoom.raw["focusMode"] as? String == "auto"
+            return State(
+                scale: [1.25, 1.5, 1.8, 2.2, 3.5, 5.0][max(0, min(5, zoom.depth - 1))],
+                x: automatic ? cursor.map { Double($0.x) } ?? zoom.focusX : zoom.focusX,
+                y: automatic ? cursor.map { Double($0.y) } ?? zoom.focusY : zoom.focusY)
+        }
+        func half(_ zoom: VideoProject.Zoom) -> Double {
+            min(250, max(0, zoom.endMs - zoom.startMs) / 4)
+        }
+        func connected(_ left: VideoProject.Zoom, _ right: VideoProject.Zoom) -> Bool {
+            let gap = right.startMs - left.endMs
+            return abs(gap) <= half(left) + half(right)
+        }
+        func between(_ left: VideoProject.Zoom, _ right: VideoProject.Zoom) -> State? {
+            let beginning = left.endMs - half(left)
+            let ending = right.startMs + half(right)
+            guard ending > beginning, timeMs >= beginning, timeMs <= ending else { return nil }
+            return mix(
+                state(left), state(right),
+                fraction: (timeMs - beginning) / (ending - beginning))
+        }
+        for index in ordered.indices {
+            let zoom = ordered[index]
+            let previous = index > 0 ? ordered[index - 1] : nil
+            let next = index + 1 < ordered.count ? ordered[index + 1] : nil
+            let margin = half(zoom)
+            if let previous, connected(previous, zoom) {
+                if let blended = between(previous, zoom) { return blended }
+            } else if margin > 0, timeMs >= zoom.startMs - margin,
+                timeMs <= zoom.startMs + margin
+            {
+                return mix(
+                    .identity, state(zoom),
+                    fraction: (timeMs - zoom.startMs + margin) / (2 * margin))
+            }
+            if let next, connected(zoom, next) {
+                if let blended = between(zoom, next) { return blended }
+            } else if margin > 0, timeMs >= zoom.endMs - margin,
+                timeMs <= zoom.endMs + margin
+            {
+                return mix(
+                    state(zoom), .identity,
+                    fraction: (timeMs - zoom.endMs + margin) / (2 * margin))
+            }
+            if timeMs >= zoom.startMs && timeMs <= zoom.endMs { return state(zoom) }
+        }
+        return .identity
+    }
+}
+
 struct VideoRenderPipeline {
     private struct CursorSample: Sendable {
         let timeMs: Double
@@ -111,7 +188,9 @@ struct VideoRenderPipeline {
 
     var duration: Double { segments.last?.outputEnd ?? 0 }
 
-    static func make(project: VideoProject) async throws -> VideoRenderPipeline {
+    static func make(
+        project: VideoProject, maxDimension: Int? = nil
+    ) async throws -> VideoRenderPipeline {
         let composition = AVMutableComposition()
         guard
             let video = composition.addMutableTrack(
@@ -125,6 +204,7 @@ struct VideoRenderPipeline {
         var cursors: [String: [CursorSample]] = [:]
         var cursor = 0.0
         var firstSize: CGSize?
+        var firstFrameRate: Float?
         for clip in project.clips where clip.duration > 0 {
             guard let source = project.assets.first(where: { $0.id == clip.assetID }) else {
                 throw RenderError.missingAsset(clip.assetID)
@@ -158,6 +238,7 @@ struct VideoRenderPipeline {
             if firstSize == nil {
                 let transformed = naturalSize.applying(preferredTransform)
                 firstSize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
+                firstFrameRate = try await sourceVideo.load(.nominalFrameRate)
                 video.preferredTransform = preferredTransform
             }
             let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first
@@ -280,7 +361,18 @@ struct VideoRenderPipeline {
         }
         mix.inputParameters = parameters
 
-        let canvas = canvasSize(for: firstSize, ratio: project.aspectRatio)
+        let nativeCanvas = canvasSize(for: firstSize, ratio: project.aspectRatio)
+        let canvas: CGSize
+        if let maxDimension, maxDimension > 0,
+            max(nativeCanvas.width, nativeCanvas.height) > CGFloat(maxDimension)
+        {
+            let factor = CGFloat(maxDimension) / max(nativeCanvas.width, nativeCanvas.height)
+            canvas = CGSize(
+                width: max(2, Int(nativeCanvas.width * factor) / 2 * 2),
+                height: max(2, Int(nativeCanvas.height * factor) / 2 * 2))
+        } else {
+            canvas = nativeCanvas
+        }
         let background = CIColor(hex: project.backgroundColor)
         let wallpaper = CIImage(contentsOf: URL(fileURLWithPath: project.backgroundColor))
         let padding = CGFloat(project.padding / 100)
@@ -361,7 +453,10 @@ struct VideoRenderPipeline {
         }
         let videoComposition = baseComposition.mutableCopy() as! AVMutableVideoComposition
         videoComposition.renderSize = canvas
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        let frameRate = Double(firstFrameRate ?? 30)
+        videoComposition.frameDuration = CMTime(
+            seconds: 1 / (frameRate.isFinite && frameRate > 0 ? frameRate : 30),
+            preferredTimescale: 60_000)
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
             audioMix: parameters.isEmpty ? nil : mix,
@@ -553,37 +648,12 @@ struct VideoRenderPipeline {
         let fit =
             min(size.width / source.width, size.height / source.height)
             * (1 - 2 * padding)
-        let focusZoom = zooms.reversed().first { zoom in
-            timeMs >= zoom.startMs - 1600 && timeMs <= zoom.endMs + 1600
-        }
-        let strength: Double
-        if let zoom = focusZoom {
-            let target = [1.25, 1.5, 1.8, 2.2, 3.5, 5.0][max(0, min(5, zoom.depth - 1))]
-            let transition = 600 + 550 * log(target)
-            let entering = min(1, max(0, (timeMs - zoom.startMs + transition) / transition))
-            let leaving = min(1, max(0, (zoom.endMs + transition - timeMs) / transition))
-            let linear = min(entering, leaving)
-            strength = linear * linear * (3 - 2 * linear)
-        } else {
-            strength = 0
-        }
-        let depth: Double =
-            focusZoom.map {
-                [1.25, 1.5, 1.8, 2.2, 3.5, 5.0][max(0, min(5, $0.depth - 1))]
-            } ?? 1
-        let zoomFactor = 1 + (depth - 1) * strength
-        let scale: CGFloat = fit * CGFloat(zoomFactor)
-        let automatic = focusZoom?.raw["focusMode"] as? String == "auto"
-        let focalX =
-            automatic
-            ? cursor?.x ?? focusZoom?.focusX ?? 0.5
-            : focusZoom?.focusX ?? 0.5
-        let focalY =
-            automatic
-            ? cursor?.y ?? focusZoom?.focusY ?? 0.5
-            : focusZoom?.focusY ?? 0.5
-        let focusFractionX = 0.5 + (focalX - 0.5) * strength
-        let focusFractionY = 0.5 + (0.5 - focalY) * strength
+        let zoom = ZoomAnimation.sample(
+            at: timeMs, zooms: zooms,
+            cursor: cursor.map { CGPoint(x: $0.x, y: $0.y) })
+        let scale: CGFloat = fit * CGFloat(zoom.scale)
+        let focusFractionX = zoom.x
+        let focusFractionY = 1 - zoom.y
         let focusX: CGFloat = source.width * CGFloat(focusFractionX)
         let focusY: CGFloat = source.height * CGFloat(focusFractionY)
         let transform = CGAffineTransform(scaleX: scale, y: scale)
