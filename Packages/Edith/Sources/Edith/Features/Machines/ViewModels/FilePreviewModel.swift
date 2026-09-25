@@ -444,7 +444,7 @@ actor SyntaxHighlighting {
     private var currentTheme: String?
 
     func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
-        guard text.utf8.count < 400_000 else { return nil }
+        guard text.count < 400_000 else { return nil }
         let theme = dark ? "atom-one-dark" : "atom-one-light"
         if highlighter == nil {
             highlighter = Highlighter()
