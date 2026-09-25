@@ -526,6 +526,7 @@ final class HerdrStore {
                 sessions[index].agent = updated
             }
         }
+        syncTerminals()
         if collapseSnapshotComplete {
             collapseCountsReady = true
             reconcileCollapseCounts()
@@ -1520,6 +1521,25 @@ final class HerdrStore {
         guard let previous = tabsBeforeRetarget else { return }
         tabsBeforeRetarget = nil
         terminalPanels.retarget(previous: previous, current: tabs, fallback: Self.boardID)
+        terminalPanels.rehome(fallback: Self.boardID, placement: terminalOwner)
+    }
+
+    func syncTerminals() {
+        terminalPanels.sync(hosts, machine: { machine(for: $0) }, placement: terminalOwner)
+        terminalPanels.rehome(fallback: Self.boardID, placement: terminalOwner)
+    }
+
+    func terminalOwner(for host: HerdrPanelHost, cwd: String?) -> String {
+        guard let cwd, !cwd.isEmpty else { return Self.boardID }
+        for tab in tabs {
+            for agentID in tab.agentIDs {
+                guard let agent = session(agentID)?.agent, !agent.isTerminal,
+                    agent.machineID == host.machineID, !agent.cwd.isEmpty
+                else { continue }
+                if cwd == agent.cwd || cwd.hasPrefix(agent.cwd + "/") { return tab.id }
+            }
+        }
+        return Self.boardID
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {

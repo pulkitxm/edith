@@ -76,6 +76,16 @@ struct HerdrPanelTerminal: Identifiable {
     var pane: String?
     var process: HerdrPaneProcess?
     var failure: String?
+    var adopted = false
+    var seen = false
+
+    var key: String? {
+        pane.map { HerdrPanelTerminal.key(machineID: host.machineID, session: session, pane: $0) }
+    }
+
+    static func key(machineID: String, session: String, pane: String) -> String {
+        "\(machineID)|\(session)|\(pane)"
+    }
 
     var title: String {
         if let process { return process.name }
@@ -226,6 +236,7 @@ final class HerdrTerminalPanels {
     @ObservationIgnored private let operations: HerdrPanelTerminalOperations
     @ObservationIgnored private let session: String
     @ObservationIgnored private var confirming = Set<String>()
+    @ObservationIgnored private var closing = Set<String>()
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
@@ -425,6 +436,97 @@ final class HerdrTerminalPanels {
         }
     }
 
+    func sync(
+        _ hosts: [HerdrHostSnapshot], machine: (HerdrHostSnapshot) -> Machine?,
+        placement: (HerdrPanelHost, String?) -> String
+    ) {
+        for host in hosts where host.herdrPresent && host.reachable && host.error == nil {
+            sync(host, machine: machine(host), placement: placement)
+        }
+    }
+
+    private func sync(
+        _ host: HerdrHostSnapshot, machine: Machine?,
+        placement: (HerdrPanelHost, String?) -> String
+    ) {
+        var tracked: [String: String] = [:]
+        var creating = false
+        for (id, terminal) in terminals where terminal.host.machineID == host.id {
+            if let key = terminal.key {
+                tracked[key] = id
+            } else if terminal.failure == nil {
+                creating = true
+            }
+        }
+        var present = Set<String>()
+        for pane in host.terminals {
+            let key = HerdrPanelTerminal.key(
+                machineID: host.id, session: pane.session, pane: pane.pane)
+            present.insert(key)
+            if let id = tracked[key] {
+                if terminals[id]?.seen == false { terminals[id]?.seen = true }
+                continue
+            }
+            guard !creating, !closing.contains(key) else { continue }
+            adopt(pane, host: host, machine: machine, placement: placement)
+        }
+        for key in closing where key.hasPrefix(host.id + "|") && !present.contains(key) {
+            closing.remove(key)
+        }
+        for (key, id) in tracked where !present.contains(key) && terminals[id]?.seen == true {
+            remove(id)?.holder.stop()
+        }
+    }
+
+    private func adopt(
+        _ pane: HerdrSpacePane, host: HerdrHostSnapshot, machine: Machine?,
+        placement: (HerdrPanelHost, String?) -> String
+    ) {
+        let panelHost = HerdrPanelHost(
+            machineID: host.id, machineName: host.name, isLocal: host.isLocal,
+            sshTarget: host.sshTarget, machine: machine)
+        let cwd = pane.cwd.isEmpty ? nil : pane.cwd
+        let id = UUID().uuidString
+        terminals[id] = HerdrPanelTerminal(
+            id: id, host: panelHost, session: pane.session, cwd: cwd,
+            holder: TerminalSessionHolder(), scroll: HerdrTerminalScroll(), pane: pane.pane,
+            adopted: true, seen: true)
+        let owner = placement(panelHost, cwd)
+        var panel = panels[owner] ?? HerdrTerminalPanel()
+        panel.terminalIDs.append(id)
+        if panel.selectedID == nil { panel.selectedID = id }
+        panels[owner] = panel
+    }
+
+    func rehome(fallback: String, placement: (HerdrPanelHost, String?) -> String) {
+        guard let board = panels[fallback] else { return }
+        for id in board.terminalIDs {
+            guard let terminal = terminals[id], terminal.adopted else { continue }
+            let owner = placement(terminal.host, terminal.cwd)
+            guard owner != fallback else { continue }
+            move(id, from: fallback, to: owner)
+            terminals[id]?.adopted = false
+        }
+    }
+
+    private func move(_ id: String, from source: String, to destination: String) {
+        guard var from = panels[source], let index = from.terminalIDs.firstIndex(of: id) else {
+            return
+        }
+        from.terminalIDs.remove(at: index)
+        if from.selectedID == id { from.selectedID = from.terminalIDs.first }
+        if from.terminalIDs.isEmpty {
+            panels.removeValue(forKey: source)
+            if focusedOwner == source { focusedOwner = nil }
+        } else {
+            panels[source] = from
+        }
+        var to = panels[destination] ?? HerdrTerminalPanel()
+        to.terminalIDs.append(id)
+        if to.selectedID == nil { to.selectedID = id }
+        panels[destination] = to
+    }
+
     func retarget(previous: [HerdrTab], current: [HerdrTab], fallback: String) {
         let moves = HerdrTerminalOwnership.moves(
             owners: Array(panels.keys), previous: previous, current: current, fallback: fallback)
@@ -460,6 +562,7 @@ final class HerdrTerminalPanels {
 
     private func dispose(_ terminal: HerdrPanelTerminal) {
         guard let pane = terminal.pane else { return }
+        if let key = terminal.key { closing.insert(key) }
         let operations = operations
         let session = terminal.session
         let machine = terminal.host.machine

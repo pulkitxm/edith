@@ -25,6 +25,15 @@ machine, created the first time it is needed. Closing a terminal in Edith closes
 its Herdr tab, and Herdr removes the workspace once its last tab is gone. A
 terminal whose shell exits in Herdr disappears from Edith as well.
 
+Edith keeps that workspace in sync on every machine. A tab you open in
+`Edith-terminals` from Herdr itself, or one left running when Edith quit, shows
+up in the tab whose agent works in the same folder on the same machine, and on
+the board when no such tab is open. It moves over once you open that agent.
+
+History lives in Herdr, so the scrollbar on the right of a terminal follows
+Herdr's scrollback: it moves as you scroll with the wheel, and dragging it or
+clicking the track jumps there.
+
 ## Closing terminals and tabs
 
 The `×` next to a terminal closes it and its Herdr tab. When it is running
