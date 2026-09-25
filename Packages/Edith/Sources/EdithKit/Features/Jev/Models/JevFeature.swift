@@ -47,5 +47,10 @@ public struct JevFeature: Identifiable, Equatable, Sendable {
             detail:
                 "When no built-in rule matches, asks whether the on-screen windows show a shared screen. Opt in under Presenter."
         ),
+        JevFeature(
+            id: AgentSearchJev.purpose, title: "Session search",
+            detail:
+                "⌘P on Sessions picks the best matches for what you type from the agent sessions found on every machine."
+        ),
     ]
 }
