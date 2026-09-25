@@ -64,11 +64,14 @@ test("the README carries the generated section and the app mirrors it", () => {
   expect(readme).toContain(END);
   expect(readme).toContain("avatars.githubusercontent.com");
 
-  const workflow = readFileSync(".github/workflows/contributors.yml", "utf8");
+  const workflow = readFileSync(
+    ".github/workflows-disabled/contributors.yml",
+    "utf8",
+  );
   expect(workflow).toContain("cron:");
   expect(workflow).toContain("bun scripts/contributors.mjs");
   expect(workflow).toContain('git commit -m "Refresh the contributor list"');
 
-  const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+  const ci = readFileSync(".github/workflows-disabled/ci.yml", "utf8");
   expect(ci).toContain("'Refresh the contributor list'");
 });

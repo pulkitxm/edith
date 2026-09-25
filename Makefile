@@ -13,11 +13,21 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-site ci-promo ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift
+
+ci-all:
+	bun install --frozen-lockfile
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-swift
+
+release:
+	./scripts/release-local.sh
+
+release-dry:
+	./scripts/release-local.sh --dry-run
 
 site-dev:
 	cd apps/site && python3 -m http.server 8000
@@ -220,3 +230,65 @@ reinstall: reset
 
 loc:
 	cloc --vcs=git
+
+ci-hygiene:
+	$(MAKE) ci-community ci-yaml ci-markdown ci-links ci-workflows
+
+ci-community:
+	test -s LICENSE && test -s README.md && test -s ARCHITECTURE.md \
+	  && test -s CODE_OF_CONDUCT.md && test -s CONTRIBUTING.md && test -s GOVERNANCE.md \
+	  && test -s SECURITY.md && test -s SUPPORT.md && test -s .github/CODEOWNERS \
+	  && test -s .github/pull_request_template.md && test -s .github/ISSUE_TEMPLATE/bug.yml \
+	  && test -s .github/ISSUE_TEMPLATE/feature.yml && test -s .github/ISSUE_TEMPLATE/config.yml
+
+ci-yaml:
+	@command -v yamllint >/dev/null || { echo "yamllint missing: run make ci-tools" >&2; exit 1; }
+	yamllint --strict .
+
+ci-markdown:
+	bunx markdownlint-cli2
+
+ci-links:
+	@command -v lychee >/dev/null || { echo "lychee missing: run make ci-tools" >&2; exit 1; }
+	lychee --config lychee.toml './**/*.md'
+
+ci-workflows:
+	@command -v actionlint >/dev/null || { echo "actionlint missing: run make ci-tools" >&2; exit 1; }
+	@command -v zizmor >/dev/null || { echo "zizmor missing: run make ci-tools" >&2; exit 1; }
+	actionlint .github/workflows-disabled/*.yml
+	zizmor --persona=pedantic --min-severity=high --format=plain .github/workflows-disabled
+
+ci-security:
+	$(MAKE) ci-secrets ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy
+
+ci-gitleaks:
+	@command -v gitleaks >/dev/null || { echo "gitleaks missing: run make ci-tools" >&2; exit 1; }
+	gitleaks git --no-banner --redact .
+
+ci-cargo-audit:
+	@cargo audit --version >/dev/null 2>&1 || { echo "cargo-audit missing: run make ci-tools" >&2; exit 1; }
+	cd apps/companion && cargo audit
+
+ci-osv:
+	@command -v osv-scanner >/dev/null || { echo "osv-scanner missing: run make ci-tools" >&2; exit 1; }
+	osv-scanner scan source --recursive .
+
+ci-semgrep:
+	@command -v semgrep >/dev/null || { echo "semgrep missing: run make ci-tools" >&2; exit 1; }
+	semgrep scan --error --config p/rust --config p/swift --config p/secrets --config p/github-actions .
+
+ci-trivy:
+	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
+	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed .
+
+ci-companion:
+	cd apps/companion && cargo clippy --all-targets --locked -- -D warnings
+	cd apps/companion && cargo test --locked
+
+ci-companion-migrate:
+	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
+	cd apps/companion && cargo run --locked -- --migrate-only
+
+ci-tools:
+	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
+	cargo install cargo-audit --locked || true

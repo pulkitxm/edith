@@ -39,11 +39,11 @@ const expectedActions = new Map([
   ["taiki-e/install-action", "ba47c86ac325773530516bb756137ac718732518"],
 ]);
 
-const workflows = readdirSync(".github/workflows")
+const workflows = readdirSync(".github/workflows-disabled")
   .filter((name) => /\.ya?ml$/.test(name))
   .map((name) => ({
     name,
-    text: readFileSync(`.github/workflows/${name}`, "utf8"),
+    text: readFileSync(`.github/workflows-disabled/${name}`, "utf8"),
   }));
 const lockfile = readFileSync("bun.lock", "utf8");
 const packageManifest = JSON.parse(readFileSync("package.json", "utf8"));

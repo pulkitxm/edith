@@ -2,12 +2,15 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const cask = readFileSync("Casks/edith.rb", "utf8");
-const releaseWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const releaseWorkflow = readFileSync(
+  ".github/workflows-disabled/ci.yml",
+  "utf8",
+);
 const releaseStateScript = readFileSync(
   "scripts/publish-release-state.sh",
   "utf8",
 );
-const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows-disabled/ci.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const doc = readFileSync("docs/homebrew.md", "utf8");
 const site = readFileSync("apps/site/index.html", "utf8");
