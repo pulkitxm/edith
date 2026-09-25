@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum NotchProximity: Int, Comparable {
@@ -20,7 +21,7 @@ enum NotchGateTransition: Equatable {
 
 struct NotchHoverGate {
     let openDwell: TimeInterval
-    let closeGrace: TimeInterval
+    var closeGrace: TimeInterval
 
     private(set) var isOpen = false
     private var pendingTarget: Bool?
@@ -78,5 +79,19 @@ struct NotchHoverGate {
     private mutating func clearPending() {
         pendingTarget = nil
         pendingDeadline = nil
+    }
+}
+
+struct NotchHidePolicy: Equatable {
+    let keepInset: CGFloat
+    let closeGrace: TimeInterval
+    let trackingMargin: CGFloat
+
+    static let shelf = NotchHidePolicy(
+        keepInset: NotchGeometry.keepInset, closeGrace: 0.4, trackingMargin: 40)
+    static let browser = NotchHidePolicy(keepInset: 64, closeGrace: 0.9, trackingMargin: 96)
+
+    static func policy(for tab: NotchTab) -> NotchHidePolicy {
+        tab == .browser ? browser : shelf
     }
 }

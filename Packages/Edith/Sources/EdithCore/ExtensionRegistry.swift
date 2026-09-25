@@ -264,6 +264,12 @@ public enum ExtensionRegistry {
             defaultsKey: "notchAudioMixerEnabled", requires: ["notchShelf"],
             requiredCapabilities: [.applicationAudio]),
         ExtensionRegistryEntry(
+            id: "notchBrowser", title: "Notch Browser",
+            subtitle: "Tabbed web browsing in the notch, signed in with a Chrome profile.",
+            symbolName: "globe", suite: .media, host: .bar, featured: false,
+            defaultsKey: "notchBrowserEnabled", requires: ["notchShelf"],
+            requiredCapabilities: [.webBrowsing]),
+        ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
             symbolName: "calendar", suite: .media, host: .bar, featured: false,
