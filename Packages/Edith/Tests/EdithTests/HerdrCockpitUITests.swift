@@ -406,6 +406,34 @@ import Testing
                 == HerdrStatusColor.color(.working, dark: false))
     }
 
+    @Test func shiftReturnSendsANewlineUntilTheTerminalAsksForMore() {
+        let view = EdithTerminalView.make()
+        #expect(view.command(for: key(code: 36, flags: .shift)) == .newline)
+        #expect(view.command(for: key(code: 76, flags: .shift)) == .newline)
+        #expect(view.command(for: key(code: 36, flags: [])) == .none)
+        #expect(view.command(for: key(code: 36, flags: [.shift, .command])) == .none)
+    }
+
+    @Test func commandCAndCommandVReachTheTerminal() {
+        let view = EdithTerminalView.make()
+        #expect(view.command(for: key(code: 9, flags: .command, characters: "v")) == .paste)
+        #expect(view.command(for: key(code: 8, flags: .command, characters: "c")) == .none)
+        #expect(view.command(for: key(code: 1, flags: .command, characters: "s")) == .none)
+    }
+
+    @Test func scrollbackIsDeepEnoughForALongAgentRun() {
+        #expect(EdithTerminalView.scrollback >= 10000)
+    }
+
+    private func key(
+        code: UInt16, flags: NSEvent.ModifierFlags, characters: String = "\r"
+    ) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+            windowNumber: 0, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
+    }
+
     private func defaults() -> UserDefaults {
         UserDefaults(suiteName: "herdr.cockpit.\(UUID().uuidString)")!
     }

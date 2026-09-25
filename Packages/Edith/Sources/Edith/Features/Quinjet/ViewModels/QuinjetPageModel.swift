@@ -228,6 +228,11 @@ final class QuinjetPageModel {
             tab.externalWorkspaceID = nil
             Task { try? await QuinjetCMUXLauncher.close(workspaceID: workspaceID) }
         }
+        tab.holder.registerOSCHandler(code: QuinjetHostAction.oscCode) {
+            [weak self, weak tab] payload in
+            guard let self, let tab else { return }
+            self.handleHostPayload(payload, from: tab)
+        }
         let environment = QuinjetOperationExecution.terminalEnvironment(
             overrides: request.environment)
         tab.holder.reset()
@@ -275,6 +280,19 @@ final class QuinjetPageModel {
             ).filter(\.canOpen)
         } catch {
             tab.errorMessage = error.localizedDescription
+        }
+    }
+
+    func handleHostPayload(_ payload: String, from tab: QuinjetTab) {
+        guard let action = QuinjetHostAction(payload: payload) else { return }
+        switch action {
+        case .openNewTab:
+            Task {
+                try? await performSessionOperation(
+                    QuinjetSessionRequest(operation: .create, session: tab.id.uuidString))
+            }
+        case .openWorktree:
+            Task { await presentWorktrees(for: tab) }
         }
     }
 

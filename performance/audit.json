@@ -73,7 +73,7 @@
         },
         {
           "path": "Packages/Edith/Tests/EdithTests/TerminalPresentationTests.swift",
-          "contains": "ghosttyFocusRequestsOnlyFireOnOwnershipTransitions"
+          "contains": "presentationChangesDoNotAccumulateStaleFocusWork"
         },
         {
           "path": "Packages/Edith/Sources/EdithKit/UI/InputFocus.swift",
@@ -173,12 +173,12 @@
           "contains": "commandDownFallsBackToTheRenderedPage"
         },
         {
-          "path": "Packages/Edith/Sources/GhosttyTerminal/GhosttyTerminalView.swift",
-          "contains": "guard renderingActive != active else { return }"
+          "path": "Packages/Edith/Sources/Edith/Features/Machines/Views/MachineTerminalTab.swift",
+          "contains": "guard !hasDeferredDisplay else { return }"
         },
         {
           "path": "Packages/Edith/Tests/EdithTests/TerminalPresentationTests.swift",
-          "contains": "ghosttyRendersOnlyWhileItsSurfaceIsVisible"
+          "contains": "inactiveTerminalCoalescesFloodRedrawAndKeepsBoundedHistory"
         }
       ]
     },

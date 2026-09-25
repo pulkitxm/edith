@@ -1,5 +1,6 @@
 import EdithKit
 import GhosttyTerminal
+import SwiftTerm
 import SwiftUI
 
 private struct HerdrResizeCursor: NSViewRepresentable {
@@ -400,7 +401,7 @@ struct HerdrSessionView: View {
         do {
             let request = try await store.attachRequest(
                 for: tab,
-                environment: TerminalEnvironment.defaults())
+                environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
                 environment: request.environment,

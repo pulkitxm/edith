@@ -1,6 +1,7 @@
 import AppKit
 import EdithKit
 import Observation
+import SwiftTerm
 import SwiftUI
 
 typealias HerdrLiveWatcher =

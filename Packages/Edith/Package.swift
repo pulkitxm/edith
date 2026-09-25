@@ -17,6 +17,7 @@ let products: [Product] = [
 
 let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
     .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.5.1"),
     .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
@@ -188,6 +189,7 @@ let targets: [Target] = [
             "EdithLidAwakeSupport",
             "GhosttyTerminal",
             .product(name: "Sparkle", package: "Sparkle"),
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
             "Highlighter",
         ],
         exclude: ["Resources"],

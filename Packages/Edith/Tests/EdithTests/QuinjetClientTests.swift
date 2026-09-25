@@ -446,6 +446,13 @@ import Testing
         #expect(request.currentDirectory == "/tmp/non-repository")
     }
 
+    @Test func mapsManagedHostPayloads() {
+        #expect(QuinjetHostAction.oscCode == 6973)
+        #expect(QuinjetHostAction(payload: "quinjet;open-new-tab") == .openNewTab)
+        #expect(QuinjetHostAction(payload: "quinjet;open-worktree") == .openWorktree)
+        #expect(QuinjetHostAction(payload: "quinjet;unknown") == nil)
+    }
+
     private static let projectsJSON = """
         [
           {
@@ -957,6 +964,50 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             QuinjetThemePreference.resolve("gruvbox", appTheme: .blue) == .gruvbox)
     }
 
+    @Test func newTabPayloadCreatesAndSelectsPickerTab() async throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+
+        model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
+
+        #expect(model.tabs.count == 2)
+        #expect(model.selectedTab?.id != original.id)
+        #expect(model.selectedTab?.worktree == nil)
+    }
+
+    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() async throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+        let machineID = UUID()
+        original.remote = QuinjetRemote(
+            machineID: machineID, machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock", executablePath: "/usr/local/bin/quinjet")
+
+        model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
+
+        #expect(model.selectedTab?.machineID == machineID)
+        #expect(model.selectedTab?.worktree == nil)
+    }
+
+    @Test func worktreePayloadPresentsNativePicker() async throws {
+        let model = QuinjetPageModel(client: client)
+        let tab = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main, Self.feature], in: tab,
+            launchEnabled: false)
+
+        model.handleHostPayload("quinjet;open-worktree", from: tab)
+        for _ in 0..<20 {
+            if tab.showsWorktrees, !tab.loadingWorktrees, tab.worktrees.count == 2 { break }
+            await Task.yield()
+        }
+
+        #expect(tab.showsWorktrees)
+        #expect(tab.worktrees.map(\.branch) == ["main", "feat/quinjet"])
+    }
+
     @Test func selectingWorktreeReusesCurrentTab() throws {
         let model = QuinjetPageModel(client: client)
         let tab = try #require(model.selectedTab)
@@ -1010,6 +1061,35 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
 
         #expect(model.tabs.allSatisfy { $0.launchConfiguration == configuration })
         #expect(model.selectedTab?.id == selected)
+    }
+
+    @Test func terminalRoutesManagedOSCSequence() async {
+        let holder = TerminalSessionHolder()
+        var action: QuinjetHostAction?
+        holder.registerOSCHandler(code: QuinjetHostAction.oscCode) { payload in
+            action = QuinjetHostAction(payload: payload)
+        }
+
+        holder.terminalView.feed(text: "\u{1B}]6973;quinjet;open-new-tab\u{1B}\\")
+        for _ in 0..<10 {
+            if action != nil { break }
+            await Task.yield()
+        }
+
+        #expect(action == .openNewTab)
+    }
+
+    @Test func resettingTerminalClearsMouseTrackingAndCreatesANewView() {
+        let holder = TerminalSessionHolder()
+        let original = holder.terminalView
+        holder.terminalView.feed(text: "\u{1B}[?1003h")
+        #expect(holder.terminalView.terminal.mouseMode == .anyEvent)
+
+        holder.reset()
+
+        #expect(holder.terminalView !== original)
+        #expect(holder.terminalView.terminal.mouseMode == .off)
+        #expect(holder.generation == 1)
     }
 
     private var client: QuinjetClient {
