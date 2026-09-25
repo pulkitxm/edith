@@ -17,7 +17,9 @@ this machine. Run them with the `Makefile`:
 - `make ci` runs the faster product subset when you only touched app code.
 - Targeted checks exist for a focused change: `make ci-scripts`, `make ci-lint`,
   `make ci-swift`, `make ci-hygiene`, `make ci-security`, `make ci-companion`,
-  and the rest. Run `grep '^ci' Makefile` to see them all.
+  `make ci-browser` (the Notch Browser suites, including a live WebKit import
+  test against a synthetic Chrome profile), and the rest. Run
+  `grep '^ci' Makefile` to see them all.
 
 First-time setup on a fresh machine:
 
