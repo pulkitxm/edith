@@ -1422,7 +1422,8 @@ final class HerdrStore {
         }
         return try await controlRequest(
             for: tab.agent, machine: tab.machine, environment: environment,
-            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable)
+            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable,
+            mouse: .buttons)
     }
 
     func attachRequest(
@@ -1435,12 +1436,15 @@ final class HerdrStore {
         }
         return try await controlRequest(
             for: agent, machine: terminal.host.machine, environment: environment,
-            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable)
+            localExecutable: localExecutable, bridgeExecutable: bridgeExecutable,
+            mouse: terminalSettings.mouse)
     }
+
+    var terminalSettings: HerdrTerminalSettings { HerdrTerminalSettings.load(defaults) }
 
     private func controlRequest(
         for agent: HerdrAgent, machine: Machine?, environment: [String],
-        localExecutable: URL?, bridgeExecutable: URL?
+        localExecutable: URL?, bridgeExecutable: URL?, mouse: HerdrTerminalMouse
     ) async throws -> TerminalLaunchRequest {
         guard let bridgeExecutable else {
             throw HerdrTerminalBridgeError.executableUnavailable
@@ -1460,14 +1464,28 @@ final class HerdrStore {
                 platform: platform)
         }
         return try HerdrTerminalBridge.launchRequest(
-            bridgeExecutable: bridgeExecutable, controller: controller)
+            bridgeExecutable: bridgeExecutable, controller: controller, mouse: mouse)
     }
 
-    func terminalContext(for owner: String) -> (host: HerdrPanelHost, cwd: String?) {
-        guard owner != Self.boardID, let tab = tab(owner), let session = session(tab.focused)
-        else { return (.local, nil) }
-        let cwd = session.agent.cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (HerdrPanelHost(session), session.agent.isTerminal || cwd.isEmpty ? nil : cwd)
+    func terminalOrigins(for owner: String) -> [HerdrTerminalOrigin] {
+        guard owner != Self.boardID, let tab = tab(owner) else { return [.local] }
+        let startFolder = terminalSettings.startFolder
+        var origins: [HerdrTerminalOrigin] = []
+        for agentID in tab.agentIDs {
+            guard let session = session(agentID) else { continue }
+            origins.append(HerdrTerminalOrigin(session, startFolder: startFolder))
+        }
+        return origins.isEmpty ? [.local] : origins
+    }
+
+    func terminalOrigin(for owner: String) -> HerdrTerminalOrigin {
+        let origins = terminalOrigins(for: owner)
+        let focused = tab(owner)?.focused
+        return origins.first { $0.id == focused } ?? origins[0]
+    }
+
+    func openTerminal(in owner: String, from origin: HerdrTerminalOrigin) {
+        terminalPanels.newTerminal(in: owner, host: origin.host, cwd: origin.cwd)
     }
 
     func performTerminalPanelKey(
@@ -1483,14 +1501,14 @@ final class HerdrStore {
 
     func perform(_ key: HerdrTerminalPanelKey) {
         let owner = selectedTab
-        let context = terminalContext(for: owner)
+        let origin = terminalOrigin(for: owner)
         switch key {
         case .toggle:
-            terminalPanels.toggle(owner, host: context.host, cwd: context.cwd)
+            terminalPanels.toggle(owner, host: origin.host, cwd: origin.cwd)
         case .visibility:
-            terminalPanels.toggleVisibility(owner, host: context.host, cwd: context.cwd)
+            terminalPanels.toggleVisibility(owner, host: origin.host, cwd: origin.cwd)
         case .new:
-            terminalPanels.newTerminal(in: owner, host: context.host, cwd: context.cwd)
+            openTerminal(in: owner, from: origin)
         }
     }
 

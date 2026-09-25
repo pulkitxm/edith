@@ -45,25 +45,23 @@ struct HerdrPage: View {
                             onEnded: finishRailResize,
                             onReset: resetRailWidth)
                     }
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .topLeading) {
-                            board.opacity(onBoard ? 1 : 0)
-                                .allowsHitTesting(onBoard)
-                            HerdrCanvas(
-                                store: store, launchEnabled: launchEnabled,
-                                hideAgents: hideAgents, active: !onBoard
-                            )
-                            .opacity(onBoard ? 0 : 1)
-                            .allowsHitTesting(!onBoard)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .herdrDropFrame(HerdrDropGeometry.canvasKey)
-                        HerdrTerminalPanelView(
-                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
-                            maximumHeight: proxy.size.height - UIScale.pt(160),
-                            hideAgents: hideAgents)
+                    ZStack(alignment: .topLeading) {
+                        board.opacity(onBoard ? 1 : 0)
+                            .allowsHitTesting(onBoard)
+                        HerdrCanvas(
+                            store: store, launchEnabled: launchEnabled, hideAgents: hideAgents,
+                            active: !onBoard
+                        )
+                        .opacity(onBoard ? 0 : 1)
+                        .allowsHitTesting(!onBoard)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .herdrDropFrame(HerdrDropGeometry.canvasKey)
+                    .overlay(alignment: .bottom) {
+                        HerdrTerminalPanelView(
+                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
+                            maximumHeight: proxy.size.height, hideAgents: hideAgents)
+                    }
                     if !onBoard, store.detailOpen, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents)

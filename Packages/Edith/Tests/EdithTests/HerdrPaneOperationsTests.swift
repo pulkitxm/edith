@@ -42,6 +42,18 @@ private actor HerdrCloseRecorder {
         #expect(process.running)
     }
 
+    @Test func retitledProcessesKeepTheirCommandAsTheName() throws {
+        let json = """
+            {"result":{"process_info":{"foreground_process_group_id":50451,"foreground_processes":[{"argv":["node","server.mjs"],"argv0":"node","cmdline":"node server.mjs","name":"node","pid":50464},{"argv0":"npm run dev","name":"node","pid":50451}],"shell_pid":50378}}}
+            """
+        let process = try #require(HerdrListParser.paneProcess(from: json))
+        #expect(
+            process == HerdrPaneProcess(name: "npm run dev", command: "npm run dev", running: true))
+        #expect(
+            HerdrListParser.processTitle("/opt/homebrew/bin/python3 -m http.server")
+                == "python3 -m http.server")
+    }
+
     @Test func processInfoWithoutProcessesIsUnknown() {
         #expect(HerdrListParser.paneProcess(from: "{}") == nil)
         #expect(

@@ -467,6 +467,24 @@ public enum ConfigCatalog {
             AppStorageKeys.Herdr.launchDefaults, .map, group: "herdr",
             summary: "Model, effort and fast mode per agent kind when Edith starts an agent.",
             fallback: .object([:])),
+        SettingDefinition(
+            AppStorageKeys.Herdr.terminalMouse, .string, group: "herdr",
+            summary: "Mouse input sent to agent-tab terminals: wheel only, or clicks too.",
+            allowed: ["scroll", "buttons"], fallback: .string("scroll")),
+        SettingDefinition(
+            AppStorageKeys.Herdr.terminalFontSize, .number, group: "herdr",
+            summary: "Text size in agent-tab terminals.", fallback: .double(13)),
+        SettingDefinition(
+            AppStorageKeys.Herdr.terminalStartFolder, .string, group: "herdr",
+            summary: "Where a new agent-tab terminal starts: the agent's folder or home.",
+            allowed: ["agent", "home"], fallback: .string("agent")),
+        SettingDefinition(
+            AppStorageKeys.Herdr.terminalStartupCommand, .string, group: "herdr",
+            summary: "Command run in every new agent-tab terminal.", fallback: .string("")),
+        SettingDefinition(
+            AppStorageKeys.Herdr.terminalConfirmClose, .bool, group: "herdr",
+            summary: "Ask before closing a tab whose terminals are running something.",
+            fallback: .bool(true)),
     ]
 
     private static let quinjet: [SettingDefinition] = [

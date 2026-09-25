@@ -8,6 +8,7 @@ import Testing
 private actor HerdrPanelHerdr {
     private(set) var opened: [(session: String, cwd: String?, machine: UUID?)] = []
     private(set) var closed: [String] = []
+    private(set) var ran: [(pane: String, command: String)] = []
     private var processes: [String: HerdrPaneState] = [:]
     private var nextPane = 1
 
@@ -28,6 +29,12 @@ private actor HerdrPanelHerdr {
         processes[pane] = nil
     }
 
+    func type(_ command: String, in pane: String) {
+        ran.append((pane, command))
+    }
+
+    var typed: [String] { ran.map(\.command) }
+
     func run(_ name: String, command: String, in pane: String) {
         processes[pane] = .live(HerdrPaneProcess(name: name, command: command, running: true))
     }
@@ -46,7 +53,8 @@ private actor HerdrPanelHerdr {
                 await self.open(session: session, cwd: cwd, machine: machine)
             },
             state: { _, pane, _ in await self.state(pane) },
-            close: { _, pane, _ in await self.close(pane) })
+            close: { _, pane, _ in await self.close(pane) },
+            run: { _, pane, command, _ in await self.type(command, in: pane) })
     }
 }
 
@@ -237,26 +245,104 @@ private actor HerdrPanelHerdr {
 
         store.perform(.toggle)
 
-        let context = store.terminalContext(for: HerdrStore.boardID)
-        #expect(context.host == .local)
-        #expect(context.cwd == nil)
-        try await eventually { await herdr.openedDirectories == [nil] }
+        let origin = store.terminalOrigin(for: HerdrStore.boardID)
+        #expect(origin.host == .local)
+        #expect(origin.cwd == "~")
+        try await eventually { await herdr.openedDirectories == ["~"] }
     }
 
     @Test func remoteAgentsOpenTerminalsOnTheirMachine() {
         let store = makeStore(HerdrPanelHerdr())
-        let remote = HerdrAgent.make(
-            machineID: UUID().uuidString, machineName: "Build Box", machineIsLocal: false,
-            sshTarget: "build", session: "default", pane: "w1:p1", kind: "Codex",
-            status: .idle, title: "Codex", workspace: "", cwd: "/srv/app")
+        let remote = remoteAgent(pane: "w1:p1", cwd: "/srv/app")
         store.open(remote)
 
-        let context = store.terminalContext(for: store.selectedTab)
+        let origin = store.terminalOrigin(for: store.selectedTab)
 
-        #expect(context.host.machineID == remote.machineID)
-        #expect(context.host.machineName == "Build Box")
-        #expect(!context.host.isLocal)
-        #expect(context.cwd == "/srv/app")
+        #expect(origin.host.machineID == remote.machineID)
+        #expect(origin.host.machineName == "Build Box")
+        #expect(!origin.host.isLocal)
+        #expect(origin.cwd == "/srv/app")
+        #expect(origin.location == "app · Build Box")
+    }
+
+    @Test func sideBySideTabsOfferEachAgentsMachineAndFolder() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        let local = agent("Claude Code", pane: "a", cwd: "/repo/web")
+        let remote = remoteAgent(pane: "w1:p1", cwd: "/srv/api")
+        store.open(local)
+        store.open(remote, beside: .right)
+        let owner = store.selectedTab
+
+        let origins = store.terminalOrigins(for: owner)
+        #expect(origins.map(\.id) == [local.id, remote.id])
+        #expect(origins.map(\.cwd) == ["/repo/web", "/srv/api"])
+        #expect(origins.map(\.host.isLocal) == [true, false])
+
+        store.openTerminal(in: owner, from: origins[0])
+        try await eventually { await herdr.openedDirectories == ["/repo/web"] }
+        let terminal = try #require(store.terminalPanels.terminals(of: owner).first)
+        #expect(terminal.host == origins[0].host)
+        #expect(terminal.location == "web")
+    }
+
+    @Test func theHomeFolderSettingStartsTerminalsAtHome() {
+        let defaults = Self.scratchDefaults()
+        defaults.set("home", forKey: AppStorageKeys.Herdr.terminalStartFolder)
+        let store = HerdrStore(
+            defaults: defaults,
+            terminalPanels: HerdrTerminalPanels(
+                defaults: defaults, operations: HerdrPanelHerdr().operations))
+        store.open(agent("Codex", pane: "a", cwd: "/repo"))
+
+        #expect(store.terminalOrigin(for: store.selectedTab).cwd == "~")
+    }
+
+    @Test func theStartupCommandRunsInEveryNewTerminal() async throws {
+        let herdr = HerdrPanelHerdr()
+        let defaults = Self.scratchDefaults()
+        defaults.set(
+            "  source .venv/bin/activate ", forKey: AppStorageKeys.Herdr.terminalStartupCommand)
+        let store = HerdrStore(
+            defaults: defaults,
+            terminalPanels: HerdrTerminalPanels(defaults: defaults, operations: herdr.operations))
+        store.open(agent("Codex", pane: "a", cwd: "/repo"))
+
+        store.perform(.toggle)
+
+        try await eventually { await herdr.typed == ["source .venv/bin/activate"] }
+    }
+
+    @Test func closingWithoutConfirmationSkipsTheRunningCheck() async throws {
+        let herdr = HerdrPanelHerdr()
+        let defaults = Self.scratchDefaults()
+        defaults.set(false, forKey: AppStorageKeys.Herdr.terminalConfirmClose)
+        let store = HerdrStore(
+            defaults: defaults,
+            terminalPanels: HerdrTerminalPanels(defaults: defaults, operations: herdr.operations))
+        store.open(agent("Codex", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.pane != nil }
+        let pane = try #require(store.terminalPanels.terminals[id]?.pane)
+        await herdr.run("npm", command: "npm run dev", in: pane)
+
+        store.closeTab(owner)
+
+        #expect(store.tabs.isEmpty)
+        #expect(store.terminalPanels.closeRequest == nil)
+        try await eventually { await herdr.closed == [pane] }
+    }
+
+    @Test func terminalSettingsFallBackToCleanDefaults() {
+        let defaults = Self.scratchDefaults()
+        #expect(HerdrTerminalSettings.load(defaults) == HerdrTerminalSettings())
+        defaults.set("buttons", forKey: AppStorageKeys.Herdr.terminalMouse)
+        defaults.set(40.0, forKey: AppStorageKeys.Herdr.terminalFontSize)
+        let loaded = HerdrTerminalSettings.load(defaults)
+        #expect(loaded.mouse == .buttons)
+        #expect(loaded.fontSize == HerdrTerminalSettings.fontSizeRange.upperBound)
     }
 
     @Test func theFirstTerminalCreatesTheEdithTerminalsSpace() {
@@ -331,6 +417,13 @@ private actor HerdrPanelHerdr {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         return defaults
+    }
+
+    private func remoteAgent(pane: String, cwd: String) -> HerdrAgent {
+        HerdrAgent.make(
+            machineID: "4F6C2A10-0000-4000-8000-000000000001", machineName: "Build Box",
+            machineIsLocal: false, sshTarget: "build", session: "default", pane: pane,
+            kind: "Codex", status: .idle, title: "Codex", workspace: "", cwd: cwd)
     }
 
     private func agent(_ kind: String, pane: String, cwd: String = "") -> HerdrAgent {

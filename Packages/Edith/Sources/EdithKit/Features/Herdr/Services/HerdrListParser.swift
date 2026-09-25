@@ -122,15 +122,22 @@ public enum HerdrListParser {
         let shell = integer(in: info, keys: ["shell_pid"])
         let leader =
             processes.first { integer(in: $0, keys: ["pid"]) == group } ?? processes[0]
-        let launched =
-            string(in: leader, keys: ["argv0"]).map { ($0 as NSString).lastPathComponent }
-        let trimmed = launched.map { $0.hasPrefix("-") ? String($0.dropFirst()) : $0 }
-        guard let name = trimmed ?? string(in: leader, keys: ["name"]), !name.isEmpty else {
-            return nil
-        }
+        guard
+            let name = string(in: leader, keys: ["argv0"]).map(processTitle)
+                ?? string(in: leader, keys: ["name"]),
+            !name.isEmpty
+        else { return nil }
         return HerdrPaneProcess(
             name: name, command: string(in: leader, keys: ["cmdline"]) ?? name,
             running: group != nil && shell != nil && group != shell)
+    }
+
+    static func processTitle(_ argv0: String) -> String {
+        let words = argv0.split(separator: " ", maxSplits: 1)
+        guard let first = words.first else { return argv0 }
+        var program = (String(first) as NSString).lastPathComponent
+        if program.hasPrefix("-") { program.removeFirst() }
+        return words.count > 1 ? "\(program) \(words[1])" : program
     }
 
     public static func eventName(in text: String) -> String? {

@@ -45,6 +45,15 @@ public enum HerdrPaneOperations {
         }
     }
 
+    public static func run(
+        session: String, pane: String, command: String, on machine: Machine?
+    ) async throws {
+        _ = try await HerdrCommand.run(
+            HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(pane: pane, command: command), session: session),
+            timeout: timeout, on: machine)
+    }
+
     public static func close(session: String, pane: String, on machine: Machine?) async throws {
         do {
             _ = try await HerdrCommand.run(

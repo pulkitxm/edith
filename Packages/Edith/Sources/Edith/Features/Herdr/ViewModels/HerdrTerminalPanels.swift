@@ -33,6 +33,39 @@ struct HerdrPanelHost: Equatable {
     }
 }
 
+struct HerdrTerminalOrigin: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let kind: String?
+    let host: HerdrPanelHost
+    let cwd: String?
+
+    static let home = "~"
+    static let local = HerdrTerminalOrigin(
+        id: HerdrHostSnapshot.localID, title: "This Mac", kind: nil, host: .local, cwd: home)
+
+    init(id: String, title: String, kind: String?, host: HerdrPanelHost, cwd: String?) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.host = host
+        self.cwd = cwd
+    }
+
+    init(_ tab: HerdrOpenTab, startFolder: HerdrTerminalSettings.StartFolder) {
+        let cwd = tab.agent.cwd.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesFolder = startFolder == .agent && !tab.agent.isTerminal && !cwd.isEmpty
+        self.init(
+            id: tab.agent.id, title: tab.agent.title,
+            kind: tab.agent.isTerminal ? nil : tab.agent.kind, host: HerdrPanelHost(tab),
+            cwd: usesFolder ? cwd : Self.home)
+    }
+
+    var location: String {
+        HerdrPanelTerminal.location(cwd: cwd, host: host)
+    }
+}
+
 struct HerdrPanelTerminal: Identifiable {
     let id: String
     let host: HerdrPanelHost
@@ -49,6 +82,15 @@ struct HerdrPanelTerminal: Identifiable {
     }
 
     var running: Bool { process?.running == true }
+
+    var location: String {
+        Self.location(cwd: cwd, host: host)
+    }
+
+    static func location(cwd: String?, host: HerdrPanelHost) -> String {
+        let folder = cwd.map { ($0 as NSString).lastPathComponent } ?? HerdrTerminalOrigin.home
+        return host.isLocal ? folder : "\(folder) · \(host.machineName)"
+    }
 
     var bridgeAgent: HerdrAgent? {
         guard let pane else { return nil }
@@ -86,12 +128,17 @@ struct HerdrPanelTerminalOperations: Sendable {
     var state:
         @Sendable (_ session: String, _ pane: String, _ machine: Machine?) async throws ->
             HerdrPaneState
-    var close: @Sendable (_ session: String, _ pane: String, _ machine: Machine?) async throws -> Void
+    var close:
+        @Sendable (_ session: String, _ pane: String, _ machine: Machine?) async throws -> Void
+    var run:
+        @Sendable (_ session: String, _ pane: String, _ command: String, _ machine: Machine?)
+            async throws -> Void
 
     static let live = HerdrPanelTerminalOperations(
         open: { try await HerdrTerminalSpace.openTerminal(session: $0, cwd: $1, on: $2) },
         state: { try await HerdrPaneOperations.state(session: $0, pane: $1, on: $2) },
-        close: { try await HerdrPaneOperations.close(session: $0, pane: $1, on: $2) })
+        close: { try await HerdrPaneOperations.close(session: $0, pane: $1, on: $2) },
+        run: { try await HerdrPaneOperations.run(session: $0, pane: $1, command: $2, on: $3) })
 }
 
 enum HerdrTerminalPanelSizing {
@@ -147,6 +194,7 @@ final class HerdrTerminalPanels {
     private(set) var panels: [String: HerdrTerminalPanel] = [:]
     private(set) var terminals: [String: HerdrPanelTerminal] = [:]
     private(set) var focusedOwner: String?
+    var maximized = false
     var closeRequest: HerdrTerminalCloseRequest?
     var height = HerdrTerminalPanelSizing.heightDefault {
         didSet {
@@ -285,6 +333,10 @@ final class HerdrTerminalPanels {
                 return
             }
             terminals[id]?.pane = created.paneID
+            let command = HerdrTerminalSettings.load(defaults).startupCommand
+            if !command.isEmpty {
+                try? await operations.run(terminal.session, created.paneID, command, machine)
+            }
             await refresh(ids: [id])
         } catch {
             fail(id, error.localizedDescription)
@@ -320,7 +372,7 @@ final class HerdrTerminalPanels {
             self?.closeAll(owners: owners)
             proceed()
         }
-        guard !ids.isEmpty else {
+        guard !ids.isEmpty, HerdrTerminalSettings.load(defaults).confirmClose else {
             finish()
             return
         }
