@@ -48,6 +48,9 @@ final class StudioModel {
     var message: String?
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
+    var workflows: [StudioWorkflow] = []
+    var editingWorkflow: StudioWorkflowDraft?
+    private var workflowsTask: Task<Void, Never>?
 
     private let defaults: UserDefaults
     private var engineTask: Task<Void, Never>?
@@ -96,6 +99,53 @@ final class StudioModel {
         refreshEngines()
         refreshProjects()
         loadRecent()
+        loadWorkflows()
+    }
+
+    func loadWorkflows() {
+        workflowsTask?.cancel()
+        workflowsTask = Task { [weak self] in
+            let loaded = await Task.detached(priority: .utility) { StudioWorkflowStore.load() }
+                .value
+            guard let self, !Task.isCancelled else { return }
+            self.workflows = loaded
+        }
+    }
+
+    func editWorkflow(_ workflow: StudioWorkflow?) {
+        editingWorkflow = StudioWorkflowDraft(
+            workflow: workflow ?? StudioWorkflow(name: "", steps: []))
+    }
+
+    func saveWorkflow(_ draft: StudioWorkflowDraft) {
+        let workflow = draft.workflow
+        do {
+            try workflow.validate()
+        } catch {
+            draft.failure = error.localizedDescription
+            return
+        }
+        if let index = workflows.firstIndex(where: { $0.id == workflow.id }) {
+            workflows[index] = workflow
+        } else {
+            workflows.append(workflow)
+        }
+        StudioWorkflowStore.save(workflows)
+        editingWorkflow = nil
+        notice = "Saved \(workflow.name)"
+    }
+
+    func deleteWorkflow(_ workflow: StudioWorkflow) {
+        workflows.removeAll { $0.id == workflow.id }
+        StudioWorkflowStore.save(workflows)
+    }
+
+    func runWorkflow(_ workflow: StudioWorkflow, with urls: [URL]) {
+        guard let tool = workflow.tool else {
+            message = "This workflow has no tools."
+            return
+        }
+        openRunner(tool, with: urls)
     }
 
     func refreshEngines() {

@@ -54,6 +54,15 @@ struct StudioPage: View {
             } message: {
                 Text(model.message ?? "")
             }
+            .sheet(
+                isPresented: Binding(
+                    get: { model.editingWorkflow != nil },
+                    set: { if !$0 { model.editingWorkflow = nil } })
+            ) {
+                if let draft = model.editingWorkflow {
+                    StudioWorkflowEditor(model: model, draft: draft)
+                }
+            }
             .task {
                 guard automaticActionsEnabled else { return }
                 model.start()

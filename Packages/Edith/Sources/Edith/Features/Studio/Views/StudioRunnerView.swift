@@ -72,6 +72,9 @@ struct StudioInputsPanel: View {
                     if job.inputs.isEmpty {
                         StudioInputsDropZone(tool: job.tool, choose: choose)
                     } else {
+                        if StudioPreview.supports(job.tool) {
+                            StudioPreviewPanel(job: job, environment: model.environment)
+                        }
                         LazyVGrid(
                             columns: [
                                 GridItem(

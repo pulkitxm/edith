@@ -22,6 +22,7 @@ final class StudioJob: Identifiable {
     var status: String?
     var result: StudioRunResult?
     var startedAt: Date?
+    let preview = StudioPreviewModel()
     private var task: Task<Void, Never>?
 
     init(tool: StudioTool, inputs: [URL], settings: StudioSettings? = nil) {

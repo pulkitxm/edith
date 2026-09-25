@@ -252,6 +252,47 @@ enum StudioTestFiles {
         )
     }
 
+    @Test func workflowsAreEditedSavedAndRunThroughTheRunner() async throws {
+        let folder = try StudioTestFiles.folder()
+        let output = folder.appendingPathComponent("out", isDirectory: true)
+        let model = model(output: output)
+        model.environment = StudioEngineLocator.detect()
+        model.editWorkflow(nil)
+        let draft = try #require(model.editingWorkflow)
+        model.saveWorkflow(draft)
+        #expect(draft.failure != nil)
+        draft.name = "Merge then number"
+        #expect(draft.candidates.contains { $0.id == "pdf.merge" })
+        draft.append(try #require(StudioCatalog.tool("pdf.merge")))
+        #expect(draft.candidates.contains { $0.id == "pdf.page-numbers" })
+        #expect(!draft.candidates.contains { $0.id == "image.resize" })
+        draft.append(try #require(StudioCatalog.tool("pdf.page-numbers")))
+        draft.steps[1].set("format", .text("{n} / {total}"))
+        model.saveWorkflow(draft)
+        #expect(model.editingWorkflow == nil)
+        let saved = try #require(model.workflows.first { $0.name == "Merge then number" })
+        #expect(saved.steps.count == 2)
+        let reloaded = StudioWorkflowStore.load()
+        #expect(reloaded.contains { $0.id == saved.id })
+        let a = folder.appendingPathComponent("a.pdf")
+        let b = folder.appendingPathComponent("b.pdf")
+        try StudioTestFiles.pdf(a, pages: ["A"])
+        try StudioTestFiles.pdf(b, pages: ["B"])
+        model.runWorkflow(saved, with: [a, b])
+        guard case let .tool(id) = model.route, let job = model.job(id) else {
+            Issue.record("running a workflow opens the runner")
+            return
+        }
+        model.run(job)
+        #expect(await StudioTestFiles.waitUntil { !job.isRunning })
+        let url = try #require(job.result?.outputs.first?.url)
+        let document = try #require(PDFDocument(url: url))
+        #expect(document.pageCount == 2)
+        #expect(document.page(at: 1)?.string?.contains("2 / 2") == true)
+        model.deleteWorkflow(saved)
+        #expect(!StudioWorkflowStore.load().contains { $0.id == saved.id })
+    }
+
     @Test func extensionIsRegisteredWithItsEnginesAndPage() {
         let entry = ExtensionRegistry.entries.first { $0.id == "studio" }
         #expect(entry?.defaultsKey == AppStorageKeys.Tabs.studioEnabled)
@@ -450,6 +491,7 @@ enum StudioTestFiles {
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
             name: "studio-files")
         model.selection = []
+        model.workflows = StudioWorkflow.presets
         model.tab = .tools
         try render(
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
@@ -477,6 +519,18 @@ enum StudioTestFiles {
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
             name: "studio-result")
         model.open(toolID: "image.watermark", with: [urls[2]])
+        guard case let .tool(watermarkID) = model.route, let watermark = model.job(watermarkID)
+        else { return }
+        watermark.set("text", .text("Summer 2026"))
+        watermark.set("position", .text("bottom-right"))
+        watermark.set("rotation", .number(0))
+        watermark.set("opacity", .number(0.85))
+        watermark.set("color", .text("#FFFFFF"))
+        watermark.preview.refresh(
+            tool: watermark.tool, input: urls[2], settings: watermark.settings,
+            environment: model.environment)
+        #expect(await StudioTestFiles.waitUntil { watermark.preview.after != nil })
+        #expect(watermark.preview.failure == nil)
         try render(
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
             name: "studio-watermark")

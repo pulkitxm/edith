@@ -80,6 +80,9 @@ struct StudioToolsView: View {
                     }
                     .scrollIndicators(.never)
                 }
+                if filter == .all, model.toolQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    StudioWorkflowSection(model: model)
+                }
                 if groups.isEmpty {
                     Text("No tools match \"\(model.toolQuery)\".")
                         .foregroundStyle(.secondary)
