@@ -264,7 +264,7 @@ private enum AttentionSyntheticWeek {
         await model.waitForReload()
         #expect(model.summary.activeDuration > 6 * 3_600)
         #expect(!model.summary.agents.isEmpty)
-        try render(model, height: 2_700, to: output.appendingPathComponent("overview-day.png"))
+        try render(model, height: 2_150, to: output.appendingPathComponent("overview-day.png"))
 
         model.section = .timeline
         try render(model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
@@ -277,10 +277,10 @@ private enum AttentionSyntheticWeek {
         model.section = .overview
         model.reload()
         await model.waitForReload()
-        try render(model, height: 2_700, to: output.appendingPathComponent("overview-week.png"))
+        try render(model, height: 2_160, to: output.appendingPathComponent("overview-week.png"))
 
         model.section = .agents
-        try render(model, height: 1_700, to: output.appendingPathComponent("agents-week.png"))
+        try render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionTag.repository

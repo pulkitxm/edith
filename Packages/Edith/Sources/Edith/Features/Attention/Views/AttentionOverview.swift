@@ -647,7 +647,7 @@ struct AttentionAgentsSummaryPanel: View {
                     rows: agents.machines.prefix(5).map {
                         AttentionRankRow(
                             label: $0.key, value: $0.working,
-                            detail: "\($0.sessions) sessions",
+                            detail: $0.sessions == 1 ? "1 session" : "\($0.sessions) sessions",
                             color: DashPalette.color(dark ? "#9085e9" : "#4a3aa7"))
                     })
                 HStack(spacing: UIScale.pt(6)) {
