@@ -123,6 +123,42 @@ import Testing
         #expect(tab.focused == agents[4].id)
     }
 
+    @Test func closingTheFocusedTabInASplitClosesOnlyTheFocusedAgent() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        let opencode = agent("OpenCode", pane: "c")
+        store.open(claude)
+        store.open(codex, beside: .right)
+        store.open(opencode, beside: .right)
+        let tabID = try #require(store.currentTab).id
+        store.focus(codex.id)
+
+        #expect(store.closeFocusedTab())
+
+        let tab = try #require(store.currentTab)
+        #expect(tab.id == tabID)
+        #expect(tab.agentIDs == [claude.id, opencode.id])
+        #expect(store.sessions.map(\.id) == [claude.id, opencode.id])
+        #expect(tab.focused != codex.id)
+    }
+
+    @Test func closingTheLastAgentOfASplitClosesTheTab() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude)
+        store.open(codex, beside: .right)
+
+        #expect(store.closeFocusedTab())
+        #expect(store.currentTab?.agentIDs == [claude.id])
+        #expect(store.currentTab?.isSplit == false)
+
+        #expect(store.closeFocusedTab())
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+    }
+
     @Test func separatingGivesEveryAgentItsOwnTab() {
         let store = HerdrStore(defaults: Self.scratchDefaults())
         let claude = agent("Claude Code", pane: "a")

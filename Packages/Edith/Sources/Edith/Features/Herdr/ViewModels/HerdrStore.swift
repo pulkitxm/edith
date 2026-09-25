@@ -1242,7 +1242,11 @@ final class HerdrStore {
     @discardableResult
     func closeFocusedTab() -> Bool {
         guard selectedTab != Self.boardID else { return false }
-        closeTab(selectedTab)
+        if let tab = currentTab, tab.isSplit {
+            close(tab.focused)
+        } else {
+            closeTab(selectedTab)
+        }
         return true
     }
 
