@@ -74,12 +74,18 @@ struct HerdrTerminalInputRouter {
     private enum Report {
         case incomplete
         case input
+        case pointer(hover: Bool, length: Int)
         case scroll(
             direction: HerdrTerminalScrollDirection, column: UInt16, row: UInt16,
             modifiers: UInt8, length: Int)
     }
 
+    private let mouse: HerdrTerminalMouse
     private var pending = Data()
+
+    init(mouse: HerdrTerminalMouse = .buttons) {
+        self.mouse = mouse
+    }
 
     mutating func commands(for data: Data) throws -> [Data] {
         pending.append(data)
@@ -112,6 +118,17 @@ struct HerdrTerminalInputRouter {
                 return commands
             case .input:
                 offset += 1
+            case let .pointer(hover, length):
+                if mouse == .buttons, !hover {
+                    offset += length
+                    continue
+                }
+                if inputStart < offset {
+                    commands.append(
+                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                }
+                offset += length
+                inputStart = offset
             case let .scroll(direction, column, row, modifiers, length):
                 if inputStart < offset {
                     commands.append(
@@ -176,7 +193,8 @@ struct HerdrTerminalInputRouter {
         switch buttonNumber {
         case 4: direction = .up
         case 5: direction = .down
-        default: return .input
+        default:
+            return .pointer(hover: button & 0b0010_0000 != 0 && buttonNumber == 3, length: length)
         }
         var modifiers: UInt8 = 0
         if button & 0b0000_0100 != 0 { modifiers |= 1 }
@@ -192,7 +210,7 @@ private final class HerdrRawTerminal {
     private var original = termios()
     private var configured = false
 
-    func configure() throws {
+    func configure(mouse: HerdrTerminalMouse) throws {
         guard isatty(STDIN_FILENO) == 1 else { return }
         guard tcgetattr(STDIN_FILENO, &original) == 0 else {
             throw POSIXError(.EIO)
@@ -203,7 +221,8 @@ private final class HerdrRawTerminal {
             throw POSIXError(.EIO)
         }
         configured = true
-        try FileHandle.standardOutput.write(contentsOf: HerdrTerminalBridge.startSequence)
+        try FileHandle.standardOutput.write(
+            contentsOf: HerdrTerminalBridge.startSequence(for: mouse))
     }
 
     func restore() {
@@ -231,7 +250,7 @@ private final class HerdrTerminalBridgeRuntime {
     func run() throws {
         signal(SIGPIPE, SIG_IGN)
         let terminal = HerdrRawTerminal()
-        try terminal.configure()
+        try terminal.configure(mouse: specification.mouse)
         defer { terminal.restore() }
 
         let dimensions = HerdrTerminalDimensions.current()
@@ -270,8 +289,8 @@ private final class HerdrTerminalBridgeRuntime {
     }
 
     private func startInputForwarding(writer: HerdrTerminalWriter) {
-        DispatchQueue.global(qos: .userInteractive).async { [input] in
-            var router = HerdrTerminalInputRouter()
+        DispatchQueue.global(qos: .userInteractive).async { [input, specification] in
+            var router = HerdrTerminalInputRouter(mouse: specification.mouse)
             while true {
                 let bytes = HerdrTerminalStream.read(from: input)
                 guard !bytes.isEmpty else {

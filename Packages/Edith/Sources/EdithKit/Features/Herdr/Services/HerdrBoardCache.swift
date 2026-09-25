@@ -7,6 +7,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
     private var knownPanes = Set<String>()
     private var paneWorkspace: [String: String] = [:]
     private var paneRevision: [String: Int] = [:]
+    private var paneCwd: [String: String] = [:]
     private var agentsByPane: [String: HerdrAgent] = [:]
 
     public init(context: HerdrBoardContext) {
@@ -17,6 +18,20 @@ public final class HerdrBoardCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return listed()
+    }
+
+    public var terminals: [HerdrSpacePane] {
+        lock.lock()
+        defer { lock.unlock() }
+        var panes: [HerdrSpacePane] = []
+        for pane in knownPanes.sorted() {
+            guard let workspace = paneWorkspace[pane],
+                labels[workspace] == HerdrTerminalSpace.label
+            else { continue }
+            panes.append(
+                HerdrSpacePane(session: context.session, pane: pane, cwd: paneCwd[pane] ?? ""))
+        }
+        return panes
     }
 
     @discardableResult
@@ -39,6 +54,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
         var next: [String: HerdrAgent] = [:]
         var nextWorkspace: [String: String] = [:]
         var nextRevision: [String: Int] = [:]
+        var nextCwd: [String: String] = [:]
         for pane in knownPanes {
             guard let record = records[pane] else {
                 if let old = agentsByPane[pane] {
@@ -46,10 +62,12 @@ public final class HerdrBoardCache: @unchecked Sendable {
                     if let id = paneWorkspace[pane] { nextWorkspace[pane] = id }
                     if let revision = paneRevision[pane] { nextRevision[pane] = revision }
                 }
+                if let cwd = paneCwd[pane] { nextCwd[pane] = cwd }
                 continue
             }
             if let id = record.workspaceID { nextWorkspace[pane] = id }
             if let revision = record.revision { nextRevision[pane] = revision }
+            if let cwd = record.cwd ?? paneCwd[pane] { nextCwd[pane] = cwd }
             if record.looksLikeAgent || agentsByPane[pane] != nil {
                 next[pane] = HerdrListParser.agent(
                     from: record, context: context, workspaceLabels: labels,
@@ -59,6 +77,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
         agentsByPane = next
         paneWorkspace = nextWorkspace
         paneRevision = nextRevision
+        paneCwd = nextCwd
         return listed()
     }
 
@@ -130,6 +149,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
             paneRevision[record.pane] = incoming
         }
         if let id = record.workspaceID { paneWorkspace[record.pane] = id }
+        if let cwd = record.cwd { paneCwd[record.pane] = cwd }
         let previous = agentsByPane[record.pane]
         if previous == nil, !record.looksLikeAgent { return }
         agentsByPane[record.pane] = HerdrListParser.agent(
@@ -141,6 +161,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
         agentsByPane[pane] = nil
         paneWorkspace[pane] = nil
         paneRevision[pane] = nil
+        paneCwd[pane] = nil
     }
 
     private func relabel() {

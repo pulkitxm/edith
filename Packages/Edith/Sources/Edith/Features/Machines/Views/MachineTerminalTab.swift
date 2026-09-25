@@ -532,6 +532,7 @@ struct TerminalPane: View {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var fontSize: Double?
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
@@ -539,7 +540,8 @@ struct TerminalPane: View {
         if GhosttyTerminals.enabled {
             if let launch = holder.ghosttyLaunch {
                 GhosttyPane(
-                    holder: holder, launch: launch, theme: GhosttyTheme(palette: palette),
+                    holder: holder, launch: launch,
+                    theme: GhosttyTheme(palette: palette, fontSize: fontSize),
                     active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
                     onFocus: onFocus
                 )

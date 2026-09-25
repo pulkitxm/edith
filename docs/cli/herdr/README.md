@@ -35,6 +35,7 @@ to the `herdr` CLI, not to the Edith window.
 - [`ed herdr attach`](./attach.md)
 - [`ed herdr models`](./models.md)
 - [`ed herdr defaults`](./defaults.md)
+- [Terminals in agent tabs](./terminals.md)
 
 ## Exit codes
 

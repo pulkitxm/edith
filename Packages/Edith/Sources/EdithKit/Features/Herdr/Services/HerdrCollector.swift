@@ -40,7 +40,8 @@ public enum HerdrCollector {
             runner: .local, machineID: machineID, machineName: machineName, machineIsLocal: true,
             sshTarget: nil)
         return .local(
-            herdrPresent: listed.present, agents: listed.agents, error: listed.error)
+            herdrPresent: listed.present, agents: listed.agents, terminals: listed.terminals,
+            error: listed.error)
     }
 
     public static func collectRemote(
@@ -65,7 +66,7 @@ public enum HerdrCollector {
         let snapshot = HerdrHostSnapshot(
             id: machine.id.uuidString, name: machine.name, isLocal: false,
             sshTarget: machine.sshTarget, herdrPresent: listed.present, reachable: true,
-            agents: listed.agents, error: listed.error)
+            agents: listed.agents, terminals: listed.terminals, error: listed.error)
         if ownsConnection { await connection.disconnect() }
         return snapshot
     }
@@ -89,6 +90,7 @@ public enum HerdrCollector {
     private struct Listing {
         var present: Bool
         var agents: [HerdrAgent]
+        var terminals: [HerdrSpacePane] = []
         var error: String?
     }
 
@@ -103,6 +105,7 @@ public enum HerdrCollector {
         let sessions = HerdrListParser.sessions(from: sessionsResult.stdout)
         let names = sessions.isEmpty ? ["default"] : sessions
         var agents: [HerdrAgent] = []
+        var terminals: [HerdrSpacePane] = []
         var lastError: String?
         for session in names {
             let listed = await agentsInSession(
@@ -113,9 +116,10 @@ public enum HerdrCollector {
             }
             if listed.agents.isEmpty { lastError = listed.error }
             agents.append(contentsOf: listed.agents)
+            terminals.append(contentsOf: listed.terminals)
         }
         return Listing(
-            present: true, agents: agents,
+            present: true, agents: agents, terminals: terminals,
             error: agents.isEmpty
                 ? lastError ?? jsonOrProcessError(sessionsResult) : nil)
     }
@@ -133,8 +137,11 @@ public enum HerdrCollector {
             let agents = HerdrListParser.agents(
                 fromSnapshot: snapshot.stdout, session: session, machineID: machineID,
                 machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+            let terminals = HerdrListParser.snapshotBoard(from: snapshot.stdout).map {
+                HerdrListParser.spacePanes(in: $0, session: session)
+            }
             return Listing(
-                present: true, agents: agents,
+                present: true, agents: agents, terminals: terminals ?? [],
                 error: agents.isEmpty ? jsonOrProcessError(snapshot) : nil)
         }
         let result = await run(

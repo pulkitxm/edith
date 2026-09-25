@@ -118,9 +118,16 @@ final class HerdrSocketClient: @unchecked Sendable {
     }
 
     func subscribeBoard() async throws {
+        try await subscribe(Self.boardSubscriptions)
+    }
+
+    func call(method: String, params: [String: Any]) async throws -> String {
+        try await request(method: method, params: params)
+    }
+
+    func subscribe(_ subscriptions: [[String: String]]) async throws {
         let line = try await request(
-            method: "events.subscribe",
-            params: ["subscriptions": Self.boardSubscriptions])
+            method: "events.subscribe", params: ["subscriptions": subscriptions])
         guard let object = HerdrListParser.firstJSON(in: line) as? [String: Any] else {
             throw HerdrSocketError(message: "herdr subscribe returned no JSON")
         }

@@ -2,7 +2,8 @@ import Foundation
 
 public enum HerdrAgentCloseCommand {
     public static func arguments(for agent: HerdrAgent) -> [String] {
-        ["--session", agent.session, "agent", "send-keys", agent.pane, "ctrl+c", "ctrl+c"]
+        HerdrSessionCommand.scoped(
+            ["pane", "send-keys", agent.pane, "ctrl+c"], session: agent.session)
     }
 
     public static func shellLine(
@@ -13,73 +14,74 @@ public enum HerdrAgentCloseCommand {
 }
 
 public enum HerdrAgentCloseError: LocalizedError, Equatable {
-    case herdrUnavailable
     case machineUnavailable
-    case commandFailed(String)
 
     public var errorDescription: String? {
-        switch self {
-        case .herdrUnavailable:
-            "Herdr is not available on this Mac."
-        case .machineUnavailable:
-            "The agent's machine is no longer configured."
-        case .commandFailed(let message):
-            message.isEmpty ? "Herdr could not close the agent." : message
-        }
+        "The agent's machine is no longer configured."
+    }
+}
+
+public struct HerdrAgentCloseSteps: Sendable {
+    public var interrupt: @Sendable () async throws -> Void
+    public var state: @Sendable () async throws -> HerdrPaneState
+    public var closePane: @Sendable () async throws -> Void
+
+    public init(
+        interrupt: @escaping @Sendable () async throws -> Void,
+        state: @escaping @Sendable () async throws -> HerdrPaneState,
+        closePane: @escaping @Sendable () async throws -> Void
+    ) {
+        self.interrupt = interrupt
+        self.state = state
+        self.closePane = closePane
     }
 }
 
 public enum HerdrAgentCloseExecution {
+    public static let attempts = 2
+    public static let pressGap = Duration.milliseconds(250)
+
     public static func close(_ agent: HerdrAgent) async throws {
-        if agent.machineIsLocal {
-            try await closeLocal(agent)
-        } else {
-            try await closeRemote(agent)
-        }
+        let machine = try machine(for: agent)
+        let arguments = HerdrAgentCloseCommand.arguments(for: agent)
+        try await close(
+            steps: HerdrAgentCloseSteps(
+                interrupt: {
+                    _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine)
+                    try await Task.sleep(for: pressGap)
+                    _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine)
+                },
+                state: {
+                    try await HerdrPaneOperations.state(
+                        session: agent.session, pane: agent.pane, on: machine)
+                },
+                closePane: {
+                    try await HerdrPaneOperations.close(
+                        session: agent.session, pane: agent.pane, on: machine)
+                }))
     }
 
-    private static func closeLocal(_ agent: HerdrAgent) async throws {
-        guard let executable = HerdrCollector.executable() else {
-            throw HerdrAgentCloseError.herdrUnavailable
+    public static func close(
+        steps: HerdrAgentCloseSteps, patience: Duration = .seconds(3),
+        interval: Duration = .milliseconds(250)
+    ) async throws {
+        for _ in 0..<attempts {
+            if case .missing? = try? await steps.state() { return }
+            try? await steps.interrupt()
+            let exited = await HerdrPaneOperations.waitForShell(
+                timeout: patience, interval: interval, state: steps.state)
+            if exited { break }
         }
-        let request = CLICommandRequest(
-            executableURL: executable, arguments: HerdrAgentCloseCommand.arguments(for: agent),
-            environment: CLIToolEnvironment.sanitized(), timeout: 10,
-            maximumOutputBytes: 64 * 1_024)
-        let result: CLICommandResult
-        do {
-            result = try await CLICommandRunner.run(request) { _ in }
-        } catch {
-            throw HerdrAgentCloseError.commandFailed(error.localizedDescription)
-        }
-        guard result.terminationStatus == 0 else {
-            throw HerdrAgentCloseError.commandFailed(clean(result.output))
-        }
+        try await steps.closePane()
     }
 
-    private static func closeRemote(_ agent: HerdrAgent) async throws {
+    private static func machine(for agent: HerdrAgent) throws -> Machine? {
+        guard !agent.machineIsLocal else { return nil }
         guard
             let machine = MachineRegistry.machines().first(where: {
                 $0.id.uuidString == agent.machineID
             })
         else { throw HerdrAgentCloseError.machineUnavailable }
-        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
-        do {
-            try await connection.connect()
-            let platform = await connection.remotePlatform ?? .linux
-            let command = HerdrAgentCloseCommand.shellLine(for: agent, platform: platform)
-            let result = try await connection.run(command)
-            guard result.status == 0 else {
-                throw HerdrAgentCloseError.commandFailed(clean(result.stderrText))
-            }
-        } catch let error as HerdrAgentCloseError {
-            throw error
-        } catch {
-            throw HerdrAgentCloseError.commandFailed(error.localizedDescription)
-        }
-    }
-
-    private static func clean(_ output: String) -> String {
-        output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return machine
     }
 }

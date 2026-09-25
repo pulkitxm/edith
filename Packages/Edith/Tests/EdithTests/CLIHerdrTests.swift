@@ -40,18 +40,20 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
         try pipe.fileHandleForReading.close()
     }
 
-    @Test func bridgeRoutesWheelReportsWithoutChangingOtherInput() throws {
+    @Test func bridgeRoutesWheelReportsAndDropsHover() throws {
         var router = HerdrTerminalInputRouter()
         let hover = Data("\u{1B}[<35;11;6M".utf8)
         let click = Data("\u{1B}[<0;11;6M".utf8)
+        let drag = Data("\u{1B}[<32;12;6M".utf8)
         let wheel = Data("\u{1B}[<92;11;6M".utf8)
-        let commands = try router.commands(for: hover + click + wheel + Data("x".utf8))
+        let commands = try router.commands(
+            for: hover + click + drag + hover + wheel + Data("x".utf8))
 
         #expect(commands.count == 3)
         let leading = try object(commands[0])
         #expect(leading["type"] as? String == "terminal.input")
         #expect(
-            Data(base64Encoded: try #require(leading["bytes"] as? String)) == hover + click)
+            Data(base64Encoded: try #require(leading["bytes"] as? String)) == click + drag)
         let scroll = try object(commands[1])
         #expect(scroll["type"] as? String == "terminal.scroll")
         #expect(scroll["direction"] as? String == "up")
@@ -61,6 +63,25 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
         #expect(scroll["modifiers"] as? Int == 7)
         let trailing = try object(commands[2])
         #expect(Data(base64Encoded: try #require(trailing["bytes"] as? String)) == Data("x".utf8))
+    }
+
+    @Test func scrollOnlyBridgeKeepsEveryPointerReportOutOfTheShell() throws {
+        var router = HerdrTerminalInputRouter(mouse: .scroll)
+        let hover = Data("\u{1B}[<35;103;2M".utf8)
+        let press = Data("\u{1B}[<0;31;14M".utf8)
+        let release = Data("\u{1B}[<0;31;14m".utf8)
+        let wheel = Data("\u{1B}[<65;4;4M".utf8)
+        let commands = try router.commands(
+            for: Data("ls".utf8) + hover + press + release + wheel + Data("\r".utf8))
+
+        #expect(commands.count == 3)
+        #expect(
+            Data(base64Encoded: try #require(try object(commands[0])["bytes"] as? String))
+                == Data("ls".utf8))
+        #expect(try object(commands[1])["type"] as? String == "terminal.scroll")
+        #expect(
+            Data(base64Encoded: try #require(try object(commands[2])["bytes"] as? String))
+                == Data("\r".utf8))
     }
 
     @Test func bridgeDropsFocusReportsWithoutChangingOtherInput() throws {

@@ -11,7 +11,7 @@ struct HerdrDetailColumn: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            HerdrHorizontalResizeHandle(
+            HerdrResizeHandle(
                 label: "Resize the agent details",
                 onChanged: resizeDetail,
                 onEnded: finishDetailResize,
@@ -122,7 +122,7 @@ struct HerdrAgentDetails: View {
                 Task { await closeAgent() }
             }
         } message: {
-            Text("The agent process will exit. Its terminal pane will remain open.")
+            Text("The agent exits gracefully, then its Herdr pane closes.")
         }
         .alert("Could not close agent", isPresented: agentCloseFailed) {
             Button("OK") { agentCloseError = nil }
@@ -159,7 +159,7 @@ struct HerdrAgentDetails: View {
             }
             .buttonStyle(.edith(.borderless))
             .disabled(closingAgent)
-            .help("Close the agent and keep its terminal pane open")
+            .help("Close the agent and its Herdr pane")
             .padding(UIScale.pt(12))
         }
         .background(DashSkin.paper2(dark))
