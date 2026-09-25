@@ -1168,6 +1168,40 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "shelf", "Read the shelf", "Confirm the shelf responds.", "ed shelf ls --json")
             ]),
+        descriptor(
+            "notchBrowser", "Browse in tabs from the notch with a Chrome profile's sessions.",
+            workflows: [
+                instruction(
+                    "attach", "Attach a Chrome profile",
+                    "Pick a profile once and its cookies and site storage follow you into the notch."
+                ),
+                instruction(
+                    "browse", "Browse in tabs",
+                    "Open tabs, use the right-click menus, and resize the browser from its edge."),
+            ],
+            prerequisites: [
+                instruction(
+                    "shelf", "Enable Notch Shelf", "The browser lives in the shelf's browser tab.",
+                    "ed extensions enable notchShelf"),
+                instruction(
+                    "chrome", "Install Google Chrome",
+                    "Chrome must be installed with at least one profile to attach."),
+                instruction(
+                    "keychain", "Allow Chrome Safe Storage",
+                    "macOS asks once for the key Chrome uses to encrypt its cookies."),
+            ],
+            examples: ["ed extensions enable notchBrowser", "ed extensions doctor notchBrowser"],
+            docs: [documentation("guide", "Notch Shelf guide", "docs/cli/shelf/README.md")],
+            recovery: [
+                instruction(
+                    "shelf", "Check the shelf", "Confirm the shelf is enabled and reachable.",
+                    "ed extensions doctor notchShelf --json")
+            ],
+            verification: [
+                instruction(
+                    "browser", "Check the browser", "Confirm the browser extension is ready.",
+                    "ed extensions doctor notchBrowser --json")
+            ]),
     ]
 
     public static let byID = Dictionary(

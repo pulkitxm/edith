@@ -32,6 +32,7 @@ import Testing
         "downloadsEnabled",
         "notchShelfEnabled",
         "notchAudioMixerEnabled",
+        "notchBrowserEnabled",
         "tabCalendarEnabled",
         "tabDatabaseEnabled",
         "tabAttentionEnabled",
@@ -51,7 +52,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "music", "downloads", "notchShelf", "audioMixer", "calendar",
+                "music", "downloads", "notchShelf", "audioMixer", "notchBrowser", "calendar",
                 "database", "attention", "seoAudit",
             ])
     }
@@ -352,6 +353,7 @@ import Testing
             "downloads": [],
             "notchShelf": [],
             "audioMixer": [],
+            "notchBrowser": [],
             "calendar": [.calendar],
             "database": [],
             "attention": [],
@@ -383,6 +385,7 @@ import Testing
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],
             "audioMixer": [.applicationAudio],
+            "notchBrowser": [],
             "calendar": [],
             "database": [],
             "attention": [],

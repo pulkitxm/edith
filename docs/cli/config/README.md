@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 214 settings in 25
+reads, and `ed config` is that surface from the command line: 216 settings in 25
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -311,6 +311,8 @@ not here cannot be set, and `import` skips it.
 | `notchAlertBattery` | bool | none | shared | Alert on battery level changes. |
 | `notchAlertBluetooth` | bool | none | shared | Alert on Bluetooth connections. |
 | `notchAudioMixerEnabled` | bool | none | shared | Per-app audio mixer in the notch shelf. |
+| `notchBrowserEnabled` | bool | `false` | shared | Notch Browser ability: a tabbed browser in the notch using a Chrome profile. |
+| `notchBrowserSearchEngine` | string | `google` | shared | Search engine the Notch Browser address bar uses for plain text: `google`, `duckDuckGo`, `bing` or `kagi`. |
 
 ### `focusdim`
 

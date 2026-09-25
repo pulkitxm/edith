@@ -794,6 +794,15 @@ public enum ConfigCatalog {
             AppStorageKeys.Notch.audioMixerEnabled, .bool, group: "notch",
             summary: "Audio Mixer ability: per-app volume in the notch shelf.",
             fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Notch.browserEnabled, .bool, group: "notch",
+            summary: "Notch Browser ability: a tabbed browser in the notch using a Chrome profile.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Notch.browserSearchEngine, .string, group: "notch",
+            summary: "Search engine the Notch Browser address bar uses for plain text.",
+            allowed: BrowserSearchEngine.allCases.map(\.rawValue),
+            fallback: .string(BrowserSearchEngine.fallback.rawValue)),
     ]
 
     private static let focusDim: [SettingDefinition] = [
