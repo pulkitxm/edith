@@ -65,6 +65,31 @@ enum StudioTestFiles {
             image, to: url, format: StudioImageFormat.of(url) ?? .png, options: .init(quality: 0.9))
     }
 
+    static func receiptPhoto(_ url: URL) throws {
+        let paper = try #require(StudioImageOps.context(width: 760, height: 1000, opaque: true))
+        paper.setFillColor(CGColor(gray: 0.97, alpha: 1))
+        paper.fill(CGRect(x: 0, y: 0, width: 760, height: 1000))
+        let font = CTFontCreateWithName("Helvetica" as CFString, 54, nil)
+        let lines = ["RECEIPT 4821", "", "Coffee beans 12.50", "Oat milk 4.25", "", "Total 16.75"]
+        for (index, line) in lines.enumerated() where !line.isEmpty {
+            let text = CTLineCreateWithAttributedString(
+                NSAttributedString(
+                    string: line,
+                    attributes: [.font: font, .foregroundColor: CGColor(gray: 0, alpha: 1)]))
+            paper.textPosition = CGPoint(x: 70, y: 860 - CGFloat(index) * 76)
+            CTLineDraw(text, paper)
+        }
+        let page = try #require(paper.makeImage())
+        let photo = try #require(StudioImageOps.context(width: 1800, height: 1500, opaque: true))
+        photo.setFillColor(CGColor(srgbRed: 0.24, green: 0.17, blue: 0.12, alpha: 1))
+        photo.fill(CGRect(x: 0, y: 0, width: 1800, height: 1500))
+        photo.translateBy(x: 900, y: 750)
+        photo.rotate(by: 0.07)
+        photo.draw(page, in: CGRect(x: -380, y: -500, width: 760, height: 1000))
+        let image = try #require(photo.makeImage())
+        try StudioImageIO.write(image, to: url, format: .jpeg, options: .init(quality: 0.9))
+    }
+
     static func waitUntil(
         timeout: TimeInterval = 30, _ condition: @MainActor () -> Bool
     ) async -> Bool {
@@ -541,6 +566,34 @@ enum StudioTestFiles {
         try render(
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
             name: "studio-watermark")
+    }
+
+    @Test func scanRunnerRenders() async throws {
+        let (model, _) = try library()
+        let photo = try StudioTestFiles.folder().appendingPathComponent("Receipt.jpg")
+        try StudioTestFiles.receiptPhoto(photo)
+        model.add([photo])
+        model.notice = nil
+        await prewarm([photo])
+        await model.loadFacts(for: photo)
+        model.open(toolID: "pdf.scan", with: [photo])
+        guard case let .tool(id) = model.route, let job = model.job(id) else {
+            Issue.record("scan did not open a runner")
+            return
+        }
+        job.set("paper", .text("fit"))
+        job.preview.refresh(
+            tool: job.tool, input: photo, settings: job.settings, environment: model.environment)
+        #expect(await StudioTestFiles.waitUntil { job.preview.after != nil })
+        #expect(job.preview.failure == nil)
+        try render(
+            StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
+            name: "studio-scan")
+        model.run(job)
+        #expect(await StudioTestFiles.waitUntil(timeout: 90) { !job.isRunning })
+        let output = try #require(job.result?.outputs.first?.url)
+        let text = PDFDocument(url: output)?.string ?? ""
+        #expect(text.contains("4821"))
     }
 
     static func composePages(in root: NSView) {

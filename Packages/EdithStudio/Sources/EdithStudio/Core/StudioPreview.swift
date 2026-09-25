@@ -11,8 +11,7 @@ public enum StudioPreview {
     static let imageTools: Set<String> = [
         "image.resize", "image.crop", "image.convert", "image.rotate", "image.watermark",
         "image.remove-background", "image.blur-faces", "image.upscale", "image.meme",
-        "image.border",
-        "image.adjust", "image.compress",
+        "image.border", "image.adjust", "image.compress", "pdf.scan",
     ]
 
     static let pdfTools: Set<String> = [
@@ -50,8 +49,10 @@ public enum StudioPreview {
                 maxPixelSize: maxPixelSize)
             : try prepare(
                 input, tool: tool, settings: settings, scratch: scratch, maxPixelSize: maxPixelSize)
+        var runSettings = prepared.settings
+        if tool.id == "pdf.scan" { runSettings["ocr"] = .bool(false) }
         let result = try await StudioRunner.run(
-            tool: tool, inputs: [prepared.url], settings: prepared.settings,
+            tool: tool, inputs: [prepared.url], settings: runSettings,
             destination: .folder(output), environment: previewEnvironment)
         guard let produced = result.outputs.first?.url else {
             throw StudioError.nothingToDo("The preview produced nothing.")

@@ -41,6 +41,23 @@ import Testing
         #expect(!StudioPreview.supports(try #require(StudioCatalog.tool("pdf.merge"))))
     }
 
+    @Test func scanPreviewShowsTheStraightenedPage() async throws {
+        let space = try Workspace()
+        let photo = space.url("receipt.jpg")
+        try StudioImageIO.write(
+            PDFScanTests.photo(of: PDFScanTests.paper()), to: photo, format: .jpeg,
+            options: .init(quality: 0.9))
+        let tool = try #require(StudioCatalog.tool("pdf.scan"))
+        #expect(StudioPreview.supports(tool))
+        let preview = try await StudioPreview.render(
+            tool: tool, input: photo, settings: StudioSettings(["paper": .text("fit")]),
+            environment: space.environment, maxPixelSize: 600)
+        #expect(preview.before.width > preview.before.height)
+        #expect(preview.after.width < preview.after.height)
+        let corner = Fixtures.pixel(preview.after, x: 12, y: 12)
+        #expect(corner.r > 180 && corner.g > 180 && corner.b > 180)
+    }
+
     @Test func previewRejectsUnsupportedTools() async throws {
         let space = try Workspace()
         let source = space.url("a.pdf")
