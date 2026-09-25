@@ -332,18 +332,21 @@ final class AttentionPageModel {
         return nil
     }
 
-    var triage: [AttentionEntity] {
+    var triage: [AttentionEntity] { Self.triage(summary) }
+
+    var quickCategories: [AttentionCategory] { Self.quickCategories(settings) }
+
+    nonisolated static func triage(_ summary: AttentionSummary) -> [AttentionEntity] {
         summary.entities.filter {
             ($0.isUnclassified || $0.categorySource == .jev) && $0.duration >= 60
         }
     }
 
-    var quickCategories: [AttentionCategory] {
-        let used = Dictionary(
-            grouping: settings.rules, by: \.categoryID
-        ).mapValues(\.count)
-        return settings.categories.filter { $0.kind != .unclassified }
-            .sorted { (used[$0.id] ?? 0) > (used[$1.id] ?? 0) }
+    nonisolated static func quickCategories(_ settings: AttentionSettings) -> [AttentionCategory] {
+        var used: [String: Int] = [:]
+        for rule in settings.rules { used[rule.categoryID, default: 0] += 1 }
+        let candidates = settings.categories.filter { $0.kind != .unclassified }
+        return candidates.sorted { (used[$0.id] ?? 0) > (used[$1.id] ?? 0) }
     }
 
     func categorizeNow() {
@@ -439,13 +442,20 @@ final class AttentionPageModel {
     }
 
     func matches(_ categories: [String: TimeInterval]) -> TimeInterval {
-        if let categoryFilter { return categories[categoryFilter] ?? 0 }
-        if let kindFilter {
-            return categories.reduce(0) {
-                settings.category($1.key).kind == kindFilter ? $0 + $1.value : $0
-            }
+        Self.filtered(
+            categories, category: categoryFilter, kind: kindFilter, settings: settings)
+    }
+
+    nonisolated static func filtered(
+        _ categories: [String: TimeInterval], category: String?, kind: AttentionCategoryKind?,
+        settings: AttentionSettings
+    ) -> TimeInterval {
+        if let category { return categories[category] ?? 0 }
+        var total: TimeInterval = 0
+        for (id, seconds) in categories where kind == nil || settings.category(id).kind == kind {
+            total += seconds
         }
-        return categories.values.reduce(0, +)
+        return total
     }
 
     func matchesSearch(_ values: [String?]) -> Bool {
