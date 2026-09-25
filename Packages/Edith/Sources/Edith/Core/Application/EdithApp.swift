@@ -42,6 +42,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         UserShellEnvironment.shared.enable(after: .seconds(4))
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
+        AttentionContextReporter.shared.start()
+        AttentionExtensionInstaller.refreshIfOutdated()
         IPCTransport.enable()
         AgentCommandRouting.enable()
         if !AgentService.usesCustomService {

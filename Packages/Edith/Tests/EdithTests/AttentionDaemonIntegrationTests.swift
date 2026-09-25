@@ -112,12 +112,12 @@ private struct AttentionDaemonFixture {
         let now = Date()
         try await fixture.service.record(
             AttentionBatch(events: [fixture.event(at: now.addingTimeInterval(-30))]))
-        let category = AttentionSettings.defaultCategories[0]
+        let category = AttentionCatalog.categories[0]
         let settings = AttentionSettings(categories: [category, category])
         let summary = try await fixture.service.summary(
             AttentionSummaryRequest(from: now.addingTimeInterval(-60), to: now, settings: settings))
         #expect(summary.hasStoredEvents)
-        #expect(summary.events.count == 1)
+        #expect(summary.summary.entities.count == 1)
         await fixture.close()
     }
 
@@ -271,7 +271,7 @@ private struct AttentionDaemonFixture {
         let events = try fixture.events.events(from: now, to: now.addingTimeInterval(20))
         #expect(events.count == 1)
         #expect(events.first?.domain == "example.com")
-        #expect(events.first?.url == nil)
+        #expect(events.first?.url == "https://example.com/private")
         fixture.defaults.set(false, forKey: AppStorageKeys.Tabs.attentionEnabled)
         let stopped = try #require(try await fixture.service.run())
         #expect(try AgentPayload.decode(AttentionRuntimeSnapshot.self, from: stopped).port == nil)
@@ -286,7 +286,7 @@ private struct AttentionDaemonFixture {
         let snapshot = try await fixture.service.summary(
             AttentionSummaryRequest(from: now.addingTimeInterval(-60), to: now))
         #expect(snapshot.hasStoredEvents)
-        #expect(snapshot.events.count == 1)
+        #expect(snapshot.summary.spans.count == 1)
         #expect(snapshot.summary.activeDuration == 30)
         #expect(!fixture.repository.hasEvents())
     }
@@ -395,5 +395,36 @@ private struct AttentionDaemonFixture {
                 "POST /v1/heartbeat HTTP/1.1\r\nContent-Length: \(value)\r\n\r\n{}".utf8)
             #expect(AttentionHTTPRequest.parse(data) == nil)
         }
+    }
+
+    @Test func summariesAreCachedTrimmedAndWindowed() async throws {
+        let fixture = try AttentionDaemonFixture()
+        defer { Task { await fixture.close() } }
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        let past = now.addingTimeInterval(-7_200)
+        try await fixture.service.record(
+            AttentionBatch(events: [fixture.event(at: past, duration: 600)]))
+        let request = AttentionSummaryRequest(
+            from: past.addingTimeInterval(-60), to: past.addingTimeInterval(900),
+            parts: [.overview])
+        let first = try await fixture.service.summary(request, now: now)
+        #expect(first.summary.activeDuration == 600)
+        #expect(
+            first.summary.dimensions.allSatisfy {
+                AttentionSummaryPart.overviewDimensions.contains($0.key)
+            })
+        try await fixture.service.record(
+            AttentionBatch(events: [fixture.event(at: past.addingTimeInterval(700), duration: 60)]))
+        let cached = try await fixture.service.summary(
+            AttentionSummaryRequest(
+                from: request.from, to: request.to, parts: [.breakdown]), now: now)
+        #expect(cached.summary.activeDuration == 600)
+        #expect(cached.summary.entities.isEmpty)
+        #expect(!cached.summary.dimensions.isEmpty)
+        let hour = Calendar.current.component(.hour, from: past)
+        let other = AttentionTimeWindow(startHour: (hour + 2) % 24, endHour: (hour + 3) % 24 + 1)
+        let windowed = try await fixture.service.summary(
+            AttentionSummaryRequest(from: request.from, to: request.to, window: other), now: now)
+        #expect(windowed.summary.activeDuration == 0)
     }
 }

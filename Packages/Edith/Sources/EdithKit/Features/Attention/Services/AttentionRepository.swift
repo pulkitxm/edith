@@ -28,6 +28,7 @@ public struct AttentionRepository: Sendable {
     public var activeFocusFile: URL { directory.appendingPathComponent("active-focus.json") }
     public var focusHistoryFile: URL { directory.appendingPathComponent("focus.jsonl") }
     public var browserHistoryFile: URL { directory.appendingPathComponent("browser-history.json") }
+    public var classificationsFile: URL { directory.appendingPathComponent("classifications.json") }
     public var lockFile: URL { directory.appendingPathComponent(".lock") }
 
     public var resolvedEventSink: AttentionEventSink? {
@@ -54,6 +55,29 @@ public struct AttentionRepository: Sendable {
         try withLock {
             try prepare()
             try encoder.encode(settings).write(to: settingsFile, options: .atomic)
+        }
+    }
+
+    public func loadClassifications() -> AttentionClassifications {
+        withLock {
+            guard let data = try? Data(contentsOf: classificationsFile),
+                let value = try? decoder.decode(AttentionClassifications.self, from: data)
+            else { return AttentionClassifications() }
+            return value
+        }
+    }
+
+    public func updateClassifications(
+        _ update: (inout AttentionClassifications) -> Void
+    ) throws {
+        try withLock {
+            try prepare()
+            var value =
+                (try? Data(contentsOf: classificationsFile)).flatMap {
+                    try? decoder.decode(AttentionClassifications.self, from: $0)
+                } ?? AttentionClassifications()
+            update(&value)
+            try encoder.encode(value).write(to: classificationsFile, options: .atomic)
         }
     }
 

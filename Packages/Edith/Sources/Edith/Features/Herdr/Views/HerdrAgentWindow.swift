@@ -12,6 +12,10 @@ enum HerdrAgentWindow {
 
     static func has(_ id: String) -> Bool { windows[id] != nil }
 
+    static func agentID(of window: NSWindow) -> String? {
+        windows.first { $0.value === window }?.key
+    }
+
     static func raise(_ id: String) -> Bool {
         guard let window = windows[id] else { return false }
         window.makeKeyAndOrderFront(nil)

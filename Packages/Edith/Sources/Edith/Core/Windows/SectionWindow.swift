@@ -140,6 +140,10 @@ enum SectionWindow {
         entries.removeAll { $0.window === window }
     }
 
+    static func destination(of window: NSWindow) -> MainDestination? {
+        entries.first { $0.window === window }?.controller.destination
+    }
+
     static func title(of window: NSWindow) -> String? {
         entries.first { $0.window === window }?.controller.destination.title
     }

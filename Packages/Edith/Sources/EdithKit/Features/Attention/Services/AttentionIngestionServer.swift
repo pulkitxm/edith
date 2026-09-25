@@ -125,7 +125,9 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             return .init(status: 204, body: [:])
         }
         if request.method == "GET", request.path == "/v1/health" {
-            return .init(status: 200, body: ["status": "ok"])
+            return .init(
+                status: 200,
+                body: ["status": "ok", "extension": AttentionExtensionInstaller.version])
         }
         guard request.method == "POST", request.path == "/v1/heartbeat" else {
             if request.method == "POST", request.path == "/v1/history" {
@@ -187,21 +189,60 @@ public final class AttentionIngestionServer: @unchecked Sendable {
     }
 
     private func ingest(_ heartbeat: AttentionBrowserHeartbeat) throws {
-        let event = Self.browserEvent(from: heartbeat, privacyLevel: settings.privacyLevel)
         guard let sink = repository.resolvedEventSink else {
             throw AgentError(.unavailable, "The Attention event store is unavailable.")
         }
-        var events = [event]
-        for (index, media) in heartbeat.media.enumerated() where media.playing {
+        try sink.record(
+            AttentionBatch(
+                events: Self.events(
+                    from: heartbeat, privacyLevel: settings.privacyLevel,
+                    media: settings.mediaTrackingEnabled)))
+    }
+
+    public static func events(
+        from heartbeat: AttentionBrowserHeartbeat, privacyLevel: AttentionPrivacyLevel,
+        media: Bool = true
+    ) -> [AttentionEvent] {
+        var events: [AttentionEvent] = []
+        if heartbeat.duration > 0 {
+            let event = browserEvent(from: heartbeat, privacyLevel: privacyLevel)
+            events.append(event)
+            for (index, playing) in heartbeat.media.enumerated() where media && playing.playing {
+                events.append(
+                    AttentionEvent(
+                        id: "\(event.id):media:\(index)",
+                        startedAt: event.startedAt, duration: event.duration, source: .media,
+                        presence: heartbeat.presence, appName: heartbeat.appName,
+                        bundleID: heartbeat.bundleID, domain: event.domain,
+                        browserProfile: heartbeat.browserProfile, media: sanitized(playing)))
+            }
+        }
+        for tab in heartbeat.audible ?? [] where media && tab.duration > 0 {
+            let domain =
+                privacyLevel == .applications
+                ? nil
+                : (tab.domain ?? tab.url.flatMap { URLComponents(string: $0)?.host })?.lowercased()
             events.append(
                 AttentionEvent(
-                    id: "\(event.id):media:\(index)",
-                    startedAt: event.startedAt, duration: event.duration, source: .media,
-                    presence: heartbeat.presence, appName: heartbeat.appName,
-                    bundleID: heartbeat.bundleID, domain: event.domain,
-                    browserProfile: heartbeat.browserProfile, media: media))
+                    id: "browser:audible:\(tab.id.uuidString)", startedAt: tab.timestamp,
+                    duration: max(0, min(tab.duration, 3_600)), source: .media,
+                    presence: .active, appName: heartbeat.appName, bundleID: heartbeat.bundleID,
+                    domain: domain, browserProfile: heartbeat.browserProfile,
+                    media: AttentionMedia(
+                        title: privacyLevel == .detailed
+                            ? String(tab.title.prefix(300)) : (domain ?? heartbeat.appName),
+                        service: domain ?? heartbeat.appName, kind: tab.kind, playing: true)))
         }
-        try sink.record(AttentionBatch(events: events))
+        return events
+    }
+
+    private static func sanitized(_ media: AttentionMedia) -> AttentionMedia {
+        var copy = media
+        copy.title = String(media.title.prefix(300))
+        copy.artist = media.artist.map { String($0.prefix(200)) }
+        copy.album = media.album.map { String($0.prefix(200)) }
+        copy.service = String(media.service.prefix(200))
+        return copy
     }
 
     public static func browserEvent(
@@ -215,16 +256,23 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             components.fragment = nil
             sanitizedURL = components.string
         }
+        var tags = (heartbeat.tags ?? [:]).reduce(into: [String: String]()) { result, entry in
+            let key = String(entry.key.prefix(40))
+            let value = String(entry.value.prefix(300))
+            guard !key.isEmpty, !value.isEmpty, result.count < 24 else { return }
+            result[key] = value
+        }
+        tags = AttentionTag.filtered(tags, privacyLevel: privacyLevel) ?? [:]
         return AttentionEvent(
             id: "browser:\(heartbeat.id.uuidString)",
-            startedAt: heartbeat.timestamp, duration: max(0, min(heartbeat.duration, 120)),
+            startedAt: heartbeat.timestamp, duration: max(0, min(heartbeat.duration, 3_600)),
             source: .browser, presence: heartbeat.presence, appName: heartbeat.appName,
             bundleID: heartbeat.bundleID,
             windowTitle: privacyLevel == .detailed
                 ? heartbeat.title.map { String($0.prefix(500)) } : nil,
             url: sanitizedURL, domain: privacyLevel == .applications ? nil : domain,
             faviconURL: privacyLevel == .applications ? nil : heartbeat.faviconURL,
-            browserProfile: heartbeat.browserProfile)
+            browserProfile: heartbeat.browserProfile, tags: tags, signals: heartbeat.signals)
     }
 
     private func send(_ response: AttentionHTTPResponse, over connection: NWConnection) {

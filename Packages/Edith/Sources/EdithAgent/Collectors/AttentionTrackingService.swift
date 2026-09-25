@@ -15,6 +15,9 @@ final class AttentionTrackingService {
     private var locked = false
     private let writer: AttentionHeartbeatWriter
     private let observing: Bool
+    private let media: AttentionMediaObserver?
+    private var mediaSegments: [String: (id: String, startedAt: Date, lastSeen: Date)] = [:]
+    private var lastHeartbeat: Date?
     nonisolated(unsafe) private var shutdownTask: Task<Void, Never>?
 
     init(
@@ -22,7 +25,8 @@ final class AttentionTrackingService {
         writer: AttentionHeartbeatWriter? = nil, settings initialSettings: AttentionSettings? = nil,
         observe: Bool = true, now: Date = Date(),
         capture: @escaping @MainActor (Date, AttentionSettings, Bool) -> AttentionHeartbeatSample? =
-            AttentionTrackingService.capture
+            AttentionTrackingService.capture,
+        media: AttentionMediaObserver? = nil
     ) {
         self.writer =
             writer
@@ -33,6 +37,7 @@ final class AttentionTrackingService {
         self.repository = repository
         settings = initialSettings ?? repository.loadSettings()
         observing = observe
+        self.media = media ?? (observe ? AttentionMediaObserver() : nil)
         previous = capture(now, settings, locked)
         if observe {
             installObservers()
@@ -51,6 +56,7 @@ final class AttentionTrackingService {
         observers.forEach(center.removeObserver)
         observers.removeAll()
         writeHeartbeat()
+        media?.stop()
         let writer = writer
         let task = Task { await writer.stop() }
         shutdownTask = task
@@ -68,8 +74,10 @@ final class AttentionTrackingService {
         guard settings.isEnabled, settings.trackingEnabled else {
             timer?.invalidate()
             timer = nil
+            media?.stop()
             return
         }
+        if settings.mediaTrackingEnabled { media?.start() } else { media?.stop() }
         if timer == nil { startTimer() }
     }
 
@@ -119,12 +127,60 @@ final class AttentionTrackingService {
 
     func writeHeartbeat(now: Date = Date()) {
         let current = capture(now, settings, locked)
-        defer { previous = current }
+        defer {
+            previous = current
+            lastHeartbeat = now
+        }
+        recordMedia(now: now)
         guard var sample = previous else { return }
         let duration = now.timeIntervalSince(sample.event.startedAt)
         guard duration > 0, duration <= 30 else { return }
         sample.event.duration = duration
+        if let before = sample.counters, let after = current?.counters {
+            let signals = after.signals(since: before)
+            sample.event.signals = signals.isEmpty ? nil : signals
+        }
         writer.submit(sample)
+    }
+
+    func recordMedia(now: Date, playing: [AttentionPlayback]? = nil) {
+        guard settings.isEnabled, settings.trackingEnabled, settings.mediaTrackingEnabled else {
+            mediaSegments.removeAll()
+            return
+        }
+        let items = playing ?? media?.current(now: now) ?? []
+        let since = lastHeartbeat.map { min(now.timeIntervalSince($0), 30) } ?? 0
+        var active = Set<String>()
+        for item in items {
+            let key = item.key
+            active.insert(key)
+            var segment =
+                mediaSegments[key].flatMap {
+                    now.timeIntervalSince($0.lastSeen) <= 60
+                        && now.timeIntervalSince($0.startedAt) <= 3_600 ? $0 : nil
+                }
+                ?? mediaSegments[key].flatMap {
+                    now.timeIntervalSince($0.lastSeen) <= 60
+                        ? (id: "media:\(UUID().uuidString)", startedAt: $0.lastSeen, lastSeen: now)
+                        : nil
+                }
+                ?? (
+                    id: "media:\(UUID().uuidString)", startedAt: now.addingTimeInterval(-since),
+                    lastSeen: now
+                )
+            segment.lastSeen = now
+            mediaSegments[key] = segment
+            let duration = now.timeIntervalSince(segment.startedAt)
+            guard duration > 0 else { continue }
+            writer.submit(
+                AttentionHeartbeatSample(
+                    event: AttentionEvent(
+                        id: segment.id, startedAt: segment.startedAt, duration: duration,
+                        source: .media, appName: item.media.service, bundleID: item.bundleID,
+                        media: item.media),
+                    processID: 0, captureWindowTitle: false))
+        }
+        mediaSegments = mediaSegments.filter { active.contains($0.key) }
     }
 
     private static func capture(
@@ -135,13 +191,22 @@ final class AttentionTrackingService {
         else { return nil }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
+        let away = app.bundleIdentifier.map(AttentionCatalog.awayBundleIDs.contains) ?? false
         let presence: AttentionPresence =
-            locked ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
+            locked || away ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
+        let context = AttentionContextBoard.shared.context(for: app.bundleIdentifier, now: now)
+        let contextTitle = settings.windowTitlesEnabled ? context?.windowTitle : nil
         return AttentionHeartbeatSample(
             event: AttentionEvent(
                 startedAt: now, duration: 0, source: .application,
-                presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier),
-            processID: app.processIdentifier, captureWindowTitle: settings.windowTitlesEnabled)
+                presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier,
+                windowTitle: contextTitle,
+                tags: AttentionTag.filtered(
+                    context?.tags, privacyLevel: settings.privacyLevel,
+                    allowed: AttentionTag.edithSafe)),
+            processID: app.processIdentifier,
+            captureWindowTitle: settings.windowTitlesEnabled && contextTitle == nil,
+            counters: AttentionInputCounters.read())
     }
 }
 

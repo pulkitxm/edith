@@ -60,9 +60,15 @@ enum JSONContract {
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
+        JSONCase(
+            "ed attention breakdown", ["attention", "breakdown", "--by", "machine", "--json"]),
+        JSONCase("ed attention agents", ["attention", "agents", "--json"]),
         JSONCase("ed attention timeline", ["attention", "timeline", "--json"]),
         JSONCase("ed attention music", ["attention", "music", "--json"]),
         JSONCase("ed attention categories ls", ["attention", "categories", "ls", "--json"]),
+        JSONCase(
+            "ed attention categories auto", ["attention", "categories", "auto", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed attention categories set",
             ["attention", "categories", "set", "app:com.example.App", "focus", "--json"],
