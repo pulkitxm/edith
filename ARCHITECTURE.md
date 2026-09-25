@@ -62,9 +62,11 @@ pressure, ambient cadences stretch threefold; live cadences are unchanged.
 launchd starts the agent, Edith Bar and the app with a minimal environment, so
 each captures the user's login shell environment once (`$SHELL -l -i -c` around
 `env -0`) and refreshes it in the background when a zsh, bash, fish or
-`/etc/paths` file changes or after an hour. Every child process gets that
-environment with the shell's PATH first, so tools and exports from the user's
-rc files work without restarting Edith.
+`/etc/paths` file changes or after an hour. Child processes get the shell's
+PATH first plus any exported variable they do not already set, so tools and
+exports from the user's rc files work without restarting Edith. Session,
+locale, SSH agent, dynamic loader and provider API key variables stay as
+launchd set them.
 
 The XPC hub listens on `com.pulkit.edith.agent`. Peers are authenticated with
 `NSXPCListener.setConnectionCodeSigningRequirement`, built from the agent's own

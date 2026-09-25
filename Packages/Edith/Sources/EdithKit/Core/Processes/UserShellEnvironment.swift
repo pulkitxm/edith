@@ -10,6 +10,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     static let maximumAge: TimeInterval = 3_600
     static let checkInterval: TimeInterval = 5
     static let failureRetryInterval: TimeInterval = 300
+    static let maximumFailureRetryInterval: TimeInterval = 21_600
     static let captureTimeout: TimeInterval = 10
     static let maximumOutputBytes = 1 << 20
 
@@ -19,9 +20,13 @@ public final class UserShellEnvironment: @unchecked Sendable {
         "PS1", "PS2", "PS3", "PS4", "PROMPT", "RPROMPT", "NO_COLOR", "LC_TERMINAL",
         "LC_TERMINAL_VERSION", "XPC_SERVICE_NAME", "XPC_FLAGS", "__CFBundleIdentifier",
         "__CF_USER_TEXT_ENCODING", "SECURITYSESSIONID", "LaunchInstanceID", "SSH_AGENT_PID",
+        "SSH_AUTH_SOCK", "BASH_ENV", "ENV", "CDPATH", "FORCE_COLOR", "CLICOLOR_FORCE", "TZ",
+        "LANG", "LANGUAGE", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
     ]
     static let sessionPrefixes = [
         "EDITH_", "TERM_", "ITERM_", "GHOSTTY_", "VSCODE_", "P9K_", "_P9K_", "POWERLEVEL9K_",
+        "LC_", "DYLD_", "SSH_ASKPASS",
     ]
 
     private struct Snapshot {
@@ -35,7 +40,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     private var snapshot: Snapshot?
     private var capturing = false
     private var lastCheck = Date.distantPast
-    private var failure: (date: Date, fingerprint: [String])?
+    private var failure: (date: Date, fingerprint: [String], count: Int)?
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     private let shell: URL
@@ -116,7 +121,8 @@ public final class UserShellEnvironment: @unchecked Sendable {
         shell: [String: String]? = shared.current()
     ) -> [String: String] {
         var environment = process
-        for (key, value) in shell ?? [:] where key == "PATH" || imports(key) {
+        for (key, value) in shell ?? [:]
+        where key == "PATH" || (imports(key) && process[key] == nil) {
             environment[key] = value
         }
         return environment
@@ -131,7 +137,8 @@ public final class UserShellEnvironment: @unchecked Sendable {
         let fingerprint = Self.fingerprint(
             Self.watchedPaths(home: home, zdotdir: snapshot?.variables["ZDOTDIR"]))
         if let failure = lock.withLock({ self.failure }), failure.fingerprint == fingerprint,
-            moment.timeIntervalSince(failure.date) < Self.failureRetryInterval
+            moment.timeIntervalSince(failure.date)
+                < Self.retryInterval(afterFailures: failure.count)
         {
             return false
         }
@@ -153,15 +160,9 @@ public final class UserShellEnvironment: @unchecked Sendable {
         let capture = capture
         let zdotdir = lock.withLock { snapshot?.variables["ZDOTDIR"] }
         Task(priority: .utility) { [weak self] in
-            let before = Self.fingerprint(Self.watchedPaths(home: home, zdotdir: zdotdir))
             let variables = await capture(shell, home, base)
-            let fingerprint =
-                variables.flatMap { captured in
-                    captured["ZDOTDIR"] == zdotdir
-                        ? nil
-                        : Self.fingerprint(
-                            Self.watchedPaths(home: home, zdotdir: captured["ZDOTDIR"]))
-                } ?? before
+            let fingerprint = Self.fingerprint(
+                Self.watchedPaths(home: home, zdotdir: variables.map { $0["ZDOTDIR"] } ?? zdotdir))
             self?.finishCapture(variables, fingerprint: fingerprint)
         }
     }
@@ -176,7 +177,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
                     variables: variables, fingerprint: fingerprint, capturedAt: moment)
                 failure = nil
             } else {
-                failure = (moment, fingerprint)
+                failure = (moment, fingerprint, (failure?.count ?? 0) + 1)
             }
             defer { waiters.removeAll() }
             return waiters
@@ -184,11 +185,21 @@ public final class UserShellEnvironment: @unchecked Sendable {
         for waiter in waiting { waiter.resume() }
     }
 
+    static func retryInterval(afterFailures count: Int) -> TimeInterval {
+        min(
+            maximumFailureRetryInterval,
+            failureRetryInterval * pow(2, Double(max(0, count - 1))))
+    }
+
     static func watchedPaths(home: URL, zdotdir: String?) -> [String] {
         let zsh = zdotdir.map { URL(fileURLWithPath: $0) } ?? home
-        let zshDirectory =
-            zsh.standardizedFileURL == home.standardizedFileURL ? [] : [zsh.path]
-        return zshDirectory
+        let zshScripts =
+            zsh.standardizedFileURL == home.standardizedFileURL
+            ? []
+            : ((try? FileManager.default.contentsOfDirectory(atPath: zsh.path)) ?? [])
+                .filter { $0.hasSuffix(".zsh") && !$0.hasPrefix(".") }.sorted()
+                .map { zsh.appendingPathComponent($0).path }
+        return zshScripts
             + [".zshenv", ".zprofile", ".zshrc", ".zlogin"].map {
                 zsh.appendingPathComponent($0).path
             }
@@ -237,8 +248,9 @@ public final class UserShellEnvironment: @unchecked Sendable {
         var environment = base
         environment["HOME"] = home.path
         environment["SHELL"] = shell.path
-        environment["TERM"] = "dumb"
+        environment.removeValue(forKey: "TERM")
         environment["EDITH_RESOLVING_ENVIRONMENT"] = "1"
+        let started = Date()
         let request = CLICommandRequest(
             executableURL: shell,
             arguments: [
@@ -250,11 +262,28 @@ public final class UserShellEnvironment: @unchecked Sendable {
         guard let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in }),
             var variables = parse(result.outputData, begin: begin, end: end)
         else { return nil }
-        if let agent = variables["SSH_AGENT_PID"], agent != base["SSH_AGENT_PID"] {
-            if let pid = pid_t(agent), pid > 1 { kill(pid, SIGTERM) }
-            variables.removeValue(forKey: "SSH_AUTH_SOCK")
+        if let agent = variables["SSH_AGENT_PID"].flatMap({ pid_t($0) }),
+            agent != base["SSH_AGENT_PID"].flatMap({ pid_t($0) }),
+            startedSSHAgent(agent, after: started)
+        {
+            kill(agent, SIGTERM)
         }
+        variables.removeValue(forKey: "SSH_AGENT_PID")
         return variables
+    }
+
+    static func startedSSHAgent(_ pid: pid_t, after date: Date) -> Bool {
+        guard pid > 1 else { return false }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
+        let name = withUnsafeBytes(of: info.pbi_comm) { bytes in
+            String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        let start = Date(
+            timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec)
+                + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
+        return name == "ssh-agent" && start >= date.addingTimeInterval(-1)
     }
 
     static func parse(_ output: Data, begin: String, end: String) -> [String: String]? {

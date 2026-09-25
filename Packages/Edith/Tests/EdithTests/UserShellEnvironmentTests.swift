@@ -32,20 +32,43 @@ import Testing
             ],
             shellEnvironment: [
                 "PATH": "/opt/mise/shims:/usr/bin", "SSH_AUTH_SOCK": "/tmp/agent",
-                "OPENAI_API_KEY": "synthetic", "PWD": "/somewhere", "SHLVL": "2",
+                "OPENAI_API_KEY": "synthetic", "VOLTA_HOME": "/Users/example/.volta",
+                "PWD": "/somewhere", "SHLVL": "2",
                 "TERM": "dumb", "EDITH_DATA_ROOT": "/elsewhere", "TMPDIR": "/private/tmp/shell",
             ])
         let path = try #require(environment["PATH"]).split(separator: ":").map(String.init)
 
         #expect(try #require(path.firstIndex(of: "/opt/mise/shims")) < 2)
         #expect(path.contains("/opt/homebrew/bin"))
-        #expect(environment["SSH_AUTH_SOCK"] == "/tmp/agent")
-        #expect(environment["OPENAI_API_KEY"] == "synthetic")
+        #expect(environment["SSH_AUTH_SOCK"] == nil)
+        #expect(environment["OPENAI_API_KEY"] == nil)
+        #expect(environment["VOLTA_HOME"] == "/Users/example/.volta")
         #expect(environment["PWD"] == nil)
         #expect(environment["SHLVL"] == nil)
         #expect(environment["TERM"] == nil)
         #expect(environment["EDITH_DATA_ROOT"] == "/private/tmp/edith-data")
         #expect(environment["TMPDIR"] == "/private/tmp/process")
+    }
+
+    @Test func explicitProcessValuesWinOverShellExports() {
+        let environment = CLIToolEnvironment.sanitized(
+            processEnvironment: ["PATH": "/usr/bin", "CODEX_HOME": "/private/tmp/isolated"],
+            shellEnvironment: ["PATH": "/usr/bin", "CODEX_HOME": "/Users/example/.codex"])
+
+        #expect(environment["CODEX_HOME"] == "/private/tmp/isolated")
+    }
+
+    @Test func localeAndDynamicLoaderVariablesStayOut() {
+        for key in ["LANG", "LC_ALL", "LC_CTYPE", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "TZ"] {
+            #expect(!UserShellEnvironment.imports(key))
+        }
+        #expect(UserShellEnvironment.imports("HOMEBREW_PREFIX"))
+    }
+
+    @Test func failedCapturesBackOffExponentially() {
+        #expect(UserShellEnvironment.retryInterval(afterFailures: 1) == 300)
+        #expect(UserShellEnvironment.retryInterval(afterFailures: 3) == 1_200)
+        #expect(UserShellEnvironment.retryInterval(afterFailures: 20) == 21_600)
     }
 
     @Test func userEnvironmentUsesTheShellPathVerbatim() {

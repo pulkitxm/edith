@@ -144,7 +144,8 @@ public enum CLIToolEnvironment {
         fileManager: FileManager = .default
     ) -> [String: String] {
         var environment = processEnvironment
-        for (key, value) in shellEnvironment ?? [:] where UserShellEnvironment.imports(key) {
+        for (key, value) in shellEnvironment ?? [:]
+        where UserShellEnvironment.imports(key) && processEnvironment[key] == nil {
             environment[key] = value
         }
         environment.removeValue(forKey: "NO_COLOR")
