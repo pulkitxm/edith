@@ -140,6 +140,18 @@ enum StudioTranslator {
         Locale.current.localizedString(forIdentifier: identifier) ?? identifier
     }
 
+    static func translateStrings(
+        _ strings: [String], from source: String, to target: String,
+        progress: @escaping (Double) -> Void
+    ) async throws -> [String] {
+        let blocks = strings.map {
+            DocumentMarkdown.Block(
+                text: $0, markdown: $0, heading: nil, listLevel: 0, ordered: false)
+        }
+        let translated = try await translate(blocks, from: source, to: target, progress: progress)
+        return translated.map(\.text)
+    }
+
     static func translate(
         _ blocks: [DocumentMarkdown.Block], from source: String, to target: String,
         progress: @escaping (Double) -> Void

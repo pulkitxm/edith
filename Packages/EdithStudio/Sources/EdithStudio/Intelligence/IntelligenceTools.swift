@@ -66,7 +66,7 @@ enum IntelligenceTools {
     static let translate = StudioTool(
         id: "ai.translate", title: "Translate PDF",
         summary:
-            "Translate PDFs and documents on this Mac, keeping headings, lists and paragraphs.",
+            "Translate PDFs on this Mac and keep their layout, or save any document as Word or Markdown.",
         symbol: "character.bubble", group: .intelligence, inputs: [.pdf, .document],
         produces: .kind(.document),
         options: [
@@ -76,8 +76,14 @@ enum IntelligenceTools {
                 default: "auto"),
             .choice(
                 "format", "Save as",
-                [StudioChoice("docx", "Word document"), StudioChoice("md", "Markdown")],
-                default: "docx"),
+                [
+                    StudioChoice("pdf", "PDF, same layout"), StudioChoice("docx", "Word document"),
+                    StudioChoice("md", "Markdown"),
+                ],
+                default: "pdf",
+                help:
+                    "Same layout puts each translated paragraph where the original was. Documents that are not PDFs are saved as Word."
+            ),
             PDFOrganizeTools.passwordOption,
         ],
         requirements: [.translation],
@@ -104,6 +110,23 @@ enum IntelligenceTools {
             blocks, from: source, to: target
         ) { run.progress($0 * 0.95) }
         let suffix = target.lowercased()
+        if run.settings.text("format") == "pdf", run.input.studioKind == .pdf {
+            let document = try StudioPDF.open(run.input, password: run.settings.text("password"))
+            let layout = LayoutTranslation.blocks(of: document)
+            let wanted = layout.filter(\.translatable)
+            let translated = try await StudioTranslator.translateStrings(
+                wanted.map(\.text), from: source, to: target
+            ) { run.progress($0 * 0.7) }
+            var lookup: [String: String] = [:]
+            for (block, text) in zip(wanted, translated) { lookup[block.text] = text }
+            let strings = layout.map { lookup[$0.text] ?? $0.text }
+            let output = run.output(for: run.input, suffix: suffix, ext: "pdf")
+            try LayoutTranslation.write(document, blocks: layout, translations: strings, to: output)
+            {
+                run.progress(0.7 + $0 * 0.3)
+            }
+            return [output]
+        }
         if run.settings.text("format") == "md" {
             let output = run.output(for: run.input, suffix: suffix, ext: "md")
             try DocumentMarkdown.render(translated).write(
