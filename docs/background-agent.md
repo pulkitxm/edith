@@ -31,8 +31,10 @@ app loads it with `launchctl bootstrap` if it is missing and restarts it with
 unloads the daemon and quits its menu helper. Development builds also skip the menu
 bar login item and the privileged lid-awake daemon, so nothing they do reaches a
 production registration. `build.sh` stops a worktree's running development processes
-before opening the new build. `build.sh --teardown` removes the current slot, and
-`build.sh --gc` removes slots whose worktree is gone, retires the old shared
+before opening the new build. `build.sh` records each slot's owning worktree under
+`Edith Dev/.owners` and refuses a slot that another existing worktree owns.
+`build.sh --teardown` removes the current slot, and `build.sh --gc` removes slots whose
+recorded worktree is gone, retires the old shared
 `com.pulkit.edith.development` identity, and removes production copies outside
 `/Applications` from LaunchServices.
 

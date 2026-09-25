@@ -7,17 +7,20 @@ PREFIX=$PRODUCTION.dev.
 LEGACY=$PRODUCTION.development
 DEV_DIRECTORY="Edith Dev"
 LIBRARY="$HOME/Library"
+OWNERS="$LIBRARY/Application Support/$DEV_DIRECTORY/.owners"
 DOMAIN="gui/$(id -u)"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
 usage() {
   cat >&2 <<'USAGE'
-usage: scripts/dev-slots.sh slot [PATH] | teardown | gc
+usage: scripts/dev-slots.sh slot [PATH] | claim | stop | teardown | gc
 
-  slot      print the development slot for a worktree path (default: this one)
+  slot      print the development slot name for a worktree path (default: this one)
+  claim     record this worktree as the slot's owner and print the slot
+  stop      stop this worktree's running development processes
   teardown  stop this worktree's development build and delete its data,
-            preferences, and permission grants
-  gc        tear down slots whose worktree is gone, retire the old shared
+            preferences, keychain items, and permission grants
+  gc        tear down slots whose owning worktree is gone, retire the old shared
             development identity, and remove production copies outside
             /Applications from LaunchServices
 USAGE
@@ -35,6 +38,36 @@ slot_for() {
   printf '%s\n' "${name:-main}"
 }
 
+owner_of() {
+  cat "$OWNERS/$1" 2>/dev/null || true
+}
+
+claim() {
+  local root="$1" slot owner
+  slot="$(slot_for "$root")"
+  owner="$(owner_of "$slot")"
+  if [ -n "$owner" ] && [ "$owner" != "$root" ]; then
+    if [ -d "$owner" ]; then
+      echo "development slot $slot belongs to $owner; rename this worktree folder" >&2
+      exit 1
+    fi
+    teardown_slot "$slot" >&2
+  fi
+  mkdir -p "$OWNERS"
+  printf '%s\n' "$root" >"$OWNERS/$slot"
+  printf '%s\n' "$slot"
+}
+
+stop_processes() {
+  local pattern
+  pattern="^$(printf '%s' "$1" | sed 's/[][\\.*^$()+?{}|]/\\&/g')/(dist|build/Build/Products/Debug)/Edith\.app/Contents/"
+  pkill -f "$pattern" 2>/dev/null || true
+  for _ in $(seq 50); do
+    pgrep -f "$pattern" >/dev/null || return 0
+    sleep 0.2
+  done
+}
+
 forget_identifiers() {
   local identifier
   for identifier in "$@"; do
@@ -47,9 +80,9 @@ forget_identifiers() {
 }
 
 teardown_slot() {
-  local slot="$1" root="${2:-}" identifier="$PREFIX$1" app
+  local slot="$1" root="${2:-}" identifier="$PREFIX$1" app service
   if [ -n "$root" ]; then
-    pkill -f "^$root/(dist|build)/.*Edith\.app/Contents/" 2>/dev/null || true
+    stop_processes "$root"
     for app in "$root/dist/Edith.app" "$root/build/Build/Products/Debug/Edith.app"; do
       [ ! -d "$app" ] || "$LSREGISTER" -u "$app" 2>/dev/null || true
     done
@@ -60,17 +93,27 @@ teardown_slot() {
     while security delete-generic-password -s "$identifier.$service" >/dev/null 2>&1; do :; done
   done
   rm -rf "$LIBRARY/Application Support/$DEV_DIRECTORY/$slot" \
-    "$LIBRARY/Caches/$DEV_DIRECTORY/$slot" "$LIBRARY/Logs/$DEV_DIRECTORY/$slot"
+    "$LIBRARY/Caches/$DEV_DIRECTORY/$slot" "$LIBRARY/Logs/$DEV_DIRECTORY/$slot" "$OWNERS/$slot"
   echo "removed development slot $slot"
 }
 
-gc() {
-  local worktree app slot label directory
-  local -a live=(xcode)
-  while IFS= read -r worktree; do
-    live+=("$(slot_for "$worktree")")
-  done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+teardown_here() {
+  local root="$1" slot owner
+  slot="$(slot_for "$root")"
+  owner="$(owner_of "$slot")"
+  if [ -n "$owner" ] && [ "$owner" != "$root" ]; then
+    echo "development slot $slot belongs to $owner, not this worktree" >&2
+    exit 1
+  fi
+  teardown_slot "$slot" "$root"
+}
 
+legacy_running() {
+  [ "$(osascript -e "application id \"$LEGACY\" is running" 2>/dev/null)" = true ]
+}
+
+gc() {
+  local app owner slot
   while IFS= read -r app; do
     case "$app" in /Applications/Edith.app | "$HOME/Applications/Edith.app") continue ;; esac
     "$LSREGISTER" -u "$app" 2>/dev/null || true
@@ -80,27 +123,19 @@ gc() {
     /^identifier:/ { matched = ($2 == identifier) }
     /^-+$/ { if (matched && path != "") print path; matched = 0; path = "" }')
 
-  is_live() {
-    local candidate
-    for candidate in "${live[@]}"; do [ "$candidate" != "$1" ] || return 0; done
-    return 1
-  }
-
-  while IFS= read -r label; do
-    slot="${label#"$PREFIX"}"
-    slot="${slot%.agent}"
-    is_live "$slot" || teardown_slot "$slot"
-  done < <(launchctl list | awk -v prefix="$PREFIX" 'index($3, prefix) == 1 && $3 ~ /\.agent$/ { print $3 }')
-
-  for directory in "$LIBRARY/Application Support/$DEV_DIRECTORY"/*/; do
-    [ -d "$directory" ] || continue
-    slot="$(basename "$directory")"
-    is_live "$slot" || teardown_slot "$slot"
+  for owner in "$OWNERS"/*; do
+    [ -f "$owner" ] || continue
+    slot="$(basename "$owner")"
+    [ -d "$(cat "$owner")" ] || teardown_slot "$slot"
   done
 
-  for label in "$LEGACY.agent" "$LEGACY.helper"; do
-    launchctl bootout "$DOMAIN/$label" 2>/dev/null || true
-    launchctl disable "$DOMAIN/$label" 2>/dev/null || true
+  if legacy_running; then
+    echo "kept the shared $LEGACY identity because one of its builds is running"
+    return
+  fi
+  for app in "$LEGACY.agent" "$LEGACY.helper"; do
+    launchctl bootout "$DOMAIN/$app" 2>/dev/null || true
+    launchctl disable "$DOMAIN/$app" 2>/dev/null || true
   done
   forget_identifiers "$LEGACY" "$LEGACY.helper" "$LEGACY.shared"
   rm -rf "$LIBRARY/Application Support/Edith Development" \
@@ -108,9 +143,12 @@ gc() {
   echo "retired the shared $LEGACY identity"
 }
 
+ROOT="$(pwd -P)"
 case "${1:-}" in
-  slot) slot_for "${2:-$PWD}" ;;
-  teardown) teardown_slot "$(slot_for "$PWD")" "$PWD" ;;
+  slot) slot_for "${2:-$ROOT}" ;;
+  claim) claim "$ROOT" ;;
+  stop) stop_processes "$ROOT" ;;
+  teardown) teardown_here "$ROOT" ;;
   gc) gc ;;
   *) usage ;;
 esac

@@ -189,7 +189,7 @@ import Testing
             await runtime.record(
                 AgentEvent(category: "fixture", name: "step", message: "\(index)", taskID: taskID))
         }
-        await runtime.shutdown()
+        await runtime.flushJournal()
         let restarted = AgentRuntime(build: "fixture", store: store)
         let events = try AgentPayload.decode(
             [AgentEvent].self, from: await restarted.snapshot(topic: .events))

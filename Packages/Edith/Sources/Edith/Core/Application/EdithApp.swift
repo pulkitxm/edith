@@ -147,7 +147,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         guard appStarted, AppBuildIdentity.isDevelopment, !AgentService.usesCustomService else {
             return .terminateNow
         }
-        Task { [agentRegistrar] in
+        postLaunch.cancel()
+        helperMaintenanceTask?.cancel()
+        Task { [agentRegistrar, helperMaintenanceTask] in
+            await helperMaintenanceTask?.value
             for helper in NSRunningApplication.runningApplications(
                 withBundleIdentifier: AppBuildIdentity.helper)
             {

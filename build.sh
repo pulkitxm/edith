@@ -138,7 +138,7 @@ XCODE_BUILD_SETTINGS=(ARCHS=arm64)
   GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)
 AGENT_IDENTIFIER=com.pulkit.edith.agent
 if [ "$CONFIG" = Debug ]; then
-  SLOT="$(scripts/dev-slots.sh slot)"
+  SLOT="$(scripts/dev-slots.sh claim)"
   AGENT_IDENTIFIER="com.pulkit.edith.dev.$SLOT.agent"
   XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")
   echo "development slot $SLOT (com.pulkit.edith.dev.$SLOT)"
@@ -299,10 +299,6 @@ if [ "$INSTALL" = 1 ]; then
 elif [ "$RELEASE" = 1 ]; then
   echo "built $APP; Edith only runs from /Applications, install it with --release --install"
 elif [ "$NO_OPEN" != 1 ]; then
-  pkill -f "^$PWD/$APP/Contents/" 2>/dev/null || true
-  for _ in $(seq 50); do
-    pgrep -f "^$PWD/$APP/Contents/" >/dev/null || break
-    sleep 0.2
-  done
+  scripts/dev-slots.sh stop
   open "$APP"
 fi

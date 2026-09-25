@@ -79,6 +79,9 @@ public actor AgentRuntime {
             await task.value
             completed.insert(id)
         }
+    }
+
+    public func flushJournal() {
         store?.flush()
     }
 
