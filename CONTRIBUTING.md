@@ -87,9 +87,10 @@ The main source tree is organized by role after the feature-folder restructure:
 | `Packages/Edith/Sources/EdithKit/Features` | Reusable macOS domain models and services. |
 | `Packages/Edith/Sources/EdithCore` | Shared extension registry and platform capability models. |
 
-`AppIcon.icns` and the helper's `MenuBar.png` are checked in, generated from
-`Packages/Edith/Sources/Edith/Resources/appicon.png`. Run `make icon` after
-changing the artwork.
+The app icon is drawn in `Resources/AppIcon.svg`. `make icon` renders it with
+Chrome into `Packages/Edith/Sources/Edith/Resources/appicon.png` and derives the
+checked-in `AppIcon.icns`, the helper's `MenuBar.png`, the share-card icon, the
+site icons and the promo video logo from that. Run it after changing the SVG.
 
 ### Companion backend
 
