@@ -39,7 +39,7 @@ struct NotchBrowserTabStrip<Leading: View>: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, NotchBrowserGeometry.chromePadding)
         .frame(height: 32)
     }
 
@@ -209,7 +209,7 @@ struct NotchBrowserToolbar: View {
             }
             profileMenu
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, NotchBrowserGeometry.chromePadding - 6)
         .frame(height: 34)
         .overlay(alignment: .bottom) { progress }
         .onAppear { draft = shownText }
@@ -266,7 +266,7 @@ struct NotchBrowserToolbar: View {
                 .tint(.white.opacity(0.75))
                 .frame(height: 2)
                 .scaleEffect(x: 1, y: 0.5, anchor: .bottom)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, NotchBrowserGeometry.chromePadding)
         }
     }
 
@@ -286,18 +286,16 @@ struct NotchBrowserToolbar: View {
             Divider()
             Button("Detach Profile and Clear Data", role: .destructive) { store.detach() }
         } label: {
-            Group {
-                if let profile = store.profile {
-                    ChromeProfileAvatar(profile: profile, size: 20)
-                } else {
-                    Image(systemName: "person.crop.circle")
-                }
+            if let profile = store.profile {
+                Image(nsImage: ChromeProfileAvatar.badge(for: profile, diameter: 20))
+            } else {
+                Image(systemName: "person.crop.circle")
             }
-            .frame(width: 26, height: 26)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .frame(width: 28, height: 26)
         .help(store.profile.map { "Chrome profile: \($0.name)" } ?? "Chrome profile")
     }
 

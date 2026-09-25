@@ -85,7 +85,8 @@ struct NotchBrowserSetupView: View {
             )
             .font(.system(size: 14))
             .foregroundStyle(
-                ok ? Color.green : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3))
+                ok ? Color.green : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3)
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
@@ -246,7 +247,9 @@ struct ChromeProfileAvatar: View {
         .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 1))
     }
 
-    private var tint: Color {
+    private var tint: Color { Self.tint(for: profile) }
+
+    static func tint(for profile: ChromeProfile) -> Color {
         guard let argb = profile.colorARGB else { return Color(red: 0.26, green: 0.52, blue: 0.96) }
         return Color(
             red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
@@ -254,6 +257,41 @@ struct ChromeProfileAvatar: View {
     }
 
     @MainActor private static var cache: [URL: NSImage] = [:]
+    @MainActor private static var badges: [String: NSImage] = [:]
+
+    @MainActor static func badge(for profile: ChromeProfile, diameter: CGFloat) -> NSImage {
+        let key = "\(profile.id)|\(profile.pictureURL?.path ?? "")|\(diameter)"
+        if let cached = badges[key] { return cached }
+        let picture = image(for: profile)
+        let fill = NSColor(tint(for: profile))
+        let initials = profile.initials
+        let badge = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) {
+            rect in
+            NSBezierPath(ovalIn: rect).addClip()
+            if let picture {
+                let side = min(picture.size.width, picture.size.height)
+                let source = NSRect(
+                    x: (picture.size.width - side) / 2, y: (picture.size.height - side) / 2,
+                    width: side, height: side)
+                picture.draw(in: rect, from: source, operation: .copy, fraction: 1)
+            } else {
+                fill.setFill()
+                rect.fill()
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: diameter * 0.4, weight: .semibold),
+                    .foregroundColor: NSColor.white,
+                ]
+                let text = NSAttributedString(string: initials, attributes: attributes)
+                let size = text.size()
+                text.draw(
+                    at: NSPoint(
+                        x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
+            }
+            return true
+        }
+        badges[key] = badge
+        return badge
+    }
 
     @MainActor static func image(for profile: ChromeProfile) -> NSImage? {
         guard let url = profile.pictureURL else { return nil }

@@ -9,6 +9,8 @@ enum NotchBrowserGeometry {
     static let minimumSize = CGSize(width: 620, height: 380)
     static let screenMargin = CGSize(width: 24, height: 12)
     static let contentInset: CGFloat = 6
+    static var sideInset: CGFloat { NotchGeometry.expandedTopRadius }
+    static var chromePadding: CGFloat { sideInset + contentInset }
 
     static func maximumSize(screen: CGSize) -> CGSize {
         CGSize(

@@ -14,7 +14,7 @@ struct NotchBrowserPane<Leading: View>: View {
                     leading
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, NotchBrowserGeometry.chromePadding)
                 .frame(height: 32)
                 NotchBrowserSetupView(store: store)
             } else {
@@ -29,7 +29,7 @@ struct NotchBrowserPane<Leading: View>: View {
 
     private var content: some View {
         BrowserWebViewHost(webView: store.selectedTab?.webView)
-            .padding(.horizontal, NotchBrowserGeometry.contentInset)
+            .padding(.horizontal, NotchBrowserGeometry.chromePadding)
             .padding(.bottom, NotchBrowserGeometry.contentInset)
             .overlay {
                 if let dialog = store.dialog {
@@ -152,7 +152,8 @@ struct NotchBrowserDialogView: View {
                 .padding(.horizontal, 16)
                 .frame(height: 28)
                 .background(
-                    primary ? Color.white.opacity(0.92) : Color.white.opacity(0.1), in: Capsule())
+                    primary ? Color.white.opacity(0.92) : Color.white.opacity(0.1), in: Capsule()
+                )
                 .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
@@ -180,6 +181,7 @@ struct NotchBrowserResizeHandles: View {
             Spacer(minLength: 0)
             corner(.bottomTrailing)
         }
+        .padding(.horizontal, NotchBrowserGeometry.sideInset)
         .frame(height: 14)
     }
 
