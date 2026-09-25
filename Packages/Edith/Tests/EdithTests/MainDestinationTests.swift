@@ -73,7 +73,7 @@ import Testing
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [
-                .general, .permissions, .agent, .data, .shortcuts, .terminal, .icloud,
+                .general, .permissions, .agent, .jev, .data, .shortcuts, .terminal, .icloud,
                 .updates,
             ])
     }
@@ -109,6 +109,17 @@ import Testing
                 mainWindowSection: "settings", settingsTab: "terminal")
                 == MainNavigationSelection(
                     mainWindowSection: "settings", settingsTab: "terminal"))
+        #expect(
+            MainNavigationFallback.resolve(
+                mainWindowSection: "settings", settingsTab: "jev")
+                == MainNavigationSelection(
+                    mainWindowSection: "settings", settingsTab: "jev"))
+        #expect(
+            SettingsPane.Tab.allCases.allSatisfy {
+                MainNavigationFallback.resolve(
+                    mainWindowSection: "settings", settingsTab: $0.rawValue
+                ).settingsTab == $0.rawValue
+            })
         #expect(
             MainNavigationFallback.resolve(
                 mainWindowSection: "permissions", settingsTab: "shortcuts")

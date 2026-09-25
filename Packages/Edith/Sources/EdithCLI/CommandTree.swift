@@ -1069,6 +1069,15 @@ public enum CommandTree {
         "ed companion erase": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed jev status": Spec(options: ["--json", "-h", "--help", "--version", "--probe"]),
+        "ed jev key show": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed jev key set": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed jev key clear": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed jev ask": Spec(
+            options: ["--json", "-h", "--help", "--version", "--request"],
+            optionValues: ["--request": .localPath]),
         "ed companion wipe": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             destructivePolicy: .previewThenYes),

@@ -209,6 +209,9 @@ public enum UserOperationCatalog {
         registrations += HerdrOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += JevOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         return registrations
     }()
 
@@ -1036,6 +1039,19 @@ private extension HerdrSessionOperation {
             UserInterfaceActionPlacement(
                 surface: "Extension settings", action: "check live Herdr sessions"),
         ])
+    }
+}
+
+private extension JevOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status: userInterface("Jev settings", "check the key and its credits")
+        case .keySet: userInterface("Jev settings", "save the TypeSafe API key")
+        case .keyClear: userInterface("Jev settings", "remove the TypeSafe API key", ["--yes"])
+        case .ask:
+            commandLineOnly(
+                "raw requests are a developer and agent tool; the app asks Jev from each feature")
+        }
     }
 }
 

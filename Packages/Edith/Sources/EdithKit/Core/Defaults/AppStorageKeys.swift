@@ -142,6 +142,10 @@ public enum AppStorageKeys {
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
 
+    public enum Jev {
+        public static let configured = "jevConfigured"
+    }
+
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"

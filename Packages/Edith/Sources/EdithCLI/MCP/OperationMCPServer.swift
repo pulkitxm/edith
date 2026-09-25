@@ -38,6 +38,84 @@ public struct OperationMCPServer: Sendable {
         }
     }
 
+    public static let findToolName = "edith_find"
+
+    public static var findTool: Tool {
+        Tool(
+            name: findToolName, title: "Find an Edith tool",
+            description:
+                "Rank the Edith tools that serve a plain-language request, using TypeSafe Jev. "
+                + "Returns tool names, summaries and probabilities.",
+            inputSchema: .object([
+                "type": "object",
+                "properties": .object([
+                    "request": .object([
+                        "type": "string", "description": "What you want Edith to do.",
+                    ])
+                ]),
+                "required": .array(["request"]),
+            ]))
+    }
+
+    public static func listedTools(jevConfigured: Bool) -> [Tool] {
+        tools + (jevConfigured ? [findTool] : []) + DatabaseMCPToolCatalog.tools
+    }
+
+    static func findGroups() -> [JevRouteGroup] {
+        Dictionary(grouping: OperationMCPCatalog.tools) { $0.route.first ?? $0.name }
+            .map { area, tools in
+                JevRouteGroup(
+                    id: area, summary: CommandTree.root.child(area)?.summary ?? area,
+                    members: tools.map { JevRouteCandidate(id: $0.name, summary: $0.summary) })
+            }
+            .sorted { $0.id < $1.id }
+    }
+
+    static func find(
+        _ parameters: CallTool.Parameters, decider: JevDeciding? = AgentJevDecider.configured()
+    ) async -> CallTool.Result {
+        guard let decider else {
+            return CallTool.Result(
+                content: [
+                    .text(
+                        text: JevError.missingKey.localizedDescription, annotations: nil, _meta: nil
+                    )
+                ], isError: true)
+        }
+        guard let request = parameters.arguments?["request"]?.stringValue,
+            !request.trimmingCharacters(in: .whitespaces).isEmpty
+        else {
+            return CallTool.Result(
+                content: [.text(text: "Pass the request to route.", annotations: nil, _meta: nil)],
+                isError: true)
+        }
+        do {
+            let result = try await JevRouter(groups: findGroups()).route(
+                request, using: decider, purpose: "mcp.find")
+            let summaries = Dictionary(
+                OperationMCPCatalog.tools.map { ($0.name, $0.summary) },
+                uniquingKeysWith: { first, _ in first })
+            let rows = result.picks.map { pick in
+                JSONValue.object([
+                    "tool": .string(pick.id), "summary": .string(summaries[pick.id] ?? ""),
+                    "probability": .double(pick.probability),
+                ])
+            }
+            return CallTool.Result(
+                content: [
+                    .text(
+                        text: JSONSerializer.string(
+                            .object(["tools": .array(rows), "latencyMs": .int(result.milliseconds)])
+                        ),
+                        annotations: nil, _meta: nil)
+                ], isError: false)
+        } catch {
+            return CallTool.Result(
+                content: [.text(text: error.localizedDescription, annotations: nil, _meta: nil)],
+                isError: true)
+        }
+    }
+
     public func makeServer() async -> Server {
         let server = Server(
             name: "edith",
@@ -48,7 +126,7 @@ public struct OperationMCPServer: Sendable {
                 + "until you pass confirm.",
             capabilities: .init(tools: .init(listChanged: false)))
         await server.withMethodHandler(ListTools.self) { _ in
-            ListTools.Result(tools: Self.tools + DatabaseMCPToolCatalog.tools)
+            ListTools.Result(tools: Self.listedTools(jevConfigured: JevAvailability.isConfigured()))
         }
         await server.withMethodHandler(CallTool.self) { parameters in
             await Self.call(parameters)
@@ -57,6 +135,7 @@ public struct OperationMCPServer: Sendable {
     }
 
     static func call(_ parameters: CallTool.Parameters) async -> CallTool.Result {
+        if parameters.name == findToolName { return await find(parameters) }
         guard let tool = OperationMCPCatalog.tool(named: parameters.name) else {
             return await DatabaseMCPToolHandler().callTool(parameters)
         }

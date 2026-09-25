@@ -76,6 +76,7 @@ public struct EdRoot: AsyncParsableCommand {
             DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
+            JevCommand.self,
             CompleteCommand.self,
         ])
 
