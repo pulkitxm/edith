@@ -682,7 +682,7 @@ enum VideoTools {
     }
 
     static let speed = StudioTool(
-        id: "video.speed", title: "Change speed",
+        id: "video.speed", title: "Video speed",
         summary: "Speed a video up for timelapses or slow it down, with matching sound.",
         symbol: "gauge.with.dots.needle.67percent", group: .edit, inputs: [.video],
         extraExtensions: gif,
@@ -989,7 +989,7 @@ enum VideoTools {
     }
 
     static let denoise = StudioTool(
-        id: "video.denoise", title: "Reduce noise",
+        id: "video.denoise", title: "Reduce video noise",
         summary: "Clean up grainy low-light video and, optionally, background hiss.",
         symbol: "wand.and.stars", group: .optimize, inputs: [.video],
         options: [
@@ -1019,7 +1019,7 @@ enum VideoTools {
     }
 
     static let fade = StudioTool(
-        id: "video.fade", title: "Fade in and out",
+        id: "video.fade", title: "Fade video",
         summary: "Fade the picture and sound in from black and out to black.",
         symbol: "circle.lefthalf.striped.horizontal", group: .edit, inputs: [.video],
         options: [

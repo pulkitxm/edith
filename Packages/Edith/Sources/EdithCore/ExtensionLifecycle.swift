@@ -673,33 +673,44 @@ public enum ExtensionLifecycleCatalog {
                     "ed lid-awake status --json")
             ]),
         descriptor(
-            "videoEditor", "Make polished edits from video, image and audio files.",
+            "studio", "Edit, convert and compress images, PDFs, video and audio on this Mac.",
             workflows: [
                 instruction(
-                    "import", "Import media",
-                    "Add a video or image, then arrange clips on the timeline."),
+                    "drop", "Drop in files",
+                    "Drop images, PDFs, videos or audio into Studio to add them to your files."),
                 instruction(
-                    "edit", "Edit and export",
-                    "Split clips, focus with zoom, add text and transitions, then export an MP4."),
+                    "tools", "Run a tool",
+                    "Pick Edit, Compress or Convert on a file, or any tool from the Tools tab.",
+                    "ed studio tools --json"),
+                instruction(
+                    "edit", "Open an editor",
+                    "Edit images and PDFs in place, or open a video in the timeline editor."),
             ],
             prerequisites: [
                 instruction(
-                    "media", "Choose a video or image",
-                    "Keep imported files accessible so the project can play them again.")
+                    "ffmpeg", "Install FFmpeg for video and audio",
+                    "Video and audio tools use FFmpeg. Install it from Studio or with Homebrew.",
+                    "ed tools install ffmpeg")
             ],
-            examples: ["ed extensions enable videoEditor", "ed extensions list --json"],
-            docs: [documentation("guide", "Video editor guide", "docs/cli/video-editor/README.md")],
+            examples: [
+                "ed extensions enable studio", "ed studio tools --kind pdf",
+                "ed studio run pdf.merge a.pdf b.pdf --json",
+            ],
+            docs: [documentation("guide", "Studio guide", "docs/cli/studio/README.md")],
             recovery: [
                 instruction(
+                    "engine", "Install a missing engine",
+                    "Tools that need FFmpeg or qpdf show an install button until it is found.",
+                    "ed tools install ffmpeg"),
+                instruction(
                     "relink", "Find missing media",
-                    "Open the project and select the original video when prompted.",
-                    "ed extensions enable videoEditor")
+                    "Open a video project and select the original video when prompted.",
+                    "ed extensions enable studio"),
             ],
             verification: [
                 instruction(
                     "status", "Check the extension",
-                    "Confirm Video editor is enabled in the Media suite.",
-                    "ed extensions list --json")
+                    "Confirm Studio is enabled in the Media suite.", "ed extensions list --json")
             ]),
         descriptor(
             "music", "Play and organize a local music library with system media controls.",

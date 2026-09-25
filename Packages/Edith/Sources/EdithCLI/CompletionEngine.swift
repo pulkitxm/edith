@@ -1,5 +1,6 @@
 import ArgumentParser
 import EdithKit
+import EdithStudio
 import Foundation
 
 public struct CompletionRequest: Equatable, Sendable {
@@ -265,6 +266,8 @@ public enum CompletionEngine {
         case .pruneTarget: return DockerPruneCommand.targets
         case .shelfItem: return shelfItems
         case .shelfKeepDuration: return ShelfKeepDuration.allCases.map(\.rawValue)
+        case .studioTool: return StudioCatalog.tools.map(\.id)
+        case .studioKind: return StudioKind.allCases.map(\.rawValue)
         case .musicTrack: return musicTracks
         case .calendarEvent: return calendarEvents
         case .tool: return toolIDs

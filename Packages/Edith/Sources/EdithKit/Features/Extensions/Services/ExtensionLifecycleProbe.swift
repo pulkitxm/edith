@@ -206,7 +206,7 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "lidAwake": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "videoEditor": Policy(
+        "studio": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "music": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),

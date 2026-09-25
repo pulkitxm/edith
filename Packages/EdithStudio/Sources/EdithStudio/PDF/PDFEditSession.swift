@@ -80,6 +80,10 @@ public final class PDFEditSession {
 
     public var pageCount: Int { document.pageCount }
 
+    public func markSaved() {
+        isDirty = false
+    }
+
     public func page(_ index: Int) -> PDFPage? { document.page(at: index) }
 
     public func index(of page: PDFPage) -> Int? {

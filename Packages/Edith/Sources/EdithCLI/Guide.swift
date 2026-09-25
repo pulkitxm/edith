@@ -557,6 +557,9 @@ public enum Guide {
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
+        ed studio tools --kind pdf      Studio's tools for one kind of file
+        ed studio run pdf.merge a.pdf b.pdf
+        ed studio run image.convert photo.heic --set format=jpg
         ed cleaner scan                 developer caches worth reclaiming
         ed cleaner clean --yes          moves them to the Trash, never deletes
         ```

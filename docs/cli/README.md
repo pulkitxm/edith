@@ -58,7 +58,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |
 | [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
-| [Video editor](./video-editor/README.md) | Import media, edit on a timeline, and export MP4 or GIF |
+| [`ed studio`](./studio/README.md) | Studio: edit, convert and compress images, PDFs, video, audio and documents |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |

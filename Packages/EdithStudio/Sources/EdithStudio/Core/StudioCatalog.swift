@@ -72,6 +72,25 @@ public enum StudioCatalog {
     public static func quickTool(_ action: StudioQuickAction, for kind: StudioKind) -> StudioTool? {
         quickActions[kind]?[action].flatMap(tool)
     }
+
+    public static let popularity: [String] = [
+        "pdf.compress", "pdf.edit", "pdf.sign", "pdf.split", "pdf.merge", "pdf.protect",
+        "pdf.organize", "pdf.to-word", "pdf.to-images", "pdf.page-numbers", "pdf.watermark",
+        "pdf.redact", "pdf.ocr", "pdf.rotate", "image.edit", "image.compress", "image.convert",
+        "image.resize", "image.remove-background", "image.crop", "image.watermark",
+        "pdf.from-images", "video.edit", "video.compress", "video.convert", "video.trim",
+        "video.to-gif", "video.extract-audio", "audio.convert", "audio.trim", "audio.compress",
+        "document.to-pdf", "files.zip", "files.unzip", "ai.summarize",
+    ]
+
+    public static func ranked(_ tools: [StudioTool]) -> [StudioTool] {
+        let order = Dictionary(uniqueKeysWithValues: popularity.enumerated().map { ($1, $0) })
+        return tools.enumerated().sorted { left, right in
+            let a = order[left.element.id] ?? popularity.count + left.offset
+            let b = order[right.element.id] ?? popularity.count + right.offset
+            return a < b
+        }.map(\.element)
+    }
 }
 
 enum StudioToolRegistry {

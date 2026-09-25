@@ -11,6 +11,9 @@ import Testing
             #expect(id.split(separator: ".").count == 2, "\(id) should be family.name")
         }
         #expect(StudioCatalog.tools.count >= 100)
+        let titles = StudioCatalog.tools.map(\.title)
+        let repeated = Dictionary(grouping: titles, by: { $0 }).filter { $0.value.count > 1 }.keys
+        #expect(repeated.isEmpty, "tool titles repeat: \(repeated.sorted())")
     }
 
     @Test func everyToolIsCompleteAndRunnableOrAnEditor() {

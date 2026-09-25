@@ -29,7 +29,7 @@ import Testing
         "windowSweatersEnabled",
         "presenterEnabled",
         "tabMusicEnabled",
-        "tabVideoEditorEnabled",
+        "tabStudioEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
         "notchAudioMixerEnabled",
@@ -53,7 +53,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "videoEditor", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
+                "studio", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
                 "calendar",
                 "database", "attention", "seoAudit",
             ])
@@ -208,7 +208,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
-                "clipboard", "keystrokeHighlight", "videoEditor", "notchShelf", "database",
+                "clipboard", "keystrokeHighlight", "studio", "notchShelf", "database",
                 "attention",
             ])
     }
@@ -352,7 +352,7 @@ import Testing
             "focusDim": [.screenRecording],
             "windowSweaters": [],
             "presenter": [.screenRecording],
-            "videoEditor": [],
+            "studio": [],
             "music": [],
             "downloads": [],
             "notchShelf": [],
@@ -385,7 +385,7 @@ import Testing
             "focusDim": [],
             "windowSweaters": [.accessibility],
             "presenter": [],
-            "videoEditor": [],
+            "studio": [],
             "music": [],
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],

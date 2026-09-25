@@ -24,6 +24,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case historyIndex
     case shelfItem
     case shelfKeepDuration
+    case studioTool
+    case studioKind
     case musicTrack
     case calendarEvent
     case configKey
@@ -347,6 +349,17 @@ public enum CommandTree {
                 "--json", "-h", "--help", "--version", "--model", "--effort", "--fast",
             ],
             optionValues: ["--fast": .onOff], arguments: [.free]),
+        "ed studio tools": Spec(
+            options: ["--json", "-h", "--help", "--version", "--kind"],
+            optionValues: ["--kind": .studioKind]),
+        "ed studio info": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.studioTool]),
+        "ed studio run": Spec(
+            options: ["--json", "-h", "--help", "--version", "--set", "--output-dir"],
+            optionValues: ["--set": .free, "--output-dir": .localPath],
+            arguments: [.studioTool, .localPath], repeatingArgument: .localPath),
+        "ed studio probe": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),

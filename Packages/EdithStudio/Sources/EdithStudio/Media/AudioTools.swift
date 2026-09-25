@@ -223,7 +223,7 @@ enum AudioTools {
     }
 
     static let speed = StudioTool(
-        id: "audio.speed", title: "Change speed",
+        id: "audio.speed", title: "Audio speed",
         summary: "Speed up or slow down audio, keeping the pitch natural or not.",
         symbol: "gauge.with.dots.needle.67percent", group: .edit, inputs: [.audio],
         options: [
@@ -254,7 +254,7 @@ enum AudioTools {
     }
 
     static let fade = StudioTool(
-        id: "audio.fade", title: "Fade in and out",
+        id: "audio.fade", title: "Fade audio",
         summary: "Add smooth fades to the start and end.",
         symbol: "waveform.path.ecg", group: .edit, inputs: [.audio],
         options: [
@@ -326,7 +326,7 @@ enum AudioTools {
     }
 
     static let denoise = StudioTool(
-        id: "audio.denoise", title: "Reduce noise",
+        id: "audio.denoise", title: "Reduce audio noise",
         summary: "Lower steady background noise such as hiss, hum and fans.",
         symbol: "wand.and.stars", group: .optimize, inputs: [.audio],
         options: [
