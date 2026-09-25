@@ -60,12 +60,16 @@ struct AttentionHeadline: View {
         let summary = model.summary
         let previous = summary.previous
         let dark = scheme == .dark
+        let accent = AttentionPalette.accent(dark)
+        let quiet = DashSkin.inkSoft(dark)
         let active = summary.activeDuration
-        let productive = summary.duration(.focus)
-        let distracting = summary.duration(.entertainment)
+        let productive = summary.productiveDuration
+        let distracting = summary.distractingDuration
         let hours = max(active / 3_600, 1 / 60)
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
+        let pulse = summary.pulse.map { Int($0.rounded()) }
+        let previousPulse = previous?.pulse.map { Int($0.rounded()) }
         LazyVGrid(
             columns: Array(
                 repeating: GridItem(.flexible(), spacing: UIScale.pt(12)), count: compact ? 2 : 6),
@@ -73,37 +77,37 @@ struct AttentionHeadline: View {
         ) {
             AttentionTile(
                 label: "Active", value: AttentionFormat.duration(active),
-                detail: AttentionFormat.delta(active, previous?.active)
-                    ?? "\(AttentionFormat.duration(summary.idleDuration)) away",
-                tint: DashSkin.inkSoft(dark), symbol: "clock")
+                detail:
+                    "\(AttentionFormat.duration(summary.duration(AttentionSphere.work))) work · \(AttentionFormat.duration(summary.duration(AttentionSphere.personal))) personal",
+                tint: quiet, symbol: "clock")
             AttentionTile(
                 label: "Productive", value: AttentionFormat.duration(productive),
                 detail:
-                    "\(AttentionFormat.percent(productive, of: active)) · \(AttentionFormat.delta(productive, previous?.duration(.focus)) ?? "of active time")",
-                tint: AttentionPalette.kind(.focus, dark: dark), symbol: "scope")
+                    "\(AttentionFormat.percent(productive, of: active)) · \(AttentionFormat.delta(productive, previous?.productive) ?? "of active time")",
+                tint: accent, symbol: "scope")
+            AttentionTile(
+                label: "Pulse", value: pulse.map { "\($0)" } ?? "n/a",
+                detail: pulse.flatMap { current in
+                    previousPulse.map { "\(current - $0 >= 0 ? "+" : "")\(current - $0) vs before" }
+                } ?? "\(AttentionFormat.duration(distracting)) distracting",
+                tint: accent, symbol: "waveform.path.ecg")
             AttentionTile(
                 label: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
                 detail: summary.focusBlocks.isEmpty
                     ? "no block of \(Int(model.settings.focusBlockMinimum / 60))m yet"
                     : "\(summary.focusBlocks.count) blocks, longest \(AttentionFormat.duration(longestBlock))",
-                tint: AttentionPalette.kind(.focus, dark: dark), symbol: "brain.head.profile")
-            AttentionTile(
-                label: "Distracting", value: AttentionFormat.duration(distracting),
-                detail:
-                    "\(AttentionFormat.percent(distracting, of: active)) · \(AttentionFormat.delta(distracting, previous?.duration(.entertainment)) ?? "of active time")",
-                tint: AttentionPalette.kind(.entertainment, dark: dark), symbol: "play.rectangle")
+                tint: quiet, symbol: "brain.head.profile")
             AttentionTile(
                 label: "Switches", value: String(format: "%.0f/h", perHour),
                 detail:
                     "\(summary.contextSwitches) total · \(AttentionFormat.duration(summary.medianStretch)) median stretch",
-                tint: DashPalette.color(dark ? "#d55181" : "#e87ba4"),
-                symbol: "arrow.triangle.2.circlepath")
+                tint: quiet, symbol: "arrow.triangle.2.circlepath")
             AttentionTile(
                 label: "Agent work", value: AttentionFormat.duration(summary.agents.working),
                 detail: summary.agents.isEmpty
                     ? "no agent activity recorded"
                     : "peak \(summary.agents.peakConcurrent) at once · \(AttentionFormat.delta(summary.agents.working, previous?.agentWorking) ?? "")",
-                tint: DashPalette.color(dark ? "#9085e9" : "#4a3aa7"), symbol: "sparkles")
+                tint: quiet, symbol: "sparkles")
         }
     }
 }
@@ -121,8 +125,8 @@ struct AttentionDayPanel: View {
         AttentionPanel(
             model.period.scope == .day ? "Your day" : "Day by day",
             subtitle: model.period.scope == .day
-                ? "Every stretch of attention, colored by kind. Hover to see what it was."
-                : "Active time per day, split by kind."
+                ? "Every stretch of attention, shaded by how productive it was. Hover to see what it was."
+                : "Active time per day, split by productivity."
         ) {
             if summary.activeDuration == 0 {
                 AttentionEmpty(text: "No active time in this period", symbol: "moon.zzz")
@@ -132,7 +136,7 @@ struct AttentionDayPanel: View {
                 } else {
                     AttentionDailyStack(days: summary.days, settings: model.settings)
                 }
-                AttentionKindLegend(kinds: summary.kinds, total: summary.activeDuration)
+                AttentionLevelLegend(levels: summary.levels, total: summary.activeDuration)
             }
             if model.period.scope == .day,
                 summary.agents.concurrency.contains(where: { $0.working > 0 })
@@ -151,45 +155,19 @@ struct AttentionDayPanel: View {
 
 struct AttentionCategoryPanel: View {
     let model: AttentionPageModel
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let summary = model.summary
-        let dark = scheme == .dark
-        AttentionPanel("Categories", subtitle: "Click a category to break it down.") {
+        AttentionPanel(
+            "Categories",
+            subtitle: "What the time was spent on. Click one to break it down."
+        ) {
             if summary.categories.isEmpty {
                 AttentionEmpty(text: "Nothing categorized yet")
             } else {
-                HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                    AttentionCategoryDonut(
-                        categories: summary.categories, total: summary.activeDuration
-                    )
-                    .frame(width: UIScale.pt(150), height: UIScale.pt(150))
-                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        ForEach(summary.categories.prefix(8)) { item in
-                            Button {
-                                model.filter(category: item.category.id)
-                            } label: {
-                                AttentionLegendRow(
-                                    color: AttentionPalette.category(item.category, dark: dark),
-                                    label: item.category.name,
-                                    value: AttentionFormat.duration(item.duration),
-                                    detail: AttentionFormat.percent(
-                                        item.duration, of: summary.activeDuration))
-                            }
-                            .buttonStyle(.edith(.borderless))
-                        }
-                        if summary.categories.count > 8 {
-                            let rest = summary.categories.dropFirst(8).reduce(0) {
-                                $0 + $1.duration
-                            }
-                            AttentionLegendRow(
-                                color: DashSkin.grid(dark),
-                                label: "\(summary.categories.count - 8) more",
-                                value: AttentionFormat.duration(rest))
-                        }
-                    }
-                }
+                AttentionCategoryBars(
+                    categories: summary.categories, total: summary.activeDuration
+                ) { model.filter(category: $0) }
             }
         }
     }
@@ -203,7 +181,7 @@ struct AttentionHoursPanel: View {
         AttentionPanel(
             model.period.scope == .day ? "Hour by hour" : "When you work",
             subtitle: model.period.scope == .day
-                ? "Active minutes in each hour, split by kind."
+                ? "Active minutes in each hour, split by productivity."
                 : "Active time by weekday and hour. Darker is busier."
         ) {
             if summary.hours.isEmpty {
@@ -292,12 +270,12 @@ struct AttentionEntityRow: View {
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 AttentionCategoryBadge(
-                                    category: entity.category, source: entity.categorySource,
+                                    category: entity.category, productivity: entity.productivity,
+                                    sphere: entity.sphere, source: entity.categorySource,
                                     confidence: entity.confidence)
                             }
                             AttentionMixBar(
-                                categories: entity.categoryDurations, total: entity.duration,
-                                scale: scale, settings: model.settings)
+                                levels: entity.levels, total: entity.duration, scale: scale)
                         }
                     }
                     .contentShape(Rectangle())
@@ -325,10 +303,7 @@ struct AttentionEntityRow: View {
                     ForEach(entity.details) { detail in
                         HStack(spacing: UIScale.pt(8)) {
                             Circle()
-                                .fill(
-                                    AttentionPalette.category(
-                                        model.category(detail.categoryID), dark: dark)
-                                )
+                                .fill(AttentionPalette.level(detail.productivity, dark: dark))
                                 .frame(width: UIScale.pt(6), height: UIScale.pt(6))
                             Text(detail.name)
                                 .font(.system(size: UIScale.pt(11.5)))
@@ -336,6 +311,9 @@ struct AttentionEntityRow: View {
                                 .lineLimit(1)
                                 .help(detail.url ?? detail.name)
                             Spacer(minLength: UIScale.pt(8))
+                            Text(model.category(detail.categoryID).name)
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(AttentionFormat.duration(detail.duration))
                                 .font(.system(size: UIScale.pt(11)))
                                 .monospacedDigit()
@@ -364,20 +342,50 @@ struct AttentionCategoryMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(AttentionPalette.kinds, id: \.self) { kind in
-                let categories = model.settings.categories.filter { $0.kind == kind }
-                if !categories.isEmpty {
-                    Section(kind.title) {
-                        ForEach(categories) { category in
-                            Button {
-                                model.assign(entity: entity, to: category.id)
-                            } label: {
-                                if category.id == entity.category.id {
-                                    Label(category.name, systemImage: "checkmark")
-                                } else {
-                                    Text(category.name)
+            Menu("Category") {
+                ForEach(AttentionPalette.levels, id: \.self) { level in
+                    let categories = model.settings.categories.filter {
+                        $0.productivity == level && !$0.isUnclassified
+                    }
+                    if !categories.isEmpty {
+                        Section(level.title) {
+                            ForEach(categories) { category in
+                                Button {
+                                    model.assign(entity: entity, to: category.id)
+                                } label: {
+                                    if category.id == entity.category.id {
+                                        Label(category.name, systemImage: "checkmark")
+                                    } else {
+                                        Text(category.name)
+                                    }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            Section("Productivity for you") {
+                ForEach(AttentionPalette.levels, id: \.self) { level in
+                    Button {
+                        model.assign(entity: entity, productivity: level)
+                    } label: {
+                        if level == entity.productivity {
+                            Label(level.title, systemImage: "checkmark")
+                        } else {
+                            Text(level.title)
+                        }
+                    }
+                }
+            }
+            Section("Part of") {
+                ForEach(AttentionSphere.allCases, id: \.self) { sphere in
+                    Button {
+                        model.assign(entity: entity, sphere: sphere)
+                    } label: {
+                        if sphere == entity.sphere {
+                            Label(sphere.title, systemImage: "checkmark")
+                        } else {
+                            Text(sphere.title)
                         }
                     }
                 }
@@ -389,7 +397,7 @@ struct AttentionCategoryMenu: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .frame(width: UIScale.pt(24))
-        .help("Change category")
+        .help("Change category, productivity or whether it is work or personal")
     }
 }
 
@@ -531,7 +539,7 @@ struct AttentionEdithPanel: View {
                 label: dimension == AttentionTag.page
                     ? (MainDestination(rawValue: row.key)?.title ?? row.key) : row.key,
                 value: row.duration, detail: nil,
-                color: DashPalette.color(dark ? "#9085e9" : "#4a3aa7"))
+                color: AttentionPalette.accent(dark))
         }
         AttentionPanel(
             "Inside Edith",
@@ -648,13 +656,13 @@ struct AttentionAgentsSummaryPanel: View {
                         AttentionRankRow(
                             label: $0.key, value: $0.working,
                             detail: $0.sessions == 1 ? "1 session" : "\($0.sessions) sessions",
-                            color: DashPalette.color(dark ? "#9085e9" : "#4a3aa7"))
+                            color: AttentionPalette.accent(dark))
                     })
                 HStack(spacing: UIScale.pt(6)) {
                     ForEach(agents.kinds.prefix(4)) { kind in
                         AttentionChip(
                             title: "\(kind.key) \(AttentionFormat.duration(kind.working))",
-                            color: DashPalette.color(dark ? "#9085e9" : "#4a3aa7"))
+                            color: AttentionPalette.accent(dark))
                     }
                 }
             }
@@ -680,7 +688,7 @@ struct AttentionListeningPanel: View {
                     ForEach(music.prefix(6)) { item in
                         HStack(spacing: UIScale.pt(10)) {
                             Image(systemName: "music.note")
-                                .foregroundStyle(DashPalette.color(dark ? "#d55181" : "#e87ba4"))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
                                 .frame(width: UIScale.pt(20))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(item.title)

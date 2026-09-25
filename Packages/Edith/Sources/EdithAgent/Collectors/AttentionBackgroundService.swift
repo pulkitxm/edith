@@ -179,7 +179,9 @@ public actor AttentionBackgroundService {
             let summary = AttentionAnalyzer().summary(
                 events: try events.events(from: from, to: now), settings: settings,
                 classifications: classifications, from: from, to: now)
-            let (next, report) = await AttentionJevCategorizer().run(
+            let (next, report) = await AttentionJevCategorizer(
+                describeApp: { AttentionAppDescriptor.describe(bundleID: $0) }
+            ).run(
                 summary: summary, settings: settings, classifications: classifications,
                 decider: decider, now: now)
             try Task.checkCancellation()

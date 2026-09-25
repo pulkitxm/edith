@@ -12,6 +12,8 @@ struct AttentionTimelineBlock: Identifiable, Equatable {
     var interactions: Int
     var tags: [String: String]
     var skipped: Int
+    var productivity: AttentionProductivity
+    var sphere: AttentionSphere
 
     var duration: TimeInterval { end.timeIntervalSince(start) }
 
@@ -44,7 +46,8 @@ struct AttentionTimelineBlock: Identifiable, Equatable {
                 AttentionTimelineBlock(
                     start: span.start, end: span.end, entityID: span.entityID, name: span.name,
                     categoryID: span.categoryID, details: details,
-                    interactions: span.interactions, tags: span.tags ?? [:], skipped: skipped))
+                    interactions: span.interactions, tags: span.tags ?? [:], skipped: skipped,
+                    productivity: span.productivity, sphere: span.sphere))
             skipped = 0
         }
         if let last = blocks.last, last.duration < minimum { blocks.removeLast() }
@@ -60,24 +63,30 @@ struct AttentionFilterBar: View {
     var body: some View {
         let dark = scheme == .dark
         HStack(spacing: UIScale.pt(6)) {
-            ForEach(AttentionPalette.kinds, id: \.self) { kind in
+            ForEach(AttentionPalette.levels, id: \.self) { level in
                 Button {
-                    model.categoryFilter = nil
-                    model.kindFilter = model.kindFilter == kind ? nil : kind
+                    model.toggle(level: level)
                 } label: {
                     AttentionChip(
-                        title: kind.title, color: AttentionPalette.kind(kind, dark: dark),
-                        active: model.kindFilter == kind)
+                        title: level.title, color: AttentionPalette.level(level, dark: dark),
+                        active: model.levelFilter == level)
+                }
+                .buttonStyle(.edith(.borderless))
+            }
+            ForEach([AttentionSphere.work, .personal], id: \.self) { sphere in
+                Button {
+                    model.toggle(sphere: sphere)
+                } label: {
+                    AttentionChip(
+                        title: sphere.title, color: DashSkin.inkFaint(dark),
+                        active: model.sphereFilter == sphere)
                 }
                 .buttonStyle(.edith(.borderless))
             }
             Menu {
                 Button("All categories") { model.categoryFilter = nil }
                 ForEach(model.settings.categories) { category in
-                    Button(category.name) {
-                        model.kindFilter = nil
-                        model.categoryFilter = category.id
-                    }
+                    Button(category.name) { model.filter(category: category.id, navigate: false) }
                 }
             } label: {
                 AttentionChip(
@@ -145,8 +154,7 @@ private struct AttentionTimelineDay: View {
     var body: some View {
         let dark = scheme == .dark
         let filtered = spans.filter { span in
-            model.matches([span.categoryID: span.duration]) > 0
-                && model.matchesSearch([span.name, span.detail])
+            model.matches(span) && model.matchesSearch([span.name, span.detail])
         }
         let blocks = Array(AttentionTimelineBlock.blocks(filtered).reversed())
         let active = spans.reduce(0) { $0 + $1.duration }
@@ -202,7 +210,7 @@ private struct AttentionTimelineRow: View {
             }
             .frame(width: UIScale.pt(64), alignment: .trailing)
             RoundedRectangle(cornerRadius: 2)
-                .fill(AttentionPalette.category(category, dark: dark))
+                .fill(AttentionPalette.level(block.productivity, dark: dark))
                 .frame(width: UIScale.pt(3))
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack(spacing: UIScale.pt(6)) {
@@ -210,7 +218,8 @@ private struct AttentionTimelineRow: View {
                         .font(.system(size: UIScale.pt(12.5), weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
-                    AttentionCategoryBadge(category: category)
+                    AttentionCategoryBadge(
+                        category: category, productivity: block.productivity, sphere: block.sphere)
                 }
                 if let detail = block.detail, detail != block.name {
                     Text(detail)

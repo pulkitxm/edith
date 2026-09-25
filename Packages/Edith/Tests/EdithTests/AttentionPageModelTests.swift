@@ -65,7 +65,7 @@ import Testing
         #expect(entity.name == "Writing")
         model.assign(entity: entity, to: "focus")
         await model.waitForReload()
-        #expect(model.summary.focusedDuration == 60)
+        #expect(model.summary.productiveDuration == 60)
     }
 
     @Test func periodsCoverExpectedWindowsAndStepByTheirLength() {

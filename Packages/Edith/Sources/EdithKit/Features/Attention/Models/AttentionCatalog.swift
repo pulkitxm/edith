@@ -3,56 +3,150 @@ import Foundation
 public enum AttentionCatalog {
     public static let unclassified = "unclassified"
 
-    public static let categories = [
-        AttentionCategory(id: "focus", name: "Focused work", kind: .focus, color: "3987E5"),
-        AttentionCategory(id: "coding", name: "Coding", kind: .focus, color: "2A78D6"),
-        AttentionCategory(id: "agents", name: "Agents", kind: .focus, color: "7F72E0"),
-        AttentionCategory(id: "ai", name: "AI assistants", kind: .focus, color: "6DA7EC"),
-        AttentionCategory(id: "design", name: "Design", kind: .focus, color: "5598E7"),
-        AttentionCategory(id: "writing", name: "Writing and docs", kind: .focus, color: "256ABF"),
-        AttentionCategory(id: "learning", name: "Learning", kind: .focus, color: "86B6EF"),
+    public static let categories: [AttentionCategory] = [
         AttentionCategory(
-            id: "communication", name: "Chat", kind: .communication, color: "1BAF7A"),
-        AttentionCategory(id: "meetings", name: "Meetings", kind: .communication, color: "0E8A5F"),
-        AttentionCategory(id: "email", name: "Email", kind: .communication, color: "5FC9A0"),
+            id: "focus", name: "Focused work", productivity: .productive, sphere: .work),
         AttentionCategory(
-            id: "entertainment", name: "Video", kind: .entertainment, color: "EB6834"),
-        AttentionCategory(id: "social", name: "Social", kind: .entertainment, color: "E87BA4"),
-        AttentionCategory(id: "games", name: "Games", kind: .entertainment, color: "E34948"),
-        AttentionCategory(id: "shopping", name: "Shopping", kind: .entertainment, color: "EDA100"),
-        AttentionCategory(id: "news", name: "News", kind: .entertainment, color: "C98500"),
-        AttentionCategory(id: "music", name: "Music", kind: .neutral, color: "9A8FBF"),
-        AttentionCategory(id: "planning", name: "Planning", kind: .neutral, color: "8A9AA8"),
-        AttentionCategory(id: "neutral", name: "Utilities", kind: .neutral, color: "898781"),
+            id: "coding", name: "Coding", productivity: .veryProductive, sphere: .work),
         AttentionCategory(
-            id: unclassified, name: "Unclassified", kind: .unclassified, color: "5C5B57"),
+            id: "review", name: "Code review", productivity: .veryProductive, sphere: .work),
+        AttentionCategory(
+            id: "agents", name: "Agents", productivity: .veryProductive, sphere: .work),
+        AttentionCategory(
+            id: "ai", name: "AI assistants", productivity: .productive, sphere: .work),
+        AttentionCategory(
+            id: "design", name: "Design", productivity: .veryProductive, sphere: .work),
+        AttentionCategory(
+            id: "writing", name: "Writing and docs", productivity: .veryProductive, sphere: .work),
+        AttentionCategory(
+            id: "research", name: "Research", productivity: .productive, sphere: .work),
+        AttentionCategory(
+            id: "learning", name: "Learning", productivity: .productive, sphere: .both),
+        AttentionCategory(
+            id: "data", name: "Data and analytics", productivity: .productive, sphere: .work),
+        AttentionCategory(
+            id: "planning", name: "Planning", productivity: .productive, sphere: .work),
+        AttentionCategory(
+            id: "meetings", name: "Meetings", productivity: .neutral, sphere: .work),
+        AttentionCategory(
+            id: "email", name: "Email", productivity: .neutral, sphere: .work),
+        AttentionCategory(
+            id: "workchat", name: "Work chat", productivity: .neutral, sphere: .work),
+        AttentionCategory(
+            id: "communication", name: "Chat", productivity: .neutral, sphere: .both),
+        AttentionCategory(
+            id: "personalchat", name: "Personal chat", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "network", name: "Professional network", productivity: .neutral, sphere: .work),
+        AttentionCategory(
+            id: "social", name: "Social", productivity: .distracting, sphere: .personal),
+        AttentionCategory(
+            id: "technews", name: "Tech news", productivity: .neutral, sphere: .both),
+        AttentionCategory(
+            id: "news", name: "News", productivity: .distracting, sphere: .personal),
+        AttentionCategory(
+            id: "reading", name: "Reading", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "entertainment", name: "Video", productivity: .veryDistracting, sphere: .personal),
+        AttentionCategory(
+            id: "shortvideo", name: "Short video", productivity: .veryDistracting, sphere: .personal
+        ),
+        AttentionCategory(
+            id: "music", name: "Music", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "podcasts", name: "Podcasts", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "games", name: "Games", productivity: .veryDistracting, sphere: .personal),
+        AttentionCategory(
+            id: "shopping", name: "Shopping", productivity: .distracting, sphere: .personal),
+        AttentionCategory(
+            id: "food", name: "Food and delivery", productivity: .distracting, sphere: .personal),
+        AttentionCategory(
+            id: "finance", name: "Finance", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "travel", name: "Travel", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "health", name: "Health and fitness", productivity: .neutral, sphere: .personal),
+        AttentionCategory(
+            id: "search", name: "Search and browsing", productivity: .neutral, sphere: .both),
+        AttentionCategory(
+            id: "neutral", name: "Utilities", productivity: .neutral, sphere: .both),
+        AttentionCategory(
+            id: unclassified, name: "Unclassified", productivity: .neutral, sphere: .both),
     ]
 
     public static let descriptions: [String: String] = [
-        "focus": "focused work that does not fit a more specific category",
+        "focus":
+            "deep work that does not fit a more specific category, such as solving a hard problem in any tool",
         "coding":
-            "writing, reviewing, building or debugging software, terminals and developer tools",
-        "agents": "running, supervising or reviewing AI coding agents and their sessions",
-        "ai": "chatting with AI assistants such as ChatGPT, Claude or Gemini",
-        "design": "visual, product or interface design work",
-        "writing": "writing or editing documents, notes, specs and spreadsheets",
-        "learning": "documentation, tutorials, talks, courses, papers and technical reading",
-        "communication": "chat and direct messages with people",
-        "meetings": "video calls and meetings",
-        "email": "reading or writing email",
-        "entertainment": "videos, streaming, shows and films watched for fun",
-        "social": "social media feeds and community forums",
-        "games": "playing or browsing games",
-        "shopping": "shopping, food delivery and browsing products",
-        "news": "news and current affairs",
-        "music": "listening to music or podcasts",
-        "planning": "calendars, task lists, project tracking and planning",
-        "neutral": "system utilities, settings, file management and web search",
+            "writing, building, debugging or running software: code editors, IDEs, terminals, git clients, local dev servers, API consoles, cloud dashboards, package registries",
+        "review":
+            "reading and commenting on pull requests, diffs and code reviews, for example GitHub pull requests or Edith's review page",
+        "agents":
+            "starting, steering, watching or reviewing AI coding agents such as Claude Code, Codex or OpenCode, including Edith's sessions and usage pages",
+        "ai":
+            "chatting with general AI assistants such as ChatGPT, Claude, Gemini or Perplexity to think, draft or ask questions",
+        "design":
+            "visual, product, interface or brand design in tools like Figma, Sketch, Framer, Excalidraw or Photoshop",
+        "writing":
+            "writing or editing documents, specs, notes, spreadsheets and slides, for example Notion, Google Docs, Obsidian or Word",
+        "research":
+            "investigating a question for work: papers, benchmarks, competitor sites, market or technical research",
+        "learning":
+            "deliberately learning a skill: documentation, tutorials, technical talks, courses and how-to videos",
+        "data":
+            "dashboards, analytics, metrics, logs and SQL tools such as PostHog, Grafana, Metabase or a database client",
+        "planning":
+            "calendars, task lists, issue trackers, roadmaps and project management, for example Linear, Jira, Things or Google Calendar",
+        "meetings":
+            "live video or voice calls and meetings, for example Google Meet, Zoom, FaceTime or Teams calls",
+        "email":
+            "reading, triaging or writing email in Mail, Gmail, Superhuman or Outlook",
+        "workchat":
+            "team chat about work, such as Slack or Microsoft Teams channels and direct messages with colleagues",
+        "communication":
+            "messaging that mixes work and personal conversations",
+        "personalchat":
+            "messaging friends and family, such as WhatsApp, iMessage, Telegram or Signal",
+        "network":
+            "professional networking and hiring, such as LinkedIn, job boards and recruiting tools",
+        "social":
+            "scrolling social feeds and forums such as X, Reddit, Instagram, Threads or Facebook",
+        "technews":
+            "following technology, startup and AI news, for example Hacker News, The Verge or TechCrunch",
+        "news":
+            "general news, politics, sport and current affairs",
+        "reading":
+            "long-form reading for pleasure or interest: blogs, newsletters, Medium, Substack, books and articles",
+        "entertainment":
+            "watching videos, streams, shows and films for fun on YouTube, Netflix, Prime Video, Twitch or similar",
+        "shortvideo":
+            "endless short-form video such as YouTube Shorts, Instagram Reels or TikTok",
+        "music":
+            "choosing or listening to music on Spotify, Apple Music, YouTube Music or Edith's player",
+        "podcasts":
+            "listening to podcasts and audiobooks",
+        "games":
+            "playing, streaming or browsing video games and game stores",
+        "shopping":
+            "browsing or buying products in online stores such as Amazon or Flipkart",
+        "food":
+            "ordering food or groceries, for example Swiggy, Zomato, Blinkit or Uber Eats",
+        "finance":
+            "banking, investing, payments, taxes and budgeting",
+        "travel":
+            "maps, rides, flights, hotels and trip planning",
+        "health":
+            "workouts, health records, sleep and fitness apps",
+        "search":
+            "web search engines and jumping between sites without a clear destination",
+        "neutral":
+            "system overhead: Finder, settings, file management, password managers, launchers, screenshots and updates",
     ]
 
     public static let mixedDomains = [
         "youtube.com", "x.com", "twitter.com", "reddit.com", "linkedin.com", "twitch.tv",
-        "medium.com", "news.ycombinator.com",
+        "medium.com", "news.ycombinator.com", "substack.com", "instagram.com",
     ]
 
     public static let awayBundleIDs: Set<String> = [
@@ -89,7 +183,7 @@ public enum AttentionCatalog {
             "edith.usage", "Edith usage", "agents", apps: edithBundleIDs,
             contexts: ["page=dashboard"]),
         rule(
-            "edith.review", "Edith review", "coding", apps: edithBundleIDs,
+            "edith.review", "Edith review", "review", apps: edithBundleIDs,
             contexts: ["page=quinjet"]),
         rule(
             "edith.machines", "Edith machines", "coding", apps: edithBundleIDs,
@@ -121,20 +215,20 @@ public enum AttentionCatalog {
             apps: ["com.anthropic.claudefordesktop"], sites: ["claude.ai"]),
         rule("chatgpt", "ChatGPT", "ai", apps: ["com.openai.chat"], sites: ["chatgpt.com"]),
         rule(
-            "whatsapp", "WhatsApp", "communication",
+            "whatsapp", "WhatsApp", "personalchat",
             apps: ["net.whatsapp.WhatsApp", "net.whatsapp.WhatsAppSMB"],
             sites: ["web.whatsapp.com"]),
         rule(
-            "slack", "Slack", "communication", apps: ["com.tinyspeck.slackmacgap"],
+            "slack", "Slack", "workchat", apps: ["com.tinyspeck.slackmacgap"],
             sites: ["app.slack.com"]),
         rule(
             "discord", "Discord", "communication", apps: ["com.hnc.Discord"], sites: ["discord.com"]
         ),
         rule(
-            "telegram", "Telegram", "communication",
+            "telegram", "Telegram", "personalchat",
             apps: ["ru.keepcoder.Telegram", "org.telegram.desktop"], sites: ["web.telegram.org"]),
         rule(
-            "teams", "Microsoft Teams", "meetings",
+            "teams", "Microsoft Teams", "workchat",
             apps: ["com.microsoft.teams2", "com.microsoft.teams"], sites: ["teams.microsoft.com"]),
         rule("zoom", "Zoom", "meetings", apps: ["us.zoom.xos"], sites: ["zoom.us"]),
         rule(
@@ -156,6 +250,10 @@ public enum AttentionCatalog {
             "superhuman", "Superhuman", "email", apps: ["com.superhuman.electron"],
             sites: ["superhuman.com"]),
         rule("x", "X", "social", sites: ["x.com", "twitter.com"]),
+        rule("linkedin", "LinkedIn", "network", sites: ["linkedin.com"]),
+        rule("hackernews", "Hacker News", "technews", sites: ["news.ycombinator.com"]),
+        rule("reddit", "Reddit", "social", sites: ["reddit.com"]),
+        rule("instagram", "Instagram", "social", sites: ["instagram.com"]),
         rule("xbox", "Xbox", "games", sites: ["xbox.com"]),
     ]
 
@@ -187,9 +285,8 @@ public enum AttentionCatalog {
         rule(
             "devtools", "Developer tools", "coding",
             apps: [
-                "com.docker.docker", "com.postmanlabs.mac", "com.tinyapp.TablePlus",
-                "com.apple.iphonesimulator", "com.apple.dt.Instruments",
-                "com.apple.dt.CreateML", "io.proxyman.NSProxy", "com.sequel-ace.sequel-ace",
+                "com.docker.docker", "com.postmanlabs.mac", "com.apple.iphonesimulator",
+                "com.apple.dt.Instruments", "com.apple.dt.CreateML", "io.proxyman.NSProxy",
             ]),
         rule(
             "agents.apps", "Coding agents", "agents",
@@ -212,7 +309,7 @@ public enum AttentionCatalog {
                 "com.apple.TextEdit", "com.ulyssesapp.mac",
             ]),
         rule(
-            "chat.apps", "Chat", "communication",
+            "chat.apps", "Messages", "personalchat",
             apps: [
                 "com.apple.MobileSMS", "org.whispersystems.signal-desktop",
             ]),
@@ -239,8 +336,8 @@ public enum AttentionCatalog {
                 "com.apple.TV", "com.colliderli.iina", "org.videolan.vlc",
             ]),
         rule(
-            "music.apps", "Music", "music",
-            apps: ["com.apple.podcasts"]),
+            "podcasts.apps", "Podcasts", "podcasts",
+            apps: ["com.apple.podcasts", "com.overcast.overcast-mac", "fm.pocketcasts.PocketCasts"]),
         rule(
             "games.apps", "Games", "games",
             apps: ["com.valvesoftware.steam", "com.epicgames.EpicGamesLauncher"]),
@@ -320,7 +417,7 @@ public enum AttentionCatalog {
                 "react.dev", "nextjs.org", "tailwindcss.com",
             ]),
         rule(
-            "chat.web", "Chat", "communication",
+            "chat.web", "Messenger", "personalchat",
             sites: [
                 "messenger.com"
             ]),
@@ -349,9 +446,8 @@ public enum AttentionCatalog {
         rule(
             "social.web", "Social", "social",
             sites: [
-                "reddit.com", "linkedin.com", "instagram.com",
-                "facebook.com", "threads.net", "bsky.app", "news.ycombinator.com",
-                "tiktok.com", "pinterest.com", "mastodon.social", "quora.com",
+                "facebook.com", "threads.net", "bsky.app", "pinterest.com", "mastodon.social",
+                "quora.com",
             ]),
         rule(
             "music.web", "Music", "music",
@@ -369,19 +465,89 @@ public enum AttentionCatalog {
             "shopping.web", "Shopping", "shopping",
             sites: [
                 "amazon.com", "amazon.in", "flipkart.com", "myntra.com", "ebay.com",
-                "etsy.com", "aliexpress.com", "ajio.com", "nykaa.com", "swiggy.com",
-                "zomato.com", "blinkit.com", "zeptonow.com", "bigbasket.com",
+                "etsy.com", "aliexpress.com", "ajio.com", "nykaa.com",
             ]),
         rule(
             "news.web", "News", "news",
             sites: [
-                "nytimes.com", "theverge.com", "bbc.com", "bbc.co.uk", "cnn.com",
-                "techcrunch.com", "arstechnica.com", "theguardian.com", "reuters.com",
+                "nytimes.com", "bbc.com", "bbc.co.uk", "cnn.com",
+                "theguardian.com", "reuters.com",
                 "bloomberg.com", "hindustantimes.com", "indiatimes.com", "economist.com",
-                "wsj.com", "ndtv.com", "thehindu.com", "moneycontrol.com", "wired.com",
+                "wsj.com", "ndtv.com", "thehindu.com", "moneycontrol.com",
             ]),
         rule(
-            "search.web", "Search", "neutral",
+            "review.github", "GitHub pull requests", "review", sites: ["github.com"],
+            contexts: ["section=pull"]),
+        rule(
+            "review.gitlab", "Merge requests", "review", urls: ["gitlab.com"],
+            keywords: ["merge request"]),
+        rule(
+            "shorts", "Short video", "shortvideo",
+            sites: ["tiktok.com"], urls: ["youtube.com/shorts", "instagram.com/reels"]),
+        rule(
+            "shorts.youtube", "YouTube Shorts", "shortvideo", sites: ["youtube.com"],
+            contexts: ["section=shorts"]),
+        rule(
+            "technews.web", "Tech news", "technews",
+            sites: [
+                "techcrunch.com", "theverge.com", "arstechnica.com", "wired.com",
+                "producthunt.com", "lobste.rs", "techmeme.com", "theinformation.com",
+            ]),
+        rule(
+            "reading.web", "Reading", "reading",
+            sites: [
+                "medium.com", "substack.com", "goodreads.com", "getpocket.com",
+                "readwise.io", "kindle.amazon.com", "paulgraham.com",
+            ]),
+        rule(
+            "research.web", "Research", "research",
+            sites: [
+                "scholar.google.com", "semanticscholar.org", "paperswithcode.com",
+                "openreview.net", "ssrn.com",
+            ]),
+        rule(
+            "data.web", "Data and analytics", "data",
+            sites: [
+                "posthog.com", "grafana.com", "metabase.com", "mixpanel.com", "amplitude.com",
+                "lookerstudio.google.com", "analytics.google.com", "app.datadoghq.com",
+            ]),
+        rule(
+            "data.apps", "Data tools", "data",
+            apps: [
+                "com.tinyapp.TablePlus", "com.sequel-ace.sequel-ace", "com.postgresapp.Postgres2",
+            ]),
+        rule(
+            "network.web", "Hiring", "network",
+            sites: [
+                "wellfound.com", "ashbyhq.com", "greenhouse.io", "lever.co", "naukri.com",
+                "indeed.com", "ycombinator.com",
+            ]),
+        rule(
+            "food.web", "Food and delivery", "food",
+            sites: [
+                "swiggy.com", "zomato.com", "blinkit.com", "zeptonow.com", "bigbasket.com",
+                "ubereats.com", "doordash.com", "instacart.com",
+            ]),
+        rule(
+            "finance.web", "Finance", "finance",
+            sites: [
+                "zerodha.com", "groww.in", "paypal.com", "wise.com", "robinhood.com",
+                "coinbase.com", "hdfcbank.com", "icicibank.com", "sbi.co.in", "incometax.gov.in",
+            ]),
+        rule(
+            "travel.web", "Travel", "travel",
+            sites: [
+                "booking.com", "airbnb.com", "makemytrip.com", "uber.com", "olacabs.com",
+                "skyscanner.com", "irctc.co.in", "expedia.com",
+            ], urls: ["google.com/maps", "maps.google.com"]),
+        rule(
+            "health.web", "Health and fitness", "health",
+            sites: ["strava.com", "fitbit.com", "myfitnesspal.com", "cult.fit"]),
+        rule(
+            "health.apps", "Health and fitness", "health",
+            apps: ["com.apple.Health", "com.apple.Fitness"]),
+        rule(
+            "search.web", "Search", "search",
             sites: ["google.com", "bing.com", "duckduckgo.com", "kagi.com"]),
     ]
 }

@@ -121,19 +121,27 @@ enum AttentionCLI {
             "to": .date(summary.to),
             "activeSeconds": .double(summary.activeDuration),
             "idleSeconds": .double(summary.idleDuration),
-            "focusedSeconds": .double(summary.focusedDuration),
-            "communicationSeconds": .double(summary.communicationDuration),
-            "entertainmentSeconds": .double(summary.entertainmentDuration),
-            "focusPercent": .double(percent(summary.focusedDuration, of: summary.activeDuration)),
-            "entertainmentPercent": .double(
-                percent(summary.entertainmentDuration, of: summary.activeDuration)),
+            "productiveSeconds": .double(summary.productiveDuration),
+            "distractingSeconds": .double(summary.distractingDuration),
+            "unclassifiedSeconds": .double(summary.unclassifiedDuration),
+            "productivePercent": .double(
+                percent(summary.productiveDuration, of: summary.activeDuration)),
+            "distractingPercent": .double(
+                percent(summary.distractingDuration, of: summary.activeDuration)),
+            "pulse": summary.pulse.map { .double($0) } ?? .null,
             "contextSwitches": .int(summary.contextSwitches),
-            "kinds": secondsJSON(summary.kinds),
+            "productivity": .object(
+                Dictionary(
+                    uniqueKeysWithValues: AttentionProductivity.allCases.map {
+                        ($0.identifier, JSONValue.double(summary.duration($0)))
+                    })),
+            "spheres": secondsJSON(summary.spheres),
             "categories": .array(
                 summary.categories.map {
                     .object([
                         "id": .string($0.category.id), "name": .string($0.category.name),
-                        "kind": .string($0.category.kind.rawValue),
+                        "productivity": .string($0.category.productivity.identifier),
+                        "sphere": .string($0.category.sphere.rawValue),
                         "durationSeconds": .double($0.duration),
                     ])
                 }),
@@ -188,7 +196,8 @@ enum AttentionCLI {
             "name": .string(entity.name),
             "categoryID": .string(entity.category.id),
             "category": .string(entity.category.name),
-            "categoryKind": .string(entity.category.kind.rawValue),
+            "productivity": .string(entity.productivity.identifier),
+            "sphere": .string(entity.sphere.rawValue),
             "source": .string(entity.source.rawValue),
             "durationSeconds": .double(entity.duration),
             "faviconURL": .optional(entity.faviconURL),
@@ -241,7 +250,8 @@ enum AttentionCLI {
     }
 
     static func categorize(
-        entity: String, category value: String, name: String?
+        entity: String, category value: String, name: String?,
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
     ) throws -> AttentionIdentityRule {
         var settings = repository.loadSettings()
         guard
@@ -254,7 +264,10 @@ enum AttentionCLI {
                 "there is no attention category named \(value)",
                 hint: "run `ed attention categories ls`")
         }
-        guard let rule = settings.assign(entityID: entity, categoryID: category.id, name: name)
+        guard
+            let rule = settings.assign(
+                entityID: entity, categoryID: category.id, name: name, productivity: productivity,
+                sphere: sphere)
         else {
             throw CLIFailure.usage(
                 "\(entity) is not an entity ID",
@@ -375,10 +388,16 @@ struct AttentionSummaryCommand: AsyncParsableCommand {
             }
             CLIOut.out("active: \(AttentionCLI.clock(summary.activeDuration))")
             CLIOut.out(
-                "focused: \(AttentionCLI.clock(summary.focusedDuration)) (\(Int(AttentionCLI.percent(summary.focusedDuration, of: summary.activeDuration).rounded()))%)"
+                "productive: \(AttentionCLI.clock(summary.productiveDuration)) (\(Int(AttentionCLI.percent(summary.productiveDuration, of: summary.activeDuration).rounded()))%)"
             )
             CLIOut.out(
-                "entertainment: \(AttentionCLI.clock(summary.entertainmentDuration)) (\(Int(AttentionCLI.percent(summary.entertainmentDuration, of: summary.activeDuration).rounded()))%)"
+                "distracting: \(AttentionCLI.clock(summary.distractingDuration)) (\(Int(AttentionCLI.percent(summary.distractingDuration, of: summary.activeDuration).rounded()))%)"
+            )
+            if let pulse = summary.pulse {
+                CLIOut.out("pulse: \(Int(pulse.rounded()))/100")
+            }
+            CLIOut.out(
+                "work: \(AttentionCLI.clock(summary.duration(AttentionSphere.work))), personal: \(AttentionCLI.clock(summary.duration(AttentionSphere.personal)))"
             )
             CLIOut.out("idle: \(AttentionCLI.clock(summary.idleDuration))")
             CLIOut.out(
@@ -618,7 +637,8 @@ struct AttentionCategoryListCommand: AsyncParsableCommand {
                         settings.categories.map {
                             .object([
                                 "id": .string($0.id), "name": .string($0.name),
-                                "kind": .string($0.kind.rawValue), "color": .string($0.color),
+                                "productivity": .string($0.productivity.identifier),
+                                "sphere": .string($0.sphere.rawValue),
                             ])
                         }),
                     "rules": .array(
@@ -628,6 +648,9 @@ struct AttentionCategoryListCommand: AsyncParsableCommand {
                                 "categoryID": .string($0.categoryID),
                                 "bundleIDs": .strings($0.bundleIDs),
                                 "domains": .strings($0.domains),
+                                "productivity": $0.productivity.map { .string($0.identifier) }
+                                    ?? .null,
+                                "sphere": $0.sphere.map { .string($0.rawValue) } ?? .null,
                             ])
                         }),
                 ]))
@@ -635,8 +658,10 @@ struct AttentionCategoryListCommand: AsyncParsableCommand {
         }
         CLIOut.out(
             TextTable.render(
-                headers: ["ID", "NAME", "KIND"],
-                rows: settings.categories.map { [$0.id, $0.name, $0.kind.rawValue] }))
+                headers: ["ID", "NAME", "PRODUCTIVITY", "SPHERE"],
+                rows: settings.categories.map {
+                    [$0.id, $0.name, $0.productivity.identifier, $0.sphere.rawValue]
+                }))
     }
 }
 
@@ -675,17 +700,43 @@ struct AttentionCategorizeCommand: AsyncParsableCommand {
     var entity: String
     @Argument(help: "Category ID or exact category name.") var category: String
     @Option(help: "Friendly identity name for a new or existing rule.") var name: String?
+    @Option(
+        help:
+            "Override productivity: very_productive, productive, neutral, distracting or very_distracting."
+    )
+    var productivity: String?
+    @Option(help: "Override the sphere: work, personal or both.") var sphere: String?
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
         try await execute {
-            let rule = try AttentionCLI.categorize(entity: entity, category: category, name: name)
+            let level = try productivity.map { raw in
+                guard let level = AttentionProductivity(identifier: raw.lowercased()) else {
+                    throw CLIFailure.usage(
+                        "\(raw) is not a productivity level",
+                        hint:
+                            "use very_productive, productive, neutral, distracting or very_distracting"
+                    )
+                }
+                return level
+            }
+            let area = try sphere.map { raw in
+                guard let area = AttentionSphere(rawValue: raw.lowercased()) else {
+                    throw CLIFailure.usage(
+                        "\(raw) is not a sphere", hint: "use work, personal or both")
+                }
+                return area
+            }
+            let rule = try AttentionCLI.categorize(
+                entity: entity, category: category, name: name, productivity: level, sphere: area)
             if json {
                 CLIOut.json(
                     .object([
                         "id": .string(rule.id), "name": .string(rule.name),
                         "categoryID": .string(rule.categoryID),
                         "bundleIDs": .strings(rule.bundleIDs), "domains": .strings(rule.domains),
+                        "productivity": rule.productivity.map { .string($0.identifier) } ?? .null,
+                        "sphere": rule.sphere.map { .string($0.rawValue) } ?? .null,
                     ]))
             } else {
                 CLIOut.out("categorized \(rule.name) as \(rule.categoryID)")

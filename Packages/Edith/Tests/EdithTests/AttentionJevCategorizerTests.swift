@@ -19,7 +19,11 @@ private actor AttentionScriptedJev: JevDeciding {
                 model: "test",
                 answers: [
                     AttentionJevCategorizer.question: JevAnswer(
-                        type: "choice", choice: choice, probabilities: [choice: probability])
+                        type: "choice", choice: choice, probabilities: [choice: probability]),
+                    AttentionJevCategorizer.productivityQuestion: JevAnswer(
+                        type: "choice", choice: "productive", probabilities: ["productive": 0.7]),
+                    AttentionJevCategorizer.sphereQuestion: JevAnswer(
+                        type: "choice", choice: "personal", probabilities: ["personal": 0.3]),
                 ]),
             milliseconds: 1)
     }
@@ -92,5 +96,38 @@ private actor AttentionScriptedJev: JevDeciding {
         #expect(!options.contains { $0.id == AttentionCatalog.unclassified })
         #expect(options.last?.id == AttentionJevDecision.none)
         #expect(options.contains { $0.id == "agents" })
+    }
+
+    @Test func requestsCarryRichEvidenceAndThePersonsPreferences() async {
+        var settings = AttentionSettings()
+        settings.profileNote = "I build developer tools."
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "X", categoryID: "social", domains: ["x.com"], productivity: .productive)
+        ]
+        let categorizer = AttentionJevCategorizer(describeApp: { _ in "App Store category design" })
+        let candidates = categorizer.candidates(
+            summary: summary(), classifications: .init(), now: now)
+        let request = categorizer.request(
+            candidates.entities[0], settings: settings, options: categorizer.options(settings))
+        #expect(field(request, "about_the_person") == "I build developer tools.")
+        #expect(
+            field(request, "how_the_person_classified_other_things")?.contains(
+                "X (x.com): Social, productive") == true)
+        #expect(field(request, "description") == "App Store category design")
+        #expect(field(request, "usage")?.hasPrefix("10 minutes over 1 visits") == true)
+        #expect(
+            Set(request.questions.keys) == [
+                AttentionJevCategorizer.question, AttentionJevCategorizer.productivityQuestion,
+                AttentionJevCategorizer.sphereQuestion,
+            ])
+        let jev = AttentionScriptedJev { _ in ("design", 0.9) }
+        let (next, _) = await categorizer.run(
+            summary: summary(), settings: settings, classifications: .init(), decider: jev,
+            now: now)
+        let decision = next.entities["app:com.example.Mystery"]
+        #expect(decision?.categoryID == "design")
+        #expect(decision?.productivity == .productive)
+        #expect(decision?.sphere == nil)
     }
 }

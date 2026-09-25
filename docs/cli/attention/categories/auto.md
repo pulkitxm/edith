@@ -2,7 +2,14 @@
 
 Asks Jev to categorize apps and sites with more than two minutes of unclassified
 time in the last seven days, and individual titles on mixed sites such as YouTube,
-X and Reddit.
+X and Reddit. Jev answers three questions at once: the category, how productive
+it is for you, and whether it is work, personal or both.
+
+Each question carries the evidence Edith has: the app's own App Store category
+and vendor, or the site's name and description; the most used window titles and
+pages; how long and how often you use it, and whether you mostly type or mostly
+scroll there. It also carries the "About you" note from Attention settings and
+examples from your own rules, so answers follow your preferences.
 
 ```
 ed attention categories auto [--json]

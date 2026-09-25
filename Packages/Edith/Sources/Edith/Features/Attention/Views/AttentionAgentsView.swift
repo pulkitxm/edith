@@ -9,7 +9,7 @@ struct AttentionAgentsView: View {
     var body: some View {
         let agents = model.summary.agents
         let dark = scheme == .dark
-        let violet = DashPalette.color(dark ? "#9085e9" : "#4a3aa7")
+        let violet = AttentionPalette.accent(dark)
         let interval = model.period.interval()
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             LazyVGrid(
@@ -26,7 +26,7 @@ struct AttentionAgentsView: View {
                 AttentionTile(
                     label: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
                     detail: "blocked for input or approval",
-                    tint: AttentionPalette.kind(.entertainment, dark: dark),
+                    tint: DashSkin.inkSoft(dark),
                     symbol: "hand.raised")
                 AttentionTile(
                     label: "Peak at once", value: "\(agents.peakConcurrent)",

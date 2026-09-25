@@ -3,40 +3,23 @@ import EdithKit
 import SwiftUI
 
 enum AttentionPalette {
-    static func kind(_ kind: AttentionCategoryKind, dark: Bool) -> Color {
-        switch kind {
-        case .focus: DashPalette.color(dark ? "#3987e5" : "#2a78d6")
-        case .communication: DashPalette.color(dark ? "#199e70" : "#1baf7a")
-        case .entertainment: DashPalette.color(dark ? "#d95926" : "#eb6834")
-        case .neutral: DashPalette.color("#898781")
-        case .unclassified: DashPalette.color(dark ? "#52514e" : "#c3c2b7")
+    static func accent(_ dark: Bool) -> Color { DashSkin.accent(dark) }
+
+    static func level(_ level: AttentionProductivity, dark: Bool) -> Color {
+        switch level {
+        case .veryProductive: DashSkin.accent(dark)
+        case .productive: DashSkin.accent(dark).opacity(0.55)
+        case .neutral: DashSkin.lineStrong(dark)
+        case .distracting: DashSkin.inkFaint(dark)
+        case .veryDistracting: DashSkin.inkSoft(dark)
         }
     }
 
     static func category(_ category: AttentionCategory, dark: Bool) -> Color {
-        hex(category.color) ?? kind(category.kind, dark: dark)
+        category.isUnclassified ? DashSkin.grid(dark) : level(category.productivity, dark: dark)
     }
 
-    static func hex(_ value: String) -> Color? {
-        let text = value.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        guard text.count == 6, let number = UInt64(text, radix: 16) else { return nil }
-        return Color(
-            red: Double((number >> 16) & 0xFF) / 255,
-            green: Double((number >> 8) & 0xFF) / 255,
-            blue: Double(number & 0xFF) / 255)
-    }
-
-    static func hexString(_ color: Color) -> String {
-        let value = NSColor(color).usingColorSpace(.sRGB) ?? .gray
-        return String(
-            format: "%02X%02X%02X", Int((value.redComponent * 255).rounded()),
-            Int((value.greenComponent * 255).rounded()),
-            Int((value.blueComponent * 255).rounded()))
-    }
-
-    static let kinds: [AttentionCategoryKind] = [
-        .focus, .communication, .entertainment, .neutral, .unclassified,
-    ]
+    static let levels = AttentionProductivity.ranked
 }
 
 enum AttentionFormat {
@@ -185,16 +168,26 @@ struct AttentionChip: View {
 
 struct AttentionCategoryBadge: View {
     let category: AttentionCategory
+    var productivity: AttentionProductivity?
+    var sphere: AttentionSphere?
     var source: AttentionCategorySource = .user
     var confidence: Double?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
-        let color = AttentionPalette.category(category, dark: dark)
+        let level = productivity ?? category.productivity
         HStack(spacing: UIScale.pt(4)) {
-            Circle().fill(color).frame(width: UIScale.pt(6), height: UIScale.pt(6))
+            Circle()
+                .fill(
+                    category.isUnclassified
+                        ? DashSkin.grid(dark) : AttentionPalette.level(level, dark: dark)
+                )
+                .frame(width: UIScale.pt(6), height: UIScale.pt(6))
             Text(category.name)
+            if let sphere, sphere != .both {
+                Text(sphere.title).foregroundStyle(DashSkin.inkFaint(dark))
+            }
             if source == .jev {
                 Text(confidence.map { "Jev \(Int(($0 * 100).rounded()))%" } ?? "Jev")
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -204,30 +197,33 @@ struct AttentionCategoryBadge: View {
         .foregroundStyle(DashSkin.inkSoft(dark))
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(2))
-        .background(color.opacity(0.14), in: Capsule())
+        .background(DashSkin.grid(dark), in: Capsule())
+        .help("\(category.name) · \(level.title) · \((sphere ?? category.sphere).title)")
     }
 }
 
 struct AttentionMixBar: View {
-    let categories: [String: TimeInterval]
+    let levels: [String: TimeInterval]
     let total: TimeInterval
     let scale: TimeInterval
-    let settings: AttentionSettings
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
-        let parts = categories.filter { $0.value > 0 }.sorted { $0.value > $1.value }
+        let parts = AttentionPalette.levels.compactMap {
+            level -> (AttentionProductivity, TimeInterval)? in
+            let value = levels[level.key] ?? 0
+            return value > 0 ? (level, value) : nil
+        }
         GeometryReader { geometry in
             let width = scale > 0 ? geometry.size.width * min(1, total / scale) : 0
             HStack(spacing: parts.count > 1 ? 2 : 0) {
-                ForEach(parts, id: \.key) { part in
-                    AttentionPalette.category(settings.category(part.key), dark: dark)
+                ForEach(parts, id: \.0) { part in
+                    AttentionPalette.level(part.0, dark: dark)
                         .frame(
                             width: max(
                                 2,
-                                (width - CGFloat(parts.count - 1) * 2) * part.value / max(total, 1)
-                            ))
+                                (width - CGFloat(parts.count - 1) * 2) * part.1 / max(total, 1)))
                 }
             }
             .frame(width: width, alignment: .leading)
@@ -477,12 +473,12 @@ struct AttentionEntityIcon: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let color = AttentionPalette.category(entity.category, dark: scheme == .dark)
+        let dark = scheme == .dark
         ZStack {
-            RoundedRectangle(cornerRadius: UIScale.pt(size * 0.24)).fill(color.opacity(0.13))
+            RoundedRectangle(cornerRadius: UIScale.pt(size * 0.24)).fill(DashSkin.grid(dark))
             AttentionResolvedIcon(
-                descriptor: AttentionEventIconDescriptor(entity: entity), fallbackColor: color,
-                size: size * 0.72)
+                descriptor: AttentionEventIconDescriptor(entity: entity),
+                fallbackColor: DashSkin.inkSoft(dark), size: size * 0.72)
         }
         .frame(width: UIScale.pt(size), height: UIScale.pt(size))
     }

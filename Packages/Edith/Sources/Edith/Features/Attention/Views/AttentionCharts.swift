@@ -6,7 +6,7 @@ struct AttentionRibbonBlock: Identifiable, Equatable {
     var id: Date { start }
     var start: Date
     var end: Date
-    var kind: AttentionCategoryKind
+    var level: AttentionProductivity
     var names: [String: TimeInterval]
     var top: AttentionSpan
 
@@ -17,8 +17,8 @@ struct AttentionRibbonBlock: Identifiable, Equatable {
     ) -> [AttentionRibbonBlock] {
         var blocks: [AttentionRibbonBlock] = []
         for span in spans.sorted(by: { $0.start < $1.start }) {
-            let kind = settings.category(span.categoryID).kind
-            if var last = blocks.last, last.kind == kind,
+            let level = span.productivity
+            if var last = blocks.last, last.level == level,
                 span.start.timeIntervalSince(last.end) <= gap
             {
                 last.end = max(last.end, span.end)
@@ -28,7 +28,7 @@ struct AttentionRibbonBlock: Identifiable, Equatable {
             } else {
                 blocks.append(
                     AttentionRibbonBlock(
-                        start: span.start, end: span.end, kind: kind,
+                        start: span.start, end: span.end, level: level,
                         names: [span.name: span.duration], top: span))
             }
         }
@@ -70,7 +70,7 @@ struct AttentionDayRibbon: View {
                     xStart: .value("Start", block.start), xEnd: .value("End", block.end),
                     yStart: .value("Low", 0), yEnd: .value("High", 1)
                 )
-                .foregroundStyle(AttentionPalette.kind(block.kind, dark: dark))
+                .foregroundStyle(AttentionPalette.level(block.level, dark: dark))
                 .opacity(hovered == nil || hovered == block ? 1 : 0.45)
             }
             if let hovered {
@@ -134,22 +134,22 @@ private struct AttentionRibbonTooltip: View {
     }
 }
 
-struct AttentionKindLegend: View {
-    let kinds: [String: TimeInterval]
+struct AttentionLevelLegend: View {
+    let levels: [String: TimeInterval]
     let total: TimeInterval
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
         HStack(spacing: UIScale.pt(14)) {
-            ForEach(AttentionPalette.kinds, id: \.self) { kind in
-                let value = kinds[kind.rawValue] ?? 0
+            ForEach(AttentionPalette.levels, id: \.self) { level in
+                let value = levels[level.key] ?? 0
                 if value > 0 {
                     HStack(spacing: UIScale.pt(5)) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(AttentionPalette.kind(kind, dark: dark))
+                            .fill(AttentionPalette.level(level, dark: dark))
                             .frame(width: UIScale.pt(9), height: UIScale.pt(9))
-                        Text(kind.title)
+                        Text(level.title)
                             .foregroundStyle(DashSkin.inkSoft(dark))
                         Text(
                             "\(AttentionFormat.duration(value)) · \(AttentionFormat.percent(value, of: total))"
@@ -165,10 +165,10 @@ struct AttentionKindLegend: View {
     }
 }
 
-private struct AttentionKindValue: Identifiable {
-    var id: String { "\(bucket.timeIntervalSinceReferenceDate)|\(kind.rawValue)" }
+private struct AttentionLevelValue: Identifiable {
+    var id: String { "\(bucket.timeIntervalSinceReferenceDate)|\(level.key)" }
     var bucket: Date
-    var kind: AttentionCategoryKind
+    var level: AttentionProductivity
     var minutes: Double
 }
 
@@ -182,12 +182,10 @@ struct AttentionDailyStack: View {
     var body: some View {
         let dark = scheme == .dark
         let values = days.flatMap { day in
-            AttentionPalette.kinds.compactMap { kind -> AttentionKindValue? in
-                let seconds = day.categories.reduce(0) {
-                    settings.category($1.key).kind == kind ? $0 + $1.value : $0
-                }
+            AttentionPalette.levels.compactMap { level -> AttentionLevelValue? in
+                let seconds = day.levels[level.key] ?? 0
                 guard seconds > 0 else { return nil }
-                return AttentionKindValue(bucket: day.day, kind: kind, minutes: seconds / 60)
+                return AttentionLevelValue(bucket: day.day, level: level, minutes: seconds / 60)
             }
         }
         let hovered = selected.flatMap { date in
@@ -199,7 +197,7 @@ struct AttentionDailyStack: View {
                     x: .value("Day", value.bucket, unit: .day),
                     y: .value("Minutes", value.minutes)
                 )
-                .foregroundStyle(AttentionPalette.kind(value.kind, dark: dark))
+                .foregroundStyle(AttentionPalette.level(value.level, dark: dark))
                 .cornerRadius(2)
                 .opacity(
                     hovered == nil
@@ -269,9 +267,9 @@ private struct AttentionDayTooltip: View {
 }
 
 private struct AttentionHourValue: Identifiable {
-    var id: String { "\(hour)|\(kind.rawValue)" }
+    var id: String { "\(hour)|\(level.key)" }
     var hour: Int
-    var kind: AttentionCategoryKind
+    var level: AttentionProductivity
     var minutes: Double
 }
 
@@ -284,8 +282,8 @@ struct AttentionHourBars: View {
     private var byHour: [Int: [String: TimeInterval]] {
         var result: [Int: [String: TimeInterval]] = [:]
         for cell in cells {
-            for (kind, seconds) in cell.kinds {
-                result[cell.hour, default: [:]][kind, default: 0] += seconds
+            for (level, seconds) in cell.levels {
+                result[cell.hour, default: [:]][level, default: 0] += seconds
             }
         }
         return result
@@ -294,10 +292,10 @@ struct AttentionHourBars: View {
     var body: some View {
         let dark = scheme == .dark
         let byHour = byHour
-        let values = byHour.flatMap { hour, kinds in
-            AttentionPalette.kinds.compactMap { kind -> AttentionHourValue? in
-                guard let seconds = kinds[kind.rawValue], seconds > 0 else { return nil }
-                return AttentionHourValue(hour: hour, kind: kind, minutes: seconds / 60)
+        let values = byHour.flatMap { hour, levels in
+            AttentionPalette.levels.compactMap { level -> AttentionHourValue? in
+                guard let seconds = levels[level.key], seconds > 0 else { return nil }
+                return AttentionHourValue(hour: hour, level: level, minutes: seconds / 60)
             }
         }
         Chart {
@@ -306,11 +304,11 @@ struct AttentionHourBars: View {
                     x: .value("Hour", value.hour), y: .value("Minutes", value.minutes),
                     width: .fixed(UIScale.pt(14))
                 )
-                .foregroundStyle(AttentionPalette.kind(value.kind, dark: dark))
+                .foregroundStyle(AttentionPalette.level(value.level, dark: dark))
                 .cornerRadius(2)
                 .opacity(selected == nil || selected == value.hour ? 1 : 0.5)
             }
-            if let selected, let kinds = byHour[selected] {
+            if let selected, let levels = byHour[selected] {
                 RuleMark(x: .value("Hour", selected))
                     .foregroundStyle(.clear)
                     .annotation(
@@ -320,9 +318,9 @@ struct AttentionHourBars: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(String(format: "%02d:00", selected))
                                 .font(.system(size: UIScale.pt(10), weight: .semibold))
-                            ForEach(AttentionPalette.kinds, id: \.self) { kind in
-                                if let seconds = kinds[kind.rawValue], seconds >= 30 {
-                                    Text("\(kind.title) \(AttentionFormat.duration(seconds))")
+                            ForEach(AttentionPalette.levels, id: \.self) { level in
+                                if let seconds = levels[level.key], seconds >= 30 {
+                                    Text("\(level.title) \(AttentionFormat.duration(seconds))")
                                         .font(.system(size: UIScale.pt(10)))
                                 }
                             }
@@ -385,11 +383,11 @@ struct AttentionWeekHeatmap: View {
                     ForEach(0..<24, id: \.self) { hour in
                         let cell = byKey[weekday * 24 + hour]
                         let active = cell?.active ?? 0
-                        let focus = cell?.duration(.focus) ?? 0
+                        let focus = cell?.productive ?? 0
                         RoundedRectangle(cornerRadius: 3)
                             .fill(
                                 active > 0
-                                    ? AttentionPalette.kind(.focus, dark: dark)
+                                    ? AttentionPalette.accent(dark)
                                         .opacity(0.15 + 0.85 * active / peak)
                                     : DashSkin.grid(dark)
                             )
@@ -415,56 +413,57 @@ struct AttentionWeekHeatmap: View {
     }
 }
 
-struct AttentionCategoryDonut: View {
+struct AttentionCategoryBars: View {
     let categories: [AttentionCategoryTotal]
     let total: TimeInterval
+    var limit = 10
     var onSelect: (String) -> Void = { _ in }
-    @State private var selected: Double?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let dark = scheme == .dark
-        let shown = Array(categories.prefix(8))
-        let rest = categories.dropFirst(8).reduce(0) { $0 + $1.duration }
-        let hovered = selected.flatMap { value -> AttentionCategoryTotal? in
-            var running = 0.0
-            for item in shown {
-                running += item.duration / 60
-                if value <= running { return item }
-            }
-            return nil
-        }
-        Chart {
-            ForEach(shown) { item in
-                SectorMark(
-                    angle: .value("Minutes", item.duration / 60), innerRadius: .ratio(0.64),
-                    angularInset: 1.5
-                )
-                .cornerRadius(3)
-                .foregroundStyle(AttentionPalette.category(item.category, dark: dark))
-                .opacity(hovered == nil || hovered?.id == item.id ? 1 : 0.4)
+        let top = categories.first?.duration ?? 1
+        let rest = categories.dropFirst(limit).reduce(0) { $0 + $1.duration }
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            ForEach(categories.prefix(limit)) { item in
+                Button {
+                    onSelect(item.category.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text(item.category.name)
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.ink(dark))
+                            Text(item.category.productivity.title)
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                            Spacer(minLength: UIScale.pt(6))
+                            Text(AttentionFormat.percent(item.duration, of: total))
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                            Text(AttentionFormat.duration(item.duration))
+                                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                                .monospacedDigit()
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                        }
+                        GeometryReader { geometry in
+                            Capsule()
+                                .fill(AttentionPalette.category(item.category, dark: dark))
+                                .frame(
+                                    width: max(2, geometry.size.width * item.duration / max(top, 1))
+                                )
+                        }
+                        .frame(height: UIScale.pt(5))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.edith(.borderless))
             }
             if rest > 0 {
-                SectorMark(
-                    angle: .value("Minutes", rest / 60), innerRadius: .ratio(0.64),
-                    angularInset: 1.5
-                )
-                .foregroundStyle(DashSkin.grid(dark))
-            }
-        }
-        .chartAngleSelection(value: $selected)
-        .chartBackground { _ in
-            VStack(spacing: UIScale.pt(1)) {
-                Text(AttentionFormat.duration(hovered?.duration ?? total))
-                    .font(DashSkin.heading(17))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .monospacedDigit()
-                Text(hovered?.category.name ?? "active")
-                    .font(.system(size: UIScale.pt(10)))
+                Text("\(categories.count - limit) more · \(AttentionFormat.duration(rest))")
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
             }
-            .frame(maxWidth: UIScale.pt(100))
         }
         .accessibilityLabel("Time by category")
     }
@@ -479,7 +478,7 @@ struct AttentionConcurrencyChart: View {
 
     var body: some View {
         let dark = scheme == .dark
-        let color = DashPalette.color(dark ? "#9085e9" : "#4a3aa7")
+        let color = AttentionPalette.accent(dark)
         let hovered = selected.flatMap { date in points.last { $0.start <= date } }
         Chart {
             ForEach(points) { point in

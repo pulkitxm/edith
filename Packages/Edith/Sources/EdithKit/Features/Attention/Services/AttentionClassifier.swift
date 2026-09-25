@@ -6,11 +6,18 @@ public struct AttentionJevDecision: Codable, Equatable, Sendable {
     public var categoryID: String
     public var confidence: Double
     public var decidedAt: Date
+    public var productivity: AttentionProductivity?
+    public var sphere: AttentionSphere?
 
-    public init(categoryID: String, confidence: Double, decidedAt: Date = Date()) {
+    public init(
+        categoryID: String, confidence: Double, decidedAt: Date = Date(),
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
+    ) {
         self.categoryID = categoryID
         self.confidence = confidence
         self.decidedAt = decidedAt
+        self.productivity = productivity
+        self.sphere = sphere
     }
 
     public var isDecisive: Bool { categoryID != Self.none }
@@ -37,6 +44,8 @@ public struct AttentionClassification: Equatable, Sendable {
     public var entityID: String
     public var entityName: String
     public var categoryID: String
+    public var productivity: AttentionProductivity
+    public var sphere: AttentionSphere
     public var source: AttentionCategorySource
     public var confidence: Double?
     public var domain: String?
@@ -50,6 +59,10 @@ public enum AttentionEntityID {
     }
 
     public static func isNamed(_ id: String) -> Bool { id.hasPrefix(namedPrefix) }
+}
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 public enum AttentionText {
@@ -205,19 +218,39 @@ public struct AttentionClassifier {
             entityName = fallbackName
         }
 
-        func result(_ category: String, _ source: AttentionCategorySource, _ confidence: Double?)
-            -> AttentionClassification
-        {
-            AttentionClassification(
-                entityID: entityID, entityName: entityName, categoryID: category, source: source,
+        let matching = specific.filter {
+            matches(
+                $0.rule, bundleID: bundleID, domain: domain, location: location, title: title,
+                tags: tags)
+        }
+        var userBroad: (candidate: Candidate, score: Int)?
+        for candidate in broad where candidate.isUser {
+            let score = targetScore(candidate.rule, bundleID: bundleID, domain: domain)
+            if score > 0, userBroad == nil || score > userBroad!.score {
+                userBroad = (candidate, score)
+            }
+        }
+        let overrides =
+            matching.filter(\.isUser).map(\.rule)
+            + [userBroad?.candidate.rule]
+            .compactMap { $0 }
+        let productivityOverride = overrides.lazy.compactMap(\.productivity).first
+        let sphereOverride = overrides.lazy.compactMap(\.sphere).first
+
+        func result(
+            _ categoryID: String, _ source: AttentionCategorySource, _ confidence: Double?,
+            decision: AttentionJevDecision? = nil
+        ) -> AttentionClassification {
+            let category = settings.category(categoryID)
+            return AttentionClassification(
+                entityID: entityID, entityName: entityName, categoryID: category.id,
+                productivity: productivityOverride ?? decision?.productivity
+                    ?? category.productivity,
+                sphere: sphereOverride ?? decision?.sphere ?? category.sphere, source: source,
                 confidence: confidence, domain: domain)
         }
 
-        for candidate in specific
-        where matches(
-            candidate.rule, bundleID: bundleID, domain: domain, location: location, title: title,
-            tags: tags)
-        {
+        if let candidate = matching.first {
             return result(candidate.rule.categoryID, candidate.isUser ? .user : .catalog, nil)
         }
         if let windowTitle = event.windowTitle, !windowTitle.isEmpty,
@@ -225,7 +258,7 @@ public struct AttentionClassifier {
                 AttentionClassifications.titleKey(entityID: fallbackID, title: windowTitle)],
             decision.isDecisive
         {
-            return result(decision.categoryID, .jev, decision.confidence)
+            return result(decision.categoryID, .jev, decision.confidence, decision: decision)
         }
         if let broadMatch {
             return result(
@@ -233,7 +266,7 @@ public struct AttentionClassifier {
                 broadMatch.candidate.isUser ? .user : .catalog, nil)
         }
         if let decision = classifications.entities[fallbackID], decision.isDecisive {
-            return result(decision.categoryID, .jev, decision.confidence)
+            return result(decision.categoryID, .jev, decision.confidence, decision: decision)
         }
         return result(AttentionCatalog.unclassified, .none, nil)
     }
@@ -300,8 +333,15 @@ public struct AttentionClassifier {
 extension AttentionSettings {
     @discardableResult
     public mutating func assign(
-        entityID: String, categoryID: String, name: String? = nil
+        entityID: String, categoryID: String? = nil, name: String? = nil,
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil,
+        fallbackCategoryID: String = AttentionCatalog.unclassified
     ) -> AttentionIdentityRule? {
+        func apply(_ rule: inout AttentionIdentityRule) {
+            if let categoryID { rule.categoryID = categoryID }
+            if let productivity { rule.productivity = productivity }
+            if let sphere { rule.sphere = sphere }
+        }
         let parts = entityID.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2, !parts[1].isEmpty else { return nil }
         let value = parts[1]
@@ -321,8 +361,9 @@ extension AttentionSettings {
                 rules.append(
                     AttentionIdentityRule(
                         name: rename?.isEmpty == false ? rename! : template.name,
-                        categoryID: categoryID, bundleIDs: template.bundleIDs,
-                        domains: template.domains))
+                        categoryID: categoryID ?? template.categoryID,
+                        bundleIDs: template.bundleIDs, domains: template.domains,
+                        productivity: productivity, sphere: sphere))
                 return rules.last
             }
         case "app":
@@ -341,7 +382,7 @@ extension AttentionSettings {
         }
         if !indices.isEmpty {
             for index in indices {
-                rules[index].categoryID = categoryID
+                apply(&rules[index])
                 if let rename, !rename.isEmpty { rules[index].name = rename }
             }
             return rules[indices[0]]
@@ -349,9 +390,11 @@ extension AttentionSettings {
         guard parts[0] != "name" else { return nil }
         rules.append(
             AttentionIdentityRule(
-                name: rename?.isEmpty == false ? rename! : value, categoryID: categoryID,
+                name: rename?.isEmpty == false ? rename! : value,
+                categoryID: categoryID ?? fallbackCategoryID,
                 bundleIDs: parts[0] == "app" ? [value] : [],
-                domains: parts[0] == "web" ? [value] : []))
+                domains: parts[0] == "web" ? [value] : [], productivity: productivity,
+                sphere: sphere))
         return rules.last
     }
 }

@@ -93,7 +93,7 @@ import Testing
             events: events, settings: settings, from: now,
             to: now.addingTimeInterval(60))
         #expect(summary.activeDuration == 60)
-        #expect(summary.communicationDuration == 30)
+        #expect(summary.categories.first { $0.category.id == "personalchat" }?.duration == 30)
         #expect(summary.entities.first { $0.name == "WhatsApp" }?.duration == 30)
         #expect(summary.entities.first { $0.name == "Google Chrome" }?.duration == 30)
         #expect(summary.entities.first { $0.name == "WhatsApp" }?.bundleID == nil)
@@ -118,7 +118,7 @@ import Testing
         let summary = AttentionAnalyzer().summary(
             events: events, settings: settings, from: now,
             to: now.addingTimeInterval(120))
-        #expect(summary.entertainmentDuration == 0)
+        #expect(summary.distractingDuration == 0)
         #expect(summary.idleDuration == 120)
         #expect(summary.music.first?.title == "Nights")
         #expect(summary.music.first?.duration == 120)

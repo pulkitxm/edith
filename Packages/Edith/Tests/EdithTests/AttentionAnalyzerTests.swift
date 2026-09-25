@@ -43,7 +43,7 @@ import Testing
             AttentionEvent(
                 startedAt: start, duration: 1, source: .browser, appName: "Chrome",
                 domain: "www.google.com"))
-        #expect(search.categoryID == "neutral")
+        #expect(search.categoryID == "search")
         #expect(search.entityID == "web:google.com")
     }
 
@@ -218,7 +218,7 @@ import Testing
         #expect(result.days.count == 2)
         #expect(result.days.map(\.active) == [1_800, 1_800])
         #expect(result.hours.count == 2)
-        #expect(result.kinds["focus"] == 3_600)
+        #expect(result.duration(AttentionProductivity.veryProductive) == 3_600)
     }
 
     @Test func signalsAreClippedProportionallyAndSummed() {
@@ -309,5 +309,76 @@ import Testing
         #expect(result.signals.keys == 61)
         #expect(result.signals.clicks == 7)
         #expect(result.signals.scrolls == 13)
+    }
+
+    @Test func yourProductivityAndSphereFollowAnItemAcrossCategories() {
+        var settings = AttentionSettings()
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "X", categoryID: "social", domains: ["x.com"], productivity: .productive,
+                sphere: .personal)
+        ]
+        let decisions = AttentionClassifications(
+            titles: [
+                AttentionClassifications.titleKey(entityID: "web:x.com", title: "Election night"):
+                    AttentionJevDecision(
+                        categoryID: "news", confidence: 0.9, productivity: .distracting,
+                        sphere: .personal)
+            ])
+        var classifier = AttentionClassifier(settings: settings, classifications: decisions)
+        func post(_ title: String) -> AttentionEvent {
+            AttentionEvent(
+                startedAt: start, duration: 1, source: .browser, appName: "Chrome",
+                windowTitle: title, domain: "x.com")
+        }
+        let feed = classifier.classify(post("Home / X"))
+        #expect(feed.categoryID == "social")
+        #expect(feed.productivity == .productive)
+        #expect(feed.sphere == .personal)
+        let news = classifier.classify(post("Election night"))
+        #expect(news.categoryID == "news")
+        #expect(news.productivity == .productive)
+    }
+
+    @Test func jevDecidesProductivityWhenYouHaveNot() {
+        let decisions = AttentionClassifications(
+            entities: [
+                "app:com.example.Studio": AttentionJevDecision(
+                    categoryID: "design", confidence: 0.8, productivity: .productive,
+                    sphere: .personal)
+            ])
+        var classifier = AttentionClassifier(
+            settings: AttentionSettings(), classifications: decisions)
+        let studio = classifier.classify(app("com.example.Studio", "Studio", at: 0, for: 1))
+        #expect(studio.categoryID == "design")
+        #expect(studio.productivity == .productive)
+        #expect(studio.sphere == .personal)
+    }
+
+    @Test func pulseWeighsProductivityAndIgnoresUnclassifiedTime() {
+        let events = [
+            app("com.apple.dt.Xcode", "Xcode", at: 0, for: 600),
+            app("com.valvesoftware.steam", "Steam", at: 600, for: 600),
+            app("com.example.Unknown", "Unknown", at: 1_200, for: 600),
+        ]
+        let result = summary(events)
+        #expect(result.productiveDuration == 600)
+        #expect(result.distractingDuration == 600)
+        #expect(result.unclassifiedDuration == 600)
+        #expect(result.pulse == 50)
+        #expect(result.duration(AttentionSphere.work) == 600)
+    }
+
+    @Test func legacyCategoriesKeepTheirMeaning() throws {
+        let legacy = """
+            [{"id":"custom","name":"Side project","kind":"focus","color":"000000"},
+            {"id":"entertainment","name":"Fun","kind":"entertainment","color":"000000"}]
+            """
+        let categories = try JSONDecoder().decode(
+            [AttentionCategory].self, from: Data(legacy.utf8))
+        #expect(categories[0].productivity == .productive)
+        #expect(categories[1].name == "Fun")
+        #expect(categories[1].productivity == .veryDistracting)
+        #expect(categories[1].sphere == .personal)
     }
 }

@@ -69,6 +69,7 @@ public struct AttentionAnalyzer: Sendable {
 
 private struct AttentionEntityAccumulator {
     var entity: AttentionEntity
+    var spheres: [String: TimeInterval] = [:]
     var sources: [String: (source: AttentionCategorySource, confidence: Double?)] = [:]
     var details: [String: AttentionDetail] = [:]
 }
@@ -101,7 +102,9 @@ struct AttentionSummaryBuilder {
 
     private var active: TimeInterval = 0
     private var idle: TimeInterval = 0
-    private var kinds: [String: TimeInterval] = [:]
+    private var levels: [String: TimeInterval] = [:]
+    private var spheres: [String: TimeInterval] = [:]
+    private var unclassified: TimeInterval = 0
     private var categoryTotals: [String: TimeInterval] = [:]
     private var entities: [String: AttentionEntityAccumulator] = [:]
     private var days: [Date: AttentionDayTotal] = [:]
@@ -138,8 +141,11 @@ struct AttentionSummaryBuilder {
     mutating func addActive(_ interval: AttentionEvent, _ classification: AttentionClassification) {
         let duration = interval.duration
         let category = settings.category(classification.categoryID)
+        let level = classification.productivity.key
         active += duration
-        kinds[category.kind.rawValue, default: 0] += duration
+        levels[level, default: 0] += duration
+        spheres[classification.sphere.rawValue, default: 0] += duration
+        if category.isUnclassified { unclassified += duration }
         categoryTotals[category.id, default: 0] += duration
         signals = signals.adding(interval.signals)
         let interactions = interval.signals?.interactions ?? 0
@@ -149,17 +155,18 @@ struct AttentionSummaryBuilder {
             var total = days[day] ?? AttentionDayTotal(day: day)
             total.active += seconds
             total.categories[category.id, default: 0] += seconds
+            total.levels[level, default: 0] += seconds
             days[day] = total
             let weekday = calendar.component(.weekday, from: start)
             let hour = calendar.component(.hour, from: start)
             var cell = hours[weekday * 24 + hour] ?? AttentionHourCell(weekday: weekday, hour: hour)
-            cell.kinds[category.kind.rawValue, default: 0] += seconds
+            cell.levels[level, default: 0] += seconds
             hours[weekday * 24 + hour] = cell
         }
         trackVisit(interval, classification)
         trackFocus(
-            start: interval.startedAt, end: interval.endedAt, isFocus: category.kind == .focus,
-            name: classification.entityName)
+            start: interval.startedAt, end: interval.endedAt,
+            isFocus: classification.productivity > .neutral, name: classification.entityName)
         trackAttendance(interval)
         guard detailed else { return }
         accumulateEntity(interval, classification, category: category)
@@ -299,6 +306,11 @@ struct AttentionSummaryBuilder {
                 entity.categoryDurations.max { $0.value < $1.value }?.key
                 ?? AttentionCatalog.unclassified
             entity.category = settings.category(dominant)
+            entity.productivity = AttentionProductivity(
+                key: entity.levels.max { $0.value < $1.value }?.key ?? "0")
+            entity.sphere =
+                accumulator.spheres.max { $0.value < $1.value }
+                .flatMap { AttentionSphere(rawValue: $0.key) } ?? entity.category.sphere
             let source = accumulator.sources[dominant]
             entity.categorySource = source?.source ?? .none
             entity.confidence = source?.confidence
@@ -324,8 +336,9 @@ struct AttentionSummaryBuilder {
             spanList.removeAll { $0.duration < 30 }
         }
         return AttentionSummary(
-            from: from, to: to, activeDuration: active, idleDuration: idle, kinds: kinds,
-            contextSwitches: switches, medianStretch: median,
+            from: from, to: to, activeDuration: active, idleDuration: idle, levels: levels,
+            spheres: spheres, unclassifiedDuration: unclassified, contextSwitches: switches,
+            medianStretch: median,
             longestStretch: sorted.last ?? 0, entities: Array(entityList.prefix(400)),
             categories: categoryTotals.map {
                 AttentionCategoryTotal(category: settings.category($0.key), duration: $0.value)
@@ -458,12 +471,19 @@ struct AttentionSummaryBuilder {
                     domain: classification.domain, visits: 1))
         accumulator.entity.duration += duration
         accumulator.entity.categoryDurations[category.id, default: 0] += duration
+        accumulator.entity.levels[classification.productivity.key, default: 0] += duration
+        accumulator.spheres[classification.sphere.rawValue, default: 0] += duration
         accumulator.entity.signals = accumulator.entity.signals.adding(interval.signals)
         if interval.source == .application, let bundleID = interval.bundleID {
             accumulator.entity.bundleID = bundleID
         }
         if let favicon = interval.faviconURL { accumulator.entity.faviconURL = favicon }
         if accumulator.entity.domain == nil { accumulator.entity.domain = classification.domain }
+        if accumulator.entity.about == nil, let tags = interval.tags {
+            accumulator.entity.about =
+                [tags[AttentionTag.site], tags[AttentionTag.about]]
+                .compactMap { $0 }.joined(separator: ": ").nilIfEmpty
+        }
         if accumulator.sources[category.id] == nil {
             accumulator.sources[category.id] = (classification.source, classification.confidence)
         }
@@ -471,7 +491,8 @@ struct AttentionSummaryBuilder {
             var detail =
                 accumulator.details[name]
                 ?? AttentionDetail(
-                    name: name, url: interval.url, duration: 0, categoryID: category.id)
+                    name: name, url: interval.url, duration: 0, categoryID: category.id,
+                    productivity: classification.productivity)
             detail.duration += duration
             accumulator.details[name] = detail
         }
@@ -503,6 +524,8 @@ struct AttentionSummaryBuilder {
             var row = dimensions[dimension]?[value] ?? AttentionBreakdownRow(key: value)
             row.duration += interval.duration
             row.categories[category.id, default: 0] += interval.duration
+            row.levels[classification.productivity.key, default: 0] += interval.duration
+            row.spheres[classification.sphere.rawValue, default: 0] += interval.duration
             row.interactions += interval.signals?.interactions ?? 0
             if row.entityNames.count < 3, !row.entityNames.contains(classification.entityName) {
                 row.entityNames.append(classification.entityName)
@@ -516,6 +539,7 @@ struct AttentionSummaryBuilder {
     ) {
         if var last = spans.last, last.entityID == classification.entityID,
             last.categoryID == classification.categoryID,
+            last.productivity == classification.productivity,
             interval.startedAt.timeIntervalSince(last.end) <= spanGap
         {
             last.end = max(last.end, interval.endedAt)
@@ -533,7 +557,8 @@ struct AttentionSummaryBuilder {
                     String(AttentionText.cleanTitle($0).prefix(160))
                 }
                     ?? interval.domain,
-                tags: interval.tags, interactions: interactions))
+                tags: interval.tags, interactions: interactions,
+                productivity: classification.productivity, sphere: classification.sphere))
     }
 
     private func binStart(_ date: Date) -> Date {

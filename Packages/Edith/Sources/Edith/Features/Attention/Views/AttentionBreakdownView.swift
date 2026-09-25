@@ -14,6 +14,7 @@ struct AttentionBreakdownView: View {
         var categories: [String: TimeInterval]
         var names: [String]
         var interactions: Int
+        var levels: [String: TimeInterval]
     }
 
     private func label(_ key: String, dimension: String) -> String {
@@ -23,14 +24,15 @@ struct AttentionBreakdownView: View {
     private func rows(_ dimension: AttentionDimension?) -> [Row] {
         guard let dimension else { return [] }
         return dimension.rows.compactMap { row -> Row? in
-            let duration = model.matches(row.categories)
+            let duration = model.matches(
+                categories: row.categories, levels: row.levels, spheres: row.spheres)
             let label = label(row.key, dimension: dimension.key)
             guard duration > 0, model.matchesSearch([label] + row.entityNames) else {
                 return nil
             }
             return Row(
                 key: row.key, label: label, duration: duration, categories: row.categories,
-                names: row.entityNames, interactions: row.interactions)
+                names: row.entityNames, interactions: row.interactions, levels: row.levels)
         }
         .sorted { $0.duration > $1.duration }
     }
@@ -97,9 +99,8 @@ struct AttentionBreakdownView: View {
                                         }
                                     }
                                     AttentionMixBar(
-                                        categories: row.categories,
-                                        total: row.categories.values.reduce(0, +),
-                                        scale: top, settings: model.settings)
+                                        levels: row.levels,
+                                        total: AttentionPageModel.total(row.levels), scale: top)
                                 }
                                 VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
                                     Text(AttentionFormat.duration(row.duration))

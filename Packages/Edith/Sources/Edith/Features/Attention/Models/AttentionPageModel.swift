@@ -119,7 +119,8 @@ final class AttentionPageModel {
     var message: String?
     var errorMessage: String?
     var breakdownDimension = AttentionDimension.entity
-    var kindFilter: AttentionCategoryKind?
+    var levelFilter: AttentionProductivity?
+    var sphereFilter: AttentionSphere?
     var categoryFilter: String?
     var search = ""
     private(set) var loaded = false
@@ -318,8 +319,29 @@ final class AttentionPageModel {
     }
 
     func assign(entity: AttentionEntity, to categoryID: String) {
+        update(entity) { $0.assign(entityID: entity.id, categoryID: categoryID) }
+    }
+
+    func assign(entity: AttentionEntity, productivity: AttentionProductivity) {
+        update(entity) {
+            $0.assign(
+                entityID: entity.id, productivity: productivity,
+                fallbackCategoryID: entity.category.id)
+        }
+    }
+
+    func assign(entity: AttentionEntity, sphere: AttentionSphere) {
+        update(entity) {
+            $0.assign(entityID: entity.id, sphere: sphere, fallbackCategoryID: entity.category.id)
+        }
+    }
+
+    private func update(
+        _ entity: AttentionEntity,
+        _ change: (inout AttentionSettings) -> AttentionIdentityRule?
+    ) {
         var next = settings
-        guard next.assign(entityID: entity.id, categoryID: categoryID) != nil else { return }
+        guard change(&next) != nil else { return }
         settings = next
         saveSettings()
     }
@@ -345,7 +367,7 @@ final class AttentionPageModel {
     nonisolated static func quickCategories(_ settings: AttentionSettings) -> [AttentionCategory] {
         var used: [String: Int] = [:]
         for rule in settings.rules { used[rule.categoryID, default: 0] += 1 }
-        let candidates = settings.categories.filter { $0.kind != .unclassified }
+        let candidates = settings.categories.filter { !$0.isUnclassified }
         return candidates.sorted { (used[$0.id] ?? 0) > (used[$1.id] ?? 0) }
     }
 
@@ -373,8 +395,7 @@ final class AttentionPageModel {
     func addCategory() {
         settings.categories.append(
             AttentionCategory(
-                id: "category-\(UUID().uuidString.lowercased())", name: "New category",
-                kind: .neutral, color: "898781"))
+                id: "category-\(UUID().uuidString.lowercased())", name: "New category"))
     }
 
     func removeCategory(_ id: String) {
@@ -435,26 +456,44 @@ final class AttentionPageModel {
         browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
     }
 
-    func filter(category id: String) {
+    func filter(category id: String, navigate: Bool = true) {
+        clearSelection()
         categoryFilter = id
-        kindFilter = nil
-        section = .breakdown
+        if navigate { section = .breakdown }
     }
 
-    func matches(_ categories: [String: TimeInterval]) -> TimeInterval {
-        Self.filtered(
-            categories, category: categoryFilter, kind: kindFilter, settings: settings)
+    func toggle(level: AttentionProductivity) {
+        let active = levelFilter == level
+        clearSelection()
+        levelFilter = active ? nil : level
     }
 
-    nonisolated static func filtered(
-        _ categories: [String: TimeInterval], category: String?, kind: AttentionCategoryKind?,
-        settings: AttentionSettings
+    func toggle(sphere: AttentionSphere) {
+        let active = sphereFilter == sphere
+        clearSelection()
+        sphereFilter = active ? nil : sphere
+    }
+
+    func matches(
+        categories: [String: TimeInterval], levels: [String: TimeInterval],
+        spheres: [String: TimeInterval]
     ) -> TimeInterval {
-        if let category { return categories[category] ?? 0 }
+        if let categoryFilter { return categories[categoryFilter] ?? 0 }
+        if let levelFilter { return levels[levelFilter.key] ?? 0 }
+        if let sphereFilter { return spheres[sphereFilter.rawValue] ?? 0 }
+        return Self.total(categories)
+    }
+
+    func matches(_ span: AttentionSpan) -> Bool {
+        if let categoryFilter, span.categoryID != categoryFilter { return false }
+        if let levelFilter, span.productivity != levelFilter { return false }
+        if let sphereFilter, span.sphere != sphereFilter { return false }
+        return true
+    }
+
+    nonisolated static func total(_ values: [String: TimeInterval]) -> TimeInterval {
         var total: TimeInterval = 0
-        for (id, seconds) in categories where kind == nil || settings.category(id).kind == kind {
-            total += seconds
-        }
+        for value in values.values { total += value }
         return total
     }
 
@@ -465,13 +504,18 @@ final class AttentionPageModel {
     }
 
     var hasFilters: Bool {
-        kindFilter != nil || categoryFilter != nil
+        levelFilter != nil || sphereFilter != nil || categoryFilter != nil
             || !search.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    func clearFilters() {
-        kindFilter = nil
+    func clearSelection() {
+        levelFilter = nil
+        sphereFilter = nil
         categoryFilter = nil
+    }
+
+    func clearFilters() {
+        clearSelection()
         search = ""
     }
 }

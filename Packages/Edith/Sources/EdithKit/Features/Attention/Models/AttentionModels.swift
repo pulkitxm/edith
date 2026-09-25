@@ -20,20 +20,77 @@ public enum AttentionPrivacyLevel: String, Codable, CaseIterable, Sendable {
     case detailed
 }
 
-public enum AttentionCategoryKind: String, Codable, CaseIterable, Sendable {
-    case focus
-    case communication
-    case entertainment
-    case neutral
-    case unclassified
+public enum AttentionProductivity: Int, Codable, CaseIterable, Comparable, Sendable {
+    case veryDistracting = -2
+    case distracting = -1
+    case neutral = 0
+    case productive = 1
+    case veryProductive = 2
+
+    public static let ranked: [AttentionProductivity] = [
+        .veryProductive, .productive, .neutral, .distracting, .veryDistracting,
+    ]
+
+    public static func < (lhs: AttentionProductivity, rhs: AttentionProductivity) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    public var key: String { String(rawValue) }
+
+    public var identifier: String {
+        switch self {
+        case .veryDistracting: "very_distracting"
+        case .distracting: "distracting"
+        case .neutral: "neutral"
+        case .productive: "productive"
+        case .veryProductive: "very_productive"
+        }
+    }
+
+    public init?(identifier: String) {
+        guard let match = Self.allCases.first(where: { $0.identifier == identifier }) else {
+            return nil
+        }
+        self = match
+    }
 
     public var title: String {
         switch self {
-        case .focus: "Productive"
-        case .communication: "Communication"
-        case .entertainment: "Distracting"
+        case .veryDistracting: "Very distracting"
+        case .distracting: "Distracting"
         case .neutral: "Neutral"
-        case .unclassified: "Unclassified"
+        case .productive: "Productive"
+        case .veryProductive: "Very productive"
+        }
+    }
+
+    public var meaning: String {
+        switch self {
+        case .veryDistracting: "pulls attention away from goals for no real return"
+        case .distracting: "mostly leisure or habit with little lasting value"
+        case .neutral: "necessary overhead, neither advancing nor hurting goals"
+        case .productive: "supports goals, such as learning, coordination or light work"
+        case .veryProductive: "directly produces work, such as building, writing or designing"
+        }
+    }
+
+    public var weight: Double { Double(rawValue + 2) }
+
+    public init(key: String) {
+        self = Int(key).flatMap(AttentionProductivity.init(rawValue:)) ?? .neutral
+    }
+}
+
+public enum AttentionSphere: String, Codable, CaseIterable, Sendable {
+    case work
+    case personal
+    case both
+
+    public var title: String {
+        switch self {
+        case .work: "Work"
+        case .personal: "Personal"
+        case .both: "Work and personal"
         }
     }
 }
@@ -55,6 +112,8 @@ public enum AttentionTag {
     public static let document = "doc"
     public static let track = "track"
     public static let passive = "passive"
+    public static let site = "site"
+    public static let about = "about"
 
     public static let domainSafe: Set<String> = [passive]
 
@@ -346,15 +405,53 @@ public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
 public struct AttentionCategory: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var name: String
-    public var kind: AttentionCategoryKind
-    public var color: String
+    public var productivity: AttentionProductivity
+    public var sphere: AttentionSphere
 
-    public init(id: String, name: String, kind: AttentionCategoryKind, color: String) {
+    public init(
+        id: String, name: String, productivity: AttentionProductivity = .neutral,
+        sphere: AttentionSphere = .both
+    ) {
         self.id = id
         self.name = name
-        self.kind = kind
-        self.color = color
+        self.productivity = productivity
+        self.sphere = sphere
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, productivity, sphere, kind
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let identifier = try container.decode(String.self, forKey: .id)
+        id = identifier
+        name = try container.decode(String.self, forKey: .name)
+        let builtIn = AttentionCatalog.categories.first { $0.id == identifier }
+        let legacy: AttentionProductivity? =
+            switch try container.decodeIfPresent(String.self, forKey: .kind) {
+            case "focus": .productive
+            case "entertainment": .distracting
+            case .some: .neutral
+            case .none: nil
+            }
+        productivity =
+            try container.decodeIfPresent(AttentionProductivity.self, forKey: .productivity)
+            ?? builtIn?.productivity ?? legacy ?? .neutral
+        sphere =
+            try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)
+            ?? builtIn?.sphere ?? .both
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(productivity, forKey: .productivity)
+        try container.encode(sphere, forKey: .sphere)
+    }
+
+    public var isUnclassified: Bool { id == AttentionCatalog.unclassified }
 }
 
 public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable {
@@ -366,11 +463,14 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
     public var urls: [String]
     public var keywords: [String]
     public var contexts: [String]
+    public var productivity: AttentionProductivity?
+    public var sphere: AttentionSphere?
 
     public init(
         id: String = UUID().uuidString, name: String, categoryID: String,
         bundleIDs: [String] = [], domains: [String] = [], urls: [String] = [],
-        keywords: [String] = [], contexts: [String] = []
+        keywords: [String] = [], contexts: [String] = [],
+        productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
     ) {
         self.id = id
         self.name = name
@@ -380,10 +480,13 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         self.urls = urls
         self.keywords = keywords
         self.contexts = contexts
+        self.productivity = productivity
+        self.sphere = sphere
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, categoryID, bundleIDs, domains, urls, keywords, contexts
+        case id, name, categoryID, bundleIDs, domains, urls, keywords, contexts, productivity,
+            sphere
     }
 
     public init(from decoder: Decoder) throws {
@@ -396,6 +499,9 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         urls = try container.decodeIfPresent([String].self, forKey: .urls) ?? []
         keywords = try container.decodeIfPresent([String].self, forKey: .keywords) ?? []
         contexts = try container.decodeIfPresent([String].self, forKey: .contexts) ?? []
+        productivity = try container.decodeIfPresent(
+            AttentionProductivity.self, forKey: .productivity)
+        sphere = try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)
     }
 
     public var isIdentity: Bool {
@@ -431,6 +537,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     public var jevCategorizationEnabled: Bool
     public var focusBlockMinimum: TimeInterval
     public var ignoredBundleIDs: [String]
+    public var profileNote: String
 
     public init(
         isEnabled: Bool = false, trackingEnabled: Bool = false,
@@ -441,7 +548,8 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         categories: [AttentionCategory] = AttentionCatalog.categories,
         rules: [AttentionIdentityRule] = [], agentTrackingEnabled: Bool = true,
         mediaTrackingEnabled: Bool = true, jevCategorizationEnabled: Bool = true,
-        focusBlockMinimum: TimeInterval = 1_500, ignoredBundleIDs: [String] = []
+        focusBlockMinimum: TimeInterval = 1_500, ignoredBundleIDs: [String] = [],
+        profileNote: String = ""
     ) {
         self.isEnabled = isEnabled
         self.trackingEnabled = trackingEnabled
@@ -459,6 +567,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         self.jevCategorizationEnabled = jevCategorizationEnabled
         self.focusBlockMinimum = focusBlockMinimum
         self.ignoredBundleIDs = ignoredBundleIDs
+        self.profileNote = profileNote
         normalizeCategories()
     }
 
@@ -479,6 +588,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         case jevCategorizationEnabled
         case focusBlockMinimum
         case ignoredBundleIDs
+        case profileNote
     }
 
     public init(from decoder: Decoder) throws {
@@ -506,6 +616,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
             try container.decodeIfPresent(TimeInterval.self, forKey: .focusBlockMinimum) ?? 1_500
         ignoredBundleIDs =
             try container.decodeIfPresent([String].self, forKey: .ignoredBundleIDs) ?? []
+        profileNote = try container.decodeIfPresent(String.self, forKey: .profileNote) ?? ""
         normalizeCategories()
     }
 

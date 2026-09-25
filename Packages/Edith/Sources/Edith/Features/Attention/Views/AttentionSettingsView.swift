@@ -73,6 +73,20 @@ struct AttentionSettingsView: View {
                 Toggle(
                     "Categorize automatically every half hour",
                     isOn: $model.settings.jevCategorizationEnabled)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("About you").font(.system(size: 11, weight: .semibold))
+                    TextEditor(text: $model.settings.profileNote)
+                        .font(.system(size: 12))
+                        .frame(minHeight: 70, maxHeight: 120)
+                        .scrollContentBackground(.hidden)
+                        .padding(6)
+                        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                    Text(
+                        "Jev reads this with every question, together with examples from your own rules. Say what you do and what counts as useful for you, for example: I build developer tools, so following AI news on X and watching engineering talks helps my work, but X is still personal time."
+                    )
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack {
                     Button {
                         model.categorizeNow()
@@ -171,7 +185,7 @@ private struct AttentionCategoriesEditor: View {
                 SettingsTitle(
                     "Categories",
                     subtitle:
-                        "The kind decides whether time counts as productive, communication, distracting or neutral."
+                        "Each category has a default productivity and says whether it is work or personal. Rules can override both for a single app, site, title or Edith context."
                 )
                 Spacer()
                 Button("Add category") { model.addCategory() }
@@ -180,22 +194,21 @@ private struct AttentionCategoriesEditor: View {
             ForEach($model.settings.categories) { $category in
                 let builtIn = AttentionCatalog.categories.contains { $0.id == category.id }
                 HStack(spacing: 10) {
-                    ColorPicker(
-                        "Color",
-                        selection: Binding(
-                            get: { AttentionPalette.hex(category.color) ?? .gray },
-                            set: { category.color = AttentionPalette.hexString($0) }),
-                        supportsOpacity: false
-                    )
-                    .labelsHidden()
                     TextField("Name", text: $category.name)
-                    Picker("Kind", selection: $category.kind) {
-                        ForEach(AttentionCategoryKind.allCases, id: \.self) { kind in
-                            Text(kind.title).tag(kind)
+                    Picker("Productivity", selection: $category.productivity) {
+                        ForEach(AttentionProductivity.ranked, id: \.self) { level in
+                            Text(level.title).tag(level)
                         }
                     }
                     .labelsHidden()
                     .frame(width: 150)
+                    Picker("Sphere", selection: $category.sphere) {
+                        ForEach(AttentionSphere.allCases, id: \.self) { sphere in
+                            Text(sphere.title).tag(sphere)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 160)
                     Button(role: .destructive) {
                         model.removeCategory(category.id)
                     } label: {
@@ -265,6 +278,24 @@ private struct AttentionRuleEditor: View {
                 Button(role: .destructive, action: remove) { Image(systemName: "trash") }
                     .buttonStyle(.edith(.iconOnly))
             }
+            HStack {
+                Picker("Productivity", selection: $rule.productivity) {
+                    Text("Category default").tag(AttentionProductivity?.none)
+                    ForEach(AttentionProductivity.ranked, id: \.self) { level in
+                        Text(level.title).tag(AttentionProductivity?.some(level))
+                    }
+                }
+                .frame(width: 260)
+                Picker("Part of", selection: $rule.sphere) {
+                    Text("Category default").tag(AttentionSphere?.none)
+                    ForEach(AttentionSphere.allCases, id: \.self) { sphere in
+                        Text(sphere.title).tag(AttentionSphere?.some(sphere))
+                    }
+                }
+                .frame(width: 260)
+                Spacer()
+            }
+            .font(.system(size: 11))
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 GridRow {
                     field("Apps", \.bundleIDs, "com.apple.dt.Xcode, com.jetbrains.*")

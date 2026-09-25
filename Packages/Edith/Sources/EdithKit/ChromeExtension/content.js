@@ -33,6 +33,8 @@ function pageTags() {
   }
   const site = text(document.querySelector('meta[property="og:site_name"]')?.getAttribute("content"))
   if (site) tags.site = site
+  const about = text(document.querySelector('meta[name="description"], meta[property="og:description"]')?.getAttribute("content"))
+  if (about) tags.about = about.slice(0, 200)
   return tags
 }
 
