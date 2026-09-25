@@ -651,4 +651,101 @@ import Testing
         #expect(window.firstResponder === view)
         #expect(!view.suppressNextLeftMouseUp)
     }
+
+    @Test @MainActor func focusMonitorHitTestsTheClickedPointInsideAFlippedWindow() throws {
+        let content = FlippedContainer(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let header = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 100))
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        view.frame = NSRect(x: 0, y: 100, width: 800, height: 500)
+        content.addSubview(header)
+        content.addSubview(view)
+        let window = TestWindowHost.window(contentRect: content.frame)
+        window.contentView = content
+        _ = window.makeFirstResponder(nil)
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+        func leftMouseDown(atWindowY y: CGFloat) throws -> NSEvent {
+            try #require(
+                NSEvent.mouseEvent(
+                    with: .leftMouseDown, location: NSPoint(x: 80, y: y), modifierFlags: [],
+                    timestamp: 1, windowNumber: window.windowNumber, context: nil,
+                    eventNumber: 1, clickCount: 1, pressure: 0))
+        }
+
+        let headerClick = try leftMouseDown(atWindowY: 560)
+        #expect(view.handleLocalLeftMouseDown(headerClick) === headerClick)
+        #expect(window.firstResponder !== view)
+
+        view.suppressNextLeftMouseUp = true
+        let promptClick = try leftMouseDown(atWindowY: 30)
+        #expect(view.handleLocalLeftMouseDown(promptClick) === promptClick)
+        #expect(window.firstResponder === view)
+        #expect(!view.suppressNextLeftMouseUp)
+    }
+
+    @Test @MainActor func clickAfterAFocusClickWithoutMouseUpStillReleasesTheButton()
+        async throws
+    {
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty-stale-focus-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let command =
+            "stty raw -echo; printf '\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
+        let launch = GhosttyLaunch(
+            executable: "/bin/sh", arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
+        let view = GhosttyTerminalView(launch: launch)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = TestWindowHost.window(contentRect: view.frame)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+
+        for _ in 0..<100 {
+            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let surface = try #require(view.surface)
+        #expect(ghostty_surface_mouse_captured(surface))
+
+        func event(_ type: NSEvent.EventType, y: CGFloat, number: Int) throws -> NSEvent {
+            try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: NSPoint(x: 80, y: y), modifierFlags: [],
+                    timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
+                    eventNumber: number, clickCount: type == .mouseMoved ? 0 : 1, pressure: 0))
+        }
+
+        view.suppressNextLeftMouseUp = true
+        view.mouseDown(with: try event(.leftMouseDown, y: 500, number: 1))
+        view.mouseUp(with: try event(.leftMouseUp, y: 500, number: 2))
+        view.mouseMoved(with: try event(.mouseMoved, y: 300, number: 3))
+
+        func isRelease(_ report: String) -> Bool {
+            report.hasPrefix("[<0;") && report.hasSuffix("m")
+        }
+        var reports: [String] = []
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: output) {
+                reports = String(decoding: data, as: UTF8.self)
+                    .split(separator: "\u{1B}").map(String.init)
+                if reports.drop(while: { !isRelease($0) }).count > 1 { break }
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let afterRelease = reports.drop(while: { !isRelease($0) }).dropFirst()
+        #expect(reports.contains(where: isRelease))
+        #expect(afterRelease.contains { $0.hasPrefix("[<35;") })
+        #expect(!reports.contains { $0.hasPrefix("[<32;") })
+    }
+}
+
+private final class FlippedContainer: NSView {
+    override var isFlipped: Bool { true }
 }

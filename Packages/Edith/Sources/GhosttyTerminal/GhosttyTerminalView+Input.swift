@@ -110,8 +110,7 @@ extension GhosttyTerminalView {
 
     func handleLocalLeftMouseDown(_ event: NSEvent) -> NSEvent? {
         guard let window, event.window === window,
-            let contentView = window.contentView,
-            contentView.hitTest(contentView.convert(event.locationInWindow, from: nil)) === self
+            window.contentView?.superview?.hitTest(event.locationInWindow) === self
         else { return event }
         suppressNextLeftMouseUp = false
         let focused = window.firstResponder === self
@@ -448,6 +447,7 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseDown(with event: NSEvent) {
+        suppressNextLeftMouseUp = false
         window?.makeFirstResponder(self)
         let local = convert(event.locationInWindow, from: nil)
         let commandClick = event.clickCount == 1 && event.modifierFlags.contains(.command)
