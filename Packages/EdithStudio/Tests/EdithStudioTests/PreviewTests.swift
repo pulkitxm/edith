@@ -52,3 +52,23 @@ import Testing
         }
     }
 }
+
+@Suite struct VideoPreviewTests {
+    @Test func videoPreviewRunsTheToolOnAShortClip() async throws {
+        let space = try Workspace()
+        guard let ffmpeg = space.environment.ffmpeg else { return }
+        let clip = space.url("clip.mp4")
+        let made = try await StudioProcess.run(
+            ffmpeg,
+            [
+                "-hide_banner", "-nostdin", "-y", "-f", "lavfi", "-i",
+                "testsrc2=size=320x240:rate=25:duration=3", "-pix_fmt", "yuv420p", clip.path,
+            ], timeout: 60)
+        #expect(made.status == 0)
+        let tool = try #require(StudioCatalog.tool("video.rotate"))
+        let preview = try await StudioPreview.render(
+            tool: tool, input: clip, settings: StudioSettings(), environment: space.environment)
+        #expect(preview.before.width == 320 && preview.before.height == 240)
+        #expect(preview.after.width == 240 && preview.after.height == 320)
+    }
+}

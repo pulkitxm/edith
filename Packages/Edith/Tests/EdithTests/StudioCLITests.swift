@@ -49,6 +49,23 @@ import Testing
         #expect(PDFDocument(url: URL(fileURLWithPath: path))?.pageCount == 5)
     }
 
+    @Test func partialBatchesReportTheirFailuresAndExitOne() async throws {
+        let folder = try Self.folder()
+        let good = folder.appendingPathComponent("good.pdf")
+        let bad = folder.appendingPathComponent("bad.pdf")
+        try Self.pdf(good, pages: 1)
+        try Data("not a pdf".utf8).write(to: bad)
+        let run = await CLIProbe.run([
+            "studio", "run", "pdf.rotate", good.path, bad.path, "--output-dir",
+            folder.appendingPathComponent("out").path, "--json",
+        ])
+        #expect(run.code == 1)
+        let object = try Self.json(run.stdout)
+        #expect(object["executed"] as? Bool == true)
+        #expect((object["failures"] as? [[String: Any]])?.count == 1)
+        #expect((object["outputs"] as? [[String: Any]])?.count == 1)
+    }
+
     @Test func runRejectsBadSettingsFilesAndTools() async throws {
         let folder = try Self.folder()
         let a = folder.appendingPathComponent("a.pdf")

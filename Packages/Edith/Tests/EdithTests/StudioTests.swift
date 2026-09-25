@@ -168,6 +168,7 @@ enum StudioTestFiles {
         #expect(job.isRunning)
         #expect(await StudioTestFiles.waitUntil { !job.isRunning })
         #expect(job.phase == .finished)
+        #expect(job.units == 1)
         let result = try #require(job.result)
         let mergedURL = try #require(result.outputs.first).url
         let merged = try #require(PDFDocument(url: mergedURL))
@@ -344,6 +345,9 @@ enum StudioTestFiles {
         #expect(document.page(at: 1)?.rotation == 90)
         #expect(studio.files.contains { $0.url == saved })
         #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(!editor.isDirty)
+        editor.rotate([0], by: 90)
+        #expect(editor.isDirty)
     }
 
     @Test func pdfEditorFormsSignaturesAndCrop() throws {
@@ -400,6 +404,9 @@ enum StudioTestFiles {
         #expect(await StudioTestFiles.waitUntil { !editor.isSaving })
         let saved = try #require(editor.lastSaved)
         #expect(saved.lastPathComponent == "Sunset-edited.jpg")
+        #expect(!editor.hasUnsavedChanges)
+        editor.edit { $0.filter = .noir }
+        #expect(editor.hasUnsavedChanges)
         let info = try #require(StudioImageIO.info(saved))
         #expect(max(info.width, info.height) == 600)
         #expect(info.height > info.width)

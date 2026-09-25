@@ -6,6 +6,7 @@ import SwiftUI
 struct StudioImageEditorView: View {
     let model: StudioModel
     @State private var editor: StudioImageEditorModel
+    @State private var confirmingLeave = false
     @Environment(\.colorScheme) private var scheme
 
     @MainActor init(model: StudioModel, url: URL) {
@@ -21,7 +22,7 @@ struct StudioImageEditorView: View {
         VStack(spacing: 0) {
             StudioBackBar(
                 title: editor.url.lastPathComponent, subtitle: sizeText, symbol: "photo",
-                back: model.goHome
+                back: leave
             ) {
                 HStack(spacing: UIScale.pt(6)) {
                     Button {
@@ -111,7 +112,23 @@ struct StudioImageEditorView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Leave without saving?", isPresented: $confirmingLeave, titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { model.goHome() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your edits to \(editor.url.lastPathComponent) have not been saved yet.")
+        }
         .task { if editor.preview == nil { editor.load() } }
+    }
+
+    private func leave() {
+        if editor.hasUnsavedChanges {
+            confirmingLeave = true
+        } else {
+            model.goHome()
+        }
     }
 
     private var sizeText: String? {

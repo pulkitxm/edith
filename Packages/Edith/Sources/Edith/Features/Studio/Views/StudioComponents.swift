@@ -156,7 +156,6 @@ struct StudioBackBar<Trailing: View>: View {
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
             }
             .buttonStyle(.edith(.secondary))
-            .keyboardShortcut(.escape, modifiers: [])
             .help("Back to Studio")
             if let symbol {
                 Image(systemName: symbol)

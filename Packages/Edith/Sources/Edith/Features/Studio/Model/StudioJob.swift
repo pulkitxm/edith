@@ -19,6 +19,8 @@ final class StudioJob: Identifiable {
     var settings: StudioSettings
     var phase: Phase = .editing
     var progress = 0.0
+    var unit = 0
+    var units = 1
     var status: String?
     var result: StudioRunResult?
     var startedAt: Date?
@@ -91,6 +93,8 @@ final class StudioJob: Identifiable {
                     Task { @MainActor [weak self] in
                         guard let self, self.phase == .running else { return }
                         self.progress = progress.fraction
+                        self.unit = progress.unit
+                        self.units = progress.units
                         if let status = progress.status { self.status = status }
                     }
                 }

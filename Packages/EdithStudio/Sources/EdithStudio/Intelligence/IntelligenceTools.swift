@@ -3,7 +3,7 @@ import NaturalLanguage
 import PDFKit
 
 enum IntelligenceTools {
-    static var all: [StudioTool] { [summarize, translate] }
+    static var all: [StudioTool] { [summarize, translate, StudioTranscription.tool] }
 
     static let summarize = StudioTool(
         id: "ai.summarize", title: "AI summarizer",

@@ -9,6 +9,7 @@ struct StudioPDFEditorView: View {
     @State private var editor: StudioPDFEditorModel
     @State private var showsThumbnails = true
     @State private var showsSignaturePad = false
+    @State private var confirmingLeave = false
     @Environment(\.colorScheme) private var scheme
 
     @MainActor init(model: StudioModel, url: URL, mode: StudioPDFEditorMode) {
@@ -25,7 +26,7 @@ struct StudioPDFEditorView: View {
             StudioBackBar(
                 title: editor.url.lastPathComponent,
                 subtitle: editor.pageCount > 0 ? "\(editor.pageCount) pages" : nil,
-                symbol: "doc.richtext", back: model.goHome
+                symbol: "doc.richtext", back: leave
             ) {
                 trailing
             }
@@ -84,6 +85,14 @@ struct StudioPDFEditorView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Leave without saving?", isPresented: $confirmingLeave, titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { model.goHome() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your edits to \(editor.url.lastPathComponent) have not been saved yet.")
+        }
         .sheet(isPresented: $showsSignaturePad) {
             StudioSignaturePad { image in
                 editor.saveSignature(image)
@@ -93,6 +102,14 @@ struct StudioPDFEditorView: View {
             }
         }
         .task { if editor.session == nil { editor.load() } }
+    }
+
+    private func leave() {
+        if editor.isDirty {
+            confirmingLeave = true
+        } else {
+            model.goHome()
+        }
     }
 
     @ViewBuilder private var trailing: some View {

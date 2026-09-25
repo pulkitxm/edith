@@ -37,7 +37,7 @@
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Edith needs this to scan an external drive you pick in the Cleaner.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Edith transcribes voice memories and speech in your videos into editable captions on this Mac.</string>
+	<string>Edith transcribes voice memories, speech in your videos, and audio or video you open in Studio into text and captions on this Mac.</string>
 	<key>NSSupportsSuddenTermination</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

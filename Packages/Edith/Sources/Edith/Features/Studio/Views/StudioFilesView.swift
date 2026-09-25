@@ -168,6 +168,7 @@ struct StudioFileCard: View {
                         .edithButtonTarget(.borderless)
                 }
                 .buttonStyle(.edith(.borderless))
+                .onDrag { NSItemProvider(object: item.url as NSURL) }
                 .accessibilityLabel("Select \(item.name)")
                 HStack {
                     Button {

@@ -126,6 +126,12 @@ enum StudioBridge {
         }
     }
 
+    static func requireNoFailures(_ result: StudioRunResult) throws {
+        guard !result.failures.isEmpty else { return }
+        let count = result.failures.count
+        throw CLIFailure("\(count) file\(count == 1 ? "" : "s") could not be processed")
+    }
+
     static func files(_ paths: [String]) throws -> [URL] {
         try paths.map { path in
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
@@ -293,11 +299,13 @@ struct StudioRunCommand: AsyncParsableCommand {
                         "inputBytes": .double(Double(result.inputBytes)),
                         "outputBytes": .double(Double(result.outputBytes)),
                         "notes": .array(result.notes.map { .string($0) }),
+                        "executed": .bool(true),
                         "failures": .array(
                             result.failures.map {
                                 .object(["file": .string($0.file), "message": .string($0.message)])
                             }),
                     ]))
+                try StudioBridge.requireNoFailures(result)
                 return
             }
             for output in result.outputs {
@@ -307,6 +315,7 @@ struct StudioRunCommand: AsyncParsableCommand {
             for failure in result.failures {
                 CLIOut.note(CLIStyle.red("\(failure.file): \(failure.message)"))
             }
+            try StudioBridge.requireNoFailures(result)
         }
     }
 }

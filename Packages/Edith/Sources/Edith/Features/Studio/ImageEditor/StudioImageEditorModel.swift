@@ -60,6 +60,7 @@ final class StudioImageEditorModel {
     var panel: StudioImagePanel = .adjust
     var preview: CGImage?
     var renderedDocument: ImageEditDocument?
+    var savedDocument: ImageEditDocument?
     var geometry: CGImage?
     var selectedLayer: UUID?
     var loadError: String?
@@ -95,6 +96,7 @@ final class StudioImageEditorModel {
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var hasChanges: Bool { !document.isUnchanged }
+    var hasUnsavedChanges: Bool { document != (savedDocument ?? ImageEditDocument(source: url)) }
 
     var canvasSize: CGSize {
         guard let preview else { return CGSize(width: 1, height: 1) }
@@ -368,6 +370,7 @@ final class StudioImageEditorModel {
                 return
             }
             self.lastSaved = target
+            self.savedDocument = document
             self.status = "Saved \(target.lastPathComponent)"
             studio.add([target])
             studio.recordSaved(toolID: "image.edit", title: "Image editor", outputs: [target])

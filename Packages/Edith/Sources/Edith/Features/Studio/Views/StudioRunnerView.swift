@@ -72,7 +72,9 @@ struct StudioInputsPanel: View {
                     if job.inputs.isEmpty {
                         StudioInputsDropZone(tool: job.tool, choose: choose)
                     } else {
-                        if StudioPreview.supports(job.tool) {
+                        if StudioPreview.supports(job.tool),
+                            model.environment.missing(for: job.tool).isEmpty
+                        {
                             StudioPreviewPanel(job: job, environment: model.environment)
                         }
                         LazyVGrid(
@@ -322,6 +324,11 @@ struct StudioProgressCard: View {
                 Text(job.status ?? "\(job.tool.actionTitle)…")
                     .font(.system(size: UIScale.pt(13.5), weight: .semibold))
                     .lineLimit(1)
+                if job.units > 1 {
+                    Text("File \(min(job.unit + 1, job.units)) of \(job.units)")
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(.secondary)
+                }
                 ProgressView(value: job.progress)
                     .frame(width: UIScale.pt(260))
                 Text("\(Int((job.progress * 100).rounded()))%")
@@ -446,9 +453,10 @@ struct StudioOutputRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(
-                    StudioInspector.size(output.bytes) + " · "
-                        + output.url.deletingLastPathComponent().path
+                    StudioInspector.size(output.bytes) + " · in "
+                        + output.url.deletingLastPathComponent().lastPathComponent
                 )
+                .help(output.url.path)
                 .font(.system(size: UIScale.pt(10.5)))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -471,6 +479,9 @@ struct StudioOutputRow: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(8))
+        .contentShape(Rectangle())
+        .onDrag { NSItemProvider(object: output.url as NSURL) }
+        .help("Drag to Finder or another app")
     }
 }
 

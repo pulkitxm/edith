@@ -20,8 +20,12 @@ public enum StudioPreview {
         "pdf.page-size", "pdf.compress", "pdf.redact",
     ]
 
+    static let videoTools: Set<String> = [
+        "video.crop", "video.rotate", "video.watermark", "video.adjust", "video.social",
+    ]
+
     public static func supports(_ tool: StudioTool) -> Bool {
-        imageTools.contains(tool.id) || pdfTools.contains(tool.id)
+        imageTools.contains(tool.id) || pdfTools.contains(tool.id) || videoTools.contains(tool.id)
     }
 
     public static func render(
@@ -39,15 +43,24 @@ public enum StudioPreview {
         previewEnvironment.temporaryRoot = scratch.appendingPathComponent(
             "staging", isDirectory: true)
         let output = scratch.appendingPathComponent("out", isDirectory: true)
-        let prepared = try prepare(
-            input, tool: tool, settings: settings, scratch: scratch, maxPixelSize: maxPixelSize)
+        let prepared =
+            input.studioKind == .video
+            ? try await prepareVideo(
+                input, settings: settings, scratch: scratch, environment: environment,
+                maxPixelSize: maxPixelSize)
+            : try prepare(
+                input, tool: tool, settings: settings, scratch: scratch, maxPixelSize: maxPixelSize)
         let result = try await StudioRunner.run(
             tool: tool, inputs: [prepared.url], settings: prepared.settings,
             destination: .folder(output), environment: previewEnvironment)
         guard let produced = result.outputs.first?.url else {
             throw StudioError.nothingToDo("The preview produced nothing.")
         }
-        let after = try image(of: produced, maxPixelSize: maxPixelSize)
+        let after =
+            produced.studioKind == .video
+            ? try await frame(
+                of: produced, scratch: scratch, environment: environment, name: "after")
+            : try image(of: produced, maxPixelSize: maxPixelSize)
         return StudioPreviewImage(before: prepared.before, after: after)
     }
 
@@ -97,6 +110,49 @@ public enum StudioPreview {
         let url = scratch.appendingPathComponent(input.studioStem + "." + format.fileExtension)
         try StudioImageIO.write(source, to: url, format: format, options: .init(quality: 0.95))
         return Prepared(url: url, settings: settings, before: source)
+    }
+
+    static func prepareVideo(
+        _ input: URL, settings: StudioSettings, scratch: URL, environment: StudioEnvironment,
+        maxPixelSize: Int
+    ) async throws -> Prepared {
+        let ffmpeg = try environment.require(.ffmpeg)
+        let duration = await StudioMedia.probe(input, environment: environment)?.duration ?? 0
+        let start = duration > 2 ? min(1, duration * 0.3) : 0
+        let snippet = scratch.appendingPathComponent(input.studioStem + ".mp4")
+        let result = try await StudioProcess.run(
+            ffmpeg,
+            [
+                "-hide_banner", "-nostdin", "-y", "-ss", String(format: "%.2f", start), "-i",
+                input.path, "-t", "0.6", "-an", "-vf",
+                "scale='min(\(maxPixelSize),iw)':-2", "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", "18", "-pix_fmt", "yuv420p", snippet.path,
+            ], timeout: 60)
+        guard result.status == 0, FileManager.default.fileExists(atPath: snippet.path) else {
+            throw StudioError.failed(
+                "A preview clip could not be made from \(input.lastPathComponent).")
+        }
+        let before = try await frame(
+            of: snippet, scratch: scratch, environment: environment, name: "before")
+        return Prepared(url: snippet, settings: settings, before: before)
+    }
+
+    static func frame(
+        of video: URL, scratch: URL, environment: StudioEnvironment, name: String
+    ) async throws -> CGImage {
+        let ffmpeg = try environment.require(.ffmpeg)
+        let still = scratch.appendingPathComponent("\(name).png")
+        let result = try await StudioProcess.run(
+            ffmpeg,
+            [
+                "-hide_banner", "-nostdin", "-y", "-ss", "0.2", "-i", video.path, "-frames:v", "1",
+                still.path,
+            ],
+            timeout: 60)
+        guard result.status == 0 else {
+            throw StudioError.failed("The preview frame could not be read.")
+        }
+        return try StudioImageIO.load(still)
     }
 
     static func image(of url: URL, maxPixelSize: Int) throws -> CGImage {
