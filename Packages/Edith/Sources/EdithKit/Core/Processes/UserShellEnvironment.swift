@@ -160,9 +160,15 @@ public final class UserShellEnvironment: @unchecked Sendable {
         let capture = capture
         let zdotdir = lock.withLock { snapshot?.variables["ZDOTDIR"] }
         Task(priority: .utility) { [weak self] in
-            let variables = await capture(shell, home, base)
-            let fingerprint = Self.fingerprint(
-                Self.watchedPaths(home: home, zdotdir: variables.map { $0["ZDOTDIR"] } ?? zdotdir))
+            var variables: [String: String]?
+            var fingerprint: [String] = []
+            for _ in 0..<2 {
+                let before = Self.fingerprint(Self.watchedPaths(home: home, zdotdir: zdotdir))
+                variables = await capture(shell, home, base)
+                let captured = variables.map { $0["ZDOTDIR"] } ?? zdotdir
+                fingerprint = Self.fingerprint(Self.watchedPaths(home: home, zdotdir: captured))
+                if variables == nil || captured != zdotdir || fingerprint == before { break }
+            }
             self?.finishCapture(variables, fingerprint: fingerprint)
         }
     }
@@ -250,7 +256,6 @@ public final class UserShellEnvironment: @unchecked Sendable {
         environment["SHELL"] = shell.path
         environment.removeValue(forKey: "TERM")
         environment["EDITH_RESOLVING_ENVIRONMENT"] = "1"
-        let started = Date()
         let request = CLICommandRequest(
             executableURL: shell,
             arguments: [
@@ -259,31 +264,10 @@ public final class UserShellEnvironment: @unchecked Sendable {
             environment: environment, currentDirectoryURL: home, timeout: captureTimeout,
             maximumOutputBytes: maximumOutputBytes, discardsStandardError: true,
             terminatesProcessGroup: true)
-        guard let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in }),
-            var variables = parse(result.outputData, begin: begin, end: end)
-        else { return nil }
-        if let agent = variables["SSH_AGENT_PID"].flatMap({ pid_t($0) }),
-            agent != base["SSH_AGENT_PID"].flatMap({ pid_t($0) }),
-            startedSSHAgent(agent, after: started)
-        {
-            kill(agent, SIGTERM)
+        guard let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in }) else {
+            return nil
         }
-        variables.removeValue(forKey: "SSH_AGENT_PID")
-        return variables
-    }
-
-    static func startedSSHAgent(_ pid: pid_t, after date: Date) -> Bool {
-        guard pid > 1 else { return false }
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
-        let name = withUnsafeBytes(of: info.pbi_comm) { bytes in
-            String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
-        }
-        let start = Date(
-            timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec)
-                + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
-        return name == "ssh-agent" && start >= date.addingTimeInterval(-1)
+        return parse(result.outputData, begin: begin, end: end)
     }
 
     static func parse(_ output: Data, begin: String, end: String) -> [String: String]? {
