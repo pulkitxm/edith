@@ -2,6 +2,7 @@ import EdithKit
 import Foundation
 import Testing
 
+@testable import Edith
 @testable import EdithCLI
 
 enum DocsFixture {
@@ -121,6 +122,16 @@ enum DocsFixture {
         #expect(library.lookup("herdr/ls") == DocsLocation(path: "herdr/ls.md"))
         #expect(library.lookup("herdr") == DocsLocation(path: "herdr/README.md"))
         #expect(library.lookup("nothing at all") == nil)
+    }
+
+    @Test func navigationNamesPagesWithinTheirGroup() throws {
+        let library = DocsFixture.library
+        let attention = try #require(library.groups.first { $0.id == "attention" })
+        let titles = attention.pages.map { DocsNavigation.title(of: $0, in: attention) }
+        #expect(titles.first == "Overview")
+        #expect(titles.contains("categories") && titles.contains("focus start"))
+        #expect(library.groups.first?.title == "Overview")
+        #expect(library.pages(inGroup: "herdr").map(\.path).first == "herdr/README.md")
     }
 
     @Test func relativeLinksResolveToBundledPages() {

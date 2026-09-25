@@ -550,10 +550,12 @@ struct MainWindowView: View {
     }
 
     private func goBack() {
+        if destination == .docs, DocsBrowser.shared.goBack() { return }
         if let location = nav.goBack() { navigate(to: location) }
     }
 
     private func goForward() {
+        if destination == .docs, DocsBrowser.shared.goForward() { return }
         if let location = nav.goForward() { navigate(to: location) }
     }
 

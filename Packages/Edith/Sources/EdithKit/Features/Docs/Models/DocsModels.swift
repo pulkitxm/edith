@@ -138,6 +138,12 @@ public struct DocsGroup: Sendable, Hashable, Identifiable {
     public let id: String
     public let title: String
     public let pages: [DocsPage]
+
+    public var readmePath: String { Self.readmePath(for: id) }
+
+    public static func readmePath(for group: String) -> String {
+        group.isEmpty ? "README.md" : "\(group)/README.md"
+    }
 }
 
 public enum DocsCommandText {
