@@ -197,6 +197,18 @@ public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var isTerminal: Bool { category == .terminal }
 }
 
+public struct HerdrSpacePane: Codable, Equatable, Hashable, Sendable {
+    public var session: String
+    public var pane: String
+    public var cwd: String
+
+    public init(session: String, pane: String, cwd: String) {
+        self.session = session
+        self.pane = pane
+        self.cwd = cwd
+    }
+}
+
 public struct HerdrHostSnapshot: Identifiable, Codable, Equatable, Sendable {
     public var id: String
     public var name: String
@@ -205,11 +217,13 @@ public struct HerdrHostSnapshot: Identifiable, Codable, Equatable, Sendable {
     public var herdrPresent: Bool
     public var reachable: Bool
     public var agents: [HerdrAgent]
+    public var terminals: [HerdrSpacePane]
     public var error: String?
 
     public init(
         id: String, name: String, isLocal: Bool, sshTarget: String? = nil,
-        herdrPresent: Bool, reachable: Bool, agents: [HerdrAgent] = [], error: String? = nil
+        herdrPresent: Bool, reachable: Bool, agents: [HerdrAgent] = [],
+        terminals: [HerdrSpacePane] = [], error: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -218,17 +232,33 @@ public struct HerdrHostSnapshot: Identifiable, Codable, Equatable, Sendable {
         self.herdrPresent = herdrPresent
         self.reachable = reachable
         self.agents = agents
+        self.terminals = terminals
         self.error = error
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        isLocal = try container.decode(Bool.self, forKey: .isLocal)
+        sshTarget = try container.decodeIfPresent(String.self, forKey: .sshTarget)
+        herdrPresent = try container.decode(Bool.self, forKey: .herdrPresent)
+        reachable = try container.decode(Bool.self, forKey: .reachable)
+        agents = try container.decode([HerdrAgent].self, forKey: .agents)
+        terminals =
+            try container.decodeIfPresent([HerdrSpacePane].self, forKey: .terminals) ?? []
+        error = try container.decodeIfPresent(String.self, forKey: .error)
     }
 
     public static let localID = "local"
 
     public static func local(
-        herdrPresent: Bool, agents: [HerdrAgent] = [], error: String? = nil
+        herdrPresent: Bool, agents: [HerdrAgent] = [], terminals: [HerdrSpacePane] = [],
+        error: String? = nil
     ) -> HerdrHostSnapshot {
         HerdrHostSnapshot(
             id: localID, name: "This Mac", isLocal: true, herdrPresent: herdrPresent,
-            reachable: true, agents: agents, error: error)
+            reachable: true, agents: agents, terminals: terminals, error: error)
     }
 }
 

@@ -35,6 +35,7 @@ public struct AgentServices {
         await startup?.value
         await BackgroundBackupRuntime.stop()
         _ = await (runtimeStopped, schedulerStopped)
+        await runtime.flushJournal()
     }
 }
 

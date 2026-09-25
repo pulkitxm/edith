@@ -36,13 +36,19 @@ public enum AppData {
 
     public static func resolveCloudDirectory(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        identifier: String = AppBuildIdentity.application
     ) -> URL {
         if let path = environment[cloudOverrideVariable], !path.isEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
+        let directoryName = AppBuildIdentity.directoryName(for: identifier)
+        guard AppBuildIdentity.slot(of: identifier) == nil else {
+            return homeDirectory.appendingPathComponent(
+                "Library/Application Support/\(directoryName)/iCloud")
+        }
         return homeDirectory.appendingPathComponent(
-            "Library/Mobile Documents/com~apple~CloudDocs/\(AppBuildIdentity.directoryName)")
+            "Library/Mobile Documents/com~apple~CloudDocs/\(directoryName)")
     }
 
     public static var cloudAvailable: Bool {

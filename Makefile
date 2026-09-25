@@ -250,7 +250,7 @@ ci-markdown:
 
 ci-links:
 	@command -v lychee >/dev/null || { echo "lychee missing: run make ci-tools" >&2; exit 1; }
-	GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token)}" lychee --config lychee.toml './**/*.md'
+	GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" lychee --config lychee.toml './**/*.md'
 
 ci-workflows:
 	@command -v actionlint >/dev/null || { echo "actionlint missing: run make ci-tools" >&2; exit 1; }
@@ -263,7 +263,7 @@ ci-security:
 
 ci-gitleaks:
 	@command -v gitleaks >/dev/null || { echo "gitleaks missing: run make ci-tools" >&2; exit 1; }
-	gitleaks git --no-banner --redact .
+	gitleaks git --no-banner --redact --log-opts="HEAD" .
 
 ci-cargo-audit:
 	@cargo audit --version >/dev/null 2>&1 || { echo "cargo-audit missing: run make ci-tools" >&2; exit 1; }
@@ -280,16 +280,17 @@ ci-semgrep:
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
-	  --skip-dirs build --skip-dirs Packages/Edith/.build --skip-dirs apps/companion/target \
-	  --skip-dirs apps/promo-video/node_modules --skip-dirs node_modules --skip-dirs extras .
+	  --skip-dirs Packages/Edith/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
+	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras .
 
 ci-companion:
-	cd apps/companion && cargo clippy --all-targets --locked -- -D warnings
-	cd apps/companion && cargo test --locked
+	cd apps/companion && cargo +stable clippy --all-targets --locked -- -D warnings
+	cd apps/companion && cargo +stable test --locked
 
 ci-companion-migrate:
 	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
-	cd apps/companion && cargo run --locked -- --migrate-only
+	cd apps/companion && cargo +stable run --locked -- --migrate-only
 
 ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true

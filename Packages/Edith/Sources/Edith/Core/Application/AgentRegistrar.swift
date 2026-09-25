@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Foundation
 import ServiceManagement
@@ -7,8 +8,13 @@ final class AgentRegistrar {
     private let service = SMAppService.agent(plistName: AgentService.plistName)
     private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in self?.publish() }
     private var didRepair = false
+    private var developmentLoad: Task<Void, Never>?
 
     func registerAndRestartIfStale() {
+        guard !AppBuildIdentity.isDevelopment else {
+            loadDevelopmentAgent()
+            return
+        }
         register()
         guard AgentBuildStamp.hasChanged() else {
             repairIfUnreachable()
@@ -16,6 +22,10 @@ final class AgentRegistrar {
         }
         AgentBuildStamp.record()
         reregister(restartingRunningAgent: true)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            self?.repairIfUnreachable()
+        }
     }
 
     private func reregister(restartingRunningAgent: Bool) {
@@ -23,6 +33,21 @@ final class AgentRegistrar {
         attemptRegistration()
         guard restartingRunningAgent else { return }
         restartRunningAgent()
+    }
+
+    private func loadDevelopmentAgent() {
+        developmentLoad?.cancel()
+        developmentLoad = Task { [weak self] in
+            let load = await DevelopmentAgentJob.ensureCurrent()
+            guard !Task.isCancelled else { return }
+            if load == .started { AgentClient.shared.reset() }
+            self?.publish(load == .failed ? .notFound : .enabled)
+        }
+    }
+
+    func unloadDevelopmentAgent() async {
+        developmentLoad?.cancel()
+        await DevelopmentAgentJob.unload()
     }
 
     private func repairIfUnreachable() {
@@ -87,6 +112,10 @@ final class AgentRegistrar {
             case .notFound: .notFound
             @unknown default: .notFound
             }
+        publish(state)
+    }
+
+    private func publish(_ state: AgentRegistrationState) {
         SharedDefaults.store.setIfChanged(state.rawValue, forKey: AgentService.stateKey)
         approvalRefresher.update(awaitingApproval: state == .awaitingApproval)
     }

@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import Security
 
@@ -15,7 +16,7 @@ struct DatabaseKeychainAPI: @unchecked Sendable {
 }
 
 public actor DatabaseKeychainSecretStore: DatabaseSecretStore {
-    public static let defaultService = "com.pulkit.edith.database"
+    public static let defaultService = AppBuildIdentity.keychainService("database")
     public static let defaultLabel = "Edith Database"
 
     public nonisolated let service: String

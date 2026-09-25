@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import EdithLidAwakeSupport
 import Security
@@ -18,6 +19,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard AgentService.usesCustomService || InstalledLocation.permitsLaunch() else {
+            InstalledLocation.refuseLaunch()
+            return
+        }
         let launchTrace = PerformanceTrace.begin(.startup, "main.launch")
         defer { PerformanceTrace.end(launchTrace) }
         applyAppearance(
@@ -79,7 +84,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
             StartupPhase(name: "main.lidAwakeDaemon") { [weak self] in
-                guard !AgentService.usesCustomService, let self else { return }
+                guard !AgentService.usesCustomService, !AppBuildIdentity.isDevelopment, let self
+                else { return }
                 self.lidAwakeDaemonRegistrar.register()
             },
         ])
@@ -135,6 +141,25 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             showInitialWindow()
         }
         return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard appStarted, AppBuildIdentity.isDevelopment, !AgentService.usesCustomService else {
+            return .terminateNow
+        }
+        postLaunch.cancel()
+        helperMaintenanceTask?.cancel()
+        Task { [agentRegistrar, helperMaintenanceTask] in
+            await helperMaintenanceTask?.value
+            for helper in NSRunningApplication.runningApplications(
+                withBundleIdentifier: AppBuildIdentity.helper)
+            {
+                helper.terminate()
+            }
+            await agentRegistrar.unloadDevelopmentAgent()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {
