@@ -25,6 +25,13 @@ public enum AgentOperations {
         await registerControls(on: runtime)
         await AgentNotificationOperations.register(on: runtime)
         await AgentJevOperations.register(on: runtime)
+        await runtime.register(operation: AgentSearchOperation.search) { payload in
+            let request = try AgentPayload.decode(AgentSearchRequest.self, from: payload)
+            return try await AgentPayload.encode(AgentSearchService.shared.search(request))
+        }
+        await runtime.registerShutdown(id: "sessions.search") {
+            await AgentTranscriptIndex.shared.flush()
+        }
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)
             await runtime.register(operation: CompanionBackgroundOperation.refresh) { _ in
