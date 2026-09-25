@@ -25,13 +25,20 @@ public actor AttentionBackgroundService {
     private var summaryTasks: [UUID: Task<AttentionPageSnapshot, Error>] = [:]
     private var stopped = false
     private var agentRecorder = AttentionAgentRecorder()
+    private let decider: @Sendable () async -> JevDeciding?
+    private var categorizeTask: Task<AttentionCategorizeReport, Error>?
+    private var lastCategorizedAt: Date?
 
     public init(
         store: AgentStore, root: URL = AttentionPaths.root,
         cloudDirectory: URL = AppData.cloudDir.appendingPathComponent("Attention"),
         defaults: UserDefaults = SharedDefaults.store,
-        cloudAvailable: @escaping @Sendable () -> Bool = { AppData.cloudAvailable }
+        cloudAvailable: @escaping @Sendable () -> Bool = { AppData.cloudAvailable },
+        decider: @escaping @Sendable () async -> JevDeciding? = {
+            AgentJev.engine.isConfigured ? AgentJev.engine : nil
+        }
     ) {
+        self.decider = decider
         let events = AttentionEventStore(store: store)
         self.events = events
         let repository = AttentionRepository(root: root, eventSink: events)
@@ -43,6 +50,7 @@ public actor AttentionBackgroundService {
     }
 
     deinit {
+        categorizeTask?.cancel()
         backupTask?.cancel()
         restoreTask?.cancel()
         refreshTask?.cancel()
@@ -97,6 +105,12 @@ public actor AttentionBackgroundService {
             server = nil
             serverSettings = nil
         }
+        if enabled, settings.isEnabled, settings.jevCategorizationEnabled, categorizeTask == nil,
+            now.timeIntervalSince(lastCategorizedAt ?? .distantPast) >= 1_800
+        {
+            lastCategorizedAt = now
+            Task { _ = try? await self.categorize() }
+        }
         if settings.iCloudBackupEnabled, cloudAvailable(),
             now.timeIntervalSince(lastBackupAt ?? .distantPast) >= 900
         {
@@ -110,6 +124,9 @@ public actor AttentionBackgroundService {
 
     public func stop() async {
         stopped = true
+        let categorizing = categorizeTask
+        categorizeTask = nil
+        categorizing?.cancel()
         await tracking.stop()
         let backup = backupTask
         let restore = restoreTask
@@ -144,6 +161,44 @@ public actor AttentionBackgroundService {
         let spool = AttentionDeliverySpool(
             file: repository.directory.appendingPathComponent("delivery-spool.json"))
         return try await spool.health()
+    }
+
+    public func categorize(now: Date = Date()) async throws -> AttentionCategorizeReport {
+        guard !stopped else { throw CancellationError() }
+        if let categorizeTask { return try await categorizeTask.value }
+        let settings = repository.loadSettings()
+        guard settings.jevCategorizationEnabled, let decider = await decider() else {
+            return AttentionCategorizeReport(available: false)
+        }
+        try importSpool()
+        let events = events
+        let repository = repository
+        let task = Task.detached(priority: .utility) { () throws -> AttentionCategorizeReport in
+            let from = now.addingTimeInterval(-7 * 86_400)
+            let classifications = repository.loadClassifications()
+            let summary = AttentionAnalyzer().summary(
+                events: try events.events(from: from, to: now), settings: settings,
+                classifications: classifications, from: from, to: now)
+            let (next, report) = await AttentionJevCategorizer().run(
+                summary: summary, settings: settings, classifications: classifications,
+                decider: decider, now: now)
+            try Task.checkCancellation()
+            try repository.updateClassifications { current in
+                current.entities.merge(next.entities) { _, latest in latest }
+                current.titles.merge(next.titles) { _, latest in latest }
+            }
+            return report
+        }
+        categorizeTask = task
+        defer {
+            categorizeTask = nil
+            lastCategorizedAt = now
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     public nonisolated func tracksAgents() -> Bool {
@@ -364,6 +419,9 @@ public enum AttentionBackgroundOperations {
             }
             service.updateContext(try AgentPayload.decode(AttentionAppContext.self, from: payload))
             return Data()
+        }
+        await runtime.register(operation: AttentionOperation.categorize) { _ in
+            try await AgentPayload.encode(service.categorize())
         }
         await runtime.register(operation: AttentionOperation.backup) { _ in
             try await service.backup()

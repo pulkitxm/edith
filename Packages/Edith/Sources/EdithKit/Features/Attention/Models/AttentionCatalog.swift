@@ -28,6 +28,27 @@ public enum AttentionCatalog {
             id: unclassified, name: "Unclassified", kind: .unclassified, color: "5C5B57"),
     ]
 
+    public static let descriptions: [String: String] = [
+        "focus": "focused work that does not fit a more specific category",
+        "coding": "writing, reviewing, building or debugging software, terminals and developer tools",
+        "agents": "running, supervising or reviewing AI coding agents and their sessions",
+        "ai": "chatting with AI assistants such as ChatGPT, Claude or Gemini",
+        "design": "visual, product or interface design work",
+        "writing": "writing or editing documents, notes, specs and spreadsheets",
+        "learning": "documentation, tutorials, talks, courses, papers and technical reading",
+        "communication": "chat and direct messages with people",
+        "meetings": "video calls and meetings",
+        "email": "reading or writing email",
+        "entertainment": "videos, streaming, shows and films watched for fun",
+        "social": "social media feeds and community forums",
+        "games": "playing or browsing games",
+        "shopping": "shopping, food delivery and browsing products",
+        "news": "news and current affairs",
+        "music": "listening to music or podcasts",
+        "planning": "calendars, task lists, project tracking and planning",
+        "neutral": "system utilities, settings, file management and web search",
+    ]
+
     public static let mixedDomains = [
         "youtube.com", "x.com", "twitter.com", "reddit.com", "linkedin.com", "twitch.tv",
         "medium.com", "news.ycombinator.com",
