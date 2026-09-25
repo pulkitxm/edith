@@ -231,6 +231,7 @@ enum AttentionCLI {
         let hours = seconds / 3_600
         let minutes = seconds % 3_600 / 60
         if hours > 0 { return "\(hours)h \(minutes)m" }
+        if minutes == 0, seconds > 0 { return "\(seconds)s" }
         return "\(minutes)m"
     }
 
