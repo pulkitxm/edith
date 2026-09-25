@@ -278,6 +278,7 @@ struct EdithApp {
             services.presenter?.pauseUntilShareEnds()
         }
         LidAwakeActionBridge.shared.install(services: services)
+        VirtualCameraActionBridge.shared.install(services: services)
         _ = IPC.observe(
             IPC.Name.requestCalendarEvents,
             info: { info in

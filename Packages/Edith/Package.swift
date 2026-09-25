@@ -143,6 +143,7 @@ let targets: [Target] = [
     .target(
         name: "EdithCLI",
         dependencies: [
+            "EdithCameraSupport",
             "EdithCore",
             "EdithDatabase",
             "EdithDatabaseMCP",
@@ -201,6 +202,7 @@ let targets: [Target] = [
     .target(
         name: "Edith",
         dependencies: [
+            "EdithCameraSupport",
             "EdithDatabase",
             "EdithDocs",
             "EdithKit",
@@ -225,7 +227,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithHelper",
-        dependencies: ["EdithKit", "EdithLidAwakeSupport"],
+        dependencies: ["EdithKit", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [.copy("MenuBar.png")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

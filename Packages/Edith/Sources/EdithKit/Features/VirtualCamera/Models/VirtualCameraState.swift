@@ -87,7 +87,7 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         activeSceneID: UUID? = nil, privacy: VirtualCameraPrivacy = .live,
         privacyMessage: String = VirtualCameraState.defaultPrivacyMessage,
         transition: VirtualCameraTransition = .smooth, sharpZoom: Bool = true,
-        mirrorPreview: Bool = true
+        mirrorPreview: Bool = false
     ) {
         self.sourceID = sourceID
         self.composition = composition

@@ -280,6 +280,11 @@ public enum ExtensionRegistry {
             symbolName: "calendar", suite: .media, host: .bar, featured: false,
             defaultsKey: "tabCalendarEnabled", requiredCapabilities: [.calendarEvents]),
         ExtensionRegistryEntry(
+            id: "virtualCamera", title: "Virtual Camera",
+            subtitle: "Frame, zoom and style your camera, then pick Edith Camera in any call.",
+            symbolName: "web.camera", suite: .media, host: .bar, featured: true,
+            defaultsKey: "virtualCameraEnabled", requiredCapabilities: [.virtualCamera]),
+        ExtensionRegistryEntry(
             id: "database", title: "Database",
             subtitle: "Explore databases and run guarded production mutations.",
             symbolName: "cylinder.fill", suite: .data, host: .agent, featured: true,

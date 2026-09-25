@@ -170,7 +170,7 @@ import Testing
         #expect(decoded.scenes.map(\.name) == ["Full frame", "Close-up"])
         #expect(decoded.transition == .smooth)
         #expect(decoded.sharpZoom)
-        #expect(decoded.mirrorPreview)
+        #expect(!decoded.mirrorPreview)
         let garbage = try JSONDecoder().decode(
             VirtualCameraState.self, from: Data("{\"privacy\":\"loud\",\"scenes\":7}".utf8))
         #expect(garbage.privacy == .live)

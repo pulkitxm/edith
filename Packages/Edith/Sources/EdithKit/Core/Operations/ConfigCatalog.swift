@@ -51,7 +51,7 @@ public enum ConfigCatalog {
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music", "videoEditor",
-        "calendar",
+        "calendar", "virtualCamera",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
@@ -62,7 +62,8 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + videoEditor + calendar + clipboard + keystrokeHighlight + notch + focusDim
+        + music + videoEditor + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
+        + focusDim
         + presenter
         + windowSweaters + colorPicker + emoji + bifrost
         + micMute
@@ -703,6 +704,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.calendarEnabled, .bool, group: "calendar",
             summary: "Calendar extension: your schedule in the panel and the app.",
+            fallback: .bool(false))
+    ]
+
+    private static let virtualCamera: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.VirtualCamera.enabled, .bool, group: "virtualCamera",
+            summary: "Virtual Camera extension: send a framed and styled camera to video apps.",
             fallback: .bool(false))
     ]
 

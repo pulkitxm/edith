@@ -338,6 +338,11 @@ public enum AppStorageKeys {
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }
+    public enum VirtualCamera {
+        public static let enabled = "virtualCameraEnabled"
+        public static let state = "virtualCameraState"
+    }
+
     public enum WindowSweaters {
         public static let enabled = "windowSweatersEnabled"
         public static let active = "windowSweatersActive"
