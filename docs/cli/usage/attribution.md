@@ -24,7 +24,7 @@ The known repositories are the GitHub repositories that already appear in
   where it is.
 - By Jev, only while a key is saved: for what is left, Jev picks one known
   repository or `none` from the folder, its path, the machine, the agent and up
-  to five chat titles. An answer below 0.8 counts as `none`. Chats titled only
+  to five chat titles. An answer below 0.9 counts as `none`. Chats titled only
   `Chat <id>` carry no signal and are never sent. Each run asks at most 40 new
   questions, and every answer, `none` included, is kept, so nothing is asked
   twice.
