@@ -1,9 +1,10 @@
+import EdithCore
 import Foundation
 import LocalAuthentication
 import Security
 
 public struct KeychainJevKeyStore: JevKeyStore {
-    public static let service = "com.pulkit.edith.jev"
+    public static let service = AppBuildIdentity.keychainService("jev")
     public static let account = "typesafe-api-key"
 
     public init() {}

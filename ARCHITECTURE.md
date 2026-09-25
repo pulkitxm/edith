@@ -37,6 +37,13 @@ Mach service and keeps it alive while the Login Items entry is enabled. It runs
 a Foundation run loop with an `NSXPCListener` and no AppKit UI. It owns
 collection and long jobs.
 
+Only `/Applications/Edith.app` runs these production registrations. Each
+worktree's development build is a separate app, `com.pulkit.edith.dev.<slot>`,
+whose agent the app loads with `launchctl bootstrap` and unloads on quit, so
+development builds never share a label, Mach service, login item or data folder
+with each other or with the installed app. `docs/background-agent.md` has the
+details.
+
 Edith Bar is the login item helper. It keeps only what needs a WindowServer
 session or a TCC grant: the clipboard tap, keystroke highlight, focus dim, the
 presenter, the microphone, the notch, playback and EventKit. It publishes into
@@ -110,9 +117,10 @@ an ability is a registry entry, not a new switch statement.
 
 One data root, `~/Library/Application Support/Edith/`: the store, `machines/`,
 `clipboard/`, `seo/`, `settings.json` and music unless another folder is
-chosen. `DataRoot` names each location once. A development build points the
-whole root elsewhere with the `EDITH_DATA_ROOT` environment variable; there is
-no setting for it, so it cannot travel in a backup.
+chosen. `DataRoot` names each location once. A development build keeps its data,
+caches and logs under `Edith Dev/<slot>` instead, and can point the whole root
+elsewhere with the `EDITH_DATA_ROOT` environment variable; there is no setting
+for it, so it cannot travel in a backup.
 
 Caches live in `~/Library/Caches/Edith/`, including `Runtime/` for SSH
 ControlMaster sockets. They are regenerable and never synced. Logs live in

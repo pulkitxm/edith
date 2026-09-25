@@ -35,7 +35,7 @@ public enum AgentStoreLayout {
 }
 
 public enum AgentSchema {
-    public static let version = 4
+    public static let version = 5
 
     public static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -121,6 +121,11 @@ public enum AgentSchema {
                 table.column("updatedAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("0005-attention-event-kind") { database in
+            try database.create(
+                index: "attention_event_on_kind_startedAt", on: "attention_event",
+                columns: ["kind", "startedAt"])
+        }
         return migrator
     }
 }
@@ -151,9 +156,7 @@ public final class AgentStore: @unchecked Sendable {
         Self.pruneBackups(root: url.deletingLastPathComponent(), fileManager: fileManager)
     }
 
-    public var schemaVersion: Int {
-        (try? pool.read { try Int.fetchOne($0, sql: "PRAGMA user_version") ?? 0 }) ?? 0
-    }
+    public let schemaVersion = AgentSchema.version
 
     public func read<T>(_ body: (Database) throws -> T) throws -> T {
         try pool.read(body)
@@ -162,6 +165,19 @@ public final class AgentStore: @unchecked Sendable {
     @discardableResult
     public func write<T>(_ body: (Database) throws -> T) throws -> T {
         try pool.write(body)
+    }
+
+    public func asyncWrite(
+        _ body: @escaping @Sendable (Database) throws -> Void,
+        failed: @escaping @Sendable (Error) -> Void
+    ) {
+        pool.asyncWrite(body) { _, result in
+            if case .failure(let error) = result { failed(error) }
+        }
+    }
+
+    public func flush() {
+        try? pool.barrierWriteWithoutTransaction { _ in }
     }
 
     public func close() throws {
