@@ -105,6 +105,9 @@ struct HerdrPage: View {
         .sheet(isPresented: $newAgentPopupPresented) {
             HerdrNewAgentPopup(store: store)
         }
+        .sheet(isPresented: $store.searchPresented) {
+            HerdrSearchPopup(store: store) { agent in openAgent(agent) }
+        }
     }
 
     private func shown(_ session: HerdrOpenTab) -> HerdrOpenTab {
@@ -143,6 +146,13 @@ struct HerdrPage: View {
                 HStack(spacing: UIScale.pt(10)) {
                     spacesWindowMenu
                     spaceGroupingToggle
+                    Button {
+                        store.searchPresented = true
+                    } label: {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .help("Search agent sessions on every machine (⌘K)")
                     Button {
                         newAgentPopupPresented = true
                     } label: {

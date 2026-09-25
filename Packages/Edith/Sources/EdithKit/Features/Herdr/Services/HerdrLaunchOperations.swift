@@ -95,13 +95,14 @@ public enum HerdrLaunchOperations {
             let slug = HerdrLaunchSettings.defaultHerdrSlug(for: kind)
         {
             let timeoutMS = agentStartTimeoutMS
+            let agentName = HerdrAgentStartCommand.name(name, pane: pane)
             return HerdrAgentLaunch(
                 local: HerdrAgentStartCommand.arguments(
-                    name: name, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
+                    name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
                     agentArguments: agentArguments),
                 remote: {
                     HerdrAgentStartCommand.shellLine(
-                        name: name, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
+                        name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
                         agentArguments: agentArguments, platform: $0)
                 }, timeout: TimeInterval(timeoutMS / 1_000) + 5)
         }

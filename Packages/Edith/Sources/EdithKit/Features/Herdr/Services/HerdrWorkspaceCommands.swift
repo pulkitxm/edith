@@ -38,6 +38,10 @@ public enum HerdrWorkspaceListCommand {
 }
 
 public enum HerdrAgentStartCommand {
+    public static func name(_ base: String, pane: String) -> String {
+        base + "-" + String(pane.map { $0.isLetter || $0.isNumber ? $0 : "-" })
+    }
+
     public static func arguments(
         name: String, kindSlug: String, pane: String, timeoutMS: Int,
         agentArguments: [String] = []

@@ -263,6 +263,12 @@ enum SectionWindowMenu {
                 if flags == .command, characters?.lowercased() == "w" {
                     return CloseCommand.perform(on: NSApp.keyWindow)
                 }
+                if flags == .command, characters?.lowercased() == "k",
+                    SessionSearchCommand.perform(
+                        in: window, store: .shared, sessionsOnScreen: sessionsIsOnScreen)
+                {
+                    return true
+                }
                 if HerdrStore.shared.performLayoutKey(
                     keyCode: keyCode, modifiers: modifiers, in: window)
                 {
@@ -346,6 +352,18 @@ enum CloseCommand {
 
     private static func isMainWindow(_ window: NSWindow) -> Bool {
         window.identifier?.rawValue == MainWindowIdentifier.value
+    }
+}
+
+@MainActor
+enum SessionSearchCommand {
+    static func perform(
+        in window: NSWindow?, store: HerdrStore, sessionsOnScreen: @MainActor () -> Bool
+    ) -> Bool {
+        guard window?.identifier?.rawValue == MainWindowIdentifier.value, sessionsOnScreen()
+        else { return false }
+        store.searchPresented = true
+        return true
     }
 }
 
