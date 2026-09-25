@@ -279,7 +279,10 @@ ci-semgrep:
 
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
-	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed .
+	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
+	  --skip-dirs Packages/Edith/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
+	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone .
 
 ci-companion:
 	cd apps/companion && cargo clippy --all-targets --locked -- -D warnings
