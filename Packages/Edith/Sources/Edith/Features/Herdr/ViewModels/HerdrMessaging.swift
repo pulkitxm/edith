@@ -38,13 +38,26 @@ struct HerdrMessageDraft: Identifiable, Equatable {
     enum Delivery: String, CaseIterable, Identifiable {
         case now
         case whenFinished
+        case after
+        case at
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .now: "Send Now"
-            case .whenFinished: "When It Finishes"
+            case .now: "Now"
+            case .whenFinished: "When done"
+            case .after: "Later"
+            case .at: "At time"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .now: "Herdr types it in and presses Return."
+            case .whenFinished: "Edith sends it once, the next time this agent finishes a turn."
+            case .after: "Edith sends it after the delay you pick."
+            case .at: "Edith sends it at the time you pick."
             }
         }
     }
@@ -69,7 +82,9 @@ struct HerdrMessageDraft: Identifiable, Equatable {
 final class HerdrMessaging {
     typealias Broadcaster =
         @Sendable (String, [HerdrAgent]) async -> [String: HerdrPromptOutcome]
-    typealias Arm = @Sendable (String, HerdrAgent) async throws -> HerdrHooksSnapshot
+    typealias Arm =
+        @Sendable (String, HerdrAgent, HerdrHookSchedule) async throws
+        -> HerdrHooksSnapshot
     typealias Remove = @Sendable (UUID) async throws -> HerdrHooksSnapshot
 
     var hooks = HerdrHooksSnapshot()
@@ -82,7 +97,7 @@ final class HerdrMessaging {
 
     init(
         broadcaster: @escaping Broadcaster = { await HerdrAgentPrompt.broadcast($0, to: $1) },
-        arm: @escaping Arm = { try await HerdrHookClient().arm($0, for: $1) },
+        arm: @escaping Arm = { try await HerdrHookClient().arm($0, for: $1, schedule: $2) },
         remove: @escaping Remove = { try await HerdrHookClient().remove($0) }
     ) {
         self.broadcaster = broadcaster
@@ -127,10 +142,12 @@ final class HerdrMessaging {
     }
 
     @discardableResult
-    func arm(_ text: String, for agent: HerdrAgent) async -> Bool {
+    func arm(
+        _ text: String, for agent: HerdrAgent, schedule: HerdrHookSchedule
+    ) async -> Bool {
         guard let text = HerdrAgentPrompt.normalized(text) else { return false }
         do {
-            adopt(try await armer(text, agent))
+            adopt(try await armer(text, agent, schedule))
             errorMessage = nil
             return true
         } catch {

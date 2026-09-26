@@ -20,7 +20,8 @@ private func hook(_ agent: HerdrAgent, _ message: String) -> HerdrAgentHook {
         agent: agent, message: message,
         observation: HerdrAgentObservation(
             kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
-            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
+            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)),
+        schedule: .whenFinished)
 }
 
 private final class Recorder: @unchecked Sendable {
@@ -53,7 +54,7 @@ struct HerdrMessagingTests {
     private func messaging(_ recorder: Recorder, armFails: Bool = false) -> HerdrMessaging {
         HerdrMessaging(
             broadcaster: { recorder.send($0, $1) },
-            arm: { text, agent in
+            arm: { text, agent, _ in
                 if armFails { throw AgentError(.unavailable, "The agent is still starting.") }
                 return recorder.arm(text, agent)
             },
@@ -104,7 +105,7 @@ struct HerdrMessagingTests {
     @Test func armingAdoptsTheReturnedHooks() async {
         let recorder = Recorder()
         let messaging = messaging(recorder)
-        #expect(await messaging.arm("run the tests", for: fleet[1]))
+        #expect(await messaging.arm("run the tests", for: fleet[1], schedule: .whenFinished))
         #expect(messaging.armedHook(for: fleet[1].id)?.message == "run the tests")
         #expect(recorder.armed.map(\.1) == ["w1:p2"])
         await messaging.remove(UUID())
@@ -113,7 +114,7 @@ struct HerdrMessagingTests {
 
     @Test func armingReportsTheBackgroundAgentError() async {
         let messaging = messaging(Recorder(), armFails: true)
-        #expect(!(await messaging.arm("run the tests", for: fleet[1])))
+        #expect(!(await messaging.arm("run the tests", for: fleet[1], schedule: .whenFinished)))
         #expect(messaging.errorMessage == "The agent is still starting.")
     }
 

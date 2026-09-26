@@ -195,7 +195,8 @@ struct HerdrAgentDetails: View {
             if let armed {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Label(
-                        armed.phase == .sending ? "Sending now" : "Sends when it finishes",
+                        armed.phase == .sending
+                            ? "Sending now" : armed.schedule.sendsPhrase(now: Date()),
                         systemImage: "paperplane.circle.fill"
                     )
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -234,10 +235,10 @@ struct HerdrAgentDetails: View {
                 Button {
                     store.messaging.compose(to: agent, presenterID: presenterID)
                 } label: {
-                    Label("Send", systemImage: "paperplane")
+                    Label("Message", systemImage: "paperplane")
                 }
                 .buttonStyle(.edith(.toolbar))
-                .help("Type a message into this agent now")
+                .help("Write a message to send now, when it finishes, or at a time")
                 if let armed {
                     Button {
                         Task { await store.messaging.remove(armed.id) }
@@ -246,16 +247,7 @@ struct HerdrAgentDetails: View {
                     }
                     .buttonStyle(.edith(.toolbar))
                     .disabled(armed.phase == .sending)
-                    .help("Cancel the message waiting for this agent to finish")
-                } else {
-                    Button {
-                        store.messaging.compose(
-                            to: agent, delivery: .whenFinished, presenterID: presenterID)
-                    } label: {
-                        Label("When Finished", systemImage: "paperplane.circle")
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                    .help("Send a message the next time this agent finishes a turn")
+                    .help("Cancel the waiting message")
                 }
             }
         }

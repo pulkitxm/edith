@@ -1000,13 +1000,13 @@ struct HerdrPage: View {
                         .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
-                if store.messaging.armedHook(for: agent.id) != nil {
+                if let waiting = store.messaging.armedHook(for: agent.id) {
                     Image(systemName: "paperplane.circle.fill")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))
-                        .help("A message goes out when this agent finishes")
-                        .accessibilityLabel("Message queued for when it finishes")
+                        .help(waiting.schedule.sendsPhrase(now: Date()))
+                        .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
                 }
             }
             .padding(.leading, UIScale.pt(12))
@@ -1060,13 +1060,10 @@ struct HerdrPage: View {
             Divider()
             Button("Send Message…") { store.messaging.compose(to: agent) }
             if let hook = store.messaging.armedHook(for: agent.id) {
-                Button("Cancel Message When Finished") {
+                Button("Cancel Waiting Message") {
                     Task { await store.messaging.remove(hook.id) }
                 }
-            } else {
-                Button("Send When Finished…") {
-                    store.messaging.compose(to: agent, delivery: .whenFinished)
-                }
+                .help(hook.schedule.sendsPhrase(now: Date()))
             }
         }
     }

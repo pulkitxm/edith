@@ -25,7 +25,7 @@ import Testing
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let messaging = HerdrMessaging(
-            broadcaster: { _, _ in [:] }, arm: { _, _ in HerdrHooksSnapshot() },
+            broadcaster: { _, _ in [:] }, arm: { _, _, _ in HerdrHooksSnapshot() },
             remove: { _ in HerdrHooksSnapshot() })
         let store = HerdrStore(
             defaults: defaults, liveWatcher: { _ in }, machinesProvider: { [] },
@@ -63,10 +63,26 @@ import Testing
         let single = try #require(messaging.draft)
         try render(
             HerdrMessageSheet(messaging: messaging, draft: single),
-            size: NSSize(width: 460, height: 300)
+            size: NSSize(width: 460, height: 420)
         )
         .write(
             to: output.appendingPathComponent("herdr-message-when-finished.png"), options: .atomic)
+
+        messaging.compose(to: agents[3], delivery: .after)
+        let after = try #require(messaging.draft)
+        try render(
+            HerdrMessageSheet(messaging: messaging, draft: after),
+            size: NSSize(width: 460, height: 520)
+        )
+        .write(to: output.appendingPathComponent("herdr-message-after.png"), options: .atomic)
+
+        messaging.compose(to: agents[3], delivery: .at)
+        let timed = try #require(messaging.draft)
+        try render(
+            HerdrMessageSheet(messaging: messaging, draft: timed),
+            size: NSSize(width: 460, height: 520)
+        )
+        .write(to: output.appendingPathComponent("herdr-message-at.png"), options: .atomic)
     }
 
     private func render<Content: View>(_ content: Content, size: NSSize) throws -> Data {
@@ -122,6 +138,7 @@ import Testing
             agent: agent, message: message,
             observation: HerdrAgentObservation(
                 kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
-                identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
+                identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)),
+            schedule: .whenFinished)
     }
 }

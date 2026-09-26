@@ -259,10 +259,13 @@ public struct HerdrHookClient: Sendable {
         try await perform(HerdrHookOperation.list, payload: Data())
     }
 
-    public func arm(_ message: String, for agent: HerdrAgent) async throws -> HerdrHooksSnapshot {
+    public func arm(
+        _ message: String, for agent: HerdrAgent, schedule: HerdrHookSchedule = .whenFinished
+    ) async throws -> HerdrHooksSnapshot {
         try await perform(
             HerdrHookOperation.arm,
-            payload: AgentPayload.encode(HerdrHookArmRequest(agent: agent, message: message)))
+            payload: AgentPayload.encode(
+                HerdrHookArmRequest(agent: agent, message: message, schedule: schedule)))
     }
 
     public func remove(_ id: UUID) async throws -> HerdrHooksSnapshot {
@@ -285,7 +288,8 @@ public enum HerdrMessageOperation: String, CaseIterable, Sendable {
         switch self {
         case .send:
             descriptor(
-                "herdr.send", "Type a message into one agent or every working or stopped agent.",
+                "herdr.send",
+                "Type a message into an agent now, when it finishes, or at a chosen time.",
                 cli: ["herdr", "send"], effect: .write)
         case .hooks:
             descriptor(

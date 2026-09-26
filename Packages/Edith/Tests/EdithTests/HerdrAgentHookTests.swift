@@ -26,12 +26,15 @@ private func observed(
             kind: kind, status: status, sequence: sequence, identity: identity))
 }
 
-private func makeHook(agent: HerdrAgent, message: String) -> HerdrAgentHook {
+private func makeHook(
+    agent: HerdrAgent, message: String, schedule: HerdrHookSchedule = .whenFinished
+) -> HerdrAgentHook {
     HerdrAgentHook(
         agent: agent, message: message,
         observation: HerdrAgentObservation(
             kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
-            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
+            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)),
+        schedule: schedule)
 }
 
 private final class ProbeScript: @unchecked Sendable {
@@ -457,6 +460,72 @@ struct HerdrAgentHookTests {
         #expect(try AgentPayload.decode(HerdrHooksSnapshot.self, from: last) == stored)
         let reloaded = fixture.service()
         #expect(await reloaded.list() == stored)
+    }
+
+    @Test func aScheduledMessageWaitsUntilItsTime() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let service = fixture.service()
+        let when = fixture.clock.now.addingTimeInterval(60)
+        _ = try await service.arm(
+            HerdrHookArmRequest(
+                agent: agent(status: .idle), message: "later", schedule: .at(when)))
+        await service.tick()
+        #expect(fixture.script.probes.isEmpty)
+        #expect(fixture.script.sent.isEmpty)
+        fixture.clock.advance(60)
+        fixture.script.queue("w1:p1", observed(.idle, 4))
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: later"])
+        #expect(await service.list().hooks.first?.phase == .sent)
+    }
+
+    @Test func aScheduledMessageCancelsWhenTheAgentIsReplaced() {
+        let when = Date(timeIntervalSince1970: 1_800_000_000)
+        let hook = makeHook(
+            agent: agent(), message: "later", schedule: .at(when.addingTimeInterval(30)))
+        #expect(
+            HerdrHookEvaluator.evaluate(
+                hook,
+                observed(
+                    .idle, 4,
+                    identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 456)),
+                now: when)
+                == .cancel(HerdrHookEvaluator.replacedReason))
+        #expect(
+            HerdrHookEvaluator.evaluate(hook, observed(.idle, 4), now: when) == .keep(hook))
+        #expect(
+            HerdrHookEvaluator.evaluate(hook, .gone, now: when)
+                == .cancel(HerdrHookEvaluator.missedReason))
+    }
+
+    @Test func schedulePhrasesAndParsersUseAFixedClock() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = now.addingTimeInterval(2.5 * 60 * 60)
+        #expect(
+            HerdrHookSchedule.at(later).sendsPhrase(now: now, calendar: calendar)
+                == "Sends today at 10:30 AM")
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)!
+        #expect(
+            HerdrHookSchedule.moment(tomorrow, now: now, calendar: calendar)
+                == "tomorrow at 8:00 AM")
+        #expect(HerdrHookSchedule.delayPhrase(hours: 0, minutes: 15) == "in 15 minutes")
+        #expect(HerdrHookSchedule.delayPhrase(hours: 1, minutes: 30) == "in 1 hour 30 minutes")
+        #expect(HerdrScheduleParser.delay("15m", from: now) == now.addingTimeInterval(15 * 60))
+        #expect(HerdrScheduleParser.delay("1h30m", from: now) == now.addingTimeInterval(90 * 60))
+        #expect(HerdrScheduleParser.delay("0m", from: now) == nil)
+        #expect(HerdrScheduleParser.delay("soon", from: now) == nil)
+        #expect(
+            HerdrScheduleParser.clock("10:30", now: now, calendar: calendar) == later)
+        #expect(HerdrScheduleParser.clock("4:30pm", now: now, calendar: calendar) != nil)
+        #expect(HerdrScheduleParser.clock("7:00", now: now, calendar: calendar) == nil)
+        #expect(
+            HerdrScheduleParser.clock("tomorrow 9:00am", now: now, calendar: calendar)
+                == calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+                .addingTimeInterval(9 * 60 * 60))
     }
 
     @Test func dropsOldSettledHooks() async throws {
