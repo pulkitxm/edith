@@ -9,9 +9,9 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
 
     public func menuBarLabel(for provider: LimitProvider) -> String {
         switch (provider, self) {
-        case (.cursor, .session): return "models"
-        case (.cursor, .week): return "other"
-        case (.cursor, .fable): return "models"
+        case (.cursor, .session): return "CM"
+        case (.cursor, .week): return "OM"
+        case (.cursor, .fable): return "CM"
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "F"
