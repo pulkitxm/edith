@@ -6,6 +6,7 @@ private final class BifrostFloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if MainActor.assumeIsolated({ TextEditingCommands.handle(event) }) { return true }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers.contains(.command), !modifiers.contains(.control),
             !modifiers.contains(.option), let key = event.charactersIgnoringModifiers?.lowercased()
@@ -30,14 +31,8 @@ enum BifrostEditingAction {
     }
 
     static func selector(for key: String, shifted: Bool) -> Selector? {
-        switch key {
-        case "a": #selector(NSText.selectAll(_:))
-        case "c": #selector(NSText.copy(_:))
-        case "v": #selector(NSText.paste(_:))
-        case "x": #selector(NSText.cut(_:))
-        case "z": shifted ? Selector(("redo:")) : Selector(("undo:"))
-        default: nil
-        }
+        let flags: NSEvent.ModifierFlags = shifted ? [.command, .shift] : .command
+        return TextEditingCommands.selector(characters: key, keyCode: 0, modifiers: flags)
     }
 }
 

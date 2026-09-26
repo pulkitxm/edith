@@ -160,6 +160,7 @@ struct EdithApp {
     @MainActor
     private static func configure() {
         _ = AppProcessUptime.launchedAt
+        TextEditingCommands.install()
         HotKey.register()
         DispatchQueue.global(qos: .utility).async {
             CLIInstaller.installIfNeeded()

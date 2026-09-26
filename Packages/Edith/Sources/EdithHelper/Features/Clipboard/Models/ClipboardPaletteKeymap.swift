@@ -36,7 +36,7 @@ enum ClipboardPaletteKeymap {
             return queryIsEmpty ? .dismiss : .clearSearch
         case .delete, .deleteForward:
             if held == [.command, .option] { return .clearUnpinned }
-            if held == .command || (held.isEmpty && queryIsEmpty) { return .delete }
+            if held.isEmpty && queryIsEmpty { return .delete }
             return nil
         default:
             return commandShortcut(key.character, held: held)
