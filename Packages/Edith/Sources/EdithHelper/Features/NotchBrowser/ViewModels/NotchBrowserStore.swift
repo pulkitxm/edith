@@ -154,6 +154,10 @@ final class NotchBrowserStore {
         NSWorkspace.shared.open(ChromeInstallation.downloadURL)
     }
 
+    func openPrivacySettings() {
+        NSWorkspace.shared.open(ChromeInstallation.privacySettingsURL)
+    }
+
     func attach(_ chosen: ChromeProfile) {
         load(chosen, full: true)
     }

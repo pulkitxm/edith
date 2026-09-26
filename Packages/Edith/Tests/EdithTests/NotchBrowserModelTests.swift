@@ -140,6 +140,31 @@ import Testing
         #expect(ChromeReadiness.notDefault(currentBrowser: "Safari").allowsAttaching)
         #expect(!ChromeReadiness.notInstalled.allowsAttaching)
         #expect(!ChromeReadiness.noProfiles.allowsAttaching)
+        #expect(!ChromeReadiness.unreadable("denied").allowsAttaching)
+    }
+
+    @Test func unreadableUserDataIsReportedInsteadOfNoProfiles() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-chrome-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(
+            at: folder.appendingPathComponent("Local State"), withIntermediateDirectories: true)
+        let chrome = ChromeInstallation(
+            applicationURL: { URL(fileURLWithPath: "/Applications/Chrome.app") },
+            defaultBrowser: { ("com.google.Chrome", "Google Chrome") },
+            userData: ChromeUserData(root: folder))
+        let inspection = chrome.inspect()
+        guard case .unreadable(let reason) = inspection.readiness else {
+            Issue.record("expected unreadable, got \(inspection.readiness)")
+            return
+        }
+        #expect(!reason.isEmpty)
+        #expect(inspection.profiles.isEmpty)
+        let missing = ChromeInstallation(
+            applicationURL: { URL(fileURLWithPath: "/Applications/Chrome.app") },
+            defaultBrowser: { ("com.google.Chrome", "Google Chrome") },
+            userData: ChromeUserData(root: folder.appendingPathComponent("nowhere")))
+        #expect(missing.inspect().readiness == .noProfiles)
     }
 }
 
