@@ -53,6 +53,7 @@ struct HerdrMessageDraft: Identifiable, Equatable {
     var recipients: [HerdrAgent]
     var group: HerdrBroadcastGroup?
     var delivery: Delivery
+    var presenterID: String?
 
     var single: HerdrAgent? { group == nil && recipients.count == 1 ? recipients[0] : nil }
 
@@ -102,17 +103,22 @@ final class HerdrMessaging {
         hooks.latestSettled(for: agentID)
     }
 
-    func compose(to agent: HerdrAgent, delivery: HerdrMessageDraft.Delivery = .now) {
+    func compose(
+        to agent: HerdrAgent, delivery: HerdrMessageDraft.Delivery = .now,
+        presenterID: String? = nil
+    ) {
         guard !agent.isTerminal else { return }
         errorMessage = nil
-        draft = HerdrMessageDraft(recipients: [agent], group: nil, delivery: delivery)
+        draft = HerdrMessageDraft(
+            recipients: [agent], group: nil, delivery: delivery, presenterID: presenterID)
     }
 
     func compose(_ group: HerdrBroadcastGroup, from agents: [HerdrAgent]) {
         let recipients = group.recipients(from: agents)
         guard !recipients.isEmpty else { return }
         errorMessage = nil
-        draft = HerdrMessageDraft(recipients: recipients, group: group, delivery: .now)
+        draft = HerdrMessageDraft(
+            recipients: recipients, group: group, delivery: .now, presenterID: nil)
     }
 
     func send(_ text: String, to agents: [HerdrAgent]) async -> [String: HerdrPromptOutcome] {

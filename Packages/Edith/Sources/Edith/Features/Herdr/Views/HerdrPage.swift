@@ -137,7 +137,7 @@ struct HerdrPage: View {
 
     private var messageDraft: Binding<HerdrMessageDraft?> {
         Binding(
-            get: { store.messaging.draft },
+            get: { store.messaging.draft.flatMap { $0.presenterID == nil ? $0 : nil } },
             set: { store.messaging.draft = $0 })
     }
 

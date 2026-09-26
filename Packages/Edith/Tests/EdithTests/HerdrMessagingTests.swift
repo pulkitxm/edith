@@ -76,6 +76,9 @@ struct HerdrMessagingTests {
         #expect(messaging.draft?.single == fleet[1])
         #expect(messaging.draft?.delivery == .whenFinished)
         messaging.draft = nil
+        messaging.compose(to: fleet[1], presenterID: "detached-w1:p2")
+        #expect(messaging.draft?.presenterID == "detached-w1:p2")
+        messaging.draft = nil
         messaging.compose(to: fleet[5])
         #expect(messaging.draft == nil)
     }

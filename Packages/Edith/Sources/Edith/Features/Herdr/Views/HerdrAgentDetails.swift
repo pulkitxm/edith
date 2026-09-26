@@ -6,6 +6,7 @@ struct HerdrDetailColumn: View {
     let tab: HerdrOpenTab
     var hideAgents = false
     var onSetView: ((HerdrAgentView) -> Void)?
+    var presenterID: String?
     @State private var detailDragBaseWidth: Double?
     @State private var liveDetailWidth: Double?
 
@@ -17,7 +18,8 @@ struct HerdrDetailColumn: View {
                 onEnded: finishDetailResize,
                 onReset: resetDetailWidth)
             HerdrAgentDetails(
-                store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView
+                store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView,
+                presenterID: presenterID
             )
             .id(tab.id)
             .frame(width: detailDisplayWidth)
@@ -53,6 +55,7 @@ struct HerdrAgentDetails: View {
     let tab: HerdrOpenTab
     var hideAgents = false
     var onSetView: ((HerdrAgentView) -> Void)?
+    var presenterID: String?
     @Environment(\.colorScheme) private var scheme
     @State private var confirmingAgentClose = false
     @State private var closingAgent = false
@@ -229,7 +232,7 @@ struct HerdrAgentDetails: View {
             }
             HStack(spacing: UIScale.pt(6)) {
                 Button {
-                    store.messaging.compose(to: agent)
+                    store.messaging.compose(to: agent, presenterID: presenterID)
                 } label: {
                     Label("Send", systemImage: "paperplane")
                 }
@@ -246,7 +249,8 @@ struct HerdrAgentDetails: View {
                     .help("Cancel the message waiting for this agent to finish")
                 } else {
                     Button {
-                        store.messaging.compose(to: agent, delivery: .whenFinished)
+                        store.messaging.compose(
+                            to: agent, delivery: .whenFinished, presenterID: presenterID)
                     } label: {
                         Label("When Finished", systemImage: "paperplane.circle")
                     }
