@@ -620,6 +620,32 @@ private actor HerdrWatchHarness {
         #expect(store.currentTab?.agentIDs.contains("local|default|w9:p1") == true)
     }
 
+    @Test func aSideBySideTabGroupsItsAgentsAndMarksTheFocusedOne() {
+        let first = agent("Claude Code", pane: "p1")
+        let second = agent("Codex", pane: "p2")
+        let other = agent("Grok", pane: "p3")
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        store.hosts = [.local(herdrPresent: true, agents: [first, second, other])]
+        store.open(first)
+        #expect(store.openSplitAgents.isEmpty)
+        #expect(store.railHighlight(for: first.id) == .solo)
+        #expect(store.railHighlight(for: second.id) == .none)
+
+        store.open(second, beside: .right)
+        #expect(store.openSplitAgents.map(\.id) == [first.id, second.id])
+        #expect(store.railHighlight(for: second.id) == .focused)
+        #expect(store.railHighlight(for: first.id) == .grouped)
+        #expect(store.railHighlight(for: other.id) == .none)
+
+        store.focus(first.id)
+        #expect(store.railHighlight(for: first.id) == .focused)
+        #expect(store.railHighlight(for: second.id) == .grouped)
+
+        store.selectedTab = HerdrStore.boardID
+        #expect(store.openSplitAgents.isEmpty)
+        #expect(store.railHighlight(for: first.id) == .none)
+    }
+
     @Test func launchNewAgentPropagatesLauncherErrors() async {
         struct LaunchFailure: Error {}
         let store = HerdrStore(newAgentLauncher: { _, _, _, _ in throw LaunchFailure() })
