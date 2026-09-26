@@ -27,7 +27,7 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Edith shows your upcoming calendar events in the app.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
+	<string>Edith frames your camera for Edith Camera, the virtual camera video apps can pick, and shows a preview in the notch so you can check yourself before a call.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>

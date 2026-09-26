@@ -35,6 +35,7 @@ import Testing
         "notchAudioMixerEnabled",
         "notchBrowserEnabled",
         "tabCalendarEnabled",
+        "virtualCameraEnabled",
         "tabDatabaseEnabled",
         "tabAttentionEnabled",
         "tabSEOAuditEnabled",
@@ -54,7 +55,7 @@ import Testing
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
                 "videoEditor", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
-                "calendar",
+                "calendar", "virtualCamera",
                 "database", "attention", "seoAudit",
             ])
     }
@@ -208,8 +209,8 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
-                "clipboard", "keystrokeHighlight", "videoEditor", "notchShelf", "database",
-                "attention",
+                "clipboard", "keystrokeHighlight", "videoEditor", "notchShelf", "virtualCamera",
+                "database", "attention",
             ])
     }
 
@@ -359,6 +360,7 @@ import Testing
             "audioMixer": [],
             "notchBrowser": [],
             "calendar": [.calendar],
+            "virtualCamera": [.camera],
             "database": [],
             "attention": [],
             "seoAudit": [],
@@ -392,6 +394,7 @@ import Testing
             "audioMixer": [.applicationAudio],
             "notchBrowser": [],
             "calendar": [],
+            "virtualCamera": [],
             "database": [],
             "attention": [],
             "seoAudit": [],

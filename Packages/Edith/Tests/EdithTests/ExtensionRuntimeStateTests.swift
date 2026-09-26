@@ -265,6 +265,7 @@ import Testing
             ("videoEditor", "VideoEditorRows", "enabled", "ExtensionsPane.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
+            ("virtualCamera", "VirtualCameraRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
             (

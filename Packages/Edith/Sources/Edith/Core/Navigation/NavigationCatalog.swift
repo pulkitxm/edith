@@ -170,6 +170,9 @@ enum NavigationCatalog {
         SidebarPage(
             id: "calendar", title: "Calendar", symbolName: "calendar", band: .suite(.media),
             abilityIDs: ["calendar"], parentID: "media"),
+        SidebarPage(
+            id: "virtualCamera", title: "Virtual Camera", symbolName: "web.camera",
+            band: .suite(.media), abilityIDs: ["virtualCamera"], parentID: "media"),
 
         SidebarPage(
             id: "data", title: "Data", symbolName: "cylinder.split.1x2", band: .suite(.data),
@@ -273,7 +276,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case appMaintenance
     case system, runningApps
     case desk
-    case media, videoEditor, music, calendar
+    case media, videoEditor, music, calendar, virtualCamera
     case data, database, attention, seoAudit
     case extensions, settings, about
 

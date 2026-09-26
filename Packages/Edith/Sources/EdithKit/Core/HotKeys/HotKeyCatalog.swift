@@ -69,6 +69,7 @@ public enum HotKeyCatalog {
     public static let presenter = "presenter"
     public static let emoji = "emoji"
     public static let keystrokeHighlight = "keystrokeHighlight"
+    public static let virtualCamera = "virtualCamera"
 
     public static let bindings: [HotKeyBinding] = [
         HotKeyBinding(
@@ -118,6 +119,13 @@ public enum HotKeyCatalog {
             labelKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel, defaultCode: kVK_ANSI_K,
             defaultMods: controlKey | optionKey | cmdKey, defaultLabel: "⌃⌥⌘K",
             abilityID: "keystrokeHighlight"),
+        HotKeyBinding(
+            id: virtualCamera, title: "Pause or resume the virtual camera", carbonID: 11,
+            codeKey: AppStorageKeys.VirtualCamera.hotKeyCode,
+            modsKey: AppStorageKeys.VirtualCamera.hotKeyMods,
+            labelKey: AppStorageKeys.VirtualCamera.hotKeyLabel, defaultCode: kVK_ANSI_V,
+            defaultMods: controlKey | optionKey | cmdKey, defaultLabel: "⌃⌥⌘V",
+            abilityID: "virtualCamera"),
     ]
 
     public static func binding(_ id: String) -> HotKeyBinding? {
