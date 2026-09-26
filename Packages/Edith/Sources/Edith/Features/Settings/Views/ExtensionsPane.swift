@@ -1903,13 +1903,20 @@ private struct UsageRows: View {
                     LimitAlertToggle(
                         "Almost capped",
                         detail: "Once per window when usage crosses the line, with what is left.",
-                        isOn: $almostCapped.configured(AppStorageKeys.Notify.almostCapped))
-                    Stepper(
-                        "\(almostCappedPercent)%",
-                        value: $almostCappedPercent.configured(
-                            AppStorageKeys.Notify.almostCappedPercent),
-                        in: LimitAlertSettings.almostCappedRange, step: 5
+                        isOn: $almostCapped.configured(AppStorageKeys.Notify.almostCapped)
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("\(almostCappedPercent)%").monospacedDigit()
+                        Stepper(
+                            "Almost capped at \(almostCappedPercent) percent",
+                            value: $almostCappedPercent.configured(
+                                AppStorageKeys.Notify.almostCappedPercent),
+                            in: LimitAlertSettings.almostCappedRange, step: 5
+                        )
+                        .labelsHidden()
+                    }
+                    .fixedSize()
                     .disabled(!almostCapped)
                 }
                 LimitAlertToggle(
