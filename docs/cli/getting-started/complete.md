@@ -36,6 +36,7 @@ color
 $ ed __complete --index 4 -- ed config set limitsProvider ""
 claude
 codex
+cursor
 
 $ ed __complete --index 3 -- ed shelf add ""
 #files

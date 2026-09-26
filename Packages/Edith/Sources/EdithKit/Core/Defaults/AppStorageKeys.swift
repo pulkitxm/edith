@@ -203,6 +203,7 @@ public enum AppStorageKeys {
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"
+        public static let cursorEnabled = "cursorLimitsEnabled"
         public static let critPercent = "critPercent"
         public static let inMenuBar = "limitsInMenuBar"
         public static let provider = "limitsProvider"
@@ -228,6 +229,7 @@ public enum AppStorageKeys {
     public enum MenuBar {
         public static let claudeWindows = "menuBarClaudeWindows"
         public static let codexWindows = "menuBarCodexWindows"
+        public static let cursorWindows = "menuBarCursorWindows"
         public static let colorMode = "menuBarColorMode"
         public static let limitsStyle = "menuBarLimitsStyle"
         public static let highColorHex = "menuBarHighColorHex"

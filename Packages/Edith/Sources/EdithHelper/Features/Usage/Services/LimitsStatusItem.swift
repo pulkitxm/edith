@@ -87,11 +87,11 @@ final class LimitsStatusItem {
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            if multi { appendLogo(group.provider, into: title) }
+            if multi || group.provider == .cursor { appendLogo(group.provider, into: title) }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
-                appendLabel(segment.slot.menuBarLabel + " ", into: title)
-                appendValue(segment, percentSuffix: !multi, into: title)
+                appendLabel(segment.slot.menuBarLabel(for: group.provider) + " ", into: title)
+                appendValue(segment, provider: group.provider, percentSuffix: !multi, into: title)
             }
         }
         return title
@@ -119,7 +119,7 @@ final class LimitsStatusItem {
                                 .foregroundColor: separatorColor,
                             ]))
                 }
-                appendValue(segment, percentSuffix: false, into: title)
+                appendValue(segment, provider: group.provider, percentSuffix: false, into: title)
             }
         }
         return title
@@ -165,7 +165,8 @@ final class LimitsStatusItem {
         }
         let enabled = UsageStore.enabledLimitProviders(
             claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
-            codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true)
+            codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true,
+            cursor: defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true)
         var stable: [ProviderLimits] = []
         stable.reserveCapacity(enabled.count)
         for provider in enabled.prefix(LimitProvider.allCases.count) {
@@ -187,6 +188,7 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        let showsLogo = multi || group.provider == .cursor
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -202,16 +204,20 @@ final class LimitsStatusItem {
             case .percent(let percent):
                 value = "\(percent)"
                 color =
-                    segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
+                    segment.window.map {
+                        self.color(
+                            for: $0, duration: segment.slot.pacingDuration(for: group.provider))
+                    }
                     ?? dimColor
             }
             columns.append(
                 StackedLimitsView.Column(
-                    label: segment.slot.menuBarLabel, value: value, valueColor: color,
+                    label: segment.slot.menuBarLabel(for: group.provider), value: value,
+                    valueColor: color,
                     labelColor: labelColor))
         }
         return StackedLimitsView.Group(
-            logo: multi ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
+            logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
             columns: columns)
     }
 
@@ -237,7 +243,8 @@ final class LimitsStatusItem {
     }
 
     private func appendValue(
-        _ segment: MenuBarLimitSegment, percentSuffix: Bool, into out: NSMutableAttributedString
+        _ segment: MenuBarLimitSegment, provider: LimitProvider, percentSuffix: Bool,
+        into out: NSMutableAttributedString
     ) {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
@@ -252,7 +259,9 @@ final class LimitsStatusItem {
                     string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
         case .percent(let percent):
             let tint =
-                segment.window.map { color(for: $0, kind: segment.slot.kind) }
+                segment.window.map {
+                    color(for: $0, duration: segment.slot.pacingDuration(for: provider))
+                }
                 ?? dimColor
             out.append(
                 NSAttributedString(
@@ -269,12 +278,12 @@ final class LimitsStatusItem {
         }
     }
 
-    private func color(for window: LimitWindow, kind: LimitWindowKind) -> NSColor {
+    private func color(for window: LimitWindow, duration: TimeInterval) -> NSColor {
         let d = SharedDefaults.store
         if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
-                windowDuration: kind.duration,
+                windowDuration: duration,
                 pacingMargin: d.object(forKey: AppStorageKeys.Limits.pacingMargin) as? Double ?? 10)
             return Self.color(forRisk: risk, low: lowColor, mid: midColor, high: highColor)
         }
@@ -456,16 +465,14 @@ struct LimitsMenuPanel: View {
                 ForEach(store.enabledProviders) { provider in
                     let limits = store.limits(for: provider)
                     Text(provider.label).font(.headline)
-                    StatusProgressRow(
-                        title: "5-hour limit", percent: limits.session?.percent,
-                        resetsAt: limits.session?.resetsAt)
-                    StatusProgressRow(
-                        title: "Weekly · all models", percent: limits.week?.percent,
-                        resetsAt: limits.week?.resetsAt)
-                    if let fable = limits.fable {
+                    let slots = MenuBarLimits.slots(for: provider).filter { slot in
+                        slot != .fable || limits.window(for: slot) != nil
+                    }
+                    ForEach(slots, id: \.self) { slot in
+                        let window = limits.window(for: slot)
                         StatusProgressRow(
-                            title: "Weekly · Fable", percent: fable.percent,
-                            resetsAt: fable.resetsAt)
+                            title: slot.title(for: provider), percent: window?.percent,
+                            resetsAt: window?.resetsAt)
                     }
                 }
             }

@@ -56,7 +56,7 @@ walks, and its order is the order `ls` prints. Thirty-two entries, in this order
 
 | ID | Name | Suite | What it does |
 | --- | --- | --- | --- |
-| `usage` | Usage | Agents | Claude and Codex limits, usage stats, and alerts |
+| `usage` | Usage | Agents | Claude, Codex and Cursor limits, usage stats, and alerts |
 | `herdr` | Sessions | Agents | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Review | Agents | Review pull requests and live workspace changes in a native terminal |
 | `companion` | Memory | Agents | Your notes, voice memos and activity, remembered and searchable |

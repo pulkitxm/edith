@@ -22,7 +22,7 @@ closed.
 | Command | What it does |
 | --- | --- |
 | `ed usage` | Runs `ed usage summary`, the default subcommand |
-| `ed usage limits` | Session and weekly rate limits per provider, newest observation per provider |
+| `ed usage limits` | Included rate limits per provider, newest observation per provider |
 | `ed usage alerts` | Burn rate, projected cap and the limit alert each tracked window would get now |
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
@@ -106,8 +106,9 @@ closed.
   `ed usage limits --refresh`, because the app appends a history row only when
   the values changed.
 - `ed config set tabUsageEnabled false` turns off the Agent Usage extension, and
-  with it the app's own collection and the limit polling; `claudeLimitsEnabled`
-  and `codexLimitsEnabled` do the same for a single provider's polling.
+  with it the app's own collection and the limit polling; `claudeLimitsEnabled`,
+  `codexLimitsEnabled` and `cursorLimitsEnabled` do the same for a single
+  provider's polling.
   `ed usage refresh` runs the pipeline itself and collects either way. The read
   verbs keep working against whatever was collected before that, so
   `ed usage limits` keeps printing a silenced provider's newest valid row.
@@ -115,18 +116,20 @@ closed.
 ## Attribution model
 
 The daily and model rows are the authoritative accounting totals. The collector
-discovers Claude Code, Cowork, Codex, Cursor Agent, OpenCode, Amp, Droid,
+discovers Claude Code, Cowork, Codex, Cursor, OpenCode, Amp, Droid,
 Codebuff, Hermes, Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and
 Command Code when their local stores contain usage. A source appears in
 `ed usage sources` only when it contributed data, so this list is collector
 coverage rather than a promise that every id is present on every Mac.
 
 Repository detail comes from the session stores that expose it: Claude and
-Cowork transcripts, Codex daily sessions and metadata, Cursor Agent chat
-metadata, Pi session logs, Command Code projects and the OpenCode database.
-Cursor token and cost totals come from Cursor's authenticated usage API, scoped
-to CLI events whose conversation ids exist in the local chat store. Those
-measurements are reconciled per day and source to the authoritative totals.
+Cowork transcripts, Codex daily sessions and metadata, Cursor chat metadata
+when a local chat matches the conversation, Pi session logs, Command Code
+projects and the OpenCode database. Cursor token and cost totals come from
+Cursor's authenticated usage API for the signed-in account, including IDE
+requests. Local chat metadata attributes a conversation to a folder when that
+chat exists on disk. Those measurements are reconciled per day and source to
+the authoritative totals.
 Detail is scaled down when it would exceed the total, and any remaining source
 or model total with no reliable folder is emitted under the `Unattributed`
 repository. That is why `ed usage projects list` adds back to `summary` without
@@ -140,8 +143,8 @@ machines so the same repository still groups into one row.
 
 ## Where to go next
 
-- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`
-  and `codexLimitsEnabled`, which decide what gets collected
+- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`,
+  `codexLimitsEnabled` and `cursorLimitsEnabled`, which decide what gets collected
 - [`ed extensions`](../extensions/README.md) for turning the Agent Usage extension on
   and off by id
 - [`ed permissions`](../permissions/README.md) for the grants the app needs before it

@@ -117,6 +117,15 @@ enum LimitAlertCopy {
         case (.codex, .denied):
             title = "Codex can't share usage"
             fix = "Run codex login again so Edith can read your limits."
+        case (.cursor, .expired):
+            title = "Cursor session expired"
+            fix = "Open Cursor and sign in again."
+        case (.cursor, .missing):
+            title = "Cursor login not found"
+            fix = "Open Cursor and sign in so Edith can read your limits."
+        case (.cursor, .denied):
+            title = "Cursor can't share usage"
+            fix = "Open Cursor and sign in again so Edith can read your limits."
         }
         return LimitAlert(
             kind: .login, scope: provider.rawValue, title: title,
@@ -132,8 +141,7 @@ enum LimitAlertCopy {
         let last = entry.sent.values.max()
         return [
             "provider": a.target.provider.label,
-            "window": a.target.slot == .session
-                ? "5-hour" : a.target.slot == .fable ? "Fable weekly" : "weekly",
+            "window": a.target.slot.title(for: a.target.provider),
             "percent": String(Int(a.window.percent.rounded())),
             "burn_per_hour": a.burn.map { String(format: "%.1f", $0.perHour) } ?? "unknown",
             "projected_cap": a.projectedCapAt.map(clock.moment) ?? "none",

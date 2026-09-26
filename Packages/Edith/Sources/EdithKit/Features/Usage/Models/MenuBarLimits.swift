@@ -5,20 +5,44 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
 
     public var kind: LimitWindowKind { self == .session ? .session : .weekly }
 
-    public var menuBarLabel: String {
-        switch self {
-        case .session: return "5h"
-        case .week: return "7d"
-        case .fable: return "F"
+    public var menuBarLabel: String { menuBarLabel(for: .claude) }
+
+    public func menuBarLabel(for provider: LimitProvider) -> String {
+        switch (provider, self) {
+        case (.cursor, .session): return "CM"
+        case (.cursor, .week): return "OM"
+        case (.cursor, .fable): return "CM"
+        case (_, .session): return "5h"
+        case (_, .week): return "7d"
+        case (_, .fable): return "F"
         }
     }
 
-    public var settingsLabel: String {
-        switch self {
-        case .session: return "5h"
-        case .week: return "7d"
-        case .fable: return "Fable"
+    public var settingsLabel: String { settingsLabel(for: .claude) }
+
+    public func settingsLabel(for provider: LimitProvider) -> String {
+        switch (provider, self) {
+        case (.cursor, .session): return "Cursor models"
+        case (.cursor, .week): return "Other models"
+        case (.cursor, .fable): return "Cursor models"
+        case (_, .session): return "5h"
+        case (_, .week): return "7d"
+        case (_, .fable): return "Fable"
         }
+    }
+
+    public func title(for provider: LimitProvider) -> String {
+        switch (provider, self) {
+        case (.cursor, .session), (.cursor, .fable): return "Cursor models"
+        case (.cursor, .week): return "Other models"
+        case (_, .session): return "5-hour limit"
+        case (_, .week): return "Weekly · all models"
+        case (_, .fable): return "Weekly · Fable"
+        }
+    }
+
+    public func pacingDuration(for provider: LimitProvider) -> TimeInterval {
+        provider == .cursor ? LimitProvider.cursorBillingCycle : kind.duration
     }
 }
 
@@ -56,12 +80,19 @@ public struct MenuBarProviderGroup: Equatable, Sendable {
 
 public enum MenuBarLimits {
     public static func slots(for provider: LimitProvider) -> [LimitWindowSlot] {
-        provider == .claude ? [.session, .week, .fable] : [.session, .week]
+        switch provider {
+        case .claude: [.session, .week, .fable]
+        case .codex: [.session, .week]
+        case .cursor: [.session, .week]
+        }
     }
 
     public static func selectionKey(for provider: LimitProvider) -> String {
-        provider == .claude
-            ? AppStorageKeys.MenuBar.claudeWindows : AppStorageKeys.MenuBar.codexWindows
+        switch provider {
+        case .claude: AppStorageKeys.MenuBar.claudeWindows
+        case .codex: AppStorageKeys.MenuBar.codexWindows
+        case .cursor: AppStorageKeys.MenuBar.cursorWindows
+        }
     }
 
     public static func parseSelection(

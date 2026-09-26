@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 222 settings in 26
+reads, and `ed config` is that surface from the command line: 224 settings in 26
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -101,7 +101,7 @@ not here cannot be set, and `import` skips it.
 
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
-| `tabUsageEnabled` | bool | `false` | shared | Agent Usage extension: Claude and Codex limits, stats and alerts. |
+| `tabUsageEnabled` | bool | `false` | shared | Agent Usage extension: Claude, Codex and Cursor limits, stats and alerts. |
 | `usageMachines` | stringList | none | shared | Ids of the machines whose agent usage is collected over SSH. |
 
 ### `limits`
@@ -110,7 +110,8 @@ not here cannot be set, and `import` skips it.
 | --- | --- | --- | --- | --- |
 | `claudeLimitsEnabled` | bool | `true` | shared | Track Claude rate limits. |
 | `codexLimitsEnabled` | bool | `true` | shared | Track Codex rate limits. |
-| `limitsProvider` | string: `claude`, `codex` | `claude` | shared | Provider shown first in the limits UI. |
+| `cursorLimitsEnabled` | bool | `true` | shared | Track Cursor models and other models included usage. |
+| `limitsProvider` | string: `claude`, `codex`, `cursor` | `claude` | shared | Provider shown first in the limits UI. |
 | `warnPercent` | int | `60` | shared | Percentage at which a limit turns amber. |
 | `critPercent` | int | `85` | shared | Percentage at which a limit turns red. |
 | `pacingMargin` | number | `10` | shared | Percentage points ahead of an even pace before smart color turns amber. |
@@ -122,6 +123,7 @@ not here cannot be set, and `import` skips it.
 | `limitsInMenuBar` | bool | `true` | shared | Show session and weekly percentages in the menu bar. |
 | `menuBarClaudeWindows` | string | `session,week,fable` | shared | Claude windows shown in the menu bar, comma-separated (session, week, fable). |
 | `menuBarCodexWindows` | string | `session,week` | shared | Codex windows shown in the menu bar, comma-separated (session, week). |
+| `menuBarCursorWindows` | string | `session,week` | shared | Cursor pools shown in the menu bar, comma-separated (session, week). session is Cursor models and week is Other models. |
 | `menuBarLimitsStyle` | string: `stacked`, `tagged`, `slash` | `stacked` | shared | Layout of the menu bar limits readout. |
 | `menuBarColorMode` | string: `auto`, `white`, `custom` | `auto` | shared | How the menu bar readout is tinted. |
 | `smartColor` | bool | none | shared | Tint the menu bar readout by a time-aware risk model. |
@@ -138,7 +140,7 @@ not here cannot be set, and `import` skips it.
 | --- | --- | --- | --- | --- |
 | `notifyMaster` | bool | `false` | shared | Master switch for every usage notification. |
 | `notifyTrackSession` | bool | `true` | shared | Send limit alerts for 5-hour windows. |
-| `notifyTrackWeekly` | bool | `true` | shared | Send limit alerts for weekly windows, Fable included. |
+| `notifyTrackWeekly` | bool | `true` | shared | Send limit alerts for weekly windows, Fable included, and Cursor's billing-cycle pools. |
 | `notifyOnPace` | bool | `true` | shared | Alert when the recent burn rate would hit the cap before the reset. |
 | `notifyAlmostCapped` | bool | `true` | shared | Alert once per window when usage crosses the almost-capped line. |
 | `notifyAlmostCappedPercent` | int | `90` | shared | Percentage that counts as almost capped. |
@@ -484,13 +486,16 @@ permission the extension needs and say which one is missing, where
 `ed config set` just writes the bool.
 
 **Menu bar limit windows are comma-separated selections.**
-`menuBarClaudeWindows` accepts `session`, `week` and `fable`, while
-`menuBarCodexWindows` accepts `session` and `week`. The menu bar always restores
-canonical order, drops unknown names, ignores `fable` for Codex, and hides a
-provider whose stored selection is empty. `ed config set` validates these as
-ordinary strings, so a typo is stored successfully and then ignored by the menu
-bar. Unsetting either key restores all windows for that provider. The defaults
-are `session,week,fable` for Claude and `session,week` for Codex.
+`menuBarClaudeWindows` accepts `session`, `week` and `fable`,
+`menuBarCodexWindows` accepts `session` and `week`, and `menuBarCursorWindows`
+accepts `session` and `week`. For Cursor, `session` is the Cursor Models pool
+and `week` is the Other Models pool. The menu bar always restores
+canonical order, drops unknown names, ignores `fable` for Codex and Cursor, and
+hides a provider whose stored selection is empty. `ed config set` validates
+these as ordinary strings, so a typo is stored successfully and then ignored by
+the menu bar. Unsetting a key restores all windows for that provider. The
+defaults are `session,week,fable` for Claude, `session,week` for Codex, and
+`session,week` for Cursor.
 
 **Values are matched exactly, keys are matched exactly.** An allowed value is
 compared case-sensitively, so `ed config set appearance Dark` exits 1 while

@@ -76,7 +76,7 @@ struct UsageWindow: ParsableArguments {
 
 struct UsageLimitsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "limits", abstract: "Session and weekly rate limits per provider.")
+        commandName: "limits", abstract: "Included rate limits per provider.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -119,18 +119,23 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                         }))
                 return
             }
-            let rows = providers.map { provider, observedAt, session, week in
+            let rows = providers.flatMap { provider, observedAt, session, week in
                 [
-                    provider.label,
-                    session.map { String(format: "%.1f%%", $0.percent) } ?? "-",
-                    week.map { String(format: "%.1f%%", $0.percent) } ?? "-",
-                    session?.resetsAt.map { resetText($0) } ?? "-",
-                    JSONSerializer.iso.string(from: observedAt),
-                ]
+                    (LimitWindowSlot.session, session),
+                    (LimitWindowSlot.week, week),
+                ].map { slot, window in
+                    [
+                        provider.label,
+                        slot.title(for: provider),
+                        window.map { String(format: "%.1f%%", $0.percent) } ?? "-",
+                        window?.resetsAt.map { resetText($0) } ?? "-",
+                        JSONSerializer.iso.string(from: observedAt),
+                    ]
+                }
             }
             CLIOut.out(
                 TextTable.render(
-                    headers: ["PROVIDER", "SESSION", "WEEKLY", "SESSION RESETS", "OBSERVED"],
+                    headers: ["PROVIDER", "LIMIT", "USED", "RESETS", "OBSERVED"],
                     rows: rows))
         }
     }

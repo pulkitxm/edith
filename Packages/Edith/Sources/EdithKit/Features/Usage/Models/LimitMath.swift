@@ -13,9 +13,18 @@ public struct LimitWindow: Equatable, Codable, Sendable {
 public enum LimitProvider: String, CaseIterable, Codable, Identifiable, Sendable {
     case codex
     case claude
+    case cursor
+
+    public static let cursorBillingCycle: TimeInterval = 30 * 24 * 3600
 
     public var id: String { rawValue }
-    public var label: String { self == .codex ? "Codex" : "Claude" }
+    public var label: String {
+        switch self {
+        case .codex: "Codex"
+        case .claude: "Claude"
+        case .cursor: "Cursor"
+        }
+    }
 }
 
 public struct ProviderLimits: Sendable {
