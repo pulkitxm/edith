@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import CoreImage
+import CoreText
 import EdithCameraSupport
 import Foundation
 import SwiftUI
@@ -424,6 +425,36 @@ enum VirtualCameraSyntheticStudio {
         return context.makeImage()
     }
 
+    static func logo() -> CGImage? {
+        let size = CGSize(width: 420, height: 120)
+        guard
+            let context = CGContext(
+                data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.setFillColor(color(0.04, 0.52, 1))
+        context.addPath(
+            CGPath(
+                roundedRect: CGRect(origin: .zero, size: size), cornerWidth: 28, cornerHeight: 28,
+                transform: nil))
+        context.fillPath()
+        context.setFillColor(color(1, 1, 1))
+        context.fillEllipse(in: CGRect(x: 26, y: 26, width: 68, height: 68))
+        context.setFillColor(color(0.04, 0.52, 1))
+        context.fillEllipse(in: CGRect(x: 44, y: 44, width: 32, height: 32))
+        let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 58, nil)
+        let text = NSAttributedString(
+            string: "Studio",
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color(1, 1, 1),
+            ])
+        context.textPosition = CGPoint(x: 118, y: 40)
+        CTLineDraw(CTLineCreateWithAttributedString(text), context)
+        return context.makeImage()
+    }
+
     static func mask() -> CIImage? {
         guard let context = context() else { return nil }
         context.setFillColor(color(0, 0, 0))
@@ -463,11 +494,7 @@ enum VirtualCameraSyntheticStudio {
         let studio = CIImage(cgImage: try #require(VirtualCameraSyntheticStudio.frame()))
         let mask = VirtualCameraSyntheticStudio.mask()
         let size = CGSize(width: 1280, height: 720)
-        let logo = renderer.context.createCGImage(
-            CIImage(color: CIColor(red: 0.04, green: 0.52, blue: 1)).cropped(
-                to: CGRect(x: 0, y: 0, width: 240, height: 90)),
-            from: CGRect(x: 0, y: 0, width: 240, height: 90))
-
+        let logo = VirtualCameraSyntheticStudio.logo()
         func write(_ image: CIImage, _ name: String) throws {
             let cgImage = try #require(renderer.cgImage(image, size: size))
             let bitmap = NSBitmapImageRep(cgImage: cgImage)
