@@ -186,6 +186,8 @@ struct VideoRenderPipeline {
     let segments: [Segment]
     let canvas: CGSize
 
+    static let frameRate: Int32 = 60
+
     var duration: Double { segments.last?.outputEnd ?? 0 }
 
     static func make(
@@ -204,7 +206,6 @@ struct VideoRenderPipeline {
         var cursors: [String: [CursorSample]] = [:]
         var cursor = 0.0
         var firstSize: CGSize?
-        var firstFrameRate: Float?
         for clip in project.clips where clip.duration > 0 {
             guard let source = project.assets.first(where: { $0.id == clip.assetID }) else {
                 throw RenderError.missingAsset(clip.assetID)
@@ -238,7 +239,6 @@ struct VideoRenderPipeline {
             if firstSize == nil {
                 let transformed = naturalSize.applying(preferredTransform)
                 firstSize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
-                firstFrameRate = try await sourceVideo.load(.nominalFrameRate)
                 video.preferredTransform = preferredTransform
             }
             let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first
@@ -453,10 +453,8 @@ struct VideoRenderPipeline {
         }
         let videoComposition = baseComposition.mutableCopy() as! AVMutableVideoComposition
         videoComposition.renderSize = canvas
-        let frameRate = Double(firstFrameRate ?? 30)
-        videoComposition.frameDuration = CMTime(
-            seconds: 1 / (frameRate.isFinite && frameRate > 0 ? frameRate : 30),
-            preferredTimescale: 60_000)
+        videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+        videoComposition.frameDuration = CMTime(value: 1, timescale: frameRate)
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
             audioMix: parameters.isEmpty ? nil : mix,
