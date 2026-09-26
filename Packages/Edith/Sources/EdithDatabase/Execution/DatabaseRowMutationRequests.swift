@@ -217,7 +217,7 @@ public enum DatabaseRowMutationRequests {
     }
 
     private static func mySQLQuote(_ value: String) -> String {
-        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
+        BacktickQuoted.wrap(value)
     }
 
     private static func postgreSQLIdentity(

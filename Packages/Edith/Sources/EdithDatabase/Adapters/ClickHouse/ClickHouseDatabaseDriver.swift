@@ -60,14 +60,10 @@ struct ClickHouseDatabaseConnectionPlan: Sendable {
     }
 
     private static func validHost(_ value: String) -> Bool {
-        !value.isEmpty && value.utf8.count <= 1_024 && !value.contains("\0")
-            && !value.unicodeScalars.contains(where: {
-                CharacterSet.controlCharacters.contains($0)
-                    || CharacterSet.whitespacesAndNewlines.contains($0)
-            })
-            && !value.contains("/") && !value.contains("?") && !value.contains("#")
-            && !value.contains("@")
-    }
+    DatabaseOperationSupport.validHost(value)
+        && !value.contains("/") && !value.contains("?") && !value.contains("#")
+        && !value.contains("@")
+}
 }
 
 struct ClickHouseDatabaseIdentityValues: Codable, Equatable, Sendable {
@@ -368,10 +364,8 @@ enum ClickHouseDatabaseDriverSupport {
     }
 
     private static func numericPrefix(_ value: Substring) -> Int? {
-        let digits = value.prefix(while: { $0.isNumber })
-        guard !digits.isEmpty else { return nil }
-        return Int(digits)
-    }
+    DatabaseOperationSupport.numericPrefix(value)
+}
 
     private static func valid(
         _ value: String,
