@@ -642,23 +642,24 @@ struct ExtensionPreview: View {
                     .foregroundStyle(DashSkin.accent(dark))
             }
             GeometryReader { proxy in
-                HStack(spacing: UIScale.pt(3)) {
-                    ForEach(0..<4) { index in
-                        let share = [0.42, 0.26, 0.19, 0.13][index]
+                let shares: [CGFloat] = [0.42, 0.26, 0.19, 0.13]
+                let gap = UIScale.pt(3)
+                let usable = max(0, proxy.size.width - gap * CGFloat(shares.count - 1))
+                HStack(spacing: gap) {
+                    ForEach(0..<shares.count, id: \.self) { index in
                         RoundedRectangle(cornerRadius: UIScale.pt(2))
                             .fill(
                                 index == 0
                                     ? DashSkin.accent(dark)
                                     : DashSkin.accent(dark).opacity(0.55 - Double(index) * 0.14)
                             )
-                            .frame(
-                                width: max(
-                                    6, proxy.size.width * reclaimed * share * 2.1))
+                            .frame(width: usable * reclaimed * shares[index])
                     }
                     Spacer(minLength: 0)
                 }
             }
             .frame(height: UIScale.pt(7))
+            .clipped()
             HStack(spacing: UIScale.pt(8)) {
                 ForEach(["caches", "logs", "builds"], id: \.self) { label in
                     Text(label)
