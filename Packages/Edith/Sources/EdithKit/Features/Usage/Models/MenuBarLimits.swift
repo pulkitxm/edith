@@ -9,9 +9,9 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
 
     public func menuBarLabel(for provider: LimitProvider) -> String {
         switch (provider, self) {
-        case (.cursor, .week): return "plan"
-        case (.cursor, .session): return "od"
-        case (.cursor, .fable): return "plan"
+        case (.cursor, .session): return "models"
+        case (.cursor, .week): return "other"
+        case (.cursor, .fable): return "models"
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "F"
@@ -22,12 +22,22 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
 
     public func settingsLabel(for provider: LimitProvider) -> String {
         switch (provider, self) {
-        case (.cursor, .week): return "Plan"
-        case (.cursor, .session): return "On-demand"
-        case (.cursor, .fable): return "Plan"
+        case (.cursor, .session): return "Cursor models"
+        case (.cursor, .week): return "Other models"
+        case (.cursor, .fable): return "Cursor models"
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "Fable"
+        }
+    }
+
+    public func title(for provider: LimitProvider) -> String {
+        switch (provider, self) {
+        case (.cursor, .session), (.cursor, .fable): return "Cursor models"
+        case (.cursor, .week): return "Other models"
+        case (_, .session): return "5-hour limit"
+        case (_, .week): return "Weekly · all models"
+        case (_, .fable): return "Weekly · Fable"
         }
     }
 
@@ -73,7 +83,7 @@ public enum MenuBarLimits {
         switch provider {
         case .claude: [.session, .week, .fable]
         case .codex: [.session, .week]
-        case .cursor: [.week]
+        case .cursor: [.session, .week]
         }
     }
 

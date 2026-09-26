@@ -17,8 +17,14 @@ ed usage limits [--refresh] [--json]
 
 A top-level array, one object per provider that has ever been recorded, in the
 fixed order `codex`, `claude`, then `cursor`. `session` and `weekly` are each
-either an object or `null`. For Cursor, `weekly` is the billing-cycle plan
-usage and `session` is on-demand spend when a limit is set.
+either an object or `null`. For Claude and Codex, `session` is the 5-hour
+window and `weekly` is the 7-day window. For Cursor, `session` is the Cursor
+Models pool (Cursor Grok and Composer) and `weekly` is the Other Models pool.
+Both Cursor pools reset together at the billing cycle.
+
+The human table is one row per pool. `LIMIT` names the pool, `USED` is its
+percent, and `RESETS` is that pool's reset as a coarse duration, `3h 10m` or
+`2d 4h`, clamped at zero. A `-` means the provider has not reported that pool.
 
 ```json
 [
@@ -70,9 +76,7 @@ provider's history, and a partial final row is ignored.
 `percent` is what the provider reported, stored rounded to one decimal place.
 `resetsAt` is the reset time the provider gave, or `null` when it gave none, and
 `resetsInSeconds` is computed at print time from your clock, so it goes negative
-once the reset moment has passed. The human table shows the session reset as a
-coarse duration instead, `3h 10m` or `2d 4h`, clamped at zero, and a `-` in any
-column the provider has not reported.
+once the reset moment has passed.
 
 `--refresh` asks the background agent to poll the providers again and waits up
 to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`

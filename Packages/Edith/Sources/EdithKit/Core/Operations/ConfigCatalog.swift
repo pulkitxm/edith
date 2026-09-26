@@ -240,7 +240,7 @@ public enum ConfigCatalog {
             summary: "Track Codex rate limits.", fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Limits.cursorEnabled, .bool, group: "limits",
-            summary: "Track Cursor plan and on-demand limits.", fallback: .bool(true)),
+            summary: "Track Cursor models and other models included usage.", fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Limits.provider, .string, group: "limits",
             summary: "Provider shown first in the limits UI.",
@@ -274,8 +274,9 @@ public enum ConfigCatalog {
             fallback: .string("session,week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.cursorWindows, .string, group: "menubar",
-            summary: "Cursor windows shown in the menu bar, comma-separated (week).",
-            fallback: .string("week")),
+            summary: "Cursor pools shown in the menu bar, comma-separated (session, week)."
+                + " session is Cursor models and week is Other models.",
+            fallback: .string("session,week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.limitsStyle, .string, group: "menubar",
             summary: "Layout of the menu bar limits readout.",
@@ -320,7 +321,8 @@ public enum ConfigCatalog {
             summary: "Send limit alerts for 5-hour windows.", fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Notify.trackWeekly, .bool, group: "alerts",
-            summary: "Send limit alerts for weekly windows, Fable included, and Cursor's plan.",
+            summary:
+                "Send limit alerts for weekly windows, Fable included, and Cursor's billing-cycle pools.",
             fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Notify.onPace, .bool, group: "alerts",

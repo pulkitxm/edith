@@ -22,7 +22,7 @@ closed.
 | Command | What it does |
 | --- | --- |
 | `ed usage` | Runs `ed usage summary`, the default subcommand |
-| `ed usage limits` | Session and weekly rate limits per provider, newest observation per provider |
+| `ed usage limits` | Included rate limits per provider, newest observation per provider |
 | `ed usage alerts` | Burn rate, projected cap and the limit alert each tracked window would get now |
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |

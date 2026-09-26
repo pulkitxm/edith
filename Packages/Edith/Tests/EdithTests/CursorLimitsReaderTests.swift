@@ -5,31 +5,30 @@ import Testing
 @testable import EdithKit
 
 @Suite struct CursorLimitsReaderTests {
-    @Test func planPercentAndOnDemandComeFromTheBillingCycle() throws {
+    @Test func cursorModelsAndOtherModelsShareTheBillingCycle() throws {
         let data = Data(
             """
             {
               "billingCycleEnd": "1771077734000",
-              "planUsage": { "totalPercentUsed": 15.48, "limit": 40000, "remaining": 16778 },
-              "spendLimitUsage": { "individualLimit": 10000, "individualUsed": 2500, "pooledLimit": 0 }
+              "planUsage": { "autoPercentUsed": 4.2, "apiPercentUsed": 0, "totalPercentUsed": 90 }
             }
             """.utf8)
         let limits = try CursorLimitsReader.limits(json: data)
         #expect(limits.provider == .cursor)
-        #expect(limits.week?.percent == 15.48)
-        #expect(limits.week?.resetsAt == Date(timeIntervalSince1970: 1_771_077_734))
-        #expect(limits.session?.percent == 25)
-        #expect(limits.session?.resetsAt == limits.week?.resetsAt)
+        #expect(limits.session?.percent == 4.2)
+        #expect(limits.week?.percent == 0)
+        #expect(limits.session?.resetsAt == Date(timeIntervalSince1970: 1_771_077_734))
+        #expect(limits.week?.resetsAt == limits.session?.resetsAt)
     }
 
-    @Test func missingReportedPercentIsComputedFromTheIncludedAmount() throws {
+    @Test func aMissingCursorModelsPoolStaysEmpty() throws {
         let data = Data(
             """
-            { "billingCycleEnd": "2026-04-01T00:00:00Z", "planUsage": { "limit": 200, "remaining": 50 } }
+            { "billingCycleEnd": "2026-04-01T00:00:00Z", "planUsage": { "apiPercentUsed": 12.5, "limit": 200, "remaining": 50 } }
             """.utf8)
         let limits = try CursorLimitsReader.limits(json: data)
-        #expect(limits.week?.percent == 75)
         #expect(limits.session == nil)
+        #expect(limits.week?.percent == 12.5)
         #expect(limits.week?.resetsAt == ISO8601DateFormatter().date(from: "2026-04-01T00:00:00Z"))
     }
 

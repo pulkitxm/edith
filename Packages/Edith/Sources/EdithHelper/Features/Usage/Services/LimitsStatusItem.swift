@@ -87,7 +87,7 @@ final class LimitsStatusItem {
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            if multi { appendLogo(group.provider, into: title) }
+            if multi || group.provider == .cursor { appendLogo(group.provider, into: title) }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
                 appendLabel(segment.slot.menuBarLabel(for: group.provider) + " ", into: title)
@@ -188,6 +188,7 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        let showsLogo = multi || group.provider == .cursor
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -216,7 +217,7 @@ final class LimitsStatusItem {
                     labelColor: labelColor))
         }
         return StackedLimitsView.Group(
-            logo: multi ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
+            logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
             columns: columns)
     }
 
@@ -464,16 +465,14 @@ struct LimitsMenuPanel: View {
                 ForEach(store.enabledProviders) { provider in
                     let limits = store.limits(for: provider)
                     Text(provider.label).font(.headline)
-                    StatusProgressRow(
-                        title: "5-hour limit", percent: limits.session?.percent,
-                        resetsAt: limits.session?.resetsAt)
-                    StatusProgressRow(
-                        title: "Weekly · all models", percent: limits.week?.percent,
-                        resetsAt: limits.week?.resetsAt)
-                    if let fable = limits.fable {
+                    let slots = MenuBarLimits.slots(for: provider).filter { slot in
+                        slot != .fable || limits.window(for: slot) != nil
+                    }
+                    ForEach(slots, id: \.self) { slot in
+                        let window = limits.window(for: slot)
                         StatusProgressRow(
-                            title: "Weekly · Fable", percent: fable.percent,
-                            resetsAt: fable.resetsAt)
+                            title: slot.title(for: provider), percent: window?.percent,
+                            resetsAt: window?.resetsAt)
                     }
                 }
             }

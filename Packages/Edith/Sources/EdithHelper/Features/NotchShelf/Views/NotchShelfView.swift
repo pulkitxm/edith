@@ -669,8 +669,8 @@ private struct NotchUsageRings: View {
     var body: some View {
         HStack(spacing: 20) {
             if selected == .cursor {
-                ring("plan", limits.week)
-                if limits.session != nil { ring("od", limits.session) }
+                ring("models", limits.session)
+                ring("other", limits.week)
             } else {
                 ring("5h", limits.session)
                 ring("7d", limits.week)

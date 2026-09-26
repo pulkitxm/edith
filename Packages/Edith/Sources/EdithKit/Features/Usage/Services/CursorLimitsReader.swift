@@ -205,22 +205,14 @@ enum CursorLimitsReader {
             throw Failure.malformed
         }
         guard let plan = object["planUsage"] as? [String: Any] else { throw Failure.unavailable }
-        let percent: Double
-        if let reported = number(plan["totalPercentUsed"]), reported.isFinite {
-            percent = reported
-        } else if let limit = number(plan["limit"]), limit > 0,
-            let remaining = number(plan["remaining"]), remaining.isFinite
-        {
-            percent = (limit - remaining) / limit * 100
-        } else {
-            throw Failure.unavailable
-        }
-        guard percent.isFinite, percent >= 0 else { throw Failure.unavailable }
         let resetsAt = date(object["billingCycleEnd"])
-        let week = LimitWindow(percent: percent, resetsAt: resetsAt)
-        let onDemand = onDemandWindow(
-            object["spendLimitUsage"] as? [String: Any], resetsAt: resetsAt)
-        return ProviderLimits(provider: .cursor, session: onDemand, week: week)
+        let models = percent(plan["autoPercentUsed"])
+        let other = percent(plan["apiPercentUsed"])
+        guard models != nil || other != nil else { throw Failure.unavailable }
+        return ProviderLimits(
+            provider: .cursor,
+            session: models.map { LimitWindow(percent: $0, resetsAt: resetsAt) },
+            week: other.map { LimitWindow(percent: $0, resetsAt: resetsAt) })
     }
 
     private struct TokenResponse: Decodable {
@@ -235,23 +227,9 @@ enum CursorLimitsReader {
         }
     }
 
-    private static func onDemandWindow(_ spend: [String: Any]?, resetsAt: Date?) -> LimitWindow? {
-        guard let spend else { return nil }
-        let individualLimit = number(spend["individualLimit"]) ?? 0
-        let pooledLimit = number(spend["pooledLimit"]) ?? 0
-        let used: Double
-        let limit: Double
-        if individualLimit > 0 {
-            used = number(spend["individualUsed"]) ?? 0
-            limit = individualLimit
-        } else if pooledLimit > 0 {
-            used = number(spend["pooledUsed"]) ?? 0
-            limit = pooledLimit
-        } else {
-            return nil
-        }
-        guard used.isFinite, limit > 0 else { return nil }
-        return LimitWindow(percent: max(0, used / limit * 100), resetsAt: resetsAt)
+    private static func percent(_ value: Any?) -> Double? {
+        guard let number = number(value), number.isFinite, number >= 0 else { return nil }
+        return number
     }
 
     private static func number(_ value: Any?) -> Double? {

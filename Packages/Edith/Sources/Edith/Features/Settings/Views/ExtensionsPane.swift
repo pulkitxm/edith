@@ -1634,7 +1634,7 @@ private struct UsageRows: View {
     @AppStorage(AppStorageKeys.MenuBar.codexWindows, store: SharedDefaults.store) private
         var codexWindowsRaw = "session,week"
     @AppStorage(AppStorageKeys.MenuBar.cursorWindows, store: SharedDefaults.store) private
-        var cursorWindowsRaw = "week"
+        var cursorWindowsRaw = "session,week"
     @AppStorage(AppStorageKeys.MenuBar.limitsStyle, store: SharedDefaults.store) private
         var limitsStyleRaw = "stacked"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
@@ -1890,7 +1890,8 @@ private struct UsageRows: View {
                     isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession))
                 LimitAlertToggle(
                     "Weekly windows",
-                    detail: "Alerts for weekly limits, Fable included, and Cursor's plan.",
+                    detail:
+                        "Alerts for weekly limits, Fable included, and Cursor's billing-cycle pools.",
                     isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly))
                 LimitAlertToggle(
                     "On pace to hit the cap",

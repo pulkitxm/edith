@@ -37,8 +37,8 @@ public struct LimitAlertTarget: Hashable, Codable, Sendable {
 
     public var label: String {
         switch (provider, slot) {
-        case (.cursor, .session): "Cursor on-demand"
-        case (.cursor, _): "Cursor plan"
+        case (.cursor, .session), (.cursor, .fable): "Cursor models"
+        case (.cursor, .week): "Cursor other models"
         case (_, .session): "\(provider.label) 5h"
         case (_, .week): "\(provider.label) weekly"
         case (_, .fable): "\(provider.label) Fable weekly"

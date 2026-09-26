@@ -65,10 +65,8 @@ struct RateLimitsDialsView: View {
             }
             HStack(spacing: UIScale.pt(24)) {
                 if selected == .cursor {
-                    dial("PLAN", pct: point?.w, reset: point?.weekReset)
-                    if point?.s != nil {
-                        dial("ON-DEMAND", pct: point?.s, reset: point?.sessionReset)
-                    }
+                    dial("CURSOR MODELS", pct: point?.s, reset: point?.sessionReset)
+                    dial("OTHER MODELS", pct: point?.w, reset: point?.weekReset)
                 } else {
                     dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
                     dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
@@ -153,6 +151,8 @@ struct RateLimitsDialsView: View {
             .frame(width: UIScale.pt(104), height: UIScale.pt(104))
             Text(label).font(DashSkin.mono(9)).tracking(UIScale.pt(1.4))
                 .foregroundStyle(DashSkin.inkFaint(dark))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(resetText(reset)).font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
         }
@@ -253,8 +253,12 @@ struct LimitsCardView: View {
         nonmutating set { selectedProviderRaw = newValue.rawValue }
     }
 
-    private var sessionSeriesName: String { selectedProvider == .cursor ? "On-demand" : "Session" }
-    private var weekSeriesName: String { selectedProvider == .cursor ? "Plan" : "Weekly" }
+    private var sessionSeriesName: String {
+        selectedProvider == .cursor ? "Cursor models" : "Session"
+    }
+    private var weekSeriesName: String {
+        selectedProvider == .cursor ? "Other models" : "Weekly"
+    }
 
     private var sessionC: Color { DashSkin.accent(dark) }
     private let weeklyC = DashPalette.color("#c89b3c")
@@ -272,7 +276,7 @@ struct LimitsCardView: View {
     var body: some View {
         SkinCard(
             title: selectedProvider == .cursor
-                ? "Rate limits - plan" : "Rate limits - session & weekly", dark: dark
+                ? "Cursor models & other models" : "Rate limits - session & weekly", dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ProviderSwitchButton(
@@ -379,7 +383,7 @@ struct LimitsCardView: View {
                     Text(point.date.formatted(.dateTime.month().day().hour().minute()))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     if let s = point.s {
-                        Text("\(selectedProvider == .cursor ? "OD" : "S") \(Int(s))%")
+                        Text("\(selectedProvider == .cursor ? "models" : "S") \(Int(s))%")
                             .foregroundStyle(sessionC)
                             .contentTransition(.numericText())
                             .animation(
@@ -387,7 +391,7 @@ struct LimitsCardView: View {
                                 value: Int(s))
                     }
                     if let w = point.w {
-                        Text("\(selectedProvider == .cursor ? "P" : "W") \(Int(w))%")
+                        Text("\(selectedProvider == .cursor ? "other" : "W") \(Int(w))%")
                             .foregroundStyle(weeklyC)
                             .contentTransition(.numericText())
                             .animation(
