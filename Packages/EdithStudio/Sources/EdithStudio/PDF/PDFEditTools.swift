@@ -9,7 +9,7 @@ enum PDFEditTools {
         [
             edit, sign, forms, watermark, pageNumbers, metadata, protect, unlock, redact,
             redactVisual,
-        ]
+        ].map { $0.checkingChoices() }
     }
 
     static let edit = StudioTool(
@@ -239,16 +239,8 @@ enum PDFEditTools {
         guard document.isEncrypted || document.isLocked else {
             throw StudioError.nothingToDo("\(run.input.lastPathComponent) is not protected.")
         }
-        let copy = PDFDocument()
-        for index in 0..<document.pageCount {
-            if let page = document.page(at: index)?.copy() as? PDFPage {
-                copy.insert(page, at: copy.pageCount)
-            }
-        }
+        let copy = StudioPDF.fresh(from: document)
         copy.documentAttributes = document.documentAttributes
-        if let outline = document.outlineRoot {
-            copy.outlineRoot = StudioPDF.copyOutline(outline, original: document, rebuilt: copy)
-        }
         let output = run.output(for: run.input, suffix: "unlocked", ext: "pdf")
         try StudioPDF.write(copy, to: output)
         guard let check = PDFDocument(url: output), !check.isEncrypted else {
@@ -299,7 +291,8 @@ enum PDFEditTools {
         try await PDFRedaction.apply(
             marks, to: document, fill: run.settings.color("fill"),
             searchable: run.settings.bool("searchable"),
-            scrubMetadata: run.settings.bool("scrubMetadata"), output: output
+            scrubMetadata: run.settings.bool("scrubMetadata"), output: output,
+            scrub: PDFRedaction.scrubber(terms: terms, patterns: patterns)
         ) { run.progress($0) }
         let count = marks.values.reduce(0) { $0 + $1.count }
         run.note(

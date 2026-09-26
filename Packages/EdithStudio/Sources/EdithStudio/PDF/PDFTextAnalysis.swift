@@ -25,6 +25,8 @@ public enum PDFTextAnalysis {
         let size: CGFloat
         let bold: Bool
         let italic: Bool
+        var index = 0
+        var length = 1
     }
 
     public static func lines(of page: PDFPage) -> [Line] {
@@ -58,7 +60,9 @@ public enum PDFTextAnalysis {
                     traits.contains(.italic) || name.contains("italic") || name.contains("oblique")
             }
             glyphs.append(
-                Glyph(text: character, rect: rect, size: size, bold: bold, italic: italic))
+                Glyph(
+                    text: character, rect: rect, size: size, bold: bold, italic: italic,
+                    index: range.location, length: range.length))
         }
         return group(glyphs)
     }
@@ -81,7 +85,41 @@ public enum PDFTextAnalysis {
         return rows.map { row in line(from: row.sorted { $0.rect.minX < $1.rect.minX }) }
     }
 
+    static func rightToLeft(_ row: [Glyph]) -> Bool {
+        var rtl = 0
+        var ltr = 0
+        for glyph in row {
+            for scalar in glyph.text.unicodeScalars where scalar.properties.isAlphabetic {
+                switch scalar.value {
+                case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rtl += 1
+                default: ltr += 1
+                }
+            }
+        }
+        return rtl > ltr
+    }
+
+    static func logicalLine(from row: [Glyph]) -> Line {
+        let ordered = row.sorted { $0.index < $1.index }
+        var text = ""
+        for (offset, glyph) in ordered.enumerated() {
+            if offset > 0, glyph.index > ordered[offset - 1].index + ordered[offset - 1].length {
+                text += " "
+            }
+            text += glyph.text
+        }
+        let rect = row.dropFirst().reduce(row[0].rect) { $0.union($1.rect) }
+        var weights: [CGFloat: Int] = [:]
+        for glyph in row { weights[(glyph.size * 2).rounded() / 2, default: 0] += 1 }
+        let size = weights.max { $0.value < $1.value }?.key ?? 12
+        return Line(
+            text: text, rect: rect, size: size, bold: row.filter(\.bold).count * 2 > row.count,
+            italic: row.filter(\.italic).count * 2 > row.count,
+            cells: [Cell(text: text, minX: rect.minX, maxX: rect.maxX)])
+    }
+
     static func line(from row: [Glyph]) -> Line {
+        if rightToLeft(row) { return logicalLine(from: row) }
         var text = ""
         var cells: [Cell] = []
         var cellText = ""
@@ -201,7 +239,11 @@ public enum PDFTextAnalysis {
         let body = bodySize(pages)
         var output: [String] = []
         for lines in pages {
-            for paragraph in paragraphs(lines, body: body) {
+            for block in blocks(lines, body: body) {
+                guard case .paragraph(let paragraph) = block else {
+                    if case .table(let rows) = block { output.append(markdownTable(rows)) }
+                    continue
+                }
                 if let heading = paragraph.heading {
                     output.append(String(repeating: "#", count: heading) + " " + paragraph.text)
                 } else if paragraph.bullet {
@@ -223,23 +265,88 @@ public enum PDFTextAnalysis {
         return text + "\n"
     }
 
-    public static func table(_ lines: [Line], tolerance: CGFloat = 8) -> [[String]] {
-        var anchors: [CGFloat] = []
-        for cell in lines.flatMap(\.cells) {
-            if !anchors.contains(where: { abs($0 - cell.minX) <= tolerance }) {
-                anchors.append(cell.minX)
+    public enum Block: Equatable {
+        case paragraph(Paragraph)
+        case table([[String]])
+    }
+
+    public static func blocks(_ lines: [Line], body: CGFloat) -> [Block] {
+        var result: [Block] = []
+        var pending: [Line] = []
+        var index = 0
+        while index < lines.count {
+            var end = index
+            while end < lines.count, lines[end].cells.count > 1 { end += 1 }
+            let rows = Array(lines[index..<end])
+            if rows.count >= 2, columns(rows).count >= 2 {
+                result += paragraphs(pending, body: body).map(Block.paragraph)
+                pending = []
+                result.append(.table(table(rows)))
+                index = end
+            } else {
+                pending.append(lines[index])
+                index += 1
             }
         }
-        anchors.sort()
+        return result + paragraphs(pending, body: body).map(Block.paragraph)
+    }
+
+    static func columns(_ lines: [Line], tolerance: CGFloat = 4) -> [ClosedRange<CGFloat>] {
+        let spans = lines.filter { $0.cells.count > 1 }.flatMap(\.cells)
+            .map { $0.minX...max($0.minX, $0.maxX) }.sorted { $0.lowerBound < $1.lowerBound }
+        var merged: [ClosedRange<CGFloat>] = []
+        for span in spans {
+            if let last = merged.last, span.lowerBound <= last.upperBound + tolerance {
+                merged[merged.count - 1] = last.lowerBound...max(last.upperBound, span.upperBound)
+            } else {
+                merged.append(span)
+            }
+        }
+        return merged
+    }
+
+    public static func table(_ lines: [Line], tolerance: CGFloat = 8) -> [[String]] {
+        let columns = columns(lines)
+        guard !columns.isEmpty else { return lines.map { [$0.text] } }
+        func column(for cell: Cell, single: Bool) -> Int {
+            if single {
+                return columns.lastIndex { $0.lowerBound <= cell.minX + tolerance } ?? 0
+            }
+            var best = 0
+            var bestScore = -CGFloat.greatestFiniteMagnitude
+            for (index, range) in columns.enumerated() {
+                let overlap = min(range.upperBound, cell.maxX) - max(range.lowerBound, cell.minX)
+                let distance = abs(
+                    (range.lowerBound + range.upperBound) / 2 - (cell.minX + cell.maxX) / 2)
+                let score = overlap > 0 ? overlap : -distance
+                if score > bestScore {
+                    bestScore = score
+                    best = index
+                }
+            }
+            return best
+        }
         return lines.map { line in
-            var row = Array(repeating: "", count: anchors.count)
+            var row = Array(repeating: "", count: columns.count)
             for cell in line.cells {
-                let column =
-                    anchors.lastIndex(where: { $0 <= cell.minX + tolerance }) ?? 0
-                row[column] = row[column].isEmpty ? cell.text : row[column] + " " + cell.text
+                let index = column(for: cell, single: line.cells.count == 1)
+                row[index] = row[index].isEmpty ? cell.text : row[index] + " " + cell.text
             }
             while let last = row.last, last.isEmpty { row.removeLast() }
             return row
         }
+    }
+
+    static func markdownTable(_ rows: [[String]]) -> String {
+        let width = rows.map(\.count).max() ?? 0
+        func render(_ row: [String]) -> String {
+            let cells = (0..<width).map { index in
+                index < row.count ? row[index].replacingOccurrences(of: "|", with: "\\|") : ""
+            }
+            return "| " + cells.joined(separator: " | ") + " |"
+        }
+        guard let header = rows.first else { return "" }
+        let divider = "| " + Array(repeating: "---", count: width).joined(separator: " | ") + " |"
+        return ([render(header), divider] + rows.dropFirst().map(render)).joined(separator: "\n")
     }
 }

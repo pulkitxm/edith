@@ -4,7 +4,9 @@ import Foundation
 import PDFKit
 
 enum PDFConvertTools {
-    static var all: [StudioTool] { [toWord, toPowerPoint, toExcel, toText, toMarkdown, toPDFA] }
+    static var all: [StudioTool] {
+        [toWord, toPowerPoint, toExcel, toText, toMarkdown, toPDFA].map { $0.checkingChoices() }
+    }
 
     static let toWord = StudioTool(
         id: "pdf.to-word", title: "PDF to Word",
@@ -54,7 +56,11 @@ enum PDFConvertTools {
         for (index, lines) in pages.enumerated() {
             try run.checkCancellation()
             if index > 0, run.settings.bool("pageBreaks") { blocks.append(.pageBreak) }
-            for paragraph in PDFTextAnalysis.paragraphs(lines, body: body) {
+            for block in PDFTextAnalysis.blocks(lines, body: body) {
+                guard case .paragraph(let paragraph) = block else {
+                    if case .table(let rows) = block { blocks.append(.table(rows)) }
+                    continue
+                }
                 let text = paragraph.bullet ? "• " + paragraph.text : paragraph.text
                 blocks.append(
                     .paragraph(
@@ -120,7 +126,7 @@ enum PDFConvertTools {
             try run.checkCancellation()
             guard let page = document.page(at: index) else { continue }
             if index == 0 { size = StudioPDF.displaySize(page) }
-            let image = try StudioPDF.render(page, dpi: dpi)
+            let image = try letterboxed(StudioPDF.render(page, dpi: dpi), to: size)
             let data = try StudioImageIO.encode(image, format: .jpeg, options: .init(quality: 0.88))
             slides.append(PPTXWriter.Slide(image: data, imageExtension: "jpg", notes: page.string))
             run.progress(Double(index + 1) / Double(document.pageCount) * 0.9)
@@ -128,6 +134,33 @@ enum PDFConvertTools {
         let output = run.output(for: run.input, suffix: nil, ext: "pptx")
         try PPTXWriter.write(slides, size: size, title: run.input.studioStem, to: output)
         return [output]
+    }
+
+    static func letterboxed(_ image: CGImage, to slide: CGSize) throws -> CGImage {
+        let ratio = slide.width / slide.height
+        let width = Double(image.width)
+        let height = Double(image.height)
+        guard abs(width / height - ratio) > 0.002 else { return image }
+        let canvas =
+            width / height > ratio
+            ? CGSize(width: width, height: (width / ratio).rounded())
+            : CGSize(width: (height * ratio).rounded(), height: height)
+        guard
+            let context = StudioImageOps.context(
+                width: Int(canvas.width), height: Int(canvas.height), opaque: true)
+        else { throw StudioError.failed("Not enough memory to draw the slide.") }
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(origin: .zero, size: canvas))
+        context.draw(
+            image,
+            in: CGRect(
+                x: ((canvas.width - width) / 2).rounded(),
+                y: ((canvas.height - height) / 2).rounded(),
+                width: width, height: height))
+        guard let result = context.makeImage() else {
+            throw StudioError.failed("The slide could not be drawn.")
+        }
+        return result
     }
 
     static let toExcel = StudioTool(
@@ -264,6 +297,8 @@ enum PDFArchival {
         var info = StudioPDF.documentInfo(document)
         info[kCGPDFContextOutputIntent] = intent
         if info[kCGPDFContextTitle] == nil { info[kCGPDFContextTitle] = title }
+        let navigation = PDFNavigation(
+            original: document, placements: StudioPDF.identityPlacements(document))
         guard let context = CGContext(url as CFURL, mediaBox: nil, info as CFDictionary) else {
             throw StudioError.failed("Could not create \(url.lastPathComponent).")
         }
@@ -271,20 +306,22 @@ enum PDFArchival {
             xmp(title: info[kCGPDFContextTitle] as? String ?? title) as CFData)
         for index in 0..<document.pageCount {
             try Task.checkCancellation()
-            guard let page = document.page(at: index), let cgPage = page.pageRef else { continue }
+            guard let page = document.page(at: index) else { continue }
             let size = StudioPDF.displaySize(page)
             var box = CGRect(origin: .zero, size: size)
             context.beginPage(mediaBox: &box)
+            navigation.begin(page: index, in: context)
             if flatten {
                 let image = try StudioPDF.render(page, dpi: 200)
                 context.draw(try StudioPDF.jpegImage(image, quality: 0.9), in: box)
                 StudioPDF.drawInvisibleText(StudioPDF.textLines(of: page), in: context)
             } else {
-                PDFImposition.draw(cgPage, page: page, into: box, fill: false, context: context)
+                StudioPDF.drawDisplayed(page, in: context)
             }
             context.endPage()
             progress(Double(index + 1) / Double(document.pageCount))
         }
+        navigation.finish(in: context)
         context.closePDF()
     }
 

@@ -36,7 +36,9 @@ enum PDFOrganizeTools {
         "password", "Password", help: "Only needed when the PDF is locked.")
 
     static var all: [StudioTool] {
-        [merge, split, removePages, reorder, rotate, organize, nUp, resize, crop, cropVisual]
+        [merge, split, removePages, reorder, rotate, organize, nUp, resize, crop, cropVisual].map {
+            $0.checkingChoices()
+        }
     }
 
     static let merge = StudioTool(
@@ -52,46 +54,47 @@ enum PDFOrganizeTools {
         ],
         keywords: ["combine", "join", "append"], actionTitle: "Merge", family: .pdf
     ) { run in
-        let merged = PDFDocument()
-        let outline = PDFOutline()
-        var sources: [PDFDocument] = []
+        let assembly = PDFAssembly()
+        var entries: [(label: String, start: Int, source: PDFDocument?)] = []
         for (index, url) in run.inputs.enumerated() {
             try run.checkCancellation()
             run.status("Adding \(url.lastPathComponent)")
-            let start = merged.pageCount
+            let start = assembly.document.pageCount
             if url.studioKind == .image {
                 let image = try StudioImageIO.load(url)
-                if let page = ImagesToPDF.page(for: image, layout: .init()) {
-                    merged.insert(page, at: merged.pageCount)
+                guard let page = ImagesToPDF.page(for: image, layout: .init()) else {
+                    throw StudioError.unreadable(url.lastPathComponent)
                 }
+                assembly.append(page)
+                entries.append((url.studioStem, start, nil))
             } else {
                 let document = try StudioPDF.open(url, password: run.settings.text("password"))
-                sources.append(document)
-                for pageIndex in 0..<document.pageCount {
-                    guard let page = document.page(at: pageIndex)?.copy() as? PDFPage else {
-                        continue
-                    }
-                    merged.insert(page, at: merged.pageCount)
-                }
-            }
-            if run.settings.bool("bookmarks"), merged.pageCount > start,
-                let first = merged.page(at: start)
-            {
-                let item = PDFOutline()
-                item.label = url.studioStem
-                item.destination = PDFDestination(
-                    page: first, at: CGPoint(x: 0, y: first.bounds(for: .mediaBox).maxY))
-                outline.insertChild(item, at: outline.numberOfChildren)
+                assembly.append(document)
+                entries.append((url.studioStem, start, document))
             }
             run.progress(Double(index + 1) / Double(run.inputs.count) * 0.9)
         }
-        guard merged.pageCount > 0 else {
+        guard assembly.document.pageCount > 0 else {
             throw StudioError.nothingToDo("None of the files had pages to merge.")
         }
+        let outline = PDFOutline()
+        for entry in entries {
+            let nested = entry.source.flatMap { assembly.outline(of: $0) }
+            guard run.settings.bool("bookmarks") else {
+                if let nested { StudioPDF.appendChildren(of: nested, to: outline) { $0 } }
+                continue
+            }
+            guard let first = assembly.document.page(at: entry.start) else { continue }
+            let item = PDFOutline()
+            item.label = entry.label
+            item.destination = PDFDestination(page: first, at: StudioPDF.topLeft(of: first))
+            if let nested { StudioPDF.appendChildren(of: nested, to: item) { $0 } }
+            outline.insertChild(item, at: outline.numberOfChildren)
+        }
+        let merged = assembly.finish()
         if outline.numberOfChildren > 0 { merged.outlineRoot = outline }
         let output = run.output(for: run.inputs[0], suffix: "merged", ext: "pdf")
         try StudioPDF.write(merged, to: output)
-        _ = sources.count
         return [output]
     }
 
@@ -144,12 +147,8 @@ enum PDFOrganizeTools {
         var outputs: [URL] = []
         for (index, group) in groups.enumerated() {
             try run.checkCancellation()
-            let part = PDFDocument()
-            for pageIndex in group {
-                if let page = document.page(at: pageIndex)?.copy() as? PDFPage {
-                    part.insert(page, at: part.pageCount)
-                }
-            }
+            let part = StudioPDF.fresh(from: document, pages: group)
+            part.documentAttributes = document.documentAttributes
             let label: String
             if run.settings.text("mode") == "extract" {
                 label = "extracted"
@@ -194,9 +193,11 @@ enum PDFOrganizeTools {
         guard remove.count < document.pageCount else {
             throw StudioError.nothingToDo("That would remove every page.")
         }
-        for index in remove.sorted(by: >) { document.removePage(at: index) }
+        let kept = (0..<document.pageCount).filter { !remove.contains($0) }
+        let result = StudioPDF.fresh(from: document, pages: kept)
+        result.documentAttributes = document.documentAttributes
         let output = run.output(for: run.input, suffix: "edited", ext: "pdf")
-        try StudioPDF.write(document, to: output)
+        try StudioPDF.write(result, to: output)
         run.note("Removed \(remove.count) page\(remove.count == 1 ? "" : "s").")
         return [output]
     }
@@ -234,12 +235,8 @@ enum PDFOrganizeTools {
         default:
             order = Array((0..<count).reversed())
         }
-        let result = PDFDocument()
-        for index in order {
-            if let page = document.page(at: index)?.copy() as? PDFPage {
-                result.insert(page, at: result.pageCount)
-            }
-        }
+        let result = StudioPDF.fresh(from: document, pages: order)
+        result.documentAttributes = document.documentAttributes
         let output = run.output(for: run.input, suffix: "reordered", ext: "pdf")
         try StudioPDF.write(result, to: output)
         return [output]
@@ -474,6 +471,11 @@ public enum PDFCropping {
 }
 
 enum PDFImposition {
+    struct Sheet {
+        var size: CGSize
+        var slots: [(page: Int, cell: CGRect)]
+    }
+
     static func grid(for count: Int, landscape: Bool) -> (columns: Int, rows: Int) {
         switch count {
         case 2: landscape ? (2, 1) : (1, 2)
@@ -494,97 +496,103 @@ enum PDFImposition {
         let landscape = perSheet == 2 || perSheet == 6 ? !sourceLandscape : sourceLandscape
         let sheet = landscape ? CGSize(width: paper.height, height: paper.width) : paper
         let layout = grid(for: perSheet, landscape: landscape)
-        var box = CGRect(origin: .zero, size: sheet)
-        guard
-            let context = CGContext(
-                url as CFURL, mediaBox: &box, StudioPDF.documentInfo(document) as CFDictionary)
-        else { throw StudioError.failed("Could not create \(url.lastPathComponent).") }
-        let count = document.pageCount
         let gap = 8.0
-        let usable = box.insetBy(dx: margin, dy: margin)
+        let usable = CGRect(origin: .zero, size: sheet).insetBy(dx: margin, dy: margin)
         let cellWidth = (usable.width - gap * Double(layout.columns - 1)) / Double(layout.columns)
         let cellHeight = (usable.height - gap * Double(layout.rows - 1)) / Double(layout.rows)
-        var index = 0
-        while index < count {
-            try Task.checkCancellation()
-            context.beginPage(mediaBox: &box)
-            for slot in 0..<perSheet where index < count {
-                defer { index += 1 }
-                guard let page = document.page(at: index), let cgPage = page.pageRef else {
-                    continue
-                }
-                let column = slot % layout.columns
-                let row = slot / layout.columns
-                let cell = CGRect(
-                    x: usable.minX + Double(column) * (cellWidth + gap),
-                    y: usable.maxY - Double(row + 1) * cellHeight - Double(row) * gap,
-                    width: cellWidth, height: cellHeight)
-                draw(cgPage, page: page, into: cell, fill: false, context: context)
-                if border {
-                    let size = StudioPDF.displaySize(page)
-                    let scale = min(cell.width / size.width, cell.height / size.height)
-                    let frame = CGRect(
-                        x: cell.midX - size.width * scale / 2,
-                        y: cell.midY - size.height * scale / 2,
-                        width: size.width * scale, height: size.height * scale)
-                    context.setStrokeColor(gray: 0.7, alpha: 1)
-                    context.setLineWidth(0.5)
-                    context.stroke(frame)
-                }
-            }
-            context.endPage()
-            progress(Double(index) / Double(count))
+        var sheets: [Sheet] = []
+        for index in 0..<document.pageCount {
+            let slot = index % perSheet
+            if slot == 0 { sheets.append(Sheet(size: sheet, slots: [])) }
+            let column = slot % layout.columns
+            let row = slot / layout.columns
+            let cell = CGRect(
+                x: usable.minX + Double(column) * (cellWidth + gap),
+                y: usable.maxY - Double(row + 1) * cellHeight - Double(row) * gap,
+                width: cellWidth, height: cellHeight)
+            sheets[sheets.count - 1].slots.append((index, cell))
         }
-        context.closePDF()
+        try write(
+            document, sheets: sheets, fill: false, border: border, to: url, progress: progress)
     }
 
     static func resize(
         _ document: PDFDocument, paper: CGSize, fill: Bool, margin: Double, to url: URL,
         progress: (Double) -> Void
     ) throws {
-        guard
-            let context = CGContext(
-                url as CFURL, mediaBox: nil, StudioPDF.documentInfo(document) as CFDictionary)
-        else { throw StudioError.failed("Could not create \(url.lastPathComponent).") }
+        var sheets: [Sheet] = []
         for index in 0..<document.pageCount {
-            try Task.checkCancellation()
-            guard let page = document.page(at: index), let cgPage = page.pageRef else { continue }
-            let size = StudioPDF.displaySize(page)
+            let size = document.page(at: index).map(StudioPDF.displaySize) ?? paper
             let sheet =
                 size.width > size.height ? CGSize(width: paper.height, height: paper.width) : paper
-            var box = CGRect(origin: .zero, size: sheet)
-            context.beginPage(mediaBox: &box)
-            draw(
-                cgPage, page: page, into: box.insetBy(dx: margin, dy: margin), fill: fill,
-                context: context)
-            context.endPage()
-            progress(Double(index + 1) / Double(document.pageCount))
+            let cell = CGRect(origin: .zero, size: sheet).insetBy(dx: margin, dy: margin)
+            sheets.append(Sheet(size: sheet, slots: [(index, cell)]))
         }
+        try write(document, sheets: sheets, fill: fill, border: false, to: url, progress: progress)
+    }
+
+    static func write(
+        _ document: PDFDocument, sheets: [Sheet], fill: Bool, border: Bool, to url: URL,
+        info: [CFString: Any]? = nil, progress: (Double) -> Void
+    ) throws {
+        var placements: [StudioPDF.Placement] = []
+        for (index, sheet) in sheets.enumerated() {
+            for slot in sheet.slots {
+                guard let page = document.page(at: slot.page),
+                    let frame = frame(of: page, in: slot.cell, fill: fill)
+                else { continue }
+                placements.append(
+                    StudioPDF.Placement(
+                        source: slot.page, target: index,
+                        transform: StudioPDF.displayFromPage(page).concatenating(frame.transform)))
+            }
+        }
+        let navigation = PDFNavigation(original: document, placements: placements)
+        let details = info ?? StudioPDF.documentInfo(document)
+        guard let context = CGContext(url as CFURL, mediaBox: nil, details as CFDictionary) else {
+            throw StudioError.failed("Could not create \(url.lastPathComponent).")
+        }
+        for (index, sheet) in sheets.enumerated() {
+            try Task.checkCancellation()
+            var box = CGRect(origin: .zero, size: sheet.size)
+            context.beginPage(mediaBox: &box)
+            navigation.begin(page: index, in: context)
+            for slot in sheet.slots {
+                guard let page = document.page(at: slot.page),
+                    let frame = frame(of: page, in: slot.cell, fill: fill)
+                else { continue }
+                context.saveGState()
+                context.clip(to: slot.cell)
+                context.concatenate(frame.transform)
+                StudioPDF.drawDisplayed(page, in: context)
+                context.restoreGState()
+                if border {
+                    context.setStrokeColor(gray: 0.7, alpha: 1)
+                    context.setLineWidth(0.5)
+                    context.stroke(frame.drawn)
+                }
+            }
+            context.endPage()
+            progress(Double(index + 1) / Double(max(sheets.count, 1)))
+        }
+        navigation.finish(in: context)
         context.closePDF()
     }
 
-    static func draw(
-        _ cgPage: CGPDFPage, page: PDFPage, into cell: CGRect, fill: Bool, context: CGContext
-    ) {
+    static func frame(of page: PDFPage, in cell: CGRect, fill: Bool) -> (
+        drawn: CGRect, transform: CGAffineTransform
+    )? {
         let size = StudioPDF.displaySize(page)
-        guard size.width > 0, size.height > 0 else { return }
+        guard size.width > 0, size.height > 0, cell.width > 0, cell.height > 0 else { return nil }
         let scale =
             fill
             ? max(cell.width / size.width, cell.height / size.height)
             : min(cell.width / size.width, cell.height / size.height)
-        let drawn = CGSize(width: size.width * scale, height: size.height * scale)
-        let origin = CGPoint(x: cell.midX - drawn.width / 2, y: cell.midY - drawn.height / 2)
-        let box = StudioPDF.cropBox(page)
-        context.saveGState()
-        context.clip(to: cell)
-        context.translateBy(x: origin.x, y: origin.y)
-        context.scaleBy(x: scale, y: scale)
-        context.concatenate(
-            StudioPDF.pageFromDisplay(size: box.size, rotation: StudioPDF.rotation(page)).inverted()
+        let drawn = CGRect(
+            x: cell.midX - size.width * scale / 2, y: cell.midY - size.height * scale / 2,
+            width: size.width * scale, height: size.height * scale)
+        return (
+            drawn, CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: drawn.minX, ty: drawn.minY)
         )
-        context.clip(to: CGRect(origin: .zero, size: box.size))
-        context.translateBy(x: -box.minX, y: -box.minY)
-        context.drawPDFPage(cgPage)
-        context.restoreGState()
     }
 }

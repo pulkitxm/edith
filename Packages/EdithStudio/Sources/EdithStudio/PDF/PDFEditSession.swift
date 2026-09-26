@@ -49,6 +49,7 @@ public final class PDFEditSession {
         public var rect: CGRect
         public var image: CGImage
         public var opacity: Double
+        public var rotation = 0
     }
 
     public static let placementMarker = "studio.placement"
@@ -157,9 +158,21 @@ public final class PDFEditSession {
     }
 
     public func duplicatePage(_ index: Int) {
-        guard let copy = document.page(at: index)?.copy() as? PDFPage else { return }
+        guard let page = document.page(at: index) else { return }
+        let placed = page.annotations.filter { $0 is PlacementAnnotation }
+        for annotation in placed { page.removeAnnotation(annotation) }
+        let copy = page.copy() as? PDFPage
+        for annotation in placed { page.addAnnotation(annotation) }
+        guard let copy else { return }
         remapPages { $0 > index ? $0 + 1 : $0 }
         document.insert(copy, at: index + 1)
+        for placement in placements where placement.page == index {
+            let clone = Placement(
+                id: UUID(), page: index + 1, rect: placement.rect, image: placement.image,
+                opacity: placement.opacity, rotation: placement.rotation)
+            placements.append(clone)
+            copy.addAnnotation(PlacementAnnotation(placement: clone))
+        }
         isDirty = true
     }
 
@@ -199,8 +212,59 @@ public final class PDFEditSession {
     }
 
     public func extractPages(_ indices: [Int], to url: URL) throws {
-        let extracted = StudioPDF.fresh(from: document, pages: indices.sorted())
-        try StudioPDF.write(extracted, to: url)
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "studio-extract-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let composed = try compose(pages: indices.sorted(), scratch: scratch) { _ in }
+        guard !composed.marks.isEmpty else {
+            try StudioPDF.write(composed.document, to: url)
+            return
+        }
+        try PDFRedaction.applyWithoutRecognition(
+            composed.marks, to: composed.document, fill: .black, searchable: true,
+            scrubMetadata: false, output: url)
+    }
+
+    func compose(pages selection: [Int]?, scratch: URL, progress: @escaping (Double) -> Void)
+        throws -> (document: PDFDocument, marks: [Int: [CGRect]])
+    {
+        let selected = selection ?? Array(0..<document.pageCount)
+        let position = Dictionary(
+            selected.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var marks: [Int: [CGRect]] = [:]
+        for (index, rects) in redactions {
+            if let target = position[index] { marks[target] = rects }
+        }
+        let markers = removeMarkers()
+        defer { restoreMarkers(markers) }
+        var working = StudioPDF.fresh(from: document, pages: selected)
+        working.documentAttributes = document.documentAttributes
+        var chosen: [Int: [Placement]] = [:]
+        for placement in placements {
+            if let target = position[placement.page] {
+                chosen[target, default: []].append(placement)
+            }
+        }
+        guard !chosen.isEmpty else { return (working, marks) }
+        let stage = scratch.appendingPathComponent("placed.pdf")
+        let pages = (0..<working.pageCount).map { working.page(at: $0) }
+        for (index, rects) in marks {
+            guard let crop = pages[index].map(StudioPDF.cropBox) else { continue }
+            marks[index] = rects.map { $0.offsetBy(dx: -crop.minX, dy: -crop.minY) }
+        }
+        try StudioPDF.rebuild(
+            working, to: stage, pages: Set(chosen.keys),
+            over: { canvas in
+                guard let page = pages[canvas.index] else { return }
+                for placement in chosen[canvas.index] ?? [] {
+                    Self.draw(
+                        placement.image, opacity: placement.opacity, bounds: placement.rect,
+                        placedAt: placement.rotation, on: page, in: canvas.context)
+                }
+            }, progress: progress)
+        working = try StudioPDF.open(stage)
+        return (working, marks)
     }
 
     @discardableResult
@@ -348,7 +412,7 @@ public final class PDFEditSession {
         guard let page = document.page(at: index) else { return nil }
         let annotation = PDFAnnotation(bounds: rect, forType: .widget, withProperties: nil)
         switch field {
-        case let .text(multiline):
+        case .text(let multiline):
             annotation.widgetFieldType = .text
             annotation.isMultiline = multiline
             annotation.font = NSFont.systemFont(ofSize: min(12, max(8, rect.height * 0.6)))
@@ -356,7 +420,7 @@ public final class PDFEditSession {
             annotation.widgetFieldType = .button
             annotation.widgetControlType = .checkBoxControl
             annotation.buttonWidgetState = .offState
-        case let .choice(options):
+        case .choice(let options):
             annotation.widgetFieldType = .choice
             annotation.choices = options
             annotation.widgetStringValue = options.first ?? ""
@@ -445,7 +509,8 @@ public final class PDFEditSession {
     {
         guard let page = document.page(at: index) else { return nil }
         let placement = Placement(
-            id: UUID(), page: index, rect: rect, image: image, opacity: opacity)
+            id: UUID(), page: index, rect: rect, image: image, opacity: opacity,
+            rotation: StudioPDF.rotation(page))
         placements.append(placement)
         page.addAnnotation(PlacementAnnotation(placement: placement))
         isDirty = true
@@ -519,51 +584,43 @@ public final class PDFEditSession {
         to url: URL, flatten: Bool = false, searchableRedactions: Bool = true,
         progress: @escaping (Double) -> Void = { _ in }
     ) async throws {
-        let marks = redactions
-        let markers = removeMarkers()
-        defer { restoreMarkers(markers) }
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
             "studio-edit-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
-        var working = StudioPDF.fresh(from: document)
-        working.documentAttributes = document.documentAttributes
-        if let outline = document.outlineRoot, outline.numberOfChildren > 0 {
-            working.outlineRoot = StudioPDF.copyOutline(
-                outline, original: document, rebuilt: working)
-        }
-        if !placements.isEmpty {
-            let stage = scratch.appendingPathComponent("placed.pdf")
-            let byPage = Dictionary(grouping: placements, by: \.page)
-            let toDisplay = (0..<working.pageCount).map { index in
-                working.page(at: index).map(StudioPDF.displayFromPage) ?? .identity
-            }
-            try StudioPDF.rebuild(
-                working, to: stage, pages: Set(byPage.keys),
-                over: { canvas in
-                    for placement in byPage[canvas.index] ?? [] {
-                        let rect = placement.rect.applying(toDisplay[canvas.index]).standardized
-                        canvas.context.saveGState()
-                        canvas.context.setAlpha(placement.opacity)
-                        canvas.context.interpolationQuality = .high
-                        canvas.context.draw(placement.image, in: rect)
-                        canvas.context.restoreGState()
-                    }
-                }, progress: { progress($0 * 0.5) })
-            working = try StudioPDF.open(stage)
-        }
-        if !marks.isEmpty {
+        let composed = try compose(pages: nil, scratch: scratch) { progress($0 * 0.5) }
+        var working = composed.document
+        if !composed.marks.isEmpty {
             let stage = scratch.appendingPathComponent("redacted.pdf")
             try await PDFRedaction.apply(
-                marks, to: working, fill: .black, searchable: searchableRedactions,
+                composed.marks, to: working, fill: .black, searchable: searchableRedactions,
                 scrubMetadata: false, output: stage
             ) { progress(0.5 + $0 * 0.4) }
             working = try StudioPDF.open(stage)
         }
         try StudioPDF.write(
             working, to: url, options: flatten ? [.burnInAnnotationsOption: true] : [:])
+        if flatten { try StudioPDF.restoreLinks(from: working, into: url) }
         progress(1)
         isDirty = false
+    }
+
+    static func draw(
+        _ image: CGImage, opacity: Double, bounds: CGRect, placedAt rotation: Int,
+        on page: PDFPage, in context: CGContext
+    ) {
+        let frame = bounds.applying(StudioPDF.displayFromPage(page)).standardized
+        let turn = ((StudioPDF.rotation(page) - rotation) % 360 + 360) % 360
+        let upright =
+            turn == 90 || turn == 270
+            ? CGSize(width: frame.height, height: frame.width) : frame.size
+        context.saveGState()
+        context.setAlpha(opacity)
+        context.interpolationQuality = .high
+        context.translateBy(x: frame.minX, y: frame.minY)
+        context.concatenate(StudioPDF.pageFromDisplay(size: upright, rotation: turn).inverted())
+        context.draw(image, in: CGRect(origin: .zero, size: upright))
+        context.restoreGState()
     }
 
     func placementID(of annotation: PDFAnnotation) -> UUID? {
@@ -626,11 +683,13 @@ public final class PlacementAnnotation: PDFAnnotation {
     public let placementID: UUID
     let image: CGImage
     let opacity: Double
+    let rotation: Int
 
     init(placement: PDFEditSession.Placement) {
         placementID = placement.id
         image = placement.image
         opacity = placement.opacity
+        rotation = placement.rotation
         super.init(bounds: placement.rect, forType: .stamp, withProperties: nil)
         userName = PDFEditSession.placementMarker
     }
@@ -638,11 +697,9 @@ public final class PlacementAnnotation: PDFAnnotation {
     required init?(coder: NSCoder) { nil }
 
     public override func draw(with box: PDFDisplayBox, in context: CGContext) {
-        context.saveGState()
-        context.setAlpha(opacity)
-        context.interpolationQuality = .high
-        context.draw(image, in: bounds)
-        context.restoreGState()
+        guard let page else { return }
+        PDFEditSession.draw(
+            image, opacity: opacity, bounds: bounds, placedAt: rotation, on: page, in: context)
     }
 }
 

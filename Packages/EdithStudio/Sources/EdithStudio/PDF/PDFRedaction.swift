@@ -62,30 +62,85 @@ public enum PDFRedaction {
         return marks
     }
 
+    public static func scrubber(terms: [String], patterns: [Pattern]) -> (String) -> String {
+        let expressions =
+            terms.map { NSRegularExpression.escapedPattern(for: $0) }
+            + patterns.map(\.expression)
+        let compiled = expressions.compactMap {
+            try? NSRegularExpression(pattern: $0, options: [.caseInsensitive])
+        }
+        return { text in
+            compiled.reduce(text) { current, expression in
+                expression.stringByReplacingMatches(
+                    in: current, range: NSRange(current.startIndex..., in: current),
+                    withTemplate: "\u{2588}\u{2588}\u{2588}")
+            }
+        }
+    }
+
     public static func apply(
         _ marks: [Int: [CGRect]], to document: PDFDocument, fill: StudioColor, searchable: Bool,
-        scrubMetadata: Bool, output: URL, dpi: Double = 200, progress: (Double) -> Void = { _ in }
+        scrubMetadata: Bool, output: URL, dpi: Double = 200,
+        scrub: ((String) -> String)? = nil, progress: (Double) -> Void = { _ in }
     ) async throws {
-        let result = PDFDocument()
-        for index in 0..<document.pageCount {
+        let prepared = try prepare(
+            marks, in: document, fill: fill, dpi: dpi, searchable: searchable, progress: progress)
+        var burned: [Int: PDFPage] = [:]
+        for (index, item) in prepared {
             try Task.checkCancellation()
-            guard let page = document.page(at: index) else { continue }
-            guard let rects = marks[index], !rects.isEmpty else {
-                if let copy = page.copy() as? PDFPage {
-                    for annotation in copy.annotations where annotation.type == "Redact" {
-                        copy.removeAnnotation(annotation)
-                    }
-                    result.insert(copy, at: result.pageCount)
+            var lines: [StudioPDF.TextLine] = []
+            if let unread = item.unread {
+                lines = try await StudioVision.recognizeText(in: unread, accurate: true).map {
+                    line in
+                    StudioPDF.TextLine(
+                        text: line.text,
+                        rect: CGRect(
+                            x: line.box.minX * item.display.width,
+                            y: line.box.minY * item.display.height,
+                            width: line.box.width * item.display.width,
+                            height: line.box.height * item.display.height))
                 }
+            }
+            burned[index] = try item.page(displayLines: lines)
+        }
+        try write(
+            marks, burned: burned, from: document, scrubMetadata: scrubMetadata, scrub: scrub,
+            to: output)
+    }
+
+    public static func applyWithoutRecognition(
+        _ marks: [Int: [CGRect]], to document: PDFDocument, fill: StudioColor, searchable: Bool,
+        scrubMetadata: Bool, output: URL, dpi: Double = 200, scrub: ((String) -> String)? = nil
+    ) throws {
+        let prepared = try prepare(
+            marks, in: document, fill: fill, dpi: dpi, searchable: searchable
+        ) { _ in }
+        let burned = try prepared.mapValues { try $0.page(displayLines: []) }
+        try write(
+            marks, burned: burned, from: document, scrubMetadata: scrubMetadata, scrub: scrub,
+            to: output)
+    }
+
+    static func write(
+        _ marks: [Int: [CGRect]], burned: [Int: PDFPage], from document: PDFDocument,
+        scrubMetadata: Bool, scrub: ((String) -> String)?, to output: URL
+    ) throws {
+        let assembly = PDFAssembly()
+        for index in 0..<document.pageCount {
+            if let page = burned[index] {
+                assembly.append(page, standingFor: document, index: index)
                 continue
             }
-            let flattened = try await burn(
-                page, rects: rects, fill: fill, dpi: dpi, searchable: searchable)
-            result.insert(flattened, at: result.pageCount)
-            progress(Double(index + 1) / Double(document.pageCount))
+            assembly.append(document, pages: [index])
+            if let copy = assembly.document.page(at: assembly.document.pageCount - 1) {
+                for annotation in copy.annotations where annotation.type == "Redact" {
+                    copy.removeAnnotation(annotation)
+                }
+            }
         }
-        for (index, rects) in marks where !rects.isEmpty {
-            guard let page = document.page(at: index), let target = result.page(at: index)
+        for (index, rects) in marks where burned[index] != nil {
+            guard let page = document.page(at: index),
+                let target = assembly.page(for: document, index)
             else { continue }
             let crop = StudioPDF.cropBox(page)
             for annotation in page.annotations where annotation.type == "Link" {
@@ -93,22 +148,85 @@ public enum PDFRedaction {
                     let link = StudioPDF.relink(
                         annotation,
                         bounds: annotation.bounds.offsetBy(dx: -crop.minX, dy: -crop.minY),
-                        original: document, rebuilt: result)
+                        map: { assembly.target(for: $0) })
                 else { continue }
                 target.addAnnotation(link)
             }
         }
-        if scrubMetadata {
-            result.documentAttributes = [:]
-        } else {
-            result.documentAttributes = document.documentAttributes
+        if let outline = assembly.outline(of: document) {
+            if let scrub { relabel(outline, scrub) }
+            assembly.document.outlineRoot = outline
         }
+        let result = assembly.finish()
+        result.documentAttributes = scrubMetadata ? [:] : document.documentAttributes
         try StudioPDF.write(result, to: output)
     }
 
-    static func burn(
+    static func relabel(_ outline: PDFOutline, _ scrub: (String) -> String) {
+        for index in 0..<outline.numberOfChildren {
+            guard let child = outline.child(at: index) else { continue }
+            if let label = child.label { child.label = scrub(label) }
+            relabel(child, scrub)
+        }
+    }
+
+    struct Prepared {
+        let burned: CGImage
+        let unread: CGImage?
+        let pageLines: [StudioPDF.TextLine]
+        let crop: CGRect
+        let rotation: Int
+        let display: CGSize
+
+        func page(displayLines: [StudioPDF.TextLine]) throws -> PDFPage {
+            let data = NSMutableData()
+            guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
+                throw StudioError.failed("The redacted page could not be written.")
+            }
+            var box = CGRect(origin: .zero, size: crop.size)
+            guard let pdf = CGContext(consumer: consumer, mediaBox: &box, nil) else {
+                throw StudioError.failed("The redacted page could not be written.")
+            }
+            pdf.beginPage(mediaBox: &box)
+            pdf.interpolationQuality = .high
+            pdf.draw(try StudioPDF.jpegImage(burned, quality: 0.85), in: box)
+            StudioPDF.drawInvisibleText(pageLines, in: pdf)
+            if !displayLines.isEmpty {
+                pdf.saveGState()
+                pdf.concatenate(StudioPDF.pageFromDisplay(size: crop.size, rotation: rotation))
+                StudioPDF.drawInvisibleText(displayLines, in: pdf)
+                pdf.restoreGState()
+            }
+            pdf.endPage()
+            pdf.closePDF()
+            guard let redacted = PDFDocument(data: data as Data)?.page(at: 0) else {
+                throw StudioError.failed("The redacted page could not be read back.")
+            }
+            redacted.rotation = rotation
+            return redacted
+        }
+    }
+
+    static func prepare(
+        _ marks: [Int: [CGRect]], in document: PDFDocument, fill: StudioColor, dpi: Double,
+        searchable: Bool, progress: (Double) -> Void
+    ) throws -> [Int: Prepared] {
+        var prepared: [Int: Prepared] = [:]
+        let indices = marks.keys.sorted()
+        for (step, index) in indices.enumerated() {
+            try Task.checkCancellation()
+            guard let page = document.page(at: index), let rects = marks[index], !rects.isEmpty
+            else { continue }
+            prepared[index] = try prepare(
+                page, rects: rects, fill: fill, dpi: dpi, searchable: searchable)
+            progress(Double(step + 1) / Double(indices.count))
+        }
+        return prepared
+    }
+
+    static func prepare(
         _ page: PDFPage, rects: [CGRect], fill: StudioColor, dpi: Double, searchable: Bool
-    ) async throws -> PDFPage {
+    ) throws -> Prepared {
         let rotation = StudioPDF.rotation(page)
         let crop = StudioPDF.cropBox(page)
         let displayed = try StudioPDF.render(page, dpi: dpi)
@@ -118,46 +236,32 @@ public enum PDFRedaction {
         else { throw StudioError.failed("Not enough memory to redact the page.") }
         let scaleX = Double(upright.width) / crop.width
         let scaleY = Double(upright.height) / crop.height
+        let local = rects.map { $0.standardized.offsetBy(dx: -crop.minX, dy: -crop.minY) }
         context.draw(upright, in: CGRect(x: 0, y: 0, width: upright.width, height: upright.height))
         context.setFillColor(fill.cgColor)
-        for rect in rects {
-            let local = rect.standardized.offsetBy(dx: -crop.minX, dy: -crop.minY)
+        for rect in local {
             context.fill(
                 CGRect(
-                    x: local.minX * scaleX, y: local.minY * scaleY,
-                    width: local.width * scaleX, height: local.height * scaleY
+                    x: rect.minX * scaleX, y: rect.minY * scaleY,
+                    width: rect.width * scaleX, height: rect.height * scaleY
                 ).integral)
         }
         guard let burned = context.makeImage() else {
             throw StudioError.failed("The redacted page could not be drawn.")
         }
-        let lines: [StudioPDF.TextLine] =
-            searchable
-            ? (try await StudioVision.recognizeText(in: burned, accurate: true)).map { line in
-                StudioPDF.TextLine(
-                    text: line.text,
-                    rect: CGRect(
-                        x: line.box.minX * crop.width, y: line.box.minY * crop.height,
-                        width: line.box.width * crop.width, height: line.box.height * crop.height))
-            } : []
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
-            throw StudioError.failed("The redacted page could not be written.")
+        var pageLines: [StudioPDF.TextLine] = []
+        var unread: CGImage?
+        if searchable {
+            let shift = CGAffineTransform(translationX: -crop.minX, y: -crop.minY)
+            let glyphs = StudioPDF.glyphs(of: page, transform: shift)
+            if glyphs.isEmpty {
+                unread = StudioImageOps.rotated(burned, quarterTurns: rotation / 90)
+            } else {
+                pageLines = StudioPDF.runs(glyphs, excluding: local)
+            }
         }
-        var box = CGRect(origin: .zero, size: crop.size)
-        guard let pdf = CGContext(consumer: consumer, mediaBox: &box, nil) else {
-            throw StudioError.failed("The redacted page could not be written.")
-        }
-        pdf.beginPage(mediaBox: &box)
-        pdf.interpolationQuality = .high
-        pdf.draw(try StudioPDF.jpegImage(burned, quality: 0.85), in: box)
-        StudioPDF.drawInvisibleText(lines, in: pdf)
-        pdf.endPage()
-        pdf.closePDF()
-        guard let redacted = PDFDocument(data: data as Data)?.page(at: 0) else {
-            throw StudioError.failed("The redacted page could not be read back.")
-        }
-        redacted.rotation = rotation
-        return redacted
+        return Prepared(
+            burned: burned, unread: unread, pageLines: pageLines, crop: crop, rotation: rotation,
+            display: StudioPDF.displaySize(page))
     }
 }

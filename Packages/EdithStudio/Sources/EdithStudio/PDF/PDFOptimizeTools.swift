@@ -6,7 +6,9 @@ import Quartz
 
 enum PDFOptimizeTools {
     static var all: [StudioTool] {
-        [compress, grayscale, ocr, repair, flatten, decompress, linearize]
+        [compress, grayscale, ocr, repair, flatten, decompress, linearize].map {
+            $0.checkingChoices()
+        }
     }
 
     static let compress = StudioTool(
@@ -206,6 +208,7 @@ enum PDFOptimizeTools {
         let document = try StudioPDF.open(run.input, password: run.settings.text("password"))
         let output = run.output(for: run.input, suffix: "flattened", ext: "pdf")
         try StudioPDF.write(document, to: output, options: [.burnInAnnotationsOption: true])
+        try StudioPDF.restoreLinks(from: document, into: output)
         return [output]
     }
 
@@ -259,6 +262,8 @@ enum PDFCompression {
         _ document: PDFDocument, dpi: Double, quality: Double, grayscale: Bool, to url: URL,
         progress: (Double) -> Void
     ) throws {
+        let navigation = PDFNavigation(
+            original: document, placements: StudioPDF.identityPlacements(document))
         guard
             let context = CGContext(
                 url as CFURL, mediaBox: nil, StudioPDF.documentInfo(document) as CFDictionary)
@@ -271,12 +276,14 @@ enum PDFCompression {
             let rendered = try StudioPDF.render(page, dpi: dpi)
             let image = try StudioPDF.jpegImage(rendered, quality: quality, grayscale: grayscale)
             context.beginPage(mediaBox: &box)
+            navigation.begin(page: index, in: context)
             context.interpolationQuality = .high
             context.draw(image, in: box)
             StudioPDF.drawInvisibleText(StudioPDF.textLines(of: page), in: context)
             context.endPage()
             progress(Double(index + 1) / Double(document.pageCount))
         }
+        navigation.finish(in: context)
         context.closePDF()
     }
 
@@ -322,7 +329,7 @@ enum PDFCompression {
             document, to: url,
             pageSetup: { context in
                 for filter in filters { _ = filter.apply(to: context) }
-            }, progress: progress)
+            }, adjust: grayscale ? grayAnnotation : nil, progress: progress)
     }
 
     static func grayscale(
@@ -336,7 +343,21 @@ enum PDFCompression {
         }
         try StudioPDF.rebuild(
             document, to: url, pageSetup: { context in _ = filter.apply(to: context) },
-            progress: progress)
+            adjust: grayAnnotation, progress: progress)
+    }
+
+    static func grayAnnotation(_ annotation: PDFAnnotation) {
+        annotation.color = gray(annotation.color) ?? annotation.color
+        annotation.interiorColor = gray(annotation.interiorColor)
+        annotation.fontColor = gray(annotation.fontColor)
+        annotation.backgroundColor = gray(annotation.backgroundColor)
+    }
+
+    static func gray(_ color: NSColor?) -> NSColor? {
+        guard let color, let rgb = color.usingColorSpace(.sRGB) else { return color }
+        let luminance =
+            0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        return NSColor(white: luminance, alpha: rgb.alphaComponent)
     }
 
     static func qpdfOptimize(_ url: URL, qpdf: URL, scratch: URL) async throws {

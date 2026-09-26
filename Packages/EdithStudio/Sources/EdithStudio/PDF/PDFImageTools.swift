@@ -6,7 +6,7 @@ import PDFKit
 import UniformTypeIdentifiers
 
 enum PDFImageTools {
-    static var all: [StudioTool] { [toImages, fromImages] }
+    static var all: [StudioTool] { [toImages, fromImages].map { $0.checkingChoices() } }
 
     static let toImages = StudioTool(
         id: "pdf.to-images", title: "PDF to JPG",
@@ -280,11 +280,30 @@ enum PDFImageExtractor {
         guard let data = CGPDFStreamCopyData(stream, &format) as Data?, !data.isEmpty else {
             return nil
         }
-        switch format {
-        case .jpegEncoded: return Extracted(data: data, ext: "jpg")
-        case .JPEG2000: return Extracted(data: data, ext: "jp2")
-        default: break
+        let mask = softMask(info)
+        if mask == nil {
+            switch format {
+            case .jpegEncoded: return Extracted(data: data, ext: "jpg")
+            case .JPEG2000: return Extracted(data: data, ext: "jp2")
+            default: break
+            }
         }
+        let decoded: CGImage?
+        switch format {
+        case .jpegEncoded, .JPEG2000:
+            decoded = CGImageSourceCreateWithData(data as CFData, nil).flatMap {
+                CGImageSourceCreateImageAtIndex($0, 0, nil)
+            }
+        default:
+            decoded = raw(data, info: info)
+        }
+        guard var image = decoded else { return nil }
+        if let mask, let masked = apply(mask, to: image) { image = masked }
+        guard let png = try? StudioImageIO.encode(image, format: .png) else { return nil }
+        return Extracted(data: png, ext: "png")
+    }
+
+    static func raw(_ data: Data, info: CGPDFDictionaryRef) -> CGImage? {
         guard let width = integer(info, "Width"), let height = integer(info, "Height"),
             width > 0, height > 0
         else { return nil }
@@ -294,15 +313,54 @@ enum PDFImageExtractor {
         guard let space else { return nil }
         let bytesPerRow = bits == 1 ? (width + 7) / 8 : width * components
         guard data.count >= bytesPerRow * height,
-            let provider = CGDataProvider(data: data as CFData),
-            let image = CGImage(
-                width: width, height: height, bitsPerComponent: bits,
-                bitsPerPixel: bits * components, bytesPerRow: bytesPerRow, space: space,
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
-                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent),
-            let png = try? StudioImageIO.encode(image, format: .png)
+            let provider = CGDataProvider(data: data as CFData)
         else { return nil }
-        return Extracted(data: png, ext: "png")
+        return CGImage(
+            width: width, height: height, bitsPerComponent: bits,
+            bitsPerPixel: bits * components, bytesPerRow: bytesPerRow, space: space,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
+
+    static func softMask(_ info: CGPDFDictionaryRef) -> (data: Data, width: Int, height: Int)? {
+        var stream: CGPDFStreamRef?
+        guard CGPDFDictionaryGetStream(info, "SMask", &stream), let stream,
+            let maskInfo = CGPDFStreamGetDictionary(stream),
+            let width = integer(maskInfo, "Width"), let height = integer(maskInfo, "Height"),
+            (integer(maskInfo, "BitsPerComponent") ?? 8) == 8
+        else { return nil }
+        var format = CGPDFDataFormat.raw
+        guard let data = CGPDFStreamCopyData(stream, &format) as Data?, format == .raw,
+            data.count >= width * height
+        else { return nil }
+        return (data, width, height)
+    }
+
+    static func apply(_ mask: (data: Data, width: Int, height: Int), to image: CGImage) -> CGImage?
+    {
+        let width = mask.width
+        let height = mask.height
+        guard let context = StudioImageOps.context(width: width, height: height),
+            let base = context.data
+        else { return nil }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = base.bindMemory(to: UInt8.self, capacity: context.bytesPerRow * height)
+        mask.data.withUnsafeBytes { raw in
+            let alpha = raw.bindMemory(to: UInt8.self)
+            for row in 0..<height {
+                for column in 0..<width {
+                    let value = Int(alpha[row * width + column])
+                    let offset = row * context.bytesPerRow + column * 4
+                    for channel in 0..<3 {
+                        pixels[offset + channel] = UInt8(
+                            Int(pixels[offset + channel]) * value / 255)
+                    }
+                    pixels[offset + 3] = UInt8(value)
+                }
+            }
+        }
+        return context.makeImage()
     }
 
     static func colorSpace(_ info: CGPDFDictionaryRef) -> (CGColorSpace?, Int) {

@@ -5,7 +5,9 @@ import PDFKit
 import Vision
 
 enum DocumentScan {
-    static let tool = StudioTool(
+    static let tool = base.checkingChoices()
+
+    static let base = StudioTool(
         id: "pdf.scan", title: "Scan to PDF",
         summary: "Turn photos of paper into straight, clean PDF pages, like a document scanner.",
         symbol: "doc.viewfinder", group: .convert, inputs: [.image],
