@@ -385,6 +385,7 @@ test("release publication can recover after a partial failure", () => {
     releaseWorkflow.indexOf("- name: Mirror the cask to the tap repository"),
   );
   expect(mirror).not.toContain("if: env.REBUILD == ''");
+  expect(mirror).toContain("mkdir -p tap/Casks");
 });
 
 test("superseded release cuts finish cleanly without publishing", () => {

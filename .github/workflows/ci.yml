@@ -172,7 +172,7 @@ jobs:
     name: swift-build
     needs: changes
     if: >-
-      github.event_name != 'push'
+      github.event_name == 'pull_request'
       && (needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
@@ -723,6 +723,7 @@ jobs:
         run: |
           git clone --depth 1 \
             "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
+          mkdir -p tap/Casks
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
