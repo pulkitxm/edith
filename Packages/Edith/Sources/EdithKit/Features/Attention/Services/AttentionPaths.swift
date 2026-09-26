@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum AttentionPaths {
@@ -11,9 +12,7 @@ public enum AttentionPaths {
     public static var lockFile: URL { directory.appendingPathComponent(".lock") }
 
     public static func eventFile(for date: Date, calendar: Calendar = utcCalendar) -> URL {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        let name = String(
-            format: "%04d-%02d-%02d.jsonl", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        let name = CalendarDay.stamp(date, calendar: calendar) + ".jsonl"
         return eventsDirectory.appendingPathComponent(name)
     }
 

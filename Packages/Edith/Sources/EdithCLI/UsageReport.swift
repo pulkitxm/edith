@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -332,8 +333,7 @@ public enum UsageRange: String, CaseIterable, Sendable {
     }
 
     public static func stamp(_ date: Date, calendar: Calendar = .current) -> String {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        CalendarDay.stamp(date, calendar: calendar)
     }
 }
 
@@ -658,10 +658,7 @@ public enum UsageAnalysis {
     }
 
     private static func nonempty(_ value: String?) -> String? {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !trimmed.isEmpty
-        else { return nil }
-        return trimmed
+        BlankText.trimmedNonEmpty(value)
     }
 
     public static func chatIDs(_ days: [UsageDay]) -> [String] {

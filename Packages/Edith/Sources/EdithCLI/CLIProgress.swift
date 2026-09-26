@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -166,10 +167,10 @@ public final class CLIProgress: @unchecked Sendable {
     }
 
     private func pad(_ text: String, _ width: Int) -> String {
-        text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
+        TextColumns.pad(text, to: width)
     }
 
     private func leftPad(_ text: String, _ width: Int) -> String {
-        text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
+        TextColumns.leftPad(text, to: width)
     }
 }

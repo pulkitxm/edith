@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import GRDB
 import GRDBSQLite
@@ -2146,7 +2147,7 @@ private enum SQLiteDatabaseAdapterSupport {
     }
 
     private static func quote(_ identifier: String) -> String {
-        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(identifier)
     }
 
     private static func qualified(_ source: String, _ column: String) -> String {

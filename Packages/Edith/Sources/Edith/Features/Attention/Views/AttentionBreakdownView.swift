@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -128,7 +129,7 @@ struct AttentionBreakdownView: View {
 
     private func copy(_ rows: [Row], title: String) {
         func field(_ value: String) -> String {
-            "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            DoubleQuoted.wrap(value)
         }
         let lines =
             ["\(field(title)),minutes,top category"]

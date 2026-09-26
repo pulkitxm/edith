@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -507,16 +508,11 @@ extension DashboardComputation {
     }
 
     fileprivate static func nonempty(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        BlankText.trimmedNonEmpty(value)
     }
 
     fileprivate static func normalizeRepositoryURL(_ value: String) -> String {
-        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        while normalized.hasSuffix("/") { normalized.removeLast() }
-        if normalized.hasSuffix(".git") { normalized.removeLast(4) }
-        return normalized
+        RepositoryURL.normalized(value)
     }
 }
 

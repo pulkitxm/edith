@@ -318,7 +318,7 @@ public enum QuinjetShellCommand {
     }
 
     public static func quote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        POSIXQuote.quote(value)
     }
 }
 

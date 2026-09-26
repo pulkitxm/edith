@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import GRDB
 
@@ -159,7 +160,7 @@ public extension DatabaseRowMutationRequests {
     }
 
     private static func sqliteMutationQuote(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 
     private static func sqliteMutationFold(_ identifier: String) -> String {
@@ -584,7 +585,7 @@ enum SQLiteDatabaseMutationSupport {
     }
 
     private static func quote(_ identifier: String) -> String {
-        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(identifier)
     }
 
     private static func fold(_ identifier: String) -> String {

@@ -1,4 +1,5 @@
 import Crypto
+import EdithCore
 import Foundation
 import PostgresNIO
 
@@ -2071,7 +2072,7 @@ extension PostgreSQLDatabaseReadSupport {
     }
 
     private static func quote(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 
     private static func qualified(_ alias: String, _ column: String) -> String {

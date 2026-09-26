@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import Foundation
 import SwiftUI
 
@@ -81,7 +82,7 @@ public enum ColorFormatting {
     }
 
     public static func hex(red: Double, green: Double, blue: Double) -> String {
-        String(format: "#%02X%02X%02X", byte(red), byte(green), byte(blue))
+        RGBHex.string(red: red, green: green, blue: blue)
     }
 
     public static func rgb(red: Double, green: Double, blue: Double) -> String {

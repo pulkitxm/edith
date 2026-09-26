@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -576,7 +577,7 @@ struct ExtensionPreview: View {
     }
 
     private func clamped(_ value: Double) -> Double {
-        min(max(value, 0), 1)
+        UnitInterval.clamp(value)
     }
 
     private func smoothed(_ value: Double) -> Double {

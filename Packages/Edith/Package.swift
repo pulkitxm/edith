@@ -194,7 +194,7 @@ let targets: [Target] = [
     ),
     .target(
         name: "GhosttyTerminal",
-        dependencies: ["GhosttyKit"],
+        dependencies: ["EdithCore", "GhosttyKit"],
         resources: [
             .copy("Resources/Fonts"),
             .copy("../../vendor/GhosttyResources"),

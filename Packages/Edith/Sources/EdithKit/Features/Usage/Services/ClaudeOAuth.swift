@@ -1,4 +1,5 @@
 import Darwin
+import EdithCore
 import Foundation
 import LocalAuthentication
 import Security
@@ -78,8 +79,7 @@ public struct ClaudeOAuthCredential {
     }
 
     private static func nonempty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
+        BlankText.nonEmpty(value)
     }
 
     private static func millisecondsDate(_ value: Any?) -> Date? {

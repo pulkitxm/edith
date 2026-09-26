@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum DatabaseRowMutationRequestError: Error, Equatable, Sendable {
@@ -266,6 +267,6 @@ public enum DatabaseRowMutationRequests {
     }
 
     private static func quote(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 }

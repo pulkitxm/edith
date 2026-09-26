@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithDatabase
 import Foundation
 import Observation
@@ -1590,7 +1591,7 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private static func doubleQuoted(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 
     private static func backtickQuoted(_ value: String) -> String {
