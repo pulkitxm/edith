@@ -163,47 +163,50 @@ struct VideoEditorPage: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: UIScale.pt(16)) {
-            Image(systemName: "film")
-                .font(.system(size: UIScale.pt(52), weight: .ultraLight))
-                .foregroundStyle(.secondary)
-            Text("Make a video your own")
-                .font(.title2.weight(.semibold))
-            Text("Import a video, highlight moments with zoom, add text, and export.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            HStack {
-                Button("Import video", action: model.importMedia)
-                    .buttonStyle(.borderedProminent)
-                Button("Open project", action: model.openProject)
-                    .buttonStyle(.bordered)
-            }
-            if !model.recentProjects.isEmpty {
-                Text("PROJECTS")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, UIScale.pt(22))
-                ForEach(Array(model.recentProjects.prefix(6))) { item in
-                    Button {
-                        model.openProject(at: item.url)
-                    } label: {
-                        HStack {
-                            Image(systemName: "film.stack")
-                            Text(item.title).lineLimit(1)
-                            if item.isOpenScreenLibrary {
-                                Text("OpenScreen")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: UIScale.pt(16)) {
+                    Image(systemName: "film")
+                        .font(.system(size: UIScale.pt(52), weight: .ultraLight))
+                        .foregroundStyle(.secondary)
+                    Text("Make a video your own")
+                        .font(.title2.weight(.semibold))
+                    Text("Import a video, highlight moments with zoom, add text, and export.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    HStack {
+                        Button("Import video", action: model.importMedia)
+                            .buttonStyle(.borderedProminent)
+                        Button("Open project", action: model.openProject)
+                            .buttonStyle(.bordered)
+                    }
+                    if !model.recentProjects.isEmpty {
+                        Text("PROJECTS")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, UIScale.pt(22))
+                        LazyVGrid(
+                            columns: [
+                                GridItem(
+                                    .adaptive(minimum: UIScale.pt(200), maximum: UIScale.pt(280)),
+                                    spacing: UIScale.pt(18))
+                            ],
+                            alignment: .leading, spacing: UIScale.pt(20)
+                        ) {
+                            ForEach(model.recentProjects) { item in
+                                VideoProjectCard(listing: item) {
+                                    model.openProject(at: item.url)
+                                }
                             }
                         }
-                        .frame(maxWidth: UIScale.pt(360), alignment: .leading)
                     }
-                    .buttonStyle(.borderless)
                 }
+                .frame(maxWidth: UIScale.pt(960))
+                .padding(UIScale.pt(30))
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(UIScale.pt(30))
     }
 
     private var preview: some View {
