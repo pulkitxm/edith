@@ -80,9 +80,8 @@ walks, and its order is the order `ls` prints. Thirty-two entries, in this order
 | `videoEditor` | Video editor | Media | Import clips, add zooms and text, then export your video |
 | `music` | Music | Media | Plays your local music folder, with media keys and a player bar |
 | `downloads` | Downloads | Media | Queue audio and video downloads that survive quitting the app |
-| `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
+| `notchShelf` | Notch Shelf | Media | File shelf, browser, now playing, camera, and alerts around the notch |
 | `audioMixer` | Audio Mixer | Media | Per-app volume from the notch shelf |
-| `notchBrowser` | Notch Browser | Media | Tabbed web browsing in the notch, signed in with a Chrome profile |
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `virtualCamera` | Virtual Camera | Media | Frame, zoom and style your camera, then pick Edith Camera in any call |
 | `database` | Database | Data | Explore databases and run guarded production mutations |
@@ -121,7 +120,6 @@ twelve the welcome tour shows before you ask it for all of them.
 | `downloads` | `downloadsEnabled` | no | none | none | `yt-dlp` | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none | none |
 | `audioMixer` | `notchAudioMixerEnabled` | no | none | `applicationAudio` | none | none |
-| `notchBrowser` | `notchBrowserEnabled` | no | none | none | none | none |
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
 | `virtualCamera` | `virtualCameraEnabled` | yes | `camera` | none | none | none |
 | `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
@@ -158,9 +156,8 @@ the current platform, and which missing implementations merely degrade it:
 | `videoEditor` | `localVideoEditing` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |
 | `downloads` | `mediaDownloads` | none |
-| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
+| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl`, `webBrowsing` |
 | `audioMixer` | `applicationAudio` | none |
-| `notchBrowser` | `webBrowsing` | none |
 | `calendar` | `calendarEvents` | none |
 | `virtualCamera` | `virtualCamera` | none |
 | `database` | `databaseBroker` | none |
