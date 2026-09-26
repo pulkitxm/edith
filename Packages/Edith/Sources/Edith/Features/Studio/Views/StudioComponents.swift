@@ -307,7 +307,8 @@ struct StudioToast: View {
 
 enum StudioFileActions {
     static func reveal(_ urls: [URL]) {
-        NSWorkspace.shared.activateFileViewerSelecting(urls)
+        guard !urls.isEmpty else { return }
+        Task { await StudioFinderReveal.reveal(urls) }
     }
 
     static func open(_ url: URL) {
@@ -320,5 +321,46 @@ enum StudioFileActions {
         var parts = [StudioInspector.size(facts.bytes)]
         if let detail = facts.detail { parts.insert(detail, at: 0) }
         return parts.joined(separator: " · ")
+    }
+}
+
+enum StudioFinderReveal {
+    static func script(for urls: [URL]) -> String {
+        let targets = urls.map { "POSIX file \"\(escaped($0.path))\" as alias" }
+        return """
+            set targets to {\(targets.joined(separator: ", "))}
+            tell application "Finder"
+                reveal targets
+                activate
+            end tell
+            """
+    }
+
+    static func escaped(_ path: String) -> String {
+        path.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    static func folders(of urls: [URL]) -> [URL] {
+        var seen = Set<URL>()
+        var folders: [URL] = []
+        for url in urls {
+            let folder = url.deletingLastPathComponent().standardizedFileURL
+            if seen.insert(folder).inserted { folders.append(folder) }
+        }
+        return folders
+    }
+
+    @MainActor
+    static func reveal(_ urls: [URL]) async {
+        let source = script(for: urls)
+        let revealed = await Task.detached(priority: .userInitiated) {
+            guard let script = NSAppleScript(source: source) else { return false }
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            return error == nil
+        }.value
+        guard !revealed else { return }
+        for folder in folders(of: urls) { NSWorkspace.shared.open(folder) }
     }
 }
