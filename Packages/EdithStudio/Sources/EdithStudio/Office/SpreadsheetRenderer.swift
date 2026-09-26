@@ -39,10 +39,17 @@ public enum SpreadsheetRenderer {
                 documentPaper: nil,
                 documentMargins: NSEdgeInsets(top: 42, left: 36, bottom: 42, right: 36),
                 prefersLandscape: prefersLandscape)
-            let layout = fit(natural, into: setup.content.width)
-            pages += try draw(
-                sheet, layout: layout, setup: setup, headerRow: headerRow,
-                showTitle: usable.count > 1, context: context)
+            for group in columnGroups(natural, available: setup.content.width) {
+                let part = SpreadsheetSheet(
+                    name: sheet.name,
+                    rows: sheet.rows.map { row in
+                        group.map { $0 < row.count ? row[$0] : "" }
+                    })
+                let layout = fit(group.map { natural[$0] }, into: setup.content.width)
+                pages += try draw(
+                    part, layout: layout, setup: setup, headerRow: headerRow,
+                    showTitle: usable.count > 1, context: context)
+            }
             progress(Double(index + 1) / Double(usable.count))
         }
         context.closePDF()
@@ -69,6 +76,25 @@ public enum SpreadsheetRenderer {
         return widths
     }
 
+    static func columnGroups(_ widths: [CGFloat], available: CGFloat) -> [[Int]] {
+        let total = widths.reduce(0, +)
+        guard total > available / 0.7, widths.count > 1 else { return [Array(widths.indices)] }
+        var groups: [[Int]] = []
+        var current: [Int] = []
+        var width: CGFloat = 0
+        for (index, column) in widths.enumerated() {
+            if !current.isEmpty, width + column > available / 0.85 {
+                groups.append(current)
+                current = []
+                width = 0
+            }
+            current.append(index)
+            width += column
+        }
+        if !current.isEmpty { groups.append(current) }
+        return groups
+    }
+
     static func fit(_ widths: [CGFloat], into available: CGFloat) -> Layout {
         let total = widths.reduce(0, +)
         guard total > available, total > 0 else { return Layout(widths: widths, fontSize: 9) }
@@ -78,16 +104,25 @@ public enum SpreadsheetRenderer {
     }
 
     static func height(
-        of row: [String], widths: [CGFloat], font: NSFont
+        of row: [String], widths: [CGFloat], font: NSFont, limit: CGFloat = 600
     ) -> CGFloat {
         var tallest = font.ascender - font.descender + font.leading
         for (column, value) in row.enumerated() where column < widths.count && !value.isEmpty {
             let bounds = (value as NSString).boundingRect(
-                with: CGSize(width: max(4, widths[column] - padding * 2), height: 400),
+                with: CGSize(width: max(4, widths[column] - padding * 2), height: 10_000),
                 options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font])
-            tallest = max(tallest, min(bounds.height, 120))
+            tallest = max(tallest, min(bounds.height + 1, limit))
         }
         return ceil(tallest + padding * 2)
+    }
+
+    static let numericPattern = try? NSRegularExpression(
+        pattern: #"^[-+(]?[$€£¥]?\s?-?[\d,]*\.?\d+([Ee][+-]?\d+)?\s?%?\)?$"#)
+
+    static func isNumeric(_ value: String) -> Bool {
+        let text = value.trimmingCharacters(in: .whitespaces)
+        return numericPattern?.firstMatch(
+            in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil
     }
 
     static func draw(
@@ -128,9 +163,11 @@ public enum SpreadsheetRenderer {
                 y += height
             }
             var drewRow = false
+            let usable = bottom - y
             while cursor < body.count {
                 let row = body[cursor]
-                let height = self.height(of: row, widths: layout.widths, font: regular)
+                let height = self.height(
+                    of: row, widths: layout.widths, font: regular, limit: max(40, usable - 12))
                 if y + height > bottom, drewRow { break }
                 drawRow(
                     row, y: y, height: height, layout: layout, font: regular, fill: nil,
@@ -165,7 +202,7 @@ public enum SpreadsheetRenderer {
             border.stroke()
             if column < row.count, !row[column].isEmpty {
                 let value = row[column]
-                let numeric = Double(value.replacingOccurrences(of: ",", with: "")) != nil
+                let numeric = isNumeric(value)
                 let style = paragraph.mutableCopy() as? NSMutableParagraphStyle ?? paragraph
                 style.alignment = numeric ? .right : .left
                 let text = NSAttributedString(

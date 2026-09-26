@@ -11,11 +11,11 @@ public final class XMLTree {
         self.attributes = attributes
     }
 
-    public static func parse(_ data: Data) -> XMLTree? {
+    public static func parse(_ data: Data, strict: Bool = false) -> XMLTree? {
         let builder = Builder()
         let parser = XMLParser(data: data)
         parser.delegate = builder
-        guard parser.parse() else { return builder.root }
+        guard parser.parse() else { return strict ? nil : builder.root }
         return builder.root
     }
 

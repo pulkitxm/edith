@@ -102,10 +102,12 @@ enum StudioSummarizer {
         var current = ""
         for paragraph in text.components(separatedBy: "\n") {
             var remaining = paragraph
-            while remaining.count > limit {
-                let head = String(remaining.prefix(limit))
-                result.append(current.isEmpty ? head : current + "\n" + head)
+            if remaining.count > limit, !current.isEmpty {
+                result.append(current)
                 current = ""
+            }
+            while remaining.count > limit {
+                result.append(String(remaining.prefix(limit)))
                 remaining = String(remaining.dropFirst(limit))
             }
             if current.count + remaining.count + 1 > limit, !current.isEmpty {

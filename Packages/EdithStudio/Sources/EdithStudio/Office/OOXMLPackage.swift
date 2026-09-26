@@ -32,13 +32,76 @@ public struct OOXMLPackage {
     public static func read(_ url: URL) throws -> [String: Data] {
         let archive = try Archive(url: url, accessMode: .read)
         var entries: [String: Data] = [:]
+        var budget = 1 << 30
         for entry in archive where entry.type == .file {
             guard entry.uncompressedSize < 200 << 20 else { continue }
             var data = Data()
-            _ = try archive.extract(entry, skipCRC32: true) { chunk in data.append(chunk) }
+            _ = try archive.extract(entry, skipCRC32: true) { chunk in
+                data.append(chunk)
+                budget -= chunk.count
+                if data.count > 200 << 20 || budget < 0 {
+                    throw StudioError.unreadable(url.lastPathComponent)
+                }
+            }
             entries[entry.path] = data
         }
         return entries
+    }
+
+    public enum Signature: Equatable {
+        case zip
+        case compound
+        case encrypted
+        case rtf
+        case html
+        case empty
+        case unknown
+    }
+
+    public static func signature(_ url: URL) -> Signature {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return .unknown }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 512)) ?? Data()
+        if head.isEmpty { return .empty }
+        let bytes = [UInt8](head)
+        if bytes.starts(with: [0x50, 0x4B, 0x03, 0x04])
+            || bytes.starts(with: [0x50, 0x4B, 0x05, 0x06])
+        {
+            return .zip
+        }
+        if bytes.starts(with: [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]) {
+            let marker = Data(
+                "EncryptedPackage".utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+            let whole = (try? Data(contentsOf: url, options: .alwaysMapped)) ?? head
+            return whole.range(of: marker) != nil ? .encrypted : .compound
+        }
+        let text = String(decoding: head.prefix(256), as: UTF8.self)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(["\u{FEFF}"]))
+            .lowercased()
+        if text.hasPrefix("{\\rtf") { return .rtf }
+        if text.hasPrefix("<!doctype html") || text.hasPrefix("<html")
+            || text.hasPrefix("<?xml")
+                && text.contains("<html")
+        {
+            return .html
+        }
+        return .unknown
+    }
+
+    public static func requirePackage(_ url: URL, application: String, format: String) throws {
+        let name = url.lastPathComponent
+        switch signature(url) {
+        case .zip: return
+        case .empty: throw StudioError.nothingToDo("\(name) is empty.")
+        case .encrypted:
+            throw StudioError.failed(
+                "\(name) is password protected. Open it in \(application), remove the password, then try again."
+            )
+        case .compound:
+            throw StudioError.unsupportedInput(
+                name, "this tool. It is an older \(application) file, save it as \(format) first")
+        default: throw StudioError.unreadable(name)
+        }
     }
 
     public static func escape(_ text: String) -> String {
@@ -64,6 +127,22 @@ public struct OOXMLPackage {
     }
 
     static let xmlHeader = #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#
+
+    static let imageTypes = [
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif",
+        "tif": "image/tiff", "tiff": "image/tiff", "bmp": "image/bmp",
+    ]
+
+    static func imageExtension(_ ext: String) -> String {
+        let lowered = ext.lowercased()
+        return imageTypes[lowered] == nil ? "png" : lowered
+    }
+
+    static func imageDefaults(_ extensions: Set<String>) -> String {
+        (extensions.union(["png", "jpg"])).sorted().compactMap { ext in
+            imageTypes[ext].map { #"<Default Extension="\#(ext)" ContentType="\#($0)"/>"# }
+        }.joined()
+    }
 
     static func coreProperties(title: String) -> String {
         let date = ISO8601DateFormatter().string(from: Date())
@@ -107,8 +186,11 @@ public struct XLSXWriter {
         let sheetNames = usable.enumerated().map { index, sheet -> String in
             var name = String(
                 sheet.name.components(separatedBy: CharacterSet(charactersIn: "[]:*?/\\")).joined()
-                    .prefix(28))
-            if name.isEmpty { name = "Sheet\(index + 1)" }
+                    .components(separatedBy: .controlCharacters).joined()
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "' "))
+                    .prefix(28)
+            ).trimmingCharacters(in: CharacterSet(charactersIn: "' "))
+            if name.isEmpty || name.lowercased() == "history" { name = "Sheet\(index + 1)" }
             var candidate = name
             var suffix = 2
             while !names.insert(candidate.lowercased()).inserted {
@@ -191,8 +273,9 @@ public struct XLSXWriter {
                 if let number = numericValue(value) {
                     xml += #"<c r="\#(reference)"><v>\#(number)</v></c>"#
                 } else {
+                    let clipped = String(value.prefix(32_767))
                     xml +=
-                        #"<c r="\#(reference)" t="inlineStr"><is><t xml:space="preserve">\#(OOXMLPackage.escape(value))</t></is></c>"#
+                        #"<c r="\#(reference)" t="inlineStr"><is><t xml:space="preserve">\#(OOXMLPackage.escape(clipped))</t></is></c>"#
                 }
             }
             xml += "</row>"
@@ -203,10 +286,11 @@ public struct XLSXWriter {
     static func numericValue(_ raw: String) -> String? {
         let text = raw.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, text.count < 16 else { return nil }
+        guard
+            text.range(
+                of: #"^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$"#, options: .regularExpression) != nil
+        else { return nil }
         let cleaned = text.replacingOccurrences(of: ",", with: "")
-        guard cleaned.range(of: #"^-?\d+(\.\d+)?$"#, options: .regularExpression) != nil else {
-            return nil
-        }
         if cleaned.hasPrefix("0"), cleaned.count > 1, !cleaned.hasPrefix("0.") { return nil }
         return cleaned
     }
@@ -225,10 +309,34 @@ public struct PPTXWriter {
         }
     }
 
-    public static func write(_ slides: [Slide], size: CGSize, title: String, to url: URL) throws {
+    static func slideSize(_ size: CGSize) -> (width: Int, height: Int) {
         let emu = 12700.0
-        let width = Int(size.width * emu)
-        let height = Int(size.height * emu)
+        var width = max(1, Double(size.width) * emu)
+        var height = max(1, Double(size.height) * emu)
+        let largest = 51_206_400.0
+        let smallest = 914_400.0
+        let shrink = min(1, largest / max(width, height))
+        width *= shrink
+        height *= shrink
+        let grow = max(1, smallest / min(width, height))
+        if max(width, height) * grow <= largest {
+            width *= grow
+            height *= grow
+        }
+        return (
+            Int(min(max(width, smallest), largest).rounded()),
+            Int(min(max(height, smallest), largest).rounded())
+        )
+    }
+
+    public static func write(_ slides: [Slide], size: CGSize, title: String, to url: URL) throws {
+        let (width, height) = slideSize(size)
+        let namespaces =
+            #"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main""#
+        let hasNotes = slides.contains {
+            !($0.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let extensions = Set(slides.map { OOXMLPackage.imageExtension($0.imageExtension) })
         let header = OOXMLPackage.xmlHeader
         var package = OOXMLPackage()
         var contentTypes =
@@ -236,8 +344,7 @@ public struct PPTXWriter {
             + #"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#
             + #"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#
             + #"<Default Extension="xml" ContentType="application/xml"/>"#
-            + #"<Default Extension="png" ContentType="image/png"/>"#
-            + #"<Default Extension="jpg" ContentType="image/jpeg"/>"#
+            + OOXMLPackage.imageDefaults(extensions)
             + #"<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>"#
             + #"<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>"#
             + #"<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>"#
@@ -257,15 +364,38 @@ public struct PPTXWriter {
             slideList += #"<p:sldId id="\#(255 + number)" r:id="rId\#(relID)"/>"#
             presentationRels +=
                 #"<Relationship Id="rId\#(relID)" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide\#(number).xml"/>"#
-            let media = "image\(number).\(slide.imageExtension)"
+            let media = "image\(number).\(OOXMLPackage.imageExtension(slide.imageExtension))"
             package.add("ppt/media/\(media)", data: slide.image)
+            var slideRelationships =
+                #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#
+                + #"<Relationship Id="rId2" Type="\#(OOXMLPackage.imageRelationship)" Target="../media/\#(media)"/>"#
+            if let notes = slide.notes, hasNotes,
+                !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                contentTypes +=
+                    #"<Override PartName="/ppt/notesSlides/notesSlide\#(number).xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>"#
+                slideRelationships +=
+                    #"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide\#(number).xml"/>"#
+                package.add(
+                    "ppt/notesSlides/notesSlide\(number).xml",
+                    header + "<p:notes \(namespaces)><p:cSld><p:spTree>" + groupProperties
+                        + #"<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>"#
+                        + #"<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>"#
+                        + paragraphs(notes) + "</p:txBody></p:sp></p:spTree></p:cSld>"
+                        + "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>")
+                package.add(
+                    "ppt/notesSlides/_rels/notesSlide\(number).xml.rels",
+                    header
+                        + #"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
+                        + #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/>"#
+                        + #"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide\#(number).xml"/>"#
+                        + "</Relationships>")
+            }
             package.add(
                 "ppt/slides/_rels/slide\(number).xml.rels",
                 header
                     + #"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
-                    + #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#
-                    + #"<Relationship Id="rId2" Type="\#(OOXMLPackage.imageRelationship)" Target="../media/\#(media)"/>"#
-                    + "</Relationships>")
+                    + slideRelationships + "</Relationships>")
             package.add(
                 "ppt/slides/slide\(number).xml",
                 header
@@ -276,6 +406,29 @@ public struct PPTXWriter {
                     + #"<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="\#(width)" cy="\#(height)"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>"#
                     + "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
             )
+        }
+        if hasNotes {
+            presentationRels +=
+                #"<Relationship Id="rIdNotesMaster" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/>"#
+            contentTypes +=
+                #"<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>"#
+                + #"<Override PartName="/ppt/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>"#
+            package.add(
+                "ppt/notesMasters/notesMaster1.xml",
+                header + "<p:notesMaster \(namespaces)><p:cSld><p:spTree>" + groupProperties
+                    + #"<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg" idx="2"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="1143000" y="685800"/><a:ext cx="4572000" cy="3429000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:sp>"#
+                    + #"<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" sz="quarter" idx="3"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="685800" y="4343400"/><a:ext cx="5486400" cy="4114800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody></p:sp>"#
+                    + "</p:spTree></p:cSld>"
+                    + #"<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>"#
+                    + #"<p:notesStyle><a:lvl1pPr marL="0" algn="l"><a:defRPr sz="1200"/></a:lvl1pPr></p:notesStyle></p:notesMaster>"#
+            )
+            package.add(
+                "ppt/notesMasters/_rels/notesMaster1.xml.rels",
+                header
+                    + #"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
+                    + #"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme2.xml"/>"#
+                    + "</Relationships>")
+            package.add("ppt/theme/theme2.xml", OOXMLTheme.xml)
         }
         presentationRels += "</Relationships>"
         contentTypes += "</Types>"
@@ -290,6 +443,9 @@ public struct PPTXWriter {
             header
                 + #"<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#
                 + #"<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>"#
+                + (hasNotes
+                    ? #"<p:notesMasterIdLst><p:notesMasterId r:id="rIdNotesMaster"/></p:notesMasterIdLst>"#
+                    : "")
                 + "<p:sldIdLst>\(slideList)</p:sldIdLst>"
                 + #"<p:sldSz cx="\#(width)" cy="\#(height)"/><p:notesSz cx="6858000" cy="9144000"/>"#
                 + "</p:presentation>")
@@ -323,6 +479,18 @@ public struct PPTXWriter {
                 + "</Relationships>")
         package.add("ppt/theme/theme1.xml", OOXMLTheme.xml)
         try package.write(to: url)
+    }
+
+    static let groupProperties =
+        #"<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>"#
+
+    static func paragraphs(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").map {
+            line in
+            line.isEmpty
+                ? #"<a:p><a:endParaRPr lang="en-US"/></a:p>"#
+                : #"<a:p><a:r><a:rPr lang="en-US" dirty="0"/><a:t>\#(OOXMLPackage.escape(line))</a:t></a:r></a:p>"#
+        }.joined()
     }
 }
 

@@ -96,22 +96,45 @@ enum DocumentTools {
             ) { run.progress($0) }
         default:
             if WebTools.htmlToPDF.extraExtensions.contains(ext) {
-                let paper = StudioPaperSize(rawValue: run.settings.text("paper")) ?? .a4
-                let (data, _) = try await WebTools.pdfData(input, width: 1024)
-                let margin = CGFloat(Double(run.settings.text("margin")) ?? 36)
-                pages = try WebPDFLayout.paginate(
-                    data, paper: paper.points, margin: margin, title: input.studioStem, to: output)
+                let setup = DocumentPageSetup.resolve(
+                    run.settings, documentPaper: nil,
+                    documentMargins: NSEdgeInsets(top: 36, left: 36, bottom: 36, right: 36))
+                (_, pages, _) = try await WebTools.renderPDF(
+                    input, width: 1024, paper: setup.paper, margin: setup.margins.left
+                ) { _ in
+                    output
+                } progress: {
+                    run.progress($0)
+                }
             } else {
                 let document = try await DocumentLoader.load(input)
-                guard document.text.length > 0 else {
+                guard
+                    !document.text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || document.text.containsAttachments(
+                            in: NSRange(location: 0, length: document.text.length))
+                else {
                     throw StudioError.nothingToDo("\(input.lastPathComponent) is empty.")
                 }
-                let setup = DocumentPageSetup.resolve(
-                    run.settings, documentPaper: document.paperSize,
-                    documentMargins: document.margins)
-                pages = try TextPaginator.render(
-                    document.text, setup: setup, title: input.studioStem, to: output
-                ) { run.progress($0) }
+                var sections =
+                    document.sections ?? [
+                        DocumentSection(
+                            text: document.text,
+                            setup: DocumentPageSetup(
+                                paper: document.paperSize ?? StudioPaperSize.a4.points,
+                                margins: document.margins
+                                    ?? NSEdgeInsets(top: 72, left: 72, bottom: 72, right: 72)))
+                    ]
+                for index in sections.indices {
+                    sections[index].setup = DocumentPageSetup.resolve(
+                        run.settings,
+                        documentPaper: document.sections == nil && document.paperSize == nil
+                            ? nil : sections[index].setup.paper,
+                        documentMargins: document.sections == nil && document.margins == nil
+                            ? nil : sections[index].setup.margins)
+                }
+                pages = try TextPaginator.render(sections, title: input.studioStem, to: output) {
+                    run.progress($0)
+                }
             }
         }
         run.note("Created \(pages) page\(pages == 1 ? "" : "s").")
@@ -128,6 +151,11 @@ public enum DocumentText {
             return try SpreadsheetReader.read(url).map(markdownTable).joined(separator: "\n\n")
                 + "\n"
         default:
+            if ["txt", "text"].contains(url.pathExtension.lowercased()) {
+                let raw = try DocumentLoader.readText(url)
+                    .replacingOccurrences(of: "\r\n", with: "\n")
+                return raw.hasSuffix("\n") ? raw : raw + "\n"
+            }
             let document = try await DocumentLoader.load(url)
             return DocumentMarkdown.markdown(document.text)
         }
@@ -137,17 +165,28 @@ public enum DocumentText {
         switch url.studioKind {
         case .presentation:
             return try PresentationRenderer.text(url).enumerated().map { index, slide in
-                (["Slide \(index + 1)" + (slide.title.map { ": \($0)" } ?? "")] + slide.lines)
-                    .joined(separator: "\n")
+                let heading =
+                    "Slide \(index + 1)" + (slide.hidden ? " (hidden)" : "")
+                    + (slide.title.map { ": \($0)" } ?? "")
+                let notes =
+                    slide.notes.map { ["Notes: " + $0.replacingOccurrences(of: "\n", with: " ")] }
+                    ?? []
+                return ([heading] + slide.lines + notes).joined(separator: "\n")
             }.joined(separator: "\n\n") + "\n"
         case .spreadsheet:
             return try SpreadsheetReader.read(url).map { sheet in
-                ([sheet.name] + sheet.rows.map { $0.joined(separator: "\t") }).joined(
-                    separator: "\n")
+                ([sheet.name]
+                    + sheet.rows.map { row in
+                        row.map { cell in
+                            cell.replacingOccurrences(of: "\r\n", with: " ")
+                                .replacingOccurrences(of: "\n", with: " ")
+                                .replacingOccurrences(of: "\t", with: " ")
+                        }.joined(separator: "\t")
+                    }).joined(separator: "\n")
             }.joined(separator: "\n\n") + "\n"
         default:
             let document = try await DocumentLoader.load(url)
-            return document.text.string
+            return DocumentMarkdown.plain(document.text)
         }
     }
 
@@ -162,7 +201,10 @@ public enum DocumentText {
         var lines = ["## " + sheet.name, ""]
         for (index, row) in rows.enumerated() {
             let cells = (0..<columns).map { column in
-                column < row.count ? row[column].replacingOccurrences(of: "|", with: "\\|") : ""
+                column < row.count
+                    ? row[column].replacingOccurrences(of: "|", with: "\\|")
+                        .replacingOccurrences(of: "\r\n", with: "<br>")
+                        .replacingOccurrences(of: "\n", with: "<br>") : ""
             }
             lines.append("| " + cells.joined(separator: " | ") + " |")
             if index == 0 { lines.append("|" + String(repeating: " --- |", count: columns)) }
@@ -174,10 +216,17 @@ public enum DocumentText {
 extension PresentationRenderer {
     public static func markdown(_ slides: [SlideText]) -> String {
         slides.enumerated().map { index, slide in
-            var lines = ["## Slide \(index + 1)" + (slide.title.map { ": \($0)" } ?? "")]
+            var lines = [
+                "## Slide \(index + 1)" + (slide.hidden ? " (hidden)" : "")
+                    + (slide.title.map { ": \($0)" } ?? "")
+            ]
             if !slide.lines.isEmpty {
                 lines.append("")
                 lines += slide.lines.map { "- " + $0.replacingOccurrences(of: "\n", with: " ") }
+            }
+            if let notes = slide.notes {
+                lines.append("")
+                lines.append("**Notes:** " + notes.replacingOccurrences(of: "\n", with: " "))
             }
             return lines.joined(separator: "\n")
         }.joined(separator: "\n\n") + "\n"

@@ -5,6 +5,17 @@ public struct LoadedDocument {
     public let text: NSAttributedString
     public let paperSize: CGSize?
     public let margins: NSEdgeInsets?
+    public var sections: [DocumentSection]?
+
+    public init(
+        text: NSAttributedString, paperSize: CGSize?, margins: NSEdgeInsets?,
+        sections: [DocumentSection]? = nil
+    ) {
+        self.text = text
+        self.paperSize = paperSize
+        self.margins = margins
+        self.sections = sections
+    }
 }
 
 public enum DocumentLoader {
@@ -21,7 +32,7 @@ public enum DocumentLoader {
         case "md", "markdown":
             let raw = try readText(url)
             return LoadedDocument(
-                text: MarkdownStyler.attributed(raw), paperSize: nil, margins: nil)
+                text: MarkdownStyler.attributed(raw, base: url), paperSize: nil, margins: nil)
         case "txt", "text":
             let raw = try readText(url)
             return LoadedDocument(text: plain(raw), paperSize: nil, margins: nil)
@@ -30,14 +41,44 @@ public enum DocumentLoader {
             return try await MainActor.run {
                 try read(data: data, type: .html, name: url.lastPathComponent, base: url)
             }
-        case "docx":
-            let loaded = try readFile(url, type: .officeOpenXML)
-            return LoadedDocument(
-                text: DOCXDefaults.apply(to: loaded.text, from: url), paperSize: loaded.paperSize,
-                margins: loaded.margins)
+        case "docx", "doc", "rtf", "odt", "wordml":
+            return try await loadWord(url, ext: ext)
         default:
             let type = documentType(for: ext)
             return try readFile(url, type: type)
+        }
+    }
+
+    static func loadWord(_ url: URL, ext: String) async throws -> LoadedDocument {
+        switch OOXMLPackage.signature(url) {
+        case .empty:
+            throw StudioError.nothingToDo("\(url.lastPathComponent) is empty.")
+        case .encrypted:
+            throw StudioError.failed(
+                "\(url.lastPathComponent) is password protected. Open it in Word, remove the password, then try again."
+            )
+        case .compound:
+            return try readFile(url, type: .docFormat)
+        case .rtf:
+            return try readFile(url, type: .rtf)
+        case .html:
+            let data = try Data(contentsOf: url)
+            return try await MainActor.run {
+                try read(data: data, type: .html, name: url.lastPathComponent, base: url)
+            }
+        case .zip where ext == "odt":
+            return try readFile(url, type: .openDocument)
+        case .zip:
+            let sections = try DOCXReader.read(url)
+            let text = NSMutableAttributedString()
+            for section in sections { text.append(section.text) }
+            return LoadedDocument(
+                text: text, paperSize: sections.first?.setup.paper,
+                margins: sections.first?.setup.margins, sections: sections)
+        case .unknown where ext == "wordml" || ext == "doc":
+            return try readFile(url, type: documentType(for: ext))
+        case .unknown:
+            throw StudioError.unreadable(url.lastPathComponent)
         }
     }
 
@@ -63,8 +104,24 @@ public enum DocumentLoader {
 
     static func readText(_ url: URL) throws -> String {
         let data = try Data(contentsOf: url)
+        let bytes = [UInt8](data.prefix(4))
+        if bytes.starts(with: [0xEF, 0xBB, 0xBF]) {
+            return String(decoding: data.dropFirst(3), as: UTF8.self)
+        }
+        if bytes.starts(with: [0xFF, 0xFE]) || bytes.starts(with: [0xFE, 0xFF]) {
+            if let text = String(data: data, encoding: .utf16) { return text }
+        }
+        let zeros = data.prefix(4096).filter { $0 == 0 }.count
+        if zeros * 5 > min(data.count, 4096), data.count >= 2 {
+            let littleEndian = data.first != 0
+            if let text = String(
+                data: data, encoding: littleEndian ? .utf16LittleEndian : .utf16BigEndian)
+            {
+                return text
+            }
+        }
         if let text = String(data: data, encoding: .utf8) { return text }
-        if let text = String(data: data, encoding: .utf16) { return text }
+        if let text = String(data: data, encoding: .windowsCP1252) { return text }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -134,68 +191,17 @@ public enum DocumentLoader {
     }
 }
 
-enum DOCXDefaults {
-    static let substitutes = [
-        "calibri": "Helvetica Neue", "calibri light": "Helvetica Neue", "aptos": "Helvetica Neue",
-        "arial": "Arial", "cambria": "Georgia", "segoe ui": "Helvetica Neue",
-    ]
-
-    static func apply(to text: NSAttributedString, from url: URL) -> NSAttributedString {
-        guard let parts = try? OOXMLPackage.read(url),
-            let styles = parts["word/styles.xml"].flatMap(XMLTree.parse),
-            let defaults = styles.child("docDefaults")
-        else { return text }
-        let document = parts["word/document.xml"].map { String(decoding: $0, as: UTF8.self) } ?? ""
-        let fonts = defaults.path("rPrDefault", "rPr", "rFonts")
-        let family = fonts?.attribute("ascii") ?? fonts?.attribute("hAnsi")
-        let spacing = defaults.path("pPrDefault", "pPr", "spacing")
-        let after = spacing?.number("after").map { CGFloat($0) / 20 }
-        let copy = NSMutableAttributedString(attributedString: text)
-        let whole = NSRange(location: 0, length: copy.length)
-        if let family, !family.lowercased().contains("times"), !document.contains("Times") {
-            let replacement = replacementFamily(family)
-            copy.enumerateAttribute(.font, in: whole) { value, range, _ in
-                guard let font = value as? NSFont,
-                    font.familyName?.lowercased().contains("times") == true
-                else { return }
-                var converted =
-                    NSFontManager.shared.font(
-                        withFamily: replacement, traits: [], weight: 5, size: font.pointSize)
-                    ?? NSFont.systemFont(ofSize: font.pointSize)
-                let traits = font.fontDescriptor.symbolicTraits
-                if traits.contains(.bold) {
-                    converted = NSFontManager.shared.convert(converted, toHaveTrait: .boldFontMask)
-                }
-                if traits.contains(.italic) {
-                    converted = NSFontManager.shared.convert(
-                        converted, toHaveTrait: .italicFontMask)
-                }
-                copy.addAttribute(.font, value: converted, range: range)
-            }
-        }
-        if let after, after > 0 {
-            copy.enumerateAttribute(.paragraphStyle, in: whole) { value, range, _ in
-                let style =
-                    (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle
-                    ?? NSMutableParagraphStyle()
-                guard style.paragraphSpacing == 0, style.textBlocks.isEmpty else { return }
-                style.paragraphSpacing = after
-                copy.addAttribute(.paragraphStyle, value: style, range: range)
-            }
-        }
-        return copy
-    }
-
-    static func replacementFamily(_ family: String) -> String {
-        if NSFontManager.shared.availableFontFamilies.contains(family) { return family }
-        return substitutes[family.lowercased()] ?? "Helvetica Neue"
-    }
-}
-
 public enum MarkdownStyler {
     static let bodySize: CGFloat = 11
 
-    public static func attributed(_ markdown: String) -> NSAttributedString {
+    struct TableCell {
+        let table: Int
+        let row: Int
+        let column: Int
+        let columns: [PresentationIntent.TableColumn]
+    }
+
+    public static func attributed(_ markdown: String, base: URL? = nil) -> NSAttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             allowsExtendedAttributes: true, interpretedSyntax: .full,
             failurePolicy: .returnPartiallyParsedIfPossible)
@@ -205,14 +211,113 @@ public enum MarkdownStyler {
         let result = NSMutableAttributedString()
         var currentBlock: Int?
         var blockPrefixDone = false
+        var tables: [Int: NSTextTable] = [:]
+        var lastCell: TableCell?
+        func cellAttributes(_ cell: TableCell) -> [NSAttributedString.Key: Any] {
+            let table =
+                tables[cell.table]
+                ?? {
+                    let table = NSTextTable()
+                    table.numberOfColumns = max(1, cell.columns.count)
+                    table.collapsesBorders = true
+                    tables[cell.table] = table
+                    return table
+                }()
+            let block = NSTextTableBlock(
+                table: table, startingRow: cell.row, rowSpan: 1, startingColumn: cell.column,
+                columnSpan: 1)
+            block.setValue(
+                100 / CGFloat(max(1, cell.columns.count)), type: .percentageValueType, for: .width)
+            block.setWidth(0.5, type: .absoluteValueType, for: .border)
+            block.setBorderColor(NSColor(white: 0.6, alpha: 1))
+            block.setWidth(4, type: .absoluteValueType, for: .padding)
+            if cell.row == 0 { block.backgroundColor = NSColor(white: 0.93, alpha: 1) }
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.textBlocks = [block]
+            if cell.column < cell.columns.count {
+                switch cell.columns[cell.column].alignment {
+                case .center: paragraph.alignment = .center
+                case .right: paragraph.alignment = .right
+                default: paragraph.alignment = .left
+                }
+            }
+            let font =
+                cell.row == 0
+                ? NSFont.boldSystemFont(ofSize: bodySize) : NSFont.systemFont(ofSize: bodySize)
+            return [
+                .font: font, .paragraphStyle: paragraph, .foregroundColor: NSColor.black,
+                DocumentMarkdown.headingKey: 0,
+            ]
+        }
+        func fill(
+            _ table: Int, row: Int, from start: Int, to end: Int,
+            columns: [PresentationIntent.TableColumn]
+        ) {
+            guard start < end else { return }
+            for column in start..<end {
+                result.append(
+                    NSAttributedString(
+                        string: "\n",
+                        attributes: cellAttributes(
+                            TableCell(table: table, row: row, column: column, columns: columns))))
+            }
+        }
+        func finishRow() {
+            guard let last = lastCell else { return }
+            fill(
+                last.table, row: last.row, from: last.column + 1, to: last.columns.count,
+                columns: last.columns)
+        }
         for run in parsed.runs {
             var text = String(parsed[run.range].characters)
             let intent = run.presentationIntent
             let identity = intent?.components.first?.identity
+            let cell = tableCell(intent)
             if identity != currentBlock {
-                if currentBlock != nil { result.append(NSAttributedString(string: "\n")) }
+                if currentBlock != nil {
+                    result.append(
+                        NSAttributedString(
+                            string: "\n",
+                            attributes: lastCell.map(cellAttributes) ?? [:]))
+                }
+                if let last = lastCell,
+                    cell == nil || cell?.table != last.table || cell?.row != last.row
+                {
+                    finishRow()
+                    lastCell = nil
+                }
+                if let cell {
+                    let start =
+                        lastCell.map {
+                            $0.table == cell.table && $0.row == cell.row ? $0.column + 1 : 0
+                        }
+                        ?? 0
+                    fill(
+                        cell.table, row: cell.row, from: start, to: cell.column,
+                        columns: cell.columns)
+                    lastCell = cell
+                }
                 currentBlock = identity
                 blockPrefixDone = false
+            }
+            if let cell {
+                var attributes = cellAttributes(cell)
+                let inline = run.inlinePresentationIntent
+                if var font = attributes[.font] as? NSFont {
+                    if inline?.contains(.stronglyEmphasized) == true {
+                        font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+                    }
+                    if inline?.contains(.emphasized) == true {
+                        font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+                    }
+                    if inline?.contains(.code) == true {
+                        font = NSFont.monospacedSystemFont(ofSize: bodySize - 1, weight: .regular)
+                    }
+                    attributes[.font] = font
+                }
+                if let link = run.link { attributes[.link] = link }
+                result.append(NSAttributedString(string: text, attributes: attributes))
+                continue
             }
             let block = BlockStyle(intent)
             if block.code, text.hasSuffix("\n") { text.removeLast() }
@@ -226,9 +331,59 @@ public enum MarkdownStyler {
             }
             var attributes = block.attributes(inline: run.inlinePresentationIntent)
             if let link = run.link { attributes[.link] = link }
+            if let image = run.imageURL, let attachment = localImage(image, base: base) {
+                let picture = NSMutableAttributedString(attachment: attachment)
+                picture.addAttributes(
+                    attributes, range: NSRange(location: 0, length: picture.length))
+                result.append(picture)
+                continue
+            }
             result.append(NSAttributedString(string: text, attributes: attributes))
         }
+        if lastCell != nil {
+            result.append(
+                NSAttributedString(string: "\n", attributes: lastCell.map(cellAttributes) ?? [:]))
+            finishRow()
+        }
         return result
+    }
+
+    static func tableCell(_ intent: PresentationIntent?) -> TableCell? {
+        guard let components = intent?.components else { return nil }
+        var column: Int?
+        var row: Int?
+        var table: (Int, [PresentationIntent.TableColumn])?
+        for component in components {
+            switch component.kind {
+            case let .tableCell(index): column = index
+            case .tableHeaderRow: row = 0
+            case let .tableRow(index): row = index
+            case let .table(columns): table = (component.identity, columns)
+            default: continue
+            }
+        }
+        guard let column, let row, let table else { return nil }
+        return TableCell(table: table.0, row: row, column: column, columns: table.1)
+    }
+
+    static func localImage(_ reference: URL, base: URL?) -> NSTextAttachment? {
+        let file: URL
+        if reference.isFileURL {
+            file = reference
+        } else if reference.scheme == nil, let base {
+            file = URL(
+                fileURLWithPath: reference.relativeString,
+                relativeTo: base.deletingLastPathComponent())
+        } else {
+            return nil
+        }
+        guard let image = NSImage(contentsOf: file.standardizedFileURL), image.size.width > 0 else {
+            return nil
+        }
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = CGRect(origin: .zero, size: image.size)
+        return attachment
     }
 
     struct BlockStyle {
@@ -311,6 +466,7 @@ public enum MarkdownStyler {
             var attributes: [NSAttributedString.Key: Any] = [
                 .font: font, .paragraphStyle: paragraph,
                 .foregroundColor: quote ? NSColor(white: 0.35, alpha: 1) : NSColor.black,
+                DocumentMarkdown.headingKey: heading ?? 0,
             ]
             if inline?.contains(.strikethrough) == true {
                 attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue

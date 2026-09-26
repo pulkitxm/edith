@@ -45,7 +45,8 @@ enum FileTools {
         run.status("Extracting \(run.input.lastPathComponent)")
         try await Extractor.extract(run.input, into: folder) { run.progress($0) }
         let items = try FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+            at: folder, includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent != ".DS_Store" }
         guard !items.isEmpty else {
             throw StudioError.nothingToDo("\(run.input.lastPathComponent) is empty.")
         }
@@ -77,9 +78,16 @@ enum FileTools {
         let format = run.settings.text("format")
         let ext = format == "tar" ? "tar" : "tar." + format
         let output = run.output(named: archiveName(run) + "." + ext)
-        var arguments = [format == "gz" ? "-czf" : format == "xz" ? "-cJf" : "-cf", output.path]
+        var arguments = [
+            "--no-xattrs", "--no-mac-metadata", "--no-acls", "--no-fflags",
+            format == "gz" ? "-czf" : format == "xz" ? "-cJf" : "-cf", output.path,
+        ]
         for input in run.inputs {
-            arguments += ["-C", input.deletingLastPathComponent().path, input.lastPathComponent]
+            let name = input.lastPathComponent
+            arguments += [
+                "-C", input.deletingLastPathComponent().path,
+                name.hasPrefix("-") ? "./" + name : name,
+            ]
         }
         let result = try await StudioProcess.run(
             URL(fileURLWithPath: "/usr/bin/tar"), arguments, timeout: 3600)
@@ -126,11 +134,10 @@ enum Zipper {
             entries.append((root, input))
             guard isDirectory.boolValue,
                 let enumerator = fileManager.enumerator(
-                    at: input, includingPropertiesForKeys: [.isDirectoryKey],
-                    options: [.skipsHiddenFiles])
+                    at: input, includingPropertiesForKeys: [.isDirectoryKey])
             else { continue }
             let base = input.standardizedFileURL.path
-            for case let item as URL in enumerator {
+            for case let item as URL in enumerator where item.lastPathComponent != ".DS_Store" {
                 let relative = String(item.standardizedFileURL.path.dropFirst(base.count))
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 entries.append((root + "/" + relative, item))
@@ -140,7 +147,9 @@ enum Zipper {
             try Task.checkCancellation()
             var isDirectory: ObjCBool = false
             _ = fileManager.fileExists(atPath: entry.url.path, isDirectory: &isDirectory)
-            if isDirectory.boolValue {
+            let link = (try? entry.url.resourceValues(forKeys: [.isSymbolicLinkKey]))?
+                .isSymbolicLink
+            if isDirectory.boolValue, link != true {
                 try archive.addEntry(
                     with: entry.path + "/", type: .directory, uncompressedSize: Int64(0),
                     provider: { _, _ in Data() })
@@ -192,18 +201,35 @@ enum Extractor {
         } catch {
             throw StudioError.unreadable(url.lastPathComponent)
         }
+        if encrypted(url) {
+            throw StudioError.failed(
+                "\(url.lastPathComponent) is password protected. Encrypted ZIP files cannot be extracted here."
+            )
+        }
         let entries = Array(archive)
+        func name(_ entry: Entry) -> String {
+            let utf8 = entry.path(using: .utf8)
+            return utf8.isEmpty ? entry.path : utf8
+        }
+        let names = Set(entries.map(name))
         for entry in entries {
-            guard contained(entry.path, in: folder) != nil else {
+            guard contained(name(entry), in: folder) != nil else {
                 throw StudioError.failed(
-                    "\(url.lastPathComponent) contains an unsafe path (\(entry.path)) and was not extracted."
+                    "\(url.lastPathComponent) contains an unsafe path (\(name(entry))) and was not extracted."
                 )
             }
         }
         for (index, entry) in entries.enumerated() {
             try Task.checkCancellation()
-            guard let target = contained(entry.path, in: folder) else { continue }
-            if entry.path.hasPrefix("__MACOSX/") || target.lastPathComponent == ".DS_Store" {
+            let path = name(entry)
+            guard let target = contained(path, in: folder) else { continue }
+            let leaf = target.lastPathComponent
+            let sibling = (path as NSString).deletingLastPathComponent
+            let original = (sibling as NSString).appendingPathComponent(String(leaf.dropFirst(2)))
+            if path.hasPrefix("__MACOSX/") || leaf == ".DS_Store"
+                || (leaf.hasPrefix("._")
+                    && (names.contains(original) || names.contains(original + "/")))
+            {
                 continue
             }
             switch entry.type {
@@ -228,6 +254,34 @@ enum Extractor {
             }
             progress(Double(index + 1) / Double(max(entries.count, 1)))
         }
+    }
+
+    static func encrypted(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url, options: .alwaysMapped), data.count >= 22 else {
+            return false
+        }
+        let bytes = [UInt8](data.suffix(min(data.count, 65_557)))
+        guard
+            let end = stride(from: bytes.count - 22, through: 0, by: -1).first(where: {
+                bytes[$0] == 0x50 && bytes[$0 + 1] == 0x4B && bytes[$0 + 2] == 0x05
+                    && bytes[$0 + 3] == 0x06
+            })
+        else { return false }
+        func value(_ offset: Int, _ size: Int, in source: [UInt8]) -> Int {
+            (0..<size).reduce(0) { $0 | Int(source[offset + $1]) << (8 * $1) }
+        }
+        let count = value(end + 10, 2, in: bytes)
+        var offset = value(end + 16, 4, in: bytes)
+        guard offset != 0xFFFF_FFFF else { return false }
+        for _ in 0..<count {
+            guard offset + 46 <= data.count else { return false }
+            let header = [UInt8](data[offset..<(offset + 46)])
+            guard value(0, 4, in: header) == 0x0201_4B50 else { return false }
+            if value(8, 2, in: header) & 1 == 1 { return true }
+            offset +=
+                46 + value(28, 2, in: header) + value(30, 2, in: header) + value(32, 2, in: header)
+        }
+        return false
     }
 
     static func untar(_ archive: URL, into folder: URL) async throws {

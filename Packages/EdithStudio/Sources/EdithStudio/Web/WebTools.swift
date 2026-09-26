@@ -57,8 +57,11 @@ enum WebTools {
         let target = try WebCapture.target(from: run.settings.text("url"))
         run.status("Loading \(target.host ?? target.lastPathComponent)")
         let format: StudioImageFormat = run.settings.text("format") == "jpg" ? .jpeg : .png
-        let (image, name) = try await captureImage(
+        let (image, name, truncated) = try await captureImage(
             target, width: width(run.settings), fullPage: run.settings.bool("fullPage"))
+        if truncated {
+            run.note("The page is taller than \(image.height) pixels, so the capture stops there.")
+        }
         let output = run.output(named: name + "." + format.fileExtension)
         try StudioImageIO.write(image, to: output, format: format, options: .init(quality: 0.9))
         return [output]
@@ -103,32 +106,43 @@ enum WebTools {
         async throws
         -> URL
     {
-        let (data, name) = try await pdfData(target, width: width)
-        run.progress(0.7)
-        let output = run.output(named: name + ".pdf")
-        let count = try WebPDFLayout.paginate(
-            data, paper: paper(for: pages), margin: 28, title: name, to: output)
+        let (output, count, truncated) = try await renderPDF(
+            target, width: width, paper: paper(for: pages), margin: 28
+        ) { name in
+            run.output(named: name + ".pdf")
+        } progress: {
+            run.progress($0)
+        }
         run.note("Saved \(count) page\(count == 1 ? "" : "s").")
+        if truncated { run.note("The page is very long, so the PDF stops partway through.") }
         return output
     }
 
     @MainActor
-    static func pdfData(_ target: URL, width: CGFloat) async throws -> (Data, String) {
+    static func renderPDF(
+        _ target: URL, width: CGFloat, paper: CGSize?, margin: CGFloat,
+        output: (String) -> URL, progress: (Double) -> Void
+    ) async throws -> (URL, Int, Bool) {
         let capture = WebCapture(width: width)
         defer { capture.close() }
         try await capture.load(target)
-        let data = try await capture.pdf()
-        return (data, name(for: target, title: capture.title))
+        let name = name(for: target, title: capture.title)
+        let url = output(name)
+        let (pages, truncated) = try await WebPDFLayout.render(
+            capture, paper: paper, margin: margin, title: name,
+            label: target.isFileURL ? target.lastPathComponent : (target.host ?? name), to: url,
+            progress: progress)
+        return (url, pages, truncated)
     }
 
     @MainActor
     static func captureImage(_ target: URL, width: CGFloat, fullPage: Bool) async throws -> (
-        CGImage, String
+        CGImage, String, Bool
     ) {
         let capture = WebCapture(width: width)
         defer { capture.close() }
         try await capture.load(target)
-        let image = try await capture.snapshot(fullPage: fullPage)
-        return (image, name(for: target, title: capture.title))
+        let (image, truncated) = try await capture.snapshot(fullPage: fullPage)
+        return (image, name(for: target, title: capture.title), truncated)
     }
 }

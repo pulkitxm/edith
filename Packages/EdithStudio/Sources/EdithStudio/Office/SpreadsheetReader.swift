@@ -104,27 +104,65 @@ public enum CSVParser {
 
 enum XLSXReader {
     static func read(_ url: URL) throws -> [SpreadsheetSheet] {
+        try OOXMLPackage.requirePackage(url, application: "Excel", format: "XLSX")
         let parts: [String: Data]
         do {
             parts = try OOXMLPackage.read(url)
         } catch {
             throw StudioError.unreadable(url.lastPathComponent)
         }
-        guard let workbook = parts["xl/workbook.xml"] else {
+        let workbookPath = DOCXReader.mainPart(parts) ?? "xl/workbook.xml"
+        guard let workbook = parts[workbookPath] ?? parts["xl/workbook.xml"] else {
             throw StudioError.unreadable(url.lastPathComponent)
         }
-        let relationships = parts["xl/_rels/workbook.xml.rels"].map(OOXMLRelationships.parse) ?? [:]
-        let shared = parts["xl/sharedStrings.xml"].map(SharedStringsParser.parse) ?? []
-        let dateStyles = parts["xl/styles.xml"].map(StylesParser.dateStyles) ?? []
+        let relationships =
+            parts[PresentationRenderer.relsPath(workbookPath)].map(OOXMLRelationships.parse) ?? [:]
+        func related(_ type: String, fallback: String) -> Data? {
+            guard let data = parts[PresentationRenderer.relsPath(workbookPath)] else {
+                return parts[fallback]
+            }
+            let collector = ElementCollector(names: ["Relationship"])
+            collector.run(data)
+            let target = collector.elements.first { $0["Type"]?.hasSuffix("/" + type) == true }?[
+                "Target"]
+            return target.flatMap { parts[OOXMLRelationships.resolve($0, from: workbookPath)] }
+                ?? parts[fallback]
+        }
+        let shared =
+            related("sharedStrings", fallback: "xl/sharedStrings.xml").map(
+                SharedStringsParser.parse)
+            ?? []
+        let formats =
+            related("styles", fallback: "xl/styles.xml").map(StylesParser.formats) ?? []
+        let book = WorkbookParser.parse(workbook)
         var sheets: [SpreadsheetSheet] = []
-        for entry in WorkbookParser.parse(workbook) {
+        for entry in book.sheets where entry.visible {
             guard let target = relationships[entry.relationship] else { continue }
-            let path = OOXMLRelationships.resolve(target, from: "xl/workbook.xml")
+            let path = OOXMLRelationships.resolve(target, from: workbookPath)
             guard let data = parts[path] else { continue }
-            let rows = WorksheetParser.parse(data, shared: shared, dateStyles: dateStyles)
+            let rows = WorksheetParser.parse(
+                data, shared: shared, formats: formats, date1904: book.date1904)
             sheets.append(SpreadsheetSheet(name: entry.name, rows: rows))
         }
         return sheets
+    }
+
+    static func unescape(_ text: String) -> String {
+        guard text.contains("_x") else { return text }
+        let pattern = try? NSRegularExpression(pattern: "_x([0-9A-Fa-f]{4})_")
+        let nsText = text as NSString
+        var result = ""
+        var cursor = 0
+        for match in pattern?.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+            ?? []
+        {
+            result += nsText.substring(
+                with: NSRange(location: cursor, length: match.range.location - cursor))
+            let code = UInt32(nsText.substring(with: match.range(at: 1)), radix: 16) ?? 0x3F
+            result += code == 0x0D ? "" : String(Character(UnicodeScalar(code) ?? "?"))
+            cursor = match.range.location + match.range.length
+        }
+        return result + nsText.substring(from: cursor)
     }
 }
 
@@ -142,7 +180,7 @@ public enum OOXMLRelationships {
     public static func resolve(_ target: String, from part: String) -> String {
         if target.hasPrefix("/") { return String(target.dropFirst()) }
         var components = part.split(separator: "/").map(String.init)
-        components.removeLast()
+        if !components.isEmpty { components.removeLast() }
         for piece in target.split(separator: "/").map(String.init) {
             if piece == ".." {
                 if !components.isEmpty { components.removeLast() }
@@ -184,16 +222,27 @@ enum WorkbookParser {
     struct Entry {
         let name: String
         let relationship: String
+        let visible: Bool
     }
 
-    static func parse(_ data: Data) -> [Entry] {
-        let collector = ElementCollector(names: ["sheet"])
+    static func parse(_ data: Data) -> (sheets: [Entry], date1904: Bool) {
+        let collector = ElementCollector(names: ["sheet", "workbookPr"])
         collector.run(data)
-        return collector.elements.compactMap { attributes in
-            guard let name = attributes["name"], let id = attributes["r:id"] ?? attributes["id"]
-            else { return nil }
-            return Entry(name: name, relationship: id)
+        var date1904 = false
+        var sheets: [Entry] = []
+        for attributes in collector.elements {
+            if let value = attributes["date1904"] {
+                date1904 = value == "1" || value.lowercased() == "true"
+                continue
+            }
+            guard let name = attributes["name"],
+                let id = attributes["r:id"]
+                    ?? attributes.first(where: { $0.key.hasSuffix(":id") })?.value
+            else { continue }
+            let state = attributes["state"] ?? "visible"
+            sheets.append(Entry(name: name, relationship: id, visible: state == "visible"))
         }
+        return (sheets, date1904)
     }
 }
 
@@ -236,7 +285,7 @@ final class SharedStringsParser: NSObject, XMLParserDelegate {
     ) {
         switch ElementCollector.local(elementName) {
         case "si":
-            strings.append(current)
+            strings.append(XLSXReader.unescape(current))
             inItem = false
         case "t": inText = false
         case "rPh": inPhonetic = false
@@ -246,23 +295,16 @@ final class SharedStringsParser: NSObject, XMLParserDelegate {
 }
 
 final class StylesParser: NSObject, XMLParserDelegate {
-    var customDateFormats = Set<Int>()
+    var custom: [Int: String] = [:]
     var cellFormats: [Int] = []
     var inCellXfs = false
 
-    static let builtInDates: Set<Int> = Set(14...22).union(45...47)
-
-    static func dateStyles(_ data: Data) -> Set<Int> {
+    static func formats(_ data: Data) -> [String] {
         let delegate = StylesParser()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
         parser.parse()
-        var result = Set<Int>()
-        for (index, format) in delegate.cellFormats.enumerated()
-        where builtInDates.contains(format) || delegate.customDateFormats.contains(format) {
-            result.insert(index)
-        }
-        return result
+        return delegate.cellFormats.map { SpreadsheetFormat.code(for: $0, custom: delegate.custom) }
     }
 
     func parser(
@@ -272,15 +314,9 @@ final class StylesParser: NSObject, XMLParserDelegate {
         switch ElementCollector.local(elementName) {
         case "numFmt":
             guard let id = attributes["numFmtId"].flatMap(Int.init),
-                let code = attributes["formatCode"]?.lowercased()
+                let code = attributes["formatCode"]
             else { return }
-            let stripped = code.replacingOccurrences(
-                of: #"\[[^\]]*\]|"[^"]*""#, with: "", options: .regularExpression)
-            if stripped.contains("y") || stripped.contains("d")
-                || (stripped.contains("m") && !stripped.contains("0"))
-            {
-                customDateFormats.insert(id)
-            }
+            custom[id] = code
         case "cellXfs": inCellXfs = true
         case "xf" where inCellXfs:
             cellFormats.append(attributes["numFmtId"].flatMap(Int.init) ?? 0)
@@ -298,8 +334,11 @@ final class StylesParser: NSObject, XMLParserDelegate {
 
 final class WorksheetParser: NSObject, XMLParserDelegate {
     let shared: [String]
-    let dateStyles: Set<Int>
+    let formats: [String]
+    let date1904: Bool
     var rows: [Int: [Int: String]] = [:]
+    var hiddenRows = Set<Int>()
+    var hiddenColumns = Set<Int>()
     var rowIndex = 0
     var column = 0
     var cellType = ""
@@ -308,21 +347,31 @@ final class WorksheetParser: NSObject, XMLParserDelegate {
     var inline = ""
     var capturing: String?
     var inInline = false
+    var inPhonetic = false
 
-    init(shared: [String], dateStyles: Set<Int>) {
+    init(shared: [String], formats: [String], date1904: Bool) {
         self.shared = shared
-        self.dateStyles = dateStyles
+        self.formats = formats
+        self.date1904 = date1904
     }
 
-    static func parse(_ data: Data, shared: [String], dateStyles: Set<Int>) -> [[String]] {
-        let delegate = WorksheetParser(shared: shared, dateStyles: dateStyles)
+    static func parse(
+        _ data: Data, shared: [String], formats: [String] = [], date1904: Bool = false
+    ) -> [[String]] {
+        let delegate = WorksheetParser(shared: shared, formats: formats, date1904: date1904)
         let parser = XMLParser(data: data)
         parser.delegate = delegate
         parser.parse()
-        guard let last = delegate.rows.keys.max() else { return [] }
-        return (0...last).map { index in
-            guard let cells = delegate.rows[index], let width = cells.keys.max() else { return [] }
-            return (0...width).map { cells[$0] ?? "" }
+        let visibleRows = delegate.rows.keys.filter { !delegate.hiddenRows.contains($0) }
+        guard let last = visibleRows.max() else { return [] }
+        let columns = (delegate.rows.values.compactMap { $0.keys.max() }.max() ?? -1) + 1
+        let keptColumns = (0..<max(columns, 0)).filter { !delegate.hiddenColumns.contains($0) }
+        return (0...last).compactMap { index in
+            guard !delegate.hiddenRows.contains(index) else { return nil }
+            guard let cells = delegate.rows[index] else { return [] }
+            let values = keptColumns.map { cells[$0] ?? "" }
+            guard let width = values.lastIndex(where: { !$0.isEmpty }) else { return [] }
+            return Array(values[...width])
         }
     }
 
@@ -337,7 +386,18 @@ final class WorksheetParser: NSObject, XMLParserDelegate {
             } else {
                 rowIndex = (rows.keys.max() ?? -1) + 1
             }
+            if let hidden = attributes["hidden"], hidden == "1" || hidden == "true" {
+                hiddenRows.insert(rowIndex)
+            }
             column = 0
+        case "col":
+            if let hidden = attributes["hidden"], hidden == "1" || hidden == "true",
+                let minimum = attributes["min"].flatMap(Int.init),
+                let maximum = attributes["max"].flatMap(Int.init), minimum <= maximum,
+                maximum - minimum < 16_384
+            {
+                for index in minimum...maximum { hiddenColumns.insert(index - 1) }
+            }
         case "c":
             if let reference = attributes["r"] {
                 column = Self.columnIndex(reference)
@@ -350,7 +410,9 @@ final class WorksheetParser: NSObject, XMLParserDelegate {
             capturing = "v"
         case "is":
             inInline = true
-        case "t" where inInline:
+        case "rPh":
+            inPhonetic = true
+        case "t" where inInline && !inPhonetic:
             capturing = "t"
         default: break
         }
@@ -371,6 +433,7 @@ final class WorksheetParser: NSObject, XMLParserDelegate {
         switch ElementCollector.local(elementName) {
         case "v", "t": capturing = nil
         case "is": inInline = false
+        case "rPh": inPhonetic = false
         case "c":
             let text = display()
             if !text.isEmpty { rows[rowIndex, default: [:]][column] = text }
@@ -379,42 +442,68 @@ final class WorksheetParser: NSObject, XMLParserDelegate {
         }
     }
 
+    var format: String {
+        cellStyle >= 0 && cellStyle < formats.count ? formats[cellStyle] : "General"
+    }
+
     func display() -> String {
         switch cellType {
         case "s":
-            guard let index = Int(value.trimmingCharacters(in: .whitespaces)), index < shared.count
+            guard let index = Int(value.trimmingCharacters(in: .whitespaces)), index >= 0,
+                index < shared.count
             else { return "" }
             return shared[index]
-        case "inlineStr": return inline
-        case "b": return value == "1" ? "TRUE" : "FALSE"
-        case "str", "e": return value
+        case "inlineStr": return XLSXReader.unescape(inline)
+        case "b": return value.trimmingCharacters(in: .whitespaces) == "1" ? "TRUE" : "FALSE"
+        case "str", "e": return XLSXReader.unescape(value)
+        case "d":
+            guard let serial = Self.serial(isoDate: value, date1904: date1904) else { return value }
+            let code = format.lowercased() == "general" ? Self.isoCode(value) : format
+            return SpreadsheetFormat.display(serial, code: code, date1904: date1904)
         default:
-            guard let number = Double(value) else { return value }
-            if dateStyles.contains(cellStyle) { return Self.date(fromSerial: number) }
-            return Self.format(number)
+            guard let number = Double(value.trimmingCharacters(in: .whitespaces)) else {
+                return value
+            }
+            return SpreadsheetFormat.display(number, code: format, date1904: date1904)
         }
     }
 
+    static func isoCode(_ value: String) -> String {
+        value.contains("T") && !value.hasSuffix("T00:00:00") && !value.hasSuffix("T00:00:00Z")
+            ? "yyyy-mm-dd hh:mm:ss" : "yyyy-mm-dd"
+    }
+
+    static func serial(isoDate: String, date1904: Bool) -> Double? {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        var date = formatter.date(from: isoDate)
+        if date == nil {
+            formatter.formatOptions = [.withFullDate]
+            date = formatter.date(from: String(isoDate.prefix(10)))
+        }
+        if date == nil {
+            formatter.formatOptions = [
+                .withFullDate, .withTime, .withColonSeparatorInTime, .withDashSeparatorInDate,
+            ]
+            date = formatter.date(from: isoDate)
+        }
+        guard let date else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let origin = calendar.date(
+            from: date1904
+                ? DateComponents(year: 1904, month: 1, day: 1)
+                : DateComponents(year: 1899, month: 12, day: 30))!
+        let serial = date.timeIntervalSince(origin) / 86_400
+        return !date1904 && serial < 61 ? serial - 1 : serial
+    }
+
     static func format(_ number: Double) -> String {
-        if number.rounded() == number, abs(number) < 1e15 { return String(Int(number)) }
-        let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 6
-        formatter.usesGroupingSeparator = false
-        formatter.decimalSeparator = "."
-        return formatter.string(from: NSNumber(value: number)) ?? String(number)
+        SpreadsheetFormat.general(number)
     }
 
     static func date(fromSerial serial: Double) -> String {
-        let base = DateComponents(
-            calendar: Calendar(identifier: .gregorian), timeZone: TimeZone(identifier: "UTC"),
-            year: 1899, month: 12, day: 30)
-        guard let origin = base.date else { return format(serial) }
-        let date = origin.addingTimeInterval(serial * 86_400)
-        let formatter = DateFormatter()
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = serial.rounded() == serial ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm"
-        return formatter.string(from: date)
+        SpreadsheetFormat.display(serial, code: "yyyy-mm-dd")
     }
 
     static func columnIndex(_ reference: String) -> Int {

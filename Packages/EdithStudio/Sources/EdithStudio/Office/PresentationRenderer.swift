@@ -28,6 +28,8 @@ public enum PresentationRenderer {
     public struct SlideText: Equatable {
         public var title: String?
         public var lines: [String]
+        public var notes: String? = nil
+        public var hidden = false
     }
 
     static func load(_ url: URL) throws -> Deck {
@@ -41,6 +43,7 @@ public enum PresentationRenderer {
             throw StudioError.unsupportedInput(
                 url.lastPathComponent, "this tool. Save it as PPTX first")
         }
+        try OOXMLPackage.requirePackage(url, application: "PowerPoint", format: "PPTX")
         let parts: [String: Data]
         do {
             parts = try OOXMLPackage.read(url)
@@ -135,10 +138,14 @@ public enum PresentationRenderer {
     public static func render(
         _ url: URL, to output: URL, title: String, progress: (Double) -> Void = { _ in }
     ) throws -> Int {
-        let deck = try load(url)
-        guard !deck.slides.isEmpty else {
+        let loaded = try load(url)
+        guard !loaded.slides.isEmpty else {
             throw StudioError.nothingToDo("The presentation has no slides.")
         }
+        let shown = loaded.slides.filter { $0.slide.tree.attribute("show") != "0" }
+        let deck = Deck(
+            parts: loaded.parts, size: loaded.size, slides: shown.isEmpty ? loaded.slides : shown,
+            theme: loaded.theme)
         var box = CGRect(origin: .zero, size: deck.size)
         let info: [CFString: Any] = [
             kCGPDFContextTitle: title, kCGPDFContextCreator: "Edith Studio",
@@ -184,12 +191,24 @@ public enum PresentationRenderer {
             }
             for table in slide.slide.tree.descendants("tbl") {
                 for row in table.all("tr") {
-                    let cells = row.all("tc").map { cell in
+                    let cells = row.all("tc").filter {
+                        $0.attribute("hMerge") != "1" && $0.attribute("vMerge") != "1"
+                    }.map { cell in
                         (cell.child("txBody")?.all("p") ?? []).map(paragraphText).joined(
                             separator: " ")
                     }
                     result.lines.append(cells.joined(separator: " | "))
                 }
+            }
+            result.hidden = slide.slide.tree.attribute("show") == "0"
+            if let notes = relatedPart(of: slide.slide, type: "notesSlide", in: deck.parts) {
+                let body = notes.tree.descendants("sp").filter { shape in
+                    let type = shape.path("nvSpPr", "nvPr", "ph")?.attribute("type") ?? "body"
+                    return type == "body"
+                }
+                let text = body.flatMap { ($0.child("txBody")?.all("p") ?? []).map(paragraphText) }
+                    .filter { !$0.isEmpty }.joined(separator: "\n")
+                if !text.isEmpty { result.notes = text }
             }
             return result
         }

@@ -106,9 +106,6 @@ enum IntelligenceTools {
             throw StudioError.nothingToDo("The document is already in that language.")
         }
         run.status("Translating")
-        let translated = try await StudioTranslator.translate(
-            blocks, from: source, to: target
-        ) { run.progress($0 * 0.95) }
         let suffix = target.lowercased()
         if run.settings.text("format") == "pdf", run.input.studioKind == .pdf {
             let document = try StudioPDF.open(run.input, password: run.settings.text("password"))
@@ -127,6 +124,9 @@ enum IntelligenceTools {
             }
             return [output]
         }
+        let translated = try await StudioTranslator.translate(
+            blocks, from: source, to: target
+        ) { run.progress($0 * 0.95) }
         if run.settings.text("format") == "md" {
             let output = run.output(for: run.input, suffix: suffix, ext: "md")
             try DocumentMarkdown.render(translated).write(
