@@ -18,6 +18,8 @@ struct HerdrPage: View {
     @State private var layoutPopoverOpen = false
     @State private var launchSettingsPresented = false
     @State private var newAgentPopupPresented = false
+    @State private var filterMenu: HerdrFilterAnchor?
+    @State private var filterDismissedAt: Date?
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -165,90 +167,39 @@ struct HerdrPage: View {
     }
 
     private var header: some View {
-        PageHeader(
-            title: { Text("Herdr") },
-            trailing: {
-                HStack(spacing: UIScale.pt(10)) {
-                    spacesWindowMenu
-                    spaceGroupingToggle
-                    Button {
-                        store.searchPresented = true
-                    } label: {
-                        Label("Search", systemImage: "magnifyingglass")
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                    .help("Search agent sessions on every machine (⌘K)")
-                    Button {
-                        newAgentPopupPresented = true
-                    } label: {
-                        Label("New Agent", systemImage: "plus")
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                    Button {
-                        Task { await store.refresh() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                    .disabled(store.refreshing)
-                }
-            },
-            accessory: { filters })
+        PageHeader(title: { Text("Herdr") }, trailing: { headerActions })
     }
 
-    private var spacesWindowMenu: some View {
-        Menu {
-            if store.agentSpaces.isEmpty {
-                Text("No spaces available")
-            } else {
-                if let first = store.agentSpaces.first {
-                    Button {
-                        openSpace(first)
-                    } label: {
-                        Label(first.title, systemImage: "macwindow")
-                    }
-                }
-                ForEach(Array(store.agentSpaces.dropFirst())) { space in
-                    Button {
-                        openSpace(space)
-                    } label: {
-                        Label(space.title, systemImage: "macwindow")
-                    }
-                }
+    private var headerActions: some View {
+        HStack(spacing: UIScale.pt(2)) {
+            headerIcon(
+                "magnifyingglass", "Search", "Search agent sessions on every machine (⌘K)"
+            ) {
+                store.searchPresented = true
             }
-        } label: {
-            Label("Spaces", systemImage: "macwindow")
+            headerIcon("plus", "New Agent", "New agent (⌘N)") {
+                newAgentPopupPresented = true
+            }
+            headerIcon("arrow.clockwise", "Refresh", "Refresh sessions") {
+                Task { await store.refresh() }
+            }
+            .disabled(store.refreshing)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Open a Space in its own window (⌥⌘S opens the first)")
     }
 
-    private var spaceGroupingToggle: some View {
-        let enabled = store.spaceGroupingEnabled
-        return Button {
-            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                store.spaceGroupingEnabled.toggle()
-            }
-        } label: {
-            Text("Space")
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                .foregroundStyle(enabled ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(5))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: enabled ? DashSkin.paper2(dark) : .clear,
-                    stroke: enabled ? DashSkin.accent(dark).opacity(0.65) : .clear,
-                    strokeWidth: enabled ? 1.4 : 0
-                )
+    private func headerIcon(
+        _ symbol: String, _ label: String, _ help: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel("Group agents by space")
-        .accessibilityValue(enabled ? "Enabled" : "Disabled")
-        .accessibilityAddTraits(enabled ? .isSelected : [])
-        .help(enabled ? "Show one agent list" : "Group agents by space")
+        .buttonStyle(.edith(.toolbar))
+        .accessibilityLabel(label)
+        .help(help)
     }
 
     private var detailToggle: some View {
@@ -311,6 +262,8 @@ struct HerdrPage: View {
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Button("") { newAgentPopupPresented = true }
                 .keyboardShortcut("n", modifiers: .command)
+            Button("") { toggleFilterMenu() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
         }
         .opacity(0)
         .allowsHitTesting(false)
@@ -345,88 +298,24 @@ struct HerdrPage: View {
                 Button {
                     store.setView(mode, for: tab.id)
                 } label: {
-                    Text(mode.shortTitle)
+                    Image(systemName: mode.icon)
                         .font(
                             .system(
                                 size: UIScale.pt(11), weight: selected ? .semibold : .medium)
                         )
                         .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                        .padding(.horizontal, UIScale.pt(10))
-                        .padding(.vertical, UIScale.pt(6))
-                        .background(
-                            selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
+                        .frame(width: UIScale.pt(26), height: UIScale.pt(22))
+                        .background(selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
                 }
                 .buttonStyle(.edith(.borderless))
+                .accessibilityLabel(mode.title)
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .help(mode.title)
             }
         }
         .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
-    }
-
-    private var filters: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            pillRow(
-                items: store.machineChoices.map { ($0.id, $0.name) },
-                isSelected: { $0 == store.machineFilter }
-            ) { store.machineFilter = $0 }
-            HStack(spacing: UIScale.pt(6)) {
-                pillRow(
-                    items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
-                    isSelected: { store.kindIsSelected($0) },
-                    showsKindMark: true
-                ) { store.selectKind($0) }
-                Button {
-                    launchSettingsPresented = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                }
-                .buttonStyle(.edith(.borderless))
-                .help("Edit the launch command, model, effort and fast mode for each agent kind")
-            }
-        }
-    }
-
-    private func pillRow(
-        items: [(String, String)], isSelected: @escaping (String) -> Bool,
-        showsKindMark: Bool = false,
-        onSelect: @escaping (String) -> Void
-    ) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(6)) {
-                ForEach(items, id: \.0) { item in
-                    let selected = isSelected(item.0)
-                    Button {
-                        onSelect(item.0)
-                    } label: {
-                        HStack(spacing: UIScale.pt(5)) {
-                            if showsKindMark, item.0 != "all" {
-                                HerdrKindMark(kind: item.0, size: UIScale.pt(11))
-                            }
-                            Text(item.1)
-                                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                        }
-                        .foregroundStyle(
-                            selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
-                        )
-                        .padding(.horizontal, UIScale.pt(10))
-                        .padding(.vertical, UIScale.pt(5))
-                        .widgetBar(
-                            cornerRadius: 8,
-                            fill: selected
-                                ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                            stroke: selected
-                                ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                            strokeWidth: selected ? 1.4 : 1)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .modifier(KindPillHelp(enabled: showsKindMark))
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
-            }
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Session view")
     }
 
     private var tabBar: some View {
@@ -437,6 +326,7 @@ struct HerdrPage: View {
             HStack(spacing: UIScale.pt(8)) {
                 railToggle
                     .padding(.leading, PageMetrics.gutter(compact))
+                sessionFilterButton(compact: true, anchor: .bar)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: UIScale.pt(6)) {
                         tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
@@ -451,20 +341,7 @@ struct HerdrPage: View {
                     .padding(.leading, 0)
                     .padding(.vertical, UIScale.pt(8))
                 }
-                if let tab = store.currentTab, !tab.isSplit,
-                    let session = store.session(tab.focused), !session.agent.isTerminal
-                {
-                    viewModes(for: session)
-                }
-                if let tab = store.currentTab {
-                    layoutButton(for: tab)
-                }
-                terminalToggle
-                    .padding(.trailing, onBoard ? PageMetrics.gutter(compact) : 0)
-                if !onBoard {
-                    detailToggle
-                        .padding(.trailing, PageMetrics.gutter(compact))
-                }
+                tabBarActions
             }
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
@@ -474,25 +351,42 @@ struct HerdrPage: View {
         .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
+    private var tabBarActions: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            if let tab = store.currentTab, !tab.isSplit,
+                let session = store.session(tab.focused), !session.agent.isTerminal
+            {
+                viewModes(for: session)
+            }
+            if let tab = store.currentTab {
+                layoutButton(for: tab)
+            }
+            terminalToggle
+            if !onBoard {
+                detailToggle
+            }
+        }
+        .padding(.trailing, PageMetrics.gutter(compact))
+    }
+
     private func layoutButton(for tab: HerdrTab) -> some View {
-        Button {
+        let label = tab.isSplit ? "Layout" : "Side by side"
+        return Button {
             layoutPopoverOpen.toggle()
         } label: {
-            Label(
-                tab.isSplit ? "Layout" : "Side by Side",
-                systemImage: tab.isSplit ? "square.grid.2x2" : "rectangle.split.2x1"
-            )
-            .font(.system(size: UIScale.pt(11), weight: .semibold))
-            .foregroundStyle(DashSkin.inkSoft(dark))
-            .padding(.horizontal, UIScale.pt(9))
-            .padding(.vertical, UIScale.pt(6))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: layoutPopoverOpen
-                    ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
-                stroke: DashSkin.line(dark))
+            Image(systemName: tab.isSplit ? "square.grid.2x2" : "plus.rectangle.on.rectangle")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: layoutPopoverOpen
+                        ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark))
         }
         .buttonStyle(.edith(.borderless))
+        .accessibilityLabel(label)
         .help(tab.isSplit ? "Arrange the agents in this tab" : "Show agents side by side")
         .popover(isPresented: $layoutPopoverOpen, arrowEdge: .bottom) {
             if let current = store.currentTab {
@@ -789,8 +683,11 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    if showsSplitGroup {
+                        splitGroup(store.openSplitAgents)
+                    }
                     railHeader(
-                        "Terminals", count: machineTerminals.count,
+                        "Terminals", count: catalogAgents(machineTerminals).count,
                         collapsed: store.terminalsCollapsed
                     ) {
                         store.terminalsCollapsed.toggle()
@@ -799,27 +696,31 @@ struct HerdrPage: View {
                         if store.settling {
                             HerdrSkeleton(dark: dark, rows: 2, card: false)
                         } else {
-                            ForEach(machineTerminals) { terminal in
+                            ForEach(catalogAgents(machineTerminals)) { terminal in
                                 agentRow(terminal)
                             }
                         }
                     }
                     agentsRailHeader
+                    agentFilterRow
                     if !store.agentsCollapsed, store.settling {
                         HerdrSkeleton(dark: dark, rows: 4, card: false)
                     }
                     if !store.agentsCollapsed, !store.settling {
                         if store.spaceGroupingEnabled {
                             ForEach(store.agentSpaces) { space in
-                                spaceHeader(space)
-                                if !store.spaceIsCollapsed(space.id) {
-                                    ForEach(space.agents) { agent in
-                                        agentRow(agent)
+                                let visible = catalogAgents(space.agents)
+                                if !visible.isEmpty {
+                                    spaceHeader(space, count: visible.count)
+                                    if !store.spaceIsCollapsed(space.id) {
+                                        ForEach(visible) { agent in
+                                            agentRow(agent)
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            ForEach(listedAgents) { agent in
+                            ForEach(catalogAgents(listedAgents)) { agent in
                                 agentRow(agent)
                             }
                         }
@@ -836,7 +737,7 @@ struct HerdrPage: View {
     private var agentsRailHeader: some View {
         HStack(spacing: UIScale.pt(4)) {
             railHeader(
-                "Agents", count: listedAgents.count,
+                "Agents", count: catalogAgents(listedAgents).count,
                 collapsed: store.agentsCollapsed
             ) {
                 store.agentsCollapsed.toggle()
@@ -864,8 +765,15 @@ struct HerdrPage: View {
         }
     }
 
-    private func spaceHeader(_ space: HerdrAgentSpace) -> some View {
+    private func catalogAgents(_ agents: [HerdrAgent]) -> [HerdrAgent] {
+        guard showsSplitGroup else { return agents }
+        let grouped = Set(store.openSplitAgents.map(\.id))
+        return agents.filter { !grouped.contains($0.id) }
+    }
+
+    private func spaceHeader(_ space: HerdrAgentSpace, count: Int? = nil) -> some View {
         let collapsed = store.spaceIsCollapsed(space.id)
+        let shownCount = count ?? space.agents.count
         let accessibleTitle = hideAgents ? "Space" : space.title
         return HStack(spacing: UIScale.pt(2)) {
             Button {
@@ -883,7 +791,7 @@ struct HerdrPage: View {
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                         .presenterTextBlur(hideAgents, fontSize: 10.5)
-                    Text("\(space.agents.count)")
+                    Text("\(shownCount)")
                         .font(DashSkin.mono(9.5, weight: .medium))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Spacer(minLength: 0)
@@ -941,8 +849,57 @@ struct HerdrPage: View {
         .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
 
-    private func agentRow(_ agent: HerdrAgent) -> some View {
-        let selected = !onBoard && store.currentTab?.layout.contains(agent.id) == true
+    private var showsSplitGroup: Bool { store.openSplitAgents.count > 1 }
+
+    private func splitGroup(_ agents: [HerdrAgent]) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: "rectangle.split.2x1")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                Text("Side by side")
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                Text("\(agents.count)")
+                    .font(DashSkin.mono(9.5, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(DashSkin.inkSoft(dark))
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.top, UIScale.pt(7))
+            .padding(.bottom, UIScale.pt(3))
+            .accessibilityHidden(true)
+            ForEach(agents) { agent in
+                agentRow(agent, inGroup: true)
+            }
+        }
+        .padding(.bottom, UIScale.pt(4))
+        .widgetBar(
+            cornerRadius: 10,
+            fill: DashSkin.paper2(dark).opacity(0.72),
+            stroke: DashSkin.accent(dark).opacity(0.55),
+            strokeWidth: 1.4
+        )
+        .padding(.horizontal, UIScale.pt(2))
+        .padding(.bottom, UIScale.pt(6))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(splitGroupLabel(agents))
+    }
+
+    private func splitGroupLabel(_ agents: [HerdrAgent]) -> String {
+        let noun = agents.count == 1 ? "agent" : "agents"
+        guard !hideAgents,
+            let focused = agents.first(where: { store.railHighlight(for: $0.id) == .focused })
+        else {
+            return "Side by side, \(agents.count) \(noun)"
+        }
+        return "Side by side, \(agents.count) \(noun). Focused, \(focused.title)"
+    }
+
+    private func agentRow(_ agent: HerdrAgent, inGroup: Bool = false) -> some View {
+        let highlight = store.railHighlight(for: agent.id)
+        let selected =
+            inGroup
+            ? highlight == .focused
+            : (!showsSplitGroup && (highlight == .solo || highlight == .focused))
         return Button {
             openAgent(agent)
         } label: {
@@ -970,15 +927,17 @@ struct HerdrPage: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.leading, UIScale.pt(12))
+            .padding(.leading, UIScale.pt(inGroup ? 8 : 12))
             .padding(.trailing, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(inGroup ? 6 : 8))
             .widgetBar(
                 cornerRadius: 8,
-                fill: HerdrStatusColor.fill(agent, dark: dark, selected: selected),
-                stroke: selected
-                    ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear,
-                strokeWidth: selected ? 1.4 : 0
+                fill: rowFill(agent, inGroup: inGroup, selected: selected),
+                stroke: inGroup
+                    ? nil
+                    : (selected
+                        ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear),
+                strokeWidth: selected && !inGroup ? 1.4 : 0
             )
             .overlay(alignment: .leading) {
                 if selected {
@@ -986,19 +945,46 @@ struct HerdrPage: View {
                         .fill(DashSkin.accent(dark))
                         .frame(width: UIScale.pt(3))
                         .padding(.vertical, UIScale.pt(6))
-                        .padding(.leading, UIScale.pt(5))
+                        .padding(.leading, UIScale.pt(inGroup ? 3 : 5))
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .help(
-            selected
-                ? "\(agent.title): open on the right"
-                : "\(agent.title). Drag onto the right side to place it beside other agents."
-        )
+        .accessibilityValueIfPresent(rowValue(highlight, inGroup: inGroup))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help(rowHelp(agent, highlight: highlight, inGroup: inGroup, selected: selected))
         .herdrDraggable(.agent(agent), simultaneous: true)
         .contextMenu { agentRowMenu(agent) }
+    }
+
+    private func rowFill(_ agent: HerdrAgent, inGroup: Bool, selected: Bool) -> Color {
+        if inGroup {
+            return selected ? DashSkin.accent(dark).opacity(dark ? 0.22 : 0.14) : .clear
+        }
+        return HerdrStatusColor.fill(agent, dark: dark, selected: selected)
+    }
+
+    private func rowValue(_ highlight: HerdrRailHighlight, inGroup: Bool) -> String {
+        if inGroup, highlight == .focused { return "Focused" }
+        if inGroup { return "In this side by side tab" }
+        if highlight == .solo { return "Open on the right" }
+        return ""
+    }
+
+    private func rowHelp(
+        _ agent: HerdrAgent, highlight: HerdrRailHighlight, inGroup: Bool, selected: Bool
+    ) -> String {
+        if inGroup, highlight == .focused {
+            return "\(agent.title): focused in this side by side tab"
+        }
+        if inGroup {
+            return "\(agent.title): in this side by side tab"
+        }
+        if selected {
+            return "\(agent.title): open on the right"
+        }
+        return "\(agent.title). Drag onto the right side to place it beside other agents."
     }
 
     @ViewBuilder
@@ -1044,6 +1030,56 @@ struct HerdrPage: View {
 
     private func openSpace(_ space: HerdrAgentSpace) {
         HerdrSpaceWindow.open(space: space, store: store, launchEnabled: launchEnabled)
+    }
+
+    private var agentFilterRow: some View {
+        HerdrAgentFilterRow(
+            store: store,
+            presented: $filterMenu,
+            hideAgents: hideAgents,
+            onPress: { showFilterMenu(.rail) },
+            onDismissed: { filterDismissedAt = Date() },
+            onOpenSpace: openFilteredSpace,
+            onEditLaunch: editLaunchSettings)
+    }
+
+    private func sessionFilterButton(compact: Bool, anchor: HerdrFilterAnchor) -> some View {
+        HerdrFilterButton(
+            store: store,
+            anchor: anchor,
+            presented: $filterMenu,
+            compact: compact,
+            hideAgents: hideAgents,
+            onPress: { showFilterMenu(anchor) },
+            onDismissed: { filterDismissedAt = Date() },
+            onOpenSpace: openFilteredSpace,
+            onEditLaunch: editLaunchSettings)
+    }
+
+    private func showFilterMenu(_ anchor: HerdrFilterAnchor) {
+        if let filterDismissedAt, Date().timeIntervalSince(filterDismissedAt) < 0.35 {
+            self.filterDismissedAt = nil
+            return
+        }
+        filterMenu = anchor
+    }
+
+    private func toggleFilterMenu() {
+        if filterMenu == nil {
+            filterMenu = .bar
+        } else {
+            filterMenu = nil
+        }
+    }
+
+    private func openFilteredSpace(_ space: HerdrAgentSpace) {
+        filterMenu = nil
+        openSpace(space)
+    }
+
+    private func editLaunchSettings() {
+        filterMenu = nil
+        launchSettingsPresented = true
     }
 
     private func emptyState(title: String, detail: String) -> some View {
@@ -1114,14 +1150,13 @@ private struct HerdrTabDrag: ViewModifier {
     }
 }
 
-private struct KindPillHelp: ViewModifier {
-    var enabled: Bool
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.help("Click to add or remove. Command-click to show only this agent.")
+extension View {
+    @ViewBuilder
+    fileprivate func accessibilityValueIfPresent(_ value: String) -> some View {
+        if value.isEmpty {
+            self
         } else {
-            content
+            accessibilityValue(value)
         }
     }
 }
