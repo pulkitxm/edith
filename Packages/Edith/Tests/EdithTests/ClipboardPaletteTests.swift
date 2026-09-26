@@ -107,6 +107,19 @@ import Testing
         #expect(palette.rows.count == 6)
     }
 
+    @Test func aSingleCategoryHasNothingToCycleThrough() {
+        var palette = ClipboardPalette(entries: [
+            entry("one", "first note"), entry("two", "second note", age: 1),
+        ])
+
+        palette.cycleCategory(by: 1)
+        palette.cycleCategory(by: -1)
+
+        #expect(palette.categories == [.text])
+        #expect(palette.category == nil)
+        #expect(!palette.isFiltered)
+    }
+
     @Test func choosingAnAbsentCategoryShowsEverything() {
         var palette = ClipboardPalette(entries: history)
         palette.choose(.color)

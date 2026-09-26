@@ -157,8 +157,54 @@ import Testing
         defer { store.shutdown() }
         for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
             let bitmap = try render(store, appearance: appearance, log: HeightLog())
-            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            let data = try composite(bitmap, dark: appearance == .darkAqua)
             try data.write(to: output.appendingPathComponent("copy-stack-\(name).png"))
         }
+    }
+
+    private func composite(_ panel: NSBitmapImageRep, dark: Bool) throws -> Data {
+        let scale = CGFloat(panel.pixelsWide) / ClipboardPanelLayout.width
+        let margin = 56 * scale
+        let width = panel.pixelsWide + Int(margin * 2)
+        let height = panel.pixelsHigh + Int(margin * 2)
+        let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(
+            CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let stops =
+            dark
+            ? [
+                CGColor(srgbRed: 0.27, green: 0.13, blue: 0.62, alpha: 1),
+                CGColor(srgbRed: 0.06, green: 0.24, blue: 0.66, alpha: 1),
+            ]
+            : [
+                CGColor(srgbRed: 0.62, green: 0.70, blue: 0.98, alpha: 1),
+                CGColor(srgbRed: 0.86, green: 0.78, blue: 0.98, alpha: 1),
+            ]
+        let gradient = try #require(
+            CGGradient(colorsSpace: space, colors: stops as CFArray, locations: [0, 1]))
+        context.drawLinearGradient(
+            gradient, start: .zero, end: CGPoint(x: width, y: height), options: [])
+        let rect = CGRect(
+            x: margin, y: margin, width: CGFloat(panel.pixelsWide),
+            height: CGFloat(panel.pixelsHigh))
+        let outline = CGPath(
+            roundedRect: rect, cornerWidth: 14 * scale, cornerHeight: 14 * scale, transform: nil)
+        context.saveGState()
+        context.setShadow(
+            offset: CGSize(width: 0, height: -12 * scale), blur: 44 * scale,
+            color: CGColor(gray: 0, alpha: 0.45))
+        context.addPath(outline)
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        context.fillPath()
+        context.restoreGState()
+        context.saveGState()
+        context.addPath(outline)
+        context.clip()
+        context.draw(try #require(panel.cgImage), in: rect)
+        context.restoreGState()
+        let image = try #require(context.makeImage())
+        return try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
     }
 }

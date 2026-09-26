@@ -283,6 +283,81 @@ import Testing
         }
     }
 
+    static func seedMixed(_ world: CLIWorld) throws {
+        let texts = [
+            "https://example.com/launch", "hello@example.com", "#ff26a1", "launch checklist",
+        ]
+        var entries: [ClipboardEntry] = []
+        for (index, text) in texts.enumerated() {
+            let data = Data(text.utf8)
+            let sha = ClipboardRepository.sha256Hex(data)
+            try ClipboardRepository.writeBlob(data, sha256: sha, ext: "txt")
+            entries.append(
+                ClipboardEntry(
+                    sha256: sha, types: ["public.utf8-plain-text"], ext: "txt",
+                    sourceApp: index == 0 ? "Safari" : "Notes", sourceBundleID: "test.app",
+                    createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
+                    size: data.count, preview: text))
+        }
+        try ClipboardRepository.saveEntries(entries)
+    }
+
+    @Test func everyListedEntryCarriesThePanelCategory() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seedMixed(world)
+            let result = await CLIProbe.capture(["clipboard", "ls", "--json"])
+            let rows = result.array as? [[String: Any]] ?? []
+            let byPreview = Dictionary(
+                uniqueKeysWithValues: rows.compactMap { row in
+                    (row["preview"] as? String).map { ($0, row["category"] as? String) }
+                })
+            #expect(byPreview["https://example.com/launch"] == "link")
+            #expect(byPreview["hello@example.com"] == "email")
+            #expect(byPreview["#ff26a1"] == "color")
+            #expect(byPreview["launch checklist"] == "text")
+        }
+    }
+
+    @Test func categoryFiltersKeepTheirHistoryNumbers() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seedMixed(world)
+            let links = await CLIProbe.capture(["clipboard", "ls", "--category", "link", "--json"])
+            let rows = links.array as? [[String: Any]] ?? []
+            #expect(links.code == 0)
+            #expect(rows.map { $0["preview"] as? String } == ["https://example.com/launch"])
+            #expect(rows.first?["index"] as? Int == 4)
+
+            let images = await CLIProbe.capture([
+                "clipboard", "ls", "--category", "image", "--json",
+            ])
+            #expect(images.array?.isEmpty == true)
+
+            let bogus = await CLIProbe.capture(["clipboard", "ls", "--category", "sticker"])
+            #expect(bogus.code == ExitCodes.usage)
+        }
+    }
+
+    @Test func searchNeedsEveryWordAndCombinesWithTheCategory() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seedMixed(world)
+            let both = await CLIProbe.capture([
+                "clipboard", "ls", "--search", "safari launch", "--json",
+            ])
+            #expect(
+                (both.array as? [[String: Any]])?.map { $0["preview"] as? String } == [
+                    "https://example.com/launch"
+                ])
+
+            let launch = await CLIProbe.capture([
+                "clipboard", "ls", "--search", "launch", "--category", "text", "--json",
+            ])
+            #expect(
+                (launch.array as? [[String: Any]])?.map { $0["preview"] as? String } == [
+                    "launch checklist"
+                ])
+        }
+    }
+
     @Test func copyingAnEntryBumpsItToTheTopTheWayClickingItDoes() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)

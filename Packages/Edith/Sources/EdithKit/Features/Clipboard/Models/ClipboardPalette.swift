@@ -82,8 +82,8 @@ public struct ClipboardPalette: Equatable, Sendable {
     }
 
     public mutating func cycleCategory(by delta: Int) {
+        guard categories.count > 1 else { return }
         let options: [ClipboardCategory?] = [nil] + categories.map(Optional.some)
-        guard options.count > 1 else { return }
         let current = options.firstIndex(of: category) ?? 0
         let next = ((current + delta) % options.count + options.count) % options.count
         choose(options[next])
