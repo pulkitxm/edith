@@ -198,6 +198,80 @@ private actor HerdrPanelHerdr {
         try await eventually { await herdr.closed == [pane] }
     }
 
+    @Test func commandWClosesTheFocusedTerminalAndKeepsTheTab() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        store.perform(.new)
+        let ids = store.terminalPanels.terminals(of: owner).map(\.id)
+        try await eventually {
+            ids.allSatisfy { store.terminalPanels.terminals[$0]?.process != nil }
+        }
+
+        #expect(store.closeFocusedTab())
+        try await eventually { store.terminalPanels.terminals[ids[1]] == nil }
+        #expect(store.tabs.map(\.id) == [owner])
+        #expect(store.terminalPanels.selectedID(in: owner) == ids[0])
+        #expect(store.terminalPanels.holdsFocus(owner))
+
+        #expect(store.closeFocusedTab())
+        try await eventually { store.terminalPanels.terminals[ids[0]] == nil }
+        #expect(store.tabs.map(\.id) == [owner])
+        #expect(!store.terminalPanels.isOpen(owner))
+        #expect(!store.terminalPanels.holdsFocus(owner))
+    }
+
+    @Test func commandWAsksBeforeClosingATerminalThatIsRunningSomething() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.pane != nil }
+        let pane = try #require(store.terminalPanels.terminals[id]?.pane)
+        await herdr.run("npm", command: "npm run dev", in: pane)
+
+        #expect(store.closeFocusedTab())
+        try await eventually { store.terminalPanels.closeRequest != nil }
+        #expect(store.terminalPanels.closeRequest?.scope == .terminal)
+        #expect(store.terminalPanels.terminals[id] != nil)
+        #expect(store.tabs.map(\.id) == [owner])
+
+        store.terminalPanels.closeRequest?.proceed()
+        #expect(store.terminalPanels.terminals[id] == nil)
+        #expect(store.tabs.map(\.id) == [owner])
+    }
+
+    @Test func commandWClosesTheTabWhenTheAgentHasFocus() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.open(agent("Claude Code", pane: "a"))
+        let owner = store.selectedTab
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.process != nil }
+        store.focus(store.tabs[0].focused)
+
+        #expect(store.closeFocusedTab())
+        try await eventually { store.tabs.isEmpty }
+        #expect(store.terminalPanels.terminals[id] == nil)
+    }
+
+    @Test func commandWClosesAFocusedTerminalOnTheBoard() async throws {
+        let herdr = HerdrPanelHerdr()
+        let store = makeStore(herdr)
+        store.perform(.toggle)
+        let id = try #require(store.terminalPanels.terminals(of: HerdrStore.boardID).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.process != nil }
+
+        #expect(store.closeFocusedTab())
+        try await eventually { store.terminalPanels.terminals[id] == nil }
+        #expect(!store.closeFocusedTab())
+    }
+
     @Test func closingShowsProgressUntilTheCheckAnswers() async throws {
         let herdr = HerdrPanelHerdr()
         let store = makeStore(herdr)
