@@ -76,6 +76,7 @@ struct HerdrAgentDetails: View {
                     if !agent.isTerminal { viewSection }
                     kindRow
                     if !agent.isTerminal { metaRow("Status", agent.status.title) }
+                    if !agent.isTerminal { messageSection }
                     metaRow("Machine", agent.machineName)
                     if !agent.session.isEmpty {
                         metaRow("Session", agent.session, blur: hideAgents)
@@ -179,6 +180,88 @@ struct HerdrAgentDetails: View {
         } catch {
             agentCloseError = error.localizedDescription
         }
+    }
+
+    private var messageSection: some View {
+        let armed = store.messaging.armedHook(for: agent.id)
+        let last = store.messaging.lastHook(for: agent.id)
+        return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            Text("Message")
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            if let armed {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Label(
+                        armed.phase == .sending ? "Sending now" : "Sends when it finishes",
+                        systemImage: "paperplane.circle.fill"
+                    )
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.accent(dark))
+                    Text(armed.message)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                        .presenterTextBlur(hideAgents, fontSize: 12)
+                }
+            } else if let last {
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
+                    Image(
+                        systemName: last.phase == .sent
+                            ? "checkmark.circle.fill" : "exclamationmark.circle"
+                    )
+                    .foregroundStyle(last.phase == .sent ? Color.green : Color.orange)
+                    Text(lastSummary(last))
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button {
+                        Task { await store.messaging.remove(last.id) }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss the last message result")
+                }
+            }
+            HStack(spacing: UIScale.pt(6)) {
+                Button {
+                    store.messaging.compose(to: agent)
+                } label: {
+                    Label("Send", systemImage: "paperplane")
+                }
+                .buttonStyle(.edith(.toolbar))
+                .help("Type a message into this agent now")
+                if let armed {
+                    Button {
+                        Task { await store.messaging.remove(armed.id) }
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .disabled(armed.phase == .sending)
+                    .help("Cancel the message waiting for this agent to finish")
+                } else {
+                    Button {
+                        store.messaging.compose(to: agent, delivery: .whenFinished)
+                    } label: {
+                        Label("When Finished", systemImage: "paperplane.circle")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .help("Send a message the next time this agent finishes a turn")
+                }
+            }
+        }
+    }
+
+    private func lastSummary(_ hook: HerdrAgentHook) -> String {
+        let detail = hook.detail ?? hook.phase.rawValue.capitalized
+        guard let settled = hook.settledAt else { return detail }
+        let ago = settled.formatted(.relative(presentation: .named))
+        return "\(detail), \(ago)"
     }
 
     private var viewSection: some View {
