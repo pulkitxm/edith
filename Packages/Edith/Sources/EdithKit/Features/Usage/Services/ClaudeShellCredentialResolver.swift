@@ -201,9 +201,10 @@ public final class ClaudeCredentialSession {
     public init(
         persistedReader: @escaping PersistedReader = ClaudeCredentialStore.read,
         shellReader: @escaping ShellReader = {
-            if let environment = UserShellEnvironment.shared.current() {
-                return ClaudeShellCredentialResolver.resolution(
-                    token: environment["CLAUDE_CODE_OAUTH_TOKEN"])
+            if let token = UserShellEnvironment.shared.current()?["CLAUDE_CODE_OAUTH_TOKEN"],
+                !token.isEmpty
+            {
+                return ClaudeShellCredentialResolver.resolution(token: token)
             }
             return await ClaudeShellCredentialResolver().resolve()
         },

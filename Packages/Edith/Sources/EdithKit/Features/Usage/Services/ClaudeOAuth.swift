@@ -145,14 +145,11 @@ public enum ClaudeCredentialStore {
 
     private static let keychainService = "Claude Code-credentials"
     private static let keychainLock = NSLock()
-    private static let keychainReads = BoundedKeychainAccess<ClaudeCredentialDataLookup>()
-    private static let keychainWrites = BoundedKeychainAccess<Bool>()
 
     public static func read() async -> ClaudeCredentialLookup {
-        let keychain = await keychainReads.run(fallback: .timedOut) { keychainData() }
-        return read(
+        read(
             home: FileManager.default.homeDirectoryForCurrentUser,
-            keychainData: keychain,
+            keychainData: .missing,
             fileData: { credentialFileData(at: $0) })
     }
 
@@ -198,21 +195,8 @@ public enum ClaudeCredentialStore {
     }
 
     public static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
-        if source == .keychain {
-            guard data.count <= maximumCredentialBytes else {
-                throw ClaudeCredentialStoreError.keychainUpdateFailed
-            }
-            let updated = await keychainWrites.run(fallback: false) {
-                do {
-                    try updateKeychain(data)
-                    return true
-                } catch {
-                    return false
-                }
-            }
-            guard updated else { throw ClaudeCredentialStoreError.keychainUpdateFailed }
-        } else {
-            try await persist(data, source: source, keychainUpdater: { try updateKeychain($0) })
+        try await persist(data, source: source) { _ in
+            throw ClaudeCredentialStoreError.keychainUpdateFailed
         }
     }
 
