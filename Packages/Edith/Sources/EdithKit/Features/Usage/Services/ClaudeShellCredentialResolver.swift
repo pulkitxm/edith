@@ -201,10 +201,9 @@ public final class ClaudeCredentialSession {
     public init(
         persistedReader: @escaping PersistedReader = ClaudeCredentialStore.read,
         shellReader: @escaping ShellReader = {
-            if let token = UserShellEnvironment.shared.current()?["CLAUDE_CODE_OAUTH_TOKEN"],
-                !token.isEmpty
-            {
-                return ClaudeShellCredentialResolver.resolution(token: token)
+            if let environment = UserShellEnvironment.shared.current() {
+                return ClaudeShellCredentialResolver.resolution(
+                    token: environment["CLAUDE_CODE_OAUTH_TOKEN"])
             }
             return await ClaudeShellCredentialResolver().resolve()
         },
@@ -237,36 +236,36 @@ public final class ClaudeCredentialSession {
     }
 
     private func load() async -> ClaudeCredentialLookup {
-        let persistedFailure: ClaudeCredentialLookupFailure?
-        switch await persistedReader() {
+        let shellFailure: ClaudeCredentialLookupFailure?
+        switch await shellReader() {
         case .credential(let credential):
             if credential.accessToken != rejectedAccessToken {
                 return accept(credential)
             }
-            persistedFailure = .rejected
-        case .failure(let failure):
-            persistedFailure = failure
-        case .cancelled:
-            return .cancelled
-        }
-        switch await shellReader() {
-        case .credential(let credential):
-            guard credential.accessToken != rejectedAccessToken else {
-                return .failure(.rejected)
-            }
-            return accept(credential)
+            shellFailure = .rejected
         case .cancelled:
             return .cancelled
         case .missing:
-            return .failure(persistedFailure ?? .missing)
+            shellFailure = nil
         case .malformed:
-            return .failure(.malformed)
+            shellFailure = .malformed
         case .timedOut:
-            return .failure(.timedOut)
+            shellFailure = .timedOut
         case .oversized:
-            return .failure(.oversized)
+            shellFailure = .oversized
         case .failed:
-            return .failure(.failed)
+            shellFailure = .failed
+        }
+        switch await persistedReader() {
+        case .credential(let credential):
+            guard credential.accessToken != rejectedAccessToken else {
+                return .failure(shellFailure ?? .rejected)
+            }
+            return accept(credential)
+        case .failure(let failure):
+            return .failure(shellFailure ?? failure)
+        case .cancelled:
+            return shellFailure.map { .failure($0) } ?? .cancelled
         }
     }
 

@@ -139,10 +139,12 @@ public enum ClaudeCredentialStore {
     public typealias KeychainReader = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
     public typealias KeychainItemUpdater = (CFDictionary, CFDictionary) -> OSStatus
     public typealias KeychainUpdater = (Data) throws -> Void
+    public typealias KeychainInteractionGate = (Bool) -> Void
 
     public static let maximumCredentialBytes = 65_536
 
     private static let keychainService = "Claude Code-credentials"
+    private static let keychainLock = NSLock()
     private static let keychainReads = BoundedKeychainAccess<ClaudeCredentialDataLookup>()
     private static let keychainWrites = BoundedKeychainAccess<Bool>()
 
@@ -168,14 +170,12 @@ public enum ClaudeCredentialStore {
             keychainFailure = .malformed
         case .missing:
             keychainFailure = nil
-        case .cancelled:
-            return .cancelled
+        case .cancelled, .failed:
+            keychainFailure = .failed
         case .timedOut:
             keychainFailure = .timedOut
         case .oversized:
             keychainFailure = .oversized
-        case .failed:
-            keychainFailure = .failed
         }
         let url = home.appendingPathComponent(".claude/.credentials.json")
         switch fileData(url) {
@@ -242,26 +242,38 @@ public enum ClaudeCredentialStore {
         maximumOutputBytes: Int = maximumCredentialBytes,
         readItem: KeychainReader = SecItemCopyMatching
     ) -> ClaudeCredentialDataLookup {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: keychainService,
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne,
-            kSecUseAuthenticationContext: noninteractiveContext(),
-            kSecUseAuthenticationUI: kSecUseAuthenticationUISkip,
-        ]
-        var item: CFTypeRef?
-        let status = readItem(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            guard let data = item as? Data else { return .failed }
-            return data.count <= maximumOutputBytes ? .data(data) : .oversized
-        case errSecItemNotFound:
-            return .missing
-        case errSecUserCanceled:
-            return .cancelled
-        default:
-            return .failed
+        keychainData(
+            maximumOutputBytes: maximumOutputBytes, readItem: readItem,
+            setInteractionAllowed: setKeychainPromptAllowed)
+    }
+
+    public static func keychainData(
+        maximumOutputBytes: Int = maximumCredentialBytes,
+        readItem: KeychainReader,
+        setInteractionAllowed: KeychainInteractionGate
+    ) -> ClaudeCredentialDataLookup {
+        withoutKeychainPrompt(setInteractionAllowed: setInteractionAllowed) {
+            let query: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrService: keychainService,
+                kSecReturnData: true,
+                kSecMatchLimit: kSecMatchLimitOne,
+                kSecUseAuthenticationContext: noninteractiveContext(),
+                kSecUseAuthenticationUI: kSecUseAuthenticationUISkip,
+            ]
+            var item: CFTypeRef?
+            let status = readItem(query as CFDictionary, &item)
+            switch status {
+            case errSecSuccess:
+                guard let data = item as? Data else { return .failed }
+                return data.count <= maximumOutputBytes ? .data(data) : .oversized
+            case errSecItemNotFound:
+                return .missing
+            case errSecUserCanceled:
+                return .cancelled
+            default:
+                return .failed
+            }
         }
     }
 
@@ -289,16 +301,42 @@ public enum ClaudeCredentialStore {
     public static func updateKeychain(
         _ data: Data, updateItem: KeychainItemUpdater = SecItemUpdate
     ) throws {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrAccount: NSUserName(),
-            kSecAttrService: keychainService,
-            kSecUseAuthenticationContext: noninteractiveContext(),
-        ]
-        let attributes: [CFString: Any] = [kSecValueData: data]
-        guard updateItem(query as CFDictionary, attributes as CFDictionary) == errSecSuccess else {
-            throw ClaudeCredentialStoreError.keychainUpdateFailed
+        try updateKeychain(
+            data, updateItem: updateItem, setInteractionAllowed: setKeychainPromptAllowed)
+    }
+
+    public static func updateKeychain(
+        _ data: Data,
+        updateItem: KeychainItemUpdater,
+        setInteractionAllowed: KeychainInteractionGate
+    ) throws {
+        try withoutKeychainPrompt(setInteractionAllowed: setInteractionAllowed) {
+            let query: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrAccount: NSUserName(),
+                kSecAttrService: keychainService,
+                kSecUseAuthenticationContext: noninteractiveContext(),
+            ]
+            let attributes: [CFString: Any] = [kSecValueData: data]
+            guard updateItem(query as CFDictionary, attributes as CFDictionary) == errSecSuccess
+            else {
+                throw ClaudeCredentialStoreError.keychainUpdateFailed
+            }
         }
+    }
+
+    private static func withoutKeychainPrompt<T>(
+        setInteractionAllowed: KeychainInteractionGate, _ body: () throws -> T
+    ) rethrows -> T {
+        keychainLock.lock()
+        defer { keychainLock.unlock() }
+        setInteractionAllowed(false)
+        defer { setInteractionAllowed(true) }
+        return try body()
+    }
+
+    private static func setKeychainPromptAllowed(_ allowed: Bool) {
+        SecKeychainSetUserInteractionAllowed(allowed)
     }
 
     private static func noninteractiveContext() -> LAContext {

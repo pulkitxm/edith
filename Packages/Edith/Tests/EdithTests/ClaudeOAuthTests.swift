@@ -457,18 +457,37 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(fallback.credential?.accessToken == "file-token")
     }
 
-    @Test func persistedCredentialsPrecedeTheShell() async throws {
+    @Test func oauthTokenPrecedesPersistedCredentials() async throws {
         let persisted = try #require(
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
+        var persistedReads = 0
         let shell = ClaudeShellCredentialQueue(tokens: ["shell-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: {
+                persistedReads += 1
+                return .credential(persisted)
+            },
+            shellReader: { shell.next() })
+        let credential = (await session.current()).credential
+        #expect(credential?.accessToken == "shell-token")
+        #expect(credential?.source == .shell)
+        #expect(shell.calls == 1)
+        #expect(persistedReads == 0)
+    }
+
+    @Test func missingOAuthTokenUsesPersistedCredentials() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let shell = ClaudeShellCredentialQueue(tokens: [])
         let session = ClaudeCredentialSession(
             persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
         let credential = (await session.current()).credential
         #expect(credential?.accessToken == "persisted-token")
         #expect(credential?.source == .keychain)
-        #expect(shell.calls == 0)
+        #expect(shell.calls == 1)
     }
 
     @Test func shellCredentialIsResolvedOnceAndCachedOnlyInMemory() async {
@@ -500,51 +519,55 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(shell.calls == 2)
     }
 
-    @Test func rejectedPersistedCredentialFallsBackToTheShellOnce() async throws {
+    @Test func rejectedOAuthTokenFallsBackToPersistedCredential() async throws {
         let persisted = try #require(
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
-        let shell = ClaudeShellCredentialQueue(tokens: ["rotated-shell-token"])
+        let shell = ClaudeShellCredentialQueue(tokens: [
+            "rejected-token", "rejected-token", "rejected-token",
+        ])
         let session = ClaudeCredentialSession(
             persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
 
         let initial = (await session.current()).credential
         let recovered =
-            (await session.reload(rejectingAccessToken: "persisted-token")).credential
+            (await session.reload(rejectingAccessToken: "rejected-token")).credential
         let cached = (await session.current()).credential
 
-        #expect(initial?.accessToken == "persisted-token")
-        #expect(recovered?.accessToken == "rotated-shell-token")
-        #expect(recovered?.source == .shell)
-        #expect(cached?.accessToken == "rotated-shell-token")
-        #expect(shell.calls == 1)
+        #expect(initial?.accessToken == "rejected-token")
+        #expect(initial?.source == .shell)
+        #expect(recovered?.accessToken == "persisted-token")
+        #expect(recovered?.source == .keychain)
+        #expect(cached?.accessToken == "persisted-token")
+        #expect(shell.calls == 2)
     }
 
-    @Test func rotatedPersistedCredentialStillPrecedesTheShellOnRetry() async throws {
-        let original = try #require(
-            ClaudeOAuthCredential.decode(
-                credentialData("persisted-token"), source: .keychain))
+    @Test func rotatedPersistedCredentialIsUsedWhenTheOAuthTokenStaysRejected() async throws {
         let rotated = try #require(
             ClaudeOAuthCredential.decode(
                 credentialData("rotated-persisted-token"), source: .keychain))
         var reads = 0
-        let shell = ClaudeShellCredentialQueue(tokens: ["shell-token"])
+        let shell = ClaudeShellCredentialQueue(tokens: [
+            "rejected-token", "rejected-token", "rejected-token",
+        ])
         let session = ClaudeCredentialSession(
             persistedReader: {
                 reads += 1
-                return .credential(reads == 1 ? original : rotated)
+                return .credential(rotated)
             },
             shellReader: { shell.next() })
 
         let initial = (await session.current()).credential
         let recovered =
-            (await session.reload(rejectingAccessToken: "persisted-token")).credential
+            (await session.reload(rejectingAccessToken: "rejected-token")).credential
 
-        #expect(initial?.accessToken == "persisted-token")
+        #expect(initial?.accessToken == "rejected-token")
+        #expect(initial?.source == .shell)
         #expect(recovered?.accessToken == "rotated-persisted-token")
         #expect(recovered?.source == .keychain)
-        #expect(shell.calls == 0)
+        #expect(reads == 1)
+        #expect(shell.calls == 2)
     }
 
     @Test func rejectedCredentialStaysRejectedAcrossLoads() async throws {
@@ -567,7 +590,9 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         let persisted = try #require(
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
-        let shell = ClaudeShellCredentialQueue(tokens: ["persisted-token", "persisted-token"])
+        let shell = ClaudeShellCredentialQueue(tokens: [
+            "persisted-token", "persisted-token", "persisted-token",
+        ])
         let session = ClaudeCredentialSession(
             persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
@@ -578,7 +603,7 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
 
         #expect(rejected.failure == .rejected)
         #expect(repeated.failure == .rejected)
-        #expect(shell.calls == 2)
+        #expect(shell.calls == 3)
     }
 
     @Test func rotatedShellTokenClearsTheRejection() async throws {
@@ -586,7 +611,7 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
         let shell = ClaudeShellCredentialQueue(tokens: [
-            "persisted-token", "rotated-shell-token",
+            "persisted-token", "persisted-token", "rotated-shell-token",
         ])
         let session = ClaudeCredentialSession(
             persistedReader: { .credential(persisted) },
@@ -600,7 +625,7 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(rejected.failure == .rejected)
         #expect(rotated?.accessToken == "rotated-shell-token")
         #expect(cached?.accessToken == "rotated-shell-token")
-        #expect(shell.calls == 2)
+        #expect(shell.calls == 3)
     }
 
     @Test func explicitStoreClearsTheRejection() async throws {
@@ -679,6 +704,18 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(ProcessInfo.processInfo.systemUptime - started < 5)
     }
 
+    @Test func deniedKeychainFallsBackToTheCredentialsFile() throws {
+        let home = URL(fileURLWithPath: "/tmp/credential-home")
+        let file = try credentialData("file-token")
+        let credential = ClaudeCredentialStore.read(
+            home: home, keychainData: .cancelled, fileData: { _ in .data(file) }
+        ).credential
+        let missing = ClaudeCredentialStore.read(
+            home: home, keychainData: .cancelled, fileData: { _ in .missing })
+        #expect(credential?.accessToken == "file-token")
+        #expect(missing.failure == .failed)
+    }
+
     @Test func keychainReadUsesNoninteractiveNativeLookup() throws {
         let credential = try credentialData("keychain-token")
         var capturedQuery: [CFString: Any] = [:]
@@ -701,6 +738,18 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         let context = try #require(
             capturedQuery[kSecUseAuthenticationContext] as? LAContext)
         #expect(context.interactionNotAllowed)
+    }
+
+    @Test func keychainReadSuppressesTheLoginKeychainPrompt() {
+        var events: [String] = []
+        let result = ClaudeCredentialStore.keychainData(
+            readItem: { _, _ in
+                events.append("read")
+                return errSecAuthFailed
+            },
+            setInteractionAllowed: { events.append($0 ? "allow" : "block") })
+        #expect(result == .failed)
+        #expect(events == ["block", "read", "allow"])
     }
 
     @Test func keychainReadPreservesOperationalFailures() {
@@ -731,13 +780,17 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         var capturedQuery: [CFString: Any] = [:]
         var capturedAttributes: [CFString: Any] = [:]
 
+        var events: [String] = []
         try ClaudeCredentialStore.updateKeychain(
             credential,
             updateItem: { query, attributes in
+                events.append("write")
                 capturedQuery = query as? [CFString: Any] ?? [:]
                 capturedAttributes = attributes as? [CFString: Any] ?? [:]
                 return errSecSuccess
-            })
+            },
+            setInteractionAllowed: { events.append($0 ? "allow" : "block") })
+        #expect(events == ["block", "write", "allow"])
 
         let context = try #require(
             capturedQuery[kSecUseAuthenticationContext] as? LAContext)
