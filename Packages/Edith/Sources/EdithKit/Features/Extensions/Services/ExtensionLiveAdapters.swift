@@ -73,7 +73,7 @@ public enum ExtensionLiveAdapters {
         "keystrokeHighlight",
         "focusDim", "windowSweaters", "presenter", "videoEditor", "music", "downloads",
         "notchShelf",
-        "audioMixer", "notchBrowser", "calendar", "virtualCamera",
+        "audioMixer", "calendar", "virtualCamera",
         "attention", "seoAudit",
     ]
 
@@ -118,11 +118,6 @@ public enum ExtensionLiveAdapters {
                 executable: executableNamed("yt-dlp"), transcoder: executableNamed("ffmpeg"),
                 javascriptRuntime: executableNamed("deno"))
         case "audioMixer": audioMixerReadiness(defaults: defaults)
-        case "notchBrowser":
-            notchBrowserReadiness(
-                defaults: defaults,
-                chromeInstalled: NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: "com.google.Chrome") != nil)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
@@ -302,18 +297,6 @@ public enum ExtensionLiveAdapters {
                 ? nil : "Application audio mixing requires macOS 14.4 or later.",
             readyDetail: "The per-app mixer is available in the notch shelf.",
             setupDetail: "Turn on Notch Shelf to reach the mixer."
-        ).readiness
-    }
-
-    static func notchBrowserReadiness(defaults: UserDefaults, chromeInstalled: Bool)
-        -> ExtensionAdapterReadiness
-    {
-        ExtensionAdapterFacts(
-            installed: chromeInstalled,
-            configured: defaults.bool(forKey: AppStorageKeys.Notch.shelfEnabled),
-            readyDetail: "The browser tab is available in the notch shelf.",
-            uninstalledDetail: "Install Google Chrome to attach a profile.",
-            setupDetail: "Turn on Notch Shelf to reach the browser."
         ).readiness
     }
 
