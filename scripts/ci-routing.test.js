@@ -148,7 +148,7 @@ test("pull requests build the release app that main releases rebuild", () => {
     ciWorkflow.indexOf("\n  swift-build:"),
     ciWorkflow.indexOf("\n  swift-test:"),
   );
-  expect(swiftBuild).toContain("github.event_name != 'push'");
+  expect(swiftBuild).toContain("github.event_name == 'pull_request'");
   expect(swiftBuild).toContain("run: ./build.sh --no-open --release");
   expect(swiftBuild).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
   const releaseBuild = ciWorkflow.slice(
