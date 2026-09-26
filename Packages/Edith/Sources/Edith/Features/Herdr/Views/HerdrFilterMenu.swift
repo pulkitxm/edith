@@ -352,9 +352,7 @@ private struct HerdrFilterMenu: View {
                     HerdrKindMark(kind: kind, size: UIScale.pt(13))
                 }
                 Text(row.title)
-                    .font(
-                        .system(size: UIScale.pt(12.5), weight: highlighted ? .semibold : .medium)
-                    )
+                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .presenterTextBlur(hideAgents && space, fontSize: 12.5)
@@ -372,7 +370,7 @@ private struct HerdrFilterMenu: View {
         .buttonStyle(.edith(.borderless))
         .accessibilityLabel(accessibleTitle(row, space: space))
         .accessibilityAddTraits(row.selected && row.toggles ? .isSelected : [])
-        .help(help(for: row))
+        .modifier(HerdrFilterRowHint(text: rowHint(row)))
         .id(row.id)
         .onHover { inside in
             if inside { highlight = index }
@@ -416,23 +414,9 @@ private struct HerdrFilterMenu: View {
         return "Open space in a new window"
     }
 
-    private func help(for row: HerdrSessionFilterRow) -> String {
-        switch row.action {
-        case .machine:
-            "Show sessions on \(row.title)"
-        case .agent("all"):
-            "Show every agent"
-        case .agent:
-            "Click to add or remove. Command-click to show only this agent."
-        case .grouping:
-            "Group the agent list by space"
-        case .space:
-            hideAgents ? "Open space in a new window" : "Open \(row.title) in a new window"
-        case .launch:
-            "Edit the launch command, model, effort and fast mode for each agent kind"
-        case .clear:
-            "Clear machine, agent, and space grouping filters"
-        }
+    private func rowHint(_ row: HerdrSessionFilterRow) -> String {
+        guard case .agent(let id) = row.action, id != "all" else { return "" }
+        return "Command-click to show only this agent."
     }
 
     private func activate(_ row: HerdrSessionFilterRow) {
@@ -454,6 +438,18 @@ private struct HerdrFilterMenu: View {
             onEditLaunch()
         case .clear:
             store.clearSessionFilters()
+        }
+    }
+}
+
+private struct HerdrFilterRowHint: ViewModifier {
+    var text: String
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if text.isEmpty {
+            content
+        } else {
+            content.accessibilityHint(text)
         }
     }
 }
