@@ -56,11 +56,20 @@ macOS installs camera extensions only from an app that meets three conditions:
 3. You approve the extension once, in System Settings under General, Login Items
    & Extensions, Camera Extensions.
 
-To build a copy that can install it, create two provisioning profiles on the
-Apple Developer site for the team that signs Edith. The first is for the app
-identifier `com.pulkit.edith` with the System Extension capability. The second is
-for `com.pulkit.edith.camera` with the App Groups capability and the group
-`<team id>.com.pulkit.edith.camera`. Then point the build at both:
+The quickest way to get the profiles is to let Xcode make them. Sign in to Xcode,
+Settings, Accounts with the Apple ID of the team that signs Edith, then run:
+
+```sh
+make camera-profiles
+make install
+```
+
+`make camera-profiles` builds a throwaway project with automatic signing, so Xcode
+registers this Mac, creates the `com.pulkit.edith` identifier with the System
+Extension capability and `com.pulkit.edith.camera` with its app group, and
+downloads a development profile for each. `make install` finds them in Xcode's
+profile folder on its own. You can also point the build at profiles you made on
+the Apple Developer site:
 
 ```sh
 EDITH_APP_PROVISIONING_PROFILE=~/Profiles/Edith.provisionprofile \
@@ -68,9 +77,12 @@ EDITH_CAMERA_PROVISIONING_PROFILE=~/Profiles/EdithCamera.provisionprofile \
 ./build.sh --release --install
 ```
 
-`build.sh` checks that each profile matches its identifier, team, entitlement and
-expiry date before it embeds them. Only then does it sign the app with the
-install entitlement. Without the profiles the build still works: the preview,
+`build.sh` embeds a profile only when it matches its identifier and team, grants
+the entitlement, has not expired, includes this Mac and includes the certificate
+Edith is signed with, because macOS refuses to open an app whose profile does
+not. Only then does it sign the app with the install entitlement. It looks for
+profiles on its own only for `--install` builds, so a release build never ships
+a development profile. Without the profiles the build still works: the preview,
 framing and scenes all run, and the Output tab explains what is missing.
 
 Open **Output** on the Virtual Camera page and choose **Install Edith Camera**,

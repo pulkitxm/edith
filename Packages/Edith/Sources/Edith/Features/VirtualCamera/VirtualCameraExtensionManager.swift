@@ -40,7 +40,7 @@ enum VirtualCameraExtensionPhase: Equatable {
         case .missingFromBundle:
             "This copy of Edith was built without the camera extension. Rebuild it with build.sh."
         case .needsSigning:
-            "macOS only installs camera extensions from apps signed with the System Extension entitlement. Build Edith with EDITH_APP_PROVISIONING_PROFILE and EDITH_CAMERA_PROVISIONING_PROFILE, as described in the Virtual Camera guide. The preview, framing and scenes work in the meantime."
+            "macOS only installs camera extensions from a copy of Edith signed with a provisioning profile. Sign in to Xcode with the Apple Developer account that signs Edith, run make camera-profiles, then make install. The preview, framing and scenes work in the meantime."
         case .needsApplicationsFolder:
             "macOS installs camera extensions only from apps in the Applications folder."
         case .notInstalled:

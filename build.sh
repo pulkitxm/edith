@@ -299,11 +299,18 @@ done
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 
+if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
+  : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
+    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install "$SIGN_IDENTITY")}"
+  : "${EDITH_CAMERA_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
+    "$CAMERA_IDENTIFIER" "$TEAM_ID" "" "$SIGN_IDENTITY")}"
+fi
+
 CAMERA_ENTITLEMENTS="$DERIVED/EdithCamera.entitlements"
 python3 scripts/camera_extension.py entitlements "$CAMERA_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
 if [ -n "${EDITH_CAMERA_PROVISIONING_PROFILE:-}" ]; then
   python3 scripts/camera_extension.py profile "$EDITH_CAMERA_PROVISIONING_PROFILE" \
-    "$CAMERA_IDENTIFIER" "$TEAM_ID" ""
+    "$CAMERA_IDENTIFIER" "$TEAM_ID" "" "$SIGN_IDENTITY"
   cp "$EDITH_CAMERA_PROVISIONING_PROFILE" "$CAMERA/Contents/embedded.provisionprofile"
 fi
 CAMERA_RUNTIME=""
@@ -314,7 +321,7 @@ APP_ENTITLEMENTS=""
 if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then
   [ -n "$TEAM_ID" ] || { echo "EDITH_APP_PROVISIONING_PROFILE needs a team signing identity" >&2; exit 1; }
   python3 scripts/camera_extension.py profile "$EDITH_APP_PROVISIONING_PROFILE" \
-    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install
+    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install "$SIGN_IDENTITY"
   cp "$EDITH_APP_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
   APP_ENTITLEMENTS="$DERIVED/EdithApp.entitlements"
   python3 scripts/camera_extension.py app-entitlements "$APP_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
