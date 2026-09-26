@@ -217,6 +217,9 @@ public enum UserOperationCatalog {
         registrations += HerdrLaunchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += HerdrMessageOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += DocsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1561,6 +1564,22 @@ private extension HerdrLaunchOperation {
             userInterface(
                 "Agent launch settings", "choose the model, effort or fast mode for a launch",
                 ["Codex", "--model", "gpt-6-sol", "--effort", "high", "--fast", "on"])
+        }
+    }
+}
+
+private extension HerdrMessageOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .send:
+            userInterface(
+                "Herdr board", "send a message to one agent or every working or stopped agent",
+                ["w3:p1N", "run the tests again"])
+        case .hooks:
+            userInterface("Herdr session tab", "see the message waiting for an agent to finish")
+        case .removeHook:
+            userInterface(
+                "Herdr session tab", "cancel the message waiting for an agent", ["1F0C2A9B"])
         }
     }
 }

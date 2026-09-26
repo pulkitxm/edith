@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum HerdrPromptOutcome: Codable, Equatable, Sendable {
@@ -8,6 +9,16 @@ public enum HerdrPromptOutcome: Codable, Equatable, Sendable {
     case failed(String)
 
     public var delivered: Bool { self == .submitted }
+
+    public var code: String {
+        switch self {
+        case .submitted: "submitted"
+        case .blocked: "blocked"
+        case .notReady: "not_ready"
+        case .gone: "gone"
+        case .failed: "failed"
+        }
+    }
 
     public var summary: String {
         switch self {
@@ -211,5 +222,35 @@ public struct HerdrHookClient: Sendable {
         let data = try await client.performInternalAsync(
             operation, payload: payload, timeout: Self.timeout)
         return try AgentPayload.decode(HerdrHooksSnapshot.self, from: data)
+    }
+}
+
+public enum HerdrMessageOperation: String, CaseIterable, Sendable {
+    case send
+    case hooks
+    case removeHook
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .send:
+            descriptor(
+                "herdr.send", "Type a message into one agent or every working or stopped agent.",
+                cli: ["herdr", "send"], effect: .write)
+        case .hooks:
+            descriptor(
+                "herdr.hooks.list", "List messages waiting for an agent to finish.",
+                cli: ["herdr", "hooks", "ls"], effect: .read)
+        case .removeHook:
+            descriptor(
+                "herdr.hooks.remove", "Cancel a waiting message or forget a finished one.",
+                cli: ["herdr", "hooks", "rm"], effect: .write)
+        }
+    }
+
+    private func descriptor(
+        _ id: String, _ summary: String, cli: [String], effect: UserOperationEffect
+    ) -> UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: id), summary: summary, cli: cli, effect: effect)
     }
 }
