@@ -1,2 +1,3 @@
 6d8b88e20931916362c950b8dfadbcd10ddf879f:Packages/Edith/Tests/EdithTests/JevTests.swift:curl-auth-header:185
 c008f7391facae0ac852f8c1cc84247085e0d25a:apps/macos/Sources/EdithKit/Core/DeviceIdentity.swift:generic-api-key:37
+0c76e41ddacb8e839eff00f38035cfb4262e10fa:scripts/signing-keychain.sh:generic-api-key:3
