@@ -48,6 +48,7 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var state: VirtualCameraState
     @Published private(set) var snapshot: VirtualCameraSnapshot?
     @Published private(set) var helperReachable = true
+    @Published private(set) var statusPending = false
     @Published private(set) var sources: [VirtualCameraSource] = []
     @Published private(set) var previewStatistics = VirtualCameraPipeline.Statistics()
     @Published private(set) var cameraAccess: AVAuthorizationStatus
@@ -75,6 +76,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private var statusTask: Task<Void, Never>?
     private var statsTimer: Timer?
     private var visible = false
+    private var ticks = 0
     private var thumbnailSource: CGImage?
     private static let thumbnailRenderer = VirtualCameraRenderer()
 
@@ -117,9 +119,12 @@ final class VirtualCameraPageModel: ObservableObject {
         sources.first { $0.id == state.sourceID } ?? sources.first
     }
 
+    static let statusRefreshTicks = 5
+
     var statusHeadline: String {
-        guard helperReachable, let snapshot else { return "Edith Bar is not answering" }
-        return snapshot.headline
+        if let snapshot, helperReachable { return snapshot.headline }
+        if statusPending || helperReachable { return "Checking Edith Bar" }
+        return "Edith Bar is not answering"
     }
 
     var isLive: Bool { snapshot?.live == true }
@@ -173,6 +178,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     private func tick() {
+        ticks += 1
+        if ticks % Self.statusRefreshTicks == 0 || (!helperReachable && !statusPending) {
+            requestStatus()
+        }
         previewStatistics = pipeline.statistics
         if tab == .look, let reference = pipeline.reference, reference !== thumbnailSource {
             updateLookThumbnails(from: reference)
@@ -201,14 +210,17 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func requestStatus() {
         statusTask?.cancel()
+        statusPending = true
         statusTask = Task { [weak self] in
             do {
                 let snapshot = try await VirtualCameraOperationExecution.request(
                     .status, timeout: .seconds(3))
                 guard !Task.isCancelled else { return }
+                self?.statusPending = false
                 self?.receive(snapshot)
             } catch {
                 guard !Task.isCancelled else { return }
+                self?.statusPending = false
                 self?.helperReachable = false
             }
         }

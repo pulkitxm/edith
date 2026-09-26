@@ -256,10 +256,7 @@ public enum VirtualCameraOperationExecution {
             throw VirtualCameraOperationFailure("The camera request could not be encoded.")
         }
         let reply = VirtualCameraReply()
-        let token = DistributedNotificationCenter.default().addObserver(
-            forName: IPC.Name.virtualCameraActionResult, object: nil, queue: nil
-        ) { notification in
-            let info = notification.userInfo ?? [:]
+        let token = IPC.observe(IPC.Name.virtualCameraActionResult) { info in
             guard info[VirtualCameraIPC.requestIDKey] as? String == runtime.requestID else {
                 return
             }
@@ -271,7 +268,7 @@ public enum VirtualCameraOperationExecution {
             }
             reply.finish(flattened)
         }
-        defer { DistributedNotificationCenter.default().removeObserver(token) }
+        defer { IPC.stopObserving(token) }
         IPC.post(IPC.Name.requestVirtualCameraAction, userInfo: payload)
         guard let response = await reply.wait(timeout: timeout) else {
             if Task.isCancelled { throw CancellationError() }

@@ -292,6 +292,23 @@ enum VirtualCameraFixtures {
         engine.shutdown()
     }
 
+    @Test func windowRequestsRoundTripOverDistributedNotifications() async throws {
+        let token = IPC.observe(IPC.Name.requestVirtualCameraAction) { info in
+            let reply = MainActor.assumeIsolated {
+                VirtualCameraActionBridge.reply(to: info, engine: nil)
+            }
+            guard let reply else { return }
+            IPC.post(IPC.Name.virtualCameraActionResult, userInfo: reply)
+        }
+        defer { IPC.stopObserving(token) }
+        let snapshot = try await VirtualCameraOperationExecution.request(
+            .status, timeout: .seconds(5))
+        #expect(snapshot.helperRunning)
+        await #expect(throws: VirtualCameraOperationFailure.self) {
+            try await VirtualCameraOperationExecution.request(.reset, timeout: .seconds(5))
+        }
+    }
+
     @Test func theEngineWithoutTheExtensionStaysIdle() {
         let engine = Self.engine()
         engine.refreshExtension()
