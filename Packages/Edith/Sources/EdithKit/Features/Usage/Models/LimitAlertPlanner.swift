@@ -31,7 +31,10 @@ public struct LimitAlertAssessment: Equatable, Sendable {
 
     public var timeLeft: TimeInterval? { window.resetsAt.map { $0.timeIntervalSince(now) } }
     public var windowStart: Date? {
-        window.resetsAt.map { $0.addingTimeInterval(-target.duration) }
+        window.resetsAt.map {
+            $0.addingTimeInterval(
+                -target.slot.pacingDuration(for: target.provider, period: window.period))
+        }
     }
 
     public var outlook: LimitOutlook? {
@@ -72,7 +75,10 @@ public enum LimitAlertPlanner {
     public static func assess(
         _ target: LimitAlertTarget, window: LimitWindow, samples: [LimitAlertSample], now: Date
     ) -> LimitAlertAssessment {
-        let start = window.resetsAt.map { $0.addingTimeInterval(-target.duration) }
+        let start = window.resetsAt.map {
+            $0.addingTimeInterval(
+                -target.slot.pacingDuration(for: target.provider, period: window.period))
+        }
         let points = trail(samples, target: target, window: window, start: start, now: now)
         let burn: LimitBurn?
         if target.isWeekly {

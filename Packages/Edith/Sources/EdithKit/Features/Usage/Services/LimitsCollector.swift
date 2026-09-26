@@ -14,16 +14,18 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
     public let session: LimitWindow?
     public let week: LimitWindow?
     public let fable: LimitWindow?
+    public let grok: GrokAllowance?
     public let error: String?
 
     public init(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, error: String? = nil
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, error: String? = nil
     ) {
         self.provider = provider
         self.session = session
         self.week = week
         self.fable = fable
+        self.grok = grok
         self.error = error
     }
 
@@ -58,7 +60,8 @@ public enum LimitsCollector {
             defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true
         let codex = defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true
         let cursor = defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true
-        return UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor)
+        let grok = defaults.object(forKey: AppStorageKeys.Limits.grokEnabled) as? Bool ?? true
+        return UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor, grok: grok)
     }
 
     public static func providerEnabled(
@@ -69,6 +72,7 @@ public enum LimitsCollector {
         case .claude: key = AppStorageKeys.Limits.claudeEnabled
         case .codex: key = AppStorageKeys.Limits.codexEnabled
         case .cursor: key = AppStorageKeys.Limits.cursorEnabled
+        case .grok: key = AppStorageKeys.Limits.grokEnabled
         }
         return defaults.object(forKey: key) as? Bool ?? true
     }
@@ -93,6 +97,8 @@ public enum LimitsCollector {
                 return (await fetchCodex(), nil)
             case .cursor:
                 return await fetchCursor()
+            case .grok:
+                return await fetchGrok()
             }
         }
     }
@@ -332,12 +338,112 @@ public enum LimitsCollector {
         }
     }
 
+    private static func fetchGrok() async -> (LimitsProviderSnapshot, Date?) {
+        guard var material = GrokCredentialStore.load() else {
+            return (
+                LimitsProviderSnapshot(
+                    provider: .grok, session: nil, week: nil, error: "Grok token not found"),
+                nil
+            )
+        }
+        var refreshed = false
+        if GrokCredentialStore.expiresSoon(material.expiresAt), material.refreshToken != nil {
+            do {
+                material = try await refreshGrok(material)
+                refreshed = true
+            } catch GrokLimitsReader.Failure.unauthorized {
+                return (
+                    LimitsProviderSnapshot(
+                        provider: .grok, session: nil, week: nil,
+                        error: GrokLimitsReader.Failure.unauthorized.localizedDescription),
+                    nil
+                )
+            } catch {}
+        }
+        do {
+            let limits = try await GrokLimitsReader.fetch(
+                token: material.accessToken, tier: GrokCredentialStore.tierDisplay())
+            try persistHistory(
+                provider: .grok, session: nil, week: limits.week, grok: limits.grok)
+            return (
+                LimitsProviderSnapshot(
+                    provider: .grok, session: nil, week: limits.week, grok: limits.grok),
+                nil
+            )
+        } catch GrokLimitsReader.Failure.unauthorized
+            where !refreshed && material.refreshToken != nil
+        {
+            do {
+                let latest = try await refreshGrok(material)
+                let limits = try await GrokLimitsReader.fetch(
+                    token: latest.accessToken, tier: GrokCredentialStore.tierDisplay())
+                try persistHistory(
+                    provider: .grok, session: nil, week: limits.week, grok: limits.grok)
+                return (
+                    LimitsProviderSnapshot(
+                        provider: .grok, session: nil, week: limits.week, grok: limits.grok),
+                    nil
+                )
+            } catch {
+                return grokFailure(error)
+            }
+        } catch {
+            return grokFailure(error)
+        }
+    }
+
+    private static func refreshGrok(
+        _ material: GrokCredentialStore.Material
+    ) async throws -> GrokCredentialStore.Material {
+        guard let refreshToken = material.refreshToken else {
+            throw GrokLimitsReader.Failure.unauthorized
+        }
+        let refreshed = try await GrokLimitsReader.refresh(
+            refreshToken: refreshToken, clientID: material.clientID)
+        var next = material
+        next.accessToken = refreshed.accessToken
+        if let replacement = refreshed.refreshToken { next.refreshToken = replacement }
+        next.expiresAt = refreshed.expiresAt
+        try? GrokCredentialStore.save(next)
+        return next
+    }
+
+    private static func grokFailure(_ error: Error) -> (LimitsProviderSnapshot, Date?) {
+        var retryNotBefore: Date?
+        let message: String
+        switch error {
+        case GrokLimitsReader.Failure.unauthorized:
+            message = GrokLimitsReader.Failure.unauthorized.localizedDescription
+        case GrokLimitsReader.Failure.rateLimited(let after):
+            let deadline = LimitsRefreshGate.backoffDeadline(retryAfter: after, now: Date())
+            retryNotBefore = deadline
+            message =
+                "Rate limited by Grok - retrying at \(deadline.formatted(date: .omitted, time: .shortened))"
+        case GrokLimitsReader.Failure.unavailable:
+            message = GrokLimitsReader.Failure.unavailable.localizedDescription
+        case GrokLimitsReader.Failure.malformed:
+            message = GrokLimitsReader.Failure.malformed.localizedDescription
+        case LimitsHistoryPersistenceError.failed:
+            message = error.localizedDescription
+        default:
+            message = "Offline"
+        }
+        logger.error("\(message, privacy: .public)")
+        return (
+            LimitsProviderSnapshot(
+                provider: .grok, session: nil, week: nil, error: message), retryNotBefore
+        )
+    }
+
     private static func persistHistory(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil
     ) throws {
         var history = LimitsHistory()
-        guard history.append(provider: provider, session: session, week: week, fable: fable) else {
+        guard
+            history.append(
+                provider: provider, session: session, week: week, fable: fable, grok: grok)
+        else {
             throw LimitsHistoryPersistenceError.failed
         }
     }
@@ -445,9 +551,11 @@ private enum LimitsHistoryPersistenceError: LocalizedError {
 }
 
 public enum UsageLimitProviders {
-    public static func enabled(claude: Bool, codex: Bool, cursor: Bool) -> [LimitProvider] {
+    public static func enabled(claude: Bool, codex: Bool, cursor: Bool, grok: Bool)
+        -> [LimitProvider]
+    {
         [
-            (LimitProvider.claude, claude), (.codex, codex), (.cursor, cursor),
+            (LimitProvider.claude, claude), (.codex, codex), (.cursor, cursor), (.grok, grok),
         ].compactMap { provider, enabled in
             enabled ? provider : nil
         }

@@ -683,11 +683,21 @@ public enum UsageAnalysis {
 }
 
 public enum LimitsReport {
-    public static func providers() -> [(LimitProvider, Date, LimitWindow?, LimitWindow?)] {
+    public struct Observation: Sendable {
+        public let provider: LimitProvider
+        public let observedAt: Date
+        public let session: LimitWindow?
+        public let week: LimitWindow?
+        public let grok: GrokAllowance?
+    }
+
+    public static func providers() -> [Observation] {
         let latest = LimitsHistory.latestProviders()
         return LimitProvider.allCases.compactMap { provider in
             guard let value = latest[provider] else { return nil }
-            return (provider, value.date, value.session, value.week)
+            return Observation(
+                provider: provider, observedAt: value.date, session: value.session,
+                week: value.week, grok: value.grok)
         }
     }
 
@@ -720,15 +730,25 @@ public enum LimitsReport {
         ])
     }
 
-    public static func json(
-        provider: LimitProvider, observedAt: Date, session: LimitWindow?, week: LimitWindow?
-    ) -> JSONValue {
-        .object([
-            "provider": .string(provider.rawValue),
-            "label": .string(provider.label),
-            "observedAt": .date(observedAt),
-            "session": window(session),
-            "weekly": window(week),
-        ])
+    public static func json(_ observation: Observation) -> JSONValue {
+        var fields: [String: JSONValue] = [
+            "provider": .string(observation.provider.rawValue),
+            "label": .string(observation.provider.label),
+            "observedAt": .date(observation.observedAt),
+            "session": window(observation.session),
+            "weekly": window(observation.week),
+        ]
+        if let allowance = observation.grok {
+            fields["period"] = .string(allowance.period)
+            fields["tier"] = .optional(allowance.tier)
+            fields["products"] = .array(
+                allowance.products.map {
+                    .object(["name": .string($0.name), "percent": .double($0.percent)])
+                })
+            fields["onDemandUsed"] = .double(allowance.onDemandUsed)
+            fields["onDemandCap"] = .double(allowance.onDemandCap)
+            fields["prepaidBalance"] = .double(allowance.prepaidBalance)
+        }
+        return .object(fields)
     }
 }

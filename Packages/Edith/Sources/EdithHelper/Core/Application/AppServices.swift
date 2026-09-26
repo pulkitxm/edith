@@ -498,6 +498,7 @@ final class AppServices {
                 claudeEnabled: preferenceOnByDefault(AppStorageKeys.Limits.claudeEnabled),
                 codexEnabled: preferenceOnByDefault(AppStorageKeys.Limits.codexEnabled),
                 cursorEnabled: preferenceOnByDefault(AppStorageKeys.Limits.cursorEnabled),
+                grokEnabled: preferenceOnByDefault(AppStorageKeys.Limits.grokEnabled),
                 menuBarEnabled: preferenceOnByDefault(AppStorageKeys.Limits.inMenuBar),
                 alertsEnabled: defaults.bool(forKey: AppStorageKeys.Notify.master),
                 selectedProvider: LimitProvider(

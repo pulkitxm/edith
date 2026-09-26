@@ -71,6 +71,7 @@ const WALKC = extractBlock("WALKC");
 const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
 const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
+const WALKG = extractBlock("WALKG");
 const DEDUP = extractBlock("DEDUP");
 const RECONCILE = extractBlock("RECONCILE");
 const DETAILS = extractBlock("DETAILS");
@@ -2803,10 +2804,74 @@ describe("collector configuration", () => {
       qwen: "Qwen",
       openclaw: "OpenClaw",
       cursor: "Cursor",
+      grok: "Grok",
     };
     for (const [source, label] of Object.entries(labels)) {
       expect(script).toContain(`${source}) echo "${label}" ;;`);
     }
+  });
+
+  test("reads Grok through the session collector and local turn logs", () => {
+    expect(script).toContain("codex|opencode|grok)");
+    expect(script).toContain(
+      "for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw grok; do",
+    );
+    expect(script).toContain("walk_grok");
+    expect(script).toContain('root="${GROK_HOME:-$HOME/.grok}/sessions"');
+    const [record] = jq(
+      WALKG,
+      JSON.stringify({
+        timestamp: 1_790_420_403,
+        params: {
+          sessionId: "sess-1",
+          update: {
+            sessionUpdate: "turn_completed",
+            usage: {
+              inputTokens: 1000,
+              outputTokens: 50,
+              reasoningTokens: 10,
+              cacheCreationTokens: 100,
+              cachedReadTokens: 400,
+              costUsdTicks: 10_000_000_000,
+              modelUsage: {
+                "grok-4.7-build": {
+                  inputTokens: 1000,
+                  outputTokens: 50,
+                  reasoningTokens: 10,
+                  cacheCreationTokens: 100,
+                  cachedReadTokens: 400,
+                  costUsdTicks: 10_000_000_000,
+                },
+              },
+            },
+          },
+          _meta: { agentTimestampMs: 1_790_420_403_000 },
+        },
+      }),
+      ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+    );
+    expect(record.t).toBe("rec");
+    expect(record.src).toBe("grok");
+    expect(record.sid).toBe("sess-1");
+    expect(record.cwd).toBe("/repo/app");
+    expect(record.model).toBe("grok-4.7-build");
+    expect(record.inp).toBe(500);
+    expect(record.out).toBe(50);
+    expect(record.cc).toBe(100);
+    expect(record.cr).toBe(400);
+    expect(record.tok).toBe(1050);
+    expect(record.cost).toBe(1);
+    expect(record.ts).toBe(1_790_420_403_000);
+    expect(
+      jq(
+        WALKG,
+        JSON.stringify({
+          timestamp: 1_790_420_403,
+          params: { sessionId: "sess-1", update: { sessionUpdate: "agent_message_chunk" } },
+        }),
+        ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+      ),
+    ).toEqual([]);
   });
 
   test("collects Cursor usage from the dashboard API", () => {

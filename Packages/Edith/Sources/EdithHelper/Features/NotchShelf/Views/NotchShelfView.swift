@@ -671,6 +671,8 @@ private struct NotchUsageRings: View {
             if selected == .cursor {
                 ring("models", limits.session)
                 ring("other", limits.week)
+            } else if selected == .grok {
+                ring(GrokPeriod.mark(limits.week?.period), limits.week)
             } else {
                 ring("5h", limits.session)
                 ring("7d", limits.week)

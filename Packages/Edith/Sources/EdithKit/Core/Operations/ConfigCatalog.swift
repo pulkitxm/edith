@@ -226,7 +226,8 @@ public enum ConfigCatalog {
     private static let usageAndLimits: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Tabs.usageEnabled, .bool, group: "usage",
-            summary: "Agent Usage extension: Claude, Codex and Cursor limits, stats and alerts.",
+            summary:
+                "Agent Usage extension: Claude, Codex, Cursor and Grok limits, stats and alerts.",
             fallback: .bool(false)),
         SettingDefinition(
             "usageMachines", .stringList, group: "usage",
@@ -241,9 +242,12 @@ public enum ConfigCatalog {
             AppStorageKeys.Limits.cursorEnabled, .bool, group: "limits",
             summary: "Track Cursor models and other models included usage.", fallback: .bool(true)),
         SettingDefinition(
+            AppStorageKeys.Limits.grokEnabled, .bool, group: "limits",
+            summary: "Track the Grok weekly or monthly allowance.", fallback: .bool(true)),
+        SettingDefinition(
             AppStorageKeys.Limits.provider, .string, group: "limits",
             summary: "Provider shown first in the limits UI.",
-            allowed: ["claude", "codex", "cursor"],
+            allowed: ["claude", "codex", "cursor", "grok"],
             fallback: .string("claude")),
         SettingDefinition(
             AppStorageKeys.Limits.warnPercent, .int, group: "limits",
@@ -260,7 +264,7 @@ public enum ConfigCatalog {
     private static let menuBar: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Limits.inMenuBar, .bool, group: "menubar",
-            summary: "Show session and weekly percentages in the menu bar.",
+            summary: "Show limit percentages in the menu bar.",
             fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.MenuBar.claudeWindows, .string, group: "menubar",
@@ -276,6 +280,10 @@ public enum ConfigCatalog {
             summary: "Cursor pools shown in the menu bar, comma-separated (session, week)."
                 + " session is Cursor models and week is Other models.",
             fallback: .string("session,week")),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.grokWindows, .string, group: "menubar",
+            summary: "Grok allowance shown in the menu bar. week is the plan pool.",
+            fallback: .string("week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.limitsStyle, .string, group: "menubar",
             summary: "Layout of the menu bar limits readout.",

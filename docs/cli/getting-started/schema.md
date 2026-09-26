@@ -35,7 +35,8 @@ Three real properties are shown:
       "enum": [
         "claude",
         "codex",
-        "cursor"
+        "cursor",
+        "grok"
       ],
       "type": "string",
       "x-group": "limits",

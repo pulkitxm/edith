@@ -198,6 +198,7 @@ label_for() {
     qwen) echo "Qwen" ;;
     openclaw) echo "OpenClaw" ;;
     cursor) echo "Cursor" ;;
+    grok) echo "Grok" ;;
     *) echo "$1" ;;
   esac
 }
@@ -877,7 +878,7 @@ else
 fi
 ccu() {
   case "${1:-}" in
-    codex|opencode) bun "$CODEX_CCUSAGE_BIN" "$@" ;;
+    codex|opencode|grok) bun "$CODEX_CCUSAGE_BIN" "$@" ;;
     *) bun "$CCUSAGE_BIN" "$@" ;;
   esac
 }
@@ -1030,7 +1031,7 @@ while IFS= read -r codex_date; do
 done < <(jq -r '.daily[].date' "$TMP/codex.daily.json")
 _phase "codex repository details" "$(jq '.daily | length' "$TMP/codex.daily.json") days"
 
-for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
+for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw grok; do
   if ! ccu "$agent" daily --json --offline >"$TMP/$agent.daily.json" 2>/dev/null; then
     _error "$agent daily collection failed; previous data preserved"
     exit 1
@@ -1578,6 +1579,61 @@ if [ -s "$TMP/manifest.jsonl" ]; then
       end
   '
 
+  WALKG='
+    def tokens($u):
+      ([$u.inputTokens // 0, 0] | max) as $input
+      | ($u.cachedReadTokens // 0) as $read
+      | ($u.cacheCreationTokens // 0) as $write
+      | ([$input - $read - $write, 0] | max) as $fresh
+      | {
+          inp: $fresh,
+          out: ($u.outputTokens // 0),
+          cc: $write,
+          cr: $read,
+          cost: (($u.costUsdTicks // 0) / 10000000000)
+        };
+    select(.params.update.sessionUpdate == "turn_completed")
+    | . as $row
+    | ($row.params.update.usage // null) as $usage
+    | select($usage != null)
+    | (($row.params.sessionId // "") | tostring) as $sid
+    | select($sid != "")
+    | (if ($row.params._meta.agentTimestampMs | type) == "number" then $row.params._meta.agentTimestampMs
+        elif ($row.timestamp | type) == "number" and $row.timestamp > 100000000000 then $row.timestamp
+        elif ($row.timestamp | type) == "number" then $row.timestamp * 1000
+        else 0 end) as $ts
+    | select($ts > 0)
+    | ($ts / 1000 | floor) as $ep
+    | ($ep + $off) as $loc
+    | ($usage.modelUsage // {}) as $models
+    | (if ($models | length) > 0 then
+        [ $models | to_entries[] | { model: .key, usage: .value } ]
+      else
+        [ { model: "unknown", usage: $usage } ]
+      end)[]
+    | . as $model
+    | (tokens($model.usage)) as $tokens
+    | select(($tokens.inp + $tokens.out + $tokens.cc + $tokens.cr) > 0)
+    | {
+        t: "rec",
+        id: ("grok:" + $sid + ":" + ($ts | tostring) + ":" + $model.model),
+        date: ($loc | strftime("%Y-%m-%d")),
+        hour: (($loc / 3600 | floor) % 24),
+        ts: $ts,
+        model: $model.model,
+        cwd: $cwd,
+        wt: null,
+        sid: $sid,
+        src: $src,
+        cost: $tokens.cost,
+        inp: $tokens.inp,
+        out: $tokens.out,
+        cc: $tokens.cc,
+        cr: $tokens.cr,
+        tok: ($tokens.inp + $tokens.out + $tokens.cc + $tokens.cr)
+      }
+  '
+
   DEDUP='
     group_by([.src, .id])
     | map(max_by([.tok, .ts]))
@@ -1897,6 +1953,31 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     fi
   }
 
+  grok_urldecode() {
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1]), end="")' "$1" 2>/dev/null
+  }
+  walk_grok() {
+    local root="${GROK_HOME:-$HOME/.grok}/sessions"
+    [ -d "$root" ] || return 0
+    local file session_dir encoded cwd sid summary
+    while IFS= read -r -d '' file; do
+      session_dir=$(dirname "$file")
+      sid=$(basename "$session_dir")
+      encoded=$(basename "$(dirname "$session_dir")")
+      cwd=$(grok_urldecode "$encoded" || printf '%s' "$encoded")
+      jq -c --argjson off "$OFF" --arg src grok --arg cwd "$cwd" "$WALKG" "$file" \
+        >>"$TMP/walk.jsonl" 2>/dev/null || true
+      summary="$session_dir/summary.json"
+      if [ -f "$summary" ]; then
+        jq -c --arg sid "$sid" '
+          select((.generated_title // "") != "")
+          | {t: "title", sid: $sid,
+              title: (.generated_title | tostring | gsub("^\\s+"; "") | gsub("\\s+$"; ""))}
+        ' "$summary" >>"$TMP/walk.jsonl" 2>/dev/null || true
+      fi
+    done < <(find "$root" -name updates.jsonl -print0 2>/dev/null || true)
+  }
+
   NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ' || true)
   _note "walking $NFILES transcript files"
   walk_dir "$PROJECTS_DIR" cli
@@ -1911,6 +1992,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"
   walk_dir "$CCODE_DIR" commandcode "$WALKCC"
   walk_opencode
+  walk_grok
   if [ -s "$TMP/cursor.events.jsonl" ]; then
     cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"
   fi

@@ -12,6 +12,7 @@ struct RateLimitsDialsView: View {
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
     @State private var point: LimitPoint?
+    @State private var allowance: GrokAllowance?
     @State private var latestLimits: LimitsTopicSnapshot?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
@@ -42,6 +43,7 @@ struct RateLimitsDialsView: View {
             providers = found
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
             let provider = found.contains(saved) ? saved : found.first ?? saved
+            allowance = latest[provider]?.grok
             point = latest[provider].map {
                 LimitPoint(
                     date: $0.date, s: $0.session?.percent, w: $0.week?.percent,
@@ -58,7 +60,7 @@ struct RateLimitsDialsView: View {
                     providers: providers, color: DashSkin.ink(dark), size: 16)
                 Text("Rate limits").font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Text(selected == .cursor ? "billing cycle" : "session · weekly")
+                Text(limitCaption)
                     .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
@@ -67,12 +69,31 @@ struct RateLimitsDialsView: View {
                 if selected == .cursor {
                     dial("CURSOR MODELS", pct: point?.s, reset: point?.sessionReset)
                     dial("OTHER MODELS", pct: point?.w, reset: point?.weekReset)
+                } else if selected == .grok {
+                    dial(
+                        GrokPeriod.title(allowance?.period).uppercased(), pct: point?.w,
+                        reset: point?.weekReset)
                 } else {
                     dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
                     dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
                 }
             }
             .frame(maxWidth: .infinity)
+            if selected == .grok, let allowance,
+                !allowance.summary.isEmpty || allowance.extraLine != nil
+            {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    if !allowance.summary.isEmpty {
+                        Text(allowance.summary)
+                    }
+                    if let extra = allowance.extraLine {
+                        Text(extra)
+                    }
+                }
+                .font(.system(size: UIScale.pt(11.5)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if let point {
                 Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
                     .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
@@ -125,6 +146,12 @@ struct RateLimitsDialsView: View {
             reloadJob?.cancel()
             reloadJob = nil
         }
+    }
+
+    private var limitCaption: String {
+        if selected == .cursor { return "billing cycle" }
+        if selected == .grok { return GrokPeriod.title(allowance?.period).lowercased() }
+        return "session · weekly"
     }
 
     private func dial(_ label: String, pct: Double?, reset: Date?) -> some View {
@@ -254,10 +281,14 @@ struct LimitsCardView: View {
     }
 
     private var sessionSeriesName: String {
-        selectedProvider == .cursor ? "Cursor models" : "Session"
+        if selectedProvider == .cursor { return "Cursor models" }
+        if selectedProvider == .grok { return "Allowance" }
+        return "Session"
     }
     private var weekSeriesName: String {
-        selectedProvider == .cursor ? "Other models" : "Weekly"
+        if selectedProvider == .cursor { return "Other models" }
+        if selectedProvider == .grok { return "Allowance" }
+        return "Weekly"
     }
 
     private var sessionC: Color { DashSkin.accent(dark) }
@@ -276,7 +307,9 @@ struct LimitsCardView: View {
     var body: some View {
         SkinCard(
             title: selectedProvider == .cursor
-                ? "Cursor models & other models" : "Rate limits - session & weekly", dark: dark
+                ? "Cursor models & other models"
+                : selectedProvider == .grok ? "Grok allowance" : "Rate limits - session & weekly",
+            dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ProviderSwitchButton(

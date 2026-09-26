@@ -7,6 +7,7 @@ public struct LimitsHistory {
         public let session: LimitWindow?
         public let week: LimitWindow?
         public let fable: LimitWindow?
+        public let grok: GrokAllowance?
     }
 
     public struct Snapshot: Sendable {
@@ -33,6 +34,7 @@ public struct LimitsHistory {
         let sr: String?
         let wr: String?
         let fr: String?
+        let ga: GrokAllowance?
     }
 
     private static let iso = ISO8601DateFormatter()
@@ -52,7 +54,7 @@ public struct LimitsHistory {
 
     public static func row(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, now: Date
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, now: Date
     ) -> (
         key: String, line: String
     ) {
@@ -65,20 +67,19 @@ public struct LimitsHistory {
             f: fable.map { round1($0.percent) },
             sr: session?.resetsAt.map { iso.string(from: $0) },
             wr: week?.resetsAt.map { iso.string(from: $0) },
-            fr: fable?.resetsAt.map { iso.string(from: $0) })
-        let key =
-            "\(provider.rawValue)|\(r.s ?? -1)|\(r.w ?? -1)|\(r.f ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")|\(r.fr ?? "-")"
+            fr: fable?.resetsAt.map { iso.string(from: $0) },
+            ga: grok)
         let data = (try? JSONEncoder().encode(r)) ?? Data("{}".utf8)
-        return (key, String(decoding: data, as: UTF8.self) + "\n")
+        return (key(for: r), String(decoding: data, as: UTF8.self) + "\n")
     }
 
     @discardableResult
     public mutating func append(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, now: Date = Date()
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, now: Date = Date()
     ) -> Bool {
         let (key, line) = Self.row(
-            provider: provider, session: session, week: week, fable: fable, now: now)
+            provider: provider, session: session, week: week, fable: fable, grok: grok, now: now)
         do {
             try UsageDataLock.withLock(dataDirectory: fileURL.deletingLastPathComponent()) {
                 let needsNewline = try Self.repairTrailingRow(at: fileURL)
@@ -109,7 +110,14 @@ public struct LimitsHistory {
     private static func key(for row: Row) -> String {
         let provider = row.p ?? .claude
         return
-            "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
+            "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")|\(allowanceKey(row.ga))"
+    }
+
+    private static func allowanceKey(_ allowance: GrokAllowance?) -> String {
+        guard let allowance else { return "" }
+        let products = allowance.products.map { "\($0.name):\($0.percent)" }.joined(separator: ",")
+        return
+            "\(allowance.period)|\(allowance.tier ?? "")|\(products)|\(allowance.onDemandUsed)|\(allowance.onDemandCap)|\(allowance.prepaidBalance)"
     }
 
     private static func repairTrailingRow(at url: URL) throws -> Bool {
@@ -330,11 +338,14 @@ public struct LimitsHistory {
                 LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
             },
             week: row.w.map {
-                LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
+                LimitWindow(
+                    percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO),
+                    period: row.ga?.period)
             },
             fable: row.f.map {
                 LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
-            })
+            },
+            grok: row.ga)
     }
 
     private static func point(row: Row, date: Date) -> LimitPoint {

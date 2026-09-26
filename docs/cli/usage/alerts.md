@@ -17,8 +17,10 @@ ed usage alerts [--json]
 
 One object. `enabled` is whether limit alerts are switched on,
 `jevConfigured` whether a TypeSafe key is saved, and `windows` holds one entry
-per tracked window: Claude 5h, weekly and Fable weekly, then Codex 5h and
-weekly, each only when the provider reported it and its toggle is on.
+per tracked window: Codex, Claude, Cursor, then Grok. Claude has a 5-hour
+window, a weekly window and Fable. Codex has a 5-hour window and a weekly
+window. Cursor has its two billing-cycle pools. Grok has its plan allowance.
+Each appears only when the provider reported it and its toggle is on.
 
 ```json
 {

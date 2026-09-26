@@ -1624,6 +1624,8 @@ private struct UsageRows: View {
         var codexEnabled = true
     @AppStorage(AppStorageKeys.Limits.cursorEnabled, store: SharedDefaults.store) private
         var cursorEnabled = true
+    @AppStorage(AppStorageKeys.Limits.grokEnabled, store: SharedDefaults.store) private
+        var grokEnabled = true
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var limitsProviderRaw =
         LimitProvider.claude.rawValue
@@ -1636,6 +1638,8 @@ private struct UsageRows: View {
         var codexWindowsRaw = "session,week"
     @AppStorage(AppStorageKeys.MenuBar.cursorWindows, store: SharedDefaults.store) private
         var cursorWindowsRaw = "session,week"
+    @AppStorage(AppStorageKeys.MenuBar.grokWindows, store: SharedDefaults.store) private
+        var grokWindowsRaw = "week"
     @AppStorage(AppStorageKeys.MenuBar.limitsStyle, store: SharedDefaults.store) private
         var limitsStyleRaw = "stacked"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
@@ -1692,7 +1696,7 @@ private struct UsageRows: View {
     @State private var projections: [String] = []
     @State private var testSent = false
 
-    private var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled }
+    private var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled || grokEnabled }
 
     var body: some View {
         CLIToolStatusSection(
@@ -1716,6 +1720,10 @@ private struct UsageRows: View {
                     isOn: $cursorEnabled.configured(AppStorageKeys.Limits.cursorEnabled)
                 )
                 Toggle(
+                    "Grok allowance",
+                    isOn: $grokEnabled.configured(AppStorageKeys.Limits.grokEnabled)
+                )
+                Toggle(
                     "Show limits in the menu bar",
                     isOn: $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar)
                 )
@@ -1736,6 +1744,11 @@ private struct UsageRows: View {
                         LimitWindowChipsRow(
                             title: "Cursor shows", provider: .cursor,
                             raw: $cursorWindowsRaw.configured(AppStorageKeys.MenuBar.cursorWindows))
+                    }
+                    if grokEnabled {
+                        LimitWindowChipsRow(
+                            title: "Grok shows", provider: .grok,
+                            raw: $grokWindowsRaw.configured(AppStorageKeys.MenuBar.grokWindows))
                     }
                     Picker(
                         "Style",
@@ -1892,7 +1905,7 @@ private struct UsageRows: View {
                 LimitAlertToggle(
                     "Weekly windows",
                     detail:
-                        "Alerts for weekly limits, Fable included, and Cursor's billing-cycle pools.",
+                        "Alerts for weekly limits, Fable included, Cursor's billing-cycle pools, and Grok's allowance.",
                     isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly))
                 LimitAlertToggle(
                     "On pace to hit the cap",
@@ -1977,6 +1990,7 @@ private struct UsageRows: View {
             reconcileProviders()
         }
         .onChange(of: cursorEnabled) { reconcileProviders() }
+        .onChange(of: grokEnabled) { reconcileProviders() }
     }
 
     private var alertsBinding: Binding<Bool> {
@@ -2019,7 +2033,7 @@ private struct UsageRows: View {
         let state = AgentUsageSettingsFlow.providersChanged(
             AgentUsageSettingsState(
                 enabled: enabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
-                cursorEnabled: cursorEnabled,
+                cursorEnabled: cursorEnabled, grokEnabled: grokEnabled,
                 menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
                 selectedProvider: selectedProvider))
         enabled = state.enabled

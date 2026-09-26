@@ -344,6 +344,9 @@ enum LimitAlertScenario {
         #expect(LimitLoginProblem(error: "Claude Code token not found") == .missing)
         #expect(
             LimitLoginProblem(error: "Claude session expired - run claude to re-login") == .expired)
+        #expect(LimitLoginProblem(error: "Grok token not found") == .missing)
+        #expect(
+            LimitLoginProblem(error: "Grok session expired. Run grok login.") == .expired)
         #expect(LimitLoginProblem(error: "Offline") == nil)
     }
 

@@ -111,32 +111,44 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                     hint: "enable the Agent Usage extension and let Edith poll once")
             }
             guard !json else {
-                CLIOut.json(
-                    .array(
-                        providers.map {
-                            LimitsReport.json(
-                                provider: $0.0, observedAt: $0.1, session: $0.2, week: $0.3)
-                        }))
+                CLIOut.json(.array(providers.map(LimitsReport.json)))
                 return
             }
-            let rows = providers.flatMap { provider, observedAt, session, week in
-                [
-                    (LimitWindowSlot.session, session),
-                    (LimitWindowSlot.week, week),
-                ].map { slot, window in
+            let rows = providers.flatMap { observation -> [[String]] in
+                let slots: [(LimitWindowSlot, LimitWindow?)] =
+                    observation.provider == .grok
+                    ? [(.week, observation.week)]
+                    : [(.session, observation.session), (.week, observation.week)]
+                var lines = slots.map { slot, window in
                     [
-                        provider.label,
-                        slot.title(for: provider),
+                        observation.provider.label,
+                        slot.title(for: observation.provider, period: window?.period),
                         window.map { String(format: "%.1f%%", $0.percent) } ?? "-",
                         window?.resetsAt.map { resetText($0) } ?? "-",
-                        JSONSerializer.iso.string(from: observedAt),
+                        JSONSerializer.iso.string(from: observation.observedAt),
                     ]
                 }
+                if let allowance = observation.grok, allowance.products.count > 1 {
+                    lines += allowance.products.map { product in
+                        [
+                            observation.provider.label,
+                            product.name,
+                            String(format: "%.1f%%", product.percent),
+                            observation.week?.resetsAt.map { resetText($0) } ?? "-",
+                            JSONSerializer.iso.string(from: observation.observedAt),
+                        ]
+                    }
+                }
+                return lines
             }
             CLIOut.out(
                 TextTable.render(
                     headers: ["PROVIDER", "LIMIT", "USED", "RESETS", "OBSERVED"],
                     rows: rows))
+            for observation in providers {
+                guard let extra = observation.grok?.extraLine else { continue }
+                CLIOut.out("\(observation.provider.label): \(extra)")
+            }
         }
     }
 

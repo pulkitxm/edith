@@ -53,12 +53,23 @@ private final class MutableHistoryURL: @unchecked Sendable {
 
     @Test func refreshesEveryEnabledProviderRegardlessOfSelection() {
         #expect(
-            UsageLimitProviders.enabled(claude: true, codex: true, cursor: true)
-                == [.claude, .codex, .cursor])
-        #expect(UsageLimitProviders.enabled(claude: true, codex: false, cursor: false) == [.claude])
-        #expect(UsageLimitProviders.enabled(claude: false, codex: true, cursor: false) == [.codex])
-        #expect(UsageLimitProviders.enabled(claude: false, codex: false, cursor: true) == [.cursor])
-        #expect(UsageLimitProviders.enabled(claude: false, codex: false, cursor: false).isEmpty)
+            UsageLimitProviders.enabled(claude: true, codex: true, cursor: true, grok: true)
+                == [.claude, .codex, .cursor, .grok])
+        #expect(
+            UsageLimitProviders.enabled(claude: true, codex: false, cursor: false, grok: false)
+                == [.claude])
+        #expect(
+            UsageLimitProviders.enabled(claude: false, codex: true, cursor: false, grok: false)
+                == [.codex])
+        #expect(
+            UsageLimitProviders.enabled(claude: false, codex: false, cursor: true, grok: false)
+                == [.cursor])
+        #expect(
+            UsageLimitProviders.enabled(claude: false, codex: false, cursor: false, grok: true)
+                == [.grok])
+        #expect(
+            UsageLimitProviders.enabled(claude: false, codex: false, cursor: false, grok: false)
+                .isEmpty)
     }
 
     @Test func startsWhenNothingIsInFlight() {
