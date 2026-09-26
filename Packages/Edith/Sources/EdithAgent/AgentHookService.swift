@@ -9,6 +9,7 @@ public actor AgentHookService {
     public static let shared = AgentHookService()
     public static let localInterval = Duration.seconds(2)
     public static let remoteInterval: TimeInterval = 10
+    public static let maximumMachinesInFlight = 4
     public static let settledLimit = 50
     public static let settledLifetime: TimeInterval = 86_400
     public static let restartedReason = "Edith restarted while sending, so it was not sent again."
@@ -103,9 +104,10 @@ public actor AgentHookService {
             })
         for machine in dueRemote { remoteCheckedAt[machine] = date }
         let due = armed.filter { $0.machineIsLocal || dueRemote.contains($0.machineID) }
-        let groups = Dictionary(grouping: due, by: \.machineID)
+        var pending = Dictionary(grouping: due, by: \.machineID).values[...]
         await withTaskGroup(of: Void.self) { group in
-            for hooks in groups.values {
+            func startNext() {
+                guard let hooks = pending.popFirst() else { return }
                 group.addTask {
                     for hook in hooks {
                         let observed = await self.probe(hook)
@@ -113,6 +115,8 @@ public actor AgentHookService {
                     }
                 }
             }
+            for _ in 0..<Self.maximumMachinesInFlight { startNext() }
+            while await group.next() != nil { startNext() }
         }
     }
 

@@ -142,7 +142,7 @@ struct HerdrPage: View {
     }
 
     private var messageMenu: some View {
-        let agents = store.messageableAgents
+        let agents = store.filteredAgents
         return Menu {
             ForEach(HerdrBroadcastGroup.allCases) { group in
                 let count = group.recipients(from: agents).count

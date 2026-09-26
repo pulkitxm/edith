@@ -360,10 +360,6 @@ final class HerdrStore {
         return labels
     }
 
-    var messageableAgents: [HerdrAgent] {
-        filteredAgents.filter { !$0.isTerminal }
-    }
-
     var filteredAgents: [HerdrAgent] {
         agents.filter { agent in
             switch machineFilter {

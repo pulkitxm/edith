@@ -53,7 +53,7 @@ import Testing
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-message-sent.png"), options: .atomic)
 
-        messaging.compose(.stopped, from: store.messageableAgents)
+        messaging.compose(.stopped, from: store.filteredAgents)
         let draft = try #require(messaging.draft)
         try render(
             HerdrMessageSheet(messaging: messaging, draft: draft),

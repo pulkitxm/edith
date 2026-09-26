@@ -129,9 +129,11 @@ struct HerdrMessagingTests {
                 reachable: true, agents: [agent("w2:p1", .working, machine: "box")]),
         ])
         store.machineFilter = "box"
-        #expect(store.messageableAgents.map(\.pane) == ["w2:p1"])
+        #expect(
+            HerdrBroadcastGroup.working.recipients(from: store.filteredAgents).map(\.pane)
+                == ["w2:p1"])
         store.machineFilter = "missing"
-        #expect(store.messageableAgents.isEmpty)
+        #expect(HerdrBroadcastGroup.working.recipients(from: store.filteredAgents).isEmpty)
         #expect(!store.listedAgents.isEmpty)
     }
 }
