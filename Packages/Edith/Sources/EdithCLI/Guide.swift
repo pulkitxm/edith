@@ -38,6 +38,7 @@ public enum Guide {
         ed database capabilities <id>  detected support for one connection id
         ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper
+        ed camera status             virtual camera, apps using it, framing and scene
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
@@ -115,6 +116,18 @@ public enum Guide {
         ed lid-awake battery 20
         ed lid-awake status --json
         ed lid-awake off
+        ```
+
+        The virtual camera takes live changes while a call is running:
+
+        ```
+        ed camera zoom 1.5
+        ed camera frame --x 0.4 --y 0.45 --auto medium
+        ed camera look studio
+        ed camera background blur --blur 0.7
+        ed camera scene apply Close-up
+        ed camera pause --style card --message "Back in 5"
+        ed camera resume
         ```
 
         ## Databases

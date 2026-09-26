@@ -278,6 +278,7 @@ struct EdithApp {
             services.presenter?.pauseUntilShareEnds()
         }
         LidAwakeActionBridge.shared.install(services: services)
+        VirtualCameraActionBridge.shared.install(services: services)
         _ = IPC.observe(
             IPC.Name.requestCalendarEvents,
             info: { info in
@@ -570,6 +571,18 @@ enum KeystrokeHighlightHotKey {
     @MainActor
     static func save(code: Int, mods: Int, label: String) {
         HotKeyRegistrar.save(HotKeyCatalog.keystrokeHighlight, code: code, mods: mods, label: label)
+    }
+}
+
+enum VirtualCameraHotKey {
+    @MainActor
+    static func register(_ action: @escaping () -> Void) {
+        HotKeyRegistrar.install(HotKeyCatalog.virtualCamera, action: action)
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.virtualCamera)
     }
 }
 

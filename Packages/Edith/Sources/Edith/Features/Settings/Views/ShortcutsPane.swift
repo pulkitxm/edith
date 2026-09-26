@@ -25,13 +25,16 @@ struct ShortcutsSettingsPane: View {
         false
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.VirtualCamera.enabled, store: SharedDefaults.store) private
+        var virtualCameraEnabled = false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             bifrost: bifrostEnabled, clipboard: clipboardEnabled, emoji: emojiEnabled,
             micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled)
+            colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled,
+            virtualCamera: virtualCameraEnabled)
     }
 
     var body: some View {
@@ -152,6 +155,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Keystroke highlight", subtitle: "Starts or pauses the on-screen keycaps",
                 keyPrefix: "keystrokeHighlightHotKey", defaultLabel: "⌃⌥⌘K")
+        case .virtualCamera:
+            shortcutRow(
+                "Virtual Camera", subtitle: "Pauses Edith Camera behind a card, or goes live again",
+                keyPrefix: "virtualCameraHotKey", defaultLabel: "⌃⌥⌘V")
         }
     }
 }

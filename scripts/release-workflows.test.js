@@ -268,7 +268,11 @@ test("one Xcode build produces every bundled executable", () => {
     "edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme",
     "utf8",
   );
-  for (const product of ["edithd", "EdithLidAwakeHelper"]) {
+  for (const product of [
+    "edithd",
+    "EdithLidAwakeHelper",
+    "EdithCameraExtension",
+  ]) {
     expect(scheme).toContain(`BlueprintIdentifier = "${product}"`);
     expect(buildScript).toContain(
       `$DERIVED/Build/Products/$CONFIG/${product}"`,
@@ -276,7 +280,7 @@ test("one Xcode build produces every bundled executable", () => {
   }
   expect(
     scheme.match(/ReferencedContainer = "container:Packages\/Edith"/g),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   expect(makefile).toContain("for target in EdithMain EdithHelper; do");
   expect(makefile).toContain("-derivedDataPath build");
 });
