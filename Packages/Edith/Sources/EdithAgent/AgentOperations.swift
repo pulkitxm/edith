@@ -32,6 +32,7 @@ public enum AgentOperations {
         await runtime.registerShutdown(id: "sessions.search") {
             await AgentSessionSearch.shared.flush()
         }
+        await registerHooks(on: runtime)
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)
             await runtime.register(operation: CompanionBackgroundOperation.refresh) { _ in
@@ -52,6 +53,26 @@ public enum AgentOperations {
                 await scheduler.cancel(id)
                 return Data()
             }
+        }
+    }
+
+    static func registerHooks(
+        on runtime: AgentRuntime, service: AgentHookService = .shared
+    ) async {
+        await runtime.register(operation: HerdrHookOperation.list) { _ in
+            try AgentPayload.encode(await service.list())
+        }
+        await runtime.register(operation: HerdrHookOperation.arm) { payload in
+            let request = try AgentPayload.decode(HerdrHookArmRequest.self, from: payload)
+            return try AgentPayload.encode(await service.arm(request))
+        }
+        await runtime.register(operation: HerdrHookOperation.remove) { payload in
+            let id = try AgentPayload.decode(UUID.self, from: payload)
+            return try AgentPayload.encode(await service.remove(id))
+        }
+        await runtime.registerShutdown(id: "sessions.hooks") { await service.stop() }
+        await service.start { payload in
+            await runtime.publish(topic: .hooks, payload: payload)
         }
     }
 

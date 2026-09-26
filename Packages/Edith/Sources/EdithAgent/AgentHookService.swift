@@ -1,0 +1,183 @@
+import EdithKit
+import Foundation
+
+public actor AgentHookService {
+    public typealias Probe = @Sendable (HerdrAgentHook) async -> HerdrAgentProbe
+    public typealias Send = @Sendable (HerdrAgentHook) async -> HerdrPromptOutcome
+    public typealias Publish = @Sendable (Data) async -> Void
+
+    public static let shared = AgentHookService()
+    public static let localInterval = Duration.seconds(2)
+    public static let remoteInterval: TimeInterval = 10
+    public static let settledLimit = 50
+    public static let settledLifetime: TimeInterval = 86_400
+    public static let restartedReason = "Edith restarted while sending, so it was not sent again."
+
+    private let url: URL
+    private let probe: Probe
+    private let send: Send
+    private let now: @Sendable () -> Date
+    private let interval: Duration
+    private var publish: Publish = { _ in }
+    private var snapshot: HerdrHooksSnapshot
+    private var remoteCheckedAt: [String: Date] = [:]
+    private var loop: Task<Void, Never>?
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    public init(
+        url: URL = AppData.supportDir.appendingPathComponent("agent-hooks.json"),
+        interval: Duration = AgentHookService.localInterval,
+        probe: @escaping Probe = {
+            await HerdrAgentPrompt.probe(
+                session: $0.session, pane: $0.pane, machineID: $0.machineID,
+                local: $0.machineIsLocal)
+        },
+        send: @escaping Send = {
+            await HerdrAgentPrompt.send(
+                $0.message, session: $0.session, pane: $0.pane, machineID: $0.machineID,
+                local: $0.machineIsLocal)
+        },
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.url = url
+        self.interval = interval
+        self.probe = probe
+        self.send = send
+        self.now = now
+        var loaded =
+            (try? Data(contentsOf: url)).flatMap {
+                try? AgentPayload.decode(HerdrHooksSnapshot.self, from: $0)
+            } ?? HerdrHooksSnapshot()
+        let date = now()
+        for index in loaded.hooks.indices where loaded.hooks[index].phase == .sending {
+            loaded.hooks[index].settle(.skipped, Self.restartedReason, at: date)
+        }
+        snapshot = loaded
+    }
+
+    public func start(publish: @escaping Publish) async {
+        self.publish = publish
+        await commit(snapshot, force: true)
+        guard loop == nil else { return }
+        loop = Task { await self.run() }
+    }
+
+    public func stop() {
+        loop?.cancel()
+        loop = nil
+        waiter?.resume()
+        waiter = nil
+    }
+
+    public func list() -> HerdrHooksSnapshot { snapshot }
+
+    public func arm(_ request: HerdrHookArmRequest) async throws -> HerdrHooksSnapshot {
+        guard let message = HerdrAgentPrompt.normalized(request.message) else {
+            throw AgentError(.refused, HerdrAgentPromptError.emptyMessage.localizedDescription)
+        }
+        guard !request.agent.isTerminal else {
+            throw AgentError(.refused, "Hooks only work on agents, not terminals.")
+        }
+        var next = snapshot
+        next.hooks.removeAll { $0.agentID == request.agent.id && !$0.phase.settled }
+        next.hooks.append(HerdrAgentHook(agent: request.agent, message: message, createdAt: now()))
+        await commit(next)
+        waiter?.resume()
+        waiter = nil
+        return snapshot
+    }
+
+    public func remove(_ id: UUID) async -> HerdrHooksSnapshot {
+        var next = snapshot
+        next.hooks.removeAll { $0.id == id }
+        await commit(next)
+        return snapshot
+    }
+
+    public func tick() async {
+        let date = now()
+        let armed = snapshot.hooks.filter(\.isArmed)
+        let dueRemote = Set(
+            armed.filter { !$0.machineIsLocal }.map(\.machineID).filter {
+                date.timeIntervalSince(remoteCheckedAt[$0] ?? .distantPast) >= Self.remoteInterval
+            })
+        for machine in dueRemote { remoteCheckedAt[machine] = date }
+        let due = armed.filter { $0.machineIsLocal || dueRemote.contains($0.machineID) }
+        let groups = Dictionary(grouping: due, by: \.machineID)
+        await withTaskGroup(of: Void.self) { group in
+            for hooks in groups.values {
+                group.addTask {
+                    for hook in hooks {
+                        let observed = await self.probe(hook)
+                        await self.apply(hook.id, observed)
+                    }
+                }
+            }
+        }
+    }
+
+    private func run() async {
+        while !Task.isCancelled {
+            if snapshot.hooks.contains(where: \.isArmed) {
+                await tick()
+                try? await Task.sleep(for: interval)
+            } else {
+                await withCheckedContinuation { waiter = $0 }
+            }
+        }
+    }
+
+    private func apply(_ id: UUID, _ observed: HerdrAgentProbe) async {
+        guard let hook = snapshot.hooks.first(where: { $0.id == id && $0.isArmed }) else { return }
+        switch HerdrHookEvaluator.evaluate(hook, observed) {
+        case .keep(let next):
+            guard next != hook else { return }
+            await update(next)
+        case .cancel(let reason):
+            var next = hook
+            next.settle(.cancelled, reason, at: now())
+            await update(next)
+        case .fire(var next):
+            next.phase = .sending
+            await update(next)
+            let outcome = await send(next)
+            next.settle(outcome.delivered ? .sent : .skipped, outcome.summary, at: now())
+            await update(next)
+        }
+    }
+
+    private func update(_ hook: HerdrAgentHook) async {
+        guard let index = snapshot.hooks.firstIndex(where: { $0.id == hook.id }) else { return }
+        var next = snapshot
+        next.hooks[index] = hook
+        await commit(next)
+    }
+
+    private func commit(_ proposed: HerdrHooksSnapshot, force: Bool = false) async {
+        let next = pruned(proposed)
+        guard force || next != snapshot else { return }
+        snapshot = next
+        guard let data = try? AgentPayload.encode(next) else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            AgentLog.logger.error(
+                "agent hooks not saved: \(error.localizedDescription, privacy: .public)")
+        }
+        await publish(data)
+    }
+
+    private func pruned(_ proposed: HerdrHooksSnapshot) -> HerdrHooksSnapshot {
+        let cutoff = now().addingTimeInterval(-Self.settledLifetime)
+        let settled = proposed.hooks.filter {
+            $0.phase.settled && ($0.settledAt ?? $0.createdAt) >= cutoff
+        }
+        .sorted { ($0.settledAt ?? $0.createdAt) > ($1.settledAt ?? $1.createdAt) }
+        .prefix(Self.settledLimit)
+        let kept = Set(settled.map(\.id))
+        return HerdrHooksSnapshot(
+            hooks: proposed.hooks.filter { !$0.phase.settled || kept.contains($0.id) })
+    }
+}
