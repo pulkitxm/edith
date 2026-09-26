@@ -95,11 +95,34 @@ import Testing
         #expect(ClipboardTimeline.sections([], now: Self.now, calendar: Self.calendar).isEmpty)
     }
 
+    @Test func olderPinnedClipsNameTheirDayBecauseTheyLeaveTheDaySections() {
+        let old = entry("old pin", hoursAgo: 72, pinned: true)
+        let fresh = entry("fresh pin", hoursAgo: 0, pinned: true)
+        let loose = entry("loose", hoursAgo: 72)
+
+        let oldLine = ClipboardTimeline.subtitle(for: old, now: Self.now, calendar: Self.calendar)
+        #expect(
+            oldLine
+                == "Notes · "
+                + ClipboardTimeline.dayAndTimeLabel(old.lastCopiedAt, calendar: Self.calendar))
+        #expect(oldLine.contains("Sep"))
+        #expect(
+            ClipboardTimeline.subtitle(for: fresh, now: Self.now, calendar: Self.calendar)
+                == "Notes · "
+                + ClipboardTimeline.timeLabel(fresh.lastCopiedAt, calendar: Self.calendar))
+        #expect(
+            ClipboardTimeline.subtitle(for: loose, now: Self.now, calendar: Self.calendar)
+                == "Notes · "
+                + ClipboardTimeline.timeLabel(loose.lastCopiedAt, calendar: Self.calendar))
+    }
+
     @Test func subtitleNamesTheSourceAppAndTime() {
         let clip = entry("x", hoursAgo: 0)
         let time = ClipboardTimeline.timeLabel(clip.lastCopiedAt, calendar: Self.calendar)
 
-        #expect(ClipboardTimeline.subtitle(for: clip, calendar: Self.calendar) == "Notes · \(time)")
+        #expect(
+            ClipboardTimeline.subtitle(for: clip, now: Self.now, calendar: Self.calendar)
+                == "Notes · \(time)")
         #expect(
             ClipboardTimeline.subtitle(
                 for: entry("y", hoursAgo: 0, source: nil), calendar: Self.calendar)

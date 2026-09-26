@@ -1,67 +1,108 @@
 import EdithKit
 import Foundation
 import Testing
+
 @testable import EdithHelper
 
-@Suite(.serialized) struct ClipboardPanelHeightTests {
-    private func entry(ext: String) -> ClipboardEntry {
+@Suite struct ClipboardPanelHeightTests {
+    private static let now = Date(timeIntervalSince1970: 1_790_000_000)
+
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private func entry(
+        _ preview: String = "hello", ext: String = "txt", hoursAgo: Double = 0,
+        pinned: Bool = false
+    ) -> ClipboardEntry {
         ClipboardEntry(
             sha256: UUID().uuidString, types: ["public.utf8-plain-text"], ext: ext,
-            sourceApp: nil, sourceBundleID: nil, size: 10, preview: "hello")
+            sourceApp: "Notes", sourceBundleID: nil,
+            createdAt: Self.now.addingTimeInterval(-hoursAgo * 3600), size: 10, preview: preview,
+            pinned: pinned)
     }
 
-    private func withFooter(_ show: Bool, _ body: () -> Void) {
-        let key = "clipboardShowFooter"
-        let saved = SharedDefaults.store.object(forKey: key)
-        defer {
-            if let saved {
-                SharedDefaults.store.set(saved, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
-        SharedDefaults.store.set(show, forKey: key)
-        body()
+    private func height(_ entries: [ClipboardEntry], footer: Bool = false) -> CGFloat {
+        ClipboardPanelLayout.estimatedHeight(
+            for: entries, pinToTop: true, showsFooter: footer, now: Self.now,
+            calendar: Self.calendar)
     }
 
-    @Test func emptyHistoryStillReservesOneRow() {
-        withFooter(false) {
-            let headerPlusRowPlusPadding: CGFloat = 62
-            #expect(ClipboardPanelView.estimatedHeight(entries: []) == headerPlusRowPlusPadding)
-        }
+    private var chrome: CGFloat {
+        ClipboardPanelLayout.chrome(showsChips: false, showsFooter: false)
     }
 
-    @Test func textRowsAreShorterThanImageRows() {
-        withFooter(false) {
-            let text = ClipboardPanelView.estimatedHeight(entries: [entry(ext: "txt")])
-            let image = ClipboardPanelView.estimatedHeight(entries: [entry(ext: "png")])
-            #expect(image - text == 24)
-        }
+    @Test func emptyHistoryReservesTheEmptyState() {
+        #expect(height([]) == chrome + ClipboardPanelLayout.emptyHeight)
+    }
+
+    @Test func oneSectionAddsAHeaderAndItsRows() {
+        let single = height([entry()])
+        let three = height([entry(), entry(), entry()])
+
+        #expect(
+            single == chrome + ClipboardPanelLayout.sectionHeaderHeight
+                + ClipboardPanelLayout.rowHeight)
+        #expect(three - single == 2 * ClipboardPanelLayout.rowHeight)
+    }
+
+    @Test func imageRowsAreTallerThanTextRows() {
+        let text = height([entry(ext: "txt"), entry(ext: "txt")])
+        let image = height([entry(ext: "png"), entry(ext: "png")])
+
+        #expect(
+            image - text == 2
+                * (ClipboardPanelLayout.imageRowHeight - ClipboardPanelLayout.rowHeight))
+    }
+
+    @Test func mixedCategoriesAddTheChipRow() {
+        let plain = height([entry("one"), entry("two")])
+        let mixed = height([entry("one"), entry("https://example.com")])
+
+        #expect(mixed - plain == ClipboardPanelLayout.chipsHeight)
+        #expect(!ClipboardPanelLayout.showsChips(for: []))
+        #expect(!ClipboardPanelLayout.showsChips(for: [entry("a"), entry("b")]))
+        #expect(ClipboardPanelLayout.showsChips(for: [entry("a"), entry("#fff")]))
+    }
+
+    @Test func everyDaySectionAddsAHeader() {
+        let today = height([entry(), entry()])
+        let split = height([entry(), entry(hoursAgo: 72)])
+        let pinned = height([entry(pinned: true), entry()])
+
+        #expect(split - today == ClipboardPanelLayout.sectionHeaderHeight)
+        #expect(pinned - today == ClipboardPanelLayout.sectionHeaderHeight)
     }
 
     @Test func footerAddsFixedHeight() {
-        var without: CGFloat = 0
-        var with: CGFloat = 0
-        withFooter(false) { without = ClipboardPanelView.estimatedHeight(entries: []) }
-        withFooter(true) { with = ClipboardPanelView.estimatedHeight(entries: []) }
-        #expect(with - without == 55)
+        #expect(height([], footer: true) - height([]) == ClipboardPanelLayout.footerHeight)
+        #expect(
+            height([entry()], footer: true) - height([entry()])
+                == ClipboardPanelLayout.footerHeight)
     }
 
-    @Test func heightStopsAccumulatingAtThePanelCap() {
-        withFooter(false) {
-            let many = (0..<500).map { _ in entry(ext: "txt") }
-            let height = ClipboardPanelView.estimatedHeight(entries: many)
-            #expect(height >= ClipboardPanel.maxHeight)
-            #expect(height < ClipboardPanel.maxHeight + 62)
-        }
+    @Test func heightStopsAtThePanelCap() {
+        let many = (0..<500).map { entry("item \($0)", hoursAgo: Double($0)) }
+
+        #expect(height(many) == ClipboardPanelLayout.maxHeight)
+        #expect(height(many, footer: true) == ClipboardPanelLayout.maxHeight)
     }
 
-    @Test func heightGrowsPerEntry() {
-        withFooter(false) {
-            let one = ClipboardPanelView.estimatedHeight(entries: [entry(ext: "txt")])
-            let three = ClipboardPanelView.estimatedHeight(
-                entries: [entry(ext: "txt"), entry(ext: "txt"), entry(ext: "txt")])
-            #expect(three - one == 48)
-        }
+    @Test func sectionsWithoutRowsCountAsEmpty() {
+        let hollow = [ClipboardSection(id: "x", title: "Today", entries: [])]
+
+        #expect(
+            ClipboardPanelLayout.height(sections: hollow, showsChips: false, showsFooter: false)
+                == chrome + ClipboardPanelLayout.emptyHeight)
+    }
+
+    @Test func panelFitsTheKeyboardHintsAndStaysCompact() {
+        #expect(ClipboardPanelLayout.width >= 480)
+        #expect(ClipboardPanelLayout.maxHeight <= 600)
+        #expect(
+            ClipboardPanelLayout.chrome(showsChips: true, showsFooter: true)
+                + ClipboardPanelLayout.emptyHeight < ClipboardPanelLayout.maxHeight)
     }
 }

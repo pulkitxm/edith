@@ -85,10 +85,24 @@ public enum ClipboardTimeline {
                 timeZone: calendar.timeZone))
     }
 
-    public static func subtitle(
-        for entry: ClipboardEntry, calendar: Calendar = .autoupdatingCurrent
+    public static func dayAndTimeLabel(
+        _ date: Date, calendar: Calendar = .autoupdatingCurrent
     ) -> String {
-        let time = timeLabel(entry.lastCopiedAt, calendar: calendar)
+        let style = Date.FormatStyle(
+            locale: calendar.locale ?? .autoupdatingCurrent, calendar: calendar,
+            timeZone: calendar.timeZone)
+        return date.formatted(style.month(.abbreviated).day().hour().minute())
+    }
+
+    public static func subtitle(
+        for entry: ClipboardEntry, now: Date = Date(),
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        let showsDay = entry.pinned && !calendar.isDate(entry.lastCopiedAt, inSameDayAs: now)
+        let time =
+            showsDay
+            ? dayAndTimeLabel(entry.lastCopiedAt, calendar: calendar)
+            : timeLabel(entry.lastCopiedAt, calendar: calendar)
         guard let source = entry.sourceApp?.trimmingCharacters(in: .whitespacesAndNewlines),
             !source.isEmpty
         else { return time }
