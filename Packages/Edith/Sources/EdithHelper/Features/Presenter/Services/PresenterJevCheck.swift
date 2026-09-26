@@ -20,7 +20,7 @@ final class PresenterJevCheck: @unchecked Sendable {
     init(
         enabled: @escaping @Sendable () -> Bool,
         decider: @escaping @Sendable () -> JevDeciding?,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.enabled = enabled
         self.decider = decider

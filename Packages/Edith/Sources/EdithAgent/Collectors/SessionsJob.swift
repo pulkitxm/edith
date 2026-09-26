@@ -46,7 +46,7 @@ public final class SessionsJob: @unchecked Sendable {
         collect: @escaping @Sendable (HerdrCollectScope) async -> [HerdrHostSnapshot] = {
             await HerdrCollector.collect($0)
         },
-        now: @escaping @Sendable () -> Date = Date.init,
+        now: @escaping @Sendable () -> Date = { Date() },
         tracksAgents: @escaping @Sendable () -> Bool = { false },
         observe: @escaping @Sendable ([HerdrHostSnapshot]) async -> Void = { _ in }
     ) {

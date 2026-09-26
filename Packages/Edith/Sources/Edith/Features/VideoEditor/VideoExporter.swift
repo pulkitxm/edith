@@ -44,7 +44,8 @@ final class VideoExporter {
         task?.cancel()
         let started = Job(destination: destination)
         job = started
-        task = Task {
+        task = Task { [weak self] in
+            guard let self else { return }
             let outcome: Phase?
             do {
                 try await work { [weak self] value in

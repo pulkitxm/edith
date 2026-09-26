@@ -256,7 +256,7 @@ private let noulRequest = JevRequest(state: .text("x"), questions: ["ok": .noul(
     private func engine(
         store: MemoryJevKeyStore, calls: JevCallCounter = JevCallCounter(),
         status: Int = 200, body: Data = jevNoulResponse,
-        clock: @escaping @Sendable () -> Date = Date.init
+        clock: @escaping @Sendable () -> Date = { Date() }
     ) -> JevEngine {
         let host = "\(UUID().uuidString.lowercased()).jev.test"
         _ = JevStubProtocol.register(host: host) { _, _ in

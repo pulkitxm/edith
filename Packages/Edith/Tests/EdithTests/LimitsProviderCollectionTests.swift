@@ -27,7 +27,7 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
             provider: .codex, session: LimitWindow(percent: 15, resetsAt: nil), week: nil)
         let first = await LimitsCollector.collect(
             providers: [.claude, .codex], refreshSession: session, now: now,
-            announce: announcements.append
+            announce: { announcements.append($0) }
         ) { provider in
             fetched.append(provider)
             return provider == .claude
@@ -38,7 +38,7 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
         fetched = []
         let second = await LimitsCollector.collect(
             providers: [.claude, .codex], refreshSession: session,
-            now: now.addingTimeInterval(100), announce: announcements.append
+            now: now.addingTimeInterval(100), announce: { announcements.append($0) }
         ) { provider in
             fetched.append(provider)
             return (healthy, nil)
@@ -48,7 +48,7 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
         fetched = []
         _ = await LimitsCollector.collect(
             providers: [.claude, .codex], refreshSession: session,
-            now: now.addingTimeInterval(301), announce: announcements.append
+            now: now.addingTimeInterval(301), announce: { announcements.append($0) }
         ) { provider in
             fetched.append(provider)
             return (
@@ -66,7 +66,7 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
         let announcements = LimitsAnnouncementRecorder()
         let failed = await LimitsCollector.collect(
             providers: [.claude, .codex], refreshSession: session, now: now,
-            announce: announcements.append
+            announce: { announcements.append($0) }
         ) { provider in
             (
                 LimitsProviderSnapshot(
@@ -77,7 +77,7 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
         #expect(announcements.count == 1)
         let recovered = await LimitsCollector.collect(
             providers: [.claude, .codex], refreshSession: session,
-            now: now.addingTimeInterval(60), announce: announcements.append
+            now: now.addingTimeInterval(60), announce: { announcements.append($0) }
         ) { provider in
             (
                 LimitsProviderSnapshot(

@@ -83,21 +83,21 @@ final class StudioJob: Identifiable {
         status = nil
         result = nil
         startedAt = Date()
+        let report: @Sendable (StudioProgress) -> Void = { [weak self] progress in
+            Task { @MainActor [weak self] in
+                guard let self, self.phase == .running else { return }
+                self.progress = progress.fraction
+                self.unit = progress.unit
+                self.units = progress.units
+                if let status = progress.status { self.status = status }
+            }
+        }
         task = Task { [weak self] in
             let outcome: Result<StudioRunResult, Error>
             do {
                 let value = try await StudioRunner.run(
                     tool: tool, inputs: inputs, settings: settings, destination: destination,
-                    environment: environment
-                ) { progress in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.phase == .running else { return }
-                        self.progress = progress.fraction
-                        self.unit = progress.unit
-                        self.units = progress.units
-                        if let status = progress.status { self.status = status }
-                    }
-                }
+                    environment: environment, progress: report)
                 outcome = .success(value)
             } catch {
                 outcome = .failure(error)

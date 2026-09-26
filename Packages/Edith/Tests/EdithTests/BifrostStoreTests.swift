@@ -6,7 +6,7 @@ import Testing
 @testable import EdithKit
 
 @Suite @MainActor struct BifrostStoreTests {
-    private static let applications = [
+    nonisolated private static let applications = [
         BifrostApplication(name: "Safari", path: "/Applications/Safari.app"),
         BifrostApplication(name: "Notes", path: "/System/Applications/Notes.app"),
     ]

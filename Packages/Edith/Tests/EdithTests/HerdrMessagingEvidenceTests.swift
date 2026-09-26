@@ -8,7 +8,7 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HerdrMessagingEvidenceTests {
-    private static let evidenceKey = "EDITH_HERDR_MESSAGE_EVIDENCE_DIR"
+    nonisolated private static let evidenceKey = "EDITH_HERDR_MESSAGE_EVIDENCE_DIR"
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment[evidenceKey] != nil))
     func messagesAndFinishedHooksRenderOnTheActualPage() throws {

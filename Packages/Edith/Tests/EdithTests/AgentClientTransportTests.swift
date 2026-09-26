@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCore
 @testable import EdithKit
 
 @Suite struct AgentClientTransportTests {

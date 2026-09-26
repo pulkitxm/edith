@@ -146,13 +146,16 @@ public struct OperationMCPServer: Sendable {
             .compactMap(\.stringValue)
         guard !arguments.contains(OperationMCPTool.confirmationFlag) else {
             return CallTool.Result(
-                content: [.text(Self.confirmationInArguments)], isError: true)
+                content: [
+                    .text(text: Self.confirmationInArguments, annotations: nil, _meta: nil)
+                ], isError: true)
         }
         let confirm = parameters.arguments?["confirm"]?.boolValue ?? false
         let invocation = await OperationMCPRunner.run(
             tool, arguments: arguments, confirm: confirm)
         return CallTool.Result(
-            content: [.text(invocation.output)], isError: invocation.failed)
+            content: [.text(text: invocation.output, annotations: nil, _meta: nil)],
+            isError: invocation.failed)
     }
 
     public func run() async throws {

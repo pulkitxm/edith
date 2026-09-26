@@ -138,6 +138,6 @@ enum BifrostWindowManager {
             AXUIElementCopyAttributeValue(window, attribute as CFString, &value) == .success,
             let raw = value, CFGetTypeID(raw) == AXValueGetTypeID()
         else { return nil }
-        return raw as! AXValue
+        return unsafeBitCast(raw, to: AXValue.self)
     }
 }
