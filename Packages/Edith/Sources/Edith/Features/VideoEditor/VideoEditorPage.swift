@@ -54,6 +54,7 @@ struct VideoEditorPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .background(VideoPlaybackKeys(onToggle: model.togglePlayback))
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -288,7 +289,7 @@ struct VideoEditorPage: View {
                 Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill")
                     .frame(width: UIScale.pt(30))
             }
-            .keyboardShortcut(.space, modifiers: [])
+            .help("Play or pause (Space)")
             Button {
                 model.seek(to: model.playhead + 1.0 / 30)
             } label: {
