@@ -1259,7 +1259,7 @@ CURSOR_COLLECTOR='
       hour,
       ts: tsMs,
       model,
-      cwd: meta.cwd || "",
+      cwd: meta.cwd || "Unattributed",
       wt: null,
       sid,
       src: "cursor",

@@ -2970,7 +2970,7 @@ describe("Cursor collector", () => {
         hour: 10,
         ts: timestamp + 1000,
         model: "cursor-grok",
-        cwd: "",
+        cwd: "Unattributed",
         wt: null,
         sid: "remote-chat",
         src: "cursor",
