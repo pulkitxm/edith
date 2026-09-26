@@ -158,11 +158,27 @@ struct HerdrSessionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if showsDetails, store.detailOpen {
                 HerdrDetailColumn(
-                    store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView)
+                    store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView,
+                    presenterID: tab.id)
             }
         }
         .task(id: tab.id) { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
+        .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
+            store.messaging.adopt($0)
+        }
+        .sheet(item: messageDraft) { draft in
+            HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
+        }
+    }
+
+    private var messageDraft: Binding<HerdrMessageDraft?> {
+        Binding(
+            get: {
+                guard showsDetails, presented else { return nil }
+                return store.messaging.draft.flatMap { $0.presenterID == tab.id ? $0 : nil }
+            },
+            set: { store.messaging.draft = $0 })
     }
 
     @ViewBuilder

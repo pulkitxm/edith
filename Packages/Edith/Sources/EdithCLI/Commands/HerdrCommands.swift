@@ -13,7 +13,8 @@ struct HerdrCommand: AsyncParsableCommand {
             """,
         subcommands: [
             HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
-            HerdrModelsCommand.self, HerdrDefaultsCommand.self, HerdrBridgeCommand.self,
+            HerdrModelsCommand.self, HerdrDefaultsCommand.self, HerdrSendCommand.self,
+            HerdrHooksCommand.self, HerdrBridgeCommand.self,
         ],
         defaultSubcommand: HerdrListCommand.self)
 }

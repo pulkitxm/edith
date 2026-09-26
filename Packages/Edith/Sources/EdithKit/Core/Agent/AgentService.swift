@@ -67,6 +67,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
     case usage
     case limits
     case sessions
+    case hooks
     case machines
     case machineMetrics
     case updates
@@ -85,6 +86,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
         case .usage: "Usage"
         case .limits: "Limits"
         case .sessions: "Sessions"
+        case .hooks: "Agent hooks"
         case .machines: "Machines"
         case .machineMetrics: "Machine metrics"
         case .updates: "Updates"

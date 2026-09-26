@@ -185,6 +185,7 @@ final class HerdrStore {
     @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
     @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
     let terminalPanels: HerdrTerminalPanels
+    let messaging: HerdrMessaging
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
@@ -229,10 +230,12 @@ final class HerdrStore {
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
         },
-        terminalPanels: HerdrTerminalPanels? = nil
+        terminalPanels: HerdrTerminalPanels? = nil,
+        messaging: HerdrMessaging? = nil
     ) {
         self.defaults = defaults
         self.terminalPanels = terminalPanels ?? HerdrTerminalPanels(defaults: defaults)
+        self.messaging = messaging ?? HerdrMessaging()
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.newAgentLauncher = newAgentLauncher

@@ -25,6 +25,8 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr models [<kind>]` | Models, effort levels and fast mode each agent offers |
 | `ed herdr defaults` | The model, effort and fast mode every launch uses |
 | `ed herdr defaults set <kind>` | Change those launch defaults for one kind |
+| `ed herdr send <pane> <message>` | Type a message now, when the agent finishes, or at a time |
+| `ed herdr hooks` | Messages waiting for an agent to finish |
 
 `ed herdr list` is an alias for `ed herdr ls`.
 
@@ -35,6 +37,8 @@ to the `herdr` CLI, not to the Edith window.
 - [`ed herdr attach`](./attach.md)
 - [`ed herdr models`](./models.md)
 - [`ed herdr defaults`](./defaults.md)
+- [`ed herdr send`](./send.md)
+- [`ed herdr hooks`](./hooks.md)
 - [Terminals in agent tabs](./terminals.md)
 
 ## Exit codes
@@ -44,8 +48,10 @@ to the `herdr` CLI, not to the Edith window.
 | 0 | The listing printed, including when Herdr is missing or no panes are live |
 | 2 | The command line was wrong: an unknown flag, `command` with no pane, or `defaults set` with options the model cannot take |
 | 3 | `--machine` named no configured machine, `command` named no pane, or `models` / `defaults set` named a kind with no launch options |
+| 1 | `send` named one pane and Herdr did not take the message |
+| 4 | `send --when-finished` or `hooks` could not reach the background agent |
 
-Nothing in this group exits 1 or 4. A down SSH machine is an error string on
+Listing never exits 1 or 4. A down SSH machine is an error string on
 that host and `reachable: false`, not an unavailable CLI. Plain output prints
 the host error instead of describing the tool as missing.
 

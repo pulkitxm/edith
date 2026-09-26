@@ -104,6 +104,12 @@ struct HerdrPage: View {
             store.adopt(snapshot)
 
         }
+        .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: automaticActions) { snapshot in
+            store.messaging.adopt(snapshot)
+        }
+        .sheet(item: messageDraft) { draft in
+            HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
+        }
         .sheet(isPresented: $launchSettingsPresented) {
             HerdrLaunchSettingsSheet()
         }
@@ -127,6 +133,30 @@ struct HerdrPage: View {
         } message: { request in
             Text(request.message)
         }
+    }
+
+    private var messageDraft: Binding<HerdrMessageDraft?> {
+        Binding(
+            get: { store.messaging.draft.flatMap { $0.presenterID == nil ? $0 : nil } },
+            set: { store.messaging.draft = $0 })
+    }
+
+    private var messageMenu: some View {
+        let agents = store.filteredAgents
+        return Menu {
+            ForEach(HerdrBroadcastGroup.allCases) { group in
+                let count = group.recipients(from: agents).count
+                Button("\(group.title) (\(count))") {
+                    store.messaging.compose(group, from: agents)
+                }
+                .disabled(count == 0)
+            }
+        } label: {
+            Label("Message", systemImage: "paperplane")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Send a message to every working or stopped agent in the list")
     }
 
     private var terminalCloseRequested: Binding<Bool> {
@@ -170,6 +200,7 @@ struct HerdrPage: View {
             trailing: {
                 HStack(spacing: UIScale.pt(10)) {
                     spacesWindowMenu
+                    messageMenu
                     spaceGroupingToggle
                     Button {
                         store.searchPresented = true
@@ -969,6 +1000,14 @@ struct HerdrPage: View {
                         .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
+                if let waiting = store.messaging.armedHook(for: agent.id) {
+                    Image(systemName: "paperplane.circle.fill")
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.accent(dark))
+                        .padding(.top, UIScale.pt(2))
+                        .help(waiting.schedule.sendsPhrase(now: Date()))
+                        .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
+                }
             }
             .padding(.leading, UIScale.pt(12))
             .padding(.trailing, UIScale.pt(8))
@@ -1016,6 +1055,16 @@ struct HerdrPage: View {
             if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
             store.close(agent.id)
             HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
+        }
+        if !agent.isTerminal {
+            Divider()
+            Button("Send Message…") { store.messaging.compose(to: agent) }
+            if let hook = store.messaging.armedHook(for: agent.id) {
+                Button("Cancel Waiting Message") {
+                    Task { await store.messaging.remove(hook.id) }
+                }
+                .help(hook.schedule.sendsPhrase(now: Date()))
+            }
         }
     }
 

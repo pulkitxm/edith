@@ -701,6 +701,13 @@ enum JSONContract {
         JSONCase("ed herdr models", ["herdr", "models", "gemini", "--json"]),
         JSONCase("ed herdr defaults ls", ["herdr", "defaults", "ls", "--json"]),
         JSONCase(
+            "ed herdr send", ["herdr", "send", "w9:p99", "hello", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed herdr hooks ls", ["herdr", "hooks", "ls", "--json"]),
+        JSONCase(
+            "ed herdr hooks rm", ["herdr", "hooks", "rm", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed herdr defaults set",
             ["herdr", "defaults", "set", "gemini", "--model", "pro", "--json"],
             mutatesTheMachine: true),
