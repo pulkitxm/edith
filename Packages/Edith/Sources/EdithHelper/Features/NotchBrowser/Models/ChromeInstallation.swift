@@ -3,6 +3,7 @@ import Foundation
 
 enum ChromeReadiness: Equatable, Sendable {
     case notInstalled
+    case unreadable(String)
     case notDefault(currentBrowser: String?)
     case noProfiles
     case ready
@@ -10,7 +11,7 @@ enum ChromeReadiness: Equatable, Sendable {
     var allowsAttaching: Bool {
         switch self {
         case .ready, .notDefault: true
-        case .notInstalled, .noProfiles: false
+        case .notInstalled, .unreadable, .noProfiles: false
         }
     }
 }
@@ -18,6 +19,8 @@ enum ChromeReadiness: Equatable, Sendable {
 struct ChromeInstallation: Sendable {
     static let bundleIdentifier = "com.google.Chrome"
     static let downloadURL = URL(string: "https://www.google.com/chrome/")!
+    static let privacySettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
 
     var applicationURL: @Sendable () -> URL?
     var defaultBrowser: @Sendable () -> (bundleIdentifier: String, name: String)?
@@ -51,10 +54,15 @@ struct ChromeInstallation: Sendable {
     }
 
     func inspect() -> (readiness: ChromeReadiness, profiles: [ChromeProfile]) {
-        let installed = applicationURL() != nil
-        let profiles = installed ? ((try? userData.profiles()) ?? []) : []
+        guard applicationURL() != nil else { return (.notInstalled, []) }
+        let profiles: [ChromeProfile]
+        do {
+            profiles = try userData.profiles()
+        } catch {
+            return (.unreadable(error.localizedDescription), [])
+        }
         let readiness = Self.readiness(
-            installed: installed, defaultBrowser: defaultBrowser(), profileCount: profiles.count)
+            installed: true, defaultBrowser: defaultBrowser(), profileCount: profiles.count)
         return (readiness, profiles)
     }
 

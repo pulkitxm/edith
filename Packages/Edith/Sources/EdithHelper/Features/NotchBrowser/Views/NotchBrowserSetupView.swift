@@ -44,7 +44,13 @@ struct NotchBrowserSetupView: View {
                     ? "Install Chrome and sign in to a profile, then check again." : nil,
                 actionTitle: store.readiness == .notInstalled ? "Download Chrome" : nil,
                 action: store.downloadChrome)
-            if store.readiness != .notInstalled {
+            if case .unreadable(let reason) = store.readiness {
+                checkRow(
+                    ok: false, warning: true, title: "Edith cannot read Chrome's data",
+                    detail:
+                        "\(reason) Allow access if macOS asks, or add Edith under Full Disk Access.",
+                    actionTitle: "Open Privacy Settings", action: store.openPrivacySettings)
+            } else if store.readiness != .notInstalled {
                 checkRow(
                     ok: store.readiness == .ready || store.readiness == .noProfiles,
                     warning: true,

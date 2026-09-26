@@ -94,7 +94,6 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case virtualCamera
     case notchShelf
     case audioMixer
-    case notchBrowser
     case clipboard
     case keystrokeHighlight
     case focusDim

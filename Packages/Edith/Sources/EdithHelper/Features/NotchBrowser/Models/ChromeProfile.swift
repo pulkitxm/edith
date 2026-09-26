@@ -44,6 +44,7 @@ struct ChromeUserData: Equatable, Sendable {
     }
 
     func profiles(fileManager: FileManager = .default) throws -> [ChromeProfile] {
+        guard fileManager.fileExists(atPath: localStateURL.path) else { return [] }
         let data = try Data(contentsOf: localStateURL)
         return ChromeProfileParser.profiles(
             localState: data, root: root,

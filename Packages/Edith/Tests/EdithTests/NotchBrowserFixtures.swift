@@ -24,6 +24,7 @@ struct SyntheticChromeProfile {
     var email: String?
     var cookies: [SyntheticChromeCookie] = []
     var localStorage: [String: [String: String]] = [:]
+    var colorARGB: Int64?
 }
 
 struct SyntheticChrome {
@@ -43,6 +44,7 @@ struct SyntheticChrome {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             var info: [String: Any] = ["name": profile.name]
             if let email = profile.email { info["user_name"] = email }
+            if let color = profile.colorARGB { info["profile_highlight_color"] = color }
             cache[profile.directory] = info
             try Self.writeCookies(
                 profile.cookies, to: folder.appendingPathComponent("Cookies"),

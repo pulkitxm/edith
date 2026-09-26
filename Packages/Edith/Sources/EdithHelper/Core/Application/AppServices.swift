@@ -278,7 +278,11 @@ final class AppServices {
             controller.shutdown()
             notchShelf = nil
         }
-        if browserOn, notchBrowser == nil { notchBrowser = NotchBrowserStore() }
+        if browserOn, notchBrowser == nil {
+            let store = NotchBrowserStore()
+            store.onProfileChange = { IPC.post(IPC.Name.notchBrowserChanged) }
+            notchBrowser = store
+        }
         notchShelf?.attachBrowser(notchBrowser)
         notchShelf?.attachLocalMusic(music)
 
