@@ -29,6 +29,12 @@ import Testing
         #expect(HerdrWorkspaceListCommand.arguments == ["workspace", "list"])
     }
 
+    @Test func agentStartNameLowercasesPublicIds() {
+        #expect(HerdrAgentStartCommand.name("grok", pane: "w5:p1") == "grok-w5-p1")
+        #expect(HerdrAgentStartCommand.name("grok", pane: "w5:p1V") == "grok-w5-p1v")
+        #expect(HerdrAgentStartCommand.name("grok", pane: "wG:pA") == "grok-wg-pa")
+    }
+
     @Test func agentStartCarriesKindPaneAndTimeout() {
         #expect(
             HerdrAgentStartCommand.arguments(

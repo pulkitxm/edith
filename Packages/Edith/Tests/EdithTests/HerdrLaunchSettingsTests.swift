@@ -92,7 +92,7 @@ import Testing
                 defaults: defaults
             ).local[2]
         }
-        #expect(names == ["opencode-w5-pQ", "opencode-w5-pR"])
+        #expect(names == ["opencode-w5-pq", "opencode-w5-pr"])
     }
 
     @Test func anOverriddenCommandGetsTheSameFlagsTyped() {
