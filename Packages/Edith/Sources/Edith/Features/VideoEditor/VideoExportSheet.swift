@@ -43,12 +43,24 @@ enum VideoExportQuality: String, CaseIterable, Identifiable {
 
 struct VideoExportSheet: View {
     let model: VideoEditorModel
-    let onExport: (Bool, VideoExportQuality) -> Void
+    var exporter = VideoExporter.shared
     @Environment(\.dismiss) private var dismiss
     @State private var format = "mp4"
     @State private var quality: VideoExportQuality = .source
 
     var body: some View {
+        Group {
+            if let job = exporter.job {
+                progress(job)
+            } else {
+                options
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private var options: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Export", systemImage: "square.and.arrow.up")
                 .font(.title2.weight(.semibold))
@@ -110,20 +122,98 @@ struct VideoExportSheet: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Export…") {
-                    onExport(format == "gif", quality)
-                    dismiss()
+                    model.export(gif: format == "gif", quality: quality)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(model.pipeline == nil)
             }
         }
-        .padding(24)
-        .frame(width: 420)
         .onAppear {
             if model.gifFPS > Int(sourceFPS) { model.gifFPS = 10 }
             if model.gifWidth > Int(model.pipeline?.canvas.width ?? 0) {
                 model.gifWidth = 0
             }
         }
+    }
+
+    private func progress(_ job: VideoExporter.Job) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch job.phase {
+            case .exporting:
+                Label("Exporting", systemImage: "square.and.arrow.up")
+                    .font(.title2.weight(.semibold))
+                destination(job)
+                ProgressView(value: job.progress)
+                HStack {
+                    Text(job.progress.formatted(.percent.precision(.fractionLength(0))))
+                    Spacer()
+                    if let remaining = job.secondsRemaining {
+                        Text("About \(Self.remaining(remaining)) left")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                Text(
+                    "You can close this, or even quit Edith. The export keeps running in the background."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Stop Export", role: .destructive) { exporter.cancel() }
+                    Button("Hide") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            case .finished:
+                Label("Export finished", systemImage: "checkmark.circle.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.green, .primary)
+                destination(job)
+                HStack {
+                    Spacer()
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([job.destination])
+                    }
+                    Button("Done") { close() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            case .failed(let message):
+                Label("Export failed", systemImage: "exclamationmark.triangle.fill")
+                    .font(.title2.weight(.semibold))
+                destination(job)
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                HStack {
+                    Spacer()
+                    Button("Done") { close() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+    }
+
+    private func destination(_ job: VideoExporter.Job) -> some View {
+        Text(job.destination.lastPathComponent)
+            .font(.callout)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private func close() {
+        exporter.clear()
+        dismiss()
+    }
+
+    static func remaining(_ seconds: Double) -> String {
+        Duration.seconds(max(1, seconds.rounded())).formatted(
+            .units(
+                allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 1))
     }
 
     private var sourceFPS: Double {

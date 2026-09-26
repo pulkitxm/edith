@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import CoreVideo
 import ImageIO
+import os
 import Testing
 @testable import Edith
 
@@ -41,6 +42,40 @@ import Testing
             NSBitmapImageRep(cgImage: output).colorAt(x: 32, y: 32)?
                 .usingColorSpace(.deviceRGB))
         #expect(outputPixel.redComponent < normal - 0.25)
+    }
+
+    @Test func sparseScreenRecordingExportsAtASteadyFrameRate() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-frame-rate-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("sparse.mov")
+        try await createVideo(at: source, frameTimes: [0, 0.04, 0.6, 0.62, 0.95], length: 1)
+        var project = VideoProject.create()
+        project.addAsset(source, duration: 1, width: 64, height: 64)
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        let exported = directory.appendingPathComponent("steady.mp4")
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        try await pipeline.exportMP4(to: exported) { value in
+            reported.withLock { $0.append(value) }
+        }
+        #expect(reported.withLock { $0.last } == 1)
+        let asset = AVURLAsset(url: exported)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(output)
+        #expect(reader.startReading())
+        var times: [Double] = []
+        while let sample = output.copyNextSampleBuffer() {
+            if CMSampleBufferGetNumSamples(sample) > 0 {
+                times.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds)
+            }
+        }
+        times.sort()
+        let gaps = zip(times, times.dropFirst()).map { $1 - $0 }
+        #expect(times.count >= 58)
+        #expect(gaps.allSatisfy { abs($0 - 1.0 / 60) < 0.002 })
     }
 
     @Test @MainActor func importedImageRendersAsEditableClip() async throws {
@@ -260,13 +295,13 @@ import Testing
         #expect(notUpscaled.canvas == pipeline.canvas)
 
         let gif = directory.appendingPathComponent("output.gif")
-        do { try pipeline.exportGIF(to: gif, fps: 5) } catch {
+        do { try await pipeline.exportGIF(to: gif, fps: 5) } catch {
             Issue.record("GIF export failed: \(error)"); return
         }
         let frames = try #require(CGImageSourceCreateWithURL(gif as CFURL, nil))
         #expect(CGImageSourceGetCount(frames) >= 4)
         let smaller = directory.appendingPathComponent("small.gif")
-        try pipeline.exportGIF(to: smaller, fps: 5, maxWidth: 32, loop: false)
+        try await pipeline.exportGIF(to: smaller, fps: 5, maxWidth: 32, loop: false)
         let resized = try #require(CGImageSourceCreateWithURL(smaller as CFURL, nil))
         let firstFrame = try #require(CGImageSourceCreateImageAtIndex(resized, 0, nil))
         #expect(firstFrame.width <= 32)
@@ -310,7 +345,10 @@ import Testing
             at: CMTime(seconds: seconds, preferredTimescale: 600), actualTime: nil)
     }
 
-    private func createVideo(at url: URL, brightness: UInt8 = 0) async throws {
+    private func createVideo(
+        at url: URL, brightness: UInt8 = 0,
+        frameTimes: [Double] = (0..<30).map { Double($0) / 30 }, length: Double? = nil
+    ) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(
             mediaType: .video,
@@ -329,7 +367,7 @@ import Testing
         writer.add(input)
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
-        for frame in 0..<30 {
+        for (frame, time) in frameTimes.enumerated() {
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(5))
             }
@@ -343,9 +381,12 @@ import Testing
             CVPixelBufferUnlockBaseAddress(pixel, [])
             #expect(
                 adaptor.append(
-                    pixel, withPresentationTime: CMTime(value: Int64(frame), timescale: 30)))
+                    pixel, withPresentationTime: CMTime(seconds: time, preferredTimescale: 600)))
         }
         input.markAsFinished()
+        if let length {
+            writer.endSession(atSourceTime: CMTime(seconds: length, preferredTimescale: 600))
+        }
         await withCheckedContinuation { continuation in
             writer.finishWriting { continuation.resume() }
         }

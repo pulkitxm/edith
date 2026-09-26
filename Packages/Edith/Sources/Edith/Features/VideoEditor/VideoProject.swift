@@ -13,6 +13,8 @@ struct VideoProject {
         let url: URL
         let title: String
         let isOpenScreenLibrary: Bool
+        let previewURL: URL?
+        let modified: Date
         var id: URL { url }
     }
 
@@ -39,18 +41,14 @@ struct VideoProject {
                     at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
             return urls.filter { $0.pathExtension == "openscreen" }.compactMap { url in
                 guard let project = try? open(url) else { return nil }
-                return Listing(url: url, title: project.title, isOpenScreenLibrary: external)
+                return Listing(
+                    url: url, title: project.title, isOpenScreenLibrary: external,
+                    previewURL: project.previewAsset?.url,
+                    modified: (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                        .contentModificationDate ?? .distantPast)
             }
         }
-        .sorted {
-            let left =
-                (try? $0.url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
-            let right =
-                (try? $1.url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
-            return left > right
-        }
+        .sorted { $0.modified > $1.modified }
     }
 
     struct Asset: Identifiable {
@@ -137,6 +135,13 @@ struct VideoProject {
         root["project"] = metadata
     }
     var assets: [Asset] { (root["assets"] as? [[String: Any]] ?? []).map { Asset(raw: $0) } }
+    var previewAsset: Asset? {
+        let primary = (root["project"] as? [String: Any])?["primaryAssetId"] as? String
+        let visual = assets.filter {
+            $0.raw["kind"] as? String != "audio" && $0.raw["kind"] as? String != "music"
+        }
+        return visual.first { $0.id == primary } ?? visual.first
+    }
     var clips: [Clip] {
         let timeline = root["timeline"] as? [String: Any] ?? [:]
         let legacy = root["legacyEditor"] as? [String: Any] ?? [:]

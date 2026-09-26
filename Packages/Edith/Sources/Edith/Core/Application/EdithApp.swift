@@ -137,6 +137,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        VideoExportBackground.userReturned()
         if !appStarted {
             startApp()
         } else if !hasVisibleWindows {
@@ -146,6 +147,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if VideoExportBackground.defersQuit(sender) { return .terminateCancel }
         guard appStarted, AppBuildIdentity.isDevelopment, !AgentService.usesCustomService else {
             return .terminateNow
         }
@@ -173,7 +175,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        !VideoExportBackground.keepsAppOpenAfterLastWindowClosed()
     }
 }
 
