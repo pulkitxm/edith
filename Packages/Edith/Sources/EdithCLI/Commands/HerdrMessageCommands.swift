@@ -5,6 +5,34 @@ import Foundation
 enum HerdrMessageCLI {
     static let groups = ["working", "stopped"]
 
+    static func schedule(whenFinished: Bool, delay: String?, at: String?) throws
+        -> HerdrHookSchedule?
+    {
+        let choices = [whenFinished, delay != nil, at != nil].filter { $0 }
+        guard choices.count <= 1 else {
+            throw CLIFailure.usage(
+                "pick one of --when-finished, --in, or --at",
+                hint: "a message has one delivery time")
+        }
+        if whenFinished { return .whenFinished }
+        if let delay {
+            guard let when = HerdrScheduleParser.delay(delay, from: Date()) else {
+                throw CLIFailure.usage(
+                    "could not read --in \(delay)", hint: "use 15m, 1h, or 1h30m")
+            }
+            return .at(when)
+        }
+        if let at {
+            guard let when = HerdrScheduleParser.clock(at, now: Date()) else {
+                throw CLIFailure.usage(
+                    "could not read --at \(at)",
+                    hint: "use a future time such as 16:30, 4:30pm, or tomorrow 9:00am")
+            }
+            return .at(when)
+        }
+        return nil
+    }
+
     static func message(_ raw: String) throws -> String {
         guard let text = HerdrAgentPrompt.normalized(raw) else {
             throw CLIFailure.usage("the message is empty", hint: "pass the text to send")
@@ -55,6 +83,7 @@ enum HerdrMessageCLI {
             "title": .string(hook.title),
             "message": .string(hook.message),
             "state": .string(hook.phase.rawValue),
+            "when": .string(hook.schedule.sendsPhrase(now: Date())),
             "detail": .optional(hook.detail),
         ])
     }
@@ -88,17 +117,27 @@ struct HerdrSendCommand: AsyncParsableCommand {
         help: "Send it the next time the agent finishes a turn instead of now.")
     var whenFinished = false
 
+    @Option(name: .customLong("in"), help: "Send after a delay, such as 15m, 1h, or 1h30m.")
+    var delay: String?
+
+    @Option(
+        name: .long,
+        help: "Send at a clock time, such as 16:30, 4:30pm, or tomorrow 9:00am.")
+    var at: String?
+
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
     func run() async throws {
         try await execute {
             let text = try HerdrMessageCLI.message(message)
+            let schedule = try HerdrMessageCLI.schedule(
+                whenFinished: whenFinished, delay: delay, at: at)
             let group = target.lowercased()
             if HerdrMessageCLI.groups.contains(group) {
-                guard !whenFinished else {
+                guard schedule == nil else {
                     throw CLIFailure.usage(
-                        "--when-finished needs one pane", hint: "pass a pane id instead")
+                        "a group sends now", hint: "pass a pane id to schedule one agent")
                 }
                 try await broadcast(text, group: group)
                 return
@@ -109,8 +148,8 @@ struct HerdrSendCommand: AsyncParsableCommand {
                 throw CLIFailure.usage(
                     "\(target) is a terminal, not an agent", hint: "pick an agent pane")
             }
-            if whenFinished {
-                try await arm(text, for: agent)
+            if let schedule {
+                try await arm(text, for: agent, schedule: schedule)
             } else {
                 try await send(text, to: agent)
             }
@@ -146,10 +185,12 @@ struct HerdrSendCommand: AsyncParsableCommand {
         guard outcome.delivered else { throw CLIFailure(outcome.summary) }
     }
 
-    private func arm(_ text: String, for agent: HerdrAgent) async throws {
+    private func arm(
+        _ text: String, for agent: HerdrAgent, schedule: HerdrHookSchedule
+    ) async throws {
         let snapshot: HerdrHooksSnapshot
         do {
-            snapshot = try await HerdrHookClient().arm(text, for: agent)
+            snapshot = try await HerdrHookClient().arm(text, for: agent, schedule: schedule)
         } catch {
             throw HerdrMessageCLI.agentFailure(error)
         }
@@ -160,14 +201,15 @@ struct HerdrSendCommand: AsyncParsableCommand {
             CLIOut.json(HerdrMessageCLI.hookJSON(hook))
             return
         }
-        CLIOut.out("\(agent.title) gets it when it finishes (\(hook.id.uuidString))")
+        CLIOut.out(
+            "\(agent.title): \(hook.schedule.sendsPhrase(now: Date())) (\(hook.id.uuidString))")
     }
 }
 
 struct HerdrHooksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hooks",
-        abstract: "Messages waiting for an agent to finish, and how the last ones went.",
+        abstract: "Messages waiting to be sent, and how the last ones went.",
         subcommands: [HerdrHooksListCommand.self, HerdrHooksRemoveCommand.self],
         defaultSubcommand: HerdrHooksListCommand.self)
 }
@@ -203,7 +245,9 @@ struct HerdrHooksListCommand: AsyncParsableCommand {
                     rows: snapshot.hooks.map {
                         [
                             String($0.id.uuidString.prefix(8)), $0.pane, $0.title,
-                            $0.detail.map { "\($0)" } ?? $0.phase.rawValue, $0.message,
+                            $0.phase == .armed
+                                ? $0.schedule.sendsPhrase(now: Date())
+                                : ($0.detail ?? $0.phase.rawValue), $0.message,
                         ]
                     }))
         }

@@ -1,9 +1,9 @@
 # `ed herdr hooks`
 
-Messages waiting for an agent to finish, from `ed herdr send --when-finished`
-or the Herdr page, plus the result of the ones that already went out. The
-background agent owns them, so they keep working while the Edith window is
-closed.
+Messages waiting to go out, from `ed herdr send --when-finished`, `--in`,
+`--at`, or the Herdr page, plus the result of the ones that already went out.
+The background agent owns them, so they keep working while the Edith window
+is closed.
 
 ```
 ed herdr hooks [ls] [--json]
@@ -36,7 +36,8 @@ ed herdr hooks rm <id> [--json]
       "pane": "w1:p2",
       "session": "default",
       "state": "armed",
-      "title": "Refactor the parser"
+      "title": "Refactor the parser",
+      "when": "Sends when it finishes"
     }
   ]
 }
@@ -44,13 +45,15 @@ ed herdr hooks rm <id> [--json]
 
 `state` is `armed` while it waits, `sending` for the moment it goes out, then
 `sent`, `skipped` (Herdr refused it, see `detail`) or `cancelled` (the agent
-closed or was replaced). Finished entries are kept for a day.
+closed or was replaced). `when` says whether it is waiting for the agent to
+finish or for a clock time, such as `Sends today at 4:30 PM`. Finished entries
+are kept for a day.
 
 `rm` prints `{"removed": "<id>"}`. An id that matches nothing, or more than one
 hook, exits 3. Both commands exit 4 when the background agent is not running.
 
 ## Where to go next
 
-- [`ed herdr send`](./send.md), send now or when an agent finishes
+- [`ed herdr send`](./send.md), send now, when an agent finishes, or at a time
 - [`ed herdr`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)

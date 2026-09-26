@@ -2,11 +2,11 @@
 
 Types a message into a live agent and presses Return, through
 `herdr agent prompt`. The target is one pane, or every working or every
-stopped agent at once. With `--when-finished` the message waits until that
-agent finishes its current turn instead.
+stopped agent at once. One pane can wait until the agent finishes, until a
+delay elapses, or until a clock time.
 
 ```
-ed herdr send <pane> <message> [--machine <name>] [--session <name>] [--when-finished] [--json]
+ed herdr send <pane> <message> [--machine <name>] [--session <name>] [--when-finished] [--in <delay>] [--at <time>] [--json]
 ed herdr send working|stopped <message> [--machine <name>] [--session <name>] [--json]
 ```
 
@@ -19,6 +19,8 @@ ed herdr send working|stopped <message> [--machine <name>] [--session <name>] [-
 | `--machine <name>` | machine name, alias, UUID, unique prefix, or `local` | all hosts | Only this Mac, or only one SSH machine |
 | `--session <name>` | Herdr session name | any | Narrow a pane id, or a group, to one session |
 | `--when-finished` | flag | off | Hand the message to the background agent, which sends it once the agent next finishes |
+| `--in <delay>` | `15m`, `90m`, `1h`, or `1h30m` | unset | Send once after this delay. Up to 7 days |
+| `--at <time>` | `16:30`, `4:30pm`, `4pm`, or `tomorrow 9:00am` | unset | Send once at this future clock time. Bare times are 24-hour |
 | `--json` | flag | off | Emit JSON on stdout |
 
 ## What Herdr accepts
@@ -31,16 +33,19 @@ foreground process is skipped too. Terminals are never messaged.
 A working agent does receive the text. Most agents queue it for after the
 current turn. `submitted` means Herdr typed it, not that the agent acted on it.
 
-## `--when-finished`
+## `--when-finished`, `--in`, and `--at`
 
-The background agent keeps the message and checks the agent with
-`herdr agent get` every two seconds on this Mac and every ten seconds on SSH
-machines. It sends the message once the agent has worked and is back at its
-prompt, then keeps the result for a day so `ed herdr hooks` and the Herdr page
-can show it. It is sent at most once: if Edith restarts in the middle of
-sending, it is not sent again. A new message for the same agent replaces the
-waiting one. The message is dropped when the agent closes or a different kind
-of agent takes over the pane.
+Pick at most one. A group (`working` or `stopped`) always sends now.
+
+The background agent keeps the message. `--when-finished` checks the agent
+with `herdr agent get` every two seconds on this Mac and every ten seconds on
+SSH machines, and sends once the agent has worked and is back at its prompt.
+`--in` and `--at` send at that moment even if the agent is mid-turn. Herdr
+then queues the text or skips it, and the result is kept for a day so
+`ed herdr hooks` and the Herdr page can show it. It is sent at most once: if
+Edith restarts in the middle of sending, it is not sent again. A new message
+for the same agent replaces the waiting one. The message is dropped when the
+agent closes or a different agent takes over the pane.
 
 Polling can miss a turn that starts and ends between two checks while the pane
 is focused in Herdr, because Herdr then reports `idle` instead of `done`.
@@ -70,7 +75,7 @@ Sending now prints the per-agent results.
 
 `result` is one of `submitted`, `blocked`, `not_ready`, `gone`, `failed`.
 `failures` lists every pane that did not take the message.
-`--when-finished` prints the waiting hook in the shape `ed herdr hooks` uses.
+`--when-finished`, `--in`, and `--at` print the waiting hook in the shape `ed herdr hooks` uses.
 
 The human form for a group is a table, `MACHINE`, `PANE`, `TITLE`, `RESULT`. An
 empty group prints a note on stderr and exits 0.
@@ -81,9 +86,9 @@ empty group prints a note on stderr and exits 0.
 | --- | --- |
 | 0 | Submitted to the pane, the group ran, or the hook is waiting |
 | 1 | One pane was named and Herdr did not take the message |
-| 2 | Empty message, `--when-finished` with a group, or a terminal pane |
+| 2 | Empty message, a scheduled group, more than one delivery flag, a delay or time Edith cannot read, or a terminal pane |
 | 3 | No such pane, or `--machine` named no configured machine |
-| 4 | `--when-finished` and the background agent is not running |
+| 4 | A scheduled send and the background agent is not running |
 
 ## Where to go next
 

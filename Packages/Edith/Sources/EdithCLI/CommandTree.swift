@@ -344,7 +344,7 @@ public enum CommandTree {
         "ed herdr send": Spec(
             options: [
                 "--json", "-h", "--help", "--version", "--machine", "--session",
-                "--when-finished",
+                "--when-finished", "--in", "--at",
             ],
             arguments: [.free, .free]),
         "ed herdr hooks ls": Spec(options: ["--json", "-h", "--help", "--version"]),

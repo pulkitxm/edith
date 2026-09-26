@@ -25,7 +25,7 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr models [<kind>]` | Models, effort levels and fast mode each agent offers |
 | `ed herdr defaults` | The model, effort and fast mode every launch uses |
 | `ed herdr defaults set <kind>` | Change those launch defaults for one kind |
-| `ed herdr send <pane> <message>` | Type a message into one agent, or `working` / `stopped` agents |
+| `ed herdr send <pane> <message>` | Type a message now, when the agent finishes, or at a time |
 | `ed herdr hooks` | Messages waiting for an agent to finish |
 
 `ed herdr list` is an alias for `ed herdr ls`.
