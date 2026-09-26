@@ -108,10 +108,10 @@ final class StudioImageEditorModel {
     func load() {
         loadTask?.cancel()
         let url = self.url
+        let previewSize = Self.previewSize
         loadTask = Task { [weak self] in
             let loaded = await Task.detached(priority: .userInitiated) {
-                StudioImageEditorWork.loadSource(
-                    url, maxPixelSize: StudioImageEditorModel.previewSize)
+                StudioImageEditorWork.loadSource(url, maxPixelSize: previewSize)
             }.value
             guard let self, !Task.isCancelled else { return }
             switch loaded {

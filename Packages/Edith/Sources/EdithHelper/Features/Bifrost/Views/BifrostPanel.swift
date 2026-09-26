@@ -231,8 +231,15 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         dragMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
-            MainActor.assumeIsolated { self?.handle(event) ?? event }
+            let result = MainActor.assumeIsolated {
+                EventResult(event: self?.handle(event) ?? event)
+            }
+            return result.event
         }
+    }
+
+    private struct EventResult: @unchecked Sendable {
+        let event: NSEvent
     }
 
     private func stopWatchingDrags() {

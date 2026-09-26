@@ -77,7 +77,7 @@ final class PresenterScanner: @unchecked Sendable {
 
     init(
         source: PresenterWindowSource = .live, jev: PresenterJevCheck = .live,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.source = source
         self.jev = jev

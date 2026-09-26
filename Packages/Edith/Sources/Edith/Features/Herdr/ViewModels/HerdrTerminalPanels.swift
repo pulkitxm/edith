@@ -424,6 +424,9 @@ final class HerdrTerminalPanels {
             return
         }
         guard checking.insert(id).inserted else { return }
+        let proceed: @MainActor () -> Void = { [weak self] in
+            self?.close(id)
+        }
         Task {
             await refresh(ids: [id])
             checking.remove(id)
@@ -434,7 +437,7 @@ final class HerdrTerminalPanels {
             }
             closeRequest = HerdrTerminalCloseRequest(
                 scope: .terminal, running: [terminal.title],
-                proceed: { [weak self] in self?.close(id) })
+                proceed: proceed)
         }
     }
 

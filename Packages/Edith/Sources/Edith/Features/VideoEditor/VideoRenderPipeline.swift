@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
@@ -130,7 +130,23 @@ struct VideoRenderPipeline {
         return (timeMs - current.timeMs <= 150 ? current : nil, clicked)
     }
 
-    private final class CameraFrameSource {
+    private final class FrameSource: @unchecked Sendable {
+        let generator: AVAssetImageGenerator
+        private let lock = NSLock()
+
+        init(asset: AVAsset) {
+            generator = AVAssetImageGenerator(asset: asset)
+        }
+
+        func frame(at time: Double) -> CGImage? {
+            lock.withLock {
+                try? generator.copyCGImage(
+                    at: CMTime(seconds: time, preferredTimescale: 600), actualTime: nil)
+            }
+        }
+    }
+
+    private final class CameraFrameSource: @unchecked Sendable {
         let generator: AVAssetImageGenerator
         let offset: Double
         private let lock = NSLock()
@@ -201,7 +217,7 @@ struct VideoRenderPipeline {
         var audio: AVMutableCompositionTrack?
 
         var segments: [Segment] = []
-        var frameGenerators: [String: AVAssetImageGenerator] = [:]
+        var frameGenerators: [String: FrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
         var cursor = 0.0
@@ -229,7 +245,7 @@ struct VideoRenderPipeline {
                     url: URL(fileURLWithPath: cameraPath), offset: (start + offset) / 1000)
             }
             if frameGenerators[clip.assetID] == nil {
-                frameGenerators[clip.assetID] = AVAssetImageGenerator(asset: asset)
+                frameGenerators[clip.assetID] = FrameSource(asset: asset)
             }
             guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
                 throw RenderError.noVideo
@@ -383,7 +399,6 @@ struct VideoRenderPipeline {
         let finalGenerators = frameGenerators
         let finalCameras = cameras
         let finalCursors = cursors
-        let generatorLock = NSLock()
         let size = canvas
         let baseComposition = AVVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
@@ -399,11 +414,7 @@ struct VideoRenderPipeline {
                     request.finish(with: RenderError.noVideo)
                     return
                 }
-                generatorLock.lock()
-                let frame = try? generator.copyCGImage(
-                    at: CMTime(seconds: segment.sourceTime(at: time), preferredTimescale: 600),
-                    actualTime: nil)
-                generatorLock.unlock()
+                let frame = generator.frame(at: segment.sourceTime(at: time))
                 guard let frame else {
                     request.finish(
                         with: RenderError.exportFailed(

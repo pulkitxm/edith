@@ -1078,9 +1078,9 @@ final class DOCXBuilder {
                     block.backgroundColor = color
                 }
                 switch properties?.child("vAlign")?.attribute("val") {
-                case "center": block.verticalAlignment = .middle
-                case "bottom": block.verticalAlignment = .bottom
-                default: block.verticalAlignment = .top
+                case "center": block.verticalAlignment = .middleAlignment
+                case "bottom": block.verticalAlignment = .bottomAlignment
+                default: block.verticalAlignment = .topAlignment
                 }
                 let before = output.length
                 blocks(

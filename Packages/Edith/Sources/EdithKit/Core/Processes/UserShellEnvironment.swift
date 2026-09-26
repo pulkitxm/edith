@@ -53,8 +53,11 @@ public final class UserShellEnvironment: @unchecked Sendable {
         shell: URL = ClaudeShellCredentialResolver.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
-        now: @escaping @Sendable () -> Date = Date.init,
-        capture: @escaping Capture = UserShellEnvironment.captureLoginEnvironment
+        now: @escaping @Sendable () -> Date = { Date() },
+        capture: @escaping Capture = { shell, home, base in
+            await UserShellEnvironment.captureLoginEnvironment(
+                shell: shell, home: home, base: base)
+        }
     ) {
         self.shell = shell
         self.home = home

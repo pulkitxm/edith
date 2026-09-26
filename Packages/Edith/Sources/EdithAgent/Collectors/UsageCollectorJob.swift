@@ -160,7 +160,7 @@ public final class UsageCollectorJob: @unchecked Sendable {
                             machinePolicy: request.machinePolicy, runID: request.runID)
                         await UsageAttributionAdvisor.schedule {
                             let engine = AgentJev.engine
-                            return await engine.isConfigured ? engine : nil
+                            return engine.isConfigured ? engine : nil
                         }
                         return result
                     } catch UsageRefreshFailure.busy {

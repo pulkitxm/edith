@@ -95,7 +95,7 @@ public actor JevEngine: JevDeciding {
 
     public init(
         store: JevKeyStore, makeClient: @escaping ClientFactory = { JevClient(apiKey: $0) },
-        now: @escaping @Sendable () -> Date = Date.init,
+        now: @escaping @Sendable () -> Date = { Date() },
         onKeyChange: @escaping @Sendable (Bool) -> Void = { _ in }
     ) {
         self.store = store

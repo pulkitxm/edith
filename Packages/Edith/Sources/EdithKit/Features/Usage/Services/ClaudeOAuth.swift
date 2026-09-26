@@ -228,7 +228,7 @@ public enum ClaudeCredentialStore {
     ) -> ClaudeCredentialDataLookup {
         keychainData(
             maximumOutputBytes: maximumOutputBytes, readItem: readItem,
-            setInteractionAllowed: setKeychainPromptAllowed)
+            setInteractionAllowed: { _ in })
     }
 
     public static func keychainData(
@@ -286,7 +286,7 @@ public enum ClaudeCredentialStore {
         _ data: Data, updateItem: KeychainItemUpdater = SecItemUpdate
     ) throws {
         try updateKeychain(
-            data, updateItem: updateItem, setInteractionAllowed: setKeychainPromptAllowed)
+            data, updateItem: updateItem, setInteractionAllowed: { _ in })
     }
 
     public static func updateKeychain(
@@ -317,10 +317,6 @@ public enum ClaudeCredentialStore {
         setInteractionAllowed(false)
         defer { setInteractionAllowed(true) }
         return try body()
-    }
-
-    private static func setKeychainPromptAllowed(_ allowed: Bool) {
-        SecKeychainSetUserInteractionAllowed(allowed)
     }
 
     private static func noninteractiveContext() -> LAContext {

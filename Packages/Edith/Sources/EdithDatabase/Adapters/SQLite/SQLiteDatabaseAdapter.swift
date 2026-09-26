@@ -577,9 +577,9 @@ private enum SQLiteDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-    return try await DatabaseOperationSupport.check(
-        context, deadlineExceeded: deadlineExceeded)
-}
+        return try await DatabaseOperationSupport.check(
+            context, deadlineExceeded: deadlineExceeded)
+    }
 
     static func queryOnlyRead<Output>(
         _ database: Database,

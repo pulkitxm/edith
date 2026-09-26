@@ -748,7 +748,7 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                 timeout: MachineUsageCollector.defaultTimeout, verbose: false),
             includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
             onEvent: sink,
-            afterChange: { try? UsageAgentOperations.requestRefresh() })
+            afterChange: { _ = try? UsageAgentOperations.requestRefresh() })
         let round = result.round
         progress.end()
         if force, let failure = forcedMachineCollectionFailure(round) { throw failure }

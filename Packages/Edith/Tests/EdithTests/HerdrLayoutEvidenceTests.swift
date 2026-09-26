@@ -8,7 +8,7 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HerdrLayoutEvidenceTests {
-    private static let evidenceKey = "EDITH_HERDR_LAYOUT_EVIDENCE_DIR"
+    nonisolated private static let evidenceKey = "EDITH_HERDR_LAYOUT_EVIDENCE_DIR"
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment[evidenceKey] != nil))
     func sideBySideTabsRenderTheActualPageWithSyntheticAgents() throws {

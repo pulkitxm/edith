@@ -521,7 +521,8 @@ enum VirtualCameraSyntheticStudio {
 
 @MainActor
 @Suite(.serialized) struct VirtualCameraEvidenceTests {
-    static let directory = ProcessInfo.processInfo.environment["EDITH_VIRTUAL_CAMERA_EVIDENCE_DIR"]
+    nonisolated static let directory =
+        ProcessInfo.processInfo.environment["EDITH_VIRTUAL_CAMERA_EVIDENCE_DIR"]
 
     @Test func syntheticStudioAndMaskAreDistinct() throws {
         let frame = try #require(VirtualCameraSyntheticStudio.frame())

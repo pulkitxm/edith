@@ -739,8 +739,8 @@ enum ElasticsearchDatabaseDriverErrorClassifier {
     }
 
     private static func safeStatus(_ value: Int) -> Int {
-    DatabaseOperationSupport.httpStatus(value)
-}
+        DatabaseOperationSupport.httpStatus(value)
+    }
 }
 
 struct ElasticsearchDatabaseRootResponse: Decodable, Equatable, Sendable {
@@ -1153,8 +1153,8 @@ enum ElasticsearchDatabaseDriverSupport {
     }
 
     private static func numericPrefix(_ value: Substring) -> Int? {
-    DatabaseOperationSupport.numericPrefix(value)
-}
+        DatabaseOperationSupport.numericPrefix(value)
+    }
 
     private static func valid(
         _ value: String,
