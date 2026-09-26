@@ -70,13 +70,16 @@ final class VirtualCameraPageModel: ObservableObject {
     private let pipeline: VirtualCameraPipeline
     private let accessProvider: () -> AVAuthorizationStatus
     private let sourceProvider: () -> [VirtualCameraSource]
+    private let previewBus: VirtualCameraPreviewBus
     private var saveWork: DispatchWorkItem?
     private var statusToken: NSObjectProtocol?
     private var stateToken: NSObjectProtocol?
     private var statusTask: Task<Void, Never>?
     private var statsTimer: Timer?
+    private var helperPreviewTimer: DispatchSourceTimer?
     private var visible = false
     private var ticks = 0
+    private var previewFeed: PreviewFeed = .idle
     private var thumbnailSource: CGImage?
     private static let thumbnailRenderer = VirtualCameraRenderer()
 
@@ -87,7 +90,8 @@ final class VirtualCameraPageModel: ObservableObject {
         accessProvider: @escaping () -> AVAuthorizationStatus = {
             VirtualCameraDevices.authorization
         },
-        sourceProvider: @escaping () -> [VirtualCameraSource] = { VirtualCameraDevices.sources() }
+        sourceProvider: @escaping () -> [VirtualCameraSource] = { VirtualCameraDevices.sources() },
+        previewBus: VirtualCameraPreviewBus = VirtualCameraPreviewBus()
     ) {
         let state = VirtualCameraStore.load(defaults)
         self.defaults = defaults
@@ -97,8 +101,17 @@ final class VirtualCameraPageModel: ObservableObject {
         self.extensionManager = extensionManager ?? VirtualCameraExtensionManager()
         self.accessProvider = accessProvider
         self.sourceProvider = sourceProvider
+        self.previewBus = previewBus
         self.cameraAccess = accessProvider()
     }
+
+    private enum PreviewFeed {
+        case idle
+        case local
+        case helper
+    }
+
+    var showsHelperPreview: Bool { previewFeed == .helper }
 
     var composition: VirtualCameraComposition { state.composition }
 
@@ -132,9 +145,10 @@ final class VirtualCameraPageModel: ObservableObject {
     func appear() {
         guard !visible else { return }
         visible = true
+        previewBus.setWanted(true)
         if saveWork != nil { flushSave() } else { reloadState() }
         refreshSources()
-        extensionManager.refresh()
+        extensionManager.refreshDetached()
         statusToken = IPC.observe(
             IPC.Name.virtualCameraStatusChanged,
             info: { [weak self] info in
@@ -154,7 +168,7 @@ final class VirtualCameraPageModel: ObservableObject {
                 }
             })
         requestStatus()
-        startPreview()
+        syncPreviewFeed()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -165,6 +179,7 @@ final class VirtualCameraPageModel: ObservableObject {
     func disappear() {
         guard visible else { return }
         visible = false
+        previewBus.setWanted(false)
         flushSave()
         statusTask?.cancel()
         statusTask = nil
@@ -181,16 +196,22 @@ final class VirtualCameraPageModel: ObservableObject {
         ticks += 1
         if ticks % Self.statusRefreshTicks == 0 || (!helperReachable && !statusPending) {
             requestStatus()
+            extensionManager.refreshDetached()
         }
-        previewStatistics = pipeline.statistics
+        let statistics = pipeline.statistics
+        if statistics.sourceWidth != previewStatistics.sourceWidth
+            || statistics.sourceHeight != previewStatistics.sourceHeight
+            || statistics.source != previewStatistics.source
+        {
+            previewStatistics = statistics
+        }
         if tab == .look, let reference = pipeline.reference, reference !== thumbnailSource {
             updateLookThumbnails(from: reference)
         }
-        extensionManager.refresh()
         let access = accessProvider()
         if access != cameraAccess {
             cameraAccess = access
-            if access == .authorized { startPreview() }
+            if access == .authorized { syncPreviewFeed() }
         }
     }
 
@@ -206,6 +227,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard let decoded else { return }
         snapshot = decoded
         helperReachable = true
+        if visible { syncPreviewFeed() }
     }
 
     func requestStatus() {
@@ -237,18 +259,57 @@ final class VirtualCameraPageModel: ObservableObject {
         sources = sourceProvider()
     }
 
-    func startPreview() {
+    func syncPreviewFeed() {
+        guard visible else { return }
+        if snapshot?.live == true {
+            showHelperPreview()
+        } else {
+            hideHelperPreview()
+            startLocalPreview()
+        }
+    }
+
+    private func showHelperPreview() {
+        if previewFeed == .local { pipeline.stop() }
+        previewFeed = .helper
+        previewRunning = true
+        guard helperPreviewTimer == nil else { return }
+        let bus = previewBus
+        let display = display
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(4))
+        timer.setEventHandler {
+            guard let buffer = bus.latest() else { return }
+            display.push(buffer)
+        }
+        timer.resume()
+        helperPreviewTimer = timer
+    }
+
+    private func hideHelperPreview() {
+        helperPreviewTimer?.cancel()
+        helperPreviewTimer = nil
+        guard previewFeed == .helper else { return }
+        previewFeed = .idle
+        previewRunning = false
+    }
+
+    private func startLocalPreview() {
         cameraAccess = accessProvider()
-        guard visible, cameraAccess == .authorized, !previewRunning else { return }
+        guard visible, cameraAccess == .authorized, previewFeed != .local else { return }
+        hideHelperPreview()
         let display = display
         pipeline.update(state: state)
         pipeline.start { buffer in display.push(buffer) }
+        previewFeed = .local
         previewRunning = true
     }
 
     func stopPreview() {
-        guard previewRunning else { return }
-        pipeline.stop()
+        hideHelperPreview()
+        guard previewFeed == .local || previewRunning else { return }
+        if previewFeed == .local { pipeline.stop() }
+        previewFeed = .idle
         previewRunning = false
     }
 
@@ -266,7 +327,7 @@ final class VirtualCameraPageModel: ObservableObject {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.cameraAccess = self.accessProvider()
-                    self.startPreview()
+                    self.syncPreviewFeed()
                     self.refreshSources()
                 }
             }

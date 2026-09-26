@@ -202,7 +202,11 @@ enum VirtualCameraFixtures {
             state: state,
             environment: VirtualCameraEngineEnvironment(
                 authorization: { .authorized }, obsRunning: { obsRunning },
-                frontmostApplication: { frontmost }))
+                frontmostApplication: { frontmost }),
+            previewBus: VirtualCameraPreviewBus(
+                file: FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "camera-preview-\(UUID().uuidString).bin"),
+                unlinkOnClose: true))
     }
 
     static func obsHardware(watching: Bool) -> FakeCameraHardware {

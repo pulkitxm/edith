@@ -29,7 +29,11 @@ import Testing
                 environment: VirtualCameraExtensionEnvironment(
                     bundleURL: URL(fileURLWithPath: "/tmp/Missing.app"),
                     hasInstallEntitlement: { false }, deviceVisible: { false })),
-            accessProvider: { .denied }, sourceProvider: { sources })
+            accessProvider: { .denied }, sourceProvider: { sources },
+            previewBus: VirtualCameraPreviewBus(
+                file: FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "camera-preview-\(UUID().uuidString).bin"),
+                unlinkOnClose: true))
         return (model, defaults, name)
     }
 
@@ -137,6 +141,26 @@ import Testing
         model.importImage(file, for: .logo)
         #expect(model.errorMessage?.contains("not an image") == true)
         #expect(model.composition.overlays.logo.imagePath == nil)
+    }
+
+    @Test func aLiveHelperReplacesTheWindowCamera() {
+        let (model, defaults, name) = Self.model()
+        defer {
+            model.disappear()
+            defaults.removePersistentDomain(forName: name)
+        }
+        model.appear()
+        #expect(!model.showsHelperPreview)
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
+                route: .obs, live: true, state: model.state))
+        #expect(model.showsHelperPreview)
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
+                route: .obs, live: false, state: model.state))
+        #expect(!model.showsHelperPreview)
     }
 
     @Test func statusCombinesTheHelperAndTheState() {
@@ -271,6 +295,26 @@ import Testing
         let other = NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: "boom"])
         #expect(VirtualCameraExtensionManager.message(for: other) == "boom")
         #expect(!VirtualCameraExtensionManager.selfHasEntitlement())
+    }
+
+    @Test func detachedRefreshDoesNotBlockOnTheDeviceCheck() async {
+        let manager = VirtualCameraExtensionManager(
+            environment: VirtualCameraExtensionEnvironment(
+                bundleURL: URL(fileURLWithPath: "/tmp/Missing.app"),
+                hasInstallEntitlement: { false },
+                deviceVisible: {
+                    Thread.sleep(forTimeInterval: 0.25)
+                    return true
+                }))
+        let started = ContinuousClock.now
+        manager.refreshDetached()
+        #expect(started.duration(to: .now) < .milliseconds(100))
+        #expect(manager.phase == .checking)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while manager.phase != .installed && ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(manager.phase == .installed)
     }
 }
 

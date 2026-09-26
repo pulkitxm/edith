@@ -61,7 +61,7 @@ struct HerdrValueDial: View {
                 .frame(width: UIScale.pt(36), height: UIScale.pt(22))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .edithButtonTarget(.borderless)
     }
 
     private func nudge(_ delta: Int) {
@@ -99,7 +99,7 @@ struct HerdrTimingChoice: View {
                             selected ? DashSkin.accent(dark) : DashSkin.paper2(dark),
                             in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .edithButtonTarget(.borderless)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
@@ -159,7 +159,7 @@ struct HerdrAfterPicker: View {
                                 selected ? DashSkin.accent(dark) : Color.clear, lineWidth: 1)
                         }
                 }
-                .buttonStyle(.plain)
+                .edithButtonTarget(.borderless)
             }
         }
     }
@@ -217,7 +217,7 @@ struct HerdrAtPicker: View {
                                 selected ? DashSkin.accent(dark) : DashSkin.paper2(dark),
                                 in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .edithButtonTarget(.borderless)
                 }
             }
         }
@@ -246,7 +246,7 @@ struct HerdrAtPicker: View {
                 .background(
                     selected ? DashSkin.accent(dark) : DashSkin.paper2(dark), in: Capsule())
         }
-        .buttonStyle(.plain)
+        .edithButtonTarget(.borderless)
     }
 
     private var suggestionRow: some View {
@@ -279,7 +279,7 @@ struct HerdrAtPicker: View {
                             selected ? DashSkin.accent(dark) : Color.clear, lineWidth: 1)
                     }
             }
-            .buttonStyle(.plain)
+            .edithButtonTarget(.borderless)
         }
     }
 

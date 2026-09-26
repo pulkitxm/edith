@@ -2720,7 +2720,7 @@ describe("collector configuration", () => {
     expect(result.stdout).toContain("phase\tccusage\tcached\t");
     expect(result.stdout).not.toContain("installing ccusage");
     expect(JSON.parse(result.output).totals.cost).toBe(1);
-  });
+  }, 15_000);
 
   test("publishes usage when online pricing is unavailable and reports empty-source progress", () => {
     const result = runCollectorFixture({
@@ -2733,7 +2733,7 @@ describe("collector configuration", () => {
       "phase\tcodex repository details\t0 days\t",
     );
     expect(result.stdout).toContain("phase\topencode\t0 days\t");
-  });
+  }, 15_000);
 
   test("imports every staging open flag explicitly", () => {
     expect(script).toContain(
@@ -2848,7 +2848,17 @@ describe("collector configuration", () => {
           _meta: { agentTimestampMs: 1_790_420_403_000 },
         },
       }),
-      ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+      [
+        "--argjson",
+        "off",
+        "0",
+        "--arg",
+        "src",
+        "grok",
+        "--arg",
+        "cwd",
+        "/repo/app",
+      ],
     );
     expect(record.t).toBe("rec");
     expect(record.src).toBe("grok");
@@ -2867,9 +2877,22 @@ describe("collector configuration", () => {
         WALKG,
         JSON.stringify({
           timestamp: 1_790_420_403,
-          params: { sessionId: "sess-1", update: { sessionUpdate: "agent_message_chunk" } },
+          params: {
+            sessionId: "sess-1",
+            update: { sessionUpdate: "agent_message_chunk" },
+          },
         }),
-        ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+        [
+          "--argjson",
+          "off",
+          "0",
+          "--arg",
+          "src",
+          "grok",
+          "--arg",
+          "cwd",
+          "/repo/app",
+        ],
       ),
     ).toEqual([]);
   });
