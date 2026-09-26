@@ -594,8 +594,8 @@ public final class PDFEditSession {
             let stage = scratch.appendingPathComponent("redacted.pdf")
             try await PDFRedaction.apply(
                 composed.marks, to: working, fill: .black, searchable: searchableRedactions,
-                scrubMetadata: false, output: stage
-            ) { progress(0.5 + $0 * 0.4) }
+                scrubMetadata: false, output: stage,
+                progress: { progress(0.5 + $0 * 0.4) })
             working = try StudioPDF.open(stage)
         }
         try StudioPDF.write(

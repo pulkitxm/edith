@@ -79,7 +79,7 @@ struct UsageRefreshBaseline: Equatable, Sendable {
     let machines: Data?
 }
 
-public final class UsageRefreshLock {
+public final class UsageRefreshLock: @unchecked Sendable {
     private let stateLock = NSLock()
     private var descriptor: Int32
 
@@ -169,7 +169,9 @@ public enum UsageRefreshRunner {
             @escaping @Sendable (
                 UsageMachineRefreshPolicy, URL,
                 @escaping @Sendable (UsageRefreshEvent) -> Void
-            ) async -> Void = collectDueMachines,
+            ) async -> Void = { policy, dataDir, onEvent in
+                await collectDueMachines(policy, dataDir: dataDir, onEvent: onEvent)
+            },
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
         let refreshTrace = PerformanceTrace.begin(.git, "usage.refresh")

@@ -346,6 +346,7 @@ jobs:
           POSTGRES_DB: companion
           POSTGRES_USER: companion
           POSTGRES_PASSWORD: companion-dev
+          POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
         ports:
           - 5432:5432
         options: >-
