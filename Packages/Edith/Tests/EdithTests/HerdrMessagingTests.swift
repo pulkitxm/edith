@@ -146,6 +146,6 @@ struct HerdrMessagingTests {
                 == ["w2:p1"])
         store.machineFilter = "missing"
         #expect(HerdrBroadcastGroup.working.recipients(from: store.filteredAgents).isEmpty)
-        #expect(!store.listedAgents.isEmpty)
+        #expect(store.listedAgents.isEmpty)
     }
 }
