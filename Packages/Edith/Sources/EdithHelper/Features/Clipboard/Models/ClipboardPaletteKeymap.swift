@@ -48,7 +48,9 @@ enum ClipboardPaletteKeymap {
     {
         guard held.contains(.command), !held.contains(.control), !held.contains(.shift)
         else { return nil }
-        if let digit = character.wholeNumberValue, (1...ClipboardPalette.shortcutLimit).contains(digit) {
+        if let digit = character.wholeNumberValue,
+            (1...ClipboardPalette.shortcutLimit).contains(digit)
+        {
             return .quickPaste(digit, plainText: held.contains(.option))
         }
         guard held == .command else { return nil }

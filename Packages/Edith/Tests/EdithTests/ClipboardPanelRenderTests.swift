@@ -205,6 +205,7 @@ import Testing
         context.draw(try #require(panel.cgImage), in: rect)
         context.restoreGState()
         let image = try #require(context.makeImage())
-        return try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+        return try #require(
+            NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
     }
 }
