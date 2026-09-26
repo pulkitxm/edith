@@ -19,6 +19,8 @@ documentation, tests, and code all help.
 ./build.sh
 ./build.sh --release --install
 cd Packages/Edith && ./test.sh
+cd Packages/Edith && ./test.sh --list-batches
+cd Packages/Edith && ./test.sh --batch clipboard
 ```
 
 Default builds are development builds. Each worktree builds its own app,
@@ -136,11 +138,14 @@ job.
 | `make ci-duplicate-keys` | Fails when a `UserDefaults`/`SharedDefaults` key is spelled out as a raw string literal in more than one Swift file instead of going through one shared constant. |
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
+| `make ci-scripts-batch BATCH=<name>` | One scripts test batch from `scripts/test-batches.json`. |
 | `make ci-performance` | Validates the checked performance audit and deterministic helper benchmark fixture. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
 | `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
 | `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all four Xcode targets and runs the privileged-helper SwiftPM embed phase. |
 | `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
+| `make ci-swift-test-batch BATCH=<name>` | One Swift package test batch. `./test.sh --list-batches` prints the names. |
+| `make ci-studio-batch BATCH=<name>` | One EdithStudio test batch. |
 | `make ci-swift-check` | The three above as one on-demand local target. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |

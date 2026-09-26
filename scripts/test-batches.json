@@ -1,0 +1,80 @@
+{
+  "swift": [
+    { "name": "core", "filter": "^EdithCoreTests[./]" },
+    { "name": "database", "filter": "^EdithDatabaseTests[./]" },
+    { "name": "database-mcp", "filter": "^EdithDatabaseMCPTests[./]" },
+    { "name": "cli", "filter": "^EdithTests\\.CLI" },
+    { "name": "herdr", "filter": "^EdithTests\\.Herdr" },
+    { "name": "agent", "filter": "^EdithTests\\.Agent" },
+    {
+      "name": "machines",
+      "filter": "^EdithTests\\.(Machine|Docker|Remote|Rsync|Workspace|SSH)"
+    },
+    { "name": "bifrost", "filter": "^EdithTests\\.Bifrost" },
+    { "name": "clipboard", "filter": "^EdithTests\\.Clipboard" },
+    {
+      "name": "usage",
+      "filter": "^EdithTests\\.(Usage|Limit|Claude|Grok|Codex|Cursor)"
+    },
+    { "name": "attention", "filter": "^EdithTests\\.Attention" },
+    { "name": "companion", "filter": "^EdithTests\\.Companion" },
+    {
+      "name": "browser",
+      "filter": "^EdithTests\\.(Notch|Browser|Chrome|LocalStorage)"
+    },
+    {
+      "name": "media",
+      "filter": "^EdithTests\\.(Music|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
+    },
+    { "name": "dashboard", "filter": "^EdithTests\\.Dashboard" },
+    { "name": "extensions", "filter": "^EdithTests\\.(Extension|Lid)" },
+    { "name": "files", "filter": "^EdithTests\\.(File|Finder|Shelf)" },
+    { "name": "database-ui", "filter": "^EdithTests\\.Database" },
+    { "name": "app", "complement": true }
+  ],
+  "studio": [
+    { "name": "pdf", "filter": "^EdithStudioTests\\.PDF" },
+    { "name": "image", "filter": "^EdithStudioTests\\.Image" },
+    { "name": "media", "filter": "^EdithStudioTests\\.Media" },
+    { "name": "docs", "filter": "^EdithStudioTests\\.Docs" },
+    { "name": "studio", "complement": true }
+  ],
+  "scripts": [
+    {
+      "name": "usage",
+      "prefixes": ["scripts/usage-", "scripts/refresh-usage-"]
+    },
+    {
+      "name": "release",
+      "prefixes": [
+        "scripts/release-",
+        "scripts/publish-release-",
+        "scripts/resolve-release-",
+        "scripts/homebrew-",
+        "scripts/run-current-release-"
+      ]
+    },
+    {
+      "name": "ci",
+      "prefixes": [
+        "scripts/ci-",
+        "scripts/workflow-",
+        "scripts/check-",
+        "scripts/strip-comments",
+        "scripts/package-resolution",
+        "scripts/approve-package",
+        "scripts/test-batches"
+      ]
+    },
+    {
+      "name": "docs",
+      "prefixes": [
+        "scripts/cli-docs",
+        "scripts/generate-cli-docs",
+        "scripts/sync-wiki",
+        "scripts/contributors"
+      ]
+    },
+    { "name": "tooling", "complement": true }
+  ]
+}

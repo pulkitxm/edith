@@ -14,7 +14,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -88,6 +88,12 @@ ci-lint:
 ci-scripts:
 	bun test ./scripts --path-ignore-patterns '**/._*'
 
+ci-scripts-batch:
+	@test -n "$(BATCH)" || { echo "set BATCH to a scripts test batch" >&2; exit 1; }
+	@set -eu; \
+	  paths="$$(python3 scripts/test-batches.py script-paths "$(BATCH)")"; \
+	  bun test $$paths
+
 ci-performance:
 	bun scripts/check-performance-audit.mjs
 	./scripts/bench-helper.sh --fixture scripts/fixtures/bench-helper.samples >/dev/null
@@ -133,8 +139,20 @@ ci-swift-build: approve-package-plugins
 ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh
 
+ci-swift-test-batch:
+	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }
+	cd $(PKG) && ./test.sh --batch "$(BATCH)"
+
 ci-studio:
 	cd $(STUDIO_PKG) && swift test --no-parallel
+
+ci-studio-batch:
+	@test -n "$(BATCH)" || { echo "set BATCH to a studio test batch" >&2; exit 1; }
+	@set -eu; \
+	  spec="$$(python3 scripts/test-batches.py studio-args "$(BATCH)")"; \
+	  flag="$$(printf '%s\n' "$$spec" | sed -n '1p')"; \
+	  pattern="$$(printf '%s\n' "$$spec" | sed -n '2p')"; \
+	  cd $(STUDIO_PKG) && swift test --no-parallel "$$flag" "$$pattern"
 
 ci-browser:
 	plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoadsInWebContent raw Resources/HelperInfo.plist | grep -qx true

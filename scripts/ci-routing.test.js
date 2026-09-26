@@ -7,6 +7,7 @@ const swiftCache = Bun.YAML.parse(
   readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
 );
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
+const batches = JSON.parse(readFileSync("scripts/test-batches.json", "utf8"));
 const pagesWorkflow = readFileSync(
   ".github/workflows-disabled/pages.yml",
   "utf8",
@@ -187,14 +188,11 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["working-directory"]).toBe("Packages/Edith");
   expect(build["timeout-minutes"]).toBe(20);
   expect(build.if).toBeUndefined();
-  expect(run.run).toBe(
-    `./test.sh --skip-build \${{ matrix.selection }} '^EdithTests\\.CLI'`,
-  );
+  expect(run.run).toBe(`./test.sh --skip-build --batch \${{ matrix.batch }}`);
   expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy.matrix.include).toEqual([
-    { suites: "cli", selection: "--filter" },
-    { suites: "app", selection: "--skip" },
-  ]);
+  expect(job.strategy.matrix.include).toEqual(
+    batches.swift.map((batch) => ({ suites: batch.name, batch: batch.name })),
+  );
   expect(run["working-directory"]).toBe(build["working-directory"]);
   expect(run["timeout-minutes"]).toBe(10);
   expect(run.if).toBeUndefined();
