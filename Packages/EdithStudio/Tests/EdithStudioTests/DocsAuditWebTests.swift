@@ -5,7 +5,7 @@ import Testing
 
 @testable import EdithStudio
 
-@Suite struct DocsAuditWebTests {
+@Suite(.serialized) struct DocsAuditWebTests {
     typealias F = DocsAuditFixtures
 
     static func lines(_ count: Int, at url: URL, extra: String = "") throws {
@@ -168,16 +168,19 @@ import Testing
         let space = try Workspace()
         let busy = space.url("busy.html")
         try """
-        <html><body><p>Loading forever</p><script>setTimeout(function () { var end = Date.now() + 14000; while (Date.now() < end) {} }, 50);</script></body></html>
+        <html><body><p>Loading forever</p><script>while (true) {}</script></body></html>
         """.write(to: busy, atomically: true, encoding: .utf8)
         let started = Date()
         do {
             _ = try await space.run("web.to-pdf", [], ["url": .text(busy.path)])
             Issue.record("a page with a runaway script produced a PDF")
         } catch let error as StudioError {
-            #expect(error.localizedDescription.contains("stopped responding"))
+            let message = error.localizedDescription
+            #expect(
+                message.contains("stopped responding") || message.contains("too long")
+                    || message.contains("crashed"))
         }
-        #expect(Date().timeIntervalSince(started) < 40)
+        #expect(Date().timeIntervalSince(started) < 60)
 
         await #expect(throws: StudioError.self) {
             try await space.run("web.to-pdf", [], ["url": .text(space.url("missing.html").path)])

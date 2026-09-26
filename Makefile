@@ -134,7 +134,7 @@ ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh
 
 ci-studio:
-	cd $(STUDIO_PKG) && swift test
+	cd $(STUDIO_PKG) && swift test --no-parallel
 
 ci-browser:
 	plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoadsInWebContent raw Resources/HelperInfo.plist | grep -qx true
