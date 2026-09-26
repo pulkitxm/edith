@@ -116,18 +116,20 @@ closed.
 ## Attribution model
 
 The daily and model rows are the authoritative accounting totals. The collector
-discovers Claude Code, Cowork, Codex, Cursor Agent, OpenCode, Amp, Droid,
+discovers Claude Code, Cowork, Codex, Cursor, OpenCode, Amp, Droid,
 Codebuff, Hermes, Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and
 Command Code when their local stores contain usage. A source appears in
 `ed usage sources` only when it contributed data, so this list is collector
 coverage rather than a promise that every id is present on every Mac.
 
 Repository detail comes from the session stores that expose it: Claude and
-Cowork transcripts, Codex daily sessions and metadata, Cursor Agent chat
-metadata, Pi session logs, Command Code projects and the OpenCode database.
-Cursor token and cost totals come from Cursor's authenticated usage API, scoped
-to CLI events whose conversation ids exist in the local chat store. Those
-measurements are reconciled per day and source to the authoritative totals.
+Cowork transcripts, Codex daily sessions and metadata, Cursor chat metadata
+when a local chat matches the conversation, Pi session logs, Command Code
+projects and the OpenCode database. Cursor token and cost totals come from
+Cursor's authenticated usage API for the signed-in account, including IDE
+requests. Local chat metadata attributes a conversation to a folder when that
+chat exists on disk. Those measurements are reconciled per day and source to
+the authoritative totals.
 Detail is scaled down when it would exceed the total, and any remaining source
 or model total with no reliable folder is emitted under the `Unattributed`
 repository. That is why `ed usage projects list` adds back to `summary` without

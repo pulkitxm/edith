@@ -2802,19 +2802,21 @@ describe("collector configuration", () => {
       kimi: "Kimi",
       qwen: "Qwen",
       openclaw: "OpenClaw",
-      cursor: "Cursor Agent",
+      cursor: "Cursor",
     };
     for (const [source, label] of Object.entries(labels)) {
       expect(script).toContain(`${source}) echo "${label}" ;;`);
     }
   });
 
-  test("collects Cursor Agent from the dashboard API scoped to local chats", () => {
+  test("collects Cursor usage from the dashboard API", () => {
     expect(script).toContain("collect_cursor");
     expect(script).toContain(
       "https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents",
     );
-    expect(script).toContain('clientType: "cli"');
+    expect(script).not.toContain('clientType: "cli"');
+    expect(script).toContain('EDITH_CURSOR_DB="$db"');
+    expect(script).toContain("state.vscdb");
     expect(script).toContain('EDITH_CURSOR_CHATS="$chats"');
     expect(script).toContain(
       'cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"',
@@ -2822,8 +2824,8 @@ describe("collector configuration", () => {
   });
 });
 
-describe("Cursor Agent collector", () => {
-  test("paginates CLI events and attributes only local chats", () => {
+describe("Cursor collector", () => {
+  test("paginates account events and keeps local chat paths", () => {
     const root = mkdtempSync(join(tmpdir(), "edith-cursor-usage-"));
     const authPath = join(root, "auth.json");
     const chatsRoot = join(root, "chats");
@@ -2921,7 +2923,7 @@ describe("Cursor Agent collector", () => {
         );
         expect(request.headers.Authorization).toBe(`Bearer ${accessToken}`);
         expect(request.headers["Connect-Protocol-Version"]).toBe("1");
-        expect(request.body.clientType).toBe("cli");
+        expect(request.body.clientType).toBeUndefined();
       }
 
       const daily = JSON.parse(
@@ -2932,11 +2934,11 @@ describe("Cursor Agent collector", () => {
       expect(daily.daily[0].modelBreakdowns).toEqual([
         {
           modelName: "cursor-grok",
-          inputTokens: 10,
-          outputTokens: 5,
+          inputTokens: 110,
+          outputTokens: 105,
           cacheCreationTokens: 2,
           cacheReadTokens: 3,
-          cost: 0.4,
+          cost: 9.4,
         },
         {
           modelName: "cursor-sonnet",
@@ -2951,16 +2953,34 @@ describe("Cursor Agent collector", () => {
       const sessions = JSON.parse(
         readFileSync(join(output, "cursor.session.json"), "utf8"),
       );
-      expect(sessions.sessions).toEqual([{ sessionId: "local-chat" }]);
+      expect(sessions.sessions).toEqual([
+        { sessionId: "local-chat" },
+        { sessionId: "remote-chat" },
+      ]);
 
       const records = readFileSync(join(output, "cursor.events.jsonl"), "utf8")
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
-      expect(records.filter((record) => record.t === "rec")).toHaveLength(2);
-      expect(records.some((record) => record.sid === "remote-chat")).toBe(
-        false,
-      );
+      expect(records.filter((record) => record.t === "rec")).toHaveLength(3);
+      expect(records).toContainEqual({
+        t: "rec",
+        id: `cursor:remote-chat:${timestamp + 1000}`,
+        date: "2026-08-18",
+        hour: 10,
+        ts: timestamp + 1000,
+        model: "cursor-grok",
+        cwd: "",
+        wt: null,
+        sid: "remote-chat",
+        src: "cursor",
+        cost: 9,
+        inp: 100,
+        out: 100,
+        cc: 0,
+        cr: 0,
+        tok: 200,
+      });
       expect(records).toContainEqual({
         t: "title",
         sid: "local-chat",
@@ -2976,6 +2996,92 @@ describe("Cursor Agent collector", () => {
         tok: 20,
         cost: 0.4,
       });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reads the IDE database when auth.json is absent", () => {
+    const root = mkdtempSync(join(tmpdir(), "edith-cursor-usage-db-"));
+    const dbPath = join(root, "state.vscdb");
+    const output = join(root, "output");
+    const requestsPath = join(root, "requests.json");
+    const timestamp = Date.parse("2026-08-18T10:00:00.000Z");
+    const accessToken = `x.${Buffer.from(
+      JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString("base64url")}.x`;
+    mkdirSync(output, { recursive: true });
+    const db = new Database(dbPath);
+    db.run("CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value TEXT)");
+    db.run("INSERT INTO ItemTable (key, value) VALUES (?, ?)", [
+      "cursorAuth/accessToken",
+      accessToken,
+    ]);
+    db.close();
+
+    const mockFetch = `
+  const cursorRequests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body);
+    cursorRequests.push({ url: String(url), headers: options.headers, body });
+    await Bun.write(process.env.EDITH_CURSOR_REQUESTS, JSON.stringify(cursorRequests));
+    return new Response(
+      JSON.stringify({
+        usageEventsDisplay: [
+          {
+            conversationId: "ide-chat",
+            timestamp: String(${timestamp}),
+            model: "cursor-grok",
+            chargedCents: 10,
+            tokenUsage: { inputTokens: 8, outputTokens: 2 },
+          },
+        ],
+        totalUsageEventsCount: 1,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+`;
+    const collector = CURSOR_COLLECTOR.replace(
+      '  import { join } from "path";',
+      `  import { join } from "path";${mockFetch}`,
+    );
+
+    try {
+      const result = Bun.spawnSync(["bun", "-e", collector], {
+        env: {
+          ...process.env,
+          EDITH_CURSOR_AUTH: "",
+          EDITH_CURSOR_DB: dbPath,
+          EDITH_CURSOR_CHATS: join(root, "missing-chats"),
+          EDITH_CURSOR_OFF: "0",
+          EDITH_CURSOR_TMP: output,
+          EDITH_CURSOR_REQUESTS: requestsPath,
+        },
+      });
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      const requests = JSON.parse(readFileSync(requestsPath, "utf8"));
+      expect(requests).toHaveLength(1);
+      expect(requests[0].headers.Authorization).toBe(`Bearer ${accessToken}`);
+      expect(requests[0].body.clientType).toBeUndefined();
+      const daily = JSON.parse(
+        readFileSync(join(output, "cursor.daily.json"), "utf8"),
+      );
+      expect(daily.daily).toHaveLength(1);
+      expect(daily.daily[0].modelBreakdowns).toEqual([
+        {
+          modelName: "cursor-grok",
+          inputTokens: 8,
+          outputTokens: 2,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          cost: 0.1,
+        },
+      ]);
+      const sessions = JSON.parse(
+        readFileSync(join(output, "cursor.session.json"), "utf8"),
+      );
+      expect(sessions.sessions).toEqual([{ sessionId: "ide-chat" }]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

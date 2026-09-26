@@ -197,7 +197,7 @@ label_for() {
     kimi) echo "Kimi" ;;
     qwen) echo "Qwen" ;;
     openclaw) echo "OpenClaw" ;;
-    cursor) echo "Cursor Agent" ;;
+    cursor) echo "Cursor" ;;
     *) echo "$1" ;;
   esac
 }
@@ -1061,6 +1061,7 @@ fi
 CURSOR_COLLECTOR='
   import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "fs";
   import { join } from "path";
+  import { Database } from "bun:sqlite";
 
   const authPath = process.env.EDITH_CURSOR_AUTH;
   const chatsRoot = process.env.EDITH_CURSOR_CHATS;
@@ -1086,12 +1087,37 @@ CURSOR_COLLECTOR='
     }
   };
 
-  let auth;
-  try {
-    auth = JSON.parse(readFileSync(authPath, "utf8"));
-  } catch {
-    writeEmpty();
-    process.exit(0);
+  let auth = null;
+  let authFile = "";
+  if (authPath && existsSync(authPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(authPath, "utf8"));
+      if (parsed?.accessToken && typeof parsed.accessToken === "string") {
+        auth = parsed;
+        authFile = authPath;
+      }
+    } catch {}
+  }
+  if (!auth) {
+    const dbPath = process.env.EDITH_CURSOR_DB || "";
+    if (dbPath && existsSync(dbPath)) {
+      try {
+        const db = new Database(dbPath, { readonly: true });
+        const rows = db
+          .query("SELECT key, value FROM ItemTable WHERE key IN (?, ?)")
+          .all("cursorAuth/accessToken", "cursorAuth/refreshToken");
+        db.close();
+        const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+        const accessToken = values["cursorAuth/accessToken"];
+        const refreshToken = values["cursorAuth/refreshToken"];
+        if (typeof accessToken === "string" && accessToken) {
+          auth = {
+            accessToken,
+            refreshToken: typeof refreshToken === "string" && refreshToken ? refreshToken : undefined,
+          };
+        }
+      } catch {}
+    }
   }
   if (!auth?.accessToken || typeof auth.accessToken !== "string") {
     writeEmpty();
@@ -1112,7 +1138,7 @@ CURSOR_COLLECTOR='
         if (body.access_token) auth.accessToken = body.access_token;
         if (body.refresh_token) auth.refreshToken = body.refresh_token;
         try {
-          writeFileSync(authPath, JSON.stringify(auth, null, 2));
+          if (authFile) writeFileSync(authFile, JSON.stringify(auth, null, 2));
         } catch {}
       }
     } catch {}
@@ -1122,7 +1148,7 @@ CURSOR_COLLECTOR='
   const projectCwd = new Map();
   let earliestMs = Date.now();
   try {
-    for (const project of readdirSync(chatsRoot)) {
+    if (chatsRoot && existsSync(chatsRoot)) for (const project of readdirSync(chatsRoot)) {
       const projectDir = join(chatsRoot, project);
       if (!statSync(projectDir).isDirectory()) continue;
       for (const chatId of readdirSync(projectDir)) {
@@ -1146,16 +1172,9 @@ CURSOR_COLLECTOR='
         if (createdAtMs > 0 && createdAtMs < earliestMs) earliestMs = createdAtMs;
       }
     }
-  } catch {
-    writeEmpty();
-    process.exit(0);
-  }
+  } catch {}
   for (const meta of local.values()) {
     if (!meta.cwd) meta.cwd = projectCwd.get(meta.project) || "";
-  }
-  if (local.size === 0) {
-    writeEmpty();
-    process.exit(0);
   }
 
   const endMs = Date.now();
@@ -1176,7 +1195,6 @@ CURSOR_COLLECTOR='
           endDate: String(endMs),
           page,
           pageSize: 100,
-          clientType: "cli",
         }),
       });
       if (!resp.ok) throw new Error(`cursor usage HTTP ${resp.status}`);
@@ -1197,9 +1215,8 @@ CURSOR_COLLECTOR='
   const titled = new Set();
   const lines = [];
   for (const event of events) {
-    const sid = typeof event.conversationId === "string" ? event.conversationId : "";
-    if (!sid || !local.has(sid)) continue;
-    const meta = local.get(sid);
+    const conversation = typeof event.conversationId === "string" ? event.conversationId : "";
+    const meta = conversation && local.has(conversation) ? local.get(conversation) : { cwd: "", title: "" };
     const tsMs = Number(event.timestamp);
     if (!Number.isFinite(tsMs) || tsMs <= 0) continue;
     const ep = Math.floor(tsMs / 1000);
@@ -1215,11 +1232,12 @@ CURSOR_COLLECTOR='
     const out = Number(tu.outputTokens) || 0;
     const cc = Number(tu.cacheWriteTokens) || 0;
     const cr = Number(tu.cacheReadTokens) || 0;
-    if (inp + out + cc + cr <= 0) continue;
     let cents = event.chargedCents;
     if (cents == null) cents = tu.totalCents;
     const cost = (Number(cents) || 0) / 100;
+    if (inp + out + cc + cr <= 0 && cost <= 0) continue;
     const model = typeof event.model === "string" && event.model ? event.model : "unknown";
+    const sid = conversation || `cursor:${tsMs}:${model}`;
     sessions.add(sid);
 
     if (!dayMap.has(date)) dayMap.set(date, new Map());
@@ -1281,7 +1299,7 @@ CURSOR_COLLECTOR='
 '
 
 collect_cursor() {
-  local auth="" chats="$HOME/.cursor/chats"
+  local auth="" db="" chats=""
   for candidate in \
     "${XDG_CONFIG_HOME:-$HOME/.config}/cursor/auth.json" \
     "$HOME/.cursor/auth.json"; do
@@ -1289,14 +1307,17 @@ collect_cursor() {
     auth="$candidate"
     break
   done
-  [ -n "$auth" ] && [ -d "$chats" ] || return 0
+  db="$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+  [ -f "$db" ] || db=""
+  [ -d "$HOME/.cursor/chats" ] && chats="$HOME/.cursor/chats"
+  [ -n "$auth" ] || [ -n "$db" ] || return 0
   if ! command -v bun >/dev/null 2>&1; then
     install_bun >/dev/null 2>&1 || {
       _note "cursor skipped (need bun to collect)"
       return 0
     }
   fi
-  if ! EDITH_CURSOR_AUTH="$auth" EDITH_CURSOR_CHATS="$chats" \
+  if ! EDITH_CURSOR_AUTH="$auth" EDITH_CURSOR_DB="$db" EDITH_CURSOR_CHATS="$chats" \
     EDITH_CURSOR_OFF="$OFF" EDITH_CURSOR_TMP="$TMP" \
     bun -e "$CURSOR_COLLECTOR" 2>/dev/null; then
     _note "cursor collection failed; continuing without it"
