@@ -177,7 +177,7 @@ def check():
     for name, count in script_counts.items():
         if count == 0:
             failures.append(f"scripts batch {name} matches nothing")
-    workflow = (ROOT / ".github/workflows-disabled/ci.yml").read_text()
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     listed = re.findall(r"batch: ([a-z0-9-]+)", workflow)
     expected = [batch["name"] for batch in catalog["swift"]]
     if listed != expected:

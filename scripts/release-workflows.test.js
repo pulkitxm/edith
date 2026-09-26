@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
-const ciWorkflow = readFileSync(".github/workflows-disabled/ci.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const releaseStateScript = readFileSync(
   "scripts/publish-release-state.sh",
   "utf8",
@@ -57,7 +57,7 @@ function publicationContext() {
 }
 
 test("release preparation belongs to the same CI run and starts after routing", () => {
-  expect(existsSync(".github/workflows-disabled/release.yml")).toBe(false);
+  expect(existsSync(".github/workflows/release.yml")).toBe(false);
   expect(workflow.jobs["release-build"]).toBeUndefined();
   expect(workflow.jobs.ci).toBeUndefined();
   expect(version.needs).toBe("changes");
@@ -410,10 +410,10 @@ test("superseded release cuts finish cleanly without publishing", () => {
   expect(releaseWorkflow).toContain('exit "$PUBLISH_STATUS"');
 });
 
-test("releases are cut locally while CI is parked", () => {
-  expect(existsSync("scripts/release-local.sh")).toBe(true);
-  expect(makefile).toMatch(/^release:/m);
-  expect(makefile).toContain("scripts/release-local.sh");
+test("GitHub Actions publishes a release from main", () => {
+  expect(existsSync(".github/workflows/ci.yml")).toBe(true);
   const agents = readFileSync("AGENTS.md", "utf8");
-  expect(agents).toContain("make release");
+  expect(agents).toContain("GitHub Actions");
+  expect(agents).not.toContain("workflows-disabled");
+  expect(agents).not.toContain("make ci-all");
 });
