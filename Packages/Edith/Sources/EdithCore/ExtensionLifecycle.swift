@@ -763,8 +763,7 @@ public enum ExtensionLifecycleCatalog {
                     "ed calendar ls --json")
             ]),
         descriptor(
-            "notchShelf",
-            "Park files, browse the web and glance at media, camera and alerts around the notch.",
+            "notchShelf", "Park files and glance at media, camera and alerts around the notch.",
             workflows: [
                 instruction(
                     "files", "Stage files",
@@ -772,10 +771,6 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "media", "Use the notch",
                     "Show now playing, camera and device alerts in one surface."),
-                instruction(
-                    "browser", "Browse from the notch",
-                    "Turn on the browser tab, attach a Chrome profile once, and its cookies and site storage follow you into the notch.",
-                    "ed config set notchBrowserEnabled true"),
             ],
             prerequisites: [
                 instruction(
@@ -784,15 +779,8 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "optional", "Grant optional access",
                     "Application Audio, Camera, Bluetooth and Automation enable extra modules."),
-                instruction(
-                    "chrome", "Install Google Chrome for the browser",
-                    "The browser tab attaches a Chrome profile; macOS asks once for Chrome Safe Storage."
-                ),
             ],
-            examples: [
-                "ed extensions enable notchShelf", "ed shelf ls --json",
-                "ed config set notchBrowserEnabled true",
-            ],
+            examples: ["ed extensions enable notchShelf", "ed shelf ls --json"],
             docs: [documentation("guide", "Shelf guide", "docs/cli/shelf/README.md")],
             recovery: [
                 instruction(
@@ -1208,6 +1196,40 @@ public enum ExtensionLifecycleCatalog {
             verification: [
                 instruction(
                     "shelf", "Read the shelf", "Confirm the shelf responds.", "ed shelf ls --json")
+            ]),
+        descriptor(
+            "notchBrowser", "Browse in tabs from the notch with a Chrome profile's sessions.",
+            workflows: [
+                instruction(
+                    "attach", "Attach a Chrome profile",
+                    "Pick a profile once and its cookies and site storage follow you into the notch."
+                ),
+                instruction(
+                    "browse", "Browse in tabs",
+                    "Open tabs, use the right-click menus, and resize the browser from its edge."),
+            ],
+            prerequisites: [
+                instruction(
+                    "shelf", "Enable Notch Shelf", "The browser lives in the shelf's browser tab.",
+                    "ed extensions enable notchShelf"),
+                instruction(
+                    "chrome", "Install Google Chrome",
+                    "Chrome must be installed with at least one profile to attach."),
+                instruction(
+                    "keychain", "Allow Chrome Safe Storage",
+                    "macOS asks once for the key Chrome uses to encrypt its cookies."),
+            ],
+            examples: ["ed extensions enable notchBrowser", "ed extensions doctor notchBrowser"],
+            docs: [documentation("guide", "Notch Shelf guide", "docs/cli/shelf/README.md")],
+            recovery: [
+                instruction(
+                    "shelf", "Check the shelf", "Confirm the shelf is enabled and reachable.",
+                    "ed extensions doctor notchShelf --json")
+            ],
+            verification: [
+                instruction(
+                    "browser", "Check the browser", "Confirm the browser extension is ready.",
+                    "ed extensions doctor notchBrowser --json")
             ]),
     ]
 
