@@ -42,11 +42,17 @@ public enum StudioVision {
             }
         }
 
-        func start() -> CheckedContinuation<Handoff<Value>, Error>? {
-            lock.withLock {
+        func claim() -> Bool {
+            lock.withLock { !cancelled && continuation != nil }
+        }
+
+        func finish(with result: Result<Handoff<Value>, Error>) {
+            let pending: CheckedContinuation<Handoff<Value>, Error>? = lock.withLock {
+                guard !cancelled else { return nil }
                 defer { continuation = nil }
                 return continuation
             }
+            pending?.resume(with: result)
         }
 
         func cancel() -> CheckedContinuation<Handoff<Value>, Error>? {
@@ -68,8 +74,8 @@ public enum StudioVision {
                     return
                 }
                 queue.async {
-                    guard let continuation = ticket.start() else { return }
-                    continuation.resume(with: Result { Handoff(value: try work()) })
+                    guard ticket.claim() else { return }
+                    ticket.finish(with: Result { Handoff(value: try work()) })
                 }
             }
         } onCancel: {
