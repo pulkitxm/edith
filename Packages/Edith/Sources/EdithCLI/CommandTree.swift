@@ -408,7 +408,9 @@ public enum CommandTree {
         "ed download reveal": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
         "ed download tool": Spec(options: ["--json", "--help", "--update"]),
-        "ed clipboard ls": Spec(options: ["--json", "--help", "--pinned", "--search", "--limit"]),
+        "ed clipboard": Spec(options: ["--category"]),
+        "ed clipboard ls": Spec(
+            options: ["--json", "--help", "--pinned", "--search", "--category", "--limit"]),
         "ed clipboard stats": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed clipboard get": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.historyIndex]),
