@@ -392,6 +392,84 @@ import Testing
         }
     }
 
+    @Test func ghosttyFocusRequestWaitsUntilTheViewJoinsAWindow() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder()
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            let frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+            view.frame = frame
+            let container = NSView(frame: frame)
+            let window = TestWindowHost.window(contentRect: frame)
+            window.contentView = container
+            _ = window.makeFirstResponder(nil)
+            defer {
+                holder.stop()
+                window.contentView = nil
+            }
+
+            view.requestFocus()
+            try await Task.sleep(for: .milliseconds(50))
+            #expect(view.focusRequested)
+            #expect(window.firstResponder !== view)
+
+            container.addSubview(view)
+            try await eventually { window.firstResponder === view }
+            #expect(!view.focusRequested)
+        }
+    }
+
+    @Test func aCancelledGhosttyFocusRequestLeavesFocusAlone() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder()
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            let frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+            view.frame = frame
+            let container = NSView(frame: frame)
+            let window = TestWindowHost.window(contentRect: frame)
+            window.contentView = container
+            _ = window.makeFirstResponder(nil)
+            defer {
+                holder.stop()
+                window.contentView = nil
+            }
+
+            view.requestFocus()
+            view.cancelFocusRequest()
+            container.addSubview(view)
+            try await Task.sleep(for: .milliseconds(50))
+
+            #expect(window.firstResponder !== view)
+        }
+    }
+
+    @Test func swiftTermFocusRequestWaitsUntilTheViewJoinsAWindow() async throws {
+        try await withGhosttyEnabled(false) {
+            let holder = TerminalSessionHolder()
+            let view = holder.terminalView
+            let frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+            view.frame = frame
+            let container = NSView(frame: frame)
+            let window = TestWindowHost.window(contentRect: frame)
+            window.contentView = container
+            _ = window.makeFirstResponder(nil)
+            defer { window.contentView = nil }
+
+            holder.updatePresentation(active: true, wantsFocus: true)
+            try await eventually { view.focusRequested }
+            #expect(window.firstResponder !== view)
+
+            container.addSubview(view)
+            #expect(window.firstResponder === view)
+            #expect(!view.focusRequested)
+        }
+    }
+
     @Test func ghosttyIsTheDefaultTerminalWithAnExplicitFallback() {
         let engine = GhosttyEngineFixture(enabled: nil)
         defer { engine.restore() }
@@ -441,6 +519,17 @@ import Testing
         let engine = GhosttyEngineFixture(enabled: enabled)
         defer { engine.restore() }
         try await operation()
+    }
+
+    private func eventually(
+        _ condition: @MainActor () -> Bool, timeout: Duration = .seconds(2)
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        Issue.record("condition was not met in time")
     }
 }
 
