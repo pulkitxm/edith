@@ -480,19 +480,38 @@ import Testing
     }
 }
 
-@Suite struct NotchBrowserExtensionTests {
-    @Test func extensionLivesInTheShelfAndNeedsWebBrowsing() throws {
-        let entry = try #require(ExtensionRegistry.entry("notchBrowser"))
-        #expect(entry.requires == ["notchShelf"])
-        #expect(entry.requiredCapabilities == [.webBrowsing])
-        #expect(entry.defaultsKey == AppStorageKeys.Notch.browserEnabled)
-        #expect(entry.host == .bar)
-        #expect(!entry.featured)
-        #expect(PlatformCapabilities.macOS.state(for: .webBrowsing).isSupported)
-        #expect(ExtensionLifecycleCatalog.descriptor(for: "notchBrowser") != nil)
+@Suite struct NotchBrowserShelfToggleTests {
+    private static let sources = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources")
+
+    private func source(_ path: String) throws -> String {
+        try String(contentsOf: Self.sources.appendingPathComponent(path), encoding: .utf8)
     }
 
-    @Test @MainActor func runtimeNeedsBothTheShelfAndTheBrowser() {
+    @Test func theBrowserIsPartOfTheNotchShelfNotASeparateExtension() throws {
+        #expect(ExtensionRegistry.entry("notchBrowser") == nil)
+        #expect(ExtensionLifecycleCatalog.descriptor(for: "notchBrowser") == nil)
+        #expect(ExtensionDetailRoute(rawValue: "notchBrowser") == nil)
+        #expect(!ExtensionLiveAdapters.extensionIDs.contains("notchBrowser"))
+        #expect(
+            !ExtensionRegistry.entries.contains {
+                $0.defaultsKey == AppStorageKeys.Notch.browserEnabled
+            })
+        let shelf = try #require(ExtensionRegistry.entry("notchShelf"))
+        #expect(shelf.optionalCapabilities.contains(.webBrowsing))
+        #expect(shelf.subtitle.contains("browser"))
+        #expect(PlatformCapabilities.macOS.state(for: .webBrowsing).isSupported)
+        let descriptor = try #require(ExtensionLifecycleCatalog.descriptor(for: "notchShelf"))
+        let browser = try #require(descriptor.workflows.first { $0.id == "browser" })
+        #expect(browser.command == "ed config set notchBrowserEnabled true")
+        #expect(descriptor.prerequisites.contains { $0.id == "chrome" })
+        #expect(descriptor.cliExamples.contains("ed config set notchBrowserEnabled true"))
+    }
+
+    @Test @MainActor func runtimeNeedsBothTheShelfAndTheBrowserToggle() {
         #expect(
             AppServices.notchBrowserRuntimeEnabled(notchShelfEnabled: true, browserEnabled: true))
         #expect(
@@ -501,36 +520,59 @@ import Testing
             !AppServices.notchBrowserRuntimeEnabled(notchShelfEnabled: true, browserEnabled: false))
     }
 
-    @Test func readinessAsksForChromeAndTheShelf() throws {
-        let defaults = try #require(
-            UserDefaults(suiteName: "test.notch-browser.\(UUID().uuidString)"))
-        defaults.set(true, forKey: AppStorageKeys.Notch.shelfEnabled)
-        #expect(
-            ExtensionLiveAdapters.notchBrowserReadiness(defaults: defaults, chromeInstalled: true)
-                == ExtensionAdapterFacts(
-                    readyDetail: "The browser tab is available in the notch shelf.",
-                    uninstalledDetail: "Install Google Chrome to attach a profile.",
-                    setupDetail: "Turn on Notch Shelf to reach the browser."
-                ).readiness)
-        let missing = ExtensionLiveAdapters.notchBrowserReadiness(
-            defaults: defaults, chromeInstalled: false)
-        #expect(
-            missing
-                != ExtensionLiveAdapters.notchBrowserReadiness(
-                    defaults: defaults, chromeInstalled: true))
-        defaults.set(false, forKey: AppStorageKeys.Notch.shelfEnabled)
-        let unconfigured = ExtensionLiveAdapters.notchBrowserReadiness(
-            defaults: defaults, chromeInstalled: true)
-        #expect(unconfigured != missing)
-    }
-
-    @Test func searchEngineSettingIsCatalogued() throws {
+    @Test func browserSettingsAreCataloguedUnderTheNotch() throws {
+        let toggle = try #require(
+            ConfigCatalog.definition(for: AppStorageKeys.Notch.browserEnabled))
+        #expect(toggle.fallback == .bool(false))
+        #expect(toggle.group == "notch")
         let definition = try #require(
             ConfigCatalog.definition(for: AppStorageKeys.Notch.browserSearchEngine))
         #expect(definition.allowed == BrowserSearchEngine.allCases.map(\.rawValue))
         #expect(definition.fallback == .string("google"))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Notch.browserSearchEngine))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Notch.browserEnabled))
+    }
+
+    @Test func theShelfSettingsCarryTheBrowserToggleAndItsSettings() throws {
+        let rows = try source("Edith/Features/Settings/Views/NotchShelfRows.swift")
+        #expect(rows.contains("$browser.configured(AppStorageKeys.Notch.browserEnabled)"))
+        #expect(rows.contains("AppStorageKeys.Notch.browserSearchEngine"))
+        #expect(rows.contains("NotchBrowserProfileRow()"))
+        #expect(rows.contains("IPC.post(IPC.Name.requestNotchBrowserDetach)"))
+        #expect(rows.contains("for: IPC.Name.notchBrowserChanged"))
+        let pane = try source("Edith/Features/Settings/Views/ExtensionsPane.swift")
+        #expect(!pane.contains("NotchBrowserRows"))
+    }
+
+    @Test func theHelperDetachesOnRequestAndAnnouncesProfileChanges() throws {
+        let app = try source("EdithHelper/Core/Application/EdithHelperApp.swift")
+        #expect(app.contains("IPC.observe(IPC.Name.requestNotchBrowserDetach)"))
+        #expect(app.contains("services.notchBrowser?.detach()"))
+        let services = try source("EdithHelper/Core/Application/AppServices.swift")
+        #expect(
+            services.contains("store.onProfileChange = { IPC.post(IPC.Name.notchBrowserChanged) }"))
+    }
+
+    @Test func sessionsNameTheAttachedProfileForSettings() throws {
+        var session = BrowserSession()
+        #expect(session.attachedProfileName == nil)
+        session.profileName = "Stale"
+        #expect(session.attachedProfileName == nil)
+        session.profile = "Profile 1"
+        #expect(session.attachedProfileName == "Stale")
+        session.profileName = nil
+        #expect(session.attachedProfileName == "Profile 1")
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-session-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = BrowserSessionFile(url: folder.appendingPathComponent("session.json"))
+        session.profileName = "Mock Work"
+        file.save(session)
+        #expect(file.load().attachedProfileName == "Mock Work")
+        #expect(BrowserSessionFile.standard.url.lastPathComponent == "session.json")
+        #expect(
+            BrowserSessionFile.standard.url.deletingLastPathComponent().lastPathComponent
+                == "notch-browser")
     }
 }
 

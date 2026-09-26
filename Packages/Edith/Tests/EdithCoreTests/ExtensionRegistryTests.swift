@@ -18,7 +18,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "videoEditor", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
+                "videoEditor", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar",
                 "database", "attention", "seoAudit",
             ])

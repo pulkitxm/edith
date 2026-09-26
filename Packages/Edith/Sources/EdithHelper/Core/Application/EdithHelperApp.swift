@@ -277,6 +277,9 @@ struct EdithApp {
         _ = IPC.observe(IPC.Name.presenterPauseAuto) {
             services.presenter?.pauseUntilShareEnds()
         }
+        _ = IPC.observe(IPC.Name.requestNotchBrowserDetach) {
+            MainActor.assumeIsolated { services.notchBrowser?.detach() }
+        }
         LidAwakeActionBridge.shared.install(services: services)
         _ = IPC.observe(
             IPC.Name.requestCalendarEvents,

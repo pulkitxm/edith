@@ -311,8 +311,8 @@ not here cannot be set, and `import` skips it.
 | `notchAlertBattery` | bool | none | shared | Alert on battery level changes. |
 | `notchAlertBluetooth` | bool | none | shared | Alert on Bluetooth connections. |
 | `notchAudioMixerEnabled` | bool | none | shared | Per-app audio mixer in the notch shelf. |
-| `notchBrowserEnabled` | bool | `false` | shared | Notch Browser ability: a tabbed browser in the notch using a Chrome profile. |
-| `notchBrowserSearchEngine` | string | `google` | shared | Search engine the Notch Browser address bar uses for plain text: `google`, `duckDuckGo`, `bing` or `kagi`. |
+| `notchBrowserEnabled` | bool | `false` | shared | Notch Shelf browser tab: tabbed browsing in the notch with a Chrome profile. |
+| `notchBrowserSearchEngine` | string | `google` | shared | Search engine the notch browser address bar uses for plain text: `google`, `duckDuckGo`, `bing` or `kagi`. |
 
 ### `focusdim`
 

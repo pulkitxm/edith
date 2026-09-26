@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithHelper
+@testable import EdithKit
 
 @Suite struct BrowserShortcutMatrixTests {
     private func match(_ key: String, _ modifiers: NSEvent.ModifierFlags) -> BrowserShortcut? {

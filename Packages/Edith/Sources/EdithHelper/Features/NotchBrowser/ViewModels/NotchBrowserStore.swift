@@ -39,6 +39,7 @@ final class NotchBrowserStore {
     @ObservationIgnored var screenSize: () -> CGSize? = { nil }
     @ObservationIgnored var onSizeChange: (() -> Void)?
     @ObservationIgnored var requestKeyFocus: (() -> Void)?
+    @ObservationIgnored var onProfileChange: (() -> Void)?
     @ObservationIgnored private let sessionFile: BrowserSessionFile
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let keyProvider: @Sendable () throws -> ChromeCookieKey
@@ -88,6 +89,7 @@ final class NotchBrowserStore {
             let saved = profiles.first(where: { $0.directory == directory })
         {
             profile = saved
+            session.profileName = saved.name
             dataStore = dataStoreFactory(
                 ChromeProfileImporter.dataStoreIdentifier(
                     profile: saved, userData: installation.userData))
@@ -184,10 +186,12 @@ final class NotchBrowserStore {
         closedTabs = []
         choosingProfile = false
         session.profile = nil
+        session.profileName = nil
         session.tabs = []
         session.selected = 0
         sessionFile.save(session)
         refreshEnvironment()
+        onProfileChange?()
         guard let released, let identifier else { return }
         released.removeData(
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
@@ -268,9 +272,12 @@ final class NotchBrowserStore {
         syncState = .idle
         syncSummary = Self.summary(applied: applied, snapshot: snapshot)
         session.profile = target.directory
+        session.profileName = target.name
         sessionFile.save(session)
         if tabs.isEmpty { restoreTabs() }
-        if attaching { showToast("Attached \(target.name)") }
+        guard attaching else { return }
+        showToast("Attached \(target.name)")
+        onProfileChange?()
     }
 
     nonisolated static func summary(applied: Int, snapshot: ChromeProfileSnapshot) -> String {
