@@ -91,6 +91,22 @@ import Testing
         #expect(BlankText.nonEmpty("") == nil)
         #expect(BlankText.nonEmpty("  edith  ") == "  edith  ")
     }
+
+    @Test func trimmedNonEmptyReadsAStringOutOfAnAnyValue() {
+        let text: Any? = "  edith  "
+        let number: Any? = 4
+        #expect(BlankText.trimmedNonEmpty(text) == "edith")
+        #expect(BlankText.trimmedNonEmpty(number) == nil)
+        #expect(BlankText.trimmedNonEmpty(nil as Any?) == nil)
+    }
+}
+
+@Suite struct BacktickQuotedTests {
+    @Test func wrapUsesBackticksAndDoublesEmbeddedOnes() {
+        #expect(BacktickQuoted.wrap("orders") == "`orders`")
+        #expect(BacktickQuoted.wrap("a`b") == "`a``b`")
+        #expect(BacktickQuoted.wrap("") == "``")
+    }
 }
 
 @Suite struct CompactDurationTests {

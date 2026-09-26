@@ -891,13 +891,7 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     private static func announce(_ message: String) {
-        NSAccessibility.post(
-            element: NSApplication.shared,
-            notification: .announcementRequested,
-            userInfo: [
-                .announcement: message,
-                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
-            ])
+        AccessibilityAnnouncement.post(message)
     }
 }
 
