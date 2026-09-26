@@ -11,19 +11,31 @@ enum AudioTools {
         ]
     }
 
-    static func edited(
-        _ run: StudioRun, filter: String, suffix: String, expected: ((Double) -> Double)? = nil
-    ) async throws -> URL {
+    static func loudness(sampleRate: Int?) -> String {
+        "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=\(sampleRate ?? 48000),"
+            + "asetnsamples=n=4096:p=0"
+    }
+
+    static func sound(_ run: StudioRun) async throws -> StudioMediaInfo {
         let info = try await FFmpeg.info(run.input, run: run)
         guard info.hasAudio else {
             throw StudioError.unsupportedInput(run.input.lastPathComponent, run.tool.title)
         }
+        return info
+    }
+
+    static func edited(
+        _ run: StudioRun, suffix: String, expected: ((Double) -> Double)? = nil,
+        complete: Bool = true, filter: (StudioMediaInfo) throws -> String
+    ) async throws -> URL {
+        let info = try await sound(run)
+        let chain = try filter(info)
         let format = MediaEncoding.sameAudioFormat(for: run.input, info: info)
         let output = run.output(for: run.input, suffix: suffix, ext: format.ext)
         _ = try await FFmpeg.execute(
-            ["-i", run.input.path, "-vn", "-map", "0:a:0", "-map_metadata", "0", "-af", filter]
+            ["-i", run.input.path, "-vn", "-map", "0:a:0", "-map_metadata", "0", "-af", chain]
                 + format.arguments + [output.path],
-            run: run, expected: info.duration.map { expected?($0) ?? $0 })
+            run: run, expected: info.duration.map { expected?($0) ?? $0 }, complete: complete)
         return output
     }
 
@@ -39,7 +51,7 @@ enum AudioTools {
         ],
         requirements: ffmpeg, keywords: ["cut", "clip", "ringtone", "shorten"], actionTitle: "Trim"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await sound(run)
         let span = run.settings.span("range")
         guard span.start > 0 || span.end != nil else {
             throw StudioError.invalidOption("range", "choose where the clip starts or ends")
@@ -47,7 +59,7 @@ enum AudioTools {
         if let total = info.duration, span.start >= total {
             throw StudioError.invalidOption("range", "the start is past the end of the audio")
         }
-        let length = span.duration(within: info.duration)
+        let length = VideoInput.length(of: span, within: info.duration)
         var filters: [String] = []
         let fadeIn = run.settings.number("fadeIn")
         let fadeOut = run.settings.number("fadeOut")
@@ -86,7 +98,8 @@ enum AudioTools {
         let info = try await FFmpeg.info(run.input, run: run)
         guard info.hasAudio else { throw StudioError.nothingToDo("This file has no sound.") }
         let format = MediaEncoding.audioFormat(
-            run.settings.text("format"), bitrate: Int(run.settings.text("bitrate")) ?? 192)
+            run.settings.text("format"), bitrate: Int(run.settings.text("bitrate")) ?? 192,
+            bitDepth: info.bitDepth)
         let same = run.input.pathExtension.lowercased() == format.ext
         let output = run.output(for: run.input, suffix: same ? "converted" : nil, ext: format.ext)
         var arguments = ["-i", run.input.path, "-vn", "-map", "0:a:0", "-map_metadata", "0"]
@@ -169,8 +182,17 @@ enum AudioTools {
         let format =
             choice == "same"
             ? MediaEncoding.sameAudioFormat(for: run.inputs[0], info: infos[0])
-            : MediaEncoding.audioFormat(choice)
-        let crossfade = run.settings.number("crossfade")
+            : MediaEncoding.audioFormat(choice, bitDepth: infos.compactMap(\.bitDepth).max())
+        let requested = run.settings.number("crossfade")
+        let lengths = infos.map { $0.duration ?? .infinity }
+        let ends = [lengths[0], lengths[lengths.count - 1]].min() ?? .infinity
+        let middles = lengths.dropFirst().dropLast().min() ?? .infinity
+        let crossfade = min(requested, ends * 0.8, middles / 2)
+        if crossfade < requested {
+            run.note(
+                "The crossfade was shortened to \(StudioTime.format(crossfade)) "
+                    + "to fit the shortest file.")
+        }
         var arguments: [String] = []
         for input in run.inputs { arguments += ["-i", input.path] }
         var chains = run.inputs.indices.map { "[\($0):a:0]\(normalize)[a\($0)]" }
@@ -215,11 +237,13 @@ enum AudioTools {
         requirements: ffmpeg, keywords: ["louder", "quieter", "normalize", "boost", "loudness"],
         actionTitle: "Change volume"
     ) { run in
-        let filter =
-            run.settings.text("mode") == "adjust"
-            ? "volume=\(Int(run.settings.number("gain")))dB"
-            : "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetnsamples=n=4096:p=0"
-        return [try await edited(run, filter: filter, suffix: "volume")]
+        let adjust = run.settings.text("mode") == "adjust"
+        let gain = Int(run.settings.number("gain"))
+        return [
+            try await edited(run, suffix: "volume") { info in
+                adjust ? "volume=\(gain)dB" : loudness(sampleRate: info.sampleRate)
+            }
+        ]
     }
 
     static let speed = StudioTool(
@@ -239,17 +263,16 @@ enum AudioTools {
         actionTitle: "Change speed"
     ) { run in
         let factor = Double(run.settings.text("speed")) ?? 1.25
-        let filter: String
-        if run.settings.bool("pitch") {
-            filter = MediaEncoding.atempo(factor)
-        } else {
-            filter = "asetrate=\(Int(48000 * factor)),aresample=48000"
-        }
-        let chain = "aresample=48000," + filter
+        let pitch = run.settings.bool("pitch")
         return [
             try await edited(
-                run, filter: chain, suffix: "\(run.settings.text("speed"))x",
-                expected: { $0 / factor })
+                run, suffix: "\(run.settings.text("speed"))x", expected: { $0 / factor }
+            ) { info in
+                let rate = info.sampleRate ?? 48000
+                return pitch
+                    ? MediaEncoding.atempo(factor)
+                    : "asetrate=\(Int((Double(rate) * factor).rounded())),aresample=\(rate)"
+            }
         ]
     }
 
@@ -263,22 +286,27 @@ enum AudioTools {
         ],
         requirements: ffmpeg, keywords: ["fade", "intro", "outro"], actionTitle: "Add fades"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
-        guard let duration = info.duration, duration > 0 else {
-            throw StudioError.unavailable("The length of this audio is unknown.")
-        }
-        let fadeIn = min(run.settings.number("fadeIn"), duration / 2)
-        let fadeOut = min(run.settings.number("fadeOut"), duration / 2)
-        guard fadeIn > 0 || fadeOut > 0 else {
+        let requestedIn = run.settings.number("fadeIn")
+        let requestedOut = run.settings.number("fadeOut")
+        guard requestedIn > 0 || requestedOut > 0 else {
             throw StudioError.invalidOption("fade", "choose a fade in or fade out length")
         }
-        var filters: [String] = []
-        if fadeIn > 0 { filters.append("afade=t=in:st=0:d=\(FFmpeg.seconds(fadeIn))") }
-        if fadeOut > 0 {
-            filters.append(
-                "afade=t=out:st=\(FFmpeg.seconds(duration - fadeOut)):d=\(FFmpeg.seconds(fadeOut))")
-        }
-        return [try await edited(run, filter: filters.joined(separator: ","), suffix: "faded")]
+        return [
+            try await edited(run, suffix: "faded") { info in
+                guard let duration = info.duration, duration > 0 else {
+                    throw StudioError.unavailable("The length of this audio is unknown.")
+                }
+                let fadeIn = min(requestedIn, duration / 2)
+                let fadeOut = min(requestedOut, duration / 2)
+                var filters: [String] = []
+                if fadeIn > 0 { filters.append("afade=t=in:st=0:d=\(FFmpeg.seconds(fadeIn))") }
+                if fadeOut > 0 {
+                    let start = FFmpeg.seconds(duration - fadeOut)
+                    filters.append("afade=t=out:st=\(start):d=\(FFmpeg.seconds(fadeOut))")
+                }
+                return filters.joined(separator: ",")
+            }
+        ]
     }
 
     static let reverse = StudioTool(
@@ -286,7 +314,7 @@ enum AudioTools {
         summary: "Play audio backwards.", symbol: "backward", group: .edit, inputs: [.audio],
         requirements: ffmpeg, keywords: ["backwards", "rewind"], actionTitle: "Reverse"
     ) { run in
-        [try await edited(run, filter: "areverse", suffix: "reversed")]
+        [try await edited(run, suffix: "reversed") { _ in "areverse" }]
     }
 
     static let removeSilence = StudioTool(
@@ -322,7 +350,7 @@ enum AudioTools {
                 + "stop_periods=-1:stop_threshold=\(threshold):"
                 + "stop_duration=\(FFmpeg.seconds(run.settings.number("pause")))"
         }
-        return [try await edited(run, filter: filter, suffix: "tightened")]
+        return [try await edited(run, suffix: "tightened", complete: false) { _ in filter }]
     }
 
     static let denoise = StudioTool(
@@ -349,7 +377,7 @@ enum AudioTools {
         }
         var filter = "afftdn=nr=\(amount):nf=-30"
         if run.settings.bool("rumble") { filter = "highpass=f=80," + filter }
-        return [try await edited(run, filter: filter, suffix: "denoised")]
+        return [try await edited(run, suffix: "denoised") { _ in filter }]
     }
 
     static let toVideo = StudioTool(

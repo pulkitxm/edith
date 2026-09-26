@@ -56,10 +56,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["reduce", "shrink", "smaller", "size", "email"],
         actionTitle: "Compress"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
-        guard info.hasVideo else {
-            throw StudioError.unsupportedInput(run.input.lastPathComponent, "Compress video")
-        }
+        let info = try await VideoInput.info(run)
         let output = run.output(for: run.input, suffix: "compressed", ext: "mp4")
         var filters: [String] = []
         let maxHeight = Int(run.settings.text("maxHeight"))
@@ -121,7 +118,12 @@ enum VideoTools {
             common + video + ["-c:a", "aac", "-b:a", audioRate]
                 + MediaEncoding.finishing(container: "mp4") + [output.path],
             run: run, expected: info.duration)
-        if maxHeight == nil, StudioRunner.fileSize(output) >= StudioRunner.fileSize(run.input),
+        let shareable =
+            info.videoCodec == (hevc ? "hevc" : "h264") && info.pixelFormat == "yuv420p"
+            && (info.width ?? 1) % 2 == 0 && (info.height ?? 1) % 2 == 0
+            && (info.audioCodec == nil || info.audioCodec == "aac")
+        if maxHeight == nil, shareable,
+            StudioRunner.fileSize(output) >= StudioRunner.fileSize(run.input),
             run.input.pathExtension.lowercased() == "mp4"
         {
             try FileManager.default.removeItem(at: output)
@@ -153,7 +155,7 @@ enum VideoTools {
         actionTitle: "Convert"
     ) { run in
         let format = run.settings.text("format")
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let same = run.input.pathExtension.lowercased() == format
         let output = run.output(for: run.input, suffix: same ? "converted" : nil, ext: format)
         if format == "gif" {
@@ -202,7 +204,7 @@ enum VideoTools {
         ],
         requirements: ffmpeg, keywords: ["cut", "clip", "shorten", "range"], actionTitle: "Trim"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let span = run.settings.span("range")
         guard span.start > 0 || span.end != nil else {
             throw StudioError.invalidOption("range", "choose where the clip starts or ends")
@@ -210,7 +212,7 @@ enum VideoTools {
         if let total = info.duration, span.start >= total {
             throw StudioError.invalidOption("range", "the start is past the end of the video")
         }
-        let length = span.duration(within: info.duration)
+        let length = VideoInput.length(of: span, within: info.duration)
         let container = MediaEncoding.videoContainer(for: run.input)
         let output = run.output(for: run.input, suffix: "trimmed", ext: container)
         var arguments = ["-ss", FFmpeg.seconds(span.start), "-i", run.input.path]
@@ -253,8 +255,8 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["cut", "segments", "pieces", "chapters"],
         groupsOutputs: true, actionTitle: "Split"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
-        guard let duration = info.duration, duration > 0 else {
+        let info = try await VideoInput.info(run)
+        guard let duration = info.pictureLength, duration > 0 else {
             throw StudioError.unavailable("The length of this video is unknown.")
         }
         var times: [Double]
@@ -278,19 +280,27 @@ enum VideoTools {
             throw StudioError.nothingToDo("The video is shorter than the first split point.")
         }
         let container = MediaEncoding.videoContainer(for: run.input)
-        let stem = run.input.studioStem.replacingOccurrences(of: "%", with: "%%")
-        let pattern = run.workDirectory.appendingPathComponent("\(stem)-part-%03d.\(container)")
-        let list = times.map(FFmpeg.seconds).joined(separator: ",")
-        var arguments = ["-i", run.input.path] + MediaEncoding.primaryStreams
-        arguments +=
-            ["-vf", MediaEncoding.evenFilter] + MediaEncoding.video(container: container, crf: 18)
-        arguments += MediaEncoding.audio(container: container, source: info, allowCopy: false)
-        arguments += [
-            "-force_key_frames", list, "-f", "segment", "-segment_times", list,
-            "-reset_timestamps", "1", "-segment_start_number", "1", pattern.path,
-        ]
-        _ = try await FFmpeg.execute(arguments, run: run, expected: duration)
-        return MediaFiles.produced(in: run.workDirectory, prefix: run.input.studioStem + "-part-")
+        let bounds = [0] + times + [duration]
+        var outputs: [URL] = []
+        for index in 0..<(bounds.count - 1) {
+            try run.checkCancellation()
+            let start = bounds[index]
+            let length = bounds[index + 1] - start
+            let number = String(format: "%03d", index + 1)
+            let output = run.output(
+                named: "\(run.input.studioStem)-part-\(number).\(container)")
+            var arguments = ["-ss", FFmpeg.seconds(start), "-i", run.input.path]
+            if index < bounds.count - 2 { arguments += ["-t", FFmpeg.seconds(length)] }
+            arguments += MediaEncoding.primaryStreams + ["-vf", MediaEncoding.evenFilter]
+            arguments += MediaEncoding.video(container: container, crf: 18)
+            arguments += MediaEncoding.audio(container: container, source: info, allowCopy: false)
+            arguments += MediaEncoding.finishing(container: container) + [output.path]
+            _ = try await FFmpeg.execute(
+                arguments, run: run, expected: length,
+                range: (start / duration)...(bounds[index + 1] / duration))
+            outputs.append(output)
+        }
+        return outputs
     }
 
     static let merge = StudioTool(
@@ -310,7 +320,7 @@ enum VideoTools {
         actionTitle: "Merge"
     ) { run in
         var infos: [StudioMediaInfo] = []
-        for input in run.inputs { infos.append(try await FFmpeg.info(input, run: run)) }
+        for input in run.inputs { infos.append(try await VideoInput.info(run, input)) }
         guard let first = infos.first?.displaySize else {
             throw StudioError.unreadable(run.inputs[0].lastPathComponent)
         }
@@ -335,7 +345,7 @@ enum VideoTools {
         var pairs = ""
         var total = 0.0
         for (index, info) in infos.enumerated() {
-            let duration = info.duration ?? 1
+            let duration = info.pictureLength ?? 1
             total += duration
             chains.append(
                 "[\(index):v:0]scale=\(width):\(height):force_original_aspect_ratio=decrease,"
@@ -344,7 +354,7 @@ enum VideoTools {
             let audio =
                 info.hasAudio
                 ? "[\(index):a:0]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
-                    + "apad,atrim=duration=\(FFmpeg.seconds(duration))[a\(index)]"
+                    + "\(info.padToPicture)atrim=duration=\(FFmpeg.seconds(duration))[a\(index)]"
                 : "anullsrc=channel_layout=stereo:sample_rate=48000,"
                     + "atrim=duration=\(FFmpeg.seconds(duration))[a\(index)]"
             chains.append(audio)
@@ -380,14 +390,18 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["gif", "animation", "meme", "loop"],
         actionTitle: "Make GIF"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
+        let span = run.settings.span("range")
+        if let total = info.duration, span.start >= total {
+            throw StudioError.invalidOption("range", "the start is past the end of the video")
+        }
         let output = run.output(for: run.input, suffix: nil, ext: "gif")
         let requested = Int(run.settings.text("width"))
         let sourceWidth = info.displaySize.map { Int($0.width) }
         let width = requested.map { min($0, sourceWidth ?? $0) }
         try await GIFEncoder.encode(
             run.input, to: output, fps: run.settings.int("fps"),
-            width: width == sourceWidth ? nil : width, span: run.settings.span("range"),
+            width: width == sourceWidth ? nil : width, span: span,
             loop: run.settings.bool("loop"), run: run, duration: info.duration)
         return [output]
     }
@@ -414,11 +428,12 @@ enum VideoTools {
         let info = try await FFmpeg.info(run.input, run: run)
         guard info.hasAudio else { throw StudioError.nothingToDo("This video has no sound.") }
         let format = MediaEncoding.audioFormat(
-            run.settings.text("format"), bitrate: Int(run.settings.text("bitrate")) ?? 192)
+            run.settings.text("format"), bitrate: Int(run.settings.text("bitrate")) ?? 192,
+            bitDepth: info.bitDepth)
         let output = run.output(for: run.input, suffix: nil, ext: format.ext)
         _ = try await FFmpeg.execute(
             ["-i", run.input.path, "-vn", "-map", "0:a:0", "-map_metadata", "0"] + format.arguments
-                + [output.path], run: run, expected: info.duration)
+                + [output.path], run: run, expected: info.soundLength)
         return [output]
     }
 
@@ -461,7 +476,7 @@ enum VideoTools {
         keywords: ["frames", "screenshots", "stills", "thumbnail", "jpg", "png", "snapshot"],
         groupsOutputs: true, actionTitle: "Save images"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let duration = info.duration ?? 0
         let ext = run.settings.text("format") == "png" ? "png" : "jpg"
         var filters: [String] = []
@@ -473,17 +488,19 @@ enum VideoTools {
             let every = max(0.1, run.settings.number("seconds"))
             let pattern = run.workDirectory.appendingPathComponent(
                 stem.replacingOccurrences(of: "%", with: "%%") + "-frame-%04d.\(ext)")
-            let chain = (["fps=1/\(FFmpeg.seconds(every))"] + filters).joined(separator: ",")
+            let rate = "fps=1/\(FFmpeg.seconds(every)):round=up:start_time=0"
+            let chain = ([rate] + filters).joined(separator: ",")
             _ = try await FFmpeg.execute(
                 ["-i", run.input.path, "-map", "0:v:0", "-vf", chain] + quality + [pattern.path],
-                run: run, expected: duration)
+                run: run, expected: duration, complete: false)
             return MediaFiles.produced(in: run.workDirectory, prefix: stem + "-frame-")
         case "thumbnail":
             var at = run.settings.number("at")
             if duration > 0, at >= duration { at = duration / 2 }
             let output = run.output(for: run.input, suffix: "thumbnail", ext: ext)
             try await FrameGrabber.grab(
-                run.input, at: at, filters: filters, quality: quality, to: output, run: run)
+                run.input, at: at, end: info.pictureLength, filters: filters, quality: quality,
+                to: output, run: run)
             return [output]
         default:
             let times: [Double]
@@ -509,8 +526,8 @@ enum VideoTools {
                 let output = run.output(for: run.input, suffix: label, ext: ext)
                 do {
                     try await FrameGrabber.grab(
-                        run.input, at: time, filters: filters, quality: quality, to: output,
-                        run: run)
+                        run.input, at: time, end: info.pictureLength, filters: filters,
+                        quality: quality, to: output, run: run)
                     outputs.append(output)
                 } catch StudioError.cancelled {
                     throw StudioError.cancelled
@@ -533,7 +550,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["silent", "remove audio", "no sound"],
         actionTitle: "Mute"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let container = MediaEncoding.videoContainer(for: run.input)
         let copy = MediaEncoding.editableContainers.contains(run.input.pathExtension.lowercased())
         let output = run.output(for: run.input, suffix: "muted", ext: container)
@@ -601,7 +618,7 @@ enum VideoTools {
         keywords: ["square", "vertical", "black bars", "letterbox", "aspect"],
         actionTitle: "Crop"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         guard let size = info.displaySize else {
             throw StudioError.unreadable(run.input.lastPathComponent)
         }
@@ -658,7 +675,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["scale", "resolution", "1080p", "720p", "4k", "smaller"],
         actionTitle: "Resize"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         guard let size = info.displaySize else {
             throw StudioError.unreadable(run.input.lastPathComponent)
         }
@@ -698,8 +715,10 @@ enum VideoTools {
         actionTitle: "Change speed"
     ) { run in
         let factor = Double(run.settings.text("speed")) ?? 2
-        let info = try await FFmpeg.info(run.input, run: run)
-        let video = "setpts=PTS/\(factor)"
+        let info = try await VideoInput.info(run)
+        let rate = info.frameRate ?? 30
+        let target = min(rate, max(rate * factor, min(24, rate)))
+        let video = "setpts=PTS/\(factor),fps=\(String(format: "%.3f", target))"
         let keep = run.settings.bool("sound") && info.hasAudio
         let expected = info.duration.map { $0 / factor }
         return [
@@ -718,7 +737,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["backwards", "rewind", "boomerang"],
         actionTitle: "Reverse"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let keep = run.settings.bool("sound") && info.hasAudio
         return [try await Reverser.reverse(run, info: info, audio: keep)]
     }
@@ -746,12 +765,12 @@ enum VideoTools {
         guard let music = run.settings.file("audio") else {
             throw StudioError.invalidOption("music", "choose an audio file")
         }
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let musicInfo = try await FFmpeg.info(music, run: run)
         guard musicInfo.hasAudio else {
             throw StudioError.unsupportedInput(music.lastPathComponent, "Add music")
         }
-        guard let duration = info.duration, duration > 0 else {
+        guard let duration = info.pictureLength, duration > 0 else {
             throw StudioError.unavailable("The length of this video is unknown.")
         }
         let fade = min(run.settings.number("fadeOut"), duration / 2)
@@ -768,8 +787,8 @@ enum VideoTools {
         if mix {
             graph =
                 musicChain + "[m];[0:a:0]aformat=sample_fmts=fltp:sample_rates=48000:"
-                + "channel_layouts=stereo[o];[o][m]amix=inputs=2:duration=first:"
-                + "dropout_transition=0:normalize=0[a]"
+                + "channel_layouts=stereo,apad,atrim=duration=\(FFmpeg.seconds(duration))[o];"
+                + "[o][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]"
         } else {
             graph = musicChain + ",apad,atrim=duration=\(FFmpeg.seconds(duration))[a]"
         }
@@ -783,7 +802,7 @@ enum VideoTools {
             copy
             ? ["-c:v", "copy"]
             : ["-vf", MediaEncoding.evenFilter] + MediaEncoding.video(container: container)
-        arguments += ["-c:a", "aac", "-b:a", "192k", "-t", FFmpeg.seconds(duration)]
+        arguments += ["-c:a", "aac", "-b:a", "192k", "-shortest", "-t", FFmpeg.seconds(duration)]
         arguments += MediaEncoding.finishing(container: container) + [output.path]
         _ = try await FFmpeg.execute(arguments, run: run, expected: duration)
         return [output]
@@ -808,12 +827,12 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["louder", "quieter", "normalize", "boost", "loudness"],
         actionTitle: "Adjust volume"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         guard info.hasAudio else { throw StudioError.nothingToDo("This video has no sound.") }
         let filter =
             run.settings.text("mode") == "adjust"
             ? "volume=\(Int(run.settings.number("gain")))dB"
-            : "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetnsamples=n=4096:p=0"
+            : AudioTools.loudness(sampleRate: info.sampleRate)
         return [try await VideoFilter.apply(run, audio: filter, suffix: "volume", info: info)]
     }
 
@@ -841,7 +860,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["logo", "brand", "stamp", "copyright", "overlay"],
         actionTitle: "Add watermark"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         guard let size = info.displaySize else {
             throw StudioError.unreadable(run.input.lastPathComponent)
         }
@@ -884,19 +903,14 @@ enum VideoTools {
         guard let file = run.settings.file("subtitles") else {
             throw StudioError.invalidOption("subtitles", "choose an SRT or VTT file")
         }
-        let raw: String
-        do {
-            raw = try String(contentsOf: file, encoding: .utf8)
-        } catch {
-            raw = try String(contentsOf: file, encoding: .isoLatin1)
-        }
+        let raw = try Captions.decode(file)
         let cues = SubtitleParser.parse(raw)
         guard !cues.isEmpty else {
             throw StudioError.unsupportedInput(file.lastPathComponent, "Add subtitles")
         }
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         if run.settings.text("mode") == "track" {
-            return [try await Captions.track(run, subtitles: file, info: info)]
+            return [try await Captions.track(run, subtitles: file, text: raw, info: info)]
         }
         return [try await Captions.burn(run, cues: cues, info: info)]
     }
@@ -908,17 +922,39 @@ enum VideoTools {
         options: [.integer("times", "Play it", 2...50, default: 3, unit: "times")],
         requirements: ffmpeg, keywords: ["repeat", "loop", "boomerang"], actionTitle: "Loop"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let times = max(2, run.settings.int("times"))
+        guard let total = info.duration, total > 0 else {
+            throw StudioError.unavailable("The length of this video is unknown.")
+        }
+        let clip = FFmpeg.seconds(min(info.videoDuration ?? total, total))
         let container = MediaEncoding.videoContainer(for: run.input)
         let output = run.output(for: run.input, suffix: "loop-\(times)x", ext: container)
-        var arguments = ["-stream_loop", String(times - 1), "-i", run.input.path]
-        arguments += MediaEncoding.primaryStreams + ["-vf", MediaEncoding.evenFilter]
+        var arguments: [String] = []
+        var chains: [String] = []
+        var pairs = ""
+        for index in 0..<times {
+            arguments += ["-i", run.input.path]
+            chains.append("[\(index):v:0]trim=end=\(clip)[v\(index)]")
+            pairs += "[v\(index)]"
+            if info.hasAudio {
+                chains.append("[\(index):a:0]\(info.padToPicture)atrim=end=\(clip)[a\(index)]")
+                pairs += "[a\(index)]"
+            }
+        }
+        let sound = info.hasAudio ? 1 : 0
+        chains.append(
+            pairs + "concat=n=\(times):v=1:a=\(sound)[joined]" + (sound == 1 ? "[a]" : ""))
+        chains.append("[joined]\(MediaEncoding.evenFilter)[v]")
+        arguments += ["-filter_complex", chains.joined(separator: ";"), "-map", "[v]"]
+        if info.hasAudio {
+            arguments += ["-map", "[a]"]
+            arguments += MediaEncoding.audio(container: container, source: info, allowCopy: false)
+        }
         arguments += MediaEncoding.video(container: container)
-        arguments += MediaEncoding.audio(container: container, source: info, allowCopy: false)
         arguments += MediaEncoding.finishing(container: container) + [output.path]
         _ = try await FFmpeg.execute(
-            arguments, run: run, expected: info.duration.map { $0 * Double(times) })
+            arguments, run: run, expected: (Double(clip) ?? total) * Double(times))
         return [output]
     }
 
@@ -1010,7 +1046,7 @@ enum VideoTools {
         case "strong": video = "hqdn3d=8:6:12:9"
         default: video = "hqdn3d=4:3:6:4.5"
         }
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let audio = run.settings.bool("audio") && info.hasAudio ? "afftdn=nr=20:nf=-30" : nil
         return [
             try await VideoFilter.apply(
@@ -1029,7 +1065,7 @@ enum VideoTools {
         requirements: ffmpeg, keywords: ["fade", "black", "intro", "outro", "transition"],
         actionTitle: "Add fades"
     ) { run in
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         guard let duration = info.duration, duration > 0 else {
             throw StudioError.unavailable("The length of this video is unknown.")
         }
@@ -1045,9 +1081,10 @@ enum VideoTools {
             audio.append("afade=t=in:st=0:d=\(FFmpeg.seconds(fadeIn))")
         }
         if fadeOut > 0 {
-            let start = FFmpeg.seconds(duration - fadeOut)
-            video.append("fade=t=out:st=\(start):d=\(FFmpeg.seconds(fadeOut))")
-            audio.append("afade=t=out:st=\(start):d=\(FFmpeg.seconds(fadeOut))")
+            let picture = FFmpeg.seconds((info.pictureLength ?? duration) - fadeOut)
+            let sound = FFmpeg.seconds((info.soundLength ?? duration) - fadeOut)
+            video.append("fade=t=out:st=\(picture):d=\(FFmpeg.seconds(fadeOut))")
+            audio.append("afade=t=out:st=\(sound):d=\(FFmpeg.seconds(fadeOut))")
         }
         return [
             try await VideoFilter.apply(
@@ -1133,7 +1170,7 @@ enum VideoTools {
                 + "[b]scale=\(width):\(height):force_original_aspect_ratio=decrease[fg];"
                 + "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
         }
-        let info = try await FFmpeg.info(run.input, run: run)
+        let info = try await VideoInput.info(run)
         let label = run.settings.text("shape").replacingOccurrences(of: ":", with: "x")
         let output = run.output(for: run.input, suffix: label, ext: "mp4")
         var arguments = [

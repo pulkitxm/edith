@@ -15,6 +15,10 @@ public struct StudioMediaInfo: Sendable, Equatable {
     public var bitRate: Int?
     public var formatName: String?
     public var subtitleTracks = 0
+    public var bitDepth: Int?
+    public var pixelFormat: String?
+    public var videoDuration: Double?
+    public var audioDuration: Double?
 
     public var hasVideo: Bool { videoCodec != nil }
     public var hasAudio: Bool { audioCodec != nil }
@@ -44,6 +48,20 @@ public struct StudioMediaInfo: Sendable, Equatable {
         self.channels = channels
         self.bitRate = bitRate
         self.formatName = formatName
+    }
+}
+
+extension StudioMediaInfo {
+    var pictureLength: Double? {
+        guard let duration else { return videoDuration }
+        return min(videoDuration ?? duration, duration)
+    }
+
+    var soundLength: Double? { audioDuration ?? duration }
+
+    var padToPicture: String {
+        let missing = (videoDuration ?? 0) - (audioDuration ?? .infinity)
+        return missing > 0 ? "apad=pad_dur=\(FFmpeg.seconds(missing))," : ""
     }
 }
 
@@ -103,6 +121,8 @@ enum FFmpeg {
                     ?? rate(stream["r_frame_rate"] as? String)
                 info.frameCount = number(stream["nb_frames"]).map { Int($0) }
                 info.rotation = rotation(of: stream)
+                info.pixelFormat = stream["pix_fmt"] as? String
+                info.videoDuration = number(stream["duration"])
                 if info.duration == nil { info.duration = number(stream["duration"]) }
             } else if type == "subtitle" {
                 info.subtitleTracks += 1
@@ -110,6 +130,8 @@ enum FFmpeg {
                 info.audioCodec = stream["codec_name"] as? String
                 info.sampleRate = number(stream["sample_rate"]).map { Int($0) }
                 info.channels = stream["channels"] as? Int
+                info.bitDepth = bitDepth(of: stream)
+                info.audioDuration = number(stream["duration"])
                 if info.duration == nil { info.duration = number(stream["duration"]) }
             }
         }
@@ -124,6 +146,13 @@ enum FFmpeg {
             if let value = number(side["rotation"]) { return Int(value) }
         }
         return 0
+    }
+
+    static func bitDepth(of stream: [String: Any]) -> Int? {
+        for key in ["bits_per_raw_sample", "bits_per_sample"] {
+            if let bits = number(stream[key]), bits > 0 { return Int(bits) }
+        }
+        return nil
     }
 
     static func number(_ value: Any?) -> Double? {
@@ -177,19 +206,30 @@ enum FFmpeg {
 
     static func execute(
         _ arguments: [String], run: StudioRun, expected: Double?,
-        range: ClosedRange<Double>? = 0...1, loglevel: String = "error"
+        range: ClosedRange<Double>? = 0...1, loglevel: String = "error", complete: Bool = true
     ) async throws -> StudioProcessResult {
         let ffmpeg = try run.environment.require(.ffmpeg)
         let base = ["-hide_banner", "-nostdin", "-y", "-loglevel", loglevel] + progressArguments
         let total = expected.flatMap { $0 > 0 ? $0 : nil }
+        let reached = FFmpegProgress()
         let result = try await StudioProcess.run(ffmpeg, base + arguments) { line in
-            guard let range, let total, let seconds = progressSeconds(line) else { return }
+            guard let seconds = progressSeconds(line) else { return }
+            reached.record(seconds)
+            guard let range, let total else { return }
             let span = range.upperBound - range.lowerBound
             run.progress(range.lowerBound + span * min(1, seconds / total))
         }
         try run.checkCancellation()
         guard result.status == 0 else {
             throw StudioError.failed("FFmpeg could not finish: " + summary(result.errorTail))
+        }
+        let stop = reached.seconds ?? 0
+        if complete, let total, stop < total * 0.9 - 0.25,
+            stop == 0 || !result.errorTail.isEmpty
+        {
+            throw StudioError.failed(
+                "The source stops at \(StudioTime.format(stop)) of \(StudioTime.format(total)). "
+                    + "It looks damaged or incomplete.")
         }
         if let range { run.progress(range.upperBound) }
         return result
@@ -219,5 +259,22 @@ enum FFmpeg {
 
     static func concatListEntry(_ url: URL) -> String {
         "file '" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+}
+
+final class FFmpegProgress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var furthest: Double?
+
+    func record(_ seconds: Double) {
+        lock.lock()
+        furthest = max(furthest ?? 0, seconds)
+        lock.unlock()
+    }
+
+    var seconds: Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return furthest
     }
 }

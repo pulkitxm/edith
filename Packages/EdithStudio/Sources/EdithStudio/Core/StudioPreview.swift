@@ -60,7 +60,8 @@ public enum StudioPreview {
         let after =
             produced.studioKind == .video
             ? try await frame(
-                of: produced, scratch: scratch, environment: environment, name: "after")
+                of: produced, scratch: scratch, environment: environment, name: "after",
+                maxPixelSize: maxPixelSize)
             : try image(of: produced, maxPixelSize: maxPixelSize)
         return StudioPreviewImage(before: prepared.before, after: after)
     }
@@ -121,39 +122,46 @@ public enum StudioPreview {
         let duration = await StudioMedia.probe(input, environment: environment)?.duration ?? 0
         let start = duration > 2 ? min(1, duration * 0.3) : 0
         let snippet = scratch.appendingPathComponent(input.studioStem + ".mp4")
+        let bound = max(2, maxPixelSize)
+        let scale =
+            "scale=w='min(\(bound),iw)':h='min(\(bound),ih)':"
+            + "force_original_aspect_ratio=decrease:force_divisible_by=2"
         let result = try await StudioProcess.run(
             ffmpeg,
             [
                 "-hide_banner", "-nostdin", "-y", "-ss", String(format: "%.2f", start), "-i",
-                input.path, "-t", "0.6", "-an", "-vf",
-                "scale='min(\(maxPixelSize),iw)':-2", "-c:v", "libx264", "-preset", "ultrafast",
-                "-crf", "18", "-pix_fmt", "yuv420p", snippet.path,
+                input.path, "-t", "0.6", "-an", "-map", "0:v:0", "-vf", scale, "-c:v", "libx264",
+                "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p", snippet.path,
             ], timeout: 60)
         guard result.status == 0, FileManager.default.fileExists(atPath: snippet.path) else {
             throw StudioError.failed(
                 "A preview clip could not be made from \(input.lastPathComponent).")
         }
         let before = try await frame(
-            of: snippet, scratch: scratch, environment: environment, name: "before")
+            of: snippet, scratch: scratch, environment: environment, name: "before",
+            maxPixelSize: maxPixelSize)
         return Prepared(url: snippet, settings: settings, before: before)
     }
 
     static func frame(
-        of video: URL, scratch: URL, environment: StudioEnvironment, name: String
+        of video: URL, scratch: URL, environment: StudioEnvironment, name: String,
+        maxPixelSize: Int
     ) async throws -> CGImage {
         let ffmpeg = try environment.require(.ffmpeg)
         let still = scratch.appendingPathComponent("\(name).png")
-        let result = try await StudioProcess.run(
-            ffmpeg,
-            [
-                "-hide_banner", "-nostdin", "-y", "-ss", "0.2", "-i", video.path, "-frames:v", "1",
-                still.path,
-            ],
-            timeout: 60)
-        guard result.status == 0 else {
-            throw StudioError.failed("The preview frame could not be read.")
+        for seek in [["-ss", "0.2"], []] {
+            let result = try await StudioProcess.run(
+                ffmpeg,
+                ["-hide_banner", "-nostdin", "-y"] + seek + [
+                    "-i", video.path, "-map", "0:v:0", "-frames:v", "1", "-update", "1",
+                    still.path,
+                ],
+                timeout: 60)
+            if result.status == 0, FileManager.default.fileExists(atPath: still.path) {
+                return try StudioImageIO.load(still, maxPixelSize: maxPixelSize)
+            }
         }
-        return try StudioImageIO.load(still)
+        throw StudioError.failed("The preview frame could not be read.")
     }
 
     static func image(of url: URL, maxPixelSize: Int) throws -> CGImage {

@@ -93,13 +93,18 @@ enum MediaEncoding {
         StudioChoice("320", "320 kbps"),
     ]
 
-    static func audioFormat(_ name: String, bitrate: Int = 192) -> AudioFormat {
+    static func audioFormat(_ name: String, bitrate: Int = 192, bitDepth: Int? = nil)
+        -> AudioFormat
+    {
         let rate = "\(bitrate)k"
+        let deep = (bitDepth ?? 16) > 16
         switch name {
         case "mp3":
             return AudioFormat(
                 ext: "mp3", arguments: ["-c:a", "libmp3lame", "-b:a", rate], lossy: true)
-        case "wav": return AudioFormat(ext: "wav", arguments: ["-c:a", "pcm_s16le"], lossy: false)
+        case "wav":
+            return AudioFormat(
+                ext: "wav", arguments: ["-c:a", deep ? "pcm_s24le" : "pcm_s16le"], lossy: false)
         case "flac": return AudioFormat(ext: "flac", arguments: ["-c:a", "flac"], lossy: false)
         case "opus":
             return AudioFormat(
@@ -110,7 +115,8 @@ enum MediaEncoding {
                 ext: "ogg", arguments: ["-c:a", "libopus", "-b:a", "\(min(bitrate, 256))k"],
                 lossy: true)
         case "aiff":
-            return AudioFormat(ext: "aiff", arguments: ["-c:a", "pcm_s16be"], lossy: false)
+            return AudioFormat(
+                ext: "aiff", arguments: ["-c:a", deep ? "pcm_s24be" : "pcm_s16be"], lossy: false)
         case "alac": return AudioFormat(ext: "m4a", arguments: ["-c:a", "alac"], lossy: false)
         default:
             return AudioFormat(ext: "m4a", arguments: ["-c:a", "aac", "-b:a", rate], lossy: true)
@@ -121,11 +127,11 @@ enum MediaEncoding {
         let bitrate = info?.bitRate.map { min(320, max(96, $0 / 1000)) } ?? 192
         switch input.pathExtension.lowercased() {
         case "mp3": return audioFormat("mp3", bitrate: bitrate)
-        case "wav": return audioFormat("wav")
+        case "wav": return audioFormat("wav", bitDepth: info?.bitDepth)
         case "flac": return audioFormat("flac")
         case "opus": return audioFormat("opus", bitrate: bitrate)
         case "ogg", "oga": return audioFormat("ogg", bitrate: bitrate)
-        case "aif", "aiff", "aifc": return audioFormat("aiff")
+        case "aif", "aiff", "aifc": return audioFormat("aiff", bitDepth: info?.bitDepth)
         case "m4a", "alac":
             return info?.audioCodec == "alac"
                 ? audioFormat("alac") : audioFormat("m4a", bitrate: bitrate)

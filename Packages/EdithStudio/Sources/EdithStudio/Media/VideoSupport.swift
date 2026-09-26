@@ -10,6 +10,23 @@ enum MediaFiles {
     }
 }
 
+enum VideoInput {
+    static func info(_ run: StudioRun, _ url: URL? = nil) async throws -> StudioMediaInfo {
+        let source = url ?? run.input
+        let info = try await FFmpeg.info(source, run: run)
+        guard info.hasVideo else {
+            throw StudioError.unsupportedInput(source.lastPathComponent, run.tool.title)
+        }
+        return info
+    }
+
+    static func length(of span: StudioSpan, within total: Double?) -> Double? {
+        guard let length = span.duration(within: total) else { return nil }
+        guard let total else { return length }
+        return max(0, min(length, total - span.start))
+    }
+}
+
 enum VideoFilter {
     static func apply(
         _ run: StudioRun, video: String? = nil, audio: String? = nil, dropAudio: Bool = false,
@@ -78,7 +95,7 @@ enum GIFEncoder {
         var arguments: [String] = []
         if span.start > 0 { arguments += ["-ss", FFmpeg.seconds(span.start)] }
         arguments += ["-i", input.path]
-        let length = span.duration(within: duration)
+        let length = VideoInput.length(of: span, within: duration)
         if span.end != nil, let length { arguments += ["-t", FFmpeg.seconds(length)] }
         let scale = width.map { ",scale=\($0):-1:flags=lanczos" } ?? ""
         let rate = min(50, max(1, fps))
@@ -92,13 +109,26 @@ enum GIFEncoder {
 
 enum FrameGrabber {
     static func grab(
-        _ input: URL, at time: Double, filters: [String], quality: [String], to output: URL,
-        run: StudioRun
+        _ input: URL, at time: Double, end: Double?, filters: [String], quality: [String],
+        to output: URL, run: StudioRun
     ) async throws {
-        var arguments = ["-ss", FFmpeg.seconds(time), "-i", input.path, "-map", "0:v:0"]
-        if !filters.isEmpty { arguments += ["-vf", filters.joined(separator: ",")] }
-        arguments += ["-frames:v", "1", "-update", "1"] + quality + [output.path]
-        _ = try await FFmpeg.execute(arguments, run: run, expected: nil, range: nil)
+        var picture = ["-map", "0:v:0"]
+        if !filters.isEmpty { picture += ["-vf", filters.joined(separator: ",")] }
+        let seek =
+            ["-ss", FFmpeg.seconds(time), "-i", input.path] + picture
+            + ["-frames:v", "1", "-update", "1"] + quality + [output.path]
+        do {
+            _ = try await FFmpeg.execute(seek, run: run, expected: nil, range: nil)
+        } catch StudioError.cancelled {
+            throw StudioError.cancelled
+        } catch {
+            try? FileManager.default.removeItem(at: output)
+        }
+        if FileManager.default.fileExists(atPath: output.path) { return }
+        let rewind =
+            end.map { ["-ss", FFmpeg.seconds(min(time, $0) - 1)] } ?? ["-sseof", "-1"]
+        let tail = rewind + ["-i", input.path] + picture + ["-update", "1"] + quality
+        _ = try await FFmpeg.execute(tail + [output.path], run: run, expected: nil, range: nil)
         guard FileManager.default.fileExists(atPath: output.path) else {
             throw StudioError.nothingToDo(
                 "\(StudioTime.format(time)) is past the end of the video.")
@@ -136,16 +166,33 @@ enum CropDetector {
 }
 
 enum Reverser {
-    static let chunk = 10.0
+    static let memoryBudget = 1_000_000_000.0
+
+    static func chunkLength(for info: StudioMediaInfo) -> Double {
+        let format = info.pixelFormat ?? "yuv420p"
+        let full = ["444", "rgb", "bgr", "gbr"].contains { format.contains($0) }
+        let planes = full ? 3.0 : format.contains("422") ? 2.0 : 1.5
+        let deep = ["10", "12", "16"].contains { format.contains($0) } ? 2.0 : 1.0
+        let pixels = Double(max(1, info.width ?? 1920) * max(1, info.height ?? 1080))
+        let rate = min(240, max(1, info.frameRate ?? 30))
+        let seconds = memoryBudget / (pixels * planes * deep * rate)
+        return min(10, max(1, seconds.rounded(.down)))
+    }
 
     static func reverse(_ run: StudioRun, info: StudioMediaInfo, audio: Bool) async throws -> URL {
         let container = MediaEncoding.videoContainer(for: run.input)
         let output = run.output(for: run.input, suffix: "reversed", ext: container)
         let filters = ["-vf", "reverse," + MediaEncoding.evenFilter]
-        let sound = audio ? ["-af", "areverse"] : ["-an"]
+        func sound(until end: Double?) -> [String] {
+            guard audio else { return ["-an"] }
+            guard let end else { return ["-af", "areverse"] }
+            return ["-af", info.padToPicture + "atrim=end=\(FFmpeg.seconds(end)),areverse"]
+        }
         let maps = ["-map", "0:v:0"] + (audio ? ["-map", "0:a:0"] : [])
+        let chunk = chunkLength(for: info)
         guard let duration = info.duration, duration > chunk * 2 else {
-            var arguments = ["-i", run.input.path] + maps + filters + sound
+            var arguments = ["-i", run.input.path] + maps + filters
+            arguments += sound(until: info.videoDuration)
             arguments += MediaEncoding.video(container: container)
             if audio {
                 arguments += MediaEncoding.audio(
@@ -156,14 +203,19 @@ enum Reverser {
             return output
         }
         let scratch = try run.scratch("reverse")
-        let count = Int((duration / chunk).rounded(.up))
+        let picture = min(info.videoDuration ?? duration, duration)
+        var count = max(1, Int((picture / chunk).rounded(.up)))
+        if count > 1, picture - Double(count - 1) * chunk < 0.5 { count -= 1 }
         var pieces: [URL] = []
         for index in 0..<count {
             try run.checkCancellation()
             let piece = scratch.appendingPathComponent(String(format: "piece-%04d.mp4", index))
             let start = Double(index) * chunk
-            var arguments = ["-ss", FFmpeg.seconds(start), "-t", FFmpeg.seconds(chunk)]
-            arguments += ["-i", run.input.path] + maps + filters + sound
+            let last = index == count - 1
+            var arguments = ["-ss", FFmpeg.seconds(start)]
+            if !last { arguments += ["-t", FFmpeg.seconds(chunk)] }
+            arguments += ["-i", run.input.path] + maps + filters
+            arguments += sound(until: last ? info.videoDuration.map { $0 - start } : nil)
             arguments += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
             ]
@@ -172,7 +224,7 @@ enum Reverser {
             let low = Double(index) / Double(count) * 0.9
             let high = Double(index + 1) / Double(count) * 0.9
             _ = try await FFmpeg.execute(
-                arguments, run: run, expected: min(chunk, duration - start), range: low...high)
+                arguments, run: run, expected: last ? picture - start : chunk, range: low...high)
             pieces.append(piece)
         }
         let list = scratch.appendingPathComponent("list.txt")
@@ -187,11 +239,30 @@ enum Reverser {
 }
 
 enum Captions {
-    static func track(_ run: StudioRun, subtitles: URL, info: StudioMediaInfo) async throws -> URL {
+    static func decode(_ file: URL) throws -> String {
+        let data = try Data(contentsOf: file)
+        for encoding in [String.Encoding.utf8, .utf16, .windowsCP1252, .isoLatin1] {
+            if encoding == .utf16,
+                !(data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]))
+            {
+                continue
+            }
+            if let text = String(data: data, encoding: encoding) { return text }
+        }
+        throw StudioError.unreadable(file.lastPathComponent)
+    }
+
+    static func track(_ run: StudioRun, subtitles: URL, text: String, info: StudioMediaInfo)
+        async throws -> URL
+    {
         let ext = run.input.pathExtension.lowercased()
         let container = MediaEncoding.editableContainers.contains(ext) ? ext : "mkv"
         let output = run.output(for: run.input, suffix: "subtitled", ext: container)
-        var arguments = ["-i", run.input.path, "-i", subtitles.path]
+        let kind = subtitles.pathExtension.lowercased() == "vtt" ? "vtt" : "srt"
+        let unicode = try run.scratch("subtitles").appendingPathComponent("captions.\(kind)")
+        try text.replacingOccurrences(of: "\u{FEFF}", with: "").write(
+            to: unicode, atomically: true, encoding: .utf8)
+        var arguments = ["-i", run.input.path, "-i", unicode.path]
         arguments += [
             "-map", "0:v:0", "-map", "0:a:0?", "-map", "1:0", "-c:v", "copy", "-c:a", "copy",
         ]
