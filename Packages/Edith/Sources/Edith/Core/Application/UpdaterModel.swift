@@ -55,7 +55,7 @@ final class UpdaterModel: NSObject,
         historyLoadTask?.cancel()
         historyLoadTask = Task { [weak self, logURL] in
             let checkHistory = await Task.detached(priority: .utility) {
-                AppRuntimeCenter().updateHistory(url: logURL)
+                Self.loadUpdateHistory(at: logURL)
             }.value
             guard !Task.isCancelled else { return }
             self?.checkHistory = checkHistory
@@ -67,6 +67,11 @@ final class UpdaterModel: NSObject,
         Task { [weak self] in
             await self?.startUpdater()
         }
+    }
+
+    private nonisolated static func loadUpdateHistory(at logURL: URL) -> [UpdateCheckRecord] {
+        let checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
+        return checkHistory
     }
 
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
