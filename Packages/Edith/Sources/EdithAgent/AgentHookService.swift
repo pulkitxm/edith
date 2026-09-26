@@ -3,6 +3,7 @@ import Foundation
 
 public actor AgentHookService {
     public typealias Probe = @Sendable (HerdrAgentHook) async -> HerdrAgentProbe
+    public typealias ArmProbe = @Sendable (HerdrAgent) async -> HerdrAgentProbe
     public typealias Send = @Sendable (HerdrAgentHook) async -> HerdrPromptOutcome
     public typealias Publish = @Sendable (Data) async -> Void
 
@@ -16,6 +17,7 @@ public actor AgentHookService {
 
     private let url: URL
     private let probe: Probe
+    private let armProbe: ArmProbe
     private let send: Send
     private let now: @Sendable () -> Date
     private let interval: Duration
@@ -34,6 +36,11 @@ public actor AgentHookService {
                 session: $0.session, pane: $0.pane, machineID: $0.machineID,
                 local: $0.machineIsLocal)
         },
+        armProbe: @escaping ArmProbe = {
+            await HerdrAgentPrompt.probe(
+                session: $0.session, pane: $0.pane, machineID: $0.machineID,
+                local: $0.machineIsLocal)
+        },
         send: @escaping Send = {
             await HerdrAgentPrompt.send(
                 $0.message, session: $0.session, pane: $0.pane, machineID: $0.machineID,
@@ -45,6 +52,7 @@ public actor AgentHookService {
         self.url = url
         self.interval = interval
         self.probe = probe
+        self.armProbe = armProbe
         self.send = send
         self.publish = publish
         self.now = now
@@ -87,6 +95,13 @@ public actor AgentHookService {
         guard !request.agent.isTerminal else {
             throw AgentError(.refused, "Hooks only work on agents, not terminals.")
         }
+        guard case .agent(let observation) = await armProbe(request.agent),
+            observation.identity.verified,
+            HerdrKind.displayName(for: observation.kind)
+                == HerdrKind.displayName(for: request.agent.kind)
+        else {
+            throw AgentError(.refused, "The agent is no longer available to watch.")
+        }
         guard
             !snapshot.hooks.contains(where: {
                 $0.agentID == request.agent.id && inFlight.contains($0.id)
@@ -96,7 +111,10 @@ public actor AgentHookService {
         }
         var next = snapshot
         next.hooks.removeAll { $0.agentID == request.agent.id && !$0.phase.settled }
-        next.hooks.append(HerdrAgentHook(agent: request.agent, message: message, createdAt: now()))
+        next.hooks.append(
+            HerdrAgentHook(
+                agent: request.agent, message: message, observation: observation,
+                createdAt: now()))
         try await commit(next)
         waiter?.resume()
         waiter = nil

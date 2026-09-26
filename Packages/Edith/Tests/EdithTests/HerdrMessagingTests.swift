@@ -15,6 +15,14 @@ private func agent(
         cwd: "/tmp", category: category, stateSequence: 1)
 }
 
+private func hook(_ agent: HerdrAgent, _ message: String) -> HerdrAgentHook {
+    HerdrAgentHook(
+        agent: agent, message: message,
+        observation: HerdrAgentObservation(
+            kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
+            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
+}
+
 private final class Recorder: @unchecked Sendable {
     private let lock = NSLock()
     private var sentValue: [(String, [String])] = []
@@ -27,7 +35,7 @@ private final class Recorder: @unchecked Sendable {
 
     func arm(_ text: String, _ agent: HerdrAgent) -> HerdrHooksSnapshot {
         lock.withLock { armedValue.append((text, agent.pane)) }
-        return HerdrHooksSnapshot(hooks: [HerdrAgentHook(agent: agent, message: text)])
+        return HerdrHooksSnapshot(hooks: [hook(agent, text)])
     }
 
     var sent: [(String, [String])] { lock.withLock { sentValue } }
@@ -110,11 +118,11 @@ struct HerdrMessagingTests {
     }
 
     @Test func hooksSnapshotSeparatesWaitingAndFinished() {
-        var sent = HerdrAgentHook(agent: fleet[1], message: "old")
+        var sent = hook(fleet[1], "old")
         sent.settle(.sent, "Submitted", at: Date(timeIntervalSince1970: 100))
-        var newer = HerdrAgentHook(agent: fleet[1], message: "newer")
+        var newer = hook(fleet[1], "newer")
         newer.settle(.skipped, "Skipped", at: Date(timeIntervalSince1970: 200))
-        let waiting = HerdrAgentHook(agent: fleet[1], message: "next")
+        let waiting = hook(fleet[1], "next")
         let snapshot = HerdrHooksSnapshot(hooks: [sent, waiting, newer])
         #expect(snapshot.armed(for: fleet[1].id) == waiting)
         #expect(snapshot.latestSettled(for: fleet[1].id) == newer)

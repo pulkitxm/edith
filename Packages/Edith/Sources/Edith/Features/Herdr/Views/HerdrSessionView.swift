@@ -174,7 +174,10 @@ struct HerdrSessionView: View {
 
     private var messageDraft: Binding<HerdrMessageDraft?> {
         Binding(
-            get: { store.messaging.draft.flatMap { $0.presenterID == tab.id ? $0 : nil } },
+            get: {
+                guard showsDetails, presented else { return nil }
+                return store.messaging.draft.flatMap { $0.presenterID == tab.id ? $0 : nil }
+            },
             set: { store.messaging.draft = $0 })
     }
 

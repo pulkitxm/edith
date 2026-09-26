@@ -27,6 +27,7 @@ public struct HerdrAgentHook: Codable, Equatable, Sendable, Identifiable {
     public var kind: String
     public var title: String
     public var message: String
+    public var identity: HerdrAgentIdentity
     public var createdAt: Date
     public var baselineSequence: Int?
     public var ran: Bool
@@ -35,7 +36,8 @@ public struct HerdrAgentHook: Codable, Equatable, Sendable, Identifiable {
     public var settledAt: Date?
 
     public init(
-        id: UUID = UUID(), agent: HerdrAgent, message: String, createdAt: Date = Date()
+        id: UUID = UUID(), agent: HerdrAgent, message: String,
+        observation: HerdrAgentObservation, createdAt: Date = Date()
     ) {
         self.id = id
         agentID = agent.id
@@ -46,9 +48,10 @@ public struct HerdrAgentHook: Codable, Equatable, Sendable, Identifiable {
         kind = agent.kind
         title = agent.title
         self.message = message
+        identity = observation.identity
         self.createdAt = createdAt
-        baselineSequence = agent.stateSequence
-        ran = agent.status == .working || agent.status == .blocked
+        baselineSequence = observation.sequence
+        ran = observation.status == .working || observation.status == .blocked
         phase = .armed
     }
 
@@ -108,6 +111,7 @@ public enum HerdrHookEvaluator {
             return .cancel(goneReason)
         case .agent(let observation):
             guard
+                observation.identity == hook.identity,
                 HerdrKind.displayName(for: observation.kind)
                     == HerdrKind.displayName(
                         for: hook.kind)

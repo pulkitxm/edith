@@ -32,13 +32,11 @@ import Testing
             messaging: messaging)
         let agents = Self.agents
         store.apply([.local(herdrPresent: true, agents: agents)])
-        var finished = HerdrAgentHook(agent: agents[2], message: "Open a PR for the docs.")
+        var finished = Self.hook(agents[2], "Open a PR for the docs.")
         finished.settle(.sent, "Submitted", at: Date().addingTimeInterval(-240))
         messaging.adopt(
             HerdrHooksSnapshot(hooks: [
-                HerdrAgentHook(
-                    agent: agents[0],
-                    message: "Now run the full test suite and fix anything that fails."),
+                Self.hook(agents[0], "Now run the full test suite and fix anything that fails."),
                 finished,
             ]))
         store.open(agents[0])
@@ -117,5 +115,13 @@ import Testing
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
             session: "demo", pane: "w1:p\(index + 1)", kind: entry.0, status: entry.2,
             title: entry.1, workspace: "demo", cwd: "/tmp/demo", stateSequence: 3)
+    }
+
+    private static func hook(_ agent: HerdrAgent, _ message: String) -> HerdrAgentHook {
+        HerdrAgentHook(
+            agent: agent, message: message,
+            observation: HerdrAgentObservation(
+                kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
+                identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
     }
 }

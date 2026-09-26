@@ -17,9 +17,21 @@ private func agent(
 }
 
 private func observed(
-    _ status: HerdrAgentStatus, _ sequence: Int?, kind: String = "claude"
+    _ status: HerdrAgentStatus, _ sequence: Int?, kind: String = "claude",
+    identity: HerdrAgentIdentity = HerdrAgentIdentity(
+        terminalID: "term_1", processGroupID: 123)
 ) -> HerdrAgentProbe {
-    .agent(HerdrAgentObservation(kind: kind, status: status, sequence: sequence))
+    .agent(
+        HerdrAgentObservation(
+            kind: kind, status: status, sequence: sequence, identity: identity))
+}
+
+private func makeHook(agent: HerdrAgent, message: String) -> HerdrAgentHook {
+    HerdrAgentHook(
+        agent: agent, message: message,
+        observation: HerdrAgentObservation(
+            kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
+            identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)))
 }
 
 private final class ProbeScript: @unchecked Sendable {
@@ -97,8 +109,9 @@ private struct HookFixture {
         let script = script
         let clock = clock
         return AgentHookService(
-            url: url, probe: { script.next($0) }, send: { script.record($0) },
-            publish: publish,
+            url: url, probe: { script.next($0) },
+            armProbe: { agent in observed(agent.status, agent.stateSequence, kind: agent.kind) },
+            send: { script.record($0) }, publish: publish,
             now: { clock.now })
     }
 
@@ -124,7 +137,27 @@ struct HerdrAgentHookTests {
             """
         #expect(
             HerdrAgentReply.observation(from: output)
-                == HerdrAgentObservation(kind: "codex", status: .done, sequence: 12))
+                == HerdrAgentObservation(
+                    kind: "codex", status: .done, sequence: 12,
+                    identity: HerdrAgentIdentity(terminalID: "term_1")))
+        let withSession = output.replacingOccurrences(
+            of: #""terminal_id":"term_1""#,
+            with:
+                #""terminal_id":"term_1","agent_session":{"source":"herdr:codex","agent":"codex","kind":"id","value":"session-1"}"#
+        )
+        #expect(
+            HerdrAgentReply.observation(from: withSession)?.identity.sessionID
+                == "herdr:codex|id|session-1")
+        #expect(
+            HerdrAgentReply.processGroup(
+                from: """
+                    {"result":{"process_info":{"foreground_process_group_id":123}}}
+                    """) == 123)
+        #expect(
+            HerdrAgentReply.processGroup(
+                from: """
+                    {"result":{"process_info":{"foreground_process_group_id":123,"shell_pid":123}}}
+                    """) == nil)
         #expect(HerdrAgentReply.observation(from: "not json") == nil)
     }
 
@@ -150,16 +183,16 @@ struct HerdrAgentHookTests {
     }
 
     @Test func armingCapturesTheBaseline() {
-        let idle = HerdrAgentHook(agent: agent(status: .idle, sequence: 7), message: "next")
+        let idle = makeHook(agent: agent(status: .idle, sequence: 7), message: "next")
         #expect(idle.baselineSequence == 7)
         #expect(!idle.ran)
         #expect(idle.isArmed)
-        let working = HerdrAgentHook(agent: agent(status: .working), message: "next")
+        let working = makeHook(agent: agent(status: .working), message: "next")
         #expect(working.ran)
     }
 
     @Test func firesOnlyAfterTheAgentRanAndStopped() {
-        let hook = HerdrAgentHook(agent: agent(status: .idle, sequence: 4), message: "next")
+        let hook = makeHook(agent: agent(status: .idle, sequence: 4), message: "next")
         guard case .keep(let unchanged) = HerdrHookEvaluator.evaluate(hook, observed(.idle, 4))
         else { Issue.record("an idle agent that never ran must not fire"); return }
         #expect(!unchanged.ran)
@@ -174,7 +207,7 @@ struct HerdrAgentHookTests {
     }
 
     @Test func firesWhenARunHappenedBetweenPolls() {
-        let hook = HerdrAgentHook(agent: agent(status: .idle, sequence: 4), message: "next")
+        let hook = makeHook(agent: agent(status: .idle, sequence: 4), message: "next")
         #expect(HerdrHookEvaluator.evaluate(hook, observed(.done, 6)) == .fire(hook))
         guard case .keep(let quiet) = HerdrHookEvaluator.evaluate(hook, observed(.idle, 6)) else {
             Issue.record("an idle agent with a moved sequence stays armed"); return
@@ -184,16 +217,23 @@ struct HerdrAgentHookTests {
     }
 
     @Test func unknownAndUnreachableKeepTheHookUntouched() {
-        let hook = HerdrAgentHook(agent: agent(status: .idle, sequence: 4), message: "next")
+        let hook = makeHook(agent: agent(status: .idle, sequence: 4), message: "next")
         #expect(HerdrHookEvaluator.evaluate(hook, observed(.unknown, 9)) == .keep(hook))
         #expect(HerdrHookEvaluator.evaluate(hook, .unreachable("ssh down")) == .keep(hook))
     }
 
     @Test func cancelsWhenTheAgentLeavesOrIsReplaced() {
-        let hook = HerdrAgentHook(agent: agent(), message: "next")
+        let hook = makeHook(agent: agent(), message: "next")
         #expect(HerdrHookEvaluator.evaluate(hook, .gone) == .cancel(HerdrHookEvaluator.goneReason))
         #expect(
             HerdrHookEvaluator.evaluate(hook, observed(.idle, 4, kind: "codex"))
+                == .cancel(HerdrHookEvaluator.replacedReason))
+        #expect(
+            HerdrHookEvaluator.evaluate(
+                hook,
+                observed(
+                    .idle, 5,
+                    identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 456)))
                 == .cancel(HerdrHookEvaluator.replacedReason))
         #expect(
             HerdrHookEvaluator.evaluate(hook, observed(.working, 5, kind: "claude-code"))
@@ -387,7 +427,7 @@ struct HerdrAgentHookTests {
     @Test func neverResendsAfterARestartMidSend() async throws {
         let fixture = HookFixture()
         defer { fixture.close() }
-        var hook = HerdrAgentHook(agent: agent(), message: "next")
+        var hook = makeHook(agent: agent(), message: "next")
         hook.phase = .sending
         try AgentPayload.encode(HerdrHooksSnapshot(hooks: [hook])).write(to: fixture.url)
         let service = fixture.service()

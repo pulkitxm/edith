@@ -43,15 +43,35 @@ public enum HerdrPromptOutcome: Codable, Equatable, Sendable {
     }
 }
 
+public struct HerdrAgentIdentity: Codable, Equatable, Sendable {
+    public var terminalID: String
+    public var sessionID: String?
+    public var processGroupID: Int?
+
+    public init(terminalID: String, sessionID: String? = nil, processGroupID: Int? = nil) {
+        self.terminalID = terminalID
+        self.sessionID = sessionID
+        self.processGroupID = processGroupID
+    }
+
+    public var verified: Bool {
+        !terminalID.isEmpty && (sessionID != nil || processGroupID != nil)
+    }
+}
+
 public struct HerdrAgentObservation: Equatable, Sendable {
     public var kind: String
     public var status: HerdrAgentStatus
     public var sequence: Int?
+    public var identity: HerdrAgentIdentity
 
-    public init(kind: String, status: HerdrAgentStatus, sequence: Int?) {
+    public init(
+        kind: String, status: HerdrAgentStatus, sequence: Int?, identity: HerdrAgentIdentity
+    ) {
         self.kind = kind
         self.status = status
         self.sequence = sequence
+        self.identity = identity
     }
 }
 
@@ -66,11 +86,31 @@ public enum HerdrAgentReply {
         guard let root = HerdrListParser.firstJSON(in: output) as? [String: Any],
             let result = root["result"] as? [String: Any],
             let agent = result["agent"] as? [String: Any],
-            let kind = agent["agent"] as? String
+            let kind = agent["agent"] as? String,
+            let terminalID = agent["terminal_id"] as? String
         else { return nil }
+        let session = agent["agent_session"] as? [String: Any]
+        let sessionID = session.flatMap { value -> String? in
+            guard let source = value["source"] as? String,
+                let kind = value["kind"] as? String,
+                let id = value["value"] as? String
+            else { return nil }
+            return "\(source)|\(kind)|\(id)"
+        }
         return HerdrAgentObservation(
             kind: kind, status: HerdrAgentStatus.parse(agent["agent_status"] as? String),
-            sequence: HerdrListParser.integer(in: agent, keys: ["state_change_seq"]))
+            sequence: HerdrListParser.integer(in: agent, keys: ["state_change_seq"]),
+            identity: HerdrAgentIdentity(terminalID: terminalID, sessionID: sessionID))
+    }
+
+    public static func processGroup(from output: String) -> Int? {
+        guard let root = HerdrListParser.firstJSON(in: output) as? [String: Any],
+            let result = root["result"] as? [String: Any],
+            let info = result["process_info"] as? [String: Any],
+            let group = HerdrListParser.integer(in: info, keys: ["foreground_process_group_id"]),
+            group != HerdrListParser.integer(in: info, keys: ["shell_pid"])
+        else { return nil }
+        return group
     }
 
     static func errorCode(in error: HerdrCommandError) -> String? {
@@ -155,8 +195,19 @@ public enum HerdrAgentPrompt {
             let output = try await HerdrCommand.run(
                 HerdrAgentPromptCommand.probeArguments(session: session, pane: pane),
                 timeout: timeout, on: machine)
-            guard let observation = HerdrAgentReply.observation(from: output) else {
+            guard var observation = HerdrAgentReply.observation(from: output) else {
                 return .unreachable(HerdrCommandError.malformedResponse.localizedDescription)
+            }
+            if observation.identity.sessionID == nil {
+                let processOutput = try await HerdrCommand.run(
+                    HerdrSessionCommand.scoped(
+                        ["pane", "process-info", "--pane", pane], session: session),
+                    timeout: timeout, on: machine)
+                observation.identity.processGroupID = HerdrAgentReply.processGroup(
+                    from: processOutput)
+            }
+            guard observation.identity.verified else {
+                return .unreachable("Herdr could not identify the agent process.")
             }
             return .agent(observation)
         } catch {
