@@ -279,7 +279,8 @@ not here cannot be set, and `import` skips it.
 | `clipboardMaxItemBytes` | int | none | shared | Largest single clipboard entry kept, in bytes. |
 | `clipboardMaxAgeDays` | int | none | shared | Days a clipboard entry is kept before it is pruned. |
 | `clipboardIgnoredApps` | csv | none | shared | Comma separated bundle identifiers never captured. |
-| `clipboardAutoPaste` | bool | none | shared | Paste straight into the frontmost app on pick. |
+| `clipboardAutoPaste` | bool | `true` | shared | Paste straight into the frontmost app on pick. |
+| `clipboardCapturePaused` | bool | `false` | shared | Stop recording new copies until capture is resumed. |
 | `clipboardPastePlainText` | bool | none | shared | Strip formatting when pasting. |
 | `clipboardCheckInterval` | number | `1` | shared | Seconds between pasteboard polls. |
 | `clipboardPopupAt` | string: `cursor`, `statusItem`, `window`, `center`, `lastPosition` | `cursor` | shared | Where the clipboard panel opens. |

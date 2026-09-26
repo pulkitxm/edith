@@ -16,7 +16,9 @@ struct ClipboardRows: View {
     @AppStorage(AppStorageKeys.Clipboard.ignoredApps, store: SharedDefaults.store) private
         var ignoredApps = ""
     @AppStorage(AppStorageKeys.Clipboard.autoPaste, store: SharedDefaults.store) private
-        var autoPaste = false
+        var autoPaste = true
+    @AppStorage(AppStorageKeys.Clipboard.capturePaused, store: SharedDefaults.store) private
+        var capturePaused = false
     @AppStorage(AppStorageKeys.Clipboard.pastePlainText, store: SharedDefaults.store) private
         var pastePlainText =
         false
@@ -126,6 +128,20 @@ struct ClipboardRows: View {
         }
         Section {
             Toggle(
+                isOn: $capturePaused.configured(AppStorageKeys.Clipboard.capturePaused)
+            ) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Text("Pause capture")
+                    InfoDot(
+                        "New copies are ignored until you resume. Your history stays available in the popup."
+                    )
+                }
+            }
+        } header: {
+            Text("Capture")
+        }
+        Section {
+            Toggle(
                 isOn: Binding(
                     get: { autoPaste },
                     set: { newValue in
@@ -139,7 +155,7 @@ struct ClipboardRows: View {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Paste automatically")
                     InfoDot(
-                        "Selecting an item pastes it into the front app instead of just copying. Needs Accessibility."
+                        "Picking a clip pastes it straight into the app you were using instead of just copying it. Needs Accessibility."
                     )
                 }
             }
@@ -257,8 +273,8 @@ struct ClipboardRows: View {
             }
             Toggle(isOn: $showFooter.configured(AppStorageKeys.Clipboard.showFooter)) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Text("Show footer")
-                    InfoDot("Shows the Clear and Preferences rows at the bottom of the popup.")
+                    Text("Show keyboard hints")
+                    InfoDot("Shows the keyboard hints at the bottom of the popup.")
                 }
             }
         }

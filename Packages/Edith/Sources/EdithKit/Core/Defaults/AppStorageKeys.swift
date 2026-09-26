@@ -93,6 +93,7 @@ public enum AppStorageKeys {
     public enum Clipboard {
         public static let autoPaste = "clipboardAutoPaste"
         public static let backup = "clipboardBackup"
+        public static let capturePaused = "clipboardCapturePaused"
         public static let checkInterval = "clipboardCheckInterval"
         public static let enabled = "clipboardEnabled"
         public static let ignoredApps = "clipboardIgnoredApps"
