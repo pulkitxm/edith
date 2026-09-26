@@ -37,7 +37,7 @@ enum DocumentScan {
             run.status("Scanning \(input.lastPathComponent)")
             let photo = try StudioImageIO.load(input, maxPixelSize: 4200)
             var page = photo
-            if run.settings.bool("straighten"), let corrected = try straighten(photo) {
+            if run.settings.bool("straighten"), let corrected = try await straighten(photo) {
                 page = corrected
                 straightened += 1
             }
@@ -68,7 +68,7 @@ enum DocumentScan {
             try run.checkCancellation()
             guard let page = document.page(at: index) else { continue }
             run.status("Reading page \(index + 1) of \(document.pageCount)")
-            layers[index] = try PDFOptimizeTools.recognizedLines(on: page)
+            layers[index] = try await PDFOptimizeTools.recognizedLines(on: page)
             run.progress(0.7 + Double(index + 1) / Double(document.pageCount) * 0.25)
         }
         let output = run.output(for: run.inputs[0], suffix: "scan", ext: "pdf")
@@ -80,8 +80,8 @@ enum DocumentScan {
         return [output]
     }
 
-    static func straighten(_ image: CGImage) throws -> CGImage? {
-        guard let quad = try pageCorners(in: image)?.inset(by: 0.012) else { return nil }
+    static func straighten(_ image: CGImage) async throws -> CGImage? {
+        guard let quad = try await pageCorners(in: image)?.inset(by: 0.012) else { return nil }
         let size = CGSize(width: image.width, height: image.height)
         func point(_ normalized: CGPoint) -> CGPoint {
             CGPoint(x: normalized.x * size.width, y: normalized.y * size.height)
@@ -128,8 +128,11 @@ enum DocumentScan {
         }
     }
 
-    static func pageCorners(in image: CGImage) throws -> Quad? {
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    static func pageCorners(in image: CGImage) async throws -> Quad? {
+        try await StudioVision.run { try pageCornersNow(in: image) }
+    }
+
+    static func pageCornersNow(in image: CGImage) throws -> Quad? {
         let segmentation = VNDetectDocumentSegmentationRequest()
         let rectangles = VNDetectRectanglesRequest()
         rectangles.minimumSize = 0.3
@@ -137,6 +140,7 @@ enum DocumentScan {
         rectangles.maximumAspectRatio = 1
         rectangles.quadratureTolerance = 30
         rectangles.maximumObservations = 1
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
         try handler.perform([segmentation, rectangles])
         func quad(_ observation: VNRectangleObservation?) -> Quad? {
             guard let observation, observation.confidence >= 0.5 else { return nil }

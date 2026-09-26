@@ -44,7 +44,7 @@ import Testing
         #expect(edit.isDirty)
     }
 
-    @Test func annotationsSurviveExport() throws {
+    @Test func annotationsSurviveExport() async throws {
         let space = try Workspace()
         let edit = try session(space)
         let style = PDFEditSession.Style()
@@ -65,7 +65,7 @@ import Testing
             edit.addMarkup(
                 .highlight, for: selection, color: StudioColor(red: 1, green: 0.9, blue: 0)) == 1)
         let output = space.url("annotated.pdf")
-        try edit.export(to: output)
+        try await edit.export(to: output)
         let saved = try #require(PDFDocument(url: output))
         let types = (0..<saved.pageCount).flatMap {
             saved.page(at: $0)?.annotations.compactMap(\.type) ?? []
@@ -81,13 +81,13 @@ import Testing
         #expect(!edit.isDirty)
 
         let flat = space.url("flat.pdf")
-        try edit.export(to: flat, flatten: true)
+        try await edit.export(to: flat, flatten: true)
         let flattened = try #require(PDFDocument(url: flat))
         #expect(flattened.page(at: 0)?.annotations.isEmpty == true)
         #expect(flattened.page(at: 0)?.string?.contains("Approved") == true)
     }
 
-    @Test func placementsAreBurnedAndMarkersNeverLeak() throws {
+    @Test func placementsAreBurnedAndMarkersNeverLeak() async throws {
         let space = try Workspace()
         let edit = try session(space, pages: ["Sign here"])
         let signature = try #require(
@@ -99,7 +99,7 @@ import Testing
         #expect(
             edit.document.page(at: 0)?.annotations.contains { $0 is PlacementAnnotation } == true)
         let output = space.url("signed.pdf")
-        try edit.export(to: output)
+        try await edit.export(to: output)
         let saved = try #require(PDFDocument(url: output))
         #expect(saved.page(at: 0)?.annotations.isEmpty == true)
         let image = try StudioPDF.render(try #require(saved.page(at: 0)), dpi: 72)
@@ -113,7 +113,7 @@ import Testing
             edit.document.page(at: 0)?.annotations.contains { $0 is PlacementAnnotation } == true)
     }
 
-    @Test func redactionMarksAreAppliedOnExport() throws {
+    @Test func redactionMarksAreAppliedOnExport() async throws {
         let space = try Workspace()
         let edit = try session(space, pages: ["Account 4111 1111 1111 1111 belongs to Sam Carter"])
         #expect(edit.markRedactions(terms: ["Sam Carter"], patterns: [.card]) >= 2)
@@ -121,7 +121,7 @@ import Testing
         let marked = edit.redactionCount
         #expect(marked >= 3)
         let output = space.url("redacted.pdf")
-        try edit.export(to: output)
+        try await edit.export(to: output)
         let text = Fixtures.text(of: output)
         #expect(!text.contains("Sam Carter"))
         #expect(!text.contains("4111"))
@@ -131,7 +131,7 @@ import Testing
         #expect(edit.redactionCount == 0)
     }
 
-    @Test func formFieldsCanBeCreatedDetectedAndFilled() throws {
+    @Test func formFieldsCanBeCreatedDetectedAndFilled() async throws {
         let space = try Workspace()
         let edit = try session(space, pages: ["Name: ________________\n\nAgree [ ]"])
         let detected = edit.detectFormFields()
@@ -140,7 +140,7 @@ import Testing
             .choice(["Red", "Green"]), in: CGRect(x: 60, y: 500, width: 140, height: 22), page: 0,
             name: "Color")
         let output = space.url("form.pdf")
-        try edit.export(to: output)
+        try await edit.export(to: output)
         let saved = try #require(PDFDocument(url: output))
         let widgets = saved.page(at: 0)?.annotations.filter { $0.type == "Widget" } ?? []
         #expect(widgets.count == 3)

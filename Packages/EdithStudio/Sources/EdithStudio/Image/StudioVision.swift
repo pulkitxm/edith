@@ -23,8 +23,81 @@ public enum StudioVision {
         StudioChoice("vi-VT", "Vietnamese"),
     ]
 
+    private static let queue = DispatchQueue(label: "studio.vision", qos: .userInitiated)
+
+    private struct Handoff<Value>: @unchecked Sendable {
+        let value: Value
+    }
+
+    private final class Ticket<Value>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Handoff<Value>, Error>?
+        private var cancelled = false
+
+        func install(_ continuation: CheckedContinuation<Handoff<Value>, Error>) -> Bool {
+            lock.withLock {
+                guard !cancelled else { return false }
+                self.continuation = continuation
+                return true
+            }
+        }
+
+        func start() -> CheckedContinuation<Handoff<Value>, Error>? {
+            lock.withLock {
+                defer { continuation = nil }
+                return continuation
+            }
+        }
+
+        func cancel() -> CheckedContinuation<Handoff<Value>, Error>? {
+            lock.withLock {
+                cancelled = true
+                defer { continuation = nil }
+                return continuation
+            }
+        }
+    }
+
+    static func run<Value>(_ work: @escaping @Sendable () throws -> Value) async throws -> Value {
+        try Task.checkCancellation()
+        let ticket = Ticket<Value>()
+        let handoff = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard ticket.install(continuation) else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                queue.async {
+                    guard let continuation = ticket.start() else { return }
+                    continuation.resume(with: Result { Handoff(value: try work()) })
+                }
+            }
+        } onCancel: {
+            ticket.cancel()?.resume(throwing: CancellationError())
+        }
+        return handoff.value
+    }
+
     public static func recognizeText(
         in image: CGImage, language: String = "auto", accurate: Bool = true
+    ) async throws -> [RecognizedLine] {
+        try await run { try recognizeTextNow(in: image, language: language, accurate: accurate) }
+    }
+
+    public static func faces(in image: CGImage) async throws -> [CGRect] {
+        try await run { try facesNow(in: image) }
+    }
+
+    public static func textRegions(in image: CGImage) async throws -> [CGRect] {
+        try await run { try textRegionsNow(in: image) }
+    }
+
+    public static func foregroundMask(of image: CGImage) async throws -> CIImage? {
+        try await run { try foregroundMaskNow(of: image) }
+    }
+
+    static func recognizeTextNow(
+        in image: CGImage, language: String, accurate: Bool
     ) throws -> [RecognizedLine] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = accurate ? .accurate : .fast
@@ -68,14 +141,14 @@ public enum StudioVision {
         return output.joined(separator: "\n")
     }
 
-    public static func faces(in image: CGImage) throws -> [CGRect] {
+    static func facesNow(in image: CGImage) throws -> [CGRect] {
         let request = VNDetectFaceRectanglesRequest()
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         try handler.perform([request])
         return (request.results ?? []).map(\.boundingBox)
     }
 
-    public static func textRegions(in image: CGImage) throws -> [CGRect] {
+    static func textRegionsNow(in image: CGImage) throws -> [CGRect] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
@@ -84,7 +157,7 @@ public enum StudioVision {
         return (request.results ?? []).map(\.boundingBox)
     }
 
-    public static func foregroundMask(of image: CGImage) throws -> CIImage? {
+    static func foregroundMaskNow(of image: CGImage) throws -> CIImage? {
         let request = VNGenerateForegroundInstanceMaskRequest()
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         try handler.perform([request])

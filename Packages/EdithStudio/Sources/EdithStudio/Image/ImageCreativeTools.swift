@@ -54,7 +54,7 @@ enum ImageCreativeTools {
     ) { run in
         let image = try StudioImageIO.load(run.input, maxPixelSize: 6000)
         run.status("Finding the subject")
-        guard let mask = try BackgroundRemoval.mask(for: image) else {
+        guard let mask = try await BackgroundRemoval.mask(for: image) else {
             throw StudioError.nothingToDo(
                 "No clear subject was found in \(run.input.lastPathComponent).")
         }
@@ -96,11 +96,11 @@ enum ImageCreativeTools {
     ) { run in
         let image = try StudioImageIO.load(run.input)
         let margin = run.settings.number("margin")
-        let faces = try StudioVision.faces(in: image)
+        let faces = try await StudioVision.faces(in: image)
         var rects = faces.map { FaceBlur.rect($0, margin: margin) }
         var textCount = 0
         if run.settings.bool("text") {
-            let regions = try StudioVision.textRegions(in: image)
+            let regions = try await StudioVision.textRegions(in: image)
             textCount = regions.count
             rects += regions.map { FaceBlur.rect($0, margin: 0.15) }
         }
@@ -333,8 +333,8 @@ enum ImageCreativeTools {
 }
 
 enum BackgroundRemoval {
-    static func mask(for image: CGImage) throws -> CIImage? {
-        guard let mask = try StudioVision.foregroundMask(of: image) else { return nil }
+    static func mask(for image: CGImage) async throws -> CIImage? {
+        guard let mask = try await StudioVision.foregroundMask(of: image) else { return nil }
         let extent = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         guard mask.extent.width > 0, mask.extent.height > 0 else { return nil }
         return mask.transformed(

@@ -399,7 +399,7 @@ enum ImageTools {
         actionTitle: "Extract text"
     ) { run in
         let image = try StudioImageIO.load(run.input, maxPixelSize: 6000)
-        let lines = try StudioVision.recognizeText(
+        let lines = try await StudioVision.recognizeText(
             in: image, language: run.settings.text("language"),
             accurate: run.settings.text("accuracy") != "fast")
         guard !lines.isEmpty else {

@@ -57,7 +57,6 @@ public final class PDFEditSession {
     public let source: URL
     public private(set) var document: PDFDocument
     public private(set) var placements: [Placement] = []
-    public private(set) var redactions: [Int: [CGRect]] = [:]
     public private(set) var isDirty = false
 
     public init(url: URL, password: String? = nil) throws {
@@ -75,10 +74,21 @@ public final class PDFEditSession {
         self.source = source
         self.document = document
         placements = snapshot.placements
-        redactions = snapshot.redactions
+        refreshMarkers(redactions: snapshot.redactions)
     }
 
     public var pageCount: Int { document.pageCount }
+
+    public var redactions: [Int: [CGRect]] {
+        var marks: [Int: [CGRect]] = [:]
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let rects = page.annotations.filter { $0.userName == Self.redactionMarker }
+                .map { $0.bounds.standardized }
+            if !rects.isEmpty { marks[index] = rects }
+        }
+        return marks
+    }
 
     public func markSaved() {
         isDirty = false
@@ -98,18 +108,18 @@ public final class PDFEditSession {
     }
 
     public func snapshot() -> Snapshot? {
+        let marks = redactions
         let markers = removeMarkers()
         defer { restoreMarkers(markers) }
         guard let data = document.dataRepresentation() else { return nil }
-        return Snapshot(data: data, placements: placements, redactions: redactions)
+        return Snapshot(data: data, placements: placements, redactions: marks)
     }
 
     public func restore(_ snapshot: Snapshot) {
         guard let restored = PDFDocument(data: snapshot.data) else { return }
         document = restored
         placements = snapshot.placements
-        redactions = snapshot.redactions
-        refreshMarkers()
+        refreshMarkers(redactions: snapshot.redactions)
         isDirty = true
     }
 
@@ -142,7 +152,6 @@ public final class PDFEditSession {
         for index in indices.sorted(by: >) { document.removePage(at: index) }
         let sorted = indices.sorted()
         placements.removeAll { indices.contains($0.page) }
-        redactions = redactions.filter { !indices.contains($0.key) }
         remapPages { index in index - sorted.filter { $0 < index }.count }
         isDirty = true
     }
@@ -416,25 +425,16 @@ public final class PDFEditSession {
         if let id = placementID(of: annotation) {
             placements.removeAll { $0.id == id }
         }
-        if annotation.userName == Self.redactionMarker, let index = index(of: page) {
-            redactions[index]?.removeAll { $0 == annotation.bounds }
-        }
         page.removeAnnotation(annotation)
         isDirty = true
     }
 
     public func move(_ annotation: PDFAnnotation, to bounds: CGRect) {
-        let previous = annotation.bounds
         annotation.bounds = bounds
         if let id = placementID(of: annotation),
             let position = placements.firstIndex(where: { $0.id == id })
         {
             placements[position].rect = bounds
-        }
-        if annotation.userName == Self.redactionMarker, let page = annotation.page,
-            let index = index(of: page), let position = redactions[index]?.firstIndex(of: previous)
-        {
-            redactions[index]?[position] = bounds
         }
         isDirty = true
     }
@@ -452,11 +452,16 @@ public final class PDFEditSession {
         return placement.id
     }
 
-    public func markRedaction(_ rect: CGRect, page index: Int) {
-        guard let page = document.page(at: index), rect.width > 1, rect.height > 1 else { return }
-        redactions[index, default: []].append(rect)
-        page.addAnnotation(Self.redactionAnnotation(rect))
+    @discardableResult
+    public func markRedaction(_ rect: CGRect, page index: Int) -> PDFAnnotation? {
+        let rect = rect.standardized
+        guard let page = document.page(at: index), rect.width > 1, rect.height > 1 else {
+            return nil
+        }
+        let annotation = Self.redactionAnnotation(rect)
+        page.addAnnotation(annotation)
         isDirty = true
+        return annotation
     }
 
     @discardableResult
@@ -479,7 +484,6 @@ public final class PDFEditSession {
                 page.removeAnnotation(annotation)
             }
         }
-        redactions.removeAll()
         isDirty = true
     }
 
@@ -514,7 +518,8 @@ public final class PDFEditSession {
     public func export(
         to url: URL, flatten: Bool = false, searchableRedactions: Bool = true,
         progress: @escaping (Double) -> Void = { _ in }
-    ) throws {
+    ) async throws {
+        let marks = redactions
         let markers = removeMarkers()
         defer { restoreMarkers(markers) }
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -547,10 +552,10 @@ public final class PDFEditSession {
                 }, progress: { progress($0 * 0.5) })
             working = try StudioPDF.open(stage)
         }
-        if !redactions.isEmpty {
+        if !marks.isEmpty {
             let stage = scratch.appendingPathComponent("redacted.pdf")
-            try PDFRedaction.apply(
-                redactions, to: working, fill: .black, searchable: searchableRedactions,
+            try await PDFRedaction.apply(
+                marks, to: working, fill: .black, searchable: searchableRedactions,
                 scrubMetadata: false, output: stage
             ) { progress(0.5 + $0 * 0.4) }
             working = try StudioPDF.open(stage)
@@ -597,7 +602,7 @@ public final class PDFEditSession {
         for (page, annotation) in markers.entries { page.addAnnotation(annotation) }
     }
 
-    func refreshMarkers() {
+    func refreshMarkers(redactions: [Int: [CGRect]]) {
         _ = removeMarkers()
         for placement in placements {
             document.page(at: placement.page)?.addAnnotation(
@@ -614,9 +619,6 @@ public final class PDFEditSession {
         for position in placements.indices {
             placements[position].page = transform(placements[position].page)
         }
-        var remapped: [Int: [CGRect]] = [:]
-        for (index, rects) in redactions { remapped[transform(index), default: []] += rects }
-        redactions = remapped
     }
 }
 

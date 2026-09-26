@@ -96,7 +96,8 @@ import Testing
         #expect(levels.isSubset(of: [0, 255]))
     }
 
-    @Test func straighteningReturnsNothingForABlankWall() throws {
-        #expect(try DocumentScan.straighten(Self.photo(of: nil)) == nil)
+    @Test func straighteningReturnsNothingForABlankWall() async throws {
+        let straightened = try await DocumentScan.straighten(Self.photo(of: nil))
+        #expect(straightened == nil)
     }
 }

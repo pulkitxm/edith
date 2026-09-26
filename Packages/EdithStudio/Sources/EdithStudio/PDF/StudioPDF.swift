@@ -89,7 +89,6 @@ public enum StudioPDF {
         context.scaleBy(x: CGFloat(width) / size.width, y: CGFloat(height) / size.height)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        page.transform(context, for: .cropBox)
         page.draw(with: .cropBox, to: context)
         NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else {

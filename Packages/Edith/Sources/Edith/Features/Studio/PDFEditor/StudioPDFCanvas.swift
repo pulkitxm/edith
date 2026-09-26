@@ -140,7 +140,8 @@ final class StudioPDFCanvasView: PDFView {
     private var dragStart: CGPoint?
     private var dragCurrent: CGPoint?
     private var inkPoints: [CGPoint] = []
-    private var moving: (annotation: PDFAnnotation, origin: CGRect, start: CGPoint)?
+    private var editing:
+        (annotation: PDFAnnotation, origin: CGRect, start: CGPoint, grip: StudioPDFGrip)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -163,12 +164,82 @@ final class StudioPDFCanvasView: PDFView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    private var editsAnnotations: Bool { tool == .select || tool == .redact }
+
     override func keyDown(with event: NSEvent) {
-        if selectedAnnotation != nil, event.keyCode == 51 || event.keyCode == 117 {
-            coordinator?.deleteSelection()
+        guard let selected = selectedAnnotation, editsAnnotations else {
+            super.keyDown(with: event)
             return
         }
-        super.keyDown(with: event)
+        let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+        switch event.keyCode {
+        case 51, 117:
+            coordinator?.deleteSelection()
+            selectedAnnotation = nil
+        case 53:
+            coordinator?.select(nil)
+            selectedAnnotation = nil
+        case 123: nudge(selected, view: CGPoint(x: -1, y: 0), by: step)
+        case 124: nudge(selected, view: CGPoint(x: 1, y: 0), by: step)
+        case 125: nudge(selected, view: CGPoint(x: 0, y: isFlipped ? 1 : -1), by: step)
+        case 126: nudge(selected, view: CGPoint(x: 0, y: isFlipped ? -1 : 1), by: step)
+        default:
+            super.keyDown(with: event)
+            return
+        }
+        overlay.needsDisplay = true
+    }
+
+    func nudge(_ annotation: PDFAnnotation, view direction: CGPoint, by amount: CGFloat) {
+        guard let page = annotation.page else { return }
+        let origin = convert(NSPoint.zero, to: page)
+        let moved = convert(NSPoint(x: direction.x * 100, y: direction.y * 100), to: page)
+        let delta = StudioPDFGrip.nudge(
+            CGPoint(x: moved.x - origin.x, y: moved.y - origin.y), by: amount)
+        coordinator?.move(to: annotation.bounds.offsetBy(dx: delta.x, dy: delta.y))
+    }
+
+    func grip(at viewPoint: NSPoint, of annotation: PDFAnnotation) -> StudioPDFGrip? {
+        guard StudioPDFGrip.resizable(annotation), let page = annotation.page else { return nil }
+        for grip in StudioPDFGrip.handles {
+            let anchor = convert(grip.anchor(in: annotation.bounds), from: page)
+            if hypot(anchor.x - viewPoint.x, anchor.y - viewPoint.y) <= 7 { return grip }
+        }
+        return nil
+    }
+
+    private func begin(_ annotation: PDFAnnotation, at point: CGPoint, grip: StudioPDFGrip) {
+        coordinator?.select(annotation)
+        selectedAnnotation = annotation
+        editing = (annotation, annotation.bounds, point, grip)
+        overlay.needsDisplay = true
+    }
+
+    private func deselect() {
+        coordinator?.select(nil)
+        selectedAnnotation = nil
+        overlay.needsDisplay = true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard editsAnnotations else { return }
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        if let selected = selectedAnnotation, let page = selected.page,
+            let grip = grip(at: viewPoint, of: selected)
+        {
+            let anchor = convert(grip.anchor(in: selected.bounds), from: page)
+            let center = convert(CGPoint(x: selected.bounds.midX, y: selected.bounds.midY), from: page)
+            let dx = abs(anchor.x - center.x)
+            let dy = abs(anchor.y - center.y)
+            let cursor: NSCursor =
+                dy < 1 ? .resizeLeftRight : dx < 1 ? .resizeUpDown : .crosshair
+            cursor.set()
+        } else if let (page, point) = location(event), let annotation = page.annotation(at: point),
+            tool == .select || StudioPDFGrip.isRedaction(annotation)
+        {
+            NSCursor.openHand.set()
+        }
     }
 
     private func location(_ event: NSEvent) -> (PDFPage, CGPoint)? {
@@ -183,21 +254,32 @@ final class StudioPDFCanvasView: PDFView {
             super.mouseDown(with: event)
             return
         }
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        if editsAnnotations, let selected = selectedAnnotation, let selectedPage = selected.page,
+            let grip = grip(at: viewPoint, of: selected)
+        {
+            begin(selected, at: convert(viewPoint, to: selectedPage), grip: grip)
+            return
+        }
         switch tool {
         case .fill:
             super.mouseDown(with: event)
         case .select:
             if let annotation = page.annotation(at: point) {
-                coordinator?.select(annotation)
-                selectedAnnotation = annotation
-                moving = (annotation, annotation.bounds, point)
-                overlay.needsDisplay = true
+                begin(annotation, at: point, grip: .move)
                 return
             }
-            coordinator?.select(nil)
-            selectedAnnotation = nil
-            overlay.needsDisplay = true
+            deselect()
             super.mouseDown(with: event)
+        case .redact:
+            if let mark = page.annotation(at: point), StudioPDFGrip.isRedaction(mark) {
+                begin(mark, at: point, grip: .move)
+                return
+            }
+            deselect()
+            dragPage = page
+            dragStart = point
+            dragCurrent = point
         case .highlight, .underline, .strike:
             super.mouseDown(with: event)
         case .text, .note:
@@ -211,9 +293,10 @@ final class StudioPDFCanvasView: PDFView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        if let moving, let (page, point) = location(event), page === moving.annotation.page {
-            let delta = CGPoint(x: point.x - moving.start.x, y: point.y - moving.start.y)
-            moving.annotation.bounds = moving.origin.offsetBy(dx: delta.x, dy: delta.y)
+        if let editing, let page = editing.annotation.page {
+            let point = convert(convert(event.locationInWindow, from: nil), to: page)
+            let delta = CGPoint(x: point.x - editing.start.x, y: point.y - editing.start.y)
+            editing.annotation.bounds = editing.grip.apply(to: editing.origin, delta: delta)
             overlay.needsDisplay = true
             return
         }
@@ -228,11 +311,11 @@ final class StudioPDFCanvasView: PDFView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if let moving {
-            let bounds = moving.annotation.bounds
-            moving.annotation.bounds = moving.origin
-            self.moving = nil
-            if bounds != moving.origin { coordinator?.move(to: bounds) }
+        if let editing {
+            let bounds = editing.annotation.bounds
+            editing.annotation.bounds = editing.origin
+            self.editing = nil
+            if bounds != editing.origin { coordinator?.move(to: bounds) }
             overlay.needsDisplay = true
             return
         }
@@ -311,6 +394,18 @@ final class StudioPDFCanvasView: PDFView {
             path.setLineDash([4, 3], count: 2, phase: 0)
             NSColor.controlAccentColor.setStroke()
             path.stroke()
+            if editsAnnotations, StudioPDFGrip.resizable(annotation) {
+                for grip in StudioPDFGrip.handles {
+                    let center = convert(grip.anchor(in: annotation.bounds), from: page)
+                    let handle = NSBezierPath(
+                        rect: NSRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8))
+                    NSColor.white.setFill()
+                    handle.fill()
+                    handle.lineWidth = 1.5
+                    NSColor.controlAccentColor.setStroke()
+                    handle.stroke()
+                }
+            }
         }
         if let crop = cropRect, let page = cropPage {
             let rect = convert(crop, from: page)

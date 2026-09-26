@@ -296,7 +296,7 @@ enum PDFEditTools {
             throw StudioError.nothingToDo("Nothing in this PDF matched what you asked to redact.")
         }
         let output = run.output(for: run.input, suffix: "redacted", ext: "pdf")
-        try PDFRedaction.apply(
+        try await PDFRedaction.apply(
             marks, to: document, fill: run.settings.color("fill"),
             searchable: run.settings.bool("searchable"),
             scrubMetadata: run.settings.bool("scrubMetadata"), output: output

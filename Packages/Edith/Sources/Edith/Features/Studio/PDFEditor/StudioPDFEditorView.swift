@@ -410,11 +410,22 @@ struct StudioPDFInspector: View {
                 .buttonStyle(.edith(.secondary))
         }
         StudioInspectorGroup("Marked") {
-            Text("\(editor.session?.redactionCount ?? 0) areas will be removed when you save.")
+            Text("\(editor.redactionCount) areas will be removed when you save.")
                 .font(.system(size: UIScale.pt(11.5)))
-            Button("Clear all marks") { editor.mutate { $0.clearRedactions() } }
+            Text(
+                "Drag on the page to mark an area. Click a mark to select it, drag it to move it, "
+                    + "drag its handles to resize it, and use the arrow keys to nudge it."
+            )
+            .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            if editor.selectedRedaction != nil {
+                Button("Remove selected mark", role: .destructive) { editor.deleteSelected() }
+                    .buttonStyle(.edith(.secondary))
+            }
+            Button("Clear all marks") { editor.clearRedactions() }
                 .buttonStyle(.edith(.secondary))
-                .disabled((editor.session?.redactionCount ?? 0) == 0)
+                .disabled(editor.redactionCount == 0)
         }
     }
 

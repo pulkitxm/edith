@@ -168,6 +168,21 @@ final class StudioPDFEditorModel {
         tool = StudioPDFTool.tools(for: mode).first ?? .select
     }
 
+    var redactionCount: Int {
+        _ = revision
+        return session?.redactionCount ?? 0
+    }
+
+    var selectedRedaction: PDFAnnotation? {
+        guard let selected, selected.userName == PDFEditSession.redactionMarker else { return nil }
+        return selected
+    }
+
+    func clearRedactions() {
+        mutate { $0.clearRedactions() }
+        selected = nil
+    }
+
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var isDirty: Bool { session?.isDirty ?? false }
@@ -266,7 +281,10 @@ final class StudioPDFEditorModel {
             mutate { $0.addShape(.ellipse, from: start, to: end, page: page, style: style) }
         case .line: mutate { $0.addShape(.line, from: start, to: end, page: page, style: style) }
         case .arrow: mutate { $0.addShape(.arrow, from: start, to: end, page: page, style: style) }
-        case .redact: mutate { $0.markRedaction(rect, page: page) }
+        case .redact:
+            var created: PDFAnnotation?
+            mutate { created = $0.markRedaction(rect, page: page) }
+            selected = created
         case .crop: cropRect = rect.width > 8 && rect.height > 8 ? rect : nil
         case .textField:
             guard rect.width > 6 else { return }
@@ -493,9 +511,8 @@ final class StudioPDFEditorModel {
         isSaving = true
         saveProgress = 0
         saveTask = Task { [weak self] in
-            let failure = await Task.detached(priority: .userInitiated) {
-                StudioPDFEditorText.export(snapshot, source: source, to: target, flatten: flatten)
-            }.value
+            let failure = await StudioPDFEditorText.export(
+                snapshot, source: source, to: target, flatten: flatten)
             guard let self, !Task.isCancelled else { return }
             self.isSaving = false
             if let failure {
@@ -585,12 +602,12 @@ enum StudioPDFEditorText {
 
     static func export(
         _ snapshot: PDFEditSession.Snapshot, source: URL, to target: URL, flatten: Bool
-    ) -> String? {
+    ) async -> String? {
         guard let session = PDFEditSession(snapshot: snapshot, source: source) else {
             return "The PDF could not be prepared for saving."
         }
         do {
-            try session.export(to: target, flatten: flatten)
+            try await session.export(to: target, flatten: flatten)
             return nil
         } catch {
             return error.localizedDescription

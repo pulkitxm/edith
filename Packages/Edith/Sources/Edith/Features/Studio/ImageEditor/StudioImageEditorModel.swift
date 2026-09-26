@@ -318,9 +318,7 @@ final class StudioImageEditorModel {
         let strength = redactStrength
         let image = StudioImageSource(image: preview)
         faceTask = Task { [weak self] in
-            let faces = await Task.detached(priority: .userInitiated) {
-                StudioImageEditorWork.faces(in: image)
-            }.value
+            let faces = await StudioImageEditorWork.faces(in: image)
             guard let self, !Task.isCancelled else { return }
             guard !faces.isEmpty else {
                 self.status = "No faces found in this picture."
@@ -434,9 +432,9 @@ enum StudioImageEditorWork {
         return result
     }
 
-    static func faces(in image: StudioImageSource) -> [StudioRect] {
+    static func faces(in image: StudioImageSource) async -> [StudioRect] {
         let size = CGSize(width: image.image.width, height: image.image.height)
-        let boxes = (try? StudioVision.faces(in: image.image)) ?? []
+        let boxes = (try? await StudioVision.faces(in: image.image)) ?? []
         return boxes.map { box in
             let pixel = StudioVision.pixelRect(box, in: size, expandedBy: 0.18)
             return StudioRect(
