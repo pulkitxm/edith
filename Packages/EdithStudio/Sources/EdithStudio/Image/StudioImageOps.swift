@@ -33,17 +33,16 @@ public enum StudioImageOps {
         case .none, .noneSkipFirst, .noneSkipLast: return false
         default: break
         }
-        guard let context = context(width: 64, height: 64) else { return true }
-        context.clear(CGRect(x: 0, y: 0, width: 64, height: 64))
-        context.draw(image, in: CGRect(x: 0, y: 0, width: 64, height: 64))
-        guard let data = context.data else { return true }
-        let bytes = data.bindMemory(to: UInt8.self, capacity: context.bytesPerRow * 64)
-        for row in 0..<64 {
-            for column in 0..<64 where bytes[row * context.bytesPerRow + column * 4 + 3] < 250 {
-                return true
-            }
-        }
-        return false
+        let input = CIImage(cgImage: image)
+        let minimum = CIFilter.areaMinimum()
+        minimum.inputImage = input
+        minimum.extent = input.extent
+        guard let output = minimum.outputImage else { return true }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        ciContext.render(
+            output, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8, colorSpace: nil)
+        return pixel[3] < 250
     }
 
     public static func flatten(_ image: CGImage, on color: StudioColor) -> CGImage? {

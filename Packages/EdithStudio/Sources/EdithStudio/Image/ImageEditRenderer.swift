@@ -286,16 +286,20 @@ public enum ImageEditRenderer {
         let mono = CIFilter.colorMatrix()
         mono.inputImage = noise
         let weight = CGFloat(amount * 0.25)
-        mono.rVector = CIVector(x: weight, y: 0, z: 0, w: 0)
-        mono.gVector = CIVector(x: weight, y: 0, z: 0, w: 0)
-        mono.bVector = CIVector(x: weight, y: 0, z: 0, w: 0)
+        mono.rVector = CIVector(x: weight, y: -weight, z: 0, w: 0)
+        mono.gVector = CIVector(x: weight, y: -weight, z: 0, w: 0)
+        mono.bVector = CIVector(x: weight, y: -weight, z: 0, w: 0)
         mono.aVector = CIVector(x: 0, y: 0, z: 0, w: 0)
-        mono.biasVector = CIVector(x: -weight / 2, y: -weight / 2, z: -weight / 2, w: 1)
+        mono.biasVector = CIVector(x: 0, y: 0, z: 0, w: 1)
         guard let texture = mono.outputImage?.cropped(to: extent) else { return image }
         let add = CIFilter.additionCompositing()
         add.inputImage = texture
-        add.backgroundImage = image
-        return add.outputImage?.cropped(to: extent) ?? image
+        add.backgroundImage = image.unpremultiplyingAlpha()
+        let keepAlpha = CIFilter.blendWithAlphaMask()
+        keepAlpha.inputImage = add.outputImage
+        keepAlpha.backgroundImage = CIImage(color: .clear).cropped(to: extent)
+        keepAlpha.maskImage = image
+        return keepAlpha.outputImage?.cropped(to: extent) ?? image
     }
 
     static func ciRect(_ rect: StudioRect, canvas: CGSize) -> CGRect {
@@ -375,11 +379,28 @@ public enum ImageEditRenderer {
         CGPoint(x: rect.minX + unit.x * rect.width, y: rect.maxY - unit.y * rect.height)
     }
 
+    static func opacity(of layer: ImageLayer) -> Double {
+        let base = min(max(layer.opacity, 0), 1)
+        if case let .drawing(drawing) = layer.content, drawing.highlighter { return base * 0.4 }
+        return base
+    }
+
     static func draw(_ layer: ImageLayer, in context: CGContext, canvas: CGSize) {
+        let alpha = opacity(of: layer)
+        guard alpha > 0 else { return }
+        let translucent = alpha < 0.999
+        context.saveGState()
+        context.setAlpha(alpha)
+        if translucent { context.beginTransparencyLayer(auxiliaryInfo: nil) }
+        drawContent(of: layer, in: context, canvas: canvas)
+        if translucent { context.endTransparencyLayer() }
+        context.restoreGState()
+    }
+
+    static func drawContent(of layer: ImageLayer, in context: CGContext, canvas: CGSize) {
         let rect = cgRect(layer.frame, canvas: canvas)
         let base = min(canvas.width, canvas.height)
         context.saveGState()
-        context.setAlpha(min(max(layer.opacity, 0), 1))
         if abs(layer.rotation) > 0.001 {
             context.translateBy(x: rect.midX, y: rect.midY)
             context.rotate(by: -layer.rotation * .pi / 180)
@@ -511,7 +532,6 @@ public enum ImageEditRenderer {
         context.setLineWidth(width)
         context.setLineCap(drawing.highlighter ? .square : .round)
         context.setLineJoin(.round)
-        if drawing.highlighter { context.setAlpha(0.4) }
         for stroke in drawing.strokes {
             guard let first = stroke.first else { continue }
             if stroke.count == 1 {
@@ -555,8 +575,9 @@ public enum ImageEditRenderer {
         let color = StudioColor(hex: frame.color) ?? .white
         switch frame.kind {
         case .solid, .polaroid:
-            let bottom = frame.kind == .polaroid ? max(border * 3.5, base * 0.12) : border
-            let side = frame.kind == .polaroid ? max(border, base * 0.035) : border
+            let bottom =
+                frame.kind == .polaroid ? max(border * 3.5, base * 0.12).rounded() : border
+            let side = frame.kind == .polaroid ? max(border, base * 0.035).rounded() : border
             let canvas = CGSize(width: width + side * 2, height: height + side + bottom)
             guard
                 let context = StudioImageOps.context(

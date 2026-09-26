@@ -53,10 +53,15 @@ enum ImageCreativeTools {
         actionTitle: "Remove background"
     ) { run in
         let image = try StudioImageIO.load(run.input, maxPixelSize: 6000)
+        let name = run.input.lastPathComponent
         run.status("Finding the subject")
-        guard let mask = try await BackgroundRemoval.mask(for: image) else {
-            throw StudioError.nothingToDo(
-                "No clear subject was found in \(run.input.lastPathComponent).")
+        let found =
+            StudioVision.canAnalyze(image)
+            ? try await StudioVision.reporting("Subject detection", for: name) {
+                try await BackgroundRemoval.mask(for: image)
+            } : nil
+        guard let mask = found else {
+            throw StudioError.nothingToDo("No clear subject was found in \(name).")
         }
         run.progress(0.6)
         var result = try BackgroundRemoval.composite(
@@ -94,30 +99,50 @@ enum ImageCreativeTools {
         keywords: ["privacy", "anonymize", "faces", "license plate", "hide", "pixelate"],
         actionTitle: "Blur"
     ) { run in
-        let image = try StudioImageIO.load(run.input)
+        let name = run.input.lastPathComponent
         let margin = run.settings.number("margin")
-        let faces = try await StudioVision.faces(in: image)
-        var rects = faces.map { FaceBlur.rect($0, margin: margin) }
-        var textCount = 0
-        if run.settings.bool("text") {
-            let regions = try await StudioVision.textRegions(in: image)
-            textCount = regions.count
-            rects += regions.map { FaceBlur.rect($0, margin: 0.15) }
-        }
-        guard !rects.isEmpty else {
-            return [
-                try ImageToolSupport.copyUnchanged(
-                    run, suffix: "blurred",
-                    note:
-                        "No faces were found in \(run.input.lastPathComponent), so it was saved unchanged."
-                )
-            ]
-        }
+        let includeText = run.settings.bool("text")
         let style = ImageRedaction(
             style: ImageRedactionStyle(rawValue: run.settings.text("style")) ?? .blur,
             strength: run.settings.number("strength"))
-        let blurred = try ImageEditRenderer.redact(image, rects: rects, style: style)
-        run.note(FaceBlur.summary(faces: faces.count, text: textCount))
+        let unchangedNote = "No faces were found in \(name), so it was saved unchanged."
+        if ImageToolSupport.isAnimated(run.input) {
+            let frames = try StudioImageIO.frames(run.input)
+            var output: [(image: CGImage, delay: Double)] = []
+            var faces = 0
+            var texts = 0
+            for (index, frame) in frames.enumerated() {
+                try run.checkCancellation()
+                let found = try await FaceBlur.regions(
+                    in: frame.image, name: name, margin: margin, text: includeText)
+                faces = max(faces, found.faces)
+                texts = max(texts, found.texts)
+                let blurred =
+                    found.rects.isEmpty
+                    ? frame.image
+                    : try ImageEditRenderer.redact(frame.image, rects: found.rects, style: style)
+                output.append((blurred, frame.delay))
+                run.progress(Double(index + 1) / Double(frames.count) * 0.9)
+            }
+            guard faces + texts > 0 else {
+                return [
+                    try ImageToolSupport.copyUnchanged(run, suffix: "blurred", note: unchangedNote)
+                ]
+            }
+            let url = run.output(for: run.input, suffix: "blurred", ext: "gif")
+            try StudioImageIO.writeAnimatedGIF(
+                output, to: url, loopCount: ImageToolSupport.loopCount(run.input))
+            run.note(FaceBlur.summary(faces: faces, text: texts))
+            return [url]
+        }
+        let image = try StudioImageIO.load(run.input)
+        let found = try await FaceBlur.regions(
+            in: image, name: name, margin: margin, text: includeText)
+        guard !found.rects.isEmpty else {
+            return [try ImageToolSupport.copyUnchanged(run, suffix: "blurred", note: unchangedNote)]
+        }
+        let blurred = try ImageEditRenderer.redact(image, rects: found.rects, style: style)
+        run.note(FaceBlur.summary(faces: found.faces, text: found.texts))
         return [try ImageToolSupport.write(blurred, run: run, suffix: "blurred")]
     }
 
@@ -145,9 +170,17 @@ enum ImageCreativeTools {
                 "enlarge",
                 "\(run.input.lastPathComponent) would be too large, choose a smaller scale")
         }
+        let denoise = run.settings.bool("denoise")
+        let sharpen = run.settings.bool("sharpen")
+        if ImageToolSupport.isAnimated(run.input) {
+            return [
+                try ImageToolSupport.process(run, suffix: "\(Int(scale))x", quality: 0.95) {
+                    try Upscaler.upscale($0, scale: scale, denoise: denoise, sharpen: sharpen)
+                }
+            ]
+        }
         let upscaled = try Upscaler.upscale(
-            image, scale: scale, denoise: run.settings.bool("denoise"),
-            sharpen: run.settings.bool("sharpen"))
+            image, scale: scale, denoise: denoise, sharpen: sharpen)
         return [
             try ImageToolSupport.write(upscaled, run: run, suffix: "\(Int(scale))x", quality: 0.95)
         ]
@@ -219,11 +252,21 @@ enum ImageCreativeTools {
             top = top.uppercased()
             bottom = bottom.uppercased()
         }
+        let font = run.settings.text("font")
+        let color = run.settings.color("color", fallback: .white)
+        let stroke = run.settings.color("stroke", fallback: .black)
+        if ImageToolSupport.isAnimated(run.input) {
+            return [
+                try ImageToolSupport.process(run, suffix: "meme", keepMetadata: false) { frame in
+                    try MemeMaker.render(
+                        StudioImageOps.fitted(frame, maxDimension: 4000), top: top,
+                        bottom: bottom, font: font, color: color, stroke: stroke)
+                }
+            ]
+        }
         let image = try StudioImageIO.load(run.input, maxPixelSize: 4000)
         let result = try MemeMaker.render(
-            image, top: top, bottom: bottom, font: run.settings.text("font"),
-            color: run.settings.color("color", fallback: .white),
-            stroke: run.settings.color("stroke", fallback: .black))
+            image, top: top, bottom: bottom, font: font, color: color, stroke: stroke)
         return [try ImageToolSupport.write(result, run: run, suffix: "meme", keepMetadata: false)]
     }
 
@@ -405,13 +448,39 @@ enum BackgroundRemoval {
 }
 
 enum FaceBlur {
+    struct Found {
+        let rects: [StudioRect]
+        let faces: Int
+        let texts: Int
+    }
+
+    static func regions(in image: CGImage, name: String, margin: Double, text: Bool) async throws
+        -> Found
+    {
+        guard StudioVision.canAnalyze(image) else { return Found(rects: [], faces: 0, texts: 0) }
+        let faces = try await StudioVision.reporting("Face detection", for: name) {
+            try await StudioVision.faces(in: image)
+        }
+        var rects = faces.map { rect($0, margin: margin) }
+        var texts = 0
+        if text {
+            let regions = try await StudioVision.reporting("Text detection", for: name) {
+                try await StudioVision.textRegions(in: image)
+            }
+            texts = regions.count
+            rects += regions.map { rect($0, margin: 0.15) }
+        }
+        return Found(rects: rects, faces: faces.count, texts: texts)
+    }
+
     static func rect(_ box: CGRect, margin: Double) -> StudioRect {
-        let width = box.width * (1 + margin * 2)
-        let height = box.height * (1 + margin * 2)
+        let grown = CGRect(
+            x: box.minX - box.width * margin, y: 1 - box.maxY - box.height * margin,
+            width: box.width * (1 + margin * 2), height: box.height * (1 + margin * 2)
+        ).intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard !grown.isNull else { return StudioRect(x: 0, y: 0, width: 0, height: 0) }
         return StudioRect(
-            x: box.minX - box.width * margin, y: 1 - box.maxY - box.height * margin, width: width,
-            height: height
-        ).clamped
+            x: grown.minX, y: grown.minY, width: grown.width, height: grown.height)
     }
 
     static func summary(faces: Int, text: Int) -> String {

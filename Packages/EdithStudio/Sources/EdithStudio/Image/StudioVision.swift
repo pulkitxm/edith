@@ -78,6 +78,33 @@ public enum StudioVision {
         return handoff.value
     }
 
+    public static func canAnalyze(_ image: CGImage) -> Bool {
+        image.width > 2 && image.height > 2
+    }
+
+    static func reporting<Value>(
+        _ task: String, for name: String, _ work: () async throws -> Value
+    ) async throws -> Value {
+        do {
+            do {
+                return try await work()
+            } catch let error as StudioError {
+                throw error
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                return try await work()
+            }
+        } catch let error as StudioError {
+            throw error
+        } catch is CancellationError {
+            throw StudioError.cancelled
+        } catch {
+            throw StudioError.failed(
+                "\(task) could not finish on \(name): \(error.localizedDescription)")
+        }
+    }
+
     public static func recognizeText(
         in image: CGImage, language: String = "auto", accurate: Bool = true
     ) async throws -> [RecognizedLine] {

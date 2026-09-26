@@ -92,11 +92,27 @@ enum ImageToolSupport {
     }
 
     static func keepSmaller(
-        _ candidate: URL, original: URL, run: StudioRun, sameFormat: Bool
+        _ candidate: URL, original: URL, run: StudioRun, sameFormat: Bool,
+        stripMetadata: Bool = false
     ) throws -> URL {
         let before = StudioRunner.fileSize(original)
         let after = StudioRunner.fileSize(candidate)
         guard sameFormat, after >= before else { return candidate }
+        if stripMetadata, !MetadataScrubber.isClean(original, everything: true) {
+            let stripped = candidate.deletingLastPathComponent().appendingPathComponent(
+                "stripped-" + candidate.lastPathComponent)
+            defer { try? FileManager.default.removeItem(at: stripped) }
+            let lossless =
+                (try? MetadataScrubber.stripLosslessly(original, to: stripped, everything: true))
+                ?? false
+            guard lossless, StudioRunner.fileSize(stripped) <= after else { return candidate }
+            try FileManager.default.removeItem(at: candidate)
+            try FileManager.default.moveItem(at: stripped, to: candidate)
+            run.note(
+                "\(original.lastPathComponent) is already well optimized, so only its camera and location data were removed."
+            )
+            return candidate
+        }
         try FileManager.default.removeItem(at: candidate)
         try FileManager.default.copyItem(at: original, to: candidate)
         run.note(
@@ -110,18 +126,16 @@ enum ImageToolSupport {
 }
 
 enum JPEGMetadata {
-    static func strip(_ data: Data, orientation: Int) throws -> Data {
+    static func strip(_ data: Data, orientation: Int, name: String = "The JPEG") throws -> Data {
         let bytes = [UInt8](data)
         guard bytes.count > 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else {
-            throw StudioError.failed("The JPEG could not be read.")
+            throw StudioError.unreadable(name)
         }
         var output: [UInt8] = [0xFF, 0xD8]
         var pendingOrientation = orientation != 1
         var index = 2
         while index + 4 <= bytes.count {
-            guard bytes[index] == 0xFF else {
-                throw StudioError.failed("The JPEG has an unexpected structure.")
-            }
+            guard bytes[index] == 0xFF else { throw StudioError.unreadable(name) }
             let marker = bytes[index + 1]
             if marker == 0xFF {
                 index += 1
@@ -142,28 +156,63 @@ enum JPEGMetadata {
             }
             let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
             let end = index + 2 + length
-            guard length >= 2, end <= bytes.count else {
-                throw StudioError.failed("The JPEG has an unexpected structure.")
-            }
+            guard length >= 2, end <= bytes.count else { throw StudioError.unreadable(name) }
             let drop =
                 marker == 0xE1 || marker == 0xED || marker == 0xFE || marker == 0xEF
                 || (0xE3...0xEC).contains(marker)
             if !drop { output += bytes[index..<end] }
             index = end
         }
-        throw StudioError.failed("The JPEG ended unexpectedly.")
+        throw StudioError.unreadable(name)
     }
 
-    static func orientationSegment(_ orientation: Int) -> [UInt8] {
-        let tiff: [UInt8] = [
+    static func orientationTIFF(_ orientation: Int) -> [UInt8] {
+        [
             0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08,
             0x00, 0x01,
             0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, UInt8(orientation), 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
         ]
-        let payload: [UInt8] = Array("Exif".utf8) + [0, 0] + tiff
+    }
+
+    static func orientationSegment(_ orientation: Int) -> [UInt8] {
+        let payload: [UInt8] = Array("Exif".utf8) + [0, 0] + orientationTIFF(orientation)
         let length = payload.count + 2
         return [0xFF, 0xE1, UInt8(length >> 8), UInt8(length & 0xFF)] + payload
+    }
+}
+
+enum PNGMetadata {
+    static let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+
+    static let pictureChunks: Set<String> = [
+        "IHDR", "PLTE", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCv", "cLLi",
+        "bKGD", "hIST", "pHYs", "sPLT", "IDAT", "IEND", "acTL", "fcTL", "fdAT",
+    ]
+
+    static func strip(_ data: Data, orientation: Int, name: String) throws -> Data {
+        let bytes = [UInt8](data)
+        guard bytes.count > 8, Array(bytes[0..<8]) == signature else {
+            throw StudioError.unreadable(name)
+        }
+        var output = Data(signature)
+        var index = 8
+        while index + 12 <= bytes.count {
+            let length =
+                Int(bytes[index]) << 24 | Int(bytes[index + 1]) << 16 | Int(bytes[index + 2]) << 8
+                | Int(bytes[index + 3])
+            let end = index + 12 + length
+            guard end <= bytes.count else { throw StudioError.unreadable(name) }
+            let type = String(decoding: bytes[(index + 4)..<(index + 8)], as: UTF8.self)
+            if pictureChunks.contains(type) { output.append(contentsOf: bytes[index..<end]) }
+            if type == "IHDR", orientation != 1 {
+                IndexedPNGEncoder.chunk(
+                    "eXIf", Data(JPEGMetadata.orientationTIFF(orientation)), into: &output)
+            }
+            if type == "IEND" { return output }
+            index = end
+        }
+        throw StudioError.unreadable(name)
     }
 }
 
@@ -189,6 +238,24 @@ enum SVGMinifier {
 
 enum ImageTrim {
     static func bounds(_ image: CGImage, tolerance: Double) -> StudioRect? {
+        guard let rect = contentBounds(image, tolerance: tolerance) else { return nil }
+        return rect.isFull ? nil : rect
+    }
+
+    static func bounds(frames: [CGImage], tolerance: Double) -> StudioRect? {
+        let rects = frames.compactMap { contentBounds($0, tolerance: tolerance) }
+        guard var union = rects.first else { return nil }
+        for rect in rects.dropFirst() {
+            let minX = min(union.x, rect.x)
+            let minY = min(union.y, rect.y)
+            let maxX = max(union.x + union.width, rect.x + rect.width)
+            let maxY = max(union.y + union.height, rect.y + rect.height)
+            union = StudioRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+        return union.isFull ? nil : union
+    }
+
+    static func contentBounds(_ image: CGImage, tolerance: Double) -> StudioRect? {
         let sample = StudioImageOps.fitted(image, maxDimension: 1200)
         let width = sample.width
         let height = sample.height
@@ -222,10 +289,9 @@ enum ImageTrim {
             }
         }
         guard maxX >= minX, maxY >= minY else { return nil }
-        let rect = StudioRect(
+        return StudioRect(
             x: Double(minX) / Double(width), y: Double(minY) / Double(height),
             width: Double(maxX - minX + 1) / Double(width),
             height: Double(maxY - minY + 1) / Double(height))
-        return rect.isFull ? nil : rect
     }
 }

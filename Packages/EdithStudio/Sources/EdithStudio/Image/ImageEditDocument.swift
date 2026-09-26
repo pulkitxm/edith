@@ -458,11 +458,13 @@ public struct ImageEditDocument: Codable, Equatable, Sendable {
 
     public mutating func rotateClockwise() {
         quarterTurns = (quarterTurns + 1) % 4
+        swap(&flipHorizontal, &flipVertical)
         crop = crop.rotatedClockwise
     }
 
     public mutating func rotateCounterclockwise() {
         quarterTurns = (quarterTurns + 3) % 4
+        swap(&flipHorizontal, &flipVertical)
         crop = crop.rotatedCounterclockwise
     }
 

@@ -124,6 +124,7 @@ public enum StudioImageIO {
             }
             throw StudioError.unreadable(url.lastPathComponent)
         }
+        try StudioImageIntegrity.requireComplete(url, source: source)
         return try load(source, name: url.lastPathComponent, maxPixelSize: maxPixelSize)
     }
 
@@ -208,15 +209,17 @@ public enum StudioImageIO {
     public struct WriteOptions {
         public var quality: Double?
         public var keepMetadataFrom: URL?
+        public var keepsLocation: Bool
         public var background: StudioColor?
         public var dpi: Double?
 
         public init(
-            quality: Double? = nil, keepMetadataFrom: URL? = nil, background: StudioColor? = nil,
-            dpi: Double? = nil
+            quality: Double? = nil, keepMetadataFrom: URL? = nil, keepsLocation: Bool = true,
+            background: StudioColor? = nil, dpi: Double? = nil
         ) {
             self.quality = quality
             self.keepMetadataFrom = keepMetadataFrom
+            self.keepsLocation = keepsLocation
             self.background = background
             self.dpi = dpi
         }
@@ -275,7 +278,7 @@ public enum StudioImageIO {
                 kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary,
                 kCGImagePropertyTIFFDictionary, kCGImagePropertyIPTCDictionary,
                 kCGImagePropertyOrientation,
-            ] {
+            ] where options.keepsLocation || key != kCGImagePropertyGPSDictionary {
                 if let value = original[key] { properties[key] = value }
             }
         }
@@ -287,9 +290,9 @@ public enum StudioImageIO {
             properties[kCGImagePropertyDPIHeight] = dpi
         }
         if format == .tiff {
-            properties[kCGImagePropertyTIFFDictionary] = [
-                kCGImagePropertyTIFFCompression: 5
-            ]
+            var tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+            tiff[kCGImagePropertyTIFFCompression] = 5
+            properties[kCGImagePropertyTIFFDictionary] = tiff
         }
         CGImageDestinationAddImage(destination, prepared, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
@@ -311,19 +314,29 @@ public enum StudioImageIO {
         context.closePDF()
     }
 
+    static let icnsEntries: [(size: Int, dpi: Double)] = [
+        (16, 72), (32, 144), (32, 72), (64, 144), (128, 72), (256, 144), (256, 72), (512, 144),
+        (512, 72), (1024, 144),
+    ]
+
+    static let icoSizes = [16, 24, 32, 48, 64, 256]
+
     static func writeIcon(_ image: CGImage, to url: URL, format: StudioImageFormat) throws {
         let square = StudioImageOps.squared(image) ?? image
-        let sizes =
-            format == .icns ? [16, 32, 64, 128, 256, 512, 1024] : [16, 24, 32, 48, 64, 256]
+        let entries = format == .icns ? icnsEntries : icoSizes.map { (size: $0, dpi: 72.0) }
         guard
             let destination = CGImageDestinationCreateWithURL(
-                url as CFURL, format.utType.identifier as CFString, sizes.count, nil)
+                url as CFURL, format.utType.identifier as CFString, entries.count, nil)
         else { throw StudioError.unavailable("This Mac cannot write \(format.title) icons.") }
-        for size in sizes {
-            guard let scaled = StudioImageOps.resized(square, width: size, height: size) else {
-                continue
-            }
-            CGImageDestinationAddImage(destination, scaled, nil)
+        for entry in entries {
+            guard
+                let scaled = StudioImageOps.resized(square, width: entry.size, height: entry.size)
+            else { continue }
+            let properties: [CFString: Any]? =
+                format == .icns
+                ? [kCGImagePropertyDPIWidth: entry.dpi, kCGImagePropertyDPIHeight: entry.dpi]
+                : nil
+            CGImageDestinationAddImage(destination, scaled, properties as CFDictionary?)
         }
         guard CGImageDestinationFinalize(destination) else {
             throw StudioError.failed("The icon could not be written.")
@@ -355,5 +368,66 @@ public enum StudioImageIO {
         guard CGImageDestinationFinalize(destination) else {
             throw StudioError.failed("The GIF could not be written.")
         }
+    }
+}
+
+enum StudioImageIntegrity {
+    static func requireComplete(_ url: URL, source: CGImageSource) throws {
+        guard let type = CGImageSourceGetType(source) as String?,
+            type == UTType.jpeg.identifier || type == UTType.png.identifier,
+            let data = try? Data(contentsOf: url, options: .alwaysMapped)
+        else { return }
+        let complete = type == UTType.png.identifier ? pngIsComplete(data) : jpegIsComplete(data)
+        guard complete else {
+            throw StudioError.failed(
+                "\(url.lastPathComponent) is incomplete. It may not have finished downloading or copying."
+            )
+        }
+    }
+
+    static func pngIsComplete(_ data: Data) -> Bool {
+        data.withUnsafeBytes { raw in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var index = 8
+            while index + 12 <= bytes.count {
+                let length =
+                    Int(bytes[index]) << 24 | Int(bytes[index + 1]) << 16
+                    | Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+                if bytes[index + 4] == 0x49, bytes[index + 5] == 0x45, bytes[index + 6] == 0x4E,
+                    bytes[index + 7] == 0x44
+                {
+                    return true
+                }
+                index += 12 + length
+            }
+            return false
+        }
+    }
+
+    static func jpegIsComplete(_ data: Data) -> Bool {
+        let scanStart: Int? = data.withUnsafeBytes { raw in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var index = 2
+            while index + 4 <= bytes.count {
+                guard bytes[index] == 0xFF else { return nil }
+                let marker = bytes[index + 1]
+                if marker == 0xFF {
+                    index += 1
+                    continue
+                }
+                if marker == 0xD9 { return index }
+                if (0xD0...0xD7).contains(marker) || marker == 0x01 {
+                    index += 2
+                    continue
+                }
+                let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+                if marker == 0xDA { return index + 2 + length }
+                index += 2 + length
+            }
+            return bytes.count
+        }
+        guard let scanStart else { return true }
+        guard scanStart < data.count else { return false }
+        return data.range(of: Data([0xFF, 0xD9]), in: scanStart..<data.count) != nil
     }
 }

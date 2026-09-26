@@ -53,7 +53,9 @@ enum ImageTools {
         let maxSize = run.settings.int("maxSize")
         let ext = input.pathExtension.lowercased()
         if ext == "svg" {
-            let text = try String(contentsOf: input, encoding: .utf8)
+            guard StudioImageIO.info(input) != nil,
+                let text = try? String(contentsOf: input, encoding: .utf8)
+            else { throw StudioError.unreadable(input.lastPathComponent) }
             let output = run.output(for: input, suffix: "compressed", ext: "svg")
             try SVGMinifier.minify(text).write(to: output, atomically: true, encoding: .utf8)
             return [
@@ -74,7 +76,8 @@ enum ImageTools {
                 frames, to: output, loopCount: ImageToolSupport.loopCount(input))
             return [
                 try ImageToolSupport.keepSmaller(
-                    output, original: input, run: run, sameFormat: true)
+                    output, original: input, run: run, sameFormat: maxSize == 0,
+                    stripMetadata: strip)
             ]
         }
         var image = try StudioImageIO.load(input)
@@ -127,13 +130,26 @@ enum ImageTools {
                 try StudioImageIO.write(
                     image, to: output, format: .jpeg, options: .init(quality: photoQuality))
             }
+            let larger = StudioRunner.fileSize(output) >= StudioRunner.fileSize(input)
+            let carriesMetadata = strip && !MetadataScrubber.isClean(input, everything: true)
+            if maxSize == 0, larger, !carriesMetadata {
+                try FileManager.default.removeItem(at: output)
+                return [
+                    try ImageToolSupport.copyUnchanged(
+                        run, suffix: "compressed",
+                        note:
+                            "\(input.lastPathComponent) is already smaller than a \(output.pathExtension.uppercased()) copy would be, so it was kept as it was."
+                    )
+                ]
+            }
             run.note(
                 "Saved \(input.lastPathComponent) as \(output.pathExtension.uppercased()) because \(ext.uppercased()) files cannot be compressed in place."
             )
         }
         return [
             try ImageToolSupport.keepSmaller(
-                output, original: input, run: run, sameFormat: sameFormat && maxSize == 0)
+                output, original: input, run: run, sameFormat: sameFormat && maxSize == 0,
+                stripMetadata: strip)
         ]
     }
 
@@ -209,7 +225,27 @@ enum ImageTools {
         keywords: ["trim", "aspect", "square", "cut", "borders", "instagram"], actionTitle: "Crop"
     ) { run in
         let settings = run.settings
-        if settings.text("mode") == "trim", !ImageToolSupport.isAnimated(run.input) {
+        if settings.text("mode") == "trim", ImageToolSupport.isAnimated(run.input) {
+            let frames = try StudioImageIO.frames(run.input)
+            guard
+                let bounds = ImageTrim.bounds(
+                    frames: frames.map(\.image), tolerance: settings.number("tolerance"))
+            else {
+                return [
+                    try ImageToolSupport.copyUnchanged(
+                        run, suffix: "cropped",
+                        note: "\(run.input.lastPathComponent) has no plain border to trim.")
+                ]
+            }
+            let url = try ImageToolSupport.process(run, suffix: "cropped") { image in
+                guard let cropped = StudioImageOps.cropped(image, to: bounds) else {
+                    throw StudioError.failed("The image could not be cropped.")
+                }
+                return cropped
+            }
+            return [url]
+        }
+        if settings.text("mode") == "trim" {
             let image = try StudioImageIO.load(run.input)
             guard let bounds = ImageTrim.bounds(image, tolerance: settings.number("tolerance"))
             else {
@@ -358,29 +394,11 @@ enum ImageTools {
         keywords: ["exif", "gps", "location", "privacy", "metadata", "camera"],
         actionTitle: "Remove metadata"
     ) { run in
-        let input = run.input
-        let output = run.output(for: input, suffix: "clean", ext: input.pathExtension)
-        let orientation = ImageToolSupport.orientation(input)
-        let everything = run.settings.text("mode") == "all"
-        if everything, StudioImageFormat.of(input) == .jpeg {
-            let data = try Data(contentsOf: input)
-            try JPEGMetadata.strip(data, orientation: orientation).write(to: output)
-            return [output]
+        let (output, reencoded) = try MetadataScrubber.scrub(
+            run, everything: run.settings.text("mode") == "all")
+        if reencoded {
+            run.note("\(run.input.lastPathComponent) had to be re-encoded to remove its metadata.")
         }
-        guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
-            let type = CGImageSourceGetType(source),
-            let destination = CGImageDestinationCreateWithURL(output as CFURL, type, 1, nil)
-        else { throw StudioError.unreadable(input.lastPathComponent) }
-        if CGImageDestinationCopyImageSource(
-            destination, source,
-            MetadataScrubber.options(source, everything: everything, orientation: orientation)
-                as CFDictionary, nil)
-        {
-            return [output]
-        }
-        try? FileManager.default.removeItem(at: output)
-        try MetadataScrubber.reencode(input, to: output, everything: everything)
-        run.note("\(input.lastPathComponent) had to be re-encoded to remove its metadata.")
         return [output]
     }
 
@@ -399,9 +417,15 @@ enum ImageTools {
         actionTitle: "Extract text"
     ) { run in
         let image = try StudioImageIO.load(run.input, maxPixelSize: 6000)
-        let lines = try await StudioVision.recognizeText(
-            in: image, language: run.settings.text("language"),
-            accurate: run.settings.text("accuracy") != "fast")
+        let name = run.input.lastPathComponent
+        guard StudioVision.canAnalyze(image) else {
+            throw StudioError.nothingToDo("\(name) is too small to contain readable text.")
+        }
+        let lines = try await StudioVision.reporting("Text recognition", for: name) {
+            try await StudioVision.recognizeText(
+                in: image, language: run.settings.text("language"),
+                accurate: run.settings.text("accuracy") != "fast")
+        }
         guard !lines.isEmpty else {
             throw StudioError.nothingToDo("No text was found in \(run.input.lastPathComponent).")
         }
@@ -440,6 +464,103 @@ enum ImageTools {
 }
 
 enum MetadataScrubber {
+    static func scrub(_ run: StudioRun, everything: Bool) throws -> (URL, reencoded: Bool) {
+        let input = run.input
+        let output = run.output(for: input, suffix: "clean", ext: input.pathExtension)
+        if try stripLosslessly(input, to: output, everything: everything) {
+            return (output, false)
+        }
+        try? FileManager.default.removeItem(at: output)
+        if isGIF(input) {
+            try StudioImageIO.writeAnimatedGIF(
+                try StudioImageIO.frames(input), to: output,
+                loopCount: ImageToolSupport.loopCount(input))
+            return (output, false)
+        }
+        let image = try StudioImageIO.load(input)
+        let (format, note) = ImageToolSupport.outputFormat(
+            for: input, hasAlpha: StudioImageOps.hasTransparency(image))
+        if let note { run.note(note) }
+        let target =
+            StudioImageFormat.of(input) == format
+            ? output : run.output(for: input, suffix: "clean", ext: format.fileExtension)
+        try StudioImageIO.write(
+            image, to: target, format: format,
+            options: .init(
+                quality: 0.95, keepMetadataFrom: everything ? nil : input, keepsLocation: false))
+        return (target, format.isLossy)
+    }
+
+    static func stripLosslessly(_ input: URL, to output: URL, everything: Bool) throws -> Bool {
+        let name = input.lastPathComponent
+        guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
+            CGImageSourceGetCount(source) > 0, let type = CGImageSourceGetType(source),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any],
+            properties[kCGImagePropertyPixelWidth] as? Int ?? 0 > 0
+        else { throw StudioError.unreadable(name) }
+        try StudioImageIntegrity.requireComplete(input, source: source)
+        let orientation = ImageToolSupport.orientation(input)
+        if everything,
+            type as String == UTType.jpeg.identifier || type as String == UTType.png.identifier
+        {
+            let data = try Data(contentsOf: input)
+            let stripped =
+                type as String == UTType.jpeg.identifier
+                ? try? JPEGMetadata.strip(data, orientation: orientation, name: name)
+                : try? PNGMetadata.strip(data, orientation: orientation, name: name)
+            if let stripped {
+                try stripped.write(to: output)
+                return true
+            }
+        }
+        guard type as String != UTType.gif.identifier,
+            let destination = CGImageDestinationCreateWithURL(output as CFURL, type, 1, nil),
+            CGImageDestinationCopyImageSource(
+                destination, source,
+                options(source, everything: everything, orientation: orientation) as CFDictionary,
+                nil)
+        else { return false }
+        return isClean(output, everything: everything)
+    }
+
+    static func isGIF(_ url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let type = CGImageSourceGetType(source)
+        else { return false }
+        return type as String == UTType.gif.identifier
+    }
+
+    static let neutralExif: Set<CFString> = [
+        kCGImagePropertyExifPixelXDimension, kCGImagePropertyExifPixelYDimension,
+        kCGImagePropertyExifColorSpace, kCGImagePropertyExifVersion,
+        kCGImagePropertyExifFlashPixVersion, kCGImagePropertyExifComponentsConfiguration,
+    ]
+
+    static let neutralTIFF: Set<CFString> = [
+        kCGImagePropertyTIFFOrientation, kCGImagePropertyTIFFXResolution,
+        kCGImagePropertyTIFFYResolution, kCGImagePropertyTIFFResolutionUnit,
+        kCGImagePropertyTIFFCompression, kCGImagePropertyTIFFPhotometricInterpretation,
+        kCGImagePropertyTIFFTileWidth, kCGImagePropertyTIFFTileLength,
+    ]
+
+    static func isClean(_ url: URL, everything: Bool) -> Bool {
+        let properties = StudioImageIO.properties(url)
+        if let gps = properties[kCGImagePropertyGPSDictionary] as? [CFString: Any], !gps.isEmpty {
+            return false
+        }
+        guard everything else { return true }
+        if let iptc = properties[kCGImagePropertyIPTCDictionary] as? [CFString: Any],
+            !iptc.isEmpty
+        {
+            return false
+        }
+        let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+        return exif.keys.allSatisfy(neutralExif.contains)
+            && tiff.keys.allSatisfy(neutralTIFF.contains)
+    }
+
     static func options(_ source: CGImageSource, everything: Bool, orientation: Int) -> [CFString:
         Any]
     {
@@ -458,26 +579,6 @@ enum MetadataScrubber {
                 orientation as CFNumber)
         }
         return [kCGImageDestinationMetadata: metadata, kCGImageDestinationMergeMetadata: false]
-    }
-
-    static func reencode(_ input: URL, to output: URL, everything: Bool) throws {
-        let image = try StudioImageIO.load(input)
-        let format = StudioImageFormat.of(input) ?? .png
-        guard
-            let destination = CGImageDestinationCreateWithURL(
-                output as CFURL, format.utType.identifier as CFString, 1, nil)
-        else { throw StudioError.unavailable("This Mac cannot write \(format.title) images.") }
-        var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.95]
-        if !everything {
-            let original = StudioImageIO.properties(input)
-            for key in [kCGImagePropertyExifDictionary, kCGImagePropertyIPTCDictionary] {
-                if let value = original[key] { properties[key] = value }
-            }
-        }
-        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else {
-            throw StudioError.failed("\(input.lastPathComponent) could not be written.")
-        }
     }
 }
 
