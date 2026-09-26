@@ -337,6 +337,24 @@ private actor HerdrWatchHarness {
         #expect(store.tabs.flatMap(\.agentIDs) == [one.id, two.id, three.id])
     }
 
+    @Test func reopenLastClosedTabSkipsAnAgentThatIsAlreadyOpen() {
+        let store = HerdrStore()
+        let claude = agent("Claude Code", pane: "a")
+        store.hosts = [.local(herdrPresent: true, agents: [claude])]
+        store.open(claude)
+        store.closeTab(store.selectedTab)
+        store.open(claude)
+        let reopenedTabID = store.selectedTab
+
+        #expect(store.reopenLastClosedTab() == false)
+        #expect(store.tabs.count == 1)
+        #expect(store.currentTab?.agentIDs == [claude.id])
+        #expect(store.selectedTab == reopenedTabID)
+
+        store.selectBoard()
+        #expect(store.selectedTab == HerdrStore.boardID)
+    }
+
     @Test func reopenLastClosedTabHistoryIsBoundedToTenEntries() {
         let store = HerdrStore()
         let agents = (0..<11).map { agent("Claude Code", pane: "p\($0)") }

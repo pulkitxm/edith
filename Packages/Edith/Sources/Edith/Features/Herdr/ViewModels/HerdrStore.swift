@@ -1301,6 +1301,7 @@ final class HerdrStore {
         while let candidate = closedTabHistory.popLast() {
             let liveAgents = candidate.agents.filter { recorded in
                 agents.contains { $0.id == recorded.id }
+                    && tab(containing: recorded.id) == nil
             }
             guard !liveAgents.isEmpty else { continue }
             openReopenedTab(candidate, liveAgents: liveAgents)
