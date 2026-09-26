@@ -284,9 +284,7 @@ final class HerdrStore {
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
-    var listedAgents: [HerdrAgent] {
-        filteredAgents.isEmpty && kindFilter.isEmpty ? agents : filteredAgents
-    }
+    var listedAgents: [HerdrAgent] { filteredAgents }
 
     var agentSpaces: [HerdrAgentSpace] {
         HerdrAgentSpace.group(listedAgents)
@@ -396,6 +394,12 @@ final class HerdrStore {
         } else {
             kindFilter.insert(id)
         }
+    }
+
+    func clearSessionFilters() {
+        machineFilter = "all"
+        kindFilter = []
+        spaceGroupingEnabled = false
     }
 
     var columns: [HerdrAgentStatus] { HerdrAgentStatus.allCases }
@@ -624,6 +628,18 @@ final class HerdrStore {
 
     var focusedSession: HerdrOpenTab? {
         currentTab.flatMap { session($0.focused) }
+    }
+
+    var openSplitAgents: [HerdrAgent] {
+        guard selectedTab != Self.boardID, let tab = currentTab, tab.isSplit else { return [] }
+        return tab.agentIDs.compactMap { session($0)?.agent }
+    }
+
+    func railHighlight(for agentID: String) -> HerdrRailHighlight {
+        guard selectedTab != Self.boardID, let tab = currentTab, tab.layout.contains(agentID)
+        else { return .none }
+        guard tab.isSplit else { return .solo }
+        return tab.focused == agentID ? .focused : .grouped
     }
 
     func open(_ agent: HerdrAgent) {
@@ -1573,6 +1589,13 @@ struct HerdrOpenTab: Identifiable {
     var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
+}
+
+enum HerdrRailHighlight: Equatable {
+    case none
+    case solo
+    case focused
+    case grouped
 }
 
 struct HerdrTab: Identifiable, Equatable {
