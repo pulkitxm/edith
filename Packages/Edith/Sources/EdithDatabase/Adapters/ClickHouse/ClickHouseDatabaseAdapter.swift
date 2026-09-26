@@ -922,15 +922,15 @@ enum ClickHouseDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-    return try await DatabaseOperationSupport.check(
-        context, deadlineExceeded: deadlineExceeded)
-}
+        return try await DatabaseOperationSupport.check(
+            context, deadlineExceeded: deadlineExceeded)
+    }
 
     static func deadlineTask(
         context: DatabaseAdapterOperationContext
     ) -> Task<Void, Never>? {
-    DatabaseOperationSupport.deadlineTask(context: context)
-}
+        DatabaseOperationSupport.deadlineTask(context: context)
+    }
 
     static func map(
         _ failure: ClickHouseDatabaseDriverFailure,
@@ -1032,20 +1032,20 @@ enum ClickHouseDatabaseAdapterSupport {
         configured: UInt64,
         deadline: Date?
     ) throws(DatabaseAdapterFailure) -> UInt64 {
-    guard configured > 0 else { throw invalidConnection }
-    return try DatabaseOperationSupport.remainingMilliseconds(
-        configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
-}
+        guard configured > 0 else { throw invalidConnection }
+        return try DatabaseOperationSupport.remainingMilliseconds(
+            configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
+    }
 
     private static func validHost(_ value: String) -> Bool {
-    DatabaseOperationSupport.validHost(value)
-        && !value.contains("/") && !value.contains("?") && !value.contains("#")
-        && !value.contains("@")
-}
+        DatabaseOperationSupport.validHost(value)
+            && !value.contains("/") && !value.contains("?") && !value.contains("#")
+            && !value.contains("@")
+    }
 
     private static func validCredential(_ value: String) -> Bool {
-    DatabaseOperationSupport.validCredential(value, maximumBytes: 16_384)
-}
+        DatabaseOperationSupport.validCredential(value, maximumBytes: 16_384)
+    }
 
     private static func failure(
         category: DatabaseErrorCategory,
@@ -1053,7 +1053,7 @@ enum ClickHouseDatabaseAdapterSupport {
         code: String,
         retry: DatabaseRetryAction = .none
     ) -> DatabaseAdapterFailure {
-    DatabaseOperationSupport.reported(
-        category: category, message: message, code: code, retry: retry)
-}
+        DatabaseOperationSupport.reported(
+            category: category, message: message, code: code, retry: retry)
+    }
 }
