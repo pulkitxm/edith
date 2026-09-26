@@ -561,7 +561,10 @@ struct VideoRenderPipeline {
             height: max(2, Int(height) / 2 * 2))
     }
 
-    func exportMP4(to url: URL, quality: String = "good") async throws {
+    func exportMP4(
+        to url: URL, quality: String = "good",
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws {
         let preset =
             quality == "medium"
             ? AVAssetExportPresetMediumQuality
@@ -575,21 +578,36 @@ struct VideoRenderPipeline {
         session.outputURL = url
         session.outputFileType = .mp4
         try? FileManager.default.removeItem(at: url)
-        await withCheckedContinuation { continuation in
-            session.exportAsynchronously { continuation.resume() }
+        let reporter = Task {
+            while !Task.isCancelled {
+                progress(Double(session.progress))
+                try? await Task.sleep(for: .milliseconds(200))
+            }
         }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                session.exportAsynchronously { continuation.resume() }
+            }
+        } onCancel: {
+            session.cancelExport()
+        }
+        reporter.cancel()
         guard session.status == .completed else {
+            try? FileManager.default.removeItem(at: url)
+            if session.status == .cancelled { throw CancellationError() }
             throw session.error ?? RenderError.exportFailed("MP4 export failed")
         }
+        progress(1)
     }
 
     func exportGIF(
-        to url: URL, fps: Int = 15, maxWidth: Int = 0, loop: Bool = true
-    ) throws {
+        to url: URL, fps: Int = 15, maxWidth: Int = 0, loop: Bool = true,
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws {
+        let count = max(1, Int(ceil(duration * Double(fps))))
         guard
             let destination = CGImageDestinationCreateWithURL(
-                url as CFURL, UTType.gif.identifier as CFString,
-                max(1, Int(ceil(duration * Double(fps)))), nil)
+                url as CFURL, UTType.gif.identifier as CFString, count, nil)
         else { throw RenderError.exportFailed("Could not create a GIF") }
         let generator = AVAssetImageGenerator(asset: composition)
         generator.videoComposition = videoComposition
@@ -599,24 +617,30 @@ struct VideoRenderPipeline {
             generator.maximumSize = CGSize(
                 width: CGFloat(maxWidth), height: max(1, canvas.height * factor))
         }
-        let count = max(1, Int(ceil(duration * Double(fps))))
-        for index in 0..<count {
-            let time = CMTime(seconds: Double(index) / Double(fps), preferredTimescale: 600)
-            let image = try generator.copyCGImage(at: time, actualTime: nil)
-            let properties: [CFString: Any] = [
-                kCGImagePropertyGIFDictionary: [
-                    kCGImagePropertyGIFDelayTime: 1.0 / Double(fps)
+        do {
+            for index in 0..<count {
+                try Task.checkCancellation()
+                let time = CMTime(seconds: Double(index) / Double(fps), preferredTimescale: 600)
+                let image = try generator.copyCGImage(at: time, actualTime: nil)
+                let properties: [CFString: Any] = [
+                    kCGImagePropertyGIFDictionary: [
+                        kCGImagePropertyGIFDelayTime: 1.0 / Double(fps)
+                    ]
                 ]
-            ]
-            CGImageDestinationAddImage(destination, image, properties as CFDictionary)
-        }
-        CGImageDestinationSetProperties(
-            destination,
-            [
-                kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loop ? 0 : 1]
-            ] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else {
-            throw RenderError.exportFailed("Could not finish GIF export")
+                CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+                progress(Double(index + 1) / Double(count))
+            }
+            CGImageDestinationSetProperties(
+                destination,
+                [
+                    kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loop ? 0 : 1]
+                ] as CFDictionary)
+            guard CGImageDestinationFinalize(destination) else {
+                throw RenderError.exportFailed("Could not finish GIF export")
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
         }
     }
 

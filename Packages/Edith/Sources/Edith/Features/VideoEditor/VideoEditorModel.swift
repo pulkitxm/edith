@@ -23,7 +23,6 @@ final class VideoEditorModel {
     var editingZoomID: String?
     var captionText = ""
     var captionDuration = 3.0
-    var isRendering = false
     var isTranscribing = false
     var gifFPS = 15
     var gifWidth = 0
@@ -31,7 +30,6 @@ final class VideoEditorModel {
     var loopPlayback = false
     var errorMessage: String?
     var permissionSettingsURL: URL?
-    var lastExportURL: URL?
     var recentProjects: [VideoProject.Listing] = []
 
     let player = AVPlayer()
@@ -343,31 +341,31 @@ final class VideoEditorModel {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [gif ? .gif : .mpeg4Movie]
         panel.nameFieldStringValue = "\(project.title).\(gif ? "gif" : "mp4")"
-        panel.begin { [weak self] response in
-            MainActor.assumeIsolated {
-                guard let self, response == .OK, let url = panel.url else { return }
-                self.isRendering = true
-                Task {
-                    do {
-                        if gif {
-                            try pipeline.exportGIF(
-                                to: url, fps: self.gifFPS, maxWidth: self.gifWidth,
-                                loop: self.gifLoop)
-                        } else {
-                            let render: VideoRenderPipeline
-                            if let dimension = quality.maxDimension {
-                                render = try await VideoRenderPipeline.make(
-                                    project: project, maxDimension: dimension)
-                            } else {
-                                render = pipeline
-                            }
-                            try await render.exportMP4(to: url)
-                        }
-                        self.lastExportURL = url
-                    } catch { self.errorMessage = error.localizedDescription }
-                    self.isRendering = false
+        let fps = gifFPS
+        let width = gifWidth
+        let loop = gifLoop
+        let chosen: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            VideoExporter.shared.start(to: url) { progress in
+                if gif {
+                    try await pipeline.exportGIF(
+                        to: url, fps: fps, maxWidth: width, loop: loop, progress: progress)
+                    return
                 }
+                let render =
+                    if let dimension = quality.maxDimension {
+                        try await VideoRenderPipeline.make(
+                            project: project, maxDimension: dimension)
+                    } else {
+                        pipeline
+                    }
+                try await render.exportMP4(to: url, progress: progress)
             }
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: chosen)
+        } else {
+            panel.begin(completionHandler: chosen)
         }
     }
 

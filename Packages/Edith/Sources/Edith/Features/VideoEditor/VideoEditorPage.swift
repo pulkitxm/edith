@@ -29,7 +29,6 @@ struct VideoEditorPage: View {
     @State private var model = VideoEditorModel()
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
-    @State private var pendingExport: (gif: Bool, quality: VideoExportQuality)?
     @State private var editingTextID: String?
     @State private var titleDraft = ""
     @State private var timelineZoom = 80.0
@@ -59,17 +58,8 @@ struct VideoEditorPage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Video editor")
-        .sheet(
-            isPresented: $showingExport,
-            onDismiss: {
-                guard let pendingExport else { return }
-                model.export(gif: pendingExport.gif, quality: pendingExport.quality)
-                self.pendingExport = nil
-            }
-        ) {
-            VideoExportSheet(model: model) { gif, quality in
-                pendingExport = (gif, quality)
-            }
+        .sheet(isPresented: $showingExport) {
+            VideoExportSheet(model: model)
         }
         .onDisappear {
             model.player.pause()
@@ -140,14 +130,35 @@ struct VideoEditorPage: View {
             Button {
                 showingExport = true
             } label: {
-                Label(
-                    model.isRendering ? "Exporting…" : "Export", systemImage: "square.and.arrow.up")
+                exportLabel
             }
-            .disabled(model.pipeline == nil || model.isRendering)
+            .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, UIScale.pt(18))
         .frame(height: UIScale.pt(52))
+    }
+
+    @ViewBuilder private var exportLabel: some View {
+        switch VideoExporter.shared.job?.phase {
+        case .exporting:
+            Label {
+                Text(
+                    "Exporting \((VideoExporter.shared.job?.progress ?? 0).formatted(.percent.precision(.fractionLength(0))))"
+                )
+                .monospacedDigit()
+            } icon: {
+                ProgressView(value: VideoExporter.shared.job?.progress ?? 0)
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+            }
+        case .finished:
+            Label("Exported", systemImage: "checkmark.circle.fill")
+        case .failed:
+            Label("Export failed", systemImage: "exclamationmark.triangle.fill")
+        case nil:
+            Label("Export", systemImage: "square.and.arrow.up")
+        }
     }
 
     private var emptyState: some View {

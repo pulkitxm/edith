@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import CoreVideo
 import ImageIO
+import os
 import Testing
 @testable import Edith
 
@@ -54,7 +55,11 @@ import Testing
         project.addAsset(source, duration: 1, width: 64, height: 64)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let exported = directory.appendingPathComponent("steady.mp4")
-        try await pipeline.exportMP4(to: exported)
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        try await pipeline.exportMP4(to: exported) { value in
+            reported.withLock { $0.append(value) }
+        }
+        #expect(reported.withLock { $0.last } == 1)
         let asset = AVURLAsset(url: exported)
         let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
         let reader = try AVAssetReader(asset: asset)
@@ -290,13 +295,13 @@ import Testing
         #expect(notUpscaled.canvas == pipeline.canvas)
 
         let gif = directory.appendingPathComponent("output.gif")
-        do { try pipeline.exportGIF(to: gif, fps: 5) } catch {
+        do { try await pipeline.exportGIF(to: gif, fps: 5) } catch {
             Issue.record("GIF export failed: \(error)"); return
         }
         let frames = try #require(CGImageSourceCreateWithURL(gif as CFURL, nil))
         #expect(CGImageSourceGetCount(frames) >= 4)
         let smaller = directory.appendingPathComponent("small.gif")
-        try pipeline.exportGIF(to: smaller, fps: 5, maxWidth: 32, loop: false)
+        try await pipeline.exportGIF(to: smaller, fps: 5, maxWidth: 32, loop: false)
         let resized = try #require(CGImageSourceCreateWithURL(smaller as CFURL, nil))
         let firstFrame = try #require(CGImageSourceCreateImageAtIndex(resized, 0, nil))
         #expect(firstFrame.width <= 32)
