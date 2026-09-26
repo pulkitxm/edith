@@ -58,6 +58,7 @@ final class VirtualCameraPreviewNSView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layerContentsRedrawPolicy = .never
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.masksToBounds = true
         content.contentsGravity = .resizeAspect

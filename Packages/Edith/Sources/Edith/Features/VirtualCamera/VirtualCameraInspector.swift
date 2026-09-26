@@ -548,6 +548,16 @@ struct VirtualCameraOutputPanel: View {
         self.dark = dark
     }
 
+    private var cameraSize: String? {
+        if model.previewStatistics.sourceWidth > 0 {
+            return "\(model.previewStatistics.sourceWidth)x\(model.previewStatistics.sourceHeight)"
+        }
+        if let snapshot = model.snapshot, snapshot.sourceWidth > 0 {
+            return "\(snapshot.sourceWidth)x\(snapshot.sourceHeight)"
+        }
+        return nil
+    }
+
     private var routeTitle: String {
         guard let route = model.snapshot?.route else { return "Sends to: nothing yet" }
         return "Sends to: \(route.cameraName)"
@@ -596,7 +606,7 @@ struct VirtualCameraOutputPanel: View {
                         EmptyView()
                     }
                     Spacer()
-                    Button("Check again") { extensionManager.refresh() }
+                    Button("Check again") { extensionManager.refreshDetached() }
                         .buttonStyle(.edith(.borderless))
                 }
             }
@@ -623,12 +633,8 @@ struct VirtualCameraOutputPanel: View {
                         value: String(format: "%.0f fps", snapshot.framesPerSecond),
                         dark: dark)
                 }
-                if model.previewStatistics.sourceWidth > 0 {
-                    VirtualCameraFact(
-                        title: "Camera",
-                        value:
-                            "\(model.previewStatistics.sourceWidth)x\(model.previewStatistics.sourceHeight)",
-                        dark: dark)
+                if let cameraSize = cameraSize {
+                    VirtualCameraFact(title: "Camera", value: cameraSize, dark: dark)
                 }
             }
             VirtualCameraPanelSection(

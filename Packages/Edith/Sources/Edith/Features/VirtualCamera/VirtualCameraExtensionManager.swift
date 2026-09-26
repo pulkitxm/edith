@@ -96,13 +96,14 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
 
     private let environment: VirtualCameraExtensionEnvironment
     private var pendingRemoval = false
+    private var refreshTask: Task<Void, Never>?
 
     init(environment: VirtualCameraExtensionEnvironment = .live) {
         self.environment = environment
         super.init()
     }
 
-    static func phase(
+    nonisolated static func phase(
         bundleContainsExtension: Bool, entitled: Bool, inApplications: Bool, deviceVisible: Bool
     ) -> VirtualCameraExtensionPhase {
         if deviceVisible { return .installed }
@@ -130,11 +131,46 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
         default:
             break
         }
-        phase = Self.phase(
+        let next = Self.phase(
             bundleContainsExtension: FileManager.default.fileExists(
                 atPath: extensionBundleURL.path),
             entitled: environment.hasInstallEntitlement(), inApplications: inApplicationsFolder,
             deviceVisible: environment.deviceVisible())
+        if next != phase { phase = next }
+    }
+
+    func refreshDetached() {
+        switch phase {
+        case .installing, .removing:
+            return
+        default:
+            break
+        }
+        guard refreshTask == nil else { return }
+        let visibleProbe = environment.deviceVisible
+        let entitledProbe = environment.hasInstallEntitlement
+        let extensionPath = extensionBundleURL.path
+        let inApplications = inApplicationsFolder
+        refreshTask = Task.detached {
+            let visible = visibleProbe()
+            let next = VirtualCameraExtensionManager.phase(
+                bundleContainsExtension: FileManager.default.fileExists(atPath: extensionPath),
+                entitled: entitledProbe(), inApplications: inApplications, deviceVisible: visible)
+            await self.completeRefresh(next, deviceVisible: visible)
+        }
+    }
+
+    private func completeRefresh(_ next: VirtualCameraExtensionPhase, deviceVisible: Bool) {
+        refreshTask = nil
+        switch phase {
+        case .installing, .removing:
+            return
+        case .awaitingApproval where !deviceVisible:
+            return
+        default:
+            break
+        }
+        if next != phase { phase = next }
     }
 
     func install() {

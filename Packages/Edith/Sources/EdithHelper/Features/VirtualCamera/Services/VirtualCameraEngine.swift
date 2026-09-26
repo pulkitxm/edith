@@ -56,6 +56,7 @@ final class VirtualCameraEngine {
     private(set) var trigger: VirtualCameraRunningApplication?
     private var triggerQuit = false
     private var obsCooldownUntil = Date.distantPast
+    private let previewBus: VirtualCameraPreviewBus
 
     var streaming: Bool { streamingRoute != nil }
 
@@ -65,12 +66,14 @@ final class VirtualCameraEngine {
                 forApplication: AppBuildIdentity.application)),
         obsSink: VirtualCameraSink = VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID),
         state: VirtualCameraState = VirtualCameraStore.load(),
-        environment: VirtualCameraEngineEnvironment = .live
+        environment: VirtualCameraEngineEnvironment = .live,
+        previewBus: VirtualCameraPreviewBus = VirtualCameraPreviewBus()
     ) {
         self.edithSink = edithSink
         self.obsSink = obsSink
         self.state = state
         self.environment = environment
+        self.previewBus = previewBus
         let format = VirtualCameraFormat.standard
         pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: format.width, height: format.height),
@@ -305,8 +308,10 @@ final class VirtualCameraEngine {
             ? extensionStatus?.format.frameRate ?? VirtualCameraFormat.standard.frameRate
             : VirtualCameraFormat.standard.frameRate
         pipeline.update(state: effectiveState())
+        let previewBus = previewBus
         pipeline.start { buffer in
             sink.send(buffer, frameRate: frameRate)
+            previewBus.publish(buffer)
         }
         streamingRoute = target
         triggerQuit = false
