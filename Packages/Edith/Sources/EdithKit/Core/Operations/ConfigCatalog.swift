@@ -50,8 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music", "videoEditor",
-        "calendar", "virtualCamera",
+        "music", "studio", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
@@ -62,7 +61,7 @@ public enum ConfigCatalog {
         agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
-        + music + videoEditor + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
+        + music + studio + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
         + focusDim
         + presenter
         + windowSweaters + colorPicker + emoji + bifrost
@@ -703,11 +702,19 @@ public enum ConfigCatalog {
             summary: "Include the music folder in the iCloud backup."),
     ]
 
-    private static let videoEditor: [SettingDefinition] = [
+    private static let studio: [SettingDefinition] = [
         SettingDefinition(
-            AppStorageKeys.Tabs.videoEditorEnabled, .bool, group: "videoEditor",
-            summary: "Video editor extension: edit imported clips and export videos.",
-            fallback: .bool(false))
+            AppStorageKeys.Tabs.studioEnabled, .bool, group: "studio",
+            summary: "Studio extension: edit, convert and compress images, PDFs, video and audio.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Studio.destination, .string, group: "studio",
+            summary: "Where Studio saves results: next to the original, downloads or a folder.",
+            allowed: ["original", "downloads", "folder"], fallback: .string("original")),
+        SettingDefinition(
+            AppStorageKeys.Studio.folder, .string, group: "studio",
+            summary: "Folder Studio saves results into when the destination is a folder.",
+            fallback: .string("")),
     ]
 
     private static let calendar: [SettingDefinition] = [

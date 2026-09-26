@@ -71,6 +71,7 @@ public struct EdRoot: AsyncParsableCommand {
             BifrostCommand.self,
             EmojiCommand.self,
             ShelfCommand.self,
+            StudioCommand.self,
             CleanerCommand.self,
             HomebrewCommand.self,
             MaintenanceCommand.self,

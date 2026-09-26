@@ -34,6 +34,7 @@ let dependencies: [Package.Dependency] = [
     .package(
         url: "https://github.com/vapor/mysql-nio.git",
         revision: "a9378d6ed22899b7df72894719cc3df51a37fb18"),
+    .package(path: "../EdithStudio"),
 ]
 
 let targets: [Target] = [
@@ -151,6 +152,7 @@ let targets: [Target] = [
             "EdithKit",
             "EdithLidAwakeSupport",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            .product(name: "EdithStudio", package: "EdithStudio"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -210,6 +212,7 @@ let targets: [Target] = [
             "GhosttyTerminal",
             .product(name: "Sparkle", package: "Sparkle"),
             .product(name: "SwiftTerm", package: "SwiftTerm"),
+            .product(name: "EdithStudio", package: "EdithStudio"),
             "Highlighter",
         ],
         exclude: ["Resources"],
@@ -237,6 +240,7 @@ let targets: [Target] = [
             "EdithCore", "Edith", "EdithDatabase", "EdithDocs", "EdithKit", "EdithLidAwakeSupport",
             "EdithHelper", "EdithAgent", "EdithCameraSupport",
             "EdithCLI", "Highlighter", "ed",
+            .product(name: "EdithStudio", package: "EdithStudio"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

@@ -158,6 +158,11 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
+        JSONCase("ed studio tools", ["studio", "tools", "--kind", "pdf", "--json"]),
+        JSONCase("ed studio info", ["studio", "info", "pdf.merge", "--json"]),
+        JSONCase(
+            "ed studio probe", ["studio", "probe", "/nonexistent/studio-probe.pdf", "--json"]),
+        JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
         JSONCase(
             "ed database connections add",
             [

@@ -20,6 +20,7 @@ and sensitive data remains on hosts chosen by the user.
 | `Packages/Edith/Sources/EdithCLI` | Command tree, configuration, remote operations, and machine-readable output. |
 | `Packages/Edith/Sources/EdithDocs` | Bundled `ed` reference parsing, search, and Docs Ask ranking, linked only by the app and CLI so the helper and agent skip the Markdown parser. |
 | `Packages/Edith/Sources/EdithLidAwakeHelper` | Privileged lid-awake helper executable. |
+| `Packages/EdithStudio` | Studio's media engine: data-driven PDF, image, video, audio, document, web, archive and on-device AI tools, the job runner, and the PDF and image editing models. A standalone package so its suites build and run in seconds; the app and `ed` link it. |
 | `apps/companion` | Optional Rust service for private memory, retrieval, and media processing. |
 | `apps/site` | Static product and policy website deployed through GitHub Pages. |
 | `apps/promo-video` | Remotion source for release and announcement media. |
@@ -112,6 +113,26 @@ back on restores them.
 
 The sidebar and every suite landing page are generated from that table. Adding
 an ability is a registry entry, not a new switch statement.
+
+## Studio
+
+Studio is a Media ability hosted in the Edith window. Its engine lives in
+`Packages/EdithStudio` and has no dependency on the rest of Edith. Every tool is
+a `StudioTool` value: an id, the kinds of file it accepts, whether it runs per
+file or combines files, typed options that the app renders as a form and `ed
+studio run --set key=value` parses, the engines it needs, and a perform closure.
+`StudioRunner` validates inputs and settings, runs each unit in a private
+staging folder, then moves results next to the originals, into Downloads or into
+a chosen folder under a name that never overwrites an existing file. Editors
+(image, PDF, video) and the PDF compare view are tools with an editor style
+instead of a perform closure. Workflows chain runnable tools into one tool.
+
+PDF and image tools use PDFKit, Core Graphics, ImageIO, Core Image and Vision.
+Video and audio tools use FFmpeg, and four PDF tools use qpdf; both are optional
+engines found on the user's PATH and installed through the same Homebrew
+provisioning as other tools. Summaries use the on-device Foundation Models, and
+translation uses the macOS Translation languages the user has downloaded, so no
+file leaves the Mac.
 
 ## Data
 

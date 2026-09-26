@@ -115,8 +115,9 @@ import Testing
         #expect(flags.candidates == ["--install-tools"])
     }
     @Test func toolIDsCompleteForInstall() {
-        let result = Self.plan(["ed", "tools", "install", "q"], 3)
+        let result = Self.plan(["ed", "tools", "install", "qu"], 3)
         #expect(result.candidates == ["quinjet"])
+        #expect(Self.plan(["ed", "tools", "install", "q"], 3).candidates == ["qpdf", "quinjet"])
     }
 
     @Test func appInspectionTargetsCompleteFromTheirTypedDomains() {

@@ -2,7 +2,7 @@ import Foundation
 
 public enum ToolProvisioning {
     public static let all: [CLIToolSpec] = [
-        .youtubeDownloader, .ffmpeg, .deno, .claudeCode, .codex, .quinjet, .homebrew,
+        .youtubeDownloader, .ffmpeg, .qpdf, .deno, .claudeCode, .codex, .quinjet, .homebrew,
     ]
 
     public static func spec(id: String) -> CLIToolSpec? {

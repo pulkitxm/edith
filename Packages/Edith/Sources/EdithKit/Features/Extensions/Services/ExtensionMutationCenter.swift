@@ -87,7 +87,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case systemStats
     case micMute
     case lidAwake
-    case videoEditor
+    case studio
     case music
     case downloads
     case calendar

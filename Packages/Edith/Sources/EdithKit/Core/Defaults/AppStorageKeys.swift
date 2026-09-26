@@ -326,6 +326,12 @@ public enum AppStorageKeys {
         public static let agentSelections = "skillsAgentSelections"
     }
 
+    public enum Studio {
+        public static let destination = "studioDestination"
+        public static let folder = "studioFolder"
+        public static let library = "studioLibrary"
+    }
+
     public enum Tabs {
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
@@ -334,7 +340,7 @@ public enum AppStorageKeys {
         public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let musicEnabled = "tabMusicEnabled"
-        public static let videoEditorEnabled = "tabVideoEditorEnabled"
+        public static let studioEnabled = "tabStudioEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let seoAuditEnabled = "tabSEOAuditEnabled"

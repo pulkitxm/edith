@@ -1,5 +1,6 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 PKG := Packages/Edith
+STUDIO_PKG := Packages/EdithStudio
 SIGN_OVERRIDES := CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
 XCODEBUILD := xcodebuild -project edth.xcodeproj -derivedDataPath build -quiet \
 	-destination 'platform=macOS,arch=arm64' \
@@ -13,7 +14,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -122,14 +123,18 @@ ci-promo:
 
 ci-swift-lint:
 	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
+	cd $(STUDIO_PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 
 ci-swift-build: approve-package-plugins
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
 
-ci-swift-test:
+ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh
+
+ci-studio:
+	cd $(STUDIO_PKG) && swift test --no-parallel
 
 ci-browser:
 	plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoadsInWebContent raw Resources/HelperInfo.plist | grep -qx true
@@ -289,7 +294,7 @@ ci-semgrep:
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
-	  --skip-dirs Packages/Edith/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
+	  --skip-dirs Packages/Edith/.build --skip-dirs Packages/EdithStudio/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
 	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs $(PKG)/Vendor/GhosttyKit.xcframework \
 	  --skip-dirs $(PKG)/Vendor/GhosttyResources --skip-dirs extras .

@@ -71,7 +71,7 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
         "keystrokeHighlight",
-        "focusDim", "windowSweaters", "presenter", "videoEditor", "music", "downloads",
+        "focusDim", "windowSweaters", "presenter", "studio", "music", "downloads",
         "notchShelf",
         "audioMixer", "calendar", "virtualCamera",
         "attention", "seoAudit",
@@ -121,7 +121,7 @@ public enum ExtensionLiveAdapters {
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
-        case "videoEditor": .ready("Import a video to start editing in the Edith window.")
+        case "studio": .ready("Drop files into Studio in the Edith window to edit or convert them.")
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
         case "virtualCamera": virtualCameraReadiness()

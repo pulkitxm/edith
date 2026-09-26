@@ -26,6 +26,8 @@ struct VideoEditorPage: View {
         case text = "Text"
     }
 
+    var media: [URL] = []
+    var project: URL?
     @State private var model = VideoEditorModel()
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
@@ -61,6 +63,13 @@ struct VideoEditorPage: View {
         .navigationTitle("Video editor")
         .sheet(isPresented: $showingExport) {
             VideoExportSheet(model: model)
+        }
+        .task {
+            if let project {
+                model.openProject(at: project)
+            } else if !media.isEmpty {
+                model.startProject(with: media)
+            }
         }
         .onDisappear {
             model.player.pause()

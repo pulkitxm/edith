@@ -21,16 +21,16 @@ import Testing
         }
     }
 
-    @Test func videoEditorFollowsItsMediaExtensionToggle() {
-        let name = "test.edith.video-editor-navigation.\(UUID().uuidString)"
+    @Test func studioFollowsItsMediaExtensionToggle() {
+        let name = "test.edith.studio-navigation.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
-        let page = NavigationCatalog.page(.videoEditor)
+        let page = NavigationCatalog.page(.studio)
         #expect(page.parentID == "media")
-        #expect(page.abilityIDs == ["videoEditor"])
+        #expect(page.abilityIDs == ["studio"])
         defaults.set(true, forKey: SuiteRegistry.suite(.media).defaultsKey)
         #expect(!page.isVisible(in: defaults))
-        defaults.set(true, forKey: "tabVideoEditorEnabled")
+        defaults.set(true, forKey: "tabStudioEnabled")
         #expect(page.isVisible(in: defaults))
         defaults.set(false, forKey: SuiteRegistry.suite(.media).defaultsKey)
         #expect(!page.isVisible(in: defaults))
@@ -96,7 +96,7 @@ import Testing
                 .appMaintenance,
                 .system, .runningApps,
                 .desk,
-                .media, .videoEditor, .music, .calendar, .virtualCamera,
+                .media, .studio, .music, .calendar, .virtualCamera,
                 .data, .database, .attention, .seoAudit,
             ])
     }

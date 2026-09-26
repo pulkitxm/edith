@@ -1055,7 +1055,7 @@ private struct ExtensionDetailRows: View {
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
-            case .videoEditor: VideoEditorRows()
+            case .studio: StudioRows()
             case .music:
                 MusicRows()
                 MusicBarRows()
@@ -1148,17 +1148,18 @@ private struct MusicBarRows: View {
     }
 }
 
-private struct VideoEditorRows: View {
-    @AppStorage(AppStorageKeys.Tabs.videoEditorEnabled, store: SharedDefaults.store) private
+private struct StudioRows: View {
+    @AppStorage(AppStorageKeys.Tabs.studioEnabled, store: SharedDefaults.store) private
         var enabled = false
 
     var body: some View {
-        Section("Video editor") {
+        Section("Studio") {
             Text(
-                "Import video, images, and audio. Add zooms, text, and transitions on the timeline, then export an MP4 or GIF."
+                "Drop images, PDFs, videos and audio into Studio to edit, compress, convert, merge, split, redact, sign and more. Video and audio tools use FFmpeg."
             )
             .settingsCaption()
-            Button("Open Video editor") { SectionWindow.open(.videoEditor) }
+            StudioDestinationPicker()
+            Button("Open Studio") { SectionWindow.open(.studio) }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

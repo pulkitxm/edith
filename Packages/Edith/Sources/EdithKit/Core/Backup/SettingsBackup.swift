@@ -722,7 +722,8 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.askJev,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
-        AppStorageKeys.Tabs.musicEnabled, AppStorageKeys.Tabs.videoEditorEnabled, "usageMachines",
+        AppStorageKeys.Tabs.musicEnabled, AppStorageKeys.Tabs.studioEnabled,
+        AppStorageKeys.Studio.destination, "usageMachines",
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
         AppStorageKeys.Tabs.seoAuditEnabled,
         AppStorageKeys.Homebrew.defaultKind,
@@ -877,7 +878,8 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.askJev,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
-        AppStorageKeys.Tabs.musicEnabled, AppStorageKeys.Tabs.videoEditorEnabled,
+        AppStorageKeys.Tabs.musicEnabled, AppStorageKeys.Tabs.studioEnabled,
+        AppStorageKeys.Studio.destination,
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
         AppStorageKeys.Tabs.seoAuditEnabled,
         AppStorageKeys.Homebrew.defaultKind,
@@ -1018,6 +1020,7 @@ final class SettingsBackup {
 
     nonisolated static let deviceLocalKeys: Set<String> = [
         AgentService.stateKey, AppStorageKeys.Herdr.pendingOpen,
+        AppStorageKeys.Studio.folder, AppStorageKeys.Studio.library,
         AppStorageKeys.Bifrost.indexedAt, "bifrostWindowPositionX", "bifrostWindowPositionY",
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
         AppStorageKeys.Music.lastBackupAt,

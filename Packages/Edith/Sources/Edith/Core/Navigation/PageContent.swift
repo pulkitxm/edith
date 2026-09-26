@@ -26,7 +26,7 @@ struct PageContent: View {
         case .runningApps: SystemPage()
         case .desk: SuiteLandingPage(suite: SuiteRegistry.suite(.desk))
         case .media: SuiteLandingPage(suite: SuiteRegistry.suite(.media))
-        case .videoEditor: VideoEditorPage()
+        case .studio: StudioPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .virtualCamera: VirtualCameraPage()

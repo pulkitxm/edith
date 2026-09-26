@@ -162,8 +162,8 @@ enum NavigationCatalog {
             band: .suite(.media), isSuiteLanding: true,
             expansionKey: SuiteExpansion.key(for: .media)),
         SidebarPage(
-            id: "videoEditor", title: "Video editor", symbolName: "film.stack",
-            band: .suite(.media), abilityIDs: ["videoEditor"], parentID: "media"),
+            id: "studio", title: "Studio", symbolName: "wand.and.stars",
+            band: .suite(.media), abilityIDs: ["studio"], parentID: "media"),
         SidebarPage(
             id: "music", title: "Music", symbolName: "music.note", band: .suite(.media),
             abilityIDs: ["music"], parentID: "media"),
@@ -276,7 +276,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case appMaintenance
     case system, runningApps
     case desk
-    case media, videoEditor, music, calendar, virtualCamera
+    case media, studio, music, calendar, virtualCamera
     case data, database, attention, seoAudit
     case extensions, settings, about
 

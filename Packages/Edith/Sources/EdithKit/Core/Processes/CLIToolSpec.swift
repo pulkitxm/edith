@@ -83,11 +83,19 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
 
     public static let ffmpeg = CLIToolSpec(
         id: "ffmpeg", displayName: "FFmpeg",
-        why: "Converts downloaded audio and combines video with sound.",
+        why: "Converts downloaded audio and powers Studio's video and audio tools.",
         presenceStrategy: .executable(name: "ffmpeg", versionArguments: ["-version"]),
         installStrategy: .homebrew(
             arguments: ["install", "ffmpeg"],
             instruction: "Install with `brew install ffmpeg`."))
+
+    public static let qpdf = CLIToolSpec(
+        id: "qpdf", displayName: "qpdf",
+        why: "Lets Studio decompress, linearize and deeply repair PDFs.",
+        presenceStrategy: .executable(name: "qpdf", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "qpdf"],
+            instruction: "Install with `brew install qpdf`."))
 
     public static let deno = CLIToolSpec(
         id: "deno", displayName: "Deno",

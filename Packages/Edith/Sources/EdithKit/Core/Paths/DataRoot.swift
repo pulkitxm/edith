@@ -32,6 +32,8 @@ public enum DataRoot {
 
     public static var music: URL { support.appendingPathComponent("music") }
 
+    public static var studio: URL { support.appendingPathComponent("studio") }
+
     public static var usage: URL { support.appendingPathComponent("data") }
 
     public static var virtualCamera: URL { support.appendingPathComponent("virtual-camera") }

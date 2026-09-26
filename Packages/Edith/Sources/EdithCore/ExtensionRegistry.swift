@@ -238,10 +238,11 @@ public enum ExtensionRegistry {
             symbolName: "theatermasks.fill", suite: .desk, host: .bar, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
         ExtensionRegistryEntry(
-            id: "videoEditor", title: "Video editor",
-            subtitle: "Import clips, add zooms and text, then export your video.",
-            symbolName: "film.stack", suite: .media, host: .window, featured: true,
-            defaultsKey: "tabVideoEditorEnabled", requiredCapabilities: [.localVideoEditing]),
+            id: "studio", title: "Studio",
+            subtitle: "Edit, convert, compress and combine images, PDFs, video and audio.",
+            symbolName: "wand.and.stars", suite: .media, host: .window, featured: true,
+            defaultsKey: "tabStudioEnabled", requiredCapabilities: [.localMediaEditing],
+            optionalToolIDs: ["ffmpeg", "qpdf"]),
         ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys and a player bar.",

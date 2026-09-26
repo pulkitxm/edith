@@ -92,6 +92,11 @@ final class VideoEditorModel {
         rebuild()
     }
 
+    func startProject(with urls: [URL]) {
+        newProject()
+        Task { await addMedia(urls) }
+    }
+
     func openProject() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.init(filenameExtension: "openscreen")!]
