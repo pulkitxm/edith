@@ -38,10 +38,11 @@ public enum ClipboardActions {
     }
 
     public static func matches(_ entry: ClipboardEntry, query: String) -> Bool {
-        guard !query.isEmpty else { return true }
-        if entry.preview?.lowercased().contains(query) == true { return true }
-        if entry.sourceApp?.lowercased().contains(query) == true { return true }
-        return false
+        let words = query.split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return true }
+        let preview = entry.preview?.lowercased() ?? ""
+        let source = entry.sourceApp?.lowercased() ?? ""
+        return words.allSatisfy { preview.contains($0) || source.contains($0) }
     }
 
     public static func arrange(

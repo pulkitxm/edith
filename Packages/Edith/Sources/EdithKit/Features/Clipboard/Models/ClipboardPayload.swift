@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
-public struct ClipboardCaptureOptions: Sendable {
+public struct ClipboardCaptureOptions: Equatable, Sendable {
     public let saveFiles: Bool
     public let saveImages: Bool
     public let saveText: Bool

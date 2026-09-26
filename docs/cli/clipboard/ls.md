@@ -3,21 +3,23 @@
 Lists the history with the number every other verb takes.
 
 ```
-ed clipboard ls [--pinned] [--search <text>] [--limit <n>] [--json]
+ed clipboard ls [--pinned] [--search <text>] [--category <kind>] [--limit <n>] [--json]
 ```
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--pinned` | flag | off | Keep only pinned entries. |
-| `--search <text>` | string | unset | Keep only entries whose preview or source app contains this text, case-insensitively. |
+| `--search <text>` | string | unset | Keep only entries whose preview or source app contains every word of this text, case-insensitively. |
+| `--category <kind>` | `text`, `link`, `email`, `color`, `image`, `media`, `file` | unset | Keep only one kind of clip, the same buckets as the panel's category chips. |
 | `--limit <n>` | integer, 0 or more | `25` | Show at most this many entries. Pass 0 for all of them. |
 | `--json` | flag | off | Emit JSON on stdout. |
 
-The filters run in that order: `--search` first, then `--pinned`, then `--limit`
-on what is left. `--search` is trimmed and lowercased before it is used, so a
-value that is only whitespace filters nothing, and it matches the preview text
-and the source application, which is the same match the panel's search field
-makes.
+The filters run in that order: `--search` first, then `--category`, then
+`--pinned`, then `--limit` on what is left. `--search` is trimmed and lowercased
+before it is used, so a value that is only whitespace filters nothing. It is
+split into words, and every word must appear in the preview text or the source
+application, which is the same match the panel's search field makes, so
+`--search "safari launch"` finds a Safari copy that mentions a launch.
 
 Numbers are assigned before any filtering, against the whole history, so a
 number you read out of `ed clipboard ls --pinned` still names the same entry to
@@ -29,6 +31,7 @@ error.
 ```json
 [
   {
+    "category": "text",
     "copiedAt": "2026-08-06T23:02:21Z",
     "family": "text",
     "id": "5C2F0A1E-1B4D-4E0A-9A21-7C3B4D8E6F10",
@@ -41,6 +44,7 @@ error.
     "sourceApp": "Ghostty"
   },
   {
+    "category": "image",
     "copiedAt": "2026-08-06T22:41:08Z",
     "family": "image",
     "id": "0D1A7B33-9F42-4C58-8E71-2B6A0C4F91DD",
@@ -58,8 +62,11 @@ error.
 `kind` is the entry's file extension, the thing the blob is stored as: `txt`,
 `json`, `sql`, `png`, `rtf`, `html`, `url`, `files`, `weburl`, `data` and so on.
 `family` is the coarse bucket the app groups by, one of `text`, `richText`,
-`html`, `image`, `file`, `document`, `media` or `data`. Both keys are present on
-every entry object the group emits. `preview` and `sourceApp` are `null` rather
+`html`, `image`, `file`, `document`, `media` or `data`. `category` is what the
+panel's chips show: `link`, `email` and `color` for text that is a web address,
+an email address or a CSS color (`#ff26a1`, `rgb(...)`, `hsl(...)`), `image`,
+`media` and `file` for the matching families, and `text` for everything else.
+All three keys are present on every entry object the group emits. `preview` and `sourceApp` are `null` rather
 than absent when the entry has neither.
 
 Examples:
@@ -69,6 +76,7 @@ ed clipboard ls
 ed clipboard ls --limit 0
 ed clipboard ls --pinned --json
 ed clipboard ls --search token --limit 5
+ed clipboard ls --category link --json
 ```
 
 ```

@@ -137,20 +137,13 @@ final class ClipboardStore: FeatureModule {
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
-        guard !ClipboardPasteboardFilter.shouldSkip(types: (pasteboard.types ?? []).map(\.rawValue))
-        else { return }
         let source = NSWorkspace.shared.frontmostApplication
         let defaults = SharedDefaults.store
-        let ignored = ClipboardIgnore.parseUserList(
-            defaults.string(forKey: AppStorageKeys.Clipboard.ignoredApps) ?? "")
-        guard !ClipboardIgnore.isIgnored(bundleID: source?.bundleIdentifier, userList: ignored)
-        else { return }
-        let options = ClipboardCaptureOptions(
-            saveFiles: defaults.object(forKey: AppStorageKeys.Clipboard.saveFiles) as? Bool ?? true,
-            saveImages: defaults.object(forKey: AppStorageKeys.Clipboard.saveImages) as? Bool
-                ?? true,
-            saveText: defaults.object(forKey: AppStorageKeys.Clipboard.saveText) as? Bool ?? true)
-        guard let payload = ClipboardPayloadExtractor.extract(from: pasteboard, options: options)
+        let decision = ClipboardCapturePolicy.decide(
+            types: (pasteboard.types ?? []).map(\.rawValue),
+            sourceBundleID: source?.bundleIdentifier, defaults: defaults)
+        guard case .capture(let options) = decision,
+            let payload = ClipboardPayloadExtractor.extract(from: pasteboard, options: options)
         else { return }
         let maximum = min(
             ClipboardArchive.maximumBlobBytes,
@@ -244,6 +237,15 @@ final class ClipboardStore: FeatureModule {
         mutate(.init(entry.pinned ? .unpin : .pin, ids: [id]))
     }
 
+    func setCapturePaused(_ paused: Bool) {
+        do {
+            try ConfigurationExecutor.application.set(
+                .bool(paused), forKey: AppStorageKeys.Clipboard.capturePaused)
+        } catch {
+            mutationError = error.localizedDescription
+        }
+    }
+
     func clear(_ plan: ClipboardClearPlan) { mutate(.init(.delete, ids: plan.targetIDs)) }
     func delete(_ id: String) { mutate(.init(.delete, ids: [id])) }
     func dismissMutationError() { mutationError = nil }
@@ -309,10 +311,7 @@ final class ClipboardStore: FeatureModule {
                     payload, pasteboard: .general)
                 self.lastChangeCount = NSPasteboard.general.changeCount
                 self.mutate(.init(.copied, ids: [entry.id]))
-                let defaults = SharedDefaults.store
-                guard defaults.bool(forKey: AppStorageKeys.Clipboard.autoPaste),
-                    defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
-                else { return }
+                guard ClipboardCapturePolicy.pastesOnPick() else { return }
                 try await Task.sleep(for: .milliseconds(50))
                 guard !Task.isCancelled else { return }
                 ClipboardPasteSynth.synthesizeCommandV()
