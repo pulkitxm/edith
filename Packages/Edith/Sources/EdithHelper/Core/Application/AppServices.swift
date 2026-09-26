@@ -419,7 +419,11 @@ final class AppServices {
             virtualCamera = engine
             engine.start()
         }
+        if cameraOn {
+            VirtualCameraHotKey.register { [weak self] in self?.virtualCamera?.togglePause() }
+        }
         if !cameraOn, let engine = virtualCamera {
+            VirtualCameraHotKey.unregister()
             engine.shutdown()
             virtualCamera = nil
         }

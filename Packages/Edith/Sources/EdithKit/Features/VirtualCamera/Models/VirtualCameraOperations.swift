@@ -10,6 +10,7 @@ public enum VirtualCameraIPC {
     public static let okKey = "ok"
     public static let errorKey = "error"
     public static let originKey = "origin"
+    public static let stateKey = "state"
 }
 
 public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {

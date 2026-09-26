@@ -279,6 +279,19 @@ enum VirtualCameraFixtures {
         engine.shutdown()
     }
 
+    @Test func theShortcutTogglesThePause() {
+        let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
+        defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
+        let engine = Self.engine()
+        #expect(engine.togglePause() == .card)
+        #expect(engine.snapshot().state.privacy == .card)
+        #expect(engine.togglePause() == .live)
+        let binding = HotKeyCatalog.binding(HotKeyCatalog.virtualCamera)
+        #expect(binding?.abilityID == "virtualCamera")
+        #expect(binding?.defaultLabel == "⌃⌥⌘V")
+        engine.shutdown()
+    }
+
     @Test func theEngineWithoutTheExtensionStaysIdle() {
         let engine = Self.engine()
         engine.refreshExtension()

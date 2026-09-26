@@ -120,7 +120,8 @@ switch to the first nine scenes.
 `pause` hides the camera without leaving the call. `--style card` shows a card
 with your message over a blurred copy of the last frame, `blank` sends black
 and `freeze` holds the last frame. The real camera turns off while paused.
-`resume` goes live again.
+`resume` goes live again. The global shortcut ⌃⌥⌘V pauses behind a card or goes
+live again from any app, and you can change it in Settings under Shortcuts.
 
 ## Output
 

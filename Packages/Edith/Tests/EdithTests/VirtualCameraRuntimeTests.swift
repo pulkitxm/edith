@@ -559,6 +559,18 @@ final class FakeCameraHardware: VirtualCameraHardware, @unchecked Sendable {
         #expect(VirtualCameraStore.isEnabled(defaults))
     }
 
+    @Test func changeNotificationsCarryTheWholeState() {
+        var state = VirtualCameraState()
+        state.composition.look.preset = .vivid
+        var info: [AnyHashable: Any] = [:]
+        if let data = VirtualCameraStore.encode(state) {
+            info[VirtualCameraIPC.stateKey] = String(decoding: data, as: UTF8.self)
+        }
+        #expect(VirtualCameraStore.announcedState(info) == state.sanitized())
+        #expect(VirtualCameraStore.announcedState([:]) == nil)
+        #expect(VirtualCameraStore.announcedState([VirtualCameraIPC.stateKey: "{"]) == nil)
+    }
+
     @Test func assetsAreCopiedAndPruned() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-camera-store-\(UUID().uuidString)")

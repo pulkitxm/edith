@@ -34,6 +34,7 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
     private var configuration: Configuration?
     private var input: AVCaptureDeviceInput?
     private var activeValue: Active?
+    private var chosenFormat: AVCaptureDevice.Format?
     private var disconnectObserver: NSObjectProtocol?
 
     public init(frameQueue: DispatchQueue) {
@@ -68,7 +69,10 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         sessionQueue.async { [weak self] in
             guard let self else { return }
             self.apply(configuration)
-            if !self.session.isRunning { self.session.startRunning() }
+            if !self.session.isRunning {
+                self.session.startRunning()
+                self.reassertFormat()
+            }
         }
     }
 
@@ -91,6 +95,7 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
             self.session.commitConfiguration()
             self.input = nil
             self.configuration = nil
+            self.chosenFormat = nil
         }
     }
 
@@ -135,6 +140,7 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
             options, minimumWidth: next.minimumWidth, frameRate: next.frameRate),
             device.formats.indices.contains(choice.index)
         {
+            chosenFormat = device.formats[choice.index]
             configure(device, format: device.formats[choice.index], frameRate: next.frameRate)
         }
         let dimensions = CMVideoFormatDescriptionGetDimensions(
@@ -145,6 +151,13 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
                 height: Int(dimensions.height))
         }
         configuration = next
+    }
+
+    private func reassertFormat() {
+        guard let device = input?.device, let desired = chosenFormat,
+            device.activeFormat != desired, let configuration
+        else { return }
+        configure(device, format: desired, frameRate: configuration.frameRate)
     }
 
     private func configure(

@@ -341,6 +341,9 @@ public enum AppStorageKeys {
     public enum VirtualCamera {
         public static let enabled = "virtualCameraEnabled"
         public static let state = "virtualCameraState"
+        public static let hotKeyCode = "virtualCameraHotKeyCode"
+        public static let hotKeyMods = "virtualCameraHotKeyMods"
+        public static let hotKeyLabel = "virtualCameraHotKeyLabel"
     }
 
     public enum WindowSweaters {

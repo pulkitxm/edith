@@ -35,8 +35,17 @@ public enum VirtualCameraStore {
         defaults.bool(forKey: AppStorageKeys.VirtualCamera.enabled)
     }
 
-    public static func announceChange(from origin: String) {
-        IPC.post(IPC.Name.virtualCameraStateChanged, userInfo: [VirtualCameraIPC.originKey: origin])
+    public static func announceChange(from origin: String, state: VirtualCameraState? = nil) {
+        var info: [String: Any] = [VirtualCameraIPC.originKey: origin]
+        if let state, let data = encode(state) {
+            info[VirtualCameraIPC.stateKey] = String(decoding: data, as: UTF8.self)
+        }
+        IPC.post(IPC.Name.virtualCameraStateChanged, userInfo: info)
+    }
+
+    public static func announcedState(_ info: [AnyHashable: Any]) -> VirtualCameraState? {
+        guard let text = info[VirtualCameraIPC.stateKey] as? String else { return nil }
+        return decode(Data(text.utf8))
     }
 
     public static func importAsset(

@@ -45,7 +45,10 @@ final class VirtualCameraEngine {
             IPC.Name.virtualCameraStateChanged,
             info: { [weak self] info in
                 guard info[VirtualCameraIPC.originKey] as? String != "helper" else { return }
-                DispatchQueue.main.async { self?.syncSettings() }
+                let announced = VirtualCameraStore.announcedState(info)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.syncSettings(announced) }
+                }
             })
         observeExtension()
         refreshExtension()
@@ -60,8 +63,8 @@ final class VirtualCameraEngine {
         stopStreaming()
     }
 
-    func syncSettings() {
-        let next = VirtualCameraStore.load()
+    func syncSettings(_ announced: VirtualCameraState? = nil) {
+        let next = announced ?? VirtualCameraStore.load()
         guard next != state else { return }
         state = next
         pipeline.update(state: effectiveState())
@@ -75,10 +78,18 @@ final class VirtualCameraEngine {
             request, to: &next, sources: VirtualCameraDevices.sources())
         state = next.sanitized()
         VirtualCameraStore.save(state)
-        VirtualCameraStore.announceChange(from: "helper")
+        VirtualCameraStore.announceChange(from: "helper", state: state)
         pipeline.update(state: effectiveState())
         publishIfChanged()
         return snapshot(message: message)
+    }
+
+    @discardableResult
+    func togglePause() -> VirtualCameraPrivacy {
+        let request: VirtualCameraRequest =
+            state.privacy == .live ? .pause(.card, message: nil) : .resume
+        _ = try? perform(request)
+        return state.privacy
     }
 
     func snapshot(message: String? = nil) -> VirtualCameraSnapshot {

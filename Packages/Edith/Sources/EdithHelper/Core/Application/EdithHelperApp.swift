@@ -574,6 +574,18 @@ enum KeystrokeHighlightHotKey {
     }
 }
 
+enum VirtualCameraHotKey {
+    @MainActor
+    static func register(_ action: @escaping () -> Void) {
+        HotKeyRegistrar.install(HotKeyCatalog.virtualCamera, action: action)
+    }
+
+    @MainActor
+    static func unregister() {
+        HotKeyRegistrar.clear(HotKeyCatalog.virtualCamera)
+    }
+}
+
 func toggleKeystrokeHighlight() {
     guard SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
         return

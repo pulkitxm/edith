@@ -143,8 +143,9 @@ final class VirtualCameraPageModel: ObservableObject {
             IPC.Name.virtualCameraStateChanged,
             info: { [weak self] info in
                 guard info[VirtualCameraIPC.originKey] as? String == "helper" else { return }
+                let announced = VirtualCameraStore.announcedState(info)
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.reloadState() }
+                    MainActor.assumeIsolated { self?.reloadState(announced) }
                 }
             })
         requestStatus()
@@ -213,8 +214,8 @@ final class VirtualCameraPageModel: ObservableObject {
         }
     }
 
-    func reloadState() {
-        let stored = VirtualCameraStore.load(defaults)
+    func reloadState(_ announced: VirtualCameraState? = nil) {
+        let stored = announced ?? VirtualCameraStore.load(defaults)
         guard stored != state else { return }
         state = stored
         pipeline.update(state: stored)
@@ -288,7 +289,7 @@ final class VirtualCameraPageModel: ObservableObject {
         saveWork = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
         VirtualCameraStore.save(state, to: defaults)
-        VirtualCameraStore.announceChange(from: "window")
+        VirtualCameraStore.announceChange(from: "window", state: state)
     }
 
     func pan(by translation: CGSize, in viewSize: CGSize) {

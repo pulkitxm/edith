@@ -66,7 +66,7 @@ struct VirtualCameraHeaderControls: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Hide the camera from apps without leaving the call")
+                .help("Hide the camera from apps without leaving the call (⌃⌥⌘V by default)")
             } else {
                 Button {
                     model.resume()
