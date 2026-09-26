@@ -17,6 +17,22 @@ import Testing
         #expect(try VideoProject.open(url).backgroundColor == "#223344")
     }
 
+    @Test func projectCardsPreviewThePrimaryVisualAsset() {
+        var project = VideoProject.create()
+        #expect(project.previewAsset == nil)
+        project.addAudio(URL(fileURLWithPath: "/tmp/voice.m4a"), duration: 2, at: 0)
+        #expect(project.previewAsset == nil)
+        project.addAsset(
+            URL(fileURLWithPath: "/tmp/first.mov"), duration: 1, width: 64, height: 64)
+        project.addAsset(
+            URL(fileURLWithPath: "/tmp/second.mov"), duration: 1, width: 64, height: 64)
+        #expect(project.previewAsset?.url.lastPathComponent == "first.mov")
+        var metadata = project.root["project"] as? [String: Any] ?? [:]
+        metadata["primaryAssetId"] = project.assets.last?.id
+        project.root["project"] = metadata
+        #expect(project.previewAsset?.url.lastPathComponent == "second.mov")
+    }
+
     @Test func zoomFrameShowsTheOutputCropAndStaysInsideTheVideo() {
         let display = CGRect(x: 20, y: 10, width: 440, height: 220)
         let source = ZoomFocusGeometry.sourceFrame(

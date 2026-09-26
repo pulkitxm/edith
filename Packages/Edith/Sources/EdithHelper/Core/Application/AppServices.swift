@@ -21,6 +21,7 @@ final class AppServices {
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
+    private(set) var virtualCamera: VirtualCameraEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
@@ -104,6 +105,8 @@ final class AppServices {
         shutDownEmojiRuntime()
         shutDownBifrostRuntime()
         keystrokeHighlight?.shutdown()
+        virtualCamera?.shutdown()
+        virtualCamera = nil
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -409,7 +412,26 @@ final class AppServices {
         }
         micMute?.syncSettings()
 
+        reconcileVirtualCameraService()
         reconcileLidAwakeService()
+    }
+
+    private func reconcileVirtualCameraService() {
+        let cameraOn = Self.extensionEnabled(AppStorageKeys.VirtualCamera.enabled)
+        if cameraOn, virtualCamera == nil {
+            let engine = VirtualCameraEngine()
+            virtualCamera = engine
+            engine.start()
+        }
+        if cameraOn {
+            VirtualCameraHotKey.register { [weak self] in self?.virtualCamera?.togglePause() }
+        }
+        if !cameraOn, let engine = virtualCamera {
+            VirtualCameraHotKey.unregister()
+            engine.shutdown()
+            virtualCamera = nil
+        }
+        virtualCamera?.syncSettings()
     }
 
     func reconcileLidAwakeService() {

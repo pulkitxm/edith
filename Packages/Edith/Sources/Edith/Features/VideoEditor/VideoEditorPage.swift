@@ -29,7 +29,6 @@ struct VideoEditorPage: View {
     @State private var model = VideoEditorModel()
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
-    @State private var pendingExport: (gif: Bool, quality: VideoExportQuality)?
     @State private var editingTextID: String?
     @State private var titleDraft = ""
     @State private var timelineZoom = 80.0
@@ -55,21 +54,13 @@ struct VideoEditorPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .background(VideoPlaybackKeys(onToggle: model.togglePlayback))
             }
         }
         .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Video editor")
-        .sheet(
-            isPresented: $showingExport,
-            onDismiss: {
-                guard let pendingExport else { return }
-                model.export(gif: pendingExport.gif, quality: pendingExport.quality)
-                self.pendingExport = nil
-            }
-        ) {
-            VideoExportSheet(model: model) { gif, quality in
-                pendingExport = (gif, quality)
-            }
+        .sheet(isPresented: $showingExport) {
+            VideoExportSheet(model: model)
         }
         .onDisappear {
             model.player.pause()
@@ -140,58 +131,82 @@ struct VideoEditorPage: View {
             Button {
                 showingExport = true
             } label: {
-                Label(
-                    model.isRendering ? "Exporting…" : "Export", systemImage: "square.and.arrow.up")
+                exportLabel
             }
-            .disabled(model.pipeline == nil || model.isRendering)
+            .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, UIScale.pt(18))
         .frame(height: UIScale.pt(52))
     }
 
-    private var emptyState: some View {
-        VStack(spacing: UIScale.pt(16)) {
-            Image(systemName: "film")
-                .font(.system(size: UIScale.pt(52), weight: .ultraLight))
-                .foregroundStyle(.secondary)
-            Text("Make a video your own")
-                .font(.title2.weight(.semibold))
-            Text("Import a video, highlight moments with zoom, add text, and export.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            HStack {
-                Button("Import video", action: model.importMedia)
-                    .buttonStyle(.borderedProminent)
-                Button("Open project", action: model.openProject)
-                    .buttonStyle(.bordered)
+    @ViewBuilder private var exportLabel: some View {
+        switch VideoExporter.shared.job?.phase {
+        case .exporting:
+            Label {
+                Text(
+                    "Exporting \((VideoExporter.shared.job?.progress ?? 0).formatted(.percent.precision(.fractionLength(0))))"
+                )
+                .monospacedDigit()
+            } icon: {
+                ProgressView(value: VideoExporter.shared.job?.progress ?? 0)
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
             }
-            if !model.recentProjects.isEmpty {
-                Text("PROJECTS")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, UIScale.pt(22))
-                ForEach(Array(model.recentProjects.prefix(6))) { item in
-                    Button {
-                        model.openProject(at: item.url)
-                    } label: {
-                        HStack {
-                            Image(systemName: "film.stack")
-                            Text(item.title).lineLimit(1)
-                            if item.isOpenScreenLibrary {
-                                Text("OpenScreen")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+        case .finished:
+            Label("Exported", systemImage: "checkmark.circle.fill")
+        case .failed:
+            Label("Export failed", systemImage: "exclamationmark.triangle.fill")
+        case nil:
+            Label("Export", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private var emptyState: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: UIScale.pt(16)) {
+                    Image(systemName: "film")
+                        .font(.system(size: UIScale.pt(52), weight: .ultraLight))
+                        .foregroundStyle(.secondary)
+                    Text("Make a video your own")
+                        .font(.title2.weight(.semibold))
+                    Text("Import a video, highlight moments with zoom, add text, and export.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    HStack {
+                        Button("Import video", action: model.importMedia)
+                            .buttonStyle(.borderedProminent)
+                        Button("Open project", action: model.openProject)
+                            .buttonStyle(.bordered)
+                    }
+                    if !model.recentProjects.isEmpty {
+                        Text("PROJECTS")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, UIScale.pt(22))
+                        LazyVGrid(
+                            columns: [
+                                GridItem(
+                                    .adaptive(minimum: UIScale.pt(200), maximum: UIScale.pt(280)),
+                                    spacing: UIScale.pt(18))
+                            ],
+                            alignment: .leading, spacing: UIScale.pt(20)
+                        ) {
+                            ForEach(model.recentProjects) { item in
+                                VideoProjectCard(listing: item) {
+                                    model.openProject(at: item.url)
+                                }
                             }
                         }
-                        .frame(maxWidth: UIScale.pt(360), alignment: .leading)
                     }
-                    .buttonStyle(.borderless)
                 }
+                .frame(maxWidth: UIScale.pt(960))
+                .padding(UIScale.pt(30))
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(UIScale.pt(30))
     }
 
     private var preview: some View {
@@ -277,7 +292,7 @@ struct VideoEditorPage: View {
                 Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill")
                     .frame(width: UIScale.pt(30))
             }
-            .keyboardShortcut(.space, modifiers: [])
+            .help("Play or pause (Space)")
             Button {
                 model.seek(to: model.playhead + 1.0 / 30)
             } label: {

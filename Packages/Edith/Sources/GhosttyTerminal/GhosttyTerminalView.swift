@@ -71,8 +71,21 @@ public final class GhosttyTerminalView: NSView {
         return true
     }
 
-    public func focusIfNeeded() {
-        guard let window, window.firstResponder !== self else { return }
+    private(set) var focusRequested = false
+
+    public func requestFocus() {
+        focusRequested = true
+        DispatchQueue.main.async { [weak self] in self?.claimRequestedFocus() }
+    }
+
+    public func cancelFocusRequest() {
+        focusRequested = false
+    }
+
+    private func claimRequestedFocus() {
+        guard focusRequested, let window else { return }
+        focusRequested = false
+        guard window.firstResponder !== self else { return }
         window.makeFirstResponder(self)
     }
 
@@ -160,6 +173,9 @@ public final class GhosttyTerminalView: NSView {
             window.acceptsMouseMovedEvents = true
             observeWindow(window)
             startIfNeeded()
+            if focusRequested {
+                DispatchQueue.main.async { [weak self] in self?.claimRequestedFocus() }
+            }
         }
         syncFocus()
         applyPresentationState()

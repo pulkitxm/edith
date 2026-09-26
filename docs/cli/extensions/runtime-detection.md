@@ -36,6 +36,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Lid Awake | privileged helper registration and approval state | Service Management reports the helper enabled | `ed lid-awake status --json`; approve Login Items when requested |
 | Music | configured library path exists and is a directory | recursive supported-track count and optional yt-dlp version | `ed music rescan`; `ed tools install yt-dlp` |
 | Calendar | live EventKit authorization | readable calendar count | `ed permissions request calendar`; `ed calendar ls --json` |
+| Virtual Camera | live AVFoundation camera authorization and a connected camera | the Edith Camera device is visible to CoreMediaIO | `ed permissions request camera`; `ed camera status --json` |
 | Notch Shelf | decodable shelf index and, when Audio Mixer is enabled, macOS 14.4 or later | parked item count and missing backing files; Audio Mixer is omitted on unsupported systems | `ed shelf ls --json`; `ed permissions settings applicationAudio` |
 | Clipboard | decodable JSONL index | entry count and missing blob payloads | `ed clipboard stats --json`; `ed clipboard ls --json` |
 | Keystroke Highlight | enabled extension and active or paused state | listen-only keyboard event monitor while active | `ed config set keystrokeHighlightActive true`; `ed permissions request inputMonitoring` |

@@ -701,6 +701,7 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
+                guard !VideoPlaybackKeyView.claims(event) else { return false }
                 let remote = MusicRemote.shared
                 return MusicKeyCommand.handle(
                     keyCode: code, modifiers: mods, active: remote.current != nil,

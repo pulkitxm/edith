@@ -91,6 +91,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case music
     case downloads
     case calendar
+    case virtualCamera
     case notchShelf
     case audioMixer
     case clipboard

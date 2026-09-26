@@ -295,6 +295,7 @@ final class TerminalSessionHolder {
         presentationGeneration += 1
         focusTask?.cancel()
         focusTask = nil
+        terminalView.focusRequested = false
         guard active, wantsFocus else { return }
         let view = terminalView
         let generation = presentationGeneration
@@ -311,8 +312,12 @@ final class TerminalSessionHolder {
             presentationActive == true,
             presentationWantsFocus
         else { return }
-        view.window?.makeFirstResponder(view)
         focusTask = nil
+        guard let window = view.window else {
+            view.focusRequested = true
+            return
+        }
+        window.makeFirstResponder(view)
     }
 
     var terminalView: EdithTerminalView {
@@ -371,6 +376,7 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
             frame: .zero, font: nil, options: TerminalOptions(scrollback: scrollback))
     }
 
+    var focusRequested = false
     private(set) var renderingActive = true
     private(set) var deferredDisplayPasses = 0
     private(set) var reactivationDisplayPasses = 0
@@ -380,6 +386,13 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
 
     deinit {
         TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusRequested, let window else { return }
+        focusRequested = false
+        window.makeFirstResponder(self)
     }
 
     func setRenderingActive(_ active: Bool) {

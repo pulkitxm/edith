@@ -103,6 +103,14 @@ public enum IPC {
         public static let lidAwakeActionResult = IPC.scopedName(
             "com.pulkit.edith.lidAwakeActionResult")
         public static let lidAwakeChanged = IPC.scopedName("com.pulkit.edith.lidAwakeChanged")
+        public static let requestVirtualCameraAction = IPC.scopedName(
+            "com.pulkit.edith.requestVirtualCameraAction")
+        public static let virtualCameraActionResult = IPC.scopedName(
+            "com.pulkit.edith.virtualCameraActionResult")
+        public static let virtualCameraStateChanged = IPC.scopedName(
+            "com.pulkit.edith.virtualCameraStateChanged")
+        public static let virtualCameraStatusChanged = IPC.scopedName(
+            "com.pulkit.edith.virtualCameraStatusChanged")
         public static let requestUpdateCheck = IPC.scopedName(
             "com.pulkit.edith.requestUpdateCheck")
         public static let updateCheckFinished = IPC.scopedName(

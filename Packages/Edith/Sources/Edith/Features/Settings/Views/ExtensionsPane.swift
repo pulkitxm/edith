@@ -1061,6 +1061,7 @@ private struct ExtensionDetailRows: View {
                 MusicBarRows()
             case .downloads: DownloadsRows()
             case .calendar: CalendarRows()
+            case .virtualCamera: VirtualCameraRows()
             case .notchShelf: NotchShelfRows()
             case .audioMixer: AudioMixerRows()
             case .clipboard: ClipboardRows()
@@ -1158,6 +1159,24 @@ private struct VideoEditorRows: View {
             )
             .settingsCaption()
             Button("Open Video editor") { SectionWindow.open(.videoEditor) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct VirtualCameraRows: View {
+    @AppStorage(AppStorageKeys.VirtualCamera.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Virtual Camera") {
+            LabeledContent("Runs in", value: "Menu bar helper")
+            Text(
+                "Frame, zoom and style your camera in Edith, then choose Edith Camera in Zoom, Meet, FaceTime or any other app."
+            )
+            .settingsCaption()
+            Button("Open Virtual Camera") { SectionWindow.open(.virtualCamera) }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

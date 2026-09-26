@@ -19,7 +19,7 @@ import Testing
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
                 "videoEditor", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
-                "calendar",
+                "calendar", "virtualCamera",
                 "database", "attention", "seoAudit",
             ])
     }

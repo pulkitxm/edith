@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.276</string>
+	<string>0.0.277</string>
 	<key>CFBundleVersion</key>
-	<string>287</string>
+	<string>288</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -36,7 +36,7 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
+	<string>Edith frames your camera for Edith Camera, the virtual camera video apps can pick, and shows a preview in the notch so you can check yourself before a call.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>

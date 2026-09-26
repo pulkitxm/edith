@@ -763,6 +763,49 @@ public enum ExtensionLifecycleCatalog {
                     "ed calendar ls --json")
             ]),
         descriptor(
+            "virtualCamera", "Send a framed, zoomed and styled camera to any video app.",
+            workflows: [
+                instruction(
+                    "frame", "Frame the shot",
+                    "Pick a camera, then drag and zoom the preview in the Virtual Camera page."),
+                instruction(
+                    "call", "Use it in a call",
+                    "Choose Edith Camera as the camera in Zoom, Meet, FaceTime or any other app."),
+                instruction(
+                    "scenes", "Switch scenes",
+                    "Save framings and looks as scenes and switch between them during the call.",
+                    "ed camera scene apply Close-up"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Camera access",
+                    "Allow Edith to read the camera it frames.", "ed permissions request camera"),
+                instruction(
+                    "extension", "Install Edith Camera",
+                    "Install the camera extension from the Virtual Camera page, then approve it."
+                ),
+            ],
+            examples: [
+                "ed extensions enable virtualCamera", "ed camera status --json",
+                "ed camera zoom 1.5",
+            ],
+            docs: [
+                documentation("guide", "Virtual Camera guide", "docs/cli/camera/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "permission", "Refresh Camera access",
+                    "Request and refresh the mirrored permission state.", "ed permissions refresh"),
+                instruction(
+                    "resume", "Resume the picture",
+                    "Leave a pause so apps see the live camera again.", "ed camera resume"),
+            ],
+            verification: [
+                instruction(
+                    "status", "Check the camera", "Confirm the extension, camera and apps in use.",
+                    "ed camera status --json")
+            ]),
+        descriptor(
             "notchShelf", "Park files and glance at media, camera and alerts around the notch.",
             workflows: [
                 instruction(

@@ -127,6 +127,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "virtualCamera", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "database", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
