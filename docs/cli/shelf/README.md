@@ -34,13 +34,15 @@ a row in this listing rather than a position on screen.
 | `ed shelf reveal <n...>` | Reveals selected items in Finder. |
 | `ed shelf share <n...>` | Opens the notch shelf's macOS share picker for selected items. |
 
-## Notch Browser
+## Browser
 
-The Notch Browser extension adds a Browser tab to the shelf: a WebKit browser
-with tabs, right-click menus, downloads and a drag handle on its bottom edge
-that resizes it. It has no commands of its own; turn it on with
-`ed extensions enable notchBrowser` and pick the search engine with
-`ed config set notchBrowserSearchEngine duckDuckGo`.
+The Notch Shelf has a Browser tab: a WebKit browser with tabs, right-click
+menus, downloads and a drag handle on its bottom edge that resizes it. It is a
+toggle inside Notch Shelf, not a separate extension, so it only runs while the
+shelf is on. Turn it on under Browser in the Notch Shelf settings, or with
+`ed config set notchBrowserEnabled true`, and pick the search engine with
+`ed config set notchBrowserSearchEngine duckDuckGo`. The same settings show the
+attached Chrome profile and can detach it and clear its data.
 
 The first time the tab opens it checks that Google Chrome is installed and is
 the default browser, then lists Chrome's profiles with their pictures. Attaching
@@ -48,6 +50,9 @@ one copies its cookies, decrypted with the Chrome Safe Storage key that macOS
 asks you to share once, and its local storage into a private WebKit store kept
 per profile. The copy refreshes each time you come back to the tab after a few
 minutes. IndexedDB, service workers, passwords and extensions stay in Chrome.
+When macOS keeps Edith from reading Chrome's profile folder, the tab says so
+instead of claiming there are no profiles, and offers to open the Full Disk
+Access settings.
 
 `ed shelf list` is the same command as `ed shelf ls`, and `ed shelf` with
 nothing after it runs `ls`, including its flags: `ed shelf --json` is

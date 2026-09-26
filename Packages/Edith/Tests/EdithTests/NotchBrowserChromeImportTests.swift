@@ -3,6 +3,7 @@ import Testing
 import WebKit
 
 @testable import EdithHelper
+@testable import EdithKit
 
 @Suite struct ChromeSafeStorageTests {
     @Test func keyDerivationMatchesChromiumsMacRecipe() {
@@ -437,6 +438,26 @@ import WebKit
         #expect(
             BrowserSessionFile(url: harness.sessionFolder.appendingPathComponent("s.json"))
                 .load().profile == nil)
+    }
+
+    @Test func attachAndDetachNameTheProfileForSettingsAndAnnounceIt() async throws {
+        let harness = try await harness()
+        defer { harness.tearDown() }
+        let store = harness.store
+        let file = BrowserSessionFile(url: harness.sessionFolder.appendingPathComponent("s.json"))
+        var announcements = 0
+        store.onProfileChange = { announcements += 1 }
+        store.attach(store.profiles[1])
+        try await eventually { store.profile?.directory == "Profile 1" }
+        #expect(announcements == 1)
+        #expect(file.load().attachedProfileName == "Mock Work")
+        store.syncNow()
+        try await eventually { store.syncState == .idle }
+        #expect(announcements == 1)
+        store.detach()
+        #expect(announcements == 2)
+        #expect(file.load().attachedProfileName == nil)
+        #expect(file.load().profileName == nil)
     }
 
     @Test func keychainFailuresSurfaceWithoutAttaching() async throws {

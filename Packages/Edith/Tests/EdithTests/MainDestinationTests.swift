@@ -36,6 +36,22 @@ import Testing
         #expect(!page.isVisible(in: defaults))
     }
 
+    @Test func virtualCameraFollowsItsMediaExtensionToggle() {
+        let name = "test.edith.virtual-camera-navigation.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let page = NavigationCatalog.page(.virtualCamera)
+        #expect(page.parentID == "media")
+        #expect(page.abilityIDs == ["virtualCamera"])
+        #expect(page.symbolName == "web.camera")
+        defaults.set(true, forKey: SuiteRegistry.suite(.media).defaultsKey)
+        #expect(!page.isVisible(in: defaults))
+        defaults.set(true, forKey: "virtualCameraEnabled")
+        #expect(page.isVisible(in: defaults))
+        defaults.set(false, forKey: SuiteRegistry.suite(.media).defaultsKey)
+        #expect(!page.isVisible(in: defaults))
+    }
+
     @Test func sidebarSectionsAreDisjointAndCoverAllDestinations() {
         let listed = MainDestination.homeItems + MainDestination.appItems
         #expect(Set(listed).count == listed.count)
@@ -80,7 +96,7 @@ import Testing
                 .appMaintenance,
                 .system, .runningApps,
                 .desk,
-                .media, .studio, .music, .calendar,
+                .media, .studio, .music, .calendar, .virtualCamera,
                 .data, .database, .attention, .seoAudit,
             ])
     }

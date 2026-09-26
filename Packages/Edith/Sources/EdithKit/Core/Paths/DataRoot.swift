@@ -36,6 +36,8 @@ public enum DataRoot {
 
     public static var usage: URL { support.appendingPathComponent("data") }
 
+    public static var virtualCamera: URL { support.appendingPathComponent("virtual-camera") }
+
     public static func prepare(fileManager: FileManager = .default) {
         for directory in [support, caches, runtime, logs] {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)

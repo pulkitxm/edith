@@ -62,7 +62,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "Required to detect shared content or sample colors from the screen."
         case .applicationAudio:
             "Asked when you first use the Notch Shelf per-app volume mixer."
-        case .camera: "Asked when you first open the Notch Shelf camera preview."
+        case .camera: "Asked when you first frame the Virtual Camera or open the notch camera."
         case .bluetooth: "Asked when Notch Shelf first checks for device connections."
         case .automation: "Asked when Notch Shelf first controls external playback."
         }
@@ -130,6 +130,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "virtualCamera": [.camera]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         case "keystrokeHighlight": [.inputMonitoring]
         default: []

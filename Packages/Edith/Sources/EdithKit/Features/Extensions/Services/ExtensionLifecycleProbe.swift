@@ -212,6 +212,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "calendar": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "virtualCamera": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "notchShelf": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "clipboard": Policy(
@@ -237,8 +239,6 @@ public struct ExtensionLifecycleProbe: Sendable {
         "downloads": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "audioMixer": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "notchBrowser": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

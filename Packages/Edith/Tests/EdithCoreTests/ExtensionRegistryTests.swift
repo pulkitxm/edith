@@ -18,8 +18,8 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "studio", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
-                "calendar",
+                "studio", "music", "downloads", "notchShelf", "audioMixer",
+                "calendar", "virtualCamera",
                 "database", "attention", "seoAudit",
             ])
     }

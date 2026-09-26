@@ -1,5 +1,7 @@
+import AVFoundation
 import AppKit
 import CoreAudio
+import EdithCameraSupport
 import EdithCore
 import EdithLidAwakeSupport
 import EventKit
@@ -71,7 +73,7 @@ public enum ExtensionLiveAdapters {
         "keystrokeHighlight",
         "focusDim", "windowSweaters", "presenter", "studio", "music", "downloads",
         "notchShelf",
-        "audioMixer", "notchBrowser", "calendar",
+        "audioMixer", "calendar", "virtualCamera",
         "attention", "seoAudit",
     ]
 
@@ -116,17 +118,13 @@ public enum ExtensionLiveAdapters {
                 executable: executableNamed("yt-dlp"), transcoder: executableNamed("ffmpeg"),
                 javascriptRuntime: executableNamed("deno"))
         case "audioMixer": audioMixerReadiness(defaults: defaults)
-        case "notchBrowser":
-            notchBrowserReadiness(
-                defaults: defaults,
-                chromeInstalled: NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: "com.google.Chrome") != nil)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
         case "studio": .ready("Drop files into Studio in the Edith window to edit or convert them.")
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
+        case "virtualCamera": virtualCameraReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
@@ -302,18 +300,6 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
-    static func notchBrowserReadiness(defaults: UserDefaults, chromeInstalled: Bool)
-        -> ExtensionAdapterReadiness
-    {
-        ExtensionAdapterFacts(
-            installed: chromeInstalled,
-            configured: defaults.bool(forKey: AppStorageKeys.Notch.shelfEnabled),
-            readyDetail: "The browser tab is available in the notch shelf.",
-            uninstalledDetail: "Install Google Chrome to attach a profile.",
-            setupDetail: "Turn on Notch Shelf to reach the browser."
-        ).readiness
-    }
-
     static func machinesReadiness(file: URL = MachinePaths.machinesFile)
         -> ExtensionAdapterReadiness
     {
@@ -459,6 +445,37 @@ public enum ExtensionLiveAdapters {
             return .unsupported("macOS does not allow Edith to read calendar events.")
         @unknown default:
             return .unsupported("This macOS version returned an unknown Calendar access state.")
+        }
+    }
+
+    static func virtualCameraReadiness(
+        status: AVAuthorizationStatus = VirtualCameraDevices.authorization,
+        cameraCount: (() -> Int)? = nil, extensionInstalled: (() -> Bool)? = nil
+    ) -> ExtensionAdapterReadiness {
+        switch status {
+        case .authorized:
+            let cameras = cameraCount?() ?? VirtualCameraDevices.sources().count
+            guard cameras > 0 else { return .needsSetup("No camera is connected.") }
+            let installed =
+                extensionInstalled?()
+                ?? VirtualCameraSink(
+                    extensionIdentifier: VirtualCameraIdentity.extensionIdentifier(
+                        forApplication: AppBuildIdentity.application)
+                ).isInstalled
+            guard installed else {
+                return .needsSetup(
+                    "Install the Edith Camera extension from the Virtual Camera page.")
+            }
+            let noun = cameras == 1 ? "camera" : "cameras"
+            return .ready("Edith Camera is installed with \(cameras) \(noun) to frame.")
+        case .notDetermined:
+            return .needsSetup("Camera access has not been requested.")
+        case .denied:
+            return .needsSetup("Camera access is denied in System Settings.")
+        case .restricted:
+            return .unsupported("macOS does not allow Edith to use the camera.")
+        @unknown default:
+            return .unsupported("This macOS version returned an unknown camera access state.")
         }
     }
 

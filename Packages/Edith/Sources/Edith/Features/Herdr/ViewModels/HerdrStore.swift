@@ -1267,6 +1267,7 @@ final class HerdrStore {
 
     @discardableResult
     func closeFocusedTab() -> Bool {
+        if terminalPanels.closeFocused(in: selectedTab) { return true }
         guard selectedTab != Self.boardID else { return false }
         if let tab = currentTab, tab.isSplit {
             close(tab.focused)

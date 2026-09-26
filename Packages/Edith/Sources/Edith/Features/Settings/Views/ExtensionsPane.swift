@@ -666,7 +666,7 @@ private struct ExtensionSettingsSheet: View {
         case "music": 460
         case "focusDim", "colorPicker", "keystrokeHighlight": 430
         case "system": 500
-        case "notchShelf", "presenter": 580
+        case "presenter": 580
         default: 620
         }
     }
@@ -1061,9 +1061,9 @@ private struct ExtensionDetailRows: View {
                 MusicBarRows()
             case .downloads: DownloadsRows()
             case .calendar: CalendarRows()
+            case .virtualCamera: VirtualCameraRows()
             case .notchShelf: NotchShelfRows()
             case .audioMixer: AudioMixerRows()
-            case .notchBrowser: NotchBrowserRows()
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
@@ -1166,6 +1166,24 @@ private struct StudioRows: View {
     }
 }
 
+private struct VirtualCameraRows: View {
+    @AppStorage(AppStorageKeys.VirtualCamera.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Virtual Camera") {
+            LabeledContent("Runs in", value: "Menu bar helper")
+            Text(
+                "Frame, zoom and style your camera in Edith, then choose Edith Camera in Zoom, Meet, FaceTime or any other app."
+            )
+            .settingsCaption()
+            Button("Open Virtual Camera") { SectionWindow.open(.virtualCamera) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
 private struct DownloadsRows: View {
     @AppStorage(AppStorageKeys.Downloads.enabled, store: SharedDefaults.store) private
         var enabled = false
@@ -1206,34 +1224,6 @@ private struct AudioMixerRows: View {
                 available
                     ? "Set the volume of each app from the shelf's audio tab."
                     : "Requires macOS 14.4 or later."
-            )
-            .settingsCaption()
-        }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
-    }
-}
-
-private struct NotchBrowserRows: View {
-    @AppStorage(AppStorageKeys.Notch.browserEnabled, store: SharedDefaults.store) private
-        var enabled = false
-    @AppStorage(AppStorageKeys.Notch.browserSearchEngine, store: SharedDefaults.store) private
-        var searchEngine = BrowserSearchEngine.fallback.rawValue
-
-    var body: some View {
-        Section("Browser") {
-            LabeledContent("Lives in", value: "Notch Shelf")
-            LabeledContent("Engine", value: "WebKit")
-            Picker(
-                "Search with",
-                selection: $searchEngine.configured(AppStorageKeys.Notch.browserSearchEngine)
-            ) {
-                ForEach(BrowserSearchEngine.allCases, id: \.rawValue) { engine in
-                    Text(engine.title).tag(engine.rawValue)
-                }
-            }
-            Text(
-                "Open the shelf's browser tab and attach a Chrome profile. Its cookies and site storage are copied into a private WebKit store on this Mac, and resyncs every few minutes while you browse."
             )
             .settingsCaption()
         }

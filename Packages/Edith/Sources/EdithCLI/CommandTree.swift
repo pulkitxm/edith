@@ -225,6 +225,41 @@ public enum CommandTree {
         "ed lid-awake restore-on-quit": Spec(
             options: ["--json", "--help", "--yes"], arguments: [.free],
             destructivePolicy: .previewThenYes),
+        "ed camera status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera on": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera off": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera sources": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera source": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed camera zoom": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed camera frame": Spec(
+            options: [
+                "--json", "-h", "--help", "--version", "--zoom", "--x", "--y", "--tilt", "--turns",
+                "--flip", "--flip-vertical", "--auto",
+            ],
+            optionValues: [
+                "--zoom": .free, "--x": .free, "--y": .free, "--tilt": .free, "--turns": .free,
+                "--flip": .free, "--flip-vertical": .free, "--auto": .free,
+            ]),
+        "ed camera reset": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera look": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed camera background": Spec(
+            options: ["--json", "-h", "--help", "--version", "--color", "--blur", "--image"],
+            optionValues: ["--color": .free, "--blur": .free, "--image": .localPath],
+            arguments: [.free]),
+        "ed camera pause": Spec(
+            options: ["--json", "-h", "--help", "--version", "--style", "--message"],
+            optionValues: ["--style": .free, "--message": .free]),
+        "ed camera resume": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera scene list": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera scene apply": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed camera scene save": Spec(
+            options: ["--json", "-h", "--help", "--version", "--replace"], arguments: [.free]),
+        "ed camera scene next": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera scene previous": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed permissions ls": Spec(options: ["--json", "--help", "--attention"]),
         "ed permissions request": Spec(options: ["--json"], arguments: [.permission]),
         "ed permissions refresh": Spec(options: ["--json"]),

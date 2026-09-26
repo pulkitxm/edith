@@ -238,6 +238,7 @@ enum CommandCrawler {
             "ed companion connectors", "ed companion db", "ed companion stack",
             "ed machines terminal",
             "ed lid-awake",
+            "ed camera", "ed camera scene",
             "ed attention", "ed attention categories", "ed attention focus",
             "ed quinjet",
             "ed database", "ed database connections", "ed database saved-queries",

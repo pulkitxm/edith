@@ -29,6 +29,7 @@ struct PageContent: View {
         case .studio: StudioPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
+        case .virtualCamera: VirtualCameraPage()
         case .data: SuiteLandingPage(suite: SuiteRegistry.suite(.data))
         case .database: DatabasePage()
         case .attention: AttentionPage()

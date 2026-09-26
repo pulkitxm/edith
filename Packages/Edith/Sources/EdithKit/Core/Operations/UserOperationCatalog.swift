@@ -102,6 +102,9 @@ public enum UserOperationCatalog {
         + LidAwakeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + VirtualCameraOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] = {
         var registrations = UsageProjectOperation.allCases.map {
@@ -959,6 +962,54 @@ private extension LidAwakeOperation {
         case .restoreOnQuit:
             userInterface(
                 "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
+        }
+    }
+}
+
+private extension VirtualCameraOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Virtual Camera page", "read the live camera status")
+        case .on:
+            userInterface("Extensions", "turn Virtual Camera on")
+        case .off:
+            userInterface("Extensions", "turn Virtual Camera off")
+        case .sources:
+            userInterface("Virtual Camera toolbar", "list the connected cameras")
+        case .source:
+            userInterface("Virtual Camera toolbar", "choose the camera to frame", ["1"])
+        case .zoom:
+            userInterface("Virtual Camera toolbar", "set the zoom level", ["1.5"])
+        case .frame:
+            userInterface(
+                "Virtual Camera framing", "move, tilt and auto-frame the picture",
+                ["--x", "0.4", "--auto", "medium"])
+        case .reset:
+            userInterface("Virtual Camera toolbar", "reset the framing")
+        case .look:
+            userInterface("Virtual Camera looks", "apply a color look", ["studio"])
+        case .background:
+            userInterface(
+                "Virtual Camera background", "blur the background", ["blur", "--blur", "0.7"])
+        case .pause:
+            userInterface("Virtual Camera header", "pause behind a card", ["--style", "card"])
+        case .resume:
+            userInterface("Virtual Camera header", "go live again")
+        case .sceneList:
+            userInterface("Virtual Camera scenes", "list the saved scenes")
+        case .sceneApply:
+            userInterface("Virtual Camera scenes", "switch to a scene", ["Close-up"])
+        case .sceneSave:
+            userInterface("Virtual Camera scenes", "save the current look", ["Podcast"])
+        case .sceneNext:
+            commandLineOnly(
+                "stepping through scenes suits hotkeys and stream decks, the page picks one directly"
+            )
+        case .scenePrevious:
+            commandLineOnly(
+                "stepping back through scenes suits hotkeys and stream decks, the page picks one directly"
+            )
         }
     }
 }

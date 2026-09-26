@@ -14,7 +14,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -219,6 +219,8 @@ verify-bundle: verify-release-build-settings
 	  done; \
 	done; exit 0
 	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
+	test 1 -eq "$$(find dist/Edith.app/Contents/Library/SystemExtensions -maxdepth 1 -name '*.camera.systemextension' | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension
 	codesign --verify --deep --strict dist/Edith.app
 
 
@@ -230,6 +232,9 @@ build:
 
 install:
 	./build.sh --release --install $(FLAGS)
+
+camera-profiles:
+	./scripts/camera-profiles.sh
 
 reset:
 	./reset.sh

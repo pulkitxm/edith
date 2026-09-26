@@ -35,6 +35,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case siteAuditing
     case systemMetrics
     case usageCollection
+    case virtualCamera
     case webBrowsing
     case windowDecoration
     case windowDimming
@@ -108,6 +109,7 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
+                    .virtualCamera: .permissionRequired,
                     .windowDimming: .permissionRequired,
                 ]))
     }

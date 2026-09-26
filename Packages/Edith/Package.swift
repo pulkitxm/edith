@@ -13,6 +13,7 @@ let products: [Product] = [
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
     .executable(name: "edithd", targets: ["edithd"]),
+    .executable(name: "EdithCameraExtension", targets: ["EdithCameraExtension"]),
 ]
 
 let dependencies: [Package.Dependency] = [
@@ -105,8 +106,17 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
+        name: "EdithCameraSupport",
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
+        name: "EdithCameraExtension",
+        dependencies: ["EdithCameraSupport"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
         name: "EdithKit",
-        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
+        dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
@@ -134,6 +144,7 @@ let targets: [Target] = [
     .target(
         name: "EdithCLI",
         dependencies: [
+            "EdithCameraSupport",
             "EdithCore",
             "EdithDatabase",
             "EdithDatabaseMCP",
@@ -193,6 +204,7 @@ let targets: [Target] = [
     .target(
         name: "Edith",
         dependencies: [
+            "EdithCameraSupport",
             "EdithDatabase",
             "EdithDocs",
             "EdithKit",
@@ -218,7 +230,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithHelper",
-        dependencies: ["EdithKit", "EdithLidAwakeSupport"],
+        dependencies: ["EdithKit", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [.copy("MenuBar.png")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -226,7 +238,7 @@ let targets: [Target] = [
         name: "EdithTests",
         dependencies: [
             "EdithCore", "Edith", "EdithDatabase", "EdithDocs", "EdithKit", "EdithLidAwakeSupport",
-            "EdithHelper", "EdithAgent",
+            "EdithHelper", "EdithAgent", "EdithCameraSupport",
             "EdithCLI", "Highlighter", "ed",
             .product(name: "EdithStudio", package: "EdithStudio"),
         ],

@@ -257,11 +257,11 @@ public enum ExtensionRegistry {
             requiredCapabilities: [.mediaDownloads], requiredToolIDs: ["yt-dlp", "ffmpeg", "deno"]),
         ExtensionRegistryEntry(
             id: "notchShelf", title: "Notch Shelf",
-            subtitle: "File shelf, now playing, camera, and alerts around the notch.",
+            subtitle: "File shelf, browser, now playing, camera, and alerts around the notch.",
             symbolName: "tray.and.arrow.down", suite: .media, host: .bar, featured: true,
             defaultsKey: "notchShelfEnabled", requiredCapabilities: [.fileShelf],
             optionalCapabilities: [
-                .bluetoothMonitoring, .cameraPreview, .externalMediaControl,
+                .bluetoothMonitoring, .cameraPreview, .externalMediaControl, .webBrowsing,
             ]),
         ExtensionRegistryEntry(
             id: "audioMixer", title: "Audio Mixer",
@@ -270,16 +270,15 @@ public enum ExtensionRegistry {
             defaultsKey: "notchAudioMixerEnabled", requires: ["notchShelf"],
             requiredCapabilities: [.applicationAudio]),
         ExtensionRegistryEntry(
-            id: "notchBrowser", title: "Notch Browser",
-            subtitle: "Tabbed web browsing in the notch, signed in with a Chrome profile.",
-            symbolName: "globe", suite: .media, host: .bar, featured: false,
-            defaultsKey: "notchBrowserEnabled", requires: ["notchShelf"],
-            requiredCapabilities: [.webBrowsing]),
-        ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
             symbolName: "calendar", suite: .media, host: .bar, featured: false,
             defaultsKey: "tabCalendarEnabled", requiredCapabilities: [.calendarEvents]),
+        ExtensionRegistryEntry(
+            id: "virtualCamera", title: "Virtual Camera",
+            subtitle: "Frame, zoom and style your camera, then pick Edith Camera in any call.",
+            symbolName: "web.camera", suite: .media, host: .bar, featured: true,
+            defaultsKey: "virtualCameraEnabled", requiredCapabilities: [.virtualCamera]),
         ExtensionRegistryEntry(
             id: "database", title: "Database",
             subtitle: "Explore databases and run guarded production mutations.",

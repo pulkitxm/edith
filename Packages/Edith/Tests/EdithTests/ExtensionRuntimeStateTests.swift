@@ -265,6 +265,7 @@ import Testing
             ("studio", "StudioRows", "enabled", "ExtensionsPane.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
+            ("virtualCamera", "VirtualCameraRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
             (
@@ -284,7 +285,6 @@ import Testing
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
             ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
             ("audioMixer", "AudioMixerRows", "enabled", "ExtensionsPane.swift"),
-            ("notchBrowser", "NotchBrowserRows", "enabled", "ExtensionsPane.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

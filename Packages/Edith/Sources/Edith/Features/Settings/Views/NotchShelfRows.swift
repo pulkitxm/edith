@@ -38,6 +38,10 @@ struct NotchShelfRows: View {
     @AppStorage(AppStorageKeys.Notch.audioMixerEnabled, store: SharedDefaults.store) private
         var audioMixer =
         false
+    @AppStorage(AppStorageKeys.Notch.browserEnabled, store: SharedDefaults.store) private
+        var browser = false
+    @AppStorage(AppStorageKeys.Notch.browserSearchEngine, store: SharedDefaults.store) private
+        var searchEngine = BrowserSearchEngine.fallback.rawValue
     @State private var bluetoothAuthorization = CBManager.authorization
 
     private var audioMixerAvailable: Bool {
@@ -68,6 +72,31 @@ struct NotchShelfRows: View {
                             "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
                         )
                     }
+                }
+            }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
+
+            Section("Browser") {
+                Toggle(
+                    "Browser tab",
+                    isOn: $browser.configured(AppStorageKeys.Notch.browserEnabled)
+                )
+                Text(
+                    "A tabbed WebKit browser in the shelf, signed in with one of your Google Chrome profiles. Cookies and site storage are copied into a private store on this Mac and resync every few minutes while you browse."
+                )
+                .settingsCaption()
+                if browser {
+                    Picker(
+                        "Search with",
+                        selection: $searchEngine.configured(
+                            AppStorageKeys.Notch.browserSearchEngine)
+                    ) {
+                        ForEach(BrowserSearchEngine.allCases, id: \.rawValue) { engine in
+                            Text(engine.title).tag(engine.rawValue)
+                        }
+                    }
+                    NotchBrowserProfileRow()
                 }
             }
             .disabled(!enabled)
@@ -179,6 +208,34 @@ struct NotchShelfRows: View {
                 for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             bluetoothAuthorization = CBManager.authorization
+        }
+    }
+}
+
+private struct NotchBrowserProfileRow: View {
+    @State private var session = BrowserSessionFile.standard.load()
+
+    var body: some View {
+        LabeledContent {
+            if session.attachedProfileName != nil {
+                Button("Detach and Clear Data", role: .destructive) {
+                    IPC.post(IPC.Name.requestNotchBrowserDetach)
+                }
+            }
+        } label: {
+            Text(
+                session.attachedProfileName.map { "Chrome profile: \($0)" }
+                    ?? "No Chrome profile attached")
+            Text(
+                session.attachedProfileName == nil
+                    ? "Open the shelf's browser tab to pick a profile."
+                    : "Cookies and site storage copied from Chrome stay on this Mac.")
+        }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: IPC.Name.notchBrowserChanged)
+        ) { _ in
+            session = BrowserSessionFile.standard.load()
         }
     }
 }

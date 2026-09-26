@@ -33,8 +33,8 @@ import Testing
         "downloadsEnabled",
         "notchShelfEnabled",
         "notchAudioMixerEnabled",
-        "notchBrowserEnabled",
         "tabCalendarEnabled",
+        "virtualCameraEnabled",
         "tabDatabaseEnabled",
         "tabAttentionEnabled",
         "tabSEOAuditEnabled",
@@ -53,8 +53,8 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "studio", "music", "downloads", "notchShelf", "audioMixer", "notchBrowser",
-                "calendar",
+                "studio", "music", "downloads", "notchShelf", "audioMixer",
+                "calendar", "virtualCamera",
                 "database", "attention", "seoAudit",
             ])
     }
@@ -208,8 +208,8 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
-                "clipboard", "keystrokeHighlight", "studio", "notchShelf", "database",
-                "attention",
+                "clipboard", "keystrokeHighlight", "studio", "notchShelf", "virtualCamera",
+                "database", "attention",
             ])
     }
 
@@ -357,8 +357,8 @@ import Testing
             "downloads": [],
             "notchShelf": [],
             "audioMixer": [],
-            "notchBrowser": [],
             "calendar": [.calendar],
+            "virtualCamera": [.camera],
             "database": [],
             "attention": [],
             "seoAudit": [],
@@ -390,8 +390,8 @@ import Testing
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],
             "audioMixer": [.applicationAudio],
-            "notchBrowser": [],
             "calendar": [],
+            "virtualCamera": [],
             "database": [],
             "attention": [],
             "seoAudit": [],
