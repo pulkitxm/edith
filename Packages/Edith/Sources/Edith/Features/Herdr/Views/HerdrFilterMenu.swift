@@ -40,7 +40,7 @@ struct HerdrFilterButton: View {
             HerdrFilterMenu(
                 store: store, hideAgents: hideAgents, onOpenSpace: onOpenSpace,
                 onEditLaunch: onEditLaunch,
-                dismiss: { presented = nil })
+                dismiss: { presented = false })
         }
     }
 
