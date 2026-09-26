@@ -63,17 +63,42 @@ private final class Clock: @unchecked Sendable {
     func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
 }
 
+private actor PublicationGate {
+    private var entered: CheckedContinuation<Void, Never>?
+    private var release: CheckedContinuation<Void, Never>?
+    private var waiting = false
+
+    func pause() async {
+        waiting = true
+        entered?.resume()
+        entered = nil
+        await withCheckedContinuation { release = $0 }
+    }
+
+    func waitUntilPaused() async {
+        if waiting { return }
+        await withCheckedContinuation { entered = $0 }
+    }
+
+    func resume() {
+        release?.resume()
+        release = nil
+        waiting = false
+    }
+}
+
 private struct HookFixture {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("AgentHooks.\(UUID().uuidString).json")
     let script = ProbeScript()
     let clock = Clock()
 
-    func service() -> AgentHookService {
+    func service(publish: @escaping AgentHookService.Publish = { _ in }) -> AgentHookService {
         let script = script
         let clock = clock
         return AgentHookService(
             url: url, probe: { script.next($0) }, send: { script.record($0) },
+            publish: publish,
             now: { clock.now })
     }
 
@@ -260,8 +285,73 @@ struct HerdrAgentHookTests {
         _ = try await service.arm(HerdrHookArmRequest(agent: agent(), message: "first"))
         let snapshot = try await service.arm(HerdrHookArmRequest(agent: agent(), message: "second"))
         #expect(snapshot.hooks.map(\.message) == ["second"])
-        let removed = await service.remove(snapshot.hooks[0].id)
+        let removed = try await service.remove(snapshot.hooks[0].id)
         #expect(removed.hooks.isEmpty)
+    }
+
+    @Test func cancellingWhileDeliveryIsPublishedPreventsTheSend() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let gate = PublicationGate()
+        let service = fixture.service { data in
+            let snapshot = try? AgentPayload.decode(HerdrHooksSnapshot.self, from: data)
+            if snapshot?.hooks.contains(where: { $0.phase == .sending }) == true {
+                await gate.pause()
+            }
+        }
+        let armed = try await service.arm(
+            HerdrHookArmRequest(agent: agent(status: .working), message: "old"))
+        fixture.script.queue("w1:p1", observed(.idle, 5))
+        let tick = Task { await service.tick() }
+        await gate.waitUntilPaused()
+        _ = try await service.remove(armed.hooks[0].id)
+        await gate.resume()
+        await tick.value
+        #expect(fixture.script.sent.isEmpty)
+        #expect(await service.list().hooks.isEmpty)
+    }
+
+    @Test func replacingWhileDeliveryIsPublishedPreventsTheOldSend() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let gate = PublicationGate()
+        let service = fixture.service { data in
+            let snapshot = try? AgentPayload.decode(HerdrHooksSnapshot.self, from: data)
+            if snapshot?.hooks.contains(where: { $0.phase == .sending }) == true {
+                await gate.pause()
+            }
+        }
+        _ = try await service.arm(
+            HerdrHookArmRequest(agent: agent(status: .working), message: "old"))
+        fixture.script.queue("w1:p1", observed(.idle, 5))
+        let tick = Task { await service.tick() }
+        await gate.waitUntilPaused()
+        _ = try await service.arm(
+            HerdrHookArmRequest(agent: agent(status: .idle, sequence: 5), message: "new"))
+        await gate.resume()
+        await tick.value
+        #expect(fixture.script.sent.isEmpty)
+        #expect(await service.list().hooks.map(\.message) == ["new"])
+    }
+
+    @Test func saveFailuresDoNotArmOrSend() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let service = fixture.service()
+        try FileManager.default.createDirectory(at: fixture.url, withIntermediateDirectories: true)
+        await #expect(throws: Error.self) {
+            try await service.arm(HerdrHookArmRequest(agent: agent(), message: "next"))
+        }
+        #expect(await service.list().hooks.isEmpty)
+        try FileManager.default.removeItem(at: fixture.url)
+        _ = try await service.arm(
+            HerdrHookArmRequest(agent: agent(status: .working), message: "next"))
+        try FileManager.default.removeItem(at: fixture.url)
+        try FileManager.default.createDirectory(at: fixture.url, withIntermediateDirectories: true)
+        fixture.script.queue("w1:p1", observed(.idle, 5))
+        await service.tick()
+        #expect(fixture.script.sent.isEmpty)
+        #expect(await service.list().hooks.first?.phase == .armed)
     }
 
     @Test func refusesEmptyMessagesAndTerminals() async {

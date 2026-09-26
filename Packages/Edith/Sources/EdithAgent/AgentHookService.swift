@@ -22,6 +22,7 @@ public actor AgentHookService {
     private var publish: Publish = { _ in }
     private var snapshot: HerdrHooksSnapshot
     private var remoteCheckedAt: [String: Date] = [:]
+    private var inFlight: Set<UUID> = []
     private var loop: Task<Void, Never>?
     private var waiter: CheckedContinuation<Void, Never>?
 
@@ -38,12 +39,14 @@ public actor AgentHookService {
                 $0.message, session: $0.session, pane: $0.pane, machineID: $0.machineID,
                 local: $0.machineIsLocal)
         },
+        publish: @escaping Publish = { _ in },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.url = url
         self.interval = interval
         self.probe = probe
         self.send = send
+        self.publish = publish
         self.now = now
         var loaded =
             (try? Data(contentsOf: url)).flatMap {
@@ -58,7 +61,12 @@ public actor AgentHookService {
 
     public func start(publish: @escaping Publish) async {
         self.publish = publish
-        await commit(snapshot, force: true)
+        do {
+            try await commit(snapshot, force: true)
+        } catch {
+            AgentLog.logger.error(
+                "agent hooks not saved: \(error.localizedDescription, privacy: .public)")
+        }
         guard loop == nil else { return }
         loop = Task { await self.run() }
     }
@@ -79,19 +87,29 @@ public actor AgentHookService {
         guard !request.agent.isTerminal else {
             throw AgentError(.refused, "Hooks only work on agents, not terminals.")
         }
+        guard
+            !snapshot.hooks.contains(where: {
+                $0.agentID == request.agent.id && inFlight.contains($0.id)
+            })
+        else {
+            throw AgentError(.refused, "A message is already being sent to this agent.")
+        }
         var next = snapshot
         next.hooks.removeAll { $0.agentID == request.agent.id && !$0.phase.settled }
         next.hooks.append(HerdrAgentHook(agent: request.agent, message: message, createdAt: now()))
-        await commit(next)
+        try await commit(next)
         waiter?.resume()
         waiter = nil
         return snapshot
     }
 
-    public func remove(_ id: UUID) async -> HerdrHooksSnapshot {
+    public func remove(_ id: UUID) async throws -> HerdrHooksSnapshot {
+        guard !inFlight.contains(id) else {
+            throw AgentError(.refused, "The message is already being sent.")
+        }
         var next = snapshot
         next.hooks.removeAll { $0.id == id }
-        await commit(next)
+        try await commit(next)
         return snapshot
     }
 
@@ -136,40 +154,39 @@ public actor AgentHookService {
         switch HerdrHookEvaluator.evaluate(hook, observed) {
         case .keep(let next):
             guard next != hook else { return }
-            await update(next)
+            try? await update(next)
         case .cancel(let reason):
             var next = hook
             next.settle(.cancelled, reason, at: now())
-            await update(next)
+            try? await update(next)
         case .fire(var next):
             next.phase = .sending
-            await update(next)
+            guard (try? await update(next)) != nil,
+                snapshot.hooks.contains(where: { $0.id == id && $0.phase == .sending })
+            else { return }
+            inFlight.insert(id)
             let outcome = await send(next)
+            inFlight.remove(id)
             next.settle(outcome.delivered ? .sent : .skipped, outcome.summary, at: now())
-            await update(next)
+            try? await update(next)
         }
     }
 
-    private func update(_ hook: HerdrAgentHook) async {
+    private func update(_ hook: HerdrAgentHook) async throws {
         guard let index = snapshot.hooks.firstIndex(where: { $0.id == hook.id }) else { return }
         var next = snapshot
         next.hooks[index] = hook
-        await commit(next)
+        try await commit(next)
     }
 
-    private func commit(_ proposed: HerdrHooksSnapshot, force: Bool = false) async {
+    private func commit(_ proposed: HerdrHooksSnapshot, force: Bool = false) async throws {
         let next = pruned(proposed)
         guard force || next != snapshot else { return }
+        let data = try AgentPayload.encode(next)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
         snapshot = next
-        guard let data = try? AgentPayload.encode(next) else { return }
-        do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
-        } catch {
-            AgentLog.logger.error(
-                "agent hooks not saved: \(error.localizedDescription, privacy: .public)")
-        }
         await publish(data)
     }
 
