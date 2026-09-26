@@ -221,7 +221,7 @@ jobs:
         run: make verify-bundle
 
   swift-test:
-    name: swift-test (${{ matrix.suites }})
+    name: swift-test (${{ matrix.lane }})
     needs: changes
     if: >-
       needs.changes.outputs.swift == 'true'
@@ -230,46 +230,17 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         include:
-          - suites: core
-            batch: core
-          - suites: database
-            batch: database
-          - suites: database-mcp
-            batch: database-mcp
-          - suites: cli
-            batch: cli
-          - suites: herdr
-            batch: herdr
-          - suites: agent
-            batch: agent
-          - suites: machines
-            batch: machines
-          - suites: bifrost
-            batch: bifrost
-          - suites: clipboard
-            batch: clipboard
-          - suites: usage
-            batch: usage
-          - suites: attention
-            batch: attention
-          - suites: companion
-            batch: companion
-          - suites: browser
-            batch: browser
-          - suites: media
-            batch: media
-          - suites: dashboard
-            batch: dashboard
-          - suites: extensions
-            batch: extensions
-          - suites: files
-            batch: files
-          - suites: database-ui
-            batch: database-ui
-          - suites: app
-            batch: app
+          - lane: core-cli
+            batches: core database database-mcp cli
+          - lane: herdr-clipboard
+            batches: herdr agent machines bifrost clipboard
+          - lane: usage-media
+            batches: usage attention companion browser media
+          - lane: dashboard-app
+            batches: dashboard extensions files database-ui app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -316,7 +287,7 @@ jobs:
         run: ./test.sh --build-only
         working-directory: Packages/Edith
       - name: Save compiled tests
-        if: matrix.suites == 'cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'
+        if: matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
@@ -326,8 +297,11 @@ jobs:
             Packages/Edith/.build/*.yaml
           key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
-        timeout-minutes: 10
-        run: ./test.sh --skip-build --batch ${{ matrix.batch }}
+        timeout-minutes: 15
+        run: |
+          for batch in ${{ matrix.batches }}; do
+            ./test.sh --skip-build --batch "$batch"
+          done
         working-directory: Packages/Edith
         env:
           EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"

@@ -182,17 +182,35 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["working-directory"]).toBe("Packages/Edith");
   expect(build["timeout-minutes"]).toBe(20);
   expect(build.if).toBeUndefined();
-  expect(run.run).toBe(`./test.sh --skip-build --batch \${{ matrix.batch }}`);
-  expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy.matrix.include).toEqual(
-    batches.swift.map((batch) => ({ suites: batch.name, batch: batch.name })),
+  expect(run.run).toBe(
+    `for batch in \${{ matrix.batches }}; do\n  ./test.sh --skip-build --batch "$batch"\ndone\n`,
   );
+  expect(job.strategy["fail-fast"]).toBe(false);
+  expect(job.strategy["max-parallel"]).toBe(4);
+  expect(job.strategy.matrix.include).toEqual([
+    {
+      lane: "core-cli",
+      batches: "core database database-mcp cli",
+    },
+    {
+      lane: "herdr-clipboard",
+      batches: "herdr agent machines bifrost clipboard",
+    },
+    {
+      lane: "usage-media",
+      batches: "usage attention companion browser media",
+    },
+    {
+      lane: "dashboard-app",
+      batches: "dashboard extensions files database-ui app",
+    },
+  ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
-  expect(run["timeout-minutes"]).toBe(10);
+  expect(run["timeout-minutes"]).toBe(15);
   expect(run.if).toBeUndefined();
   expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
   expect(save.if).toBe(
-    "matrix.suites == 'cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
+    "matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
   );
   expect(save.uses).toBe(
     "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
