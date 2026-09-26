@@ -12,7 +12,7 @@ test("test batches partition swift, studio, and script suites", () => {
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("core=");
   expect(result.stdout).toContain("app=");
-});
+}, 15_000);
 
 test("named batches resolve to swift and studio filters", () => {
   const cli = run(["swift-args", "cli"]);

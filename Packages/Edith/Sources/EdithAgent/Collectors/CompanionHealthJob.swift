@@ -27,7 +27,7 @@ public struct CompanionHealthJob: Sendable {
             return await CompanionTunnel.ensure(deployment)
         },
         deliverOutbox: @escaping @Sendable (URL) async -> Void = { url in
-            await CompanionOutboxDelivery.shared.enqueue(endpoint: url)
+            CompanionOutboxDelivery.shared.enqueue(endpoint: url)
         }
     ) {
         self.store = store

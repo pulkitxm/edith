@@ -52,7 +52,7 @@ final class AgentRegistrar {
 
     private func repairIfUnreachable() {
         guard service.status == .enabled, !didRepair else { return }
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             guard (try? AgentClient.shared.verifyHandshake()) == nil else { return }
             DispatchQueue.main.async { [weak self] in
                 guard let self, !didRepair else { return }

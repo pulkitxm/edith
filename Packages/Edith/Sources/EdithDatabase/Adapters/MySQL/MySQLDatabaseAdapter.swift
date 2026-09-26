@@ -437,9 +437,9 @@ enum MySQLDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-    return try await DatabaseOperationSupport.check(
-        context, deadlineExceeded: deadlineExceeded)
-}
+        return try await DatabaseOperationSupport.check(
+            context, deadlineExceeded: deadlineExceeded)
+    }
 
     static func establish(
         plan: MySQLDatabaseConnectionPlan,
@@ -509,8 +509,8 @@ enum MySQLDatabaseAdapterSupport {
     static func deadlineTask(
         context: DatabaseAdapterOperationContext
     ) -> Task<Void, Never>? {
-    DatabaseOperationSupport.deadlineTask(context: context)
-}
+        DatabaseOperationSupport.deadlineTask(context: context)
+    }
 
     static func connectionPlan(
         _ resolved: DatabaseResolvedConnection,
@@ -781,15 +781,15 @@ enum MySQLDatabaseAdapterSupport {
         configured: UInt64,
         deadline: Date?
     ) throws(DatabaseAdapterFailure) -> UInt64 {
-    return try DatabaseOperationSupport.remainingMilliseconds(
-        configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
-}
+        return try DatabaseOperationSupport.remainingMilliseconds(
+            configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
+    }
 
     private static func validHost(_ value: String) -> Bool {
-    DatabaseOperationSupport.validHost(value)
-}
+        DatabaseOperationSupport.validHost(value)
+    }
 
     private static func validCredential(_ value: String) -> Bool {
-    DatabaseOperationSupport.validCredential(value, maximumBytes: 1_048_576)
-}
+        DatabaseOperationSupport.validCredential(value, maximumBytes: 1_048_576)
+    }
 }

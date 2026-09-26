@@ -97,7 +97,12 @@ import Testing
                 _ = release.wait(timeout: .now() + 3)
             }
         }
-        #expect(entered.wait(timeout: .now() + 3) == .success)
+        let enteredResult = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: entered.wait(timeout: .now() + 3))
+            }
+        }
+        #expect(enteredResult == .success)
         pending.cancel()
         release.signal()
         await #expect(throws: CancellationError.self) { try await pending.value }

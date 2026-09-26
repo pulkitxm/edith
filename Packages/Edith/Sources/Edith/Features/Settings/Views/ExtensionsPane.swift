@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import EdithCore
 import EdithKit
 import SwiftUI
 

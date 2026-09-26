@@ -57,8 +57,8 @@ enum PDFEditTools {
         }
         let under = run.settings.text("layer") == "under"
         try StudioPDF.rebuild(
-            document, to: output, pages: pages, under: under ? draw : nil, over: under ? nil : draw
-        ) { run.progress($0) }
+            document, to: output, pages: pages, under: under ? draw : nil, over: under ? nil : draw,
+            progress: { run.progress($0) })
         return [output]
     }
 
@@ -126,8 +126,8 @@ enum PDFEditTools {
                 PDFPageNumbering.draw(
                     text, position: position, margin: margin, font: font, color: color,
                     canvas: canvas)
-            }
-        ) { run.progress($0) }
+            },
+            progress: { run.progress($0) })
         return [output]
     }
 

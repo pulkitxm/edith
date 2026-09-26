@@ -8,7 +8,7 @@ import WebKit
 
 @MainActor
 @Suite(.serialized) struct NotchBrowserEvidenceTests {
-    private static let evidenceKey = "EDITH_NOTCH_BROWSER_EVIDENCE_DIR"
+    nonisolated private static let evidenceKey = "EDITH_NOTCH_BROWSER_EVIDENCE_DIR"
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment[evidenceKey] != nil))
     func theShelfBrowserRendersWithASyntheticChromeProfile() async throws {
@@ -104,7 +104,7 @@ import WebKit
     private func settle() async throws {
         for _ in 0..<8 {
             try await Task.sleep(for: .milliseconds(250))
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            await Task.yield()
         }
     }
 

@@ -151,10 +151,6 @@ final class DatabaseObjectExplorerModel {
             loadGroup(group.identifier, connection: connection)
         case .mysql, .mariaDB, .clickHouse:
             loadDatabaseGroups(connection)
-        default:
-            state = .failed(
-                "Automatic object discovery is not available for \(connection.product.displayName) yet."
-            )
         }
     }
 

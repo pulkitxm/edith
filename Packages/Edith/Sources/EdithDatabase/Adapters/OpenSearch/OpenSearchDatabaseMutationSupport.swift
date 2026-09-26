@@ -166,9 +166,9 @@ enum OpenSearchDatabaseMutationSupport {
         message: String,
         code: String
     ) -> DatabaseAdapterFailure {
-    DatabaseOperationSupport.reported(
-        category: category, message: message, code: code)
-}
+        DatabaseOperationSupport.reported(
+            category: category, message: message, code: code)
+    }
 }
 
 private struct OpenSearchDatabaseValidatedMutation {

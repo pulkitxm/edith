@@ -47,7 +47,7 @@ public actor AgentHookService {
                 local: $0.machineIsLocal)
         },
         publish: @escaping Publish = { _ in },
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.url = url
         self.interval = interval

@@ -214,23 +214,12 @@ enum SweaterEvent {
 }
 
 enum SkyLightSupport {
-    static func numberArray<T>(_ values: [T], type: CFNumberType) -> CFArray? {
-        var numbers: [CFNumber] = []
-        numbers.reserveCapacity(values.count)
-        for value in values {
-            var copy = value
-            guard let number = CFNumberCreate(nil, type, &copy) else { return nil }
-            numbers.append(number)
-        }
-        return numbers as CFArray
-    }
-
     static func windowArray(_ windows: [SkyLight.WindowID]) -> CFArray? {
-        numberArray(windows.map { Int32(bitPattern: $0) }, type: .sInt32Type)
+        windows.map { NSNumber(value: Int32(bitPattern: $0)) } as CFArray
     }
 
     static func spaceArray(_ spaces: [SkyLight.SpaceID]) -> CFArray? {
-        numberArray(spaces.map { Int64(bitPattern: $0) }, type: .sInt64Type)
+        spaces.map { NSNumber(value: Int64(bitPattern: $0)) } as CFArray
     }
 
     static func region(for rect: CGRect) -> UnsafeMutableRawPointer? {

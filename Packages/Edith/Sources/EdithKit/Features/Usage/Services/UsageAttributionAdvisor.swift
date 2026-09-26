@@ -186,7 +186,7 @@ actor UsageAttributionQueue {
     private func start(_ work: @escaping @Sendable () async -> Void) {
         running = Task(priority: .utility) {
             await work()
-            await self.finish()
+            self.finish()
         }
     }
 

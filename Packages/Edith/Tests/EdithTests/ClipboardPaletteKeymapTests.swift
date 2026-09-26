@@ -24,8 +24,9 @@ import Testing
     }
 
     @Test func arrowKeysIgnoreTheFunctionAndKeypadFlagsMacOSAddsToThem() {
-        #expect(command(.downArrow, [.numericPad, .function]) == .move(1))
-        #expect(command(.leftArrow, [.numericPad, .function, .capsLock]) == .cycleCategory(-1))
+        let function = EventModifiers(rawValue: 64)
+        #expect(command(.downArrow, [.numericPad, function]) == .move(1))
+        #expect(command(.leftArrow, [.numericPad, function, .capsLock]) == .cycleCategory(-1))
         #expect(command(.upArrow, [.command, .numericPad]) == .jump(top: true))
     }
 

@@ -876,15 +876,15 @@ enum ElasticsearchDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-    return try await DatabaseOperationSupport.check(
-        context, deadlineExceeded: deadlineExceeded)
-}
+        return try await DatabaseOperationSupport.check(
+            context, deadlineExceeded: deadlineExceeded)
+    }
 
     static func deadlineTask(
         context: DatabaseAdapterOperationContext
     ) -> Task<Void, Never>? {
-    DatabaseOperationSupport.deadlineTask(context: context)
-}
+        DatabaseOperationSupport.deadlineTask(context: context)
+    }
 
     static func map(
         _ failure: ElasticsearchDatabaseDriverFailure,
@@ -1078,21 +1078,21 @@ enum ElasticsearchDatabaseAdapterSupport {
         configured: UInt64,
         deadline: Date?
     ) throws(DatabaseAdapterFailure) -> UInt64 {
-    return try DatabaseOperationSupport.remainingMilliseconds(
-        configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
-}
+        return try DatabaseOperationSupport.remainingMilliseconds(
+            configured: configured, deadline: deadline, deadlineExceeded: deadlineExceeded)
+    }
 
     private static func validHost(_ value: String) -> Bool {
-    DatabaseOperationSupport.validHost(value)
-}
+        DatabaseOperationSupport.validHost(value)
+    }
 
     private static func validCredential(_ value: String) -> Bool {
-    DatabaseOperationSupport.validCredential(value, maximumBytes: 1_048_576)
-}
+        DatabaseOperationSupport.validCredential(value, maximumBytes: 1_048_576)
+    }
 
     private static func safeStatus(_ value: Int) -> Int {
-    DatabaseOperationSupport.httpStatus(value)
-}
+        DatabaseOperationSupport.httpStatus(value)
+    }
 
     private static func failure(
         category: DatabaseErrorCategory,
@@ -1100,7 +1100,7 @@ enum ElasticsearchDatabaseAdapterSupport {
         code: String,
         retry: DatabaseRetryAction = .none
     ) -> DatabaseAdapterFailure {
-    DatabaseOperationSupport.reported(
-        category: category, message: message, code: code, retry: retry)
-}
+        DatabaseOperationSupport.reported(
+            category: category, message: message, code: code, retry: retry)
+    }
 }

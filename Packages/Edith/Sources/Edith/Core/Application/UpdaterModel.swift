@@ -52,12 +52,13 @@ final class UpdaterModel: NSObject,
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
-        historyLoadTask = Task.detached(priority: .utility) { [weak self, logURL] in
-            let checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
-            await MainActor.run {
-                guard !Task.isCancelled else { return }
-                self?.checkHistory = checkHistory
-            }
+        historyLoadTask?.cancel()
+        historyLoadTask = Task { [weak self, logURL] in
+            let checkHistory = await Task.detached(priority: .utility) {
+                Self.loadUpdateHistory(at: logURL)
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.checkHistory = checkHistory
         }
         guard startingUpdater, !AppBuildIdentity.isDevelopment else { return }
         let updaterController = SPUStandardUpdaterController(
@@ -66,6 +67,11 @@ final class UpdaterModel: NSObject,
         Task { [weak self] in
             await self?.startUpdater()
         }
+    }
+
+    private nonisolated static func loadUpdateHistory(at logURL: URL) -> [UpdateCheckRecord] {
+        let checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
+        return checkHistory
     }
 
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
