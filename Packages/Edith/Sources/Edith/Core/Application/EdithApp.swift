@@ -28,6 +28,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance(
             SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         InputFocus.install()
+        TextEditingCommands.install()
         ScrollForwarding.install()
         FinderUndoBridge.start()
         startApp()

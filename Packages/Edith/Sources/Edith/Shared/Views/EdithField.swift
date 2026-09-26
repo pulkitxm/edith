@@ -89,6 +89,7 @@ struct EdithTextField: View {
             .multilineTextAlignment(alignment)
             .focused(focus ?? $localFocus)
             .focusEffectDisabled()
+            .textEditingCommands()
             .onExitCommand { (focus ?? $localFocus).wrappedValue = false }
             .onSubmit { onSubmit?() }
     }
@@ -129,6 +130,7 @@ struct EdithNumberField: View {
             .labelsHidden()
             .focused($focused)
             .focusEffectDisabled()
+            .textEditingCommands()
             .onExitCommand { focused = false }
             .frame(width: width)
             .edithFieldSurface(focused: focused, compact: true)

@@ -4,6 +4,11 @@ import SwiftUI
 
 private final class ClipboardFloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if MainActor.assumeIsolated({ TextEditingCommands.handle(event) }) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
 @MainActor

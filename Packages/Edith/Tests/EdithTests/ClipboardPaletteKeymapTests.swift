@@ -52,7 +52,9 @@ import Testing
         #expect(command(.deleteForward) == .delete)
         #expect(command(.delete, queryIsEmpty: false) == nil)
         #expect(command(.delete, .option, queryIsEmpty: false) == nil)
-        #expect(command(.delete, .command, queryIsEmpty: false) == .delete)
+        #expect(command(.delete, .command) == nil)
+        #expect(command(.delete, .command, queryIsEmpty: false) == nil)
+        #expect(command(.deleteForward, .command, queryIsEmpty: false) == nil)
         #expect(command(.delete, [.command, .option]) == .clearUnpinned)
         #expect(command(.delete, [.command, .option], queryIsEmpty: false) == .clearUnpinned)
     }
