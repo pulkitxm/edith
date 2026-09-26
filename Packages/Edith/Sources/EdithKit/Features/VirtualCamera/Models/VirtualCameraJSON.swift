@@ -30,6 +30,8 @@ public extension VirtualCameraSnapshot {
             "enabled": .bool(enabled),
             "helperRunning": .bool(helperRunning),
             "extensionInstalled": .bool(extensionInstalled),
+            "obsAvailable": .bool(obsAvailable),
+            "route": .optional(route?.rawValue),
             "extensionBuild": .optional(extensionBuild),
             "live": .bool(live),
             "headline": .string(headline),
@@ -87,6 +89,7 @@ public extension VirtualCameraSnapshot {
                 + (state.activeSceneIsModified ? " (changed)" : ""),
             "camera access: \(cameraAccess)",
             "extension: \(extensionInstalled ? "installed" : "not installed")",
+            "sending to: \(route?.cameraName ?? "nothing yet")",
         ]
         if !clients.isEmpty {
             lines.append("apps: \(clients.map(\.name).joined(separator: ", "))")

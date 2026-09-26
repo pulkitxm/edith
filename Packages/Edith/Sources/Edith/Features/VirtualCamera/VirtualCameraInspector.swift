@@ -548,8 +548,35 @@ struct VirtualCameraOutputPanel: View {
         self.dark = dark
     }
 
+    private var routeTitle: String {
+        guard let route = model.snapshot?.route else { return "Sends to: nothing yet" }
+        return "Sends to: \(route.cameraName)"
+    }
+
+    private var routeDetail: String {
+        switch model.snapshot?.route {
+        case .obs:
+            "Pick OBS Virtual Camera in Zoom, Meet, FaceTime or any other app. Edith starts when an app opens it and stops when that app quits. Keep the OBS app closed while you use it."
+        case .edithCamera:
+            "Pick Edith Camera in any video app. Edith turns your camera on only while an app shows it."
+        case nil:
+            model.snapshot?.obsAvailable == true
+                ? "Edith Camera is not installed. Choose Automatic or OBS Virtual Camera to send through OBS instead."
+                : "Install Edith Camera below, or install OBS Studio and Edith can send through its virtual camera."
+        }
+    }
+
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
+            VirtualCameraPanelSection(title: routeTitle, detail: routeDetail, dark: dark) {
+                Picker("Output", selection: model.stateBinding(\.output)) {
+                    ForEach(VirtualCameraOutput.allCases, id: \.self) { output in
+                        Text(output.title).tag(output)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
             VirtualCameraPanelSection(
                 title: "Edith Camera: \(extensionManager.phase.title)",
                 detail: extensionManager.phase.detail, dark: dark

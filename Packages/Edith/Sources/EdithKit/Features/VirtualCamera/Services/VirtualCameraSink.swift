@@ -17,6 +17,7 @@ public protocol VirtualCameraHardware: Sendable {
     func string(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> String?
     func streamIDs(_ device: CMIOObjectID) -> [CMIOStreamID]
     func direction(_ stream: CMIOStreamID) -> UInt32?
+    func flag(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> Bool?
     func startSink(device: CMIOObjectID, stream: CMIOStreamID) -> CMSimpleQueue?
     func stopSink(device: CMIOObjectID, stream: CMIOStreamID)
     func listen(
@@ -149,6 +150,19 @@ public struct VirtualCameraSystemHardware: VirtualCameraHardware {
         }
     }
 
+    public func flag(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> Bool? {
+        var address = Self.address(selector)
+        guard CMIOObjectHasProperty(object, &address) else { return nil }
+        var value: UInt32 = 0
+        var used: UInt32 = 0
+        guard
+            CMIOObjectGetPropertyData(
+                object, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &used, &value)
+                == noErr
+        else { return nil }
+        return value != 0
+    }
+
     public func direction(_ stream: CMIOStreamID) -> UInt32? {
         var address = Self.address(CMIOObjectPropertySelector(kCMIOStreamPropertyDirection))
         var value: UInt32 = 0
@@ -162,7 +176,6 @@ public struct VirtualCameraSystemHardware: VirtualCameraHardware {
 }
 
 public final class VirtualCameraSink: @unchecked Sendable {
-    public let extensionIdentifier: String
     public let deviceUID: String
     private let hardware: VirtualCameraHardware
     private let lock = NSLock()
@@ -171,15 +184,27 @@ public final class VirtualCameraSink: @unchecked Sendable {
     private var listeners: [VirtualCameraListener] = []
     private let listenerQueue = DispatchQueue(label: "com.pulkit.edith.camera.cmio")
 
-    public init(
+    public init(deviceUID: String, hardware: VirtualCameraHardware = VirtualCameraSystemHardware())
+    {
+        self.deviceUID = deviceUID
+        self.hardware = hardware
+    }
+
+    public convenience init(
         extensionIdentifier: String,
         hardware: VirtualCameraHardware = VirtualCameraSystemHardware()
     ) {
-        self.extensionIdentifier = extensionIdentifier
-        self.deviceUID =
-            VirtualCameraIdentity.deviceID(forExtension: extensionIdentifier)
-            .uuidString
-        self.hardware = hardware
+        self.init(
+            deviceUID: VirtualCameraIdentity.deviceID(forExtension: extensionIdentifier).uuidString,
+            hardware: hardware)
+    }
+
+    public var isRunningSomewhere: Bool {
+        guard let device = locate()?.device else { return false }
+        return hardware.flag(
+            device,
+            selector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere))
+            == true
     }
 
     public func locate() -> VirtualCameraEndpoints? {
@@ -247,6 +272,11 @@ public final class VirtualCameraSink: @unchecked Sendable {
         if let found = locate() {
             let status = CMIOObjectPropertySelector(VirtualCameraProperty.statusCode)
             targets.append((found.device, status))
+            targets.append(
+                (
+                    found.device,
+                    CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere)
+                ))
             if let source = found.source { targets.append((source, status)) }
         }
         let installed = targets.compactMap { object, selector in

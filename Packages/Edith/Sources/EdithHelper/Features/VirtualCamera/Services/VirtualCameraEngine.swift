@@ -5,35 +5,72 @@ import EdithCore
 import EdithKit
 import Foundation
 
+struct VirtualCameraRunningApplication: Equatable {
+    let pid: pid_t
+    let bundleIdentifier: String?
+}
+
+struct VirtualCameraEngineEnvironment {
+    var authorization: () -> AVAuthorizationStatus
+    var obsRunning: () -> Bool
+    var frontmostApplication: () -> VirtualCameraRunningApplication?
+
+    static var live: VirtualCameraEngineEnvironment {
+        VirtualCameraEngineEnvironment(
+            authorization: { VirtualCameraDevices.authorization },
+            obsRunning: {
+                !NSRunningApplication.runningApplications(
+                    withBundleIdentifier: VirtualCameraOBS.bundleIdentifier
+                ).isEmpty
+            },
+            frontmostApplication: {
+                NSWorkspace.shared.frontmostApplication.map {
+                    VirtualCameraRunningApplication(
+                        pid: $0.processIdentifier, bundleIdentifier: $0.bundleIdentifier)
+                }
+            })
+    }
+}
+
 @MainActor
 final class VirtualCameraEngine {
     static let idleGrace: TimeInterval = 3
+    static let obsCooldown: TimeInterval = 1.5
     static let accessMessage = "Allow camera access for Edith"
 
-    private let sink: VirtualCameraSink
+    private let edithSink: VirtualCameraSink
+    private let obsSink: VirtualCameraSink
     private let pipeline: VirtualCameraPipeline
-    private let authorization: () -> AVAuthorizationStatus
+    private let environment: VirtualCameraEngineEnvironment
     private var state: VirtualCameraState
     private var extensionStatus: VirtualCameraExtensionStatus?
-    private var installed = false
-    private(set) var streaming = false
+    private var edithInstalled = false
+    private var obsInstalled = false
+    private(set) var route: VirtualCameraRoute?
+    private(set) var streamingRoute: VirtualCameraRoute?
     private var stopWork: DispatchWorkItem?
     private var stateToken: NSObjectProtocol?
+    private var workspaceTokens: [NSObjectProtocol] = []
     private var lastPublished: VirtualCameraSnapshot?
-    private var observedInstall = false
+    private var observedDevices: [Bool] = []
+    private(set) var trigger: VirtualCameraRunningApplication?
+    private var triggerQuit = false
+    private var obsCooldownUntil = Date.distantPast
+
+    var streaming: Bool { streamingRoute != nil }
 
     init(
-        sink: VirtualCameraSink = VirtualCameraSink(
+        edithSink: VirtualCameraSink = VirtualCameraSink(
             extensionIdentifier: VirtualCameraIdentity.extensionIdentifier(
                 forApplication: AppBuildIdentity.application)),
+        obsSink: VirtualCameraSink = VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID),
         state: VirtualCameraState = VirtualCameraStore.load(),
-        authorization: @escaping () -> AVAuthorizationStatus = {
-            VirtualCameraDevices.authorization
-        }
+        environment: VirtualCameraEngineEnvironment = .live
     ) {
-        self.sink = sink
+        self.edithSink = edithSink
+        self.obsSink = obsSink
         self.state = state
-        self.authorization = authorization
+        self.environment = environment
         let format = VirtualCameraFormat.standard
         pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: format.width, height: format.height),
@@ -50,7 +87,23 @@ final class VirtualCameraEngine {
                     MainActor.assumeIsolated { self?.syncSettings(announced) }
                 }
             })
-        observeExtension()
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceTokens = [
+            center.addObserver(
+                forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+            ) { [weak self] note in
+                let app =
+                    note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                let pid = app?.processIdentifier
+                MainActor.assumeIsolated { self?.applicationQuit(pid) }
+            },
+            center.addObserver(
+                forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshExtension() }
+            },
+        ]
+        observeDevices()
         refreshExtension()
     }
 
@@ -59,16 +112,20 @@ final class VirtualCameraEngine {
         stopWork = nil
         if let stateToken { IPC.stopObserving(stateToken) }
         stateToken = nil
-        sink.stopObserving()
+        workspaceTokens.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        workspaceTokens = []
+        edithSink.stopObserving()
+        obsSink.stopObserving()
         stopStreaming()
     }
 
     func syncSettings(_ announced: VirtualCameraState? = nil) {
         let next = announced ?? VirtualCameraStore.load()
         guard next != state else { return }
+        let outputChanged = next.output != state.output
         state = next
         pipeline.update(state: effectiveState())
-        publishIfChanged()
+        if outputChanged { refreshExtension() } else { publishIfChanged() }
     }
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
@@ -97,16 +154,27 @@ final class VirtualCameraEngine {
         let sources = VirtualCameraDevices.sources()
         let fallbackSource = sources.first { $0.id == state.sourceID } ?? sources.first
         return VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: installed,
-            extensionBuild: extensionStatus?.build,
-            clients: VirtualCameraClients.clients(
-                extensionStatus?.clients ?? [], resolver: Self.applicationName),
-            live: streaming, framesPerSecond: statistics.framesPerSecond,
+            enabled: true, helperRunning: true, extensionInstalled: edithInstalled,
+            obsAvailable: obsInstalled, route: route, extensionBuild: extensionStatus?.build,
+            clients: clients(), live: streaming, framesPerSecond: statistics.framesPerSecond,
             source: statistics.source ?? fallbackSource, sourceWidth: statistics.sourceWidth,
             sourceHeight: statistics.sourceHeight, sources: sources,
-            format: extensionStatus?.format ?? .standard,
-            cameraAccess: VirtualCameraClients.accessDescription(authorization()), state: state,
-            message: message)
+            format: route == .edithCamera ? extensionStatus?.format ?? .standard : .standard,
+            cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
+            state: state, message: message)
+    }
+
+    private func clients() -> [VirtualCameraClient] {
+        switch route {
+        case .edithCamera:
+            return VirtualCameraClients.clients(
+                extensionStatus?.clients ?? [], resolver: Self.applicationName)
+        case .obs:
+            guard streamingRoute == .obs, let id = trigger?.bundleIdentifier else { return [] }
+            return VirtualCameraClients.clients([id], resolver: Self.applicationName)
+        case nil:
+            return []
+        }
     }
 
     static func applicationName(_ bundleIdentifier: String) -> String? {
@@ -117,45 +185,68 @@ final class VirtualCameraEngine {
     }
 
     private func effectiveState() -> VirtualCameraState {
-        guard authorization() != .authorized, state.privacy == .live else { return state }
+        guard environment.authorization() != .authorized, state.privacy == .live else {
+            return state
+        }
         var gated = state
         gated.privacy = .card
         gated.privacyMessage = Self.accessMessage
         return gated
     }
 
-    private func observeExtension() {
-        sink.observe { [weak self] in
-            DispatchQueue.main.async { self?.refreshExtension() }
+    private func observeDevices() {
+        observedDevices = [edithSink.isInstalled, obsSink.isInstalled]
+        for sink in [edithSink, obsSink] {
+            sink.observe { [weak self] in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.refreshExtension() }
+                }
+            }
         }
     }
 
     func refreshExtension() {
-        let wasInstalled = installed
-        installed = sink.isInstalled
-        extensionStatus = installed ? sink.status() : nil
-        if installed != wasInstalled || (installed && !observedInstall) {
-            observedInstall = installed
-            observeExtension()
-        }
-        if let format = extensionStatus?.format {
-            pipeline.update(
-                outputSize: CGSize(width: format.width, height: format.height),
-                frameRate: format.frameRate)
-        }
+        edithInstalled = edithSink.isInstalled
+        obsInstalled = obsSink.isInstalled
+        extensionStatus = edithInstalled ? edithSink.status() : nil
+        if observedDevices != [edithInstalled, obsInstalled] { observeDevices() }
+        route = VirtualCameraRoute.resolve(
+            state.output, edithInstalled: edithInstalled, obsInstalled: obsInstalled)
+        if let streamingRoute, streamingRoute != route { stopStreaming() }
+        let format =
+            route == .edithCamera
+            ? extensionStatus?.format ?? .standard : VirtualCameraFormat.standard
+        pipeline.update(
+            outputSize: CGSize(width: format.width, height: format.height),
+            frameRate: format.frameRate)
+        evaluate()
+        publishIfChanged()
+    }
+
+    func applicationQuit(_ pid: pid_t?) {
+        guard let pid, trigger?.pid == pid else { return }
+        triggerQuit = true
         evaluate()
         publishIfChanged()
     }
 
     private func evaluate() {
+        switch route {
+        case .edithCamera: evaluateEdithCamera()
+        case .obs: evaluateOBS()
+        case nil: if streaming { stopStreaming() }
+        }
+    }
+
+    private func evaluateEdithCamera() {
         let demand = VirtualCameraDemand.next(
-            installed: installed, inUse: extensionStatus?.isInUse == true, streaming: streaming,
-            stopPending: stopWork != nil)
+            installed: edithInstalled, inUse: extensionStatus?.isInUse == true,
+            streaming: streaming, stopPending: stopWork != nil)
         switch demand {
         case .start, .keepStreaming:
             stopWork?.cancel()
             stopWork = nil
-            if demand == .start { startStreaming() }
+            if demand == .start { startStreaming(.edithCamera) }
         case .scheduleStop:
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
@@ -173,22 +264,61 @@ final class VirtualCameraEngine {
         }
     }
 
-    private func startStreaming() {
+    static func trigger(from application: VirtualCameraRunningApplication?)
+        -> VirtualCameraRunningApplication?
+    {
+        guard let application,
+            application.bundleIdentifier?.hasPrefix(VirtualCameraIdentity.productionApplication)
+                != true
+        else { return nil }
+        return application
+    }
+
+    private func evaluateOBS() {
+        let streamingOBS = streamingRoute == .obs
+        let watching = !streamingOBS && Date() >= obsCooldownUntil && obsSink.isRunningSomewhere
+        let demand = VirtualCameraOBSDemand.next(
+            installed: obsInstalled, inUse: watching, streaming: streamingOBS,
+            obsRunning: environment.obsRunning(), triggerQuit: triggerQuit)
+        switch demand {
+        case .start:
+            let front = Self.trigger(from: environment.frontmostApplication())
+            startStreaming(.obs)
+            if streaming { trigger = front }
+        case .stop:
+            stopStreaming()
+            obsCooldownUntil = Date().addingTimeInterval(Self.obsCooldown)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.obsCooldown + 0.1) {
+                [weak self] in
+                MainActor.assumeIsolated { self?.refreshExtension() }
+            }
+        case .keep, .idle:
+            break
+        }
+    }
+
+    private func startStreaming(_ target: VirtualCameraRoute) {
+        let sink = target == .edithCamera ? edithSink : obsSink
         guard sink.connect() else { return }
-        let sink = sink
-        let frameRate = extensionStatus?.format.frameRate ?? VirtualCameraFormat.standard.frameRate
+        let frameRate =
+            target == .edithCamera
+            ? extensionStatus?.format.frameRate ?? VirtualCameraFormat.standard.frameRate
+            : VirtualCameraFormat.standard.frameRate
         pipeline.update(state: effectiveState())
         pipeline.start { buffer in
             sink.send(buffer, frameRate: frameRate)
         }
-        streaming = true
+        streamingRoute = target
+        triggerQuit = false
     }
 
     private func stopStreaming() {
-        guard streaming else { return }
+        guard let streamingRoute else { return }
         pipeline.stop()
-        sink.disconnect()
-        streaming = false
+        (streamingRoute == .edithCamera ? edithSink : obsSink).disconnect()
+        self.streamingRoute = nil
+        trigger = nil
+        triggerQuit = false
     }
 
     private func publishIfChanged() {

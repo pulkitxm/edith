@@ -79,6 +79,8 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var enabled: Bool
     public var helperRunning: Bool
     public var extensionInstalled: Bool
+    public var obsAvailable: Bool
+    public var route: VirtualCameraRoute?
     public var extensionBuild: String?
     public var clients: [VirtualCameraClient]
     public var live: Bool
@@ -93,7 +95,8 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var message: String?
 
     public init(
-        enabled: Bool, helperRunning: Bool, extensionInstalled: Bool, extensionBuild: String? = nil,
+        enabled: Bool, helperRunning: Bool, extensionInstalled: Bool, obsAvailable: Bool = false,
+        route: VirtualCameraRoute? = nil, extensionBuild: String? = nil,
         clients: [VirtualCameraClient] = [], live: Bool = false, framesPerSecond: Double = 0,
         source: VirtualCameraSource? = nil, sourceWidth: Int = 0, sourceHeight: Int = 0,
         sources: [VirtualCameraSource] = [], format: VirtualCameraFormat = .standard,
@@ -102,6 +105,8 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
         self.enabled = enabled
         self.helperRunning = helperRunning
         self.extensionInstalled = extensionInstalled
+        self.obsAvailable = obsAvailable
+        self.route = route
         self.extensionBuild = extensionBuild
         self.clients = clients
         self.live = live
@@ -129,10 +134,17 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var headline: String {
         if !enabled { return "Off" }
         if !helperRunning { return "Waiting for Edith" }
-        if !extensionInstalled { return "Camera extension not installed" }
-        if state.privacy != .live, inUse { return "Paused: \(state.privacy.title)" }
-        if live { return "Live in " + clients.map(\.name).joined(separator: ", ") }
-        return "Ready, no app is using it"
+        switch route {
+        case nil:
+            return "Camera extension not installed"
+        case .obs:
+            if live, state.privacy != .live { return "Paused: \(state.privacy.title)" }
+            return live ? "Live as OBS Virtual Camera" : "Ready as OBS Virtual Camera"
+        case .edithCamera:
+            if state.privacy != .live, inUse { return "Paused: \(state.privacy.title)" }
+            if live { return "Live in " + clients.map(\.name).joined(separator: ", ") }
+            return "Ready, no app is using it"
+        }
     }
 
     public var encoded: String? {

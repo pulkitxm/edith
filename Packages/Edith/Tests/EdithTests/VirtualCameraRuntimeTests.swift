@@ -200,7 +200,7 @@ import Testing
     @Test func snapshotsRoundTripAndDescribeThemselves() throws {
         var state = VirtualCameraState()
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true,
+            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
             state: state)
         let decoded = try #require(VirtualCameraSnapshot.decode(snapshot.encoded))
@@ -213,7 +213,14 @@ import Testing
         snapshot.live = false
         #expect(snapshot.headline == "Ready, no app is using it")
         snapshot.extensionInstalled = false
+        snapshot.route = nil
         #expect(snapshot.headline == "Camera extension not installed")
+        snapshot.route = .obs
+        #expect(snapshot.headline == "Ready as OBS Virtual Camera")
+        snapshot.live = true
+        #expect(snapshot.headline == "Paused: Blank")
+        snapshot.state.privacy = .live
+        #expect(snapshot.headline == "Live as OBS Virtual Camera")
         snapshot.helperRunning = false
         #expect(snapshot.headline == "Waiting for Edith")
         snapshot.enabled = false
@@ -238,7 +245,8 @@ import Testing
 
     @Test func jsonCarriesTheDocumentedFields() {
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, extensionBuild: "7",
+            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            extensionBuild: "7",
             source: VirtualCameraSource(id: "a", name: "Cam", kind: .builtIn), sourceWidth: 1920,
             sourceHeight: 1080, state: VirtualCameraState())
         snapshot.message = "Done."
@@ -248,7 +256,8 @@ import Testing
         }
         #expect(
             Set(object.keys) == [
-                "enabled", "helperRunning", "extensionInstalled", "extensionBuild", "live",
+                "enabled", "helperRunning", "extensionInstalled", "obsAvailable", "route",
+                "extensionBuild", "live",
                 "headline", "apps", "framesPerSecond", "camera", "cameraResolution", "output",
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
                 "look", "background", "message",
@@ -290,6 +299,78 @@ import Testing
         #expect(clients.map(\.name) == ["Google Chrome", "zoom.us"])
         #expect(VirtualCameraClients.accessDescription(.authorized) == "granted")
         #expect(VirtualCameraClients.accessDescription(.notDetermined) == "notRequested")
+    }
+}
+
+@Suite struct VirtualCameraRouteTests {
+    @Test func automaticPrefersEdithCameraThenOBS() {
+        #expect(
+            VirtualCameraRoute.resolve(.automatic, edithInstalled: true, obsInstalled: true)
+                == .edithCamera)
+        #expect(
+            VirtualCameraRoute.resolve(.automatic, edithInstalled: false, obsInstalled: true)
+                == .obs)
+        #expect(
+            VirtualCameraRoute.resolve(.automatic, edithInstalled: false, obsInstalled: false)
+                == nil)
+        #expect(
+            VirtualCameraRoute.resolve(.obs, edithInstalled: true, obsInstalled: true) == .obs)
+        #expect(
+            VirtualCameraRoute.resolve(.obs, edithInstalled: true, obsInstalled: false) == nil)
+        #expect(
+            VirtualCameraRoute.resolve(.edithCamera, edithInstalled: false, obsInstalled: true)
+                == nil)
+        #expect(VirtualCameraRoute.obs.cameraName == "OBS Virtual Camera")
+    }
+
+    @Test func obsDemandStartsOnViewersAndStopsOnQuitOrOBS() {
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: true, streaming: false, obsRunning: false,
+                triggerQuit: false) == .start)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: true, streaming: false, obsRunning: true,
+                triggerQuit: false) == .idle)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: false, streaming: false, obsRunning: false,
+                triggerQuit: false) == .idle)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: false, streaming: true, obsRunning: false,
+                triggerQuit: false) == .keep)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: false, streaming: true, obsRunning: false,
+                triggerQuit: true) == .stop)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: true, inUse: false, streaming: true, obsRunning: true,
+                triggerQuit: false) == .stop)
+        #expect(
+            VirtualCameraOBSDemand.next(
+                installed: false, inUse: false, streaming: true, obsRunning: false,
+                triggerQuit: false) == .stop)
+    }
+
+    @Test func outputDecodesWithAnAutomaticFallback() throws {
+        let decoded = try JSONDecoder().decode(
+            VirtualCameraState.self, from: Data("{\"output\":\"obs\"}".utf8))
+        #expect(decoded.output == .obs)
+        let legacy = try JSONDecoder().decode(VirtualCameraState.self, from: Data("{}".utf8))
+        #expect(legacy.output == .automatic)
+    }
+
+    @Test func sinksReportWhetherAnyAppRunsTheirDevice() {
+        let hardware = FakeCameraHardware()
+        hardware.devices = [40: VirtualCameraOBS.deviceUID]
+        let sink = VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware)
+        #expect(sink.isInstalled)
+        #expect(!sink.isRunningSomewhere)
+        hardware.running = [40]
+        #expect(sink.isRunningSomewhere)
+        #expect(!VirtualCameraSink(deviceUID: "missing", hardware: hardware).isRunningSomewhere)
     }
 }
 
@@ -349,6 +430,14 @@ final class FakeCameraHardware: VirtualCameraHardware, @unchecked Sendable {
     func streamIDs(_ device: CMIOObjectID) -> [CMIOStreamID] { streams[device] ?? [] }
 
     func direction(_ stream: CMIOStreamID) -> UInt32? { directions[stream] }
+
+    var running: Set<CMIOObjectID> = []
+
+    func flag(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> Bool? {
+        guard selector == CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere)
+        else { return nil }
+        return running.contains(object)
+    }
 
     func startSink(device: CMIOObjectID, stream: CMIOStreamID) -> CMSimpleQueue? {
         guard let sinkCapacity else { return nil }
@@ -461,12 +550,12 @@ final class FakeCameraHardware: VirtualCameraHardware, @unchecked Sendable {
         hardware.streams = [20: [201, 202]]
         hardware.directions = [201: 0, 202: 1]
         sink.observe {}
-        #expect(sink.listenerCount == 3)
+        #expect(sink.listenerCount == 4)
         #expect(hardware.removedListeners == 1)
         #expect(Set(hardware.handlers.keys).isSuperset(of: [20, 202]))
         sink.stopObserving()
         #expect(sink.listenerCount == 0)
-        #expect(hardware.removedListeners == 4)
+        #expect(hardware.removedListeners == 5)
     }
 
     @Test func sinkReportsInstallAndStatusThroughItsHardware() {

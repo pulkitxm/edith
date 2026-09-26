@@ -80,6 +80,7 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
     public var transition: VirtualCameraTransition
     public var sharpZoom: Bool
     public var mirrorPreview: Bool
+    public var output: VirtualCameraOutput
 
     public init(
         sourceID: String? = nil, composition: VirtualCameraComposition = VirtualCameraComposition(),
@@ -87,7 +88,7 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         activeSceneID: UUID? = nil, privacy: VirtualCameraPrivacy = .live,
         privacyMessage: String = VirtualCameraState.defaultPrivacyMessage,
         transition: VirtualCameraTransition = .smooth, sharpZoom: Bool = true,
-        mirrorPreview: Bool = false
+        mirrorPreview: Bool = false, output: VirtualCameraOutput = .automatic
     ) {
         self.sourceID = sourceID
         self.composition = composition
@@ -98,6 +99,7 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         self.transition = transition
         self.sharpZoom = sharpZoom
         self.mirrorPreview = mirrorPreview
+        self.output = output
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,7 +121,9 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
             sharpZoom: (try? container.decodeIfPresent(Bool.self, forKey: .sharpZoom))
                 ?? fallback.sharpZoom,
             mirrorPreview: (try? container.decodeIfPresent(Bool.self, forKey: .mirrorPreview))
-                ?? fallback.mirrorPreview)
+                ?? fallback.mirrorPreview,
+            output: (try? container.decodeIfPresent(VirtualCameraOutput.self, forKey: .output))
+                ?? fallback.output)
         self = sanitized()
     }
 

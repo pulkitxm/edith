@@ -47,7 +47,8 @@ final class FakeCameraHelper: @unchecked Sendable {
 
     private func snapshot(message: String?) -> VirtualCameraSnapshot {
         VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, extensionBuild: "42",
+            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            extensionBuild: "42",
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
             framesPerSecond: 30, source: sources[0], sourceWidth: 1920, sourceHeight: 1080,
             sources: sources, format: .hd1080, cameraAccess: "granted", state: state,

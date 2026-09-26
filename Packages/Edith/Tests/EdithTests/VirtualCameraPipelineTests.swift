@@ -191,10 +191,90 @@ enum VirtualCameraFixtures {
 @Suite(.serialized) struct VirtualCameraHelperTests {
     static let identifier = "com.pulkit.edith.dev.tests.camera"
 
-    static func engine(hardware: FakeCameraHardware = FakeCameraHardware()) -> VirtualCameraEngine {
+    static func engine(
+        hardware: FakeCameraHardware = FakeCameraHardware(),
+        state: VirtualCameraState = VirtualCameraState(), obsRunning: Bool = false,
+        frontmost: VirtualCameraRunningApplication? = nil
+    ) -> VirtualCameraEngine {
         VirtualCameraEngine(
-            sink: VirtualCameraSink(extensionIdentifier: identifier, hardware: hardware),
-            state: VirtualCameraState(), authorization: { .authorized })
+            edithSink: VirtualCameraSink(extensionIdentifier: identifier, hardware: hardware),
+            obsSink: VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware),
+            state: state,
+            environment: VirtualCameraEngineEnvironment(
+                authorization: { .authorized }, obsRunning: { obsRunning },
+                frontmostApplication: { frontmost }))
+    }
+
+    static func obsHardware(watching: Bool) -> FakeCameraHardware {
+        let hardware = FakeCameraHardware()
+        hardware.devices = [40: VirtualCameraOBS.deviceUID]
+        hardware.streams = [40: [41, 42]]
+        hardware.directions = [41: 1, 42: 0]
+        hardware.sinkCapacity = 4
+        if watching { hardware.running = [40] }
+        return hardware
+    }
+
+    @Test func obsCameraStartsWhenAnAppOpensItAndStopsWhenThatAppQuits() {
+        let hardware = Self.obsHardware(watching: true)
+        let zoom = VirtualCameraRunningApplication(pid: 4242, bundleIdentifier: "us.zoom.xos")
+        let engine = Self.engine(hardware: hardware, frontmost: zoom)
+        engine.refreshExtension()
+        #expect(engine.route == .obs)
+        #expect(engine.streamingRoute == .obs)
+        #expect(hardware.started == [42])
+        #expect(engine.trigger == zoom)
+        let live = engine.snapshot()
+        #expect(live.headline == "Live as OBS Virtual Camera")
+        #expect(live.obsAvailable)
+        #expect(!live.extensionInstalled)
+        engine.applicationQuit(9999)
+        #expect(engine.streaming)
+        engine.applicationQuit(4242)
+        #expect(!engine.streaming)
+        #expect(hardware.stopped == [42])
+        engine.refreshExtension()
+        #expect(!engine.streaming)
+        engine.shutdown()
+    }
+
+    @Test func obsCameraWaitsForAnAppAndStepsAsideForOBS() {
+        let idle = Self.obsHardware(watching: false)
+        let waiting = Self.engine(hardware: idle)
+        waiting.refreshExtension()
+        #expect(waiting.route == .obs)
+        #expect(!waiting.streaming)
+        #expect(waiting.snapshot().headline == "Ready as OBS Virtual Camera")
+        waiting.shutdown()
+        let busy = Self.obsHardware(watching: true)
+        let deferring = Self.engine(hardware: busy, obsRunning: true)
+        deferring.refreshExtension()
+        #expect(!deferring.streaming)
+        #expect(busy.started.isEmpty)
+        deferring.shutdown()
+    }
+
+    @Test func edithAppsDoNotCountAsTheViewer() {
+        let edith = VirtualCameraRunningApplication(pid: 1, bundleIdentifier: "com.pulkit.edith")
+        let dev = VirtualCameraRunningApplication(
+            pid: 2, bundleIdentifier: "com.pulkit.edith.dev.main")
+        let meet = VirtualCameraRunningApplication(pid: 3, bundleIdentifier: "com.google.Chrome")
+        #expect(VirtualCameraEngine.trigger(from: edith) == nil)
+        #expect(VirtualCameraEngine.trigger(from: dev) == nil)
+        #expect(VirtualCameraEngine.trigger(from: meet) == meet)
+        #expect(VirtualCameraEngine.trigger(from: nil) == nil)
+    }
+
+    @Test func choosingEdithCameraIgnoresOBS() {
+        let hardware = Self.obsHardware(watching: true)
+        var state = VirtualCameraState()
+        state.output = .edithCamera
+        let engine = Self.engine(hardware: hardware, state: state)
+        engine.refreshExtension()
+        #expect(engine.route == nil)
+        #expect(!engine.streaming)
+        #expect(engine.snapshot().headline == "Camera extension not installed")
+        engine.shutdown()
     }
 
     static func payload(

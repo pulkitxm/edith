@@ -91,6 +91,30 @@ then approve it in System Settings. `ed camera status` reports
 extension identity, `com.pulkit.edith.dev.<slot>.camera`, and appear in apps as
 `Edith Camera (<slot>)`.
 
+## Without a developer account: OBS Virtual Camera
+
+Free Apple IDs (Personal Teams) cannot get the System Extension capability, so
+they cannot install Edith Camera. If OBS Studio is installed and its virtual
+camera has been approved once, Edith can send its picture through the OBS
+Virtual Camera instead. OBS's camera extension accepts frames from any app,
+which is how OBS itself feeds it.
+
+With the output set to **Automatic** (the default) Edith uses Edith Camera when
+it is installed and the OBS Virtual Camera otherwise. Choose it on the Output
+tab to force one or the other. Then:
+
+1. Keep the OBS app closed. Edith steps aside whenever OBS is running so OBS can
+   drive its own camera.
+2. Pick **OBS Virtual Camera** in Zoom, Meet, FaceTime or any other app.
+3. Edith turns your camera on as soon as an app opens the OBS camera, and stops
+   when that app quits. It cannot tell when a call ends while the app stays
+   open, because the OBS camera reports itself as in use for as long as Edith
+   is feeding it. Pause with ⌃⌥⌘V, or quit the call app, to turn your camera
+   off.
+
+`ed camera status` reports `sending to: OBS Virtual Camera` and `route: obs` in
+JSON.
+
 ## Framing
 
 `zoom` sets the zoom level from 1 to 8. `frame` sets any mix of zoom, the center

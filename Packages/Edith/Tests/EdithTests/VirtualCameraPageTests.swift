@@ -145,7 +145,7 @@ import Testing
         model.injectForTesting(snapshot: nil, sources: [])
         #expect(model.statusHeadline == "Edith Bar is not answering")
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true,
+            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
             format: .hd720, state: model.state)
         model.receive(snapshot)
@@ -588,7 +588,8 @@ enum VirtualCameraSyntheticStudio {
         model.updateLookThumbnails(from: reference)
         model.injectForTesting(
             snapshot: VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: true, extensionBuild: "288",
+                enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+                extensionBuild: "288",
                 clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
                 framesPerSecond: 30, source: VirtualCameraPageModelTests.sources[0],
                 sourceWidth: 1920, sourceHeight: 1080, sources: VirtualCameraPageModelTests.sources,
