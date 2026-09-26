@@ -2848,7 +2848,17 @@ describe("collector configuration", () => {
           _meta: { agentTimestampMs: 1_790_420_403_000 },
         },
       }),
-      ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+      [
+        "--argjson",
+        "off",
+        "0",
+        "--arg",
+        "src",
+        "grok",
+        "--arg",
+        "cwd",
+        "/repo/app",
+      ],
     );
     expect(record.t).toBe("rec");
     expect(record.src).toBe("grok");
@@ -2867,9 +2877,22 @@ describe("collector configuration", () => {
         WALKG,
         JSON.stringify({
           timestamp: 1_790_420_403,
-          params: { sessionId: "sess-1", update: { sessionUpdate: "agent_message_chunk" } },
+          params: {
+            sessionId: "sess-1",
+            update: { sessionUpdate: "agent_message_chunk" },
+          },
         }),
-        ["--argjson", "off", "0", "--arg", "src", "grok", "--arg", "cwd", "/repo/app"],
+        [
+          "--argjson",
+          "off",
+          "0",
+          "--arg",
+          "src",
+          "grok",
+          "--arg",
+          "cwd",
+          "/repo/app",
+        ],
       ),
     ).toEqual([]);
   });
