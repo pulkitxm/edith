@@ -229,7 +229,8 @@ final class StudioPDFCanvasView: PDFView {
             let grip = grip(at: viewPoint, of: selected)
         {
             let anchor = convert(grip.anchor(in: selected.bounds), from: page)
-            let center = convert(CGPoint(x: selected.bounds.midX, y: selected.bounds.midY), from: page)
+            let center = convert(
+                CGPoint(x: selected.bounds.midX, y: selected.bounds.midY), from: page)
             let dx = abs(anchor.x - center.x)
             let dy = abs(anchor.y - center.y)
             let cursor: NSCursor =
