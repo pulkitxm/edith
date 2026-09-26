@@ -66,7 +66,7 @@ first two rows:
       "claude",
       "codex"
     ],
-    "summary": "Claude and Codex limits, usage stats, and alerts.",
+    "summary": "Claude, Codex and Cursor limits, usage stats, and alerts.",
     "title": "Agent Usage"
   },
   {

@@ -31,7 +31,7 @@ import Testing
 
         let providers = LimitsStatusItem.stableProviders([codex], defaults: defaults)
 
-        #expect(providers.map(\.provider) == [.claude, .codex])
+        #expect(providers.map(\.provider) == [.claude, .codex, .cursor])
         #expect(providers[0].isAvailable == false)
         #expect(providers[1].session?.percent == 42)
     }

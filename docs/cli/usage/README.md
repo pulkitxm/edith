@@ -106,8 +106,9 @@ closed.
   `ed usage limits --refresh`, because the app appends a history row only when
   the values changed.
 - `ed config set tabUsageEnabled false` turns off the Agent Usage extension, and
-  with it the app's own collection and the limit polling; `claudeLimitsEnabled`
-  and `codexLimitsEnabled` do the same for a single provider's polling.
+  with it the app's own collection and the limit polling; `claudeLimitsEnabled`,
+  `codexLimitsEnabled` and `cursorLimitsEnabled` do the same for a single
+  provider's polling.
   `ed usage refresh` runs the pipeline itself and collects either way. The read
   verbs keep working against whatever was collected before that, so
   `ed usage limits` keeps printing a silenced provider's newest valid row.
@@ -140,8 +141,8 @@ machines so the same repository still groups into one row.
 
 ## Where to go next
 
-- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`
-  and `codexLimitsEnabled`, which decide what gets collected
+- [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`,
+  `codexLimitsEnabled` and `cursorLimitsEnabled`, which decide what gets collected
 - [`ed extensions`](../extensions/README.md) for turning the Agent Usage extension on
   and off by id
 - [`ed permissions`](../permissions/README.md) for the grants the app needs before it

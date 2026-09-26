@@ -227,7 +227,7 @@ public enum ConfigCatalog {
     private static let usageAndLimits: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Tabs.usageEnabled, .bool, group: "usage",
-            summary: "Agent Usage extension: Claude and Codex limits, stats and alerts.",
+            summary: "Agent Usage extension: Claude, Codex and Cursor limits, stats and alerts.",
             fallback: .bool(false)),
         SettingDefinition(
             "usageMachines", .stringList, group: "usage",
@@ -239,8 +239,12 @@ public enum ConfigCatalog {
             AppStorageKeys.Limits.codexEnabled, .bool, group: "limits",
             summary: "Track Codex rate limits.", fallback: .bool(true)),
         SettingDefinition(
+            AppStorageKeys.Limits.cursorEnabled, .bool, group: "limits",
+            summary: "Track Cursor plan and on-demand limits.", fallback: .bool(true)),
+        SettingDefinition(
             AppStorageKeys.Limits.provider, .string, group: "limits",
-            summary: "Provider shown first in the limits UI.", allowed: ["claude", "codex"],
+            summary: "Provider shown first in the limits UI.",
+            allowed: ["claude", "codex", "cursor"],
             fallback: .string("claude")),
         SettingDefinition(
             AppStorageKeys.Limits.warnPercent, .int, group: "limits",
@@ -268,6 +272,10 @@ public enum ConfigCatalog {
             AppStorageKeys.MenuBar.codexWindows, .string, group: "menubar",
             summary: "Codex windows shown in the menu bar, comma-separated (session, week).",
             fallback: .string("session,week")),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.cursorWindows, .string, group: "menubar",
+            summary: "Cursor windows shown in the menu bar, comma-separated (week).",
+            fallback: .string("week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.limitsStyle, .string, group: "menubar",
             summary: "Layout of the menu bar limits readout.",
@@ -312,7 +320,7 @@ public enum ConfigCatalog {
             summary: "Send limit alerts for 5-hour windows.", fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Notify.trackWeekly, .bool, group: "alerts",
-            summary: "Send limit alerts for weekly windows, Fable included.",
+            summary: "Send limit alerts for weekly windows, Fable included, and Cursor's plan.",
             fallback: .bool(true)),
         SettingDefinition(
             AppStorageKeys.Notify.onPace, .bool, group: "alerts",

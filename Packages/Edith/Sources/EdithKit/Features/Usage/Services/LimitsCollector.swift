@@ -57,15 +57,19 @@ public enum LimitsCollector {
         let claude =
             defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true
         let codex = defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true
-        return UsageLimitProviders.enabled(claude: claude, codex: codex)
+        let cursor = defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true
+        return UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor)
     }
 
     public static func providerEnabled(
         _ provider: LimitProvider, defaults: UserDefaults = SharedDefaults.store
     ) -> Bool {
-        let key =
-            provider == .claude
-            ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled
+        let key: String
+        switch provider {
+        case .claude: key = AppStorageKeys.Limits.claudeEnabled
+        case .codex: key = AppStorageKeys.Limits.codexEnabled
+        case .cursor: key = AppStorageKeys.Limits.cursorEnabled
+        }
         return defaults.object(forKey: key) as? Bool ?? true
     }
 
@@ -87,6 +91,8 @@ public enum LimitsCollector {
                 return (snapshot, retryNotBefore)
             case .codex:
                 return (await fetchCodex(), nil)
+            case .cursor:
+                return await fetchCursor()
             }
         }
     }
@@ -221,6 +227,97 @@ public enum LimitsCollector {
         }
     }
 
+    private static func fetchCursor() async -> (LimitsProviderSnapshot, Date?) {
+        guard var material = CursorCredentialStore.load() else {
+            return (
+                LimitsProviderSnapshot(
+                    provider: .cursor, session: nil, week: nil, error: "Cursor token not found"),
+                nil
+            )
+        }
+        var refreshed = false
+        if CursorCredentialStore.expiresSoon(material.accessToken), material.refreshToken != nil {
+            do {
+                material = try await refreshCursor(material)
+                refreshed = true
+            } catch CursorLimitsReader.Failure.unauthorized {
+                return (
+                    LimitsProviderSnapshot(
+                        provider: .cursor, session: nil, week: nil,
+                        error: CursorLimitsReader.Failure.unauthorized.localizedDescription),
+                    nil
+                )
+            } catch {}
+        }
+        do {
+            let limits = try await CursorLimitsReader.fetch(token: material.accessToken)
+            try persistHistory(
+                provider: .cursor, session: limits.session, week: limits.week, fable: nil)
+            return (
+                LimitsProviderSnapshot(
+                    provider: .cursor, session: limits.session, week: limits.week), nil
+            )
+        } catch CursorLimitsReader.Failure.unauthorized
+            where !refreshed && material.refreshToken != nil
+        {
+            do {
+                let latest = try await refreshCursor(material)
+                let limits = try await CursorLimitsReader.fetch(token: latest.accessToken)
+                try persistHistory(
+                    provider: .cursor, session: limits.session, week: limits.week, fable: nil)
+                return (
+                    LimitsProviderSnapshot(
+                        provider: .cursor, session: limits.session, week: limits.week), nil
+                )
+            } catch {
+                return cursorFailure(error)
+            }
+        } catch {
+            return cursorFailure(error)
+        }
+    }
+
+    private static func refreshCursor(
+        _ material: CursorCredentialStore.Material
+    ) async throws -> CursorCredentialStore.Material {
+        guard let refreshToken = material.refreshToken else {
+            throw CursorLimitsReader.Failure.unauthorized
+        }
+        let refreshed = try await CursorLimitsReader.refresh(refreshToken: refreshToken)
+        var next = material
+        next.accessToken = refreshed.accessToken
+        if let replacement = refreshed.refreshToken { next.refreshToken = replacement }
+        if next.file != nil { try? CursorCredentialStore.save(next) }
+        return next
+    }
+
+    private static func cursorFailure(_ error: Error) -> (LimitsProviderSnapshot, Date?) {
+        var retryNotBefore: Date?
+        let message: String
+        switch error {
+        case CursorLimitsReader.Failure.unauthorized:
+            message = CursorLimitsReader.Failure.unauthorized.localizedDescription
+        case CursorLimitsReader.Failure.rateLimited(let after):
+            let deadline = LimitsRefreshGate.backoffDeadline(retryAfter: after, now: Date())
+            retryNotBefore = deadline
+            message =
+                "Rate limited by Cursor - retrying at \(deadline.formatted(date: .omitted, time: .shortened))"
+        case CursorLimitsReader.Failure.unavailable:
+            message = CursorLimitsReader.Failure.unavailable.localizedDescription
+        case CursorLimitsReader.Failure.malformed:
+            message = CursorLimitsReader.Failure.malformed.localizedDescription
+        case LimitsHistoryPersistenceError.failed:
+            message = error.localizedDescription
+        default:
+            message = "Offline"
+        }
+        logger.error("\(message, privacy: .public)")
+        return (
+            LimitsProviderSnapshot(
+                provider: .cursor, session: nil, week: nil, error: message), retryNotBefore
+        )
+    }
+
     private static func fetchCodex() async -> LimitsProviderSnapshot {
         do {
             let limits = try await readCodexLimits()
@@ -348,8 +445,10 @@ private enum LimitsHistoryPersistenceError: LocalizedError {
 }
 
 public enum UsageLimitProviders {
-    public static func enabled(claude: Bool, codex: Bool) -> [LimitProvider] {
-        [(LimitProvider.claude, claude), (.codex, codex)].compactMap { provider, enabled in
+    public static func enabled(claude: Bool, codex: Bool, cursor: Bool) -> [LimitProvider] {
+        [
+            (LimitProvider.claude, claude), (.codex, codex), (.cursor, cursor),
+        ].compactMap { provider, enabled in
             enabled ? provider : nil
         }
     }

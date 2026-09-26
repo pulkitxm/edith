@@ -52,10 +52,13 @@ private final class MutableHistoryURL: @unchecked Sendable {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     @Test func refreshesEveryEnabledProviderRegardlessOfSelection() {
-        #expect(UsageLimitProviders.enabled(claude: true, codex: true) == [.claude, .codex])
-        #expect(UsageLimitProviders.enabled(claude: true, codex: false) == [.claude])
-        #expect(UsageLimitProviders.enabled(claude: false, codex: true) == [.codex])
-        #expect(UsageLimitProviders.enabled(claude: false, codex: false).isEmpty)
+        #expect(
+            UsageLimitProviders.enabled(claude: true, codex: true, cursor: true)
+                == [.claude, .codex, .cursor])
+        #expect(UsageLimitProviders.enabled(claude: true, codex: false, cursor: false) == [.claude])
+        #expect(UsageLimitProviders.enabled(claude: false, codex: true, cursor: false) == [.codex])
+        #expect(UsageLimitProviders.enabled(claude: false, codex: false, cursor: true) == [.cursor])
+        #expect(UsageLimitProviders.enabled(claude: false, codex: false, cursor: false).isEmpty)
     }
 
     @Test func startsWhenNothingIsInFlight() {

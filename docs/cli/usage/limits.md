@@ -16,8 +16,9 @@ ed usage limits [--refresh] [--json]
 ## `--json` shape
 
 A top-level array, one object per provider that has ever been recorded, in the
-fixed order `codex` then `claude`. `session` and `weekly` are each either an
-object or `null`.
+fixed order `codex`, `claude`, then `cursor`. `session` and `weekly` are each
+either an object or `null`. For Cursor, `weekly` is the billing-cycle plan
+usage and `session` is on-demand spend when a limit is set.
 
 ```json
 [

@@ -668,8 +668,13 @@ private struct NotchUsageRings: View {
 
     var body: some View {
         HStack(spacing: 20) {
-            ring("5h", limits.session)
-            ring("7d", limits.week)
+            if selected == .cursor {
+                ring("plan", limits.week)
+                if limits.session != nil { ring("od", limits.session) }
+            } else {
+                ring("5h", limits.session)
+                ring("7d", limits.week)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {

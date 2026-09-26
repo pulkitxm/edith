@@ -473,16 +473,20 @@ public struct ExtensionMutationCenter: Sendable {
         }
         if entry.id == "usage", enabled,
             !environment.defaults.bool(forKey: AppStorageKeys.Limits.claudeEnabled),
-            !environment.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled)
+            !environment.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled),
+            !environment.defaults.bool(forKey: AppStorageKeys.Limits.cursorEnabled)
         {
             let selected =
                 LimitProvider(
                     rawValue: environment.defaults.string(
                         forKey: AppStorageKeys.Limits.provider) ?? "") ?? .claude
-            environment.defaults.set(
-                true,
-                forKey: selected == .claude
-                    ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled)
+            let key: String
+            switch selected {
+            case .claude: key = AppStorageKeys.Limits.claudeEnabled
+            case .codex: key = AppStorageKeys.Limits.codexEnabled
+            case .cursor: key = AppStorageKeys.Limits.cursorEnabled
+            }
+            environment.defaults.set(true, forKey: key)
         }
         if entry.id == "keepAwake", !enabled {
             environment.defaults.set(false, forKey: AppStorageKeys.General.preventSleep)

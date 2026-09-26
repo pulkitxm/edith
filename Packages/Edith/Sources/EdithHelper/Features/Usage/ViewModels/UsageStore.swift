@@ -88,6 +88,8 @@ final class UsageStore: FeatureModule {
     private(set) var fableWeek: LimitWindow?
     private(set) var codexSession: LimitWindow?
     private(set) var codexWeek: LimitWindow?
+    private(set) var cursorSession: LimitWindow?
+    private(set) var cursorWeek: LimitWindow?
     private(set) var limitsError: String?
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
@@ -103,7 +105,8 @@ final class UsageStore: FeatureModule {
 
     var enabledProviders: [LimitProvider] {
         Self.enabledLimitProviders(
-            claude: providerEnabled(.claude), codex: providerEnabled(.codex))
+            claude: providerEnabled(.claude), codex: providerEnabled(.codex),
+            cursor: providerEnabled(.cursor))
     }
 
     var availableProviders: [LimitProvider] {
@@ -120,6 +123,10 @@ final class UsageStore: FeatureModule {
         case .codex:
             return ProviderLimits(
                 provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek))
+        case .cursor:
+            return ProviderLimits(
+                provider: provider, session: Self.fresh(cursorSession),
+                week: Self.fresh(cursorWeek))
         }
     }
 
@@ -128,14 +135,13 @@ final class UsageStore: FeatureModule {
     }
 
     func providerEnabled(_ provider: LimitProvider) -> Bool {
-        let key =
-            provider == .claude
-            ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled
-        return SharedDefaults.store.object(forKey: key) as? Bool ?? true
+        LimitsCollector.providerEnabled(provider)
     }
 
-    nonisolated static func enabledLimitProviders(claude: Bool, codex: Bool) -> [LimitProvider] {
-        UsageLimitProviders.enabled(claude: claude, codex: codex)
+    nonisolated static func enabledLimitProviders(
+        claude: Bool, codex: Bool, cursor: Bool
+    ) -> [LimitProvider] {
+        UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor)
     }
 
     init() {
@@ -182,6 +188,11 @@ final class UsageStore: FeatureModule {
         if let last = latest[.codex] {
             codexSession = Self.fresh(last.session)
             codexWeek = Self.fresh(last.week)
+            limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
+        }
+        if let last = latest[.cursor] {
+            cursorSession = Self.fresh(last.session)
+            cursorWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
     }

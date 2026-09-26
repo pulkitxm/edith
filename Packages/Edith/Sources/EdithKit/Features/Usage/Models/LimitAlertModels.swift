@@ -26,20 +26,22 @@ public struct LimitAlertTarget: Hashable, Codable, Sendable {
         self.slot = slot
     }
 
-    public static let all: [LimitAlertTarget] = [LimitProvider.claude, .codex].flatMap { provider in
+    public static let all: [LimitAlertTarget] = LimitProvider.allCases.flatMap { provider in
         MenuBarLimits.slots(for: provider).map { LimitAlertTarget(provider, $0) }
     }
 
     public var id: String { "\(provider.rawValue).\(slot.rawValue)" }
-    public var isWeekly: Bool { slot != .session }
-    public var duration: TimeInterval { slot.kind.duration }
+    public var isWeekly: Bool { provider == .cursor || slot != .session }
+    public var duration: TimeInterval { slot.pacingDuration(for: provider) }
     var sameWindowTolerance: TimeInterval { isWeekly ? 12 * 3600 : 3600 }
 
     public var label: String {
-        switch slot {
-        case .session: "\(provider.label) 5h"
-        case .week: "\(provider.label) weekly"
-        case .fable: "\(provider.label) Fable weekly"
+        switch (provider, slot) {
+        case (.cursor, .session): "Cursor on-demand"
+        case (.cursor, _): "Cursor plan"
+        case (_, .session): "\(provider.label) 5h"
+        case (_, .week): "\(provider.label) weekly"
+        case (_, .fable): "\(provider.label) Fable weekly"
         }
     }
 }

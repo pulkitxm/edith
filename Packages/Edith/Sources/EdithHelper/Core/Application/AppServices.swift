@@ -497,6 +497,7 @@ final class AppServices {
                 enabled: extensionEnabled(AppStorageKeys.Tabs.usageEnabled),
                 claudeEnabled: preferenceOnByDefault(AppStorageKeys.Limits.claudeEnabled),
                 codexEnabled: preferenceOnByDefault(AppStorageKeys.Limits.codexEnabled),
+                cursorEnabled: preferenceOnByDefault(AppStorageKeys.Limits.cursorEnabled),
                 menuBarEnabled: preferenceOnByDefault(AppStorageKeys.Limits.inMenuBar),
                 alertsEnabled: defaults.bool(forKey: AppStorageKeys.Notify.master),
                 selectedProvider: LimitProvider(

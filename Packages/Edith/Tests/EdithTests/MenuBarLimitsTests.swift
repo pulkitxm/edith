@@ -10,6 +10,9 @@ import Testing
         #expect(
             MenuBarLimits.parseSelection(nil, provider: .claude) == [.session, .week, .fable])
         #expect(MenuBarLimits.parseSelection(nil, provider: .codex) == [.session, .week])
+        #expect(MenuBarLimits.parseSelection(nil, provider: .cursor) == [.week])
+        #expect(LimitWindowSlot.week.menuBarLabel(for: .cursor) == "plan")
+        #expect(LimitWindowSlot.week.settingsLabel(for: .cursor) == "Plan")
     }
 
     @Test func selectionKeepsCanonicalOrderAndDropsGarbage() {

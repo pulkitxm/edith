@@ -62,23 +62,25 @@ public struct AgentUsageSettingsState: Equatable, Sendable {
     public var enabled: Bool
     public var claudeEnabled: Bool
     public var codexEnabled: Bool
+    public var cursorEnabled: Bool
     public var menuBarEnabled: Bool
     public var alertsEnabled: Bool
     public var selectedProvider: LimitProvider
 
     public init(
-        enabled: Bool, claudeEnabled: Bool, codexEnabled: Bool, menuBarEnabled: Bool,
-        alertsEnabled: Bool, selectedProvider: LimitProvider
+        enabled: Bool, claudeEnabled: Bool, codexEnabled: Bool, cursorEnabled: Bool,
+        menuBarEnabled: Bool, alertsEnabled: Bool, selectedProvider: LimitProvider
     ) {
         self.enabled = enabled
         self.claudeEnabled = claudeEnabled
         self.codexEnabled = codexEnabled
+        self.cursorEnabled = cursorEnabled
         self.menuBarEnabled = menuBarEnabled
         self.alertsEnabled = alertsEnabled
         self.selectedProvider = selectedProvider
     }
 
-    public var hasProvider: Bool { claudeEnabled || codexEnabled }
+    public var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled }
 }
 
 public enum AgentUsageSettingsFlow {
@@ -102,6 +104,7 @@ public enum AgentUsageSettingsFlow {
         switch next.selectedProvider {
         case .claude: next.claudeEnabled = true
         case .codex: next.codexEnabled = true
+        case .cursor: next.cursorEnabled = true
         }
         return next
     }

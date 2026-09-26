@@ -58,13 +58,21 @@ struct RateLimitsDialsView: View {
                     providers: providers, color: DashSkin.ink(dark), size: 16)
                 Text("Rate limits").font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Text("session · weekly").font(.system(size: UIScale.pt(11.5)))
+                Text(selected == .cursor ? "billing cycle" : "session · weekly")
+                    .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
             HStack(spacing: UIScale.pt(24)) {
-                dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
-                dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
+                if selected == .cursor {
+                    dial("PLAN", pct: point?.w, reset: point?.weekReset)
+                    if point?.s != nil {
+                        dial("ON-DEMAND", pct: point?.s, reset: point?.sessionReset)
+                    }
+                } else {
+                    dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
+                    dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
+                }
             }
             .frame(maxWidth: .infinity)
             if let point {
@@ -245,6 +253,9 @@ struct LimitsCardView: View {
         nonmutating set { selectedProviderRaw = newValue.rawValue }
     }
 
+    private var sessionSeriesName: String { selectedProvider == .cursor ? "On-demand" : "Session" }
+    private var weekSeriesName: String { selectedProvider == .cursor ? "Plan" : "Weekly" }
+
     private var sessionC: Color { DashSkin.accent(dark) }
     private let weeklyC = DashPalette.color("#c89b3c")
     private let ranges: [(String, TimeInterval?)] = [
@@ -259,7 +270,10 @@ struct LimitsCardView: View {
     }
 
     var body: some View {
-        SkinCard(title: "Rate limits - session & weekly", dark: dark) {
+        SkinCard(
+            title: selectedProvider == .cursor
+                ? "Rate limits - plan" : "Rate limits - session & weekly", dark: dark
+        ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ProviderSwitchButton(
                     selection: Binding(
@@ -321,7 +335,9 @@ struct LimitsCardView: View {
     private func rebuildVisible() {
         let now = all.last?.date ?? Date()
         let window = ranges.first { $0.0 == range }?.1 ?? nil
-        let display = LimitsChartDisplay.build(downsampled, now: now, window: window)
+        let display = LimitsChartDisplay.build(
+            downsampled, now: now, window: window, sessionSeries: sessionSeriesName,
+            weekSeries: weekSeriesName)
         visible = display.visible
         marks = display.marks
         samples = display.samples
@@ -363,7 +379,7 @@ struct LimitsCardView: View {
                     Text(point.date.formatted(.dateTime.month().day().hour().minute()))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     if let s = point.s {
-                        Text("S \(Int(s))%")
+                        Text("\(selectedProvider == .cursor ? "OD" : "S") \(Int(s))%")
                             .foregroundStyle(sessionC)
                             .contentTransition(.numericText())
                             .animation(
@@ -371,7 +387,7 @@ struct LimitsCardView: View {
                                 value: Int(s))
                     }
                     if let w = point.w {
-                        Text("W \(Int(w))%")
+                        Text("\(selectedProvider == .cursor ? "P" : "W") \(Int(w))%")
                             .foregroundStyle(weeklyC)
                             .contentTransition(.numericText())
                             .animation(
@@ -413,7 +429,7 @@ struct LimitsCardView: View {
                 .foregroundStyle(by: .value("Series", s.series))
             }
         }
-        .chartForegroundStyleScale(["Session": sessionC, "Weekly": weeklyC])
+        .chartForegroundStyleScale([sessionSeriesName: sessionC, weekSeriesName: weeklyC])
         .chartYScale(domain: 0...100)
         .chartXScale(domain: start...now)
         .chartXSelection(value: $selected)
@@ -460,7 +476,10 @@ private enum LimitsChartDisplay {
         let samples: [LimitsCardView.Sample]
     }
 
-    static func build(_ points: [LimitPoint], now: Date, window: TimeInterval?) -> Output {
+    static func build(
+        _ points: [LimitPoint], now: Date, window: TimeInterval?,
+        sessionSeries: String = "Session", weekSeries: String = "Weekly"
+    ) -> Output {
         var pts = points
         if let window {
             let cutoff = now.addingTimeInterval(-window)
@@ -477,10 +496,10 @@ private enum LimitsChartDisplay {
         samples.reserveCapacity(capped.count * 2)
         for point in capped {
             if let s = point.s {
-                samples.append(LimitsCardView.Sample(t: point.date, v: s, series: "Session"))
+                samples.append(LimitsCardView.Sample(t: point.date, v: s, series: sessionSeries))
             }
             if let w = point.w {
-                samples.append(LimitsCardView.Sample(t: point.date, v: w, series: "Weekly"))
+                samples.append(LimitsCardView.Sample(t: point.date, v: w, series: weekSeries))
             }
         }
         return Output(visible: capped, marks: marks, samples: samples)

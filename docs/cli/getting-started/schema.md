@@ -34,7 +34,8 @@ Three real properties are shown:
       "description": "Provider shown first in the limits UI.",
       "enum": [
         "claude",
-        "codex"
+        "codex",
+        "cursor"
       ],
       "type": "string",
       "x-group": "limits",

@@ -120,7 +120,7 @@ public enum ExtensionRegistry {
     public static let entries: [ExtensionRegistryEntry] = [
         ExtensionRegistryEntry(
             id: "usage", title: "Usage",
-            subtitle: "Claude and Codex limits, usage stats, and alerts.",
+            subtitle: "Claude, Codex and Cursor limits, usage stats, and alerts.",
             symbolName: "chart.bar.fill", suite: .agents, host: .agent, featured: true,
             defaultsKey: "tabUsageEnabled", requiredCapabilities: [.usageCollection],
             optionalCapabilities: [.notifications], requiredToolIDs: ["claude", "codex"]),

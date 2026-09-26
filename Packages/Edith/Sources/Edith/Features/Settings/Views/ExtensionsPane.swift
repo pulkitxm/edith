@@ -1621,6 +1621,8 @@ private struct UsageRows: View {
         var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
         var codexEnabled = true
+    @AppStorage(AppStorageKeys.Limits.cursorEnabled, store: SharedDefaults.store) private
+        var cursorEnabled = true
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var limitsProviderRaw =
         LimitProvider.claude.rawValue
@@ -1631,6 +1633,8 @@ private struct UsageRows: View {
         var claudeWindowsRaw = "session,week,fable"
     @AppStorage(AppStorageKeys.MenuBar.codexWindows, store: SharedDefaults.store) private
         var codexWindowsRaw = "session,week"
+    @AppStorage(AppStorageKeys.MenuBar.cursorWindows, store: SharedDefaults.store) private
+        var cursorWindowsRaw = "week"
     @AppStorage(AppStorageKeys.MenuBar.limitsStyle, store: SharedDefaults.store) private
         var limitsStyleRaw = "stacked"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
@@ -1687,7 +1691,7 @@ private struct UsageRows: View {
     @State private var projections: [String] = []
     @State private var testSent = false
 
-    private var hasProvider: Bool { claudeEnabled || codexEnabled }
+    private var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled }
 
     var body: some View {
         CLIToolStatusSection(
@@ -1707,6 +1711,10 @@ private struct UsageRows: View {
                     isOn: $codexEnabled.configured(AppStorageKeys.Limits.codexEnabled)
                 )
                 Toggle(
+                    "Cursor limits",
+                    isOn: $cursorEnabled.configured(AppStorageKeys.Limits.cursorEnabled)
+                )
+                Toggle(
                     "Show limits in the menu bar",
                     isOn: $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar)
                 )
@@ -1722,6 +1730,11 @@ private struct UsageRows: View {
                         LimitWindowChipsRow(
                             title: "Codex shows", provider: .codex,
                             raw: $codexWindowsRaw.configured(AppStorageKeys.MenuBar.codexWindows))
+                    }
+                    if cursorEnabled {
+                        LimitWindowChipsRow(
+                            title: "Cursor shows", provider: .cursor,
+                            raw: $cursorWindowsRaw.configured(AppStorageKeys.MenuBar.cursorWindows))
                     }
                     Picker(
                         "Style",
@@ -1876,7 +1889,8 @@ private struct UsageRows: View {
                     "5-hour windows", detail: "Alerts for Claude and Codex 5-hour limits.",
                     isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession))
                 LimitAlertToggle(
-                    "Weekly windows", detail: "Alerts for weekly limits, Fable included.",
+                    "Weekly windows",
+                    detail: "Alerts for weekly limits, Fable included, and Cursor's plan.",
                     isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly))
                 LimitAlertToggle(
                     "On pace to hit the cap",
@@ -1953,6 +1967,7 @@ private struct UsageRows: View {
             }
             reconcileProviders()
         }
+        .onChange(of: cursorEnabled) { reconcileProviders() }
     }
 
     private var alertsBinding: Binding<Bool> {
@@ -1995,6 +2010,7 @@ private struct UsageRows: View {
         let state = AgentUsageSettingsFlow.providersChanged(
             AgentUsageSettingsState(
                 enabled: enabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
+                cursorEnabled: cursorEnabled,
                 menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
                 selectedProvider: selectedProvider))
         enabled = state.enabled
@@ -2263,7 +2279,7 @@ private struct LimitWindowChipsRow: View {
             Text(title)
             Spacer()
             ForEach(MenuBarLimits.slots(for: provider), id: \.self) { slot in
-                Toggle(slot.settingsLabel, isOn: binding(for: slot))
+                Toggle(slot.settingsLabel(for: provider), isOn: binding(for: slot))
                     .toggleStyle(.button)
             }
         }

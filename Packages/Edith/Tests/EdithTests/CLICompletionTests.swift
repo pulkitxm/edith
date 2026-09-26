@@ -83,7 +83,7 @@ import Testing
 
     @Test func allowedValuesCompleteAfterTheirKey() {
         let result = Self.plan(["ed", "config", "set", "limitsProvider", ""], 4)
-        #expect(result.candidates == ["claude", "codex"])
+        #expect(result.candidates == ["claude", "codex", "cursor"])
     }
 
     @Test func booleanSettingsOfferTrueAndFalse() {

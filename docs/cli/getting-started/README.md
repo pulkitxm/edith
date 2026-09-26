@@ -107,7 +107,7 @@ What `__complete` offers, in the order it decides:
 
 The typed slots are what make it useful: machine names where a machine goes,
 setting keys where a key goes, that setting's allowed values where its value
-goes (`ed config set limitsProvider <TAB>` gives `claude codex`, and a boolean
+goes (`ed config set limitsProvider <TAB>` gives `claude codex cursor`, and a boolean
 setting gives `true false`), extension ids, permission ids, shell names, config
 groups, usage ranges, app action names, cleaner category ids, colour formats and
 docker prune targets in their own slots, and `#files` where a local path goes.
