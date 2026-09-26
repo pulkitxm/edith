@@ -741,7 +741,11 @@ public enum ConfigCatalog {
             summary: "Comma separated bundle identifiers never captured."),
         SettingDefinition(
             AppStorageKeys.Clipboard.autoPaste, .bool, group: "clipboard",
-            summary: "Paste straight into the frontmost app on pick."),
+            summary: "Paste straight into the frontmost app on pick.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Clipboard.capturePaused, .bool, group: "clipboard",
+            summary: "Stop recording new copies until capture is resumed.",
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Clipboard.pastePlainText, .bool, group: "clipboard",
             summary: "Strip formatting when pasting."),

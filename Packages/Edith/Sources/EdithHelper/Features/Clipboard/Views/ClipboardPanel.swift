@@ -10,8 +10,6 @@ private final class ClipboardFloatingPanel: NSPanel {
 final class ClipboardPanel: NSObject, NSWindowDelegate {
     static let shared = ClipboardPanel()
 
-    static let width: CGFloat = 450
-    nonisolated static let maxHeight: CGFloat = 800
     static let willShow = Notification.Name("clipboardPanelWillShow")
 
     weak var store: ClipboardStore? {
@@ -38,9 +36,10 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
     func show() {
         guard let store, let p = panel else { return }
         NotificationCenter.default.post(name: Self.willShow, object: nil)
-        let height = min(
-            ClipboardPanelView.estimatedHeight(entries: store.entries), Self.maxHeight)
-        p.setContentSize(NSSize(width: Self.width, height: height))
+        let height = ClipboardPanelLayout.estimatedHeight(
+            for: store.entries, pinToTop: ClipboardActions.pinToTopPreference(),
+            showsFooter: ClipboardPanelView.footerEnabled)
+        p.setContentSize(NSSize(width: ClipboardPanelLayout.width, height: height))
         let position = PopupPosition.stored(forKey: AppStorageKeys.Clipboard.popupAt)
         let size = p.frame.size
         showGeneration += 1
@@ -85,7 +84,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
 
     private func resize(toFit height: CGFloat) {
         guard let panel, panel.isVisible else { return }
-        let clamped = min(height, Self.maxHeight)
+        let clamped = min(height, ClipboardPanelLayout.maxHeight)
         guard abs(panel.frame.height - clamped) > 0.5 else { return }
         var frame = panel.frame
         frame.origin.y += frame.height - clamped
@@ -96,7 +95,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
 
     private func makePanel() {
         let p = ClipboardFloatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: ClipboardPanelLayout.width, height: 400),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: true)
         p.isOpaque = false
@@ -116,7 +115,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
-        effect.layer?.cornerRadius = 9
+        effect.layer?.cornerRadius = 14
         effect.layer?.masksToBounds = true
 
         let host = NSHostingView(rootView: AnyView(EmptyView()))

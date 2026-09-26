@@ -54,6 +54,7 @@ enum ClipboardBridge {
             "id": .string(entry.id),
             "kind": .string(entry.ext),
             "family": .string(entry.kind.rawValue),
+            "category": .string(ClipboardCategory(entry).rawValue),
             "isText": .bool(entry.isTextual),
             "preview": .optional(entry.preview),
             "sourceApp": .optional(entry.sourceApp),
@@ -116,8 +117,11 @@ struct ClipboardListCommand: AsyncParsableCommand {
     @Flag(help: "Only pinned entries.")
     var pinned = false
 
-    @Option(help: "Only entries whose preview or source app contains this text.")
+    @Option(help: "Only entries whose preview or source app contains every word of this text.")
     var search: String?
+
+    @Option(help: "Only one kind of clip: text, link, email, color, image, media or file.")
+    var category: ClipboardCategory?
 
     @Option(help: "Show at most this many entries. Pass 0 for all of them.")
     var limit: Int = 25
@@ -130,6 +134,9 @@ struct ClipboardListCommand: AsyncParsableCommand {
             if let search, !ClipboardActions.normalized(search).isEmpty {
                 let needle = ClipboardActions.normalized(search)
                 numbered = numbered.filter { ClipboardActions.matches($0.entry, query: needle) }
+            }
+            if let category {
+                numbered = numbered.filter { ClipboardCategory($0.entry) == category }
             }
             if pinned { numbered = numbered.filter { $0.entry.pinned } }
             let shown = limit == 0 ? numbered : Array(numbered.prefix(limit))
@@ -588,3 +595,5 @@ struct ColorClearCommand: AsyncParsableCommand {
         }
     }
 }
+
+extension ClipboardCategory: ExpressibleByArgument {}

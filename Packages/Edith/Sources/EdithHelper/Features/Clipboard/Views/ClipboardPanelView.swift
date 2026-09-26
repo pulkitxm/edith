@@ -8,14 +8,10 @@ struct ClipboardPanelView: View {
     var onHeightChange: (CGFloat) -> Void
 
     @State private var filterText = ""
-    @State private var selectedID: String?
+    @State private var palette = ClipboardPalette()
     @State private var keyboardScrollTick = 0
-    @State private var arranged: [ClipboardEntry] = []
-    @State private var visible: [ClipboardEntry] = []
     @State private var renderLimit = ClipboardPanelView.pageSize
     @State private var lastMouse = NSEvent.mouseLocation
-    @State private var rowFrames: [String: CGRect] = [:]
-    @State private var listHeight: CGFloat = 0
     @State private var pendingClearPlan: ClipboardClearPlan?
     @State private var showingClearConfirmation = false
     @FocusState private var searchFocused: Bool
@@ -23,129 +19,54 @@ struct ClipboardPanelView: View {
         var showFooter = true
     @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
         "top"
+    @AppStorage(AppStorageKeys.Clipboard.capturePaused, store: SharedDefaults.store) private
+        var capturePaused = false
+    @AppStorage(AppStorageKeys.Clipboard.autoPaste, store: SharedDefaults.store) private
+        var autoPaste = true
+    @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
+    private var accessibilityGranted = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
 
     static let pageSize = 80
 
-    static func jumpTargetIndex(
-        itemCount: Int, top: Bool, shownEdgeIndex: Int?, renderedCount: Int
-    ) -> Int? {
-        guard itemCount > 0 else { return nil }
-        if top { return 0 }
-        guard renderedCount > 0 else { return nil }
-        if let shownEdgeIndex, (0..<min(renderedCount, itemCount)).contains(shownEdgeIndex) {
-            return shownEdgeIndex
-        }
-        return min(renderedCount, itemCount) - 1
-    }
-
-    private static let headerHeight: CGFloat = 33
-    private static let rowHeight: CGFloat = 24
-    private static let imageRowHeight: CGFloat = 48
-    private static let footerHeight: CGFloat = 55
-    private static let bottomPadding: CGFloat = 5
-
-    static func estimatedHeight(entries: [ClipboardEntry]) -> CGFloat {
-        height(for: entries, showFooter: footerEnabled)
-    }
-
-    private static var footerEnabled: Bool {
+    static var footerEnabled: Bool {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.showFooter) as? Bool ?? true
     }
 
-    private static func rowHeight(for entry: ClipboardEntry) -> CGFloat {
-        entry.kind == .image || entry.kind == .file ? imageRowHeight : rowHeight
-    }
-
-    private static func height(for entries: [ClipboardEntry], showFooter: Bool) -> CGFloat {
-        let chrome = headerHeight + (showFooter ? footerHeight : 0) + bottomPadding
-        guard !entries.isEmpty else { return chrome + rowHeight }
-        var rows: CGFloat = 0
-        for entry in entries {
-            rows += rowHeight(for: entry)
-            if chrome + rows >= ClipboardPanel.maxHeight { break }
-        }
-        return chrome + rows
-    }
-
     private var pinToTop: Bool { pinTo != "bottom" }
-
-    private nonisolated static func arrange(
-        _ entries: [ClipboardEntry], query: String, pinToTop: Bool
-    ) -> [ClipboardEntry] {
-        ClipboardActions.arrange(entries, query: query, pinToTop: pinToTop)
-    }
-
-    private func adoptArranged(_ result: [ClipboardEntry], selectFirst: Bool) {
-        arranged = result
-        syncVisible()
-        if selectFirst { selectFirstRow() }
-        reportHeight()
-    }
-
-    private func syncVisible() {
-        visible = Array(arranged.prefix(renderLimit))
-    }
-
-    private func ensureRendered(upTo index: Int) {
-        guard index >= renderLimit else { return }
-        renderLimit = min(arranged.count, index + Self.pageSize)
-        syncVisible()
-    }
-
-    private func extendPage() {
-        guard renderLimit < arranged.count else { return }
-        renderLimit = min(arranged.count, renderLimit + Self.pageSize)
-        syncVisible()
-    }
-
-    private func refreshVisible(selectFirst: Bool = false, resetLimit: Bool = false) {
-        if resetLimit { renderLimit = Self.pageSize }
-        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        adoptArranged(
-            Self.arrange(store.entries, query: query, pinToTop: pinToTop),
-            selectFirst: selectFirst)
-    }
-
-    private func resetForShow() {
-        lastMouse = NSEvent.mouseLocation
-        filterText = ""
-        renderLimit = Self.pageSize
-        refreshVisible(selectFirst: true)
-        DispatchQueue.main.async { searchFocused = true }
-    }
-
-    private func selectFirstRow() {
-        selectedID = visible.first?.id
-        keyboardScrollTick += 1
-    }
-
-    private var digitShortcuts: [String: Int] {
-        let unpinned = visible.filter { !$0.pinned }.prefix(9)
-        return Dictionary(
-            uniqueKeysWithValues: unpinned.enumerated().map { ($1.id, $0 + 1) })
-    }
+    private var showsChips: Bool { palette.categories.count > 1 }
+    private var pastesOnPick: Bool { autoPaste && accessibilityGranted }
 
     var body: some View {
         VStack(spacing: 0) {
-            searchField
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+            header
+            if showsChips { chips }
+            Divider().opacity(0.5)
             list
-            if showFooter { footer }
+            if showFooter {
+                Divider().opacity(0.5)
+                footer
+            }
         }
-        .padding(.bottom, Self.bottomPadding)
-        .frame(width: ClipboardPanel.width)
+        .frame(width: ClipboardPanelLayout.width)
         .onAppear { resetForShow() }
         .onReceive(NotificationCenter.default.publisher(for: ClipboardPanel.willShow)) { _ in
             resetForShow()
         }
-        .onChange(of: filterText) { _, _ in
-            refreshVisible(selectFirst: true, resetLimit: true)
+        .onChange(of: filterText) { _, text in
+            palette.search(text)
+            renderLimit = Self.pageSize
+            keyboardScrollTick += 1
         }
-        .onChange(of: store.revision) { _, _ in refreshVisible() }
-        .onChange(of: pinTo) { _, _ in refreshVisible() }
+        .onChange(of: store.revision) { _, _ in
+            palette.replace(store.entries)
+            reportHeight()
+        }
+        .onChange(of: pinTo) { _, _ in
+            palette.setPinToTop(pinToTop)
+            reportHeight()
+        }
         .onChange(of: showFooter) { _, _ in reportHeight() }
         .confirmationDialog(
             pendingClearPlan?.confirmationTitle ?? "Clear clipboard history?",
@@ -169,97 +90,136 @@ struct ClipboardPanelView: View {
         }
     }
 
-    private var searchField: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.secondary.opacity(0.1))
-            HStack(spacing: 0) {
-                Image(systemName: "magnifyingglass")
-                    .resizable()
-                    .frame(width: 11, height: 11)
-                    .padding(.leading, 5)
-                    .opacity(0.8)
-                TextField("Search", text: $filterText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                    .disableAutocorrection(true)
-                    .padding(.horizontal, 4)
-                    .focused($searchFocused)
-                    .onKeyPress(keys: [.upArrow, .downArrow]) { press in
-                        let up = press.key == .upArrow
-                        if press.modifiers.contains(.command) {
-                            jumpToEdge(top: up)
-                        } else {
-                            move(up ? -1 : 1)
-                        }
-                        return .handled
-                    }
-                    .onKeyPress(.escape) {
-                        onDismiss()
-                        return .handled
-                    }
-                    .onKeyPress(keys: [.return]) { press in
-                        activate(selectedEntry, plainText: press.modifiers.contains(.option))
-                        return .handled
-                    }
-                    .onKeyPress { press in handle(press) }
-                if let error = store.captureError ?? store.refreshError {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                        .help("Clipboard synchronization is retrying. \(error)")
-                        .accessibilityLabel("Clipboard synchronization is retrying")
-                        .padding(.horizontal, 4)
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+            TextField("Type to search…", text: $filterText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .lineLimit(1)
+                .disableAutocorrection(true)
+                .focused($searchFocused)
+                .onKeyPress(phases: [.down, .repeat]) { press in handle(press) }
+            if !filterText.isEmpty {
+                Button {
+                    filterText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
-                if !filterText.isEmpty {
-                    Button {
-                        filterText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .resizable()
-                            .frame(width: 11, height: 11)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .padding(.trailing, 5)
-                }
+                .buttonStyle(.edith(.borderless))
+                .accessibilityLabel("Clear search")
             }
+            if let error = store.captureError ?? store.refreshError {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .help("Clipboard synchronization is retrying. \(error)")
+                    .accessibilityLabel("Clipboard synchronization is retrying")
+            }
+            if capturePaused {
+                Button {
+                    store.setCapturePaused(false)
+                } label: {
+                    Label("Paused", systemImage: "pause.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 8)
+                        .frame(height: 20)
+                        .background(Capsule().fill(Color.orange.opacity(0.18)))
+                        .foregroundStyle(Color.orange)
+                }
+                .buttonStyle(.edith(.borderless))
+                .help("Capture is paused. Click to resume.")
+            }
+            Text(palette.countLabel)
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            menu
         }
-        .frame(height: 23)
+        .padding(.horizontal, 14)
+        .frame(height: ClipboardPanelLayout.headerHeight)
+    }
+
+    private var menu: some View {
+        Menu {
+            Button(capturePaused ? "Resume Capture" : "Pause Capture") {
+                store.setCapturePaused(!capturePaused)
+            }
+            Button("Clear Unpinned…") { requestClear() }
+            Divider()
+            Button("Settings…") { openPreferences() }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Clipboard options")
+    }
+
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                chip(nil)
+                ForEach(palette.categories) { chip($0) }
+            }
+            .padding(.horizontal, 12)
+        }
+        .frame(height: ClipboardPanelLayout.chipsHeight)
+    }
+
+    private func chip(_ category: ClipboardCategory?) -> some View {
+        let active = palette.category == category
+        return Button {
+            palette.choose(category)
+            renderLimit = Self.pageSize
+            keyboardScrollTick += 1
+        } label: {
+            Text(category?.title ?? "All")
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(
+                    Capsule().fill(
+                        active ? themeColor(themeName) : Color.secondary.opacity(0.12))
+                )
+                .foregroundStyle(active ? Color.white : Color.primary)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 
     private var list: some View {
         ScrollViewReader { proxy in
             List {
-                if visible.isEmpty {
-                    Text(filterText.isEmpty ? "Clipboard history is empty" : "No matches")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .frame(height: Self.rowHeight)
+                if palette.rows.isEmpty {
+                    emptyState
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 } else {
-                    ForEach(visible) { entry in
-                        row(entry)
-                            .id(entry.id)
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: RowFramesKey.self,
-                                        value: [entry.id: geo.frame(in: .named("clipboardList"))])
-                                }
-                            )
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(
-                                        selectedID == entry.id
-                                            ? themeColor(themeName) : Color.clear)
-                            )
+                    ForEach(palette.sections(limit: renderLimit)) { section in
+                        sectionHeader(section.title)
+                        ForEach(section.entries) { entry in
+                            row(entry)
+                                .id(entry.id)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(
+                                            palette.selectedID == entry.id
+                                                ? themeColor(themeName) : Color.clear
+                                        )
+                                        .padding(.horizontal, 6)
+                                )
+                        }
                     }
-                    if visible.count < arranged.count {
+                    if renderLimit < palette.rows.count {
                         Color.clear
                             .frame(height: 1)
                             .listRowInsets(EdgeInsets())
@@ -271,204 +231,237 @@ struct ClipboardPanelView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, Self.rowHeight)
-            .padding(.horizontal, 5)
-            .coordinateSpace(name: "clipboardList")
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { listHeight = geo.size.height }
-                        .onChange(of: geo.size.height) { _, height in listHeight = height }
-                }
-            )
-            .onPreferenceChange(RowFramesKey.self) { rowFrames = $0 }
+            .environment(\.defaultMinListRowHeight, 1)
+            .padding(.vertical, ClipboardPanelLayout.listPadding / 2)
             .onChange(of: keyboardScrollTick) { _, _ in
-                guard let selectedID else { return }
+                guard let selectedID = palette.selectedID else { return }
                 proxy.scrollTo(selectedID)
             }
         }
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .frame(
+                maxWidth: .infinity, minHeight: ClipboardPanelLayout.sectionHeaderHeight,
+                maxHeight: ClipboardPanelLayout.sectionHeaderHeight, alignment: .bottomLeading
+            )
+            .padding(.bottom, 2)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 4) {
+            Text(emptyTitle)
+                .font(.system(size: 13, weight: .medium))
+            Text(emptySubtitle)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: ClipboardPanelLayout.emptyHeight)
+    }
+
+    private var emptyTitle: String {
+        if palette.isFiltered { return "No matches" }
+        return capturePaused ? "Capture is paused" : "Your copy stack is empty"
+    }
+
+    private var emptySubtitle: String {
+        if palette.isFiltered { return "Try another word or category." }
+        if capturePaused { return "Resume capture to start collecting copies again." }
+        return "Copy anything and it lands here. \(ClipboardHotKey.label) opens it from any app."
+    }
+
     private func row(_ entry: ClipboardEntry) -> some View {
-        let selected = selectedID == entry.id
+        let selected = palette.selectedID == entry.id
+        let category = palette.category(of: entry)
+        let secondary = selected ? Color.white.opacity(0.75) : Color.secondary
         return Button {
             activate(entry, plainText: false)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
+                leading(entry, category: category, selected: selected)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title(entry))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(ClipboardTimeline.subtitle(for: entry))
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(secondary)
+                }
+                Spacer(minLength: 8)
                 if entry.pinned {
                     Image(systemName: "pin.fill")
-                        .font(.system(size: 9))
-                        .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                        .font(.system(size: 10))
+                        .foregroundStyle(secondary)
+                        .accessibilityLabel("Pinned")
                 }
-                rowContent(entry)
-                Spacer(minLength: 8)
-                if let digit = digitShortcuts[entry.id] {
+                if let digit = palette.shortcut(for: entry.id) {
                     Text("⌘\(digit)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(secondary)
                 }
             }
-            .padding(.horizontal, 8)
-            .frame(height: Self.rowHeight(for: entry))
+            .padding(.horizontal, 16)
+            .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(selected ? Color.white : Color.primary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
+        .accessibilityLabel("\(category.title): \(title(entry))")
         .onContinuousHover { phase in
             guard case .active = phase else { return }
             let location = NSEvent.mouseLocation
             guard location != lastMouse else { return }
             lastMouse = location
-            selectedID = entry.id
+            palette.select(entry.id)
         }
     }
 
-    @ViewBuilder private func rowContent(_ entry: ClipboardEntry) -> some View {
-        switch entry.kind {
-        case .image:
-            ClipboardThumbnailView(entry: entry, maxHeight: 40) {
-                rowTitle(entry)
-            }
-        case .file:
-            HStack(spacing: 6) {
-                ClipboardThumbnailView(entry: entry, maxHeight: 40) {
-                    Image(systemName: "doc")
+    @ViewBuilder private func leading(
+        _ entry: ClipboardEntry, category: ClipboardCategory, selected: Bool
+    ) -> some View {
+        let side: CGFloat = entry.kind == .image ? 44 : 28
+        Group {
+            switch category {
+            case .color:
+                if let color = ClipboardColorValue(parsing: entry.preview ?? "") {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            Color(
+                                .sRGB, red: color.red, green: color.green, blue: color.blue,
+                                opacity: color.alpha)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.15))
+                        )
+                        .frame(width: 22, height: 22)
+                } else {
+                    symbol(category, selected: selected)
                 }
-                .frame(width: 40)
-                rowTitle(entry)
+            case .image, .file:
+                ClipboardThumbnailView(entry: entry, maxHeight: side) {
+                    symbol(category, selected: selected)
+                }
+            default:
+                symbol(category, selected: selected)
             }
-        default:
-            rowTitle(entry)
         }
+        .frame(width: side, height: side)
     }
 
-    private func rowTitle(_ entry: ClipboardEntry) -> some View {
-        Text(title(entry))
-            .font(.system(size: 13))
-            .lineLimit(1)
-            .truncationMode(.tail)
+    private func symbol(_ category: ClipboardCategory, selected: Bool) -> some View {
+        Image(systemName: category.symbol)
+            .font(.system(size: 14))
+            .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
     }
 
     private var footer: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-            footerRow("Clear unpinned", shortcut: "⌥⌘⌫") { requestClear() }
-            footerRow("Preferences…", shortcut: "⌘,") { openPreferences() }
+        HStack(spacing: 12) {
+            KeyHint(keys: "↑↓", label: "Navigate")
+            if showsChips { KeyHint(keys: "←→", label: "Category") }
+            KeyHint(keys: "↩", label: pastesOnPick ? "Paste" : "Copy")
+            KeyHint(keys: "⌘P", label: "Pin")
+            KeyHint(keys: "⌫", label: "Delete")
+            Spacer(minLength: 0)
+            KeyHint(keys: "esc", label: "Close")
         }
-        .padding(.horizontal, 5)
-    }
-
-    private func footerRow(
-        _ label: String, shortcut: String, action: @escaping () -> Void
-    ) -> some View {
-        FooterRow(label: label, shortcut: shortcut, action: action)
+        .padding(.horizontal, 14)
+        .frame(height: ClipboardPanelLayout.footerHeight)
     }
 
     private func title(_ entry: ClipboardEntry) -> String {
         entry.displayPreview
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
+            .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
     }
 
-    private var selectedEntry: ClipboardEntry? {
-        arranged.first { $0.id == selectedID }
+    private func resetForShow() {
+        lastMouse = NSEvent.mouseLocation
+        palette.setPinToTop(pinToTop)
+        palette.replace(store.entries)
+        palette.reset()
+        filterText = ""
+        renderLimit = Self.pageSize
+        keyboardScrollTick += 1
+        reportHeight()
+        DispatchQueue.main.async { searchFocused = true }
     }
 
-    private func move(_ delta: Int) {
-        let items = arranged
-        guard !items.isEmpty else { return }
-        let index = selectedID.flatMap { id in items.firstIndex { $0.id == id } } ?? -delta
-        let next: Int
-        if delta < 0, index == 0 {
-            next = edgeShownIndex(in: items, bottom: true) ?? items.count - 1
-        } else if delta > 0, index == items.count - 1 {
-            next = edgeShownIndex(in: items, bottom: false) ?? 0
-        } else {
-            next = min(max(index + delta, 0), items.count - 1)
+    private func extendPage() {
+        guard renderLimit < palette.rows.count else { return }
+        renderLimit = min(palette.rows.count, renderLimit + Self.pageSize)
+    }
+
+    private func revealSelection() {
+        if let index = palette.selectedIndex, index >= renderLimit {
+            renderLimit = min(palette.rows.count, index + Self.pageSize)
         }
-        ensureRendered(upTo: next)
-        selectedID = items[next].id
         keyboardScrollTick += 1
-    }
-
-    private func jumpToEdge(top: Bool) {
-        let items = arranged
-        let shownEdgeIndex = top ? nil : edgeShownIndex(in: items, bottom: true)
-        guard
-            let index = Self.jumpTargetIndex(
-                itemCount: items.count, top: top, shownEdgeIndex: shownEdgeIndex,
-                renderedCount: visible.count)
-        else { return }
-        selectedID = items[index].id
-        keyboardScrollTick += 1
-    }
-
-    private func edgeShownIndex(in items: [ClipboardEntry], bottom: Bool) -> Int? {
-        let shown = rowFrames.filter { $0.value.minY >= -1 && $0.value.maxY <= listHeight + 1 }
-        let edge =
-            bottom
-            ? shown.max { $0.value.minY < $1.value.minY }
-            : shown.min { $0.value.minY < $1.value.minY }
-        guard let id = edge?.key else { return nil }
-        return items.firstIndex { $0.id == id }
     }
 
     private func handle(_ press: KeyPress) -> KeyPress.Result {
-        if press.modifiers.contains(.command),
-            let digit = press.key.character.wholeNumberValue, (1...9).contains(digit),
-            let id = digitShortcuts.first(where: { $0.value == digit })?.key,
-            let entry = visible.first(where: { $0.id == id })
-        {
-            activate(entry, plainText: press.modifiers.contains(.option))
-            return .handled
-        }
-        if press.key == .delete {
-            if press.modifiers.contains([.option, .command]) {
-                requestClear()
-                return .handled
-            }
-            if press.modifiers.contains(.option) {
-                deleteSelected()
-                return .handled
-            }
-        }
-        if press.modifiers.contains(.option), press.key.character == "p",
-            let entry = selectedEntry
-        {
-            store.togglePin(entry.id)
-            return .handled
-        }
-        if press.modifiers.contains(.command), press.key.character == "," {
+        guard
+            let command = ClipboardPaletteKeymap.command(
+                key: press.key, modifiers: press.modifiers, queryIsEmpty: filterText.isEmpty)
+        else { return .ignored }
+        perform(command)
+        return .handled
+    }
+
+    private func perform(_ command: ClipboardPaletteCommand) {
+        switch command {
+        case .move(let delta):
+            palette.move(by: delta)
+            revealSelection()
+        case .jump(let top):
+            palette.jump(toTop: top)
+            revealSelection()
+        case .cycleCategory(let delta):
+            palette.cycleCategory(by: delta)
+            renderLimit = Self.pageSize
+            keyboardScrollTick += 1
+        case .paste(let plainText):
+            activate(palette.selected, plainText: plainText)
+        case .quickPaste(let digit, let plainText):
+            activate(palette.entry(forShortcut: digit), plainText: plainText)
+        case .togglePin:
+            guard let id = palette.selectedID else { return }
+            store.togglePin(id)
+            palette.replace(store.entries)
+            revealSelection()
+        case .delete:
+            guard let id = palette.selectedID else { return }
+            store.delete(id)
+            palette.replace(store.entries)
+            revealSelection()
+        case .clearUnpinned:
+            requestClear()
+        case .clearSearch:
+            filterText = ""
+        case .dismiss:
+            onDismiss()
+        case .preferences:
             openPreferences()
-            return .handled
         }
-        return .ignored
     }
 
     private func activate(_ entry: ClipboardEntry?, plainText: Bool) {
         guard let entry else { return }
         onDismiss()
         store.activate(entry, forcePlainText: plainText)
-    }
-
-    private func deleteSelected() {
-        guard let entry = selectedEntry else { return }
-        let index = arranged.firstIndex { $0.id == entry.id } ?? 0
-        arranged.removeAll { $0.id == entry.id }
-        syncVisible()
-        store.delete(entry.id)
-        if arranged.isEmpty {
-            selectedID = nil
-        } else {
-            let nextIndex = min(index, arranged.count - 1)
-            ensureRendered(upTo: nextIndex)
-            selectedID = arranged[nextIndex].id
-        }
-        reportHeight()
     }
 
     private func requestClear() {
@@ -486,47 +479,30 @@ struct ClipboardPanelView: View {
     }
 
     private func reportHeight() {
-        let sizingEntries = filterText.isEmpty ? arranged : store.entries
-        onHeightChange(Self.height(for: sizingEntries, showFooter: showFooter))
+        onHeightChange(
+            ClipboardPanelLayout.estimatedHeight(
+                for: store.entries, pinToTop: pinToTop, showsFooter: showFooter))
     }
 }
 
-private struct RowFramesKey: PreferenceKey {
-    static let defaultValue: [String: CGRect] = [:]
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
-    }
-}
-
-private struct FooterRow: View {
+private struct KeyHint: View {
+    let keys: String
     let label: String
-    let shortcut: String
-    let action: () -> Void
-
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
-    @State private var hovered = false
 
     var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 13))
-                Spacer()
-                Text(shortcut)
-                    .font(.system(size: 11))
-                    .foregroundStyle(hovered ? Color.white.opacity(0.8) : Color.secondary)
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 21)
-            .foregroundStyle(hovered ? Color.white : Color.primary)
-            .background(
-                hovered ? themeColor(themeName) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 4)
-            )
-            .contentShape(Rectangle())
+        HStack(spacing: 5) {
+            Text(keys)
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 5)
+                .frame(minWidth: 20)
+                .frame(height: 17)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.secondary.opacity(0.16)))
+            Text(label)
+                .font(.system(size: 11))
         }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovered = $0 }
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
     }
 }
