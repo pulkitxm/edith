@@ -630,30 +630,11 @@ extension DatabaseContinuationAuthority {
 
 extension Data {
     fileprivate init?(databaseContinuationBase64URL value: String) {
-        guard !value.isEmpty,
-            value.unicodeScalars.allSatisfy({ scalar in
-                (48...57).contains(scalar.value)
-                    || (65...90).contains(scalar.value)
-                    || (97...122).contains(scalar.value)
-                    || scalar.value == 45 || scalar.value == 95
-            })
-        else {
-            return nil
-        }
-        var base64 = value.replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let remainder = base64.utf8.count % 4
-        guard remainder != 1 else { return nil }
-        if remainder != 0 {
-            base64.append(String(repeating: "=", count: 4 - remainder))
-        }
-        self.init(base64Encoded: base64)
+        guard let decoded = DatabaseBase64URL.decode(value) else { return nil }
+        self = decoded
     }
 
     fileprivate func databaseContinuationBase64URLString() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
+        DatabaseBase64URL.encode(self)
     }
 }

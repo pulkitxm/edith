@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 private struct MySQLDatabaseReadContinuation: Codable, Equatable, Sendable {
@@ -759,7 +760,7 @@ enum MySQLDatabaseReadSupport {
     }
 
     private static func quote(_ identifier: String) -> String {
-        "`" + identifier.replacingOccurrences(of: "`", with: "``") + "`"
+        BacktickQuoted.wrap(identifier)
     }
 
     private static func requireIdentifier(

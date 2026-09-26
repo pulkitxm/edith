@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum BifrostSearchTarget: String, CaseIterable, Sendable {
@@ -119,6 +120,6 @@ public enum BifrostRipgrep {
     }
 
     public static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        POSIXQuote.quote(value)
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import GhosttyKit
 import OSLog
 
@@ -28,7 +29,7 @@ public struct GhosttyLaunch: Sendable {
     }
 
     private static func quote(_ value: String) -> String {
-        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        POSIXQuote.quote(value)
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import SwiftUI
 
 public enum UsageShareRenderingError: LocalizedError {
@@ -767,8 +768,6 @@ private enum ShareFormat {
     }
 
     static func period(_ date: Date) -> String {
-        let calendar = Calendar(identifier: .gregorian)
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        CalendarDay.stamp(date, calendar: Calendar(identifier: .gregorian))
     }
 }

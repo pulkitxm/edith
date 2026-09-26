@@ -668,13 +668,7 @@ struct DatabaseSafetyReviewSheet: View {
     }
 
     private func announce(_ message: String) {
-        NSAccessibility.post(
-            element: NSApplication.shared,
-            notification: .announcementRequested,
-            userInfo: [
-                .announcement: message,
-                .priority: NSAccessibilityPriorityLevel.high.rawValue,
-            ])
+        AccessibilityAnnouncement.post(message, priority: .high)
     }
 }
 

@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum DatabaseRowMutationRequestError: Error, Equatable, Sendable {
@@ -216,7 +217,7 @@ public enum DatabaseRowMutationRequests {
     }
 
     private static func mySQLQuote(_ value: String) -> String {
-        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
+        BacktickQuoted.wrap(value)
     }
 
     private static func postgreSQLIdentity(
@@ -266,6 +267,6 @@ public enum DatabaseRowMutationRequests {
     }
 
     private static func quote(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 }

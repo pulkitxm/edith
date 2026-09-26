@@ -1,4 +1,5 @@
 import Darwin
+import EdithCore
 import EdithKit
 import Foundation
 import GRDB
@@ -8,11 +9,7 @@ public enum BackupSnapshotTables {
     public static let timestampKey = "backupLastSnapshotAt"
 
     public static func fileName(table: String, day: Date, calendar: Calendar = .current) -> String {
-        let components = calendar.dateComponents([.year, .month, .day], from: day)
-        let stamp = String(
-            format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0,
-            components.day ?? 0)
-        return "\(table)-\(stamp).jsonl"
+        return "\(table)-\(CalendarDay.stamp(day, calendar: calendar)).jsonl"
     }
 }
 

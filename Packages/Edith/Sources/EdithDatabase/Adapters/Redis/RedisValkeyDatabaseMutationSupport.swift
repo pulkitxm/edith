@@ -233,12 +233,9 @@ enum RedisValkeyDatabaseMutationSupport {
         message: String,
         code: String
     ) -> DatabaseAdapterFailure {
-        .reported(
-            DatabaseErrorEnvelope(
-                category: category,
-                message: message,
-                productCode: code))
-    }
+    DatabaseOperationSupport.reported(
+        category: category, message: message, code: code)
+}
 }
 
 struct RedisValkeyDatabaseMutation: Sendable {

@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -304,10 +305,7 @@ private struct AgentJobRow: View {
 
 enum AgentDuration {
     static func text(_ seconds: TimeInterval) -> String {
-        if seconds < 60 { return "\(Int(seconds))s" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        if seconds < 86_400 { return "\(Int(seconds / 3600))h" }
-        return "\(Int(seconds / 86_400))d"
+        CompactDuration.text(seconds)
     }
 
     static func cadence(_ cadence: AgentCadence) -> String {

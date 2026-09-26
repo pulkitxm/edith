@@ -1,4 +1,5 @@
 import ArgumentParser
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -58,10 +59,7 @@ enum AgentCLI {
     }
 
     static func duration(_ seconds: TimeInterval) -> String {
-        if seconds < 60 { return "\(Int(seconds))s" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        if seconds < 86_400 { return "\(Int(seconds / 3600))h" }
-        return "\(Int(seconds / 86_400))d"
+        CompactDuration.text(seconds)
     }
 }
 

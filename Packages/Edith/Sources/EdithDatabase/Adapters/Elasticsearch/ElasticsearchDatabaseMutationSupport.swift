@@ -166,12 +166,9 @@ enum ElasticsearchDatabaseMutationSupport {
         message: String,
         code: String
     ) -> DatabaseAdapterFailure {
-        .reported(
-            DatabaseErrorEnvelope(
-                category: category,
-                message: message,
-                productCode: code))
-    }
+    DatabaseOperationSupport.reported(
+        category: category, message: message, code: code)
+}
 }
 
 private struct ElasticsearchDatabaseValidatedMutation {

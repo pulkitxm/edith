@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithDatabase
 import Foundation
 import Observation
@@ -1590,11 +1591,11 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private static func doubleQuoted(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(value)
     }
 
     private static func backtickQuoted(_ value: String) -> String {
-        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
+        BacktickQuoted.wrap(value)
     }
 
     private static func text(for value: DatabaseValue) -> String {
@@ -2080,13 +2081,7 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private static func announce(_ message: String) {
-        NSAccessibility.post(
-            element: NSApplication.shared,
-            notification: .announcementRequested,
-            userInfo: [
-                .announcement: message,
-                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
-            ])
+        AccessibilityAnnouncement.post(message)
     }
 }
 

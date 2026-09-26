@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 enum GrokCredentialStore {
@@ -93,9 +94,7 @@ enum GrokCredentialStore {
     }
 
     private static func nonempty(_ value: Any?) -> String? {
-        guard let text = value as? String else { return nil }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        BlankText.trimmedNonEmpty(value)
     }
 
     private static func timestamp(_ date: Date) -> String {

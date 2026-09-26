@@ -1118,10 +1118,8 @@ enum MySQLDatabaseDriverSupport {
     }
 
     private static func numericPrefix(_ value: Substring) -> Int? {
-        let digits = value.prefix(while: { $0.isNumber })
-        guard !digits.isEmpty else { return nil }
-        return Int(digits)
-    }
+    DatabaseOperationSupport.numericPrefix(value)
+}
 
     private static func valid(_ value: String, maximumBytes: Int) -> Bool {
         !value.isEmpty && value.utf8.count <= maximumBytes && !value.contains("\0")

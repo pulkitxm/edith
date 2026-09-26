@@ -2,6 +2,42 @@
 set -eo pipefail
 cd "$(dirname "$0")"
 
+batch=""
+passthrough=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --list-batches)
+            python3 ../../scripts/test-batches.py list swift
+            exit 0
+            ;;
+        --batch)
+            if [[ $# -lt 2 || -z "${2:-}" ]]; then
+                printf '%s\n' "test.sh: --batch needs a name" >&2
+                exit 2
+            fi
+            batch="$2"
+            shift 2
+            ;;
+        *)
+            passthrough+=("$1")
+            shift
+            ;;
+    esac
+done
+if [[ ${#passthrough[@]} -gt 0 ]]; then
+    set -- "${passthrough[@]}"
+else
+    set --
+fi
+
+batch_args=()
+if [[ -n "$batch" ]]; then
+    batch_spec="$(python3 ../../scripts/test-batches.py swift-args "$batch")"
+    batch_flag="$(printf '%s\n' "$batch_spec" | sed -n '1p')"
+    batch_pattern="$(printf '%s\n' "$batch_spec" | sed -n '2p')"
+    batch_args=("$batch_flag" "$batch_pattern")
+fi
+
 test_owned_runtime=""
 test_owned_shared=""
 test_owned_helper=""
@@ -101,5 +137,6 @@ if [[ "${1:-}" == "--build-only" ]]; then
     shift
     swift build --product EdithPackageTests --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
 else
-    swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+    swift test --no-parallel --disable-index-store ${FLAGS[@]+"${FLAGS[@]}"} \
+        ${batch_args[@]+"${batch_args[@]}"} "$@"
 fi

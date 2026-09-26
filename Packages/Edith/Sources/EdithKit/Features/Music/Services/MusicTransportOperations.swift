@@ -298,7 +298,7 @@ public struct BuiltinCommand: Equatable, Sendable {
 
 public enum MusicTransportExecution {
     public static func fraction(_ value: Double) -> Double {
-        min(max(value, 0), 1)
+        UnitInterval.clamp(value)
     }
 
     public static func builtinCommands(_ action: PlayerAction) -> [BuiltinCommand] {

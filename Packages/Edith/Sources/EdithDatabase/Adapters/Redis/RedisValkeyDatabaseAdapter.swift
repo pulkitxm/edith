@@ -1418,13 +1418,9 @@ private enum RedisValkeyDatabaseAdapterSupport {
         code: String,
         retry: DatabaseRetryAction = .none
     ) -> DatabaseAdapterFailure {
-        .reported(
-            DatabaseErrorEnvelope(
-                category: category,
-                message: message,
-                productCode: code,
-                retry: DatabaseRetryGuidance(action: retry)))
-    }
+    DatabaseOperationSupport.reported(
+        category: category, message: message, code: code, retry: retry)
+}
 
     static func connectionFailure(
         for failure: RedisDatabaseClientFailure
@@ -1447,25 +1443,9 @@ private enum RedisValkeyDatabaseAdapterSupport {
         _ context: DatabaseAdapterOperationContext,
         deadline: Date? = nil
     ) async throws(DatabaseAdapterFailure) {
-        switch await context.cancellation.reason() {
-        case .deadlineExceeded:
-            throw deadlineExceeded
-        case .userRequested, .sessionDisconnected:
-            throw .cancelled
-        case nil:
-            break
-        }
-        if Task.isCancelled {
-            throw .cancelled
-        }
-        let effectiveDeadline = [context.deadline, deadline].compactMap { $0 }.min()
-        guard let effectiveDeadline else { return }
-        guard effectiveDeadline.timeIntervalSinceReferenceDate.isFinite,
-            effectiveDeadline > Date()
-        else {
-            throw deadlineExceeded
-        }
-    }
+    return try await DatabaseOperationSupport.check(
+        context, deadlineExceeded: deadlineExceeded, deadline: deadline)
+}
 
     static func operationDeadline(
         context: DatabaseAdapterOperationContext,

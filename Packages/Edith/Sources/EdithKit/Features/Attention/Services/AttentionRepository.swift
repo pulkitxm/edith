@@ -1,4 +1,5 @@
 import Darwin
+import EdithCore
 import Foundation
 
 public struct AttentionRepository: Sendable {
@@ -36,9 +37,7 @@ public struct AttentionRepository: Sendable {
     }
 
     public func eventFile(for date: Date) -> URL {
-        let parts = AttentionPaths.utcCalendar.dateComponents([.year, .month, .day], from: date)
-        let name = String(
-            format: "%04d-%02d-%02d.jsonl", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        let name = CalendarDay.stamp(date, calendar: AttentionPaths.utcCalendar) + ".jsonl"
         return eventsDirectory.appendingPathComponent(name)
     }
 

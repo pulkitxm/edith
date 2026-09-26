@@ -232,10 +232,44 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - suites: core
+            batch: core
+          - suites: database
+            batch: database
+          - suites: database-mcp
+            batch: database-mcp
           - suites: cli
-            selection: --filter
+            batch: cli
+          - suites: herdr
+            batch: herdr
+          - suites: agent
+            batch: agent
+          - suites: machines
+            batch: machines
+          - suites: bifrost
+            batch: bifrost
+          - suites: clipboard
+            batch: clipboard
+          - suites: usage
+            batch: usage
+          - suites: attention
+            batch: attention
+          - suites: companion
+            batch: companion
+          - suites: browser
+            batch: browser
+          - suites: media
+            batch: media
+          - suites: dashboard
+            batch: dashboard
+          - suites: extensions
+            batch: extensions
+          - suites: files
+            batch: files
+          - suites: database-ui
+            batch: database-ui
           - suites: app
-            selection: --skip
+            batch: app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -293,7 +327,7 @@ jobs:
           key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
         timeout-minutes: 10
-        run: ./test.sh --skip-build ${{ matrix.selection }} '^EdithTests\.CLI'
+        run: ./test.sh --skip-build --batch ${{ matrix.batch }}
         working-directory: Packages/Edith
         env:
           EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"

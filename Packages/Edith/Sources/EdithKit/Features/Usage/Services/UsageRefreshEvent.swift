@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum UsageRefreshEvent: Sendable, Equatable {
@@ -95,10 +96,10 @@ public enum UsageRefreshTranscript {
     }()
 
     private static func pad(_ text: String, _ width: Int) -> String {
-        text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
+        TextColumns.pad(text, to: width)
     }
 
     private static func leftPad(_ text: String, _ width: Int) -> String {
-        text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
+        TextColumns.leftPad(text, to: width)
     }
 }

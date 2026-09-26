@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import GRDB
 import GRDBSQLite
@@ -576,22 +577,9 @@ private enum SQLiteDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-        switch await context.cancellation.reason() {
-        case .deadlineExceeded:
-            throw deadlineExceeded
-        case .userRequested, .sessionDisconnected:
-            throw .cancelled
-        case nil:
-            break
-        }
-        if Task.isCancelled {
-            throw .cancelled
-        }
-        guard let deadline = context.deadline else { return }
-        guard deadline.timeIntervalSinceReferenceDate.isFinite, deadline > Date() else {
-            throw deadlineExceeded
-        }
-    }
+    return try await DatabaseOperationSupport.check(
+        context, deadlineExceeded: deadlineExceeded)
+}
 
     static func queryOnlyRead<Output>(
         _ database: Database,
@@ -2146,7 +2134,7 @@ private enum SQLiteDatabaseAdapterSupport {
     }
 
     private static func quote(_ identifier: String) -> String {
-        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
+        DoubleQuoted.wrap(identifier)
     }
 
     private static func qualified(_ source: String, _ column: String) -> String {

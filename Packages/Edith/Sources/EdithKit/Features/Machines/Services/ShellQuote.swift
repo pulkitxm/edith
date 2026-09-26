@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum ShellQuote {
@@ -5,7 +6,7 @@ public enum ShellQuote {
         if !value.isEmpty, value.allSatisfy({ Self.safeCharacters.contains($0) }) {
             return value
         }
-        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return POSIXQuote.quote(value)
     }
 
     public static func command(_ argv: [String]) -> String {

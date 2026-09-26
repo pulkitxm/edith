@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public struct CLIFailure: Error, CustomStringConvertible, Equatable {
@@ -161,9 +162,7 @@ public enum TextTable {
     }
 
     private static func pad(_ cell: String, to width: Int) -> String {
-        let missing = width - cell.count
-        guard missing > 0 else { return cell }
-        return cell + String(repeating: " ", count: missing)
+        TextColumns.pad(cell, to: width)
     }
 }
 

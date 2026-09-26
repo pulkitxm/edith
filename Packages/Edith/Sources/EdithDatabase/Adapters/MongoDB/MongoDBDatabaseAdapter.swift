@@ -524,22 +524,9 @@ enum MongoDBDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-        switch await context.cancellation.reason() {
-        case .deadlineExceeded:
-            throw deadlineExceeded
-        case .userRequested, .sessionDisconnected:
-            throw .cancelled
-        case nil:
-            break
-        }
-        if Task.isCancelled {
-            throw .cancelled
-        }
-        guard let deadline = context.deadline else { return }
-        guard deadline.timeIntervalSinceReferenceDate.isFinite, deadline > Date() else {
-            throw deadlineExceeded
-        }
-    }
+    return try await DatabaseOperationSupport.check(
+        context, deadlineExceeded: deadlineExceeded)
+}
 
     static func maximumTimeMilliseconds(
         connection: DatabaseConnectionDefinition,
