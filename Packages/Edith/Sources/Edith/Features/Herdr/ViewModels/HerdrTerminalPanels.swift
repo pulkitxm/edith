@@ -438,6 +438,13 @@ final class HerdrTerminalPanels {
         }
     }
 
+    @discardableResult
+    func closeFocused(in owner: String) -> Bool {
+        guard holdsFocus(owner), let id = selectedID(in: owner) else { return false }
+        requestClose(id)
+        return true
+    }
+
     func close(_ id: String) {
         guard let terminal = remove(id) else { return }
         terminal.holder.stop()

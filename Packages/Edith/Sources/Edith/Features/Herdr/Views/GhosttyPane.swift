@@ -51,9 +51,10 @@ struct GhosttyPane: NSViewRepresentable {
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
         view.setRenderingActive(active)
-        guard context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) else {
-            return
+        if context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) {
+            view.requestFocus()
+        } else if !(active && wantsFocus) {
+            view.cancelFocusRequest()
         }
-        DispatchQueue.main.async { view.focusIfNeeded() }
     }
 }
