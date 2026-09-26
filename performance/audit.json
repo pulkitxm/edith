@@ -161,7 +161,7 @@
       "area": "uiRendering",
       "status": "protected",
       "finding": "Clipboard history bounds its initial population, and inactive terminal surfaces defer repeated redraws until visible.",
-      "measurement": "The initial clipboard population is capped at 80 rows, while 20,000 terminal output chunks create one deferred inactive redraw pass.",
+      "measurement": "The initial clipboard population is capped at 80 rows even for a 5,000 clip history, while 20,000 terminal output chunks create one deferred inactive redraw pass.",
       "regressionProperty": "Large clipboard histories stay paged and hidden terminal tabs request one catch-up redraw when reactivated.",
       "evidence": [
         {
@@ -170,7 +170,7 @@
         },
         {
           "path": "Packages/Edith/Tests/EdithTests/ClipboardPanelNavigationTests.swift",
-          "contains": "commandDownFallsBackToTheRenderedPage"
+          "contains": "largeHistoriesRenderOnlyTheFirstPage"
         },
         {
           "path": "Packages/Edith/Sources/Edith/Features/Machines/Views/MachineTerminalTab.swift",

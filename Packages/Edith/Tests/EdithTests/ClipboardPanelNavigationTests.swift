@@ -44,6 +44,19 @@ private struct ClipboardMutationFailure: LocalizedError {
         ]
     }
 
+    @Test func largeHistoriesRenderOnlyTheFirstPage() {
+        let many = (0..<5_000).map { entry("e\($0)", "clip \($0)", age: Double($0)) }
+        var palette = ClipboardPalette(entries: many)
+
+        let page = palette.sections(limit: ClipboardPanelView.pageSize)
+        #expect(ClipboardPanelView.pageSize == 80)
+        #expect(page.flatMap(\.entries).count == ClipboardPanelView.pageSize)
+        #expect(palette.rows.count == 5_000)
+
+        palette.jump(toTop: false)
+        #expect(palette.selectedIndex == 4_999)
+    }
+
     @Test func clearSurfacesPersistenceFailure() async throws {
         let target = entry("target", "target", age: 0)
         let store = try await store([target], mutationsFail: true)
