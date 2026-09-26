@@ -107,8 +107,8 @@ closed.
   the values changed.
 - `ed config set tabUsageEnabled false` turns off the Agent Usage extension, and
   with it the app's own collection and the limit polling; `claudeLimitsEnabled`,
-  `codexLimitsEnabled` and `cursorLimitsEnabled` do the same for a single
-  provider's polling.
+  `codexLimitsEnabled`, `cursorLimitsEnabled` and `grokLimitsEnabled` do the same
+  for a single provider's polling.
   `ed usage refresh` runs the pipeline itself and collects either way. The read
   verbs keep working against whatever was collected before that, so
   `ed usage limits` keeps printing a silenced provider's newest valid row.
@@ -116,7 +116,7 @@ closed.
 ## Attribution model
 
 The daily and model rows are the authoritative accounting totals. The collector
-discovers Claude Code, Cowork, Codex, Cursor, OpenCode, Amp, Droid,
+discovers Claude Code, Cowork, Codex, Cursor, Grok, OpenCode, Amp, Droid,
 Codebuff, Hermes, Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and
 Command Code when their local stores contain usage. A source appears in
 `ed usage sources` only when it contributed data, so this list is collector
@@ -125,7 +125,9 @@ coverage rather than a promise that every id is present on every Mac.
 Repository detail comes from the session stores that expose it: Claude and
 Cowork transcripts, Codex daily sessions and metadata, Cursor chat metadata
 when a local chat matches the conversation, Pi session logs, Command Code
-projects and the OpenCode database. Cursor token and cost totals come from
+projects, Grok Build turn logs under `~/.grok/sessions`, and the OpenCode
+database. Grok token totals split cache out of input, and the cost is the
+billed `costUsdTicks` on each completed turn. Cursor token and cost totals come from
 Cursor's authenticated usage API for the signed-in account, including IDE
 requests. Local chat metadata attributes a conversation to a folder when that
 chat exists on disk. Those measurements are reconciled per day and source to
@@ -144,7 +146,7 @@ machines so the same repository still groups into one row.
 ## Where to go next
 
 - [`ed config`](../config/README.md) for `tabUsageEnabled`, `claudeLimitsEnabled`,
-  `codexLimitsEnabled` and `cursorLimitsEnabled`, which decide what gets collected
+  `codexLimitsEnabled`, `cursorLimitsEnabled` and `grokLimitsEnabled`, which decide what gets collected
 - [`ed extensions`](../extensions/README.md) for turning the Agent Usage extension on
   and off by id
 - [`ed permissions`](../permissions/README.md) for the grants the app needs before it

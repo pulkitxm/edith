@@ -126,6 +126,15 @@ enum LimitAlertCopy {
         case (.cursor, .denied):
             title = "Cursor can't share usage"
             fix = "Open Cursor and sign in again so Edith can read your limits."
+        case (.grok, .expired):
+            title = "Grok session expired"
+            fix = "Run grok login in a terminal."
+        case (.grok, .missing):
+            title = "Grok login not found"
+            fix = "Run grok login so Edith can read your allowance."
+        case (.grok, .denied):
+            title = "Grok can't share usage"
+            fix = "Run grok login again so Edith can read your allowance."
         }
         return LimitAlert(
             kind: .login, scope: provider.rawValue, title: title,

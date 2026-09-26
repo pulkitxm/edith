@@ -90,6 +90,8 @@ final class UsageStore: FeatureModule {
     private(set) var codexWeek: LimitWindow?
     private(set) var cursorSession: LimitWindow?
     private(set) var cursorWeek: LimitWindow?
+    private(set) var grokWeek: LimitWindow?
+    private(set) var grokAllowance: GrokAllowance?
     private(set) var limitsError: String?
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
@@ -106,7 +108,7 @@ final class UsageStore: FeatureModule {
     var enabledProviders: [LimitProvider] {
         Self.enabledLimitProviders(
             claude: providerEnabled(.claude), codex: providerEnabled(.codex),
-            cursor: providerEnabled(.cursor))
+            cursor: providerEnabled(.cursor), grok: providerEnabled(.grok))
     }
 
     var availableProviders: [LimitProvider] {
@@ -127,6 +129,11 @@ final class UsageStore: FeatureModule {
             return ProviderLimits(
                 provider: provider, session: Self.fresh(cursorSession),
                 week: Self.fresh(cursorWeek))
+        case .grok:
+            let week = Self.fresh(grokWeek)
+            return ProviderLimits(
+                provider: provider, session: nil, week: week,
+                grok: week == nil ? nil : grokAllowance)
         }
     }
 
@@ -139,9 +146,9 @@ final class UsageStore: FeatureModule {
     }
 
     nonisolated static func enabledLimitProviders(
-        claude: Bool, codex: Bool, cursor: Bool
+        claude: Bool, codex: Bool, cursor: Bool, grok: Bool
     ) -> [LimitProvider] {
-        UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor)
+        UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor, grok: grok)
     }
 
     init() {
@@ -193,6 +200,11 @@ final class UsageStore: FeatureModule {
         if let last = latest[.cursor] {
             cursorSession = Self.fresh(last.session)
             cursorWeek = Self.fresh(last.week)
+            limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
+        }
+        if let last = latest[.grok] {
+            grokWeek = Self.fresh(last.week)
+            grokAllowance = grokWeek == nil ? nil : last.grok
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
     }

@@ -16,15 +16,26 @@ ed usage limits [--refresh] [--json]
 ## `--json` shape
 
 A top-level array, one object per provider that has ever been recorded, in the
-fixed order `codex`, `claude`, then `cursor`. `session` and `weekly` are each
-either an object or `null`. For Claude and Codex, `session` is the 5-hour
-window and `weekly` is the 7-day window. For Cursor, `session` is the Cursor
-Models pool (Cursor Grok and Composer) and `weekly` is the Other Models pool.
-Both Cursor pools reset together at the billing cycle.
+fixed order `codex`, `claude`, `cursor`, then `grok`. `session` and `weekly`
+are each either an object or `null`. For Claude and Codex, `session` is the
+5-hour window and `weekly` is the 7-day window. For Cursor, `session` is the
+Cursor Models pool (Cursor Grok and Composer) and `weekly` is the Other Models
+pool. Both Cursor pools reset together at the billing cycle. For Grok, `session`
+is always `null`. `weekly` is the plan allowance: one pool for Chat, Imagine,
+Voice, Build and API on a paid plan, sized by the plan and reset on the
+account's own clock. `period` is `weekly`, `monthly` or `daily`. `products`
+splits that same pool, `tier` is the plan name when Grok has one, and
+`prepaidBalance`, `onDemandUsed` and `onDemandCap` are dollar balances for
+extra credits and pay as you go. Those dollar fields are omitted for the other
+providers. A free plan can report a daily pool instead of a weekly one. xAI
+does not publish a message or token quota, so the percent is the live number.
 
 The human table is one row per pool. `LIMIT` names the pool, `USED` is its
 percent, and `RESETS` is that pool's reset as a coarse duration, `3h 10m` or
 `2d 4h`, clamped at zero. A `-` means the provider has not reported that pool.
+Grok prints its allowance, and a row for each product only when more than one
+product spent the pool. When extra credits or pay as you go are in use, a line
+under the table names those dollar balances.
 
 ```json
 [

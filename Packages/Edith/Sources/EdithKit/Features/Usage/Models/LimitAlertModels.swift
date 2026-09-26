@@ -39,6 +39,7 @@ public struct LimitAlertTarget: Hashable, Codable, Sendable {
         switch (provider, slot) {
         case (.cursor, .session), (.cursor, .fable): "Cursor models"
         case (.cursor, .week): "Cursor other models"
+        case (.grok, .week): "Grok allowance"
         case (_, .session): "\(provider.label) 5h"
         case (_, .week): "\(provider.label) weekly"
         case (_, .fable): "\(provider.label) Fable weekly"

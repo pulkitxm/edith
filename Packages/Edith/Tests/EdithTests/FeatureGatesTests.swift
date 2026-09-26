@@ -91,6 +91,7 @@ import Testing
     @Test func lastUsageProviderTurnsOffDependentFeatures() {
         let state = AgentUsageSettingsState(
             enabled: true, claudeEnabled: false, codexEnabled: false, cursorEnabled: false,
+            grokEnabled: false,
             menuBarEnabled: true,
             alertsEnabled: true, selectedProvider: .codex)
         let next = AgentUsageSettingsFlow.providersChanged(state)
@@ -102,6 +103,7 @@ import Testing
     @Test func remainingUsageProviderKeepsDependentFeatures() {
         let state = AgentUsageSettingsState(
             enabled: true, claudeEnabled: false, codexEnabled: true, cursorEnabled: false,
+            grokEnabled: false,
             menuBarEnabled: true,
             alertsEnabled: true, selectedProvider: .codex)
         #expect(AgentUsageSettingsFlow.providersChanged(state) == state)
@@ -110,6 +112,7 @@ import Testing
     @Test func reenablingUsageRestoresSelectedProvider() {
         let state = AgentUsageSettingsState(
             enabled: false, claudeEnabled: false, codexEnabled: false, cursorEnabled: false,
+            grokEnabled: false,
             menuBarEnabled: false,
             alertsEnabled: false, selectedProvider: .codex)
         let next = AgentUsageSettingsFlow.setEnabled(true, in: state)

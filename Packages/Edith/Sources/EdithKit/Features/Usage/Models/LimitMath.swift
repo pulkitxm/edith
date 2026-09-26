@@ -3,10 +3,105 @@ import Foundation
 public struct LimitWindow: Equatable, Codable, Sendable {
     public let percent: Double
     public let resetsAt: Date?
+    public let period: String?
 
-    public init(percent: Double, resetsAt: Date?) {
+    public init(percent: Double, resetsAt: Date?, period: String? = nil) {
         self.percent = percent
         self.resetsAt = resetsAt
+        self.period = period
+    }
+}
+
+public struct GrokProductShare: Codable, Equatable, Sendable {
+    public var name: String
+    public var percent: Double
+
+    public init(name: String, percent: Double) {
+        self.name = name
+        self.percent = percent
+    }
+}
+
+public struct GrokAllowance: Codable, Equatable, Sendable {
+    public var period: String
+    public var tier: String?
+    public var products: [GrokProductShare]
+    public var onDemandUsed: Double
+    public var onDemandCap: Double
+    public var prepaidBalance: Double
+
+    public init(
+        period: String, tier: String?, products: [GrokProductShare], onDemandUsed: Double,
+        onDemandCap: Double, prepaidBalance: Double
+    ) {
+        self.period = period
+        self.tier = tier
+        self.products = products
+        self.onDemandUsed = onDemandUsed
+        self.onDemandCap = onDemandCap
+        self.prepaidBalance = prepaidBalance
+    }
+
+    public var summary: String {
+        var parts: [String] = []
+        if let tier, !tier.isEmpty { parts.append(tier) }
+        if !products.isEmpty {
+            parts.append(
+                products.map { "\($0.name) \(Int($0.percent.rounded()))%" }.joined(
+                    separator: " · "))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    public var extraLine: String? {
+        var parts: [String] = []
+        if prepaidBalance > 0 { parts.append("Extra credits \(Self.money(prepaidBalance))") }
+        if onDemandCap > 0 || onDemandUsed > 0 {
+            parts.append(
+                "Pay as you go \(Self.money(onDemandUsed)) of \(Self.money(onDemandCap))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    private static func money(_ value: Double) -> String {
+        String(format: "$%.2f", value)
+    }
+}
+
+public enum GrokPeriod {
+    public static func canonical(_ raw: String?) -> String {
+        let stripped = (raw ?? "")
+            .replacingOccurrences(of: "USAGE_PERIOD_TYPE_", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if stripped.isEmpty { return "weekly" }
+        return stripped
+    }
+
+    public static func mark(_ period: String?) -> String {
+        switch canonical(period) {
+        case "monthly": "Mo"
+        case "daily": "Day"
+        case "weekly": "Wk"
+        default: "Use"
+        }
+    }
+
+    public static func title(_ period: String?) -> String {
+        switch canonical(period) {
+        case "monthly": "Monthly allowance"
+        case "daily": "Daily allowance"
+        case "weekly": "Weekly allowance"
+        default: "Allowance"
+        }
+    }
+
+    public static func duration(_ period: String?) -> TimeInterval {
+        switch canonical(period) {
+        case "monthly": 30 * 24 * 3600
+        case "daily": 24 * 3600
+        default: 7 * 24 * 3600
+        }
     }
 }
 
@@ -14,6 +109,7 @@ public enum LimitProvider: String, CaseIterable, Codable, Identifiable, Sendable
     case codex
     case claude
     case cursor
+    case grok
 
     public static let cursorBillingCycle: TimeInterval = 30 * 24 * 3600
 
@@ -23,6 +119,7 @@ public enum LimitProvider: String, CaseIterable, Codable, Identifiable, Sendable
         case .codex: "Codex"
         case .claude: "Claude"
         case .cursor: "Cursor"
+        case .grok: "Grok"
         }
     }
 }
@@ -32,15 +129,17 @@ public struct ProviderLimits: Sendable {
     public let session: LimitWindow?
     public let week: LimitWindow?
     public let fable: LimitWindow?
+    public let grok: GrokAllowance?
 
     public init(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil
     ) {
         self.provider = provider
         self.session = session
         self.week = week
         self.fable = fable
+        self.grok = grok
     }
 
     public var isAvailable: Bool { session != nil || week != nil || fable != nil }

@@ -474,7 +474,8 @@ public struct ExtensionMutationCenter: Sendable {
         if entry.id == "usage", enabled,
             !environment.defaults.bool(forKey: AppStorageKeys.Limits.claudeEnabled),
             !environment.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled),
-            !environment.defaults.bool(forKey: AppStorageKeys.Limits.cursorEnabled)
+            !environment.defaults.bool(forKey: AppStorageKeys.Limits.cursorEnabled),
+            !environment.defaults.bool(forKey: AppStorageKeys.Limits.grokEnabled)
         {
             let selected =
                 LimitProvider(
@@ -485,6 +486,7 @@ public struct ExtensionMutationCenter: Sendable {
             case .claude: key = AppStorageKeys.Limits.claudeEnabled
             case .codex: key = AppStorageKeys.Limits.codexEnabled
             case .cursor: key = AppStorageKeys.Limits.cursorEnabled
+            case .grok: key = AppStorageKeys.Limits.grokEnabled
             }
             environment.defaults.set(true, forKey: key)
         }

@@ -151,7 +151,7 @@ import Testing
         }
         #expect(fields["key"] == .string("limitsProvider"))
         #expect(fields["type"] == .string("string"))
-        #expect(fields["allowed"] == .strings(["claude", "codex", "cursor"]))
+        #expect(fields["allowed"] == .strings(["claude", "codex", "cursor", "grok"]))
         #expect(fields["isSet"] == .bool(false))
         defaults.removePersistentDomain(forName: "test.cli.describe")
     }

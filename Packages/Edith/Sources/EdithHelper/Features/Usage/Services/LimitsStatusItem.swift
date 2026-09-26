@@ -87,10 +87,13 @@ final class LimitsStatusItem {
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            if multi || group.provider == .cursor { appendLogo(group.provider, into: title) }
+            if showsLogo(group.provider, multi: multi) { appendLogo(group.provider, into: title) }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
-                appendLabel(segment.slot.menuBarLabel(for: group.provider) + " ", into: title)
+                appendLabel(
+                    segment.slot.menuBarLabel(for: group.provider, period: segment.window?.period)
+                        + " ",
+                    into: title)
                 appendValue(segment, provider: group.provider, percentSuffix: !multi, into: title)
             }
         }
@@ -166,7 +169,8 @@ final class LimitsStatusItem {
         let enabled = UsageStore.enabledLimitProviders(
             claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
             codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true,
-            cursor: defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true)
+            cursor: defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true,
+            grok: defaults.object(forKey: AppStorageKeys.Limits.grokEnabled) as? Bool ?? true)
         var stable: [ProviderLimits] = []
         stable.reserveCapacity(enabled.count)
         for provider in enabled.prefix(LimitProvider.allCases.count) {
@@ -175,6 +179,10 @@ final class LimitsStatusItem {
                     ?? ProviderLimits(provider: provider, session: nil, week: nil))
         }
         return stable
+    }
+
+    private func showsLogo(_ provider: LimitProvider, multi: Bool) -> Bool {
+        multi || provider == .cursor || provider == .grok
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
@@ -188,7 +196,7 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let showsLogo = multi || group.provider == .cursor
+        let showsLogo = showsLogo(group.provider, multi: multi)
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -206,13 +214,16 @@ final class LimitsStatusItem {
                 color =
                     segment.window.map {
                         self.color(
-                            for: $0, duration: segment.slot.pacingDuration(for: group.provider))
+                            for: $0,
+                            duration: segment.slot.pacingDuration(
+                                for: group.provider, period: $0.period))
                     }
                     ?? dimColor
             }
             columns.append(
                 StackedLimitsView.Column(
-                    label: segment.slot.menuBarLabel(for: group.provider), value: value,
+                    label: segment.slot.menuBarLabel(
+                        for: group.provider, period: segment.window?.period), value: value,
                     valueColor: color,
                     labelColor: labelColor))
         }
@@ -260,7 +271,9 @@ final class LimitsStatusItem {
         case .percent(let percent):
             let tint =
                 segment.window.map {
-                    color(for: $0, duration: segment.slot.pacingDuration(for: provider))
+                    color(
+                        for: $0,
+                        duration: segment.slot.pacingDuration(for: provider, period: $0.period))
                 }
                 ?? dimColor
             out.append(

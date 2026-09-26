@@ -12,10 +12,16 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (.cursor, .session): return "CM"
         case (.cursor, .week): return "OM"
         case (.cursor, .fable): return "CM"
+        case (.grok, .week): return GrokPeriod.mark(nil)
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "F"
         }
+    }
+
+    public func menuBarLabel(for provider: LimitProvider, period: String?) -> String {
+        if provider == .grok, self == .week { return GrokPeriod.mark(period) }
+        return menuBarLabel(for: provider)
     }
 
     public var settingsLabel: String { settingsLabel(for: .claude) }
@@ -25,6 +31,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (.cursor, .session): return "Cursor models"
         case (.cursor, .week): return "Other models"
         case (.cursor, .fable): return "Cursor models"
+        case (.grok, .week): return "Allowance"
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "Fable"
@@ -35,14 +42,22 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         switch (provider, self) {
         case (.cursor, .session), (.cursor, .fable): return "Cursor models"
         case (.cursor, .week): return "Other models"
+        case (.grok, .week): return GrokPeriod.title(nil)
         case (_, .session): return "5-hour limit"
         case (_, .week): return "Weekly · all models"
         case (_, .fable): return "Weekly · Fable"
         }
     }
 
-    public func pacingDuration(for provider: LimitProvider) -> TimeInterval {
-        provider == .cursor ? LimitProvider.cursorBillingCycle : kind.duration
+    public func title(for provider: LimitProvider, period: String?) -> String {
+        if provider == .grok, self == .week { return GrokPeriod.title(period) }
+        return title(for: provider)
+    }
+
+    public func pacingDuration(for provider: LimitProvider, period: String? = nil) -> TimeInterval {
+        if provider == .grok { return GrokPeriod.duration(period) }
+        if provider == .cursor { return LimitProvider.cursorBillingCycle }
+        return kind.duration
     }
 }
 
@@ -84,6 +99,7 @@ public enum MenuBarLimits {
         case .claude: [.session, .week, .fable]
         case .codex: [.session, .week]
         case .cursor: [.session, .week]
+        case .grok: [.week]
         }
     }
 
@@ -92,6 +108,7 @@ public enum MenuBarLimits {
         case .claude: AppStorageKeys.MenuBar.claudeWindows
         case .codex: AppStorageKeys.MenuBar.codexWindows
         case .cursor: AppStorageKeys.MenuBar.cursorWindows
+        case .grok: AppStorageKeys.MenuBar.grokWindows
         }
     }
 

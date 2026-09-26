@@ -22,7 +22,7 @@ limitsProvider
   type     string
   group    limits
   scope    shared
-  allowed  claude, codex, cursor
+  allowed  claude, codex, cursor, grok
   default  claude
   value    claude
 ```
@@ -36,7 +36,8 @@ the same object `ls` and `get` emit, which always carries every field:
   "allowed": [
     "claude",
     "codex",
-    "cursor"
+    "cursor",
+    "grok"
   ],
   "default": "claude",
   "group": "limits",
