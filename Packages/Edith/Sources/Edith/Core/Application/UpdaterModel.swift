@@ -52,6 +52,7 @@ final class UpdaterModel: NSObject,
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
+        historyLoadTask?.cancel()
         historyLoadTask = Task { [weak self, logURL] in
             let checkHistory = await Task.detached(priority: .utility) {
                 AppRuntimeCenter().updateHistory(url: logURL)
