@@ -39,7 +39,10 @@ public enum HerdrWorkspaceListCommand {
 
 public enum HerdrAgentStartCommand {
     public static func name(_ base: String, pane: String) -> String {
-        base + "-" + String(pane.map { $0.isLetter || $0.isNumber ? $0 : "-" })
+        let suffix = pane.lowercased().map { character -> Character in
+            character.isASCII && (character.isLetter || character.isNumber) ? character : "-"
+        }
+        return base.lowercased() + "-" + String(suffix)
     }
 
     public static func arguments(
