@@ -65,6 +65,28 @@ import Testing
         }
     }
 
+    @Test func aResetPeriodWithAnOmittedPercentStartsAtZero() throws {
+        let data = Data(
+            #"{"config":{"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-09-27T00:00:00Z","end":"2026-10-04T00:00:00Z"},"isUnifiedBillingUser":true,"onDemandUsed":{},"prepaidBalance":{}}}"#
+                .utf8)
+        let limits = try GrokLimitsReader.limits(json: data, tier: nil)
+        #expect(limits.week?.percent == 0)
+        #expect(limits.week?.resetsAt == EdithDate.parseISO("2026-10-04T00:00:00Z"))
+        #expect(limits.grok?.period == "weekly")
+        #expect(limits.grok?.onDemandUsed == 0)
+    }
+
+    @Test(arguments: ["NaN", "Infinity", "invalid"])
+    func invalidPercentIsNotTreatedAsAnUnusedAllowance(_ percent: String) {
+        let data = Data(
+            """
+            {"config":{"creditUsagePercent":"\(percent)","currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-10-04T00:00:00Z"}}}
+            """.utf8)
+        #expect(throws: GrokLimitsReader.Failure.malformed) {
+            try GrokLimitsReader.limits(json: data, tier: nil)
+        }
+    }
+
     @Test func refreshDecodesTheReplacementToken() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let refresh = try GrokLimitsReader.refreshed(

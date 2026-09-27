@@ -261,6 +261,7 @@ struct LimitsCardView: View {
     @State private var visible: [LimitPoint] = []
     @State private var samples: [Sample] = []
     @State private var marks: [LimitResetMarker] = []
+    @State private var loadedProvider: LimitProvider?
     @State private var range = "24h"
     @State private var selected: Date?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
@@ -316,7 +317,7 @@ struct LimitsCardView: View {
                     selection: Binding(
                         get: { selectedProvider }, set: { selectedProvider = $0 }),
                     providers: providers, color: DashSkin.ink(dark), size: 15)
-                if all.count > 1 {
+                if loadedProvider == selectedProvider, all.count > 1 {
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         HStack {
                             segmented
@@ -324,7 +325,7 @@ struct LimitsCardView: View {
                             readout
                             LimitsRefreshButton(dark: dark) { reloadAll() }
                         }
-                        chart
+                        chart.id(selectedProvider)
                     }
                 } else {
                     HStack {
@@ -362,6 +363,8 @@ struct LimitsCardView: View {
                 preferred == (LimitProvider(rawValue: selectedProviderRaw) ?? .claude)
             else { return }
             providers = snapshot.providers
+            loadedProvider = snapshot.provider
+            selected = nil
             all = snapshot.points
             let now = all.last?.date ?? Date()
             downsampled = LimitsHistory.downsample(all, now: now)
@@ -466,7 +469,11 @@ struct LimitsCardView: View {
                 .foregroundStyle(by: .value("Series", s.series))
             }
         }
-        .chartForegroundStyleScale([sessionSeriesName: sessionC, weekSeriesName: weeklyC])
+        .chartForegroundStyleScale(
+            domain: selectedProvider == .grok
+                ? [weekSeriesName] : [sessionSeriesName, weekSeriesName],
+            range: selectedProvider == .grok ? [weeklyC] : [sessionC, weeklyC]
+        )
         .chartYScale(domain: 0...100)
         .chartXScale(domain: start...now)
         .chartXSelection(value: $selected)

@@ -215,9 +215,18 @@ enum GrokLimitsReader {
             throw Failure.malformed
         }
         let config = object["config"] as? [String: Any] ?? object
-        guard let percent = number(config["creditUsagePercent"]) else { throw Failure.unavailable }
-        let periodSource =
-            (config["currentPeriod"] as? [String: Any])?["type"] as? String
+        let currentPeriod = config["currentPeriod"] as? [String: Any]
+        let periodSource = currentPeriod?["type"] as? String
+        let percent: Double
+        if let rawPercent = config["creditUsagePercent"], !(rawPercent is NSNull) {
+            guard let value = number(rawPercent), value.isFinite else { throw Failure.malformed }
+            percent = min(100, max(0, value))
+        } else {
+            guard let periodSource, !periodSource.isEmpty,
+                let end = currentPeriod?["end"] as? String, EdithDate.parseISO(end) != nil
+            else { throw Failure.unavailable }
+            percent = 0
+        }
         let period = GrokPeriod.canonical(periodSource)
         let resetText =
             ((config["currentPeriod"] as? [String: Any])?["end"] as? String)
