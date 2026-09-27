@@ -478,8 +478,8 @@ struct MainWindowView: View {
     @State private var liveSidebarWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
-    @State private var commandHintMonitor: Any?
-    @State private var commandHintWork: DispatchWorkItem?
+    @State private var optionHintMonitor: Any?
+    @State private var optionHintWork: DispatchWorkItem?
     @State private var showShortcutHints = false
     @State private var nav = NavStack()
     @State private var musicFolderPath = ""
@@ -603,7 +603,7 @@ struct MainWindowView: View {
             guard automaticActionsEnabled else { return }
             applyNavigationFallback()
             installWindowKeys()
-            installCommandHintMonitor()
+            installOptionHintMonitor()
             syncMusicResources()
             PresenterState.shared.syncEnabled(presenterEnabled)
             CalendarPermission.observe(permissionsObserverID)
@@ -620,7 +620,7 @@ struct MainWindowView: View {
             guard automaticActionsEnabled else { return }
             CalendarPermission.stopObserving(permissionsObserverID)
             removeWindowKeys()
-            removeCommandHintMonitor()
+            removeOptionHintMonitor()
             removeMusicKeys()
             MusicRemote.shared.stop()
         }
@@ -634,7 +634,7 @@ struct MainWindowView: View {
             NotificationCenter.default.publisher(
                 for: NSApplication.didResignActiveNotification)
         ) { _ in
-            dismissCommandHints()
+            dismissOptionHints()
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
@@ -1015,8 +1015,8 @@ struct MainWindowView: View {
         guard showShortcutHints else { return nil }
         let items = navigableItems
         guard let index = items.firstIndex(of: item) else { return nil }
-        if index < WindowKeyCommand.directSelectLimit { return "⌘\(index + 1)" }
-        return index == items.count - 1 ? "⌘9" : nil
+        if index < WindowKeyCommand.directSelectLimit { return "⌥\(index + 1)" }
+        return index == items.count - 1 ? "⌥9" : nil
     }
 
     private func installWindowKeys() {
@@ -1058,38 +1058,38 @@ struct MainWindowView: View {
         }
     }
 
-    private func installCommandHintMonitor() {
-        guard commandHintMonitor == nil else { return }
-        commandHintMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            let commandDown = event.modifierFlags.contains(.command)
+    private func installOptionHintMonitor() {
+        guard optionHintMonitor == nil else { return }
+        optionHintMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            let optionDown = event.modifierFlags.contains(.option)
             MainActor.assumeIsolated {
-                if commandDown {
-                    guard commandHintWork == nil, !showShortcutHints else { return }
+                if optionDown {
+                    guard optionHintWork == nil, !showShortcutHints else { return }
                     let work = DispatchWorkItem {
                         showShortcutHints = true
-                        commandHintWork = nil
+                        optionHintWork = nil
                     }
-                    commandHintWork = work
+                    optionHintWork = work
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
                 } else {
-                    dismissCommandHints()
+                    dismissOptionHints()
                 }
             }
             return event
         }
     }
 
-    private func removeCommandHintMonitor() {
-        dismissCommandHints()
-        if let monitor = commandHintMonitor {
+    private func removeOptionHintMonitor() {
+        dismissOptionHints()
+        if let monitor = optionHintMonitor {
             NSEvent.removeMonitor(monitor)
-            commandHintMonitor = nil
+            optionHintMonitor = nil
         }
     }
 
-    private func dismissCommandHints() {
-        commandHintWork?.cancel()
-        commandHintWork = nil
+    private func dismissOptionHints() {
+        optionHintWork?.cancel()
+        optionHintWork = nil
         showShortcutHints = false
     }
 
