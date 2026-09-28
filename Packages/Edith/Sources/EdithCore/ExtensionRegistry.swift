@@ -165,6 +165,12 @@ public enum ExtensionRegistry {
             featured: false, defaultsKey: "cleanerEnabled",
             requiredCapabilities: [.diskCleaning]),
         ExtensionRegistryEntry(
+            id: "blitztree", title: "BlitzTree",
+            subtitle: "Explore disk space with a treemap, largest files and cleanup candidates.",
+            symbolName: "square.grid.3x3.fill", suite: .maintenance, host: .window,
+            featured: true, defaultsKey: "tabBlitzTreeEnabled",
+            requiredCapabilities: [.diskCleaning]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps and the keyboard-cleaning lock.",
             symbolName: "switch.2", suite: .system, host: .bar, featured: true,

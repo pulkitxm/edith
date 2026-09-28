@@ -195,6 +195,10 @@ public enum ConfigCatalog {
             summary: "Site Audit extension: sitemap, metadata, and local Lighthouse reports.",
             fallback: .bool(false)),
         SettingDefinition(
+            AppStorageKeys.Tabs.blitzTreeEnabled, .bool, group: "panel",
+            summary: "BlitzTree extension: disk-space treemap and cleanup candidates.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.General.mainWindowSection, .string, group: "panel",
             summary: "Section the main window opens on."),
         SettingDefinition(

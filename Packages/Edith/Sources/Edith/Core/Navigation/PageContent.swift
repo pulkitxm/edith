@@ -22,6 +22,7 @@ struct PageContent: View {
         case .companion: CompanionPage()
         case .plugins: PluginsPage()
         case .appMaintenance: AppMaintenanceView()
+        case .blitztree: BlitzTreePage()
         case .system: SuiteLandingPage(suite: SuiteRegistry.suite(.system))
         case .runningApps: SystemPage()
         case .desk: SuiteLandingPage(suite: SuiteRegistry.suite(.desk))

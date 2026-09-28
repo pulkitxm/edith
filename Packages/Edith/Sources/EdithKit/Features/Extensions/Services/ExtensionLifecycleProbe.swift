@@ -178,6 +178,8 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     static let policies: [String: Policy] = [
+        "blitztree": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "plugins": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "attention": Policy(

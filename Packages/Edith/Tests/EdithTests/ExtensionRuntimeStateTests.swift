@@ -283,6 +283,7 @@ import Testing
             ("bifrost", "BifrostRows", "bifrostEnabled", "BifrostRows.swift"),
             ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
             ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
+            ("blitztree", "BlitzTreeRows", "enabled", "ExtensionsPane.swift"),
             ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
             ("audioMixer", "AudioMixerRows", "enabled", "ExtensionsPane.swift"),
         ]

@@ -199,6 +199,35 @@ public enum ExtensionLifecycleCatalog {
 
     public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
+            "blitztree", "Explore allocated disk space using Edith's built-in native scanner.",
+            workflows: [
+                instruction(
+                    "scan", "Scan a folder",
+                    "Choose a folder and explore its treemap and largest files."),
+                instruction(
+                    "review", "Review candidates",
+                    "Inspect cleanup candidates and reveal them in Finder."),
+            ],
+            prerequisites: [
+                instruction(
+                    "folder", "Choose a folder",
+                    "Enable BlitzTree and choose a readable local folder.",
+                    "ed app reveal blitztree")
+            ],
+            examples: ["ed extensions enable blitztree", "ed app reveal blitztree"],
+            docs: [documentation("guide", "BlitzTree guide", "docs/blitztree.md")],
+            recovery: [
+                instruction(
+                    "access", "Check folder access",
+                    "Use Full Disk Access to include protected folders when needed.",
+                    "ed permissions request fullDisk")
+            ],
+            verification: [
+                instruction(
+                    "verify", "Verify BlitzTree", "Check the extension readiness.",
+                    "ed extensions verify blitztree --json")
+            ]),
+        descriptor(
             "attention", "Understand app and browser activity, then protect focused work.",
             workflows: [
                 instruction(

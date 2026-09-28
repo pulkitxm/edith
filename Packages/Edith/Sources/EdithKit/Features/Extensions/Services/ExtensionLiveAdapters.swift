@@ -67,7 +67,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "system",
+        "usage", "quinjet", "plugins", "appMaintenance", "homebrew", "cleaner", "blitztree",
+        "system",
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
         "keystrokeHighlight",
@@ -98,6 +99,8 @@ public enum ExtensionLiveAdapters {
         }
     ) async -> ExtensionAdapterReadiness? {
         switch id {
+        case "blitztree":
+            .ready("The built-in disk scanner is ready. Choose a folder in BlitzTree.")
         case "plugins":
             executableNamed("npx") == nil
                 ? .needsSetup(

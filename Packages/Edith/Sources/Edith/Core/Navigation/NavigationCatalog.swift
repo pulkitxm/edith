@@ -147,6 +147,10 @@ enum NavigationCatalog {
             }),
 
         SidebarPage(
+            id: "blitztree", title: "BlitzTree", symbolName: "square.grid.3x3.fill",
+            band: .suite(.maintenance), abilityIDs: ["blitztree"], parentID: "appMaintenance"),
+
+        SidebarPage(
             id: "system", title: "System", symbolName: "switch.2", band: .suite(.system),
             isSuiteLanding: true, expansionKey: SuiteExpansion.key(for: .system)),
         SidebarPage(
@@ -273,7 +277,7 @@ enum NavigationCatalog {
 enum MainDestination: String, CaseIterable, Identifiable {
     case home, machines, docs
     case agents, dashboard, herdr, quinjet, companion, plugins
-    case appMaintenance
+    case appMaintenance, blitztree
     case system, runningApps
     case desk
     case media, studio, music, calendar, virtualCamera

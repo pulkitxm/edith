@@ -14,7 +14,7 @@ import Testing
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "usage", "herdr", "quinjet", "companion", "plugins",
-                "appMaintenance", "homebrew", "cleaner",
+                "appMaintenance", "homebrew", "cleaner", "blitztree",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",

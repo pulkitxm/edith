@@ -15,6 +15,7 @@ import Testing
         "appMaintenanceEnabled",
         "homebrewEnabled",
         "cleanerEnabled",
+        "tabBlitzTreeEnabled",
         "tabSystemEnabled",
         "keepAwakeEnabled",
         "lidAwakeEnabled",
@@ -49,7 +50,7 @@ import Testing
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "usage", "herdr", "quinjet", "companion", "plugins",
-                "appMaintenance", "homebrew", "cleaner",
+                "appMaintenance", "homebrew", "cleaner", "blitztree",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
@@ -209,7 +210,7 @@ import Testing
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
                 "clipboard", "keystrokeHighlight", "studio", "notchShelf", "virtualCamera",
-                "database", "attention",
+                "database", "attention", "blitztree",
             ])
     }
 
@@ -339,6 +340,7 @@ import Testing
             "appMaintenance": [],
             "homebrew": [],
             "cleaner": [],
+            "blitztree": [],
             "system": [],
             "keepAwake": [],
             "lidAwake": [],
@@ -372,6 +374,7 @@ import Testing
             "appMaintenance": [.notifications],
             "homebrew": [],
             "cleaner": [],
+            "blitztree": [.fullDisk],
             "system": [.accessibility, .inputMonitoring],
             "keepAwake": [],
             "lidAwake": [],

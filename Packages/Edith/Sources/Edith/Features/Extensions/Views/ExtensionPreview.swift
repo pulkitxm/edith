@@ -44,10 +44,25 @@ struct ExtensionPreview: View {
         case "colorPicker": colorPickerPreview(phase: phase)
         case "homebrew": homebrewPreview(phase: phase)
         case "cleaner": cleanerPreview(phase: phase)
+        case "blitztree": blitzTreePreview
         case "downloads": downloadsPreview(phase: phase)
         case "audioMixer": audioMixerPreview(phase: phase)
         default: staticPreview
         }
+    }
+
+    private var blitzTreePreview: some View {
+        HStack(spacing: UIScale.pt(3)) {
+            RoundedRectangle(cornerRadius: UIScale.pt(4)).fill(.blue.opacity(0.8))
+            VStack(spacing: UIScale.pt(3)) {
+                RoundedRectangle(cornerRadius: UIScale.pt(4)).fill(.teal.opacity(0.8))
+                HStack(spacing: UIScale.pt(3)) {
+                    RoundedRectangle(cornerRadius: UIScale.pt(4)).fill(.indigo.opacity(0.8))
+                    RoundedRectangle(cornerRadius: UIScale.pt(4)).fill(.orange.opacity(0.8))
+                }
+            }
+        }
+        .padding(UIScale.pt(12))
     }
 
     private func usagePreview(phase: Double) -> some View {

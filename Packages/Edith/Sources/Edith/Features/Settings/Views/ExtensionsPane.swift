@@ -1050,6 +1050,7 @@ private struct ExtensionDetailRows: View {
             case .appMaintenance: AppMaintenanceRows()
             case .homebrew: HomebrewRows()
             case .cleaner: CleanerRows()
+            case .blitztree: BlitzTreeRows()
             case .database: DatabaseRows()
             case .companion: CompanionRows()
             case .plugins: PluginsRows()
@@ -1227,6 +1228,24 @@ private struct AudioMixerRows: View {
                     : "Requires macOS 14.4 or later."
             )
             .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct BlitzTreeRows: View {
+    @AppStorage(AppStorageKeys.Tabs.blitzTreeEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Disk space") {
+            LabeledContent("Engine", value: "BlitzTree")
+            Text(
+                "Choose a folder to explore allocated space and review cleanup candidates in Finder."
+            )
+            .settingsCaption()
+            Button("Open BlitzTree") { SectionWindow.open(.blitztree) }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
