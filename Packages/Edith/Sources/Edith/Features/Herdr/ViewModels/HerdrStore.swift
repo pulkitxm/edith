@@ -20,6 +20,11 @@ struct HerdrClosedTabRecord: Equatable {
     let rightNeighborID: String?
 }
 
+struct HerdrRailItem: Identifiable {
+    let id: String
+    let agents: [HerdrAgent]
+}
+
 typealias HerdrNewAgentLauncher =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
@@ -33,8 +38,11 @@ struct HerdrAgentSpace: Identifiable, Equatable {
 
     static func group(_ agents: [HerdrAgent]) -> [HerdrAgentSpace] {
         Dictionary(grouping: agents, by: spaceID)
-            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            .map { HerdrAgentSpace(id: $0.key, title: spaceTitle($0.value[0]), agents: $0.value) }
+            .sorted {
+                let order = $0.title.localizedCaseInsensitiveCompare($1.title)
+                return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+            }
     }
 
     static func counts(_ spaces: [HerdrAgentSpace]) -> [String: Int] {
@@ -42,6 +50,10 @@ struct HerdrAgentSpace: Identifiable, Equatable {
     }
 
     static func spaceID(_ agent: HerdrAgent) -> String {
+        "\(agent.machineID)|\(spaceTitle(agent))"
+    }
+
+    private static func spaceTitle(_ agent: HerdrAgent) -> String {
         let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Unassigned" : title
     }
@@ -647,9 +659,27 @@ final class HerdrStore {
         currentTab.flatMap { session($0.focused) }
     }
 
-    var openSplitAgents: [HerdrAgent] {
-        guard selectedTab != Self.boardID, let tab = currentTab, tab.isSplit else { return [] }
-        return tab.agentIDs.compactMap { session($0)?.agent }
+    func railItems(for agents: [HerdrAgent]) -> [HerdrRailItem] {
+        guard !spaceGroupingEnabled else {
+            return agents.map { HerdrRailItem(id: $0.id, agents: [$0]) }
+        }
+        var visible: [String: HerdrAgent] = [:]
+        for agent in agents { visible[agent.id] = agent }
+        var groups: [String: HerdrRailItem] = [:]
+        for tab in tabs where tab.isSplit {
+            var members: [HerdrAgent] = []
+            for id in tab.agentIDs {
+                if let agent = visible[id] { members.append(agent) }
+            }
+            guard members.count > 1 else { continue }
+            let item = HerdrRailItem(id: tab.id, agents: members)
+            for member in members { groups[member.id] = item }
+        }
+        var seen = Set<String>()
+        return agents.compactMap { agent in
+            let item = groups[agent.id] ?? HerdrRailItem(id: agent.id, agents: [agent])
+            return seen.insert(item.id).inserted ? item : nil
+        }
     }
 
     func railHighlight(for agentID: String) -> HerdrRailHighlight {
@@ -1435,8 +1465,10 @@ final class HerdrStore {
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
         newSpaceLabel: String?, openBeside: Bool = false
     ) async throws {
+        let machine = machine(for: host)
+        guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
         let created = try await newAgentLauncher(
-            kind, machine(for: host), existingSpace, newSpaceLabel)
+            kind, machine, existingSpace, newSpaceLabel)
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
