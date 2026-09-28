@@ -28,6 +28,7 @@ enum HerdrAgentWindow {
     }
 
     static func open(agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
+        store.usage.record(agent)
         if raise(agent.id) { return }
         let tab = store.detachedTab(for: agent)
         let window = NSWindow(

@@ -82,6 +82,7 @@ enum HerdrSpaceWindow {
     }
 
     static func open(space: HerdrAgentSpace, store: HerdrStore, launchEnabled: Bool) {
+        store.usage.record(space.agents.map { ["space", $0.machineID, $0.workspace] })
         if raise(space.id) { return }
         for agent in space.agents { HerdrAgentWindow.close(agent.id) }
         let model = HerdrSpaceWindowModel(space: space, store: store)
