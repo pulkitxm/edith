@@ -17,6 +17,10 @@ final class VideoEditorModel {
     var selection: VideoSelection?
     var canvasEditing = true
     var safeAreas = false
+    var audioTask: Task<Void, Never>?
+    var audioStatus: String?
+    var silentRanges: [ClosedRange<Double>] = []
+    var silenceClipID: String?
     var playhead = 0.0
     var zoomDepth = 4
     var regionSpeed = 2.0
@@ -76,6 +80,7 @@ final class VideoEditorModel {
     }
 
     func close() {
+        audioTask?.cancel()
         player.pause()
         player.replaceCurrentItem(with: nil)
         focusPlayer.pause()
@@ -85,6 +90,9 @@ final class VideoEditorModel {
     }
 
     func newProject() {
+        audioTask?.cancel()
+        selection = nil
+        silentRanges = []
         player.pause()
         project = .create()
         selectedClipID = nil

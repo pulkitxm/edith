@@ -96,6 +96,10 @@ struct VideoTimeline: View {
                             model.retime(item.key, id: item.id, range: range, edge: edge)
                         }
                     }
+                    .overlay(alignment: .bottom) {
+                        waveform(item).frame(height: 10).padding(.horizontal, 12).padding(
+                            .bottom, 2)
+                    }
                     .offset(x: item.start * scale)
                 }
             }.frame(width: width, height: 38)
@@ -130,6 +134,32 @@ struct VideoTimeline: View {
                     .offset(x: start * scale)
                 }
             }.frame(width: width, height: 38).coordinateSpace(name: "zoomTimeline")
+        }
+    }
+
+    @ViewBuilder private func waveform(_ item: Item) -> some View {
+        if item.key == "clips", let clip = model.project?.clips.first(where: { $0.id == item.id }),
+            let asset = model.project?.assets.first(where: { $0.id == clip.assetID })
+        {
+            HStack(spacing: 0) {
+                ForEach(
+                    Array(
+                        (model.pipeline?.segments.filter { $0.clip.id == clip.id } ?? [])
+                            .enumerated()), id: \.offset
+                ) { _, segment in
+                    VideoWaveform(
+                        url: asset.url, start: segment.sourceStart, end: segment.sourceEnd
+                    )
+                    .frame(width: max(1, segment.outputDuration * scale - 2))
+                }
+            }.clipped().allowsHitTesting(false)
+        } else if item.key == "audioTracks",
+            let track = model.project?.audioTracks.first(where: { $0.id == item.id }),
+            let asset = model.project?.assets.first(where: { $0.id == track.assetID })
+        {
+            VideoWaveform(
+                url: asset.url, start: track.offsetMs / 1000,
+                end: track.offsetMs / 1000 + (track.endMs - track.startMs) / 1000)
         }
     }
 

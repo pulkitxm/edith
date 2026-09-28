@@ -270,7 +270,11 @@ struct VideoRenderPipeline {
                 firstSize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
                 video.preferredTransform = preferredTransform
             }
-            let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first
+            let audioAsset =
+                (source.raw["edithAudioPath"] as? String).map {
+                    AVURLAsset(url: URL(fileURLWithPath: $0))
+                } ?? asset
+            let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first
             for slice in speedSlices(
                 for: clip, regions: project.speedRegions, trims: project.trimRanges
             ) {
@@ -312,7 +316,10 @@ struct VideoRenderPipeline {
             guard FileManager.default.fileExists(atPath: source.url.path) else {
                 throw RenderError.missingAsset(source.url.path)
             }
-            let asset = AVURLAsset(url: source.url)
+            let asset = AVURLAsset(
+                url: (source.raw["edithAudioPath"] as? String).map {
+                    URL(fileURLWithPath: $0)
+                } ?? source.url)
             guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first,
                 let mixTrack = composition.addMutableTrack(
                     withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
@@ -374,16 +381,33 @@ struct VideoRenderPipeline {
             }
             parameters.append(input)
         }
-        if let audio, !parameters.isEmpty || !transitions.isEmpty {
+        if let audio {
             let input = AVMutableAudioMixInputParameters(track: audio)
+            for segment in segments {
+                let gain = (segment.clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0
+                let level: Float =
+                    segment.clip.raw["audioMuted"] as? Bool == true ? 0 : Float(pow(10, gain / 20))
+                input.setVolume(
+                    level, at: CMTime(seconds: segment.outputStart, preferredTimescale: 600))
+            }
             for edge in transitions {
                 let half = CMTime(seconds: edge.halfDuration, preferredTimescale: 600)
                 let midpoint = CMTime(seconds: edge.time, preferredTimescale: 600)
+                let outgoing = segments.last { $0.outputStart < edge.time }?.clip
+                let incoming = segments.first { $0.outputStart >= edge.time }?.clip
+                func level(_ clip: VideoProject.Clip?) -> Float {
+                    clip?.raw["audioMuted"] as? Bool == true
+                        ? 0
+                        : Float(
+                            pow(
+                                10, ((clip?.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0) / 20
+                            ))
+                }
                 input.setVolumeRamp(
-                    fromStartVolume: 1, toEndVolume: 0,
+                    fromStartVolume: level(outgoing), toEndVolume: 0,
                     timeRange: CMTimeRange(start: midpoint - half, duration: half))
                 input.setVolumeRamp(
-                    fromStartVolume: 0, toEndVolume: 1,
+                    fromStartVolume: 0, toEndVolume: level(incoming),
                     timeRange: CMTimeRange(start: midpoint, duration: half))
             }
             parameters.append(input)
@@ -868,6 +892,13 @@ struct VideoRenderPipeline {
                 width: size.width * (proportions["width"] ?? 30) / 100,
                 height: size.height * (proportions["height"] ?? 20) / 100)
             switch annotation.type {
+            case "text":
+                if let text = VideoCaptionImage.make(annotation, time: timeMs, size: size) {
+                    output = text.transformed(
+                        by: CGAffineTransform(translationX: region.minX, y: region.minY)
+                    )
+                    .composited(over: output).cropped(to: bounds)
+                }
             case "blur":
                 let settings = annotation.raw["blurData"] as? [String: Any] ?? [:]
                 let mosaic = settings["type"] as? String == "mosaic"
