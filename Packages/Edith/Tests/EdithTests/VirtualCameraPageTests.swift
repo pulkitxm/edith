@@ -50,6 +50,15 @@ import Testing
         #expect(stored.composition.look.preset == .film)
     }
 
+    @Test func dragEditsSaveDuringEventTracking() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.setZoom(2)
+        model.pan(by: CGSize(width: 80, height: 0), in: CGSize(width: 320, height: 180))
+        RunLoop.main.run(mode: .eventTracking, before: Date(timeIntervalSinceNow: 0.3))
+        #expect(VirtualCameraStore.load(defaults).composition.framing == model.composition.framing)
+    }
+
     @Test func dragAndZoomFollowTheGeometry() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -220,6 +229,16 @@ import Testing
         #expect(CVPixelBufferGetWidth(shown) == 320)
         model.display.clear()
         #expect(model.display.current == nil)
+    }
+
+    @Test func previewFramesArriveDuringEventTracking() throws {
+        let display = VirtualCameraPreviewDisplay()
+        let buffer = try #require(VirtualCameraFixtures.quadrants())
+        display.push(buffer)
+        RunLoop.main.add(
+            Timer(timeInterval: 0.1, repeats: false) { _ in }, forMode: .eventTracking)
+        RunLoop.main.run(mode: .eventTracking, before: Date(timeIntervalSinceNow: 0.1))
+        #expect(display.current === buffer)
     }
 }
 
@@ -646,7 +665,7 @@ enum VirtualCameraSyntheticStudio {
         let buffer = try #require(VirtualCameraPlaceholder.makeBuffer(width: 1280, height: 720))
         renderer.render(preview, into: buffer)
         model.showPreviewFrame(buffer)
-        for tab in [VirtualCameraInspectorTab.frame, .look, .overlays, .output] {
+        for tab in [VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output] {
             model.tab = tab
             try renderPage(
                 model, preview: preview, renderer: renderer,

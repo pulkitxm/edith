@@ -71,7 +71,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private let accessProvider: () -> AVAuthorizationStatus
     private let sourceProvider: () -> [VirtualCameraSource]
     private let previewBus: VirtualCameraPreviewBus
-    private var saveWork: DispatchWorkItem?
+    private var saveTimer: Timer?
     private var statusToken: NSObjectProtocol?
     private var stateToken: NSObjectProtocol?
     private var statusTask: Task<Void, Never>?
@@ -146,7 +146,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard !visible else { return }
         visible = true
         previewBus.setWanted(true)
-        if saveWork != nil { flushSave() } else { reloadState() }
+        if saveTimer != nil { flushSave() } else { reloadState() }
         refreshSources()
         extensionManager.refreshDetached()
         statusToken = IPC.observe(
@@ -349,27 +349,32 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     private func scheduleSave() {
-        saveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
+        saveTimer?.invalidate()
+        let timer = Timer(timeInterval: Self.saveDelay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.flushSave() }
         }
-        saveWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.saveDelay, execute: work)
+        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .eventTracking)
+        saveTimer = timer
     }
 
     func flushSave() {
-        saveWork?.cancel()
-        saveWork = nil
+        saveTimer?.invalidate()
+        saveTimer = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
         VirtualCameraStore.save(state, to: defaults)
         VirtualCameraStore.announceChange(from: "window", state: state)
     }
 
     func pan(by translation: CGSize, in viewSize: CGSize) {
+        let previous = state
         updateComposition {
             $0.framing = VirtualCameraGeometry.panned(
                 $0.framing, by: translation, viewSize: viewSize, source: sourceSize,
                 output: outputSize)
+        }
+        if state != previous, snapshot?.live == true {
+            VirtualCameraStore.announceChange(from: "window", state: state)
         }
     }
 
