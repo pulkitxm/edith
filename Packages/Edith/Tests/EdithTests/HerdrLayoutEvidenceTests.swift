@@ -52,7 +52,8 @@ import Testing
             .write(to: output.appendingPathComponent("herdr-spaces.png"), options: .atomic)
         let space = try #require(store.agentSpaces.first)
         try render(
-            HerdrNewAgentPopup(store: store, space: space),
+            HerdrNewAgentPopup(store: store, space: space)
+                .background(Color(nsColor: .windowBackgroundColor)),
             size: NSSize(width: 440, height: 380)
         )
         .write(to: output.appendingPathComponent("herdr-space-launcher.png"), options: .atomic)
