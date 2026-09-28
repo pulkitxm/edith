@@ -59,6 +59,12 @@ public struct ToolInstaller: Sendable {
     @discardableResult
     public func install(_ tool: CLIToolSpec, log: @escaping Log = { _ in }) async throws -> String {
         switch tool.installStrategy {
+        case let .cargo(arguments, instruction):
+            guard await isPresent("cargo", log: log) else {
+                throw ToolInstallFailure.manual(instruction)
+            }
+            log("Running cargo " + arguments.joined(separator: " "))
+            try await requireSuccess(env(["cargo"] + arguments), named: "cargo", log: log)
         case let .manual(instruction):
             throw ToolInstallFailure.manual(instruction)
         case let .standaloneBinary(url, destinationName, _):
