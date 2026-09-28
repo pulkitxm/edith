@@ -865,6 +865,7 @@ private struct DatabaseWorkbenchTabView: View {
                     columns.setWidth(width, for: field)
                 },
                 contentRevision: data.recordsRevision,
+                appendedFrom: data.recordsAppendedFrom,
                 editingEnabled: workbenchMode == .browse && canUpdateData(connection)
                     && !mutations.hasTrackedMutation,
                 isActive: isActive,

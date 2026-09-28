@@ -32,9 +32,27 @@
     "largeRepository",
     "slowNetwork",
     "cliStartup",
-    "deterministicLargeDataset"
+    "deterministicLargeDataset",
+    "databaseGrid"
   ],
   "scenarios": [
+    {
+      "area": "databaseGrid",
+      "status": "protected",
+      "finding": "Native database cells use bounded row indexes and previews; consecutive page appends preserve visible cells.",
+      "measurement": "10,000-row cache traversal, 8 MB text previews, and native table append/refresh integration tests.",
+      "regressionProperty": "The cache holds at most 128 rows, previews hold at most 512 characters, and only a consecutive append revision can avoid a full reload.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Tests/EdithTests/DatabaseGridProjectionTests.swift",
+          "contains": "scrollingCacheStaysBoundedAndInvalidationReleasesValues"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/DatabaseTableUpdateTests.swift",
+          "contains": "appendingPagesKeepsVisibleCellsAndRefreshReplacesCachedValues"
+        }
+      ]
+    },
     {
       "area": "startup",
       "status": "protected",

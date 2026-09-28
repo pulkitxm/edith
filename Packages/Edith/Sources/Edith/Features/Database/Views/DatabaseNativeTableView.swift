@@ -25,6 +25,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let sort: (String, Bool) -> Void
     let resizeColumn: (DatabaseFieldPath, CGFloat) -> Void
     var contentRevision: Int? = nil
+    var appendedFrom: Int? = nil
     var editingEnabled = false
     var isActive = true
     var scrollOffset = CGPoint.zero
@@ -71,13 +72,19 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.isUpdating = true
         let reload = context.coordinator.needsReload(self)
+        let append = context.coordinator.canAppend(self)
+        if reload && !append { context.coordinator.projection.invalidateRows() }
         context.coordinator.parent = self
         let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
         context.coordinator.applyColumnWidths()
         if reload {
-            context.coordinator.tableView?.reloadData()
+            if append {
+                context.coordinator.tableView?.noteNumberOfRowsChanged()
+            } else {
+                context.coordinator.tableView?.reloadData()
+            }
             context.coordinator.hasLoadedData = true
         }
         context.coordinator.reloadSelection()
@@ -107,6 +114,18 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         var parent: DatabaseNativeTableView
         var isUpdating = false
         var hasLoadedData = false
+        var projection = DatabaseGridProjection()
+
+        func canAppend(_ next: DatabaseNativeTableView) -> Bool {
+            guard hasLoadedData, let revision = parent.contentRevision,
+                next.contentRevision == revision &+ 1,
+                next.appendedFrom == parent.records.count,
+                next.records.count > parent.records.count
+            else { return false }
+            return next.fields == parent.fields && next.editingEnabled == parent.editingEnabled
+                && next.accent == parent.accent && next.background == parent.background
+                && next.ink == parent.ink && next.inkFaint == parent.inkFaint
+        }
 
         func needsReload(_ next: DatabaseNativeTableView) -> Bool {
             let recordsChanged =
@@ -120,6 +139,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
         weak var tableView: NSTableView?
         private var fieldNames: [String] = []
+        private var columnFields: [DatabaseFieldDescriptor] = []
+        private var columnsByName: [String: NSTableColumn] = [:]
         private var applyingSelection = false
         private var applyingSortDescriptors = false
         private var applyingColumnWidths = false
@@ -221,16 +242,14 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     parent.records[row].identity == nil ? "No stable key" : "Stable key")
                 return cell
             }
-            guard
-                let field = parent.fields.first(where: {
-                    $0.path.segments.joined(separator: ".") == identifier.rawValue
-                })
+            guard let field = projection.fieldsByName[identifier.rawValue]
             else { return cell }
-            let value =
-                parent.records[row].fields.first(where: { $0.name == identifier.rawValue })?
-                .value ?? .missing
-            let rendered = bounded(parent.text(value))
+            let value = projection.value(
+                named: identifier.rawValue, row: row, records: parent.records)
+            let fullText = parent.text(value)
+            let rendered = bounded(fullText)
             textField.stringValue = rendered
+            (textField as? DatabaseNativeValueField)?.editingValue = fullText
             textField.alignment = .left
             textField.textColor = NSColor(value.isAbsent ? parent.inkFaint : parent.ink)
             textField.font =
@@ -309,18 +328,18 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         func controlTextDidEndEditing(_ notification: Notification) {
             guard let textField = notification.object as? NSTextField,
                 let name = textField.identifier?.rawValue,
+                parent.records.indices.contains(textField.tag),
                 parent.canEdit(textField.tag, name)
             else { return }
             let current =
                 parent.records[textField.tag].fields.first(where: { $0.name == name })?
                 .value ?? .missing
-            guard textField.stringValue != bounded(parent.text(current)) else { return }
+            guard textField.stringValue != parent.text(current) else { return }
             parent.edit(textField.tag, name, textField.stringValue)
         }
 
         func rebuildColumnsIfNeeded() {
-            let names = parent.fields.map { $0.path.segments.joined(separator: ".") }
-            guard names != fieldNames else {
+            guard parent.fields != columnFields else {
                 updateSortDescriptors()
                 return
             }
@@ -336,9 +355,12 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
         func rebuildColumns() {
             guard let tableView else { return }
+            projection.setFields(parent.fields)
+            columnFields = parent.fields
             for column in tableView.tableColumns {
                 tableView.removeTableColumn(column)
             }
+            columnsByName.removeAll(keepingCapacity: true)
             let rowColumn = NSTableColumn(
                 identifier: NSUserInterfaceItemIdentifier(Self.rowColumnIdentifier))
             rowColumn.title = "#"
@@ -363,6 +385,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     column.sortDescriptorPrototype = NSSortDescriptor(key: name, ascending: true)
                 }
                 tableView.addTableColumn(column)
+                columnsByName[name] = column
             }
             updateSortDescriptors()
             applyHeaderPalette()
@@ -375,8 +398,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             for field in parent.fields {
                 let name = field.path.segments.joined(separator: ".")
                 guard let width = parent.columnWidth(field.path),
-                    let column = tableView.tableColumn(
-                        withIdentifier: NSUserInterfaceItemIdentifier(name)),
+                    let column = columnsByName[name],
                     abs(column.width - width) > 0.5
                 else { continue }
                 column.width = width
@@ -464,7 +486,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             }
             let cell = NSTableCellView()
             cell.identifier = identifier
-            let textField = NSTextField(labelWithString: "")
+            let textField = DatabaseNativeValueField(labelWithString: "")
             textField.identifier = identifier
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingTail
@@ -542,9 +564,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         private func bounded(_ value: String) -> String {
-            let compact = value.replacingOccurrences(of: "\n", with: " ")
-            guard compact.count > 512 else { return compact }
-            return "\(compact.prefix(511))…"
+            DatabaseGridProjection.preview(value)
         }
 
         private static let rowColumnIdentifier = "__database_row_number"
