@@ -335,6 +335,7 @@ public enum AppStorageKeys {
     }
 
     public enum Tabs {
+        public static let blitzTreeEnabled = "tabBlitzTreeEnabled"
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"

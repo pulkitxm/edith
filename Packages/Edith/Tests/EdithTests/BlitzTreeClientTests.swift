@@ -68,6 +68,30 @@ import Testing
         }
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["BLITZTREE_BIN"] != nil))
+    func realScannerReadsOnlySyntheticFiles() async throws {
+        let binary = try #require(ProcessInfo.processInfo.environment["BLITZTREE_BIN"])
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitztree-fixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("quotes '; $(example).bin")
+        let content = Data(repeating: 42, count: 8192)
+        try content.write(to: file)
+        let client = BlitzTreeClient { arguments in
+            try await CLICommandRunner.runLocal(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: binary), arguments: arguments,
+                    environment: [:], timeout: 30, maximumOutputBytes: 1_048_576)
+            ) { _ in }
+        }
+        let report = try await client.scan(root: root.path)
+        #expect(report.coverage.complete)
+        #expect(report.summary.fileCount == 1)
+        #expect(report.report.inventory.largestChildren.first?.name == file.lastPathComponent)
+        #expect(try Data(contentsOf: file) == content)
+    }
+
     @Test func cargoInstallationUsesPinnedSourceAndVerifiesBinary() async throws {
         let installer = ToolInstaller { request, _ in
             switch request.arguments.first {

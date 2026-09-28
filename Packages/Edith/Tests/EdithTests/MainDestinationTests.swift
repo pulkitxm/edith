@@ -93,7 +93,7 @@ import Testing
             MainDestination.homeItems == [
                 .home, .machines, .docs,
                 .agents, .dashboard, .herdr, .quinjet, .companion, .plugins,
-                .appMaintenance,
+                .appMaintenance, .blitztree,
                 .system, .runningApps,
                 .desk,
                 .media, .studio, .music, .calendar, .virtualCamera,

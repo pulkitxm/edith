@@ -81,6 +81,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case appMaintenance
     case homebrew
     case cleaner
+    case blitztree
     case database
     case companion
     case plugins

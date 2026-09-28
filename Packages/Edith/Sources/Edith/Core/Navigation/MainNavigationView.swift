@@ -405,6 +405,8 @@ struct MainWindowView: View {
         var homebrewEnabled = false
     @AppStorage(AppStorageKeys.Cleaner.enabled, store: SharedDefaults.store) private
         var cleanerEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.blitzTreeEnabled, store: SharedDefaults.store) private
+        var blitzTreeEnabled = false
     @AppStorage(AppStorageKeys.Suites.agents, store: SharedDefaults.store) private
         var agentsSuite = false
     @AppStorage(AppStorageKeys.Suites.maintenance, store: SharedDefaults.store) private
@@ -940,7 +942,7 @@ struct MainWindowView: View {
     private var extensionSelectionToken: [Bool] {
         [
             usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, pluginsEnabled,
-            appMaintenanceEnabled,
+            appMaintenanceEnabled, blitzTreeEnabled,
             homebrewEnabled, cleanerEnabled, systemEnabled, keepAwakeEnabled, musicEnabled,
             calendarEnabled,
             databaseEnabled, attentionEnabled, seoAuditEnabled, agentsSuite, maintenanceSuite,
