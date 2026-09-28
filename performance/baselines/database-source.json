@@ -1,7 +1,7 @@
 {
   "maxLines": 700,
   "exceptions": {
-    "Models/DatabaseDataWorkspaceModel.swift": 2107,
+    "Models/DatabaseDataWorkspaceModel.swift": 1342,
     "Models/DatabaseConnectionWorkspaceModel.swift": 1050,
     "Models/DatabaseWorkspaceModel.swift": 1022,
     "Models/DatabaseSafetyReviewPresentation.swift": 821,
