@@ -671,6 +671,44 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test("Object structure survives query projections and clears with the connection")
+    func objectStructureSurvivesQueryProjectionsAndClearsWithTheConnection() async throws {
+        let fields = [
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("schema_only"), displayName: "schema_only",
+                typeName: "text",
+                isNullable: true, isSortable: true, isFilterable: true)
+        ]
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [], fields: fields),
+            Self.queryResponse(records: [Self.record(1)]),
+            Self.response(records: [], fields: fields),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.open(
+            DatabaseObjectIdentifier(kind: .table, path: ["public", "customers"]),
+            connection: connection)
+        await Self.waitUntil { model.state == .loaded }
+        #expect(model.objectFields == fields)
+        model.queryText = "SELECT id, name FROM public.customers"
+        model.runQuery(connection)
+        await Self.waitUntil { model.state == .loaded }
+        #expect(model.fields != fields)
+        #expect(model.objectFields == fields)
+        let tab = DatabaseTableTab(
+            object: DatabaseObjectIdentifier(kind: .table, path: ["public", "customers"]),
+            data: model)
+        tab.mode = .query
+        tab.selectMode(.browse, connection: connection)
+        #expect(model.records.isEmpty)
+        #expect(model.queryText == "SELECT id, name FROM public.customers")
+        await Self.waitUntil { model.state == .loaded }
+        model.prepare(for: nil)
+        #expect(model.objectFields.isEmpty)
+    }
+
     @Test("Query continuation appends and replays the original request")
     func continuationQuery() async throws {
         let token = DatabaseContinuationToken(rawValue: "query-next-page")
