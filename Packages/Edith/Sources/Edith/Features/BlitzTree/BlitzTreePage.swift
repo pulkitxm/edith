@@ -123,6 +123,7 @@ struct BlitzTreePage: View {
                 Text("Treemap").tag(false)
                 Text("Rings").tag(true)
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: UIScale.pt(180))
         }
