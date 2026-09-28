@@ -18,7 +18,7 @@ final class VirtualCameraPreviewDisplay: @unchecked Sendable {
             return true
         }
         guard shouldSchedule else { return }
-        DispatchQueue.main.async { [weak self] in
+        RunLoop.main.perform(inModes: [.common, .eventTracking]) { [weak self] in
             MainActor.assumeIsolated { self?.flush() }
         }
     }
