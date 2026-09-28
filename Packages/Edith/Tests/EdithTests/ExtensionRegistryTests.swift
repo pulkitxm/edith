@@ -90,7 +90,7 @@ import Testing
         }
         #expect(ExtensionRegistry.entry("quinjet")?.requires == ["herdr"])
         #expect(ExtensionRegistry.entry("audioMixer")?.requires == ["notchShelf"])
-        #expect(ExtensionRegistry.entry("downloads")?.requires == ["music"])
+        #expect(ExtensionRegistry.entry("downloads")?.requires == [])
         #expect(ExtensionRegistry.entry("homebrew")?.requires == ["appMaintenance"])
     }
 
@@ -210,7 +210,7 @@ import Testing
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
                 "clipboard", "keystrokeHighlight", "studio", "notchShelf", "virtualCamera",
-                "database", "attention", "blitztree",
+                "database", "attention", "blitztree", "downloads",
             ])
     }
 
@@ -225,6 +225,7 @@ import Testing
         #expect(music.requiredTools.isEmpty)
         #expect(music.optionalTools.isEmpty)
         #expect(downloads.requiredTools == [.youtubeDownloader, .ffmpeg, .deno])
+        #expect(downloads.optionalTools == [.galleryDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])

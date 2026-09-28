@@ -3,6 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct DownloadSheet: View {
+    var isPage = false
     @State private var downloader = YoutubeDownloader.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
@@ -14,12 +15,14 @@ struct DownloadSheet: View {
     @State private var confirmClearHistory = false
     @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
         var downloadKindRaw =
-        DownloadKind.audio.rawValue
+        DownloadKind.post.rawValue
     @State private var estimate: DownloadEstimate?
     @State private var estimating = false
+    @State private var outputDirectory: URL?
+    @State private var browser = ""
 
     private var downloadKind: DownloadKind {
-        DownloadKind(rawValue: downloadKindRaw) ?? .audio
+        DownloadKind(rawValue: downloadKindRaw) ?? .post
     }
 
     private var theme: Color { themeColor(themeName) }
@@ -90,8 +93,10 @@ struct DownloadSheet: View {
                 content
             }
         }
-        .frame(width: UIScale.pt(560), height: UIScale.pt(580))
+        .frame(width: isPage ? nil : UIScale.pt(680), height: isPage ? nil : UIScale.pt(760))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+        .onAppear { downloader.checkAvailability() }
         .alert(
             "Download request failed",
             isPresented: Binding(
@@ -107,7 +112,7 @@ struct DownloadSheet: View {
 
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Text("Download YouTube Audio")
+            Text("Downloads")
                 .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
@@ -137,16 +142,18 @@ struct DownloadSheet: View {
                         .lineLimit(1)
                 }
             }
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                    .contentShape(Rectangle())
+            if !isPage {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.edith(.toolbar))
             }
-            .buttonStyle(.edith(.toolbar))
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
@@ -163,6 +170,10 @@ struct DownloadSheet: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
+            Button("Open extension settings") { SectionWindow.open(.extensions) }
+                .buttonStyle(.edith(.toolbar))
+            Button("Check again") { downloader.checkAvailability() }
+                .buttonStyle(.edith(.toolbar))
             Spacer()
         }
         .padding(.horizontal, UIScale.pt(40))
@@ -170,58 +181,54 @@ struct DownloadSheet: View {
 
     @ViewBuilder
     private var content: some View {
-        if downloader.items.isEmpty {
-            VStack(spacing: UIScale.pt(16)) {
+        VStack(spacing: UIScale.pt(0)) {
+            VStack(spacing: UIScale.pt(12)) {
                 urlInput
                 formatRow
-                optionsRow
-                Spacer()
+                if downloadKind == .audio || downloadKind == .video { optionsRow }
+                destinationRow
                 startRow
             }
             .padding(.horizontal, UIScale.pt(22))
             .padding(.top, UIScale.pt(16))
             .padding(.bottom, UIScale.pt(14))
-        } else {
-            VStack(spacing: UIScale.pt(0)) {
-                urlBar
+            Divider().overlay(DashSkin.line(dark))
+            if !activeItems.isEmpty {
+                progressHeader
+                activeQueue
+                    .frame(maxHeight: UIScale.pt(200))
                 Divider().overlay(DashSkin.line(dark))
-                if !activeItems.isEmpty {
-                    progressHeader
-                    activeQueue
-                        .frame(maxHeight: UIScale.pt(200))
-                    Divider().overlay(DashSkin.line(dark))
-                }
-                if !historyItems.isEmpty {
-                    historyHeader
-                    historyList
-                }
-                if activeItems.isEmpty && historyItems.isEmpty {
-                    emptyState
-                }
-                Spacer(minLength: 0)
-                Divider().overlay(DashSkin.line(dark))
-                controlsRow
             }
-            .sheet(item: $logItem) { item in
-                logSheet(item).transientPresentation()
+            if !historyItems.isEmpty {
+                historyHeader
+                historyList
             }
+            if activeItems.isEmpty && historyItems.isEmpty {
+                emptyState
+            }
+            Spacer(minLength: 0)
+            Divider().overlay(DashSkin.line(dark))
+            controlsRow
+                .sheet(item: $logItem) { item in
+                    logSheet(item).transientPresentation()
+                }
         }
     }
 
     private var urlInput: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-            label("VIDEO URLS")
+            label("VIDEO, POST OR IMAGE LINKS")
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $urlText)
                     .font(.system(size: UIScale.pt(13), design: .monospaced))
                     .foregroundStyle(DashSkin.ink(dark))
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
-                    .frame(height: downloader.isRunning ? 46 : 104)
+                    .frame(height: 64)
                     .padding(.horizontal, UIScale.pt(10))
                     .padding(.vertical, UIScale.pt(8))
                 if urlText.isEmpty {
-                    Text("Paste one or more YouTube links, one per line")
+                    Text("Paste links from any supported site, one per line")
                         .font(.system(size: UIScale.pt(12.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.45))
                         .padding(.horizontal, UIScale.pt(14))
@@ -243,12 +250,12 @@ struct DownloadSheet: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(.green)
-                        Text("\(parsedCount) valid URL\(parsedCount == 1 ? "" : "s")")
+                        Text("\(parsedCount) web link\(parsedCount == 1 ? "" : "s")")
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(.secondary)
                     }
                 } else if !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("No YouTube URLs found")
+                    Text("Enter a complete http:// or https:// link")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.orange)
                 }
@@ -275,15 +282,24 @@ struct DownloadSheet: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            HStack(spacing: UIScale.pt(10)) {
-                ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
-                    sizeChip(kind)
+            if downloadKind == .video || downloadKind == .audio {
+                HStack(spacing: UIScale.pt(10)) {
+                    ForEach([DownloadKind.video, .audio], id: \.rawValue) { kind in
+                        sizeChip(kind)
+                    }
+                    Spacer()
                 }
-                Spacer()
+                .font(.system(size: UIScale.pt(11)))
             }
+            Text(
+                downloadKind == .post || downloadKind == .images
+                    ? "gallery-dl saves photos and carousels. Entire post also tries yt-dlp for video-only links. Up to 100 media files per link."
+                    : "yt-dlp supports YouTube, TikTok, Instagram, X, Facebook, Vimeo, Twitch and many more."
+            )
             .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(.secondary)
         }
-        .task(id: urlText) { await refreshEstimate() }
+        .task(id: urlText + downloadKindRaw) { await refreshEstimate() }
     }
 
     private func sizeChip(_ kind: DownloadKind) -> some View {
@@ -314,6 +330,11 @@ struct DownloadSheet: View {
     }
 
     private func refreshEstimate() async {
+        guard downloadKind == .audio || downloadKind == .video else {
+            estimate = nil
+            estimating = false
+            return
+        }
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty, downloader.unavailableReason == nil else {
             estimate = nil
@@ -355,11 +376,16 @@ struct DownloadSheet: View {
 
     private var startRow: some View {
         HStack {
+            Text(
+                "Some sites require a signed-in browser. Site support depends on the installed extractors."
+            )
+            .font(.system(size: UIScale.pt(10.5)))
+            .foregroundStyle(.secondary)
             Spacer()
             Button(action: startDownload) {
                 HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "arrow.down.circle")
-                    Text("Start Download")
+                    Text("Add to queue")
                         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -373,21 +399,46 @@ struct DownloadSheet: View {
         }
     }
 
-    private var urlBar: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            EdithTextField(placeholder: "Add more YouTube URLs...", text: $urlText)
-                .disabled(downloader.isRunning)
-            Button(action: addMore) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: UIScale.pt(20)))
-                    .foregroundStyle(canStart ? theme : Color.gray.opacity(0.4))
+    private var destinationRow: some View {
+        HStack(alignment: .top, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                label("SAVE TO")
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.canChooseDirectories = true
+                    panel.canChooseFiles = false
+                    panel.canCreateDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.directoryURL =
+                        outputDirectory ?? MediaDownloadInput.defaultDirectory(for: downloadKind)
+                    panel.begin { response in
+                        if response == .OK { outputDirectory = panel.url }
+                    }
+                } label: {
+                    Label(
+                        (outputDirectory ?? MediaDownloadInput.defaultDirectory(for: downloadKind))
+                            .lastPathComponent, systemImage: "folder"
+                    )
+                    .lineLimit(1)
+                }
+                .buttonStyle(.edith(.toolbar))
+                .help(
+                    (outputDirectory ?? MediaDownloadInput.defaultDirectory(for: downloadKind)).path
+                )
             }
-            .buttonStyle(.edith(.borderless))
-            .disabled(!canStart)
-            .help("Add to queue")
+            Spacer()
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                label("LOGIN COOKIES")
+                Picker("Login cookies", selection: $browser) {
+                    Text("None (public media)").tag("")
+                    ForEach(DownloadBrowser.allCases, id: \.rawValue) { source in
+                        Text(source.rawValue.capitalized).tag(source.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: UIScale.pt(180))
+            }
         }
-        .padding(.horizontal, UIScale.pt(22))
-        .padding(.vertical, UIScale.pt(8))
     }
 
     private var progressHeader: some View {
@@ -850,11 +901,13 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
             }
             Spacer()
-            Button("Close") {
-                dismiss()
+            if !isPage {
+                Button("Close") {
+                    dismiss()
+                }
+                .buttonStyle(.edith(.toolbar))
+                .font(.system(size: UIScale.pt(11)))
             }
-            .buttonStyle(.edith(.toolbar))
-            .font(.system(size: UIScale.pt(11)))
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(10))
@@ -877,30 +930,18 @@ struct DownloadSheet: View {
     }
 
     private func displayURL(_ url: URL) -> String {
-        let id: String
-        if url.host?.contains("youtu.be") == true {
-            id = url.lastPathComponent
-        } else {
-            id =
-                URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
-        }
-        return "youtube.com/watch?v=\(id.prefix(11))"
+        (url.host ?? "") + url.path
     }
 
     private func startDownload() {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
-        downloader.enqueue(urls: urls, prefix: filenamePrefix, kind: downloadKind)
+        downloader.enqueue(
+            urls: urls, prefix: filenamePrefix, kind: downloadKind,
+            outputDirectory: outputDirectory, browser: DownloadBrowser(rawValue: browser))
         urlText = ""
     }
 
-    private func addMore() {
-        let urls = YoutubeDownloader.parseURLs(from: urlText)
-        guard !urls.isEmpty else { return }
-        downloader.enqueue(urls: urls, prefix: filenamePrefix, kind: downloadKind)
-        urlText = ""
-    }
 }
 
 private struct DownloadThumb: View {
@@ -911,7 +952,9 @@ private struct DownloadThumb: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(5)).fill(DashSkin.paper2(dark))
-            if let thumb = YoutubeDownloader.thumbnailURL(for: url) {
+            if let thumb = MediaDownloadInput.isDirectImage(url)
+                ? url : YoutubeDownloader.thumbnailURL(for: url)
+            {
                 AsyncImage(url: thumb) { phase in
                     switch phase {
                     case .empty:

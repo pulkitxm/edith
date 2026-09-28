@@ -60,7 +60,9 @@ import Testing
             urls: urls, prefix: "focus-", now: Date(timeIntervalSince1970: 2_000),
             file: sandbox.queue, outputDirectory: output)
         #expect(added.count == 2)
-        #expect(added.allSatisfy { $0.outputFilename?.contains("focus-%(title).160B [%(id)s]") == true })
+        #expect(
+            added.allSatisfy { $0.outputFilename?.contains("focus-%(title).160B [%(id)s]") == true }
+        )
 
         let cancelled = try DownloadOperationExecution.cancel(file: sandbox.queue)
         #expect(cancelled.changed == 2)

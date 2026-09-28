@@ -344,7 +344,8 @@ public final class YoutubeDownloader {
                 guard downloadsEnabled else { return }
                 unavailableReason =
                     status.installed
-                    ? nil : "yt-dlp is not installed. Open Downloads extension settings to install it."
+                    ? nil
+                    : "yt-dlp is not installed. Open Downloads extension settings to install it."
                 ytdlpVersion = status.version
             } catch is CancellationError {
                 return

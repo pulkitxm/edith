@@ -1190,7 +1190,7 @@ private struct DownloadsRows: View {
     @AppStorage(AppStorageKeys.Downloads.enabled, store: SharedDefaults.store) private
         var enabled = false
     @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
-        var downloadKind = DownloadKind.audio.rawValue
+        var downloadKind = DownloadKind.post.rawValue
 
     var body: some View {
         Section("Downloads") {
@@ -1202,9 +1202,11 @@ private struct DownloadsRows: View {
                     Text(kind.title).tag(kind.rawValue)
                 }
             }
-            Text("Queued downloads keep running in the background and land in your music folder.")
-                .settingsCaption()
-            Button("Open Music") { SectionWindow.open(.music) }
+            Text(
+                "Save videos, photos and entire posts. Install gallery-dl above for images and carousels. Audio defaults to Music; other media defaults to Downloads/Edith."
+            )
+            .settingsCaption()
+            Button("Open Downloads") { SectionWindow.open(.downloads) }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

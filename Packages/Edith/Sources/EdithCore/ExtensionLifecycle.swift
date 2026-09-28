@@ -1238,7 +1238,7 @@ public enum ExtensionLifecycleCatalog {
                     "ed cleaner scan --json")
             ]),
         descriptor(
-            "downloads", "Queue audio and video downloads that outlive the window.",
+            "downloads", "Save videos, images and social posts in a persistent background queue.",
             workflows: [
                 instruction("add", "Queue a download", "Add one or more URLs to the queue."),
                 instruction(
@@ -1249,8 +1249,13 @@ public enum ExtensionLifecycleCatalog {
                     "tool", "Install yt-dlp", "Put yt-dlp on Edith's PATH.",
                     "ed tools install yt-dlp"),
                 instruction(
-                    "folder", "Choose a music folder",
-                    "Downloads are written into the folder Music uses."),
+                    "images", "Install gallery-dl",
+                    "Enable photos, carousels and mixed-media posts.",
+                    "ed tools install gallery-dl"),
+                instruction(
+                    "folder", "Choose a destination",
+                    "Audio defaults to Music. Other media defaults to Downloads/Edith; choose another folder in Downloads."
+                ),
             ],
             examples: ["ed extensions enable downloads", "ed download ls --json"],
             docs: [documentation("guide", "Download guide", "docs/cli/download/README.md")],

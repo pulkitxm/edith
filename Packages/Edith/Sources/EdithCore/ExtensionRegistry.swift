@@ -257,10 +257,11 @@ public enum ExtensionRegistry {
             optionalCapabilities: [.mediaControls]),
         ExtensionRegistryEntry(
             id: "downloads", title: "Downloads",
-            subtitle: "Queue audio and video downloads that survive quitting the app.",
-            symbolName: "arrow.down.circle", suite: .media, host: .agent, featured: false,
-            defaultsKey: "downloadsEnabled", requires: ["music"],
-            requiredCapabilities: [.mediaDownloads], requiredToolIDs: ["yt-dlp", "ffmpeg", "deno"]),
+            subtitle: "Save videos, images and social posts with a persistent download queue.",
+            symbolName: "arrow.down.circle", suite: .media, host: .agent, featured: true,
+            defaultsKey: "downloadsEnabled",
+            requiredCapabilities: [.mediaDownloads], requiredToolIDs: ["yt-dlp", "ffmpeg", "deno"],
+            optionalToolIDs: ["gallery-dl"]),
         ExtensionRegistryEntry(
             id: "notchShelf", title: "Notch Shelf",
             subtitle: "File shelf, browser, now playing, camera, and alerts around the notch.",

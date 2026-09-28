@@ -250,7 +250,8 @@ public enum DownloadOperationExecution {
         let outputDirectory = outputDirectory ?? MediaDownloadInput.defaultDirectory(for: kind)
         if isDaemonQueue(file) {
             return try AgentDownloadClient().mutate(
-                .enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: outputDirectory,
+                .enqueue(
+                    urls: urls, prefix: prefix, kind: kind, outputDirectory: outputDirectory,
                     browser: browser)
             ).added
         }
