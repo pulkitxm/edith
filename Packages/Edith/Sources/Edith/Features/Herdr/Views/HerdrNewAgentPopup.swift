@@ -16,9 +16,9 @@ struct HerdrNewAgentPopup: View {
     }
 
     private var dark: Bool { scheme == .dark }
-    init(store: HerdrStore, model: HerdrNewAgentPopupModel? = nil) {
+    init(store: HerdrStore, model: HerdrNewAgentPopupModel) {
         self.store = store
-        _model = State(initialValue: model ?? HerdrNewAgentPopupModel())
+        _model = State(initialValue: model)
     }
 
     private var hosts: [HerdrHostSnapshot] { store.recentHosts }
