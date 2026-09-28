@@ -16,10 +16,20 @@ struct VideoInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Inspector", selection: $tab) {
-                ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6
+            ) {
+                ForEach(Tab.allCases, id: \.self) { option in
+                    Button {
+                        tab = option
+                    } label: {
+                        Text(option.rawValue).font(.caption).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(tab == option ? .accentColor : .secondary)
+                    .accessibilityLabel("\(option.rawValue) inspector")
+                }
             }
-            .labelsHidden()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     switch tab {

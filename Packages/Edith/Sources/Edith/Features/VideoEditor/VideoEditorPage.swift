@@ -593,7 +593,7 @@ struct VideoEditorPage: View {
     }
 
     private var zoomControls: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text(
                 model.editingZoomID == nil
                     ? "Add zoom at playhead"
@@ -602,49 +602,51 @@ struct VideoEditorPage: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
-            .frame(maxWidth: UIScale.pt(140), alignment: .leading)
-            Picker(
-                "Zoom",
-                selection: Binding(
-                    get: { model.zoomDepth },
-                    set: { model.setZoomDepth($0) }
-                )
-            ) {
-                Text("1.25×").tag(1)
-                Text("1.5×").tag(2)
-                Text("1.8×").tag(3)
-                Text("2.2×").tag(4)
-                Text("3.5×").tag(5)
-                Text("5×").tag(6)
-            }
-            .frame(width: UIScale.pt(105))
-            HStack(spacing: UIScale.pt(5)) {
-                Text("Length")
-                Slider(
-                    value: Binding(
-                        get: { model.zoomDuration },
-                        set: { model.setZoomDuration($0) }
-                    ), in: 0.1...max(0.5, model.maximumZoomDuration), step: 0.1
-                )
-                .frame(width: UIScale.pt(90))
-                Text(String(format: "%.1fs", model.zoomDuration))
-                    .monospacedDigit()
-            }
-            .font(.caption)
-            Button(
-                "Add zoom",
-                systemImage: "plus.magnifyingglass", action: model.addZoom
-            )
-            .buttonStyle(.borderedProminent)
-            .disabled(model.pipeline == nil)
-            if let id = model.editingZoomID {
-                Button {
-                    model.removeZoom(id)
-                } label: {
-                    Image(systemName: "trash")
+            HStack(spacing: UIScale.pt(12)) {
+                Picker(
+                    "Zoom",
+                    selection: Binding(
+                        get: { model.zoomDepth },
+                        set: { model.setZoomDepth($0) }
+                    )
+                ) {
+                    Text("1.25×").tag(1)
+                    Text("1.5×").tag(2)
+                    Text("1.8×").tag(3)
+                    Text("2.2×").tag(4)
+                    Text("3.5×").tag(5)
+                    Text("5×").tag(6)
                 }
-                .accessibilityLabel("Remove zoom")
-                .help("Remove selected zoom")
+                .frame(width: UIScale.pt(105))
+                HStack(spacing: UIScale.pt(5)) {
+                    Text("Length")
+                    Slider(
+                        value: Binding(
+                            get: { model.zoomDuration },
+                            set: { model.setZoomDuration($0) }
+                        ), in: 0.1...max(0.5, model.maximumZoomDuration), step: 0.1
+                    )
+                    .frame(width: UIScale.pt(90))
+                    Text(String(format: "%.1fs", model.zoomDuration))
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .fixedSize(horizontal: true, vertical: false)
+                Button(
+                    "Add zoom",
+                    systemImage: "plus.magnifyingglass", action: model.addZoom
+                )
+                .buttonStyle(.borderedProminent)
+                .disabled(model.pipeline == nil)
+                if let id = model.editingZoomID {
+                    Button {
+                        model.removeZoom(id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .accessibilityLabel("Remove zoom")
+                    .help("Remove selected zoom")
+                }
             }
         }
     }
@@ -663,6 +665,7 @@ struct VideoEditorPage: View {
                     .monospacedDigit()
             }
             .font(.caption)
+            .fixedSize(horizontal: true, vertical: false)
             Button("Add text", systemImage: "plus", action: model.addCaption)
                 .buttonStyle(.borderedProminent)
                 .disabled(model.pipeline == nil || model.captionText.isEmpty)
