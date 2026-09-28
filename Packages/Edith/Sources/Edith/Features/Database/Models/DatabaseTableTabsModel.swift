@@ -5,11 +5,13 @@ import Observation
 enum DatabaseWorkbenchMode: String, CaseIterable {
     case browse
     case query
+    case structure
 
     var title: String {
         switch self {
         case .browse: "Browse"
         case .query: "Query"
+        case .structure: "Structure"
         }
     }
 }
@@ -21,12 +23,39 @@ final class DatabaseTableTab: Identifiable {
     let object: DatabaseObjectIdentifier
     let data: DatabaseDataWorkspaceModel
     let columns = DatabaseColumnsModel()
+    let history = DatabaseQueryHistory()
+    var hasOpenedQuery = false
     var mode = DatabaseWorkbenchMode.browse
     @ObservationIgnored var scrollOffset = CGPoint.zero
 
     init(object: DatabaseObjectIdentifier, data: DatabaseDataWorkspaceModel) {
         self.object = object
         self.data = data
+    }
+
+    func selectMode(_ next: DatabaseWorkbenchMode, connection: DatabaseConnectionSummary) {
+        guard mode != next, !data.isLoading else { return }
+        mode = next
+        if next == .query, !hasOpenedQuery {
+            hasOpenedQuery = true
+            data.prepareQuery(object, connection: connection)
+        } else if next == .browse, data.resultMode == .query {
+            data.open(object, connection: connection)
+        }
+    }
+
+    func runQuery(_ connection: DatabaseConnectionSummary) {
+        guard !data.isLoading else { return }
+        history.record(data.queryText, operation: data.searchQueryOperation)
+        data.runQuery(connection)
+    }
+
+    func restoreQuery(_ entry: DatabaseQueryHistoryEntry, connection: DatabaseConnectionSummary) {
+        guard !data.isLoading else { return }
+        hasOpenedQuery = true
+        mode = .query
+        data.setSearchQueryOperation(entry.operation, connection: connection)
+        data.queryText = entry.text
     }
 }
 

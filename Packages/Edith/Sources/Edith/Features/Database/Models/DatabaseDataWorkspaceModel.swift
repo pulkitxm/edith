@@ -22,6 +22,7 @@ final class DatabaseDataWorkspaceModel {
         }
     }
     private(set) var fields: [DatabaseFieldDescriptor] = []
+    private(set) var objectFields: [DatabaseFieldDescriptor] = []
     var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?
     private(set) var metadata: DatabasePageMetadata?
@@ -196,6 +197,7 @@ final class DatabaseDataWorkspaceModel {
         activeProduct = connection?.product
         resetResults()
         cancelEditor()
+        objectFields = []
         selectedObject = nil
         filterClauses = []
         filterConjunction = .and
@@ -355,6 +357,7 @@ final class DatabaseDataWorkspaceModel {
             } == true
         cancel()
         if selectedObject != object {
+            objectFields = []
             clearFilters()
             clearSorts()
             cancelEditor()
@@ -419,6 +422,7 @@ final class DatabaseDataWorkspaceModel {
             selectedRecordIndex = nil
         }
         fields = page.fields
+        if mode == .browse { objectFields = page.fields }
         nextContinuation = page.nextContinuation
         metadata = page.metadata
         browseQueryIsCurrent = mode == .browse && page.metadata.browseQuery != nil

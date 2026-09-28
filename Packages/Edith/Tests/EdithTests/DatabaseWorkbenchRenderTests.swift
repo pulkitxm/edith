@@ -12,6 +12,60 @@ struct DatabaseWorkbenchRenderTests {
         _ = TestWindowHost.application
     }
 
+    @Test func structureAndQueryHistoryPreserveTheTabDraftAndBrowseResults() async throws {
+        let fixture = try await Self.fixture()
+        let connection = try #require(fixture.connections.selectedConnection)
+        let tab = try #require(fixture.tabs.selected)
+        let fields = tab.data.fields
+        let records = tab.data.records
+        let revision = tab.data.recordsRevision
+        tab.selectMode(.structure, connection: connection)
+        #expect(tab.data.objectFields == fields)
+        #expect(tab.data.recordsRevision == revision)
+        #expect(tab.data.records == records)
+        tab.selectMode(.query, connection: connection)
+        await Self.waitUntil { tab.data.state == .loaded }
+        tab.data.queryText = "SELECT customer FROM public.orders"
+        let queryRevision = tab.data.recordsRevision
+        tab.selectMode(.structure, connection: connection)
+        tab.selectMode(.query, connection: connection)
+        #expect(tab.data.queryText == "SELECT customer FROM public.orders")
+        #expect(tab.data.recordsRevision == queryRevision)
+        tab.history.record("SELECT id FROM public.orders", operation: .search)
+        let entry = try #require(tab.history.entries.first)
+        tab.restoreQuery(entry, connection: connection)
+        #expect(tab.data.queryText == entry.text)
+        #expect(tab.data.recordsRevision == queryRevision)
+        #expect(tab.data.objectFields == fields)
+    }
+
+    @Test func finishedWorkbenchModesRenderWithSyntheticData() async throws {
+        let fixture = try await Self.fixture()
+        let tab = try #require(fixture.tabs.selected)
+        tab.data.queryText =
+            "SELECT id, customer, status\nFROM public.orders\nWHERE status = 'active'\nORDER BY created_at DESC;"
+        tab.history.record(tab.data.queryText, operation: .search)
+        for mode in DatabaseWorkbenchMode.allCases {
+            tab.mode = mode
+            for scheme in [ColorScheme.light, .dark] {
+                let directory = ProcessInfo.processInfo.environment[
+                    "EDITH_DATABASE_WORKBENCH_EVIDENCE_DIR"]
+                let captureURL = directory.map {
+                    URL(fileURLWithPath: $0).appendingPathComponent(
+                        "\(mode.rawValue)-\(scheme == .dark ? "dark" : "light").png")
+                }
+                let image = try #require(
+                    renderWorkbench(
+                        DatabaseWorkbenchView(
+                            connections: fixture.connections, explorer: fixture.explorer,
+                            tabs: fixture.tabs, mutations: fixture.mutations),
+                        width: 1180, height: 760, scheme: scheme, captureURL: captureURL))
+                #expect(image.pixelsWide >= 1180)
+                #expect(image.representation(using: .png, properties: [:])?.count ?? 0 > 18_000)
+            }
+        }
+    }
+
     @Test func populatedWorkbenchRendersAcrossLayoutsAndAppearances() async throws {
         let fixture = try await Self.fixture()
 

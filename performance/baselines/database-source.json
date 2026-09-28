@@ -4,7 +4,6 @@
     "Models/DatabaseConnectionWorkspaceModel.swift": 1050,
     "Models/DatabaseWorkspaceModel.swift": 1022,
     "Models/DatabaseSafetyReviewPresentation.swift": 821,
-    "Views/DatabaseWorkbenchView.swift": 1843,
     "Views/DatabaseConnectionGallery.swift": 1047,
     "Views/DatabaseSafetyReviewSheet.swift": 875,
     "Views/DatabaseConnectionManagementSheet.swift": 782,
