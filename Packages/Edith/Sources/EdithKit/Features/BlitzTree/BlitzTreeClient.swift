@@ -1,21 +1,21 @@
 import Foundation
 
-public struct BlitzTreeReport: Decodable, Sendable {
-    public struct Summary: Decodable, Sendable {
+public struct BlitzTreeReport: Sendable {
+    public struct Summary: Sendable {
         public let allocatedBytes: UInt64
         public let logicalBytes: UInt64
         public let fileCount: UInt64
         public let directoryCount: UInt64
     }
 
-    public struct Coverage: Decodable, Sendable {
+    public struct Coverage: Sendable {
         public let complete: Bool
         public let errors: UInt64
         public let skippedCloudDirectories: UInt64
         public let skippedMountPoints: UInt64
     }
 
-    public struct Entry: Decodable, Identifiable, Sendable {
+    public struct Entry: Identifiable, Sendable {
         public var id: String { path }
         public var name: String { URL(fileURLWithPath: path).lastPathComponent }
         public var isDirectory: Bool { kind == "directory" }
@@ -26,25 +26,23 @@ public struct BlitzTreeReport: Decodable, Sendable {
         public let fileCount: UInt64
         public let complete: Bool
         public let reason: String?
+        public let device: Int32
+        public let inode: UInt64
     }
 
-    public struct Inventory: Decodable, Sendable {
+    public struct Inventory: Sendable {
         public let largestChildren: [Entry]
         public let largestDirectories: [Entry]
         public let largestFiles: [Entry]
     }
 
-    public struct Findings: Decodable, Sendable {
+    public struct Findings: Sendable {
         public let candidates: [Entry]
         public let candidateCount: Int
         public let truncated: Bool
         public let inventory: Inventory
     }
 
-    public let schemaVersion: Int
-    public let tool: String
-    public let command: String
-    public let readOnly: Bool
     public let root: String
     public let scanSeconds: Double
     public let summary: Summary
@@ -59,68 +57,45 @@ public struct BlitzTreeReport: Decodable, Sendable {
 }
 
 public enum BlitzTreeError: LocalizedError, Equatable {
-    case notInstalled
     case invalidRoot
-    case invalidReport
     case failed(String)
 
     public var errorDescription: String? {
         switch self {
-        case .notInstalled: "Install the BlitzTree CLI to scan a folder."
         case .invalidRoot: "Choose an absolute folder path to scan."
-        case .invalidReport:
-            "BlitzTree returned an unsupported or invalid report. Reinstall the CLI."
         case let .failed(message): message
         }
     }
 }
 
 public struct BlitzTreeClient: Sendable {
-    public typealias Execute = @Sendable ([String]) async throws -> CLICommandResult
+    public typealias Progress = @Sendable (UInt64) -> Void
+    public typealias Execute =
+        @Sendable (String, @escaping Progress) async throws -> BlitzTreeReport
     private let execute: Execute
 
     public init(execute: @escaping Execute) {
         self.execute = execute
     }
 
-    public func scan(root: String) async throws -> BlitzTreeReport {
+    public func scan(root: String, progress: @escaping Progress = { _ in }) async throws
+        -> BlitzTreeReport
+    {
         guard root.hasPrefix("/"), !root.contains("\0") else { throw BlitzTreeError.invalidRoot }
         try Task.checkCancellation()
-        let result = try await execute([
-            "quick-wins", "--root", root, "--limit", "200",
-        ])
+        let result = try await execute(root, progress)
         try Task.checkCancellation()
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard result.terminationStatus == 0 else {
-            let failure = try? decoder.decode(Failure.self, from: result.standardOutputData)
-            throw BlitzTreeError.failed(
-                failure?.error.message
-                    ?? "BlitzTree exited with status \(result.terminationStatus).")
-        }
-        guard
-            let report = try? decoder.decode(BlitzTreeReport.self, from: result.standardOutputData),
-            report.schemaVersion == 1, report.tool == "blitztree",
-            report.command == "quick-wins", report.readOnly, report.root.hasPrefix("/"),
-            report.scanSeconds.isFinite, report.scanSeconds >= 0
-        else { throw BlitzTreeError.invalidReport }
-        return report
+        return result
     }
 
-    public static let live = BlitzTreeClient { arguments in
-        guard let executable = CLIToolEnvironment.executable(named: "blitztree") else {
-            throw BlitzTreeError.notInstalled
+    public static let live = BlitzTreeClient { root, progress in
+        let worker = Task.detached(priority: .userInitiated) {
+            try BlitzTreeScanner.scan(root: root, progress: progress)
         }
-        return try await CLICommandRunner.runLocal(
-            CLICommandRequest(
-                executableURL: executable, arguments: arguments,
-                environment: CLIToolEnvironment.sanitized(), timeout: 600,
-                maximumOutputBytes: 8 * 1_024 * 1_024)
-        ) { _ in }
-    }
-
-    private struct Failure: Decodable {
-        struct Detail: Decodable { let message: String }
-        let error: Detail
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
     }
 }

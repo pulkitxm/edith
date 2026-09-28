@@ -53,7 +53,7 @@ import EdithDatabase
         MatrixRow(
             id: "blitztree", helper: false, machine: false,
             toolRule: .all, adapter: true,
-            requiredTools: ["blitztree"], optionalTools: []),
+            requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "system", helper: true, machine: false,
             toolRule: .all, adapter: true,

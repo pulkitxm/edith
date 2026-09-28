@@ -1,115 +1,144 @@
+import Darwin
 import Foundation
 import Testing
 
 @testable import EdithKit
 
 @Suite struct BlitzTreeClientTests {
-    static let report = """
-        {"schema_version":1,"tool":"blitztree","command":"quick-wins","read_only":true,
-        "root":"/fixtures","scan_seconds":0.2,
-        "summary":{"allocated_bytes":8192,"logical_bytes":7000,"file_count":2,"directory_count":1},
-        "coverage":{"complete":false,"errors":1,"skipped_cloud_directories":2,"skipped_mount_points":1},
-        "report":{"candidates":[],"candidate_count":0,"truncated":false,
-        "inventory":{"largest_children":[{"path":"/fixtures/example","kind":"directory",
-        "allocated_bytes":4096,"logical_bytes":3500,"file_count":1,"complete":false}],
-        "largest_directories":[],"largest_files":[]}}}
-        """
-
-    @Test func partialCoverageAndUnlistedSpaceArePreserved() async throws {
-        let client = BlitzTreeClient { arguments in
-            #expect(
-                arguments == [
-                    "quick-wins", "--root", "/fixtures/quotes '; $(example)", "--limit", "200",
-                ])
-            return CLICommandResult(terminationStatus: 0, output: Self.report)
-        }
-        let report = try await client.scan(root: "/fixtures/quotes '; $(example)")
-        #expect(!report.coverage.complete)
-        #expect(report.coverage.errors == 1)
-        #expect(report.coverage.skippedCloudDirectories == 2)
-        #expect(report.unlistedBytes == 4096)
-        #expect(report.report.inventory.largestChildren.first?.complete == false)
-    }
-
-    @Test func rejectsUnsupportedReports() async throws {
-        for replacement in [
-            ("\"schema_version\":1", "\"schema_version\":2"),
-            ("\"tool\":\"blitztree\"", "\"tool\":\"other\""),
-            ("\"read_only\":true", "\"read_only\":false"),
-            ("\"command\":\"quick-wins\"", "\"command\":\"scan\""),
-        ] {
-            let output = Self.report.replacingOccurrences(of: replacement.0, with: replacement.1)
-            let client = BlitzTreeClient { _ in
-                CLICommandResult(terminationStatus: 0, output: output)
-            }
-            await #expect(throws: BlitzTreeError.invalidReport) {
-                try await client.scan(root: "/fixtures")
-            }
-        }
-    }
-
-    @Test func surfacesStructuredErrors() async {
-        let client = BlitzTreeClient { _ in
-            CLICommandResult(
-                terminationStatus: 1, output: "{\"error\":{\"message\":\"Cannot open folder\"}}")
-        }
-        await #expect(throws: BlitzTreeError.failed("Cannot open folder")) {
-            try await client.scan(root: "/fixtures")
-        }
+    static func report(root: String) -> BlitzTreeReport {
+        .init(
+            root: root, scanSeconds: 0.1,
+            summary: .init(allocatedBytes: 0, logicalBytes: 0, fileCount: 0, directoryCount: 1),
+            coverage: .init(
+                complete: true, errors: 0, skippedCloudDirectories: 0, skippedMountPoints: 0),
+            report: .init(
+                candidates: [], candidateCount: 0, truncated: false,
+                inventory: .init(largestChildren: [], largestDirectories: [], largestFiles: [])))
     }
 
     @Test func invalidRootsNeverLaunch() async {
-        let client = BlitzTreeClient { _ in
+        let client = BlitzTreeClient { _, _ in
             Issue.record("Invalid roots must not launch a scan")
-            return CLICommandResult(terminationStatus: 0, output: Self.report)
+            return Self.report(root: "/fixtures")
         }
         for root in ["", "relative", "/fixtures\0bad"] {
             await #expect(throws: BlitzTreeError.invalidRoot) { try await client.scan(root: root) }
         }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["BLITZTREE_BIN"] != nil))
-    func realScannerReadsOnlySyntheticFiles() async throws {
-        let binary = try #require(ProcessInfo.processInfo.environment["BLITZTREE_BIN"])
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blitztree-fixture-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    @Test func nativeScannerCountsHardLinksOnceAndDoesNotFollowDirectoryLinks() async throws {
+        let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("quotes '; $(example).bin")
         let content = Data(repeating: 42, count: 8192)
         try content.write(to: file)
-        let client = BlitzTreeClient { arguments in
-            try await CLICommandRunner.runLocal(
-                CLICommandRequest(
-                    executableURL: URL(fileURLWithPath: binary), arguments: arguments,
-                    environment: [:], timeout: 30, maximumOutputBytes: 1_048_576)
-            ) { _ in }
-        }
-        let report = try await client.scan(root: root.path)
+        try FileManager.default.linkItem(at: file, to: root.appendingPathComponent("hardlink"))
+        try FileManager.default.createSymbolicLink(
+            atPath: root.appendingPathComponent("loop").path, withDestinationPath: root.path)
+        try FileManager.default.createSymbolicLink(
+            atPath: root.appendingPathComponent("broken").path,
+            withDestinationPath: "/missing-blitztree-fixture")
+        let report = try await BlitzTreeClient.live.scan(root: root.path)
         #expect(report.coverage.complete)
-        #expect(report.summary.fileCount == 1)
-        #expect(report.report.inventory.largestChildren.first?.name == file.lastPathComponent)
+        #expect(report.summary.fileCount == 4)
+        #expect(report.summary.directoryCount == 1)
+        #expect(report.report.inventory.largestChildren.count == 4)
+        #expect(
+            report.report.inventory.largestChildren.filter {
+                $0.name == "hardlink" || $0.name == file.lastPathComponent
+            }.reduce(0) { $0 + $1.logicalBytes } == 8192)
         #expect(try Data(contentsOf: file) == content)
+        var metadata = stat()
+        #expect(lstat(file.path, &metadata) == 0)
+        let counted = report.report.inventory.largestChildren.filter { $0.inode == metadata.st_ino }
+        #expect(counted.reduce(0) { $0 + $1.allocatedBytes } == UInt64(metadata.st_blocks) * 512)
     }
 
-    @Test func cargoInstallationUsesPinnedSourceAndVerifiesBinary() async throws {
-        let installer = ToolInstaller { request, _ in
-            switch request.arguments.first {
-            case "cargo":
-                if request.arguments != ["cargo", "--version"] {
-                    #expect(request.arguments.contains("--locked"))
-                    #expect(request.arguments.contains("d5a0fc8c30b150969f4c6066520f0cadc87a9eb6"))
-                    #expect(request.arguments.suffix(3) == ["--bin", "blitztree", "blitztree"])
-                }
-                return CLICommandResult(terminationStatus: 0, output: "cargo")
-            case "blitztree":
-                #expect(request.arguments == ["blitztree", "--version"])
-                return CLICommandResult(terminationStatus: 0, output: "1.0")
-            default:
-                Issue.record("Unexpected installer command")
-                return CLICommandResult(terminationStatus: 1, output: "")
-            }
+    @Test func nestedCandidatesAreDeduplicatedAndReportsAreBounded() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for path in [
+            "a/node_modules/nested/node_modules", "b/node_modules", ".Trash/node_modules", "target",
+            "valid/target",
+        ] {
+            let directory = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            try Data(repeating: 7, count: 8192).write(
+                to: directory.appendingPathComponent("fixture.bin"))
         }
-        #expect(try await installer.install(.blitzTree) == "1.0")
+        try Data().write(to: root.appendingPathComponent("valid/Cargo.toml"))
+        let report = try BlitzTreeScanner.scan(root: root.path, minimumBytes: 1, limit: 2)
+        #expect(report.coverage.complete)
+        #expect(report.report.candidateCount == 3)
+        #expect(report.report.truncated)
+        #expect(report.report.candidates.count == 2)
+        #expect(report.report.inventory.largestChildren.count == 2)
+        #expect(report.report.inventory.largestDirectories.count == 2)
+        #expect(report.report.inventory.largestFiles.count == 2)
+        #expect(
+            report.report.candidates.allSatisfy {
+                !$0.path.contains("nested") && !$0.path.contains(".Trash")
+            })
+        let full = try BlitzTreeScanner.scan(root: root.path, minimumBytes: 1)
+        #expect(full.report.candidates.contains { $0.path.hasSuffix("valid/target") })
+        #expect(
+            !full.report.candidates.contains {
+                $0.path == root.appendingPathComponent("target").path
+            })
+    }
+
+    @Test func sparseFilesUseAllocatedRatherThanLogicalBytes() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("sparse.bin")
+        #expect(FileManager.default.createFile(atPath: file.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: 100_000_000)
+        try handle.close()
+        let report = try BlitzTreeScanner.scan(root: root.path, minimumBytes: 0)
+        let entry = try #require(report.report.inventory.largestChildren.first)
+        #expect(entry.logicalBytes == 100_000_000)
+        #expect(entry.allocatedBytes < entry.logicalBytes)
+    }
+
+    @Test func unreadableDirectoriesReportPartialCoverage() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocked = root.appendingPathComponent("blocked")
+        try FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
+        try Data([1]).write(to: blocked.appendingPathComponent("hidden.bin"))
+        #expect(chmod(blocked.path, 0) == 0)
+        defer { chmod(blocked.path, 0o700) }
+        let report = try BlitzTreeScanner.scan(root: root.path)
+        #expect(!report.coverage.complete)
+        #expect(report.coverage.errors > 0)
+    }
+
+    @Test func emptyFoldersSymlinkRootsAndCancellation() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("empty")
+        let link = root.appendingPathComponent("alias")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "empty")
+        let report = try BlitzTreeScanner.scan(root: link.path)
+        #expect(report.root == (try BlitzTreeScanner.resolvedDirectory(folder.path)))
+        #expect(report.summary.fileCount == 0)
+        #expect(report.coverage.complete)
+        #expect(report.report.inventory.largestChildren.isEmpty)
+        #expect(throws: CancellationError.self) {
+            try BlitzTreeScanner.scan(root: root.path, isCancelled: { true })
+        }
+        #expect(throws: (any Error).self) {
+            try BlitzTreeScanner.scan(root: root.appendingPathComponent("missing").path)
+        }
+    }
+
+    private func fixture() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent("blitztree-fixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
     }
 }

@@ -65,7 +65,7 @@ public enum SuiteRegistry {
             id: .maintenance, title: "Maintenance",
             subtitle: "Updates, packages, review-first removal, disk cleanup and history.",
             symbolName: "shippingbox.and.arrow.backward",
-            defaultsKey: "suiteMaintenanceEnabled", toolIDs: ["homebrew", "mas", "blitztree"]),
+            defaultsKey: "suiteMaintenanceEnabled", toolIDs: ["homebrew", "mas"]),
         SuiteDescriptor(
             id: .system, title: "System",
             subtitle: "Running apps, sleep, the cleaning lock, menu bar stats and mic mute.",

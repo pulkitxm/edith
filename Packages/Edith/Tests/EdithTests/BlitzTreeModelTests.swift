@@ -8,13 +8,9 @@ import Testing
     @Test func cancelledScanCannotReplaceANewerResult() async throws {
         let gate = ScanGate()
         let model = BlitzTreeModel(
-            client: BlitzTreeClient { arguments in
-                let root = arguments[2]
+            client: BlitzTreeClient { root, _ in
                 if root == "/old" { await gate.wait() }
-                return CLICommandResult(
-                    terminationStatus: 0,
-                    output: BlitzTreeClientTests.report.replacingOccurrences(
-                        of: "/fixtures", with: root))
+                return BlitzTreeClientTests.report(root: root)
             })
         model.scan("/old")
         while !(await gate.waiting) { await Task.yield() }
@@ -30,11 +26,8 @@ import Testing
 
     @Test func backAndCancelPreserveNavigation() async {
         let model = BlitzTreeModel(
-            client: BlitzTreeClient { arguments in
-                CLICommandResult(
-                    terminationStatus: 0,
-                    output: BlitzTreeClientTests.report.replacingOccurrences(
-                        of: "/fixtures", with: arguments[2]))
+            client: BlitzTreeClient { root, _ in
+                BlitzTreeClientTests.report(root: root)
             })
         model.scan("/parent")
         while model.scanning { await Task.yield() }

@@ -100,9 +100,7 @@ public enum ExtensionLiveAdapters {
     ) async -> ExtensionAdapterReadiness? {
         switch id {
         case "blitztree":
-            executableNamed("blitztree") == nil
-                ? .uninstalled("Install the BlitzTree CLI from the extension setup.")
-                : .ready("Choose a folder in BlitzTree to scan its disk usage.")
+            .ready("The built-in disk scanner is ready. Choose a folder in BlitzTree.")
         case "plugins":
             executableNamed("npx") == nil
                 ? .needsSetup(

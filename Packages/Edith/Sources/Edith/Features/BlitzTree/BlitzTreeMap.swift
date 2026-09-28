@@ -50,7 +50,7 @@ struct BlitzTreeMap: View {
                                 }
                                 .clipped()
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .disabled(entry == nil)
                         .accessibilityLabel(entry?.name ?? "Other unlisted space")
                         .help(entry?.path ?? "Unlisted entries and folder metadata")

@@ -199,7 +199,7 @@ public enum ExtensionLifecycleCatalog {
 
     public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
-            "blitztree", "Explore allocated disk space using the BlitzTree scan engine.",
+            "blitztree", "Explore allocated disk space using Edith's built-in native scanner.",
             workflows: [
                 instruction(
                     "scan", "Scan a folder",
@@ -210,21 +210,21 @@ public enum ExtensionLifecycleCatalog {
             ],
             prerequisites: [
                 instruction(
-                    "tool", "Install BlitzTree",
-                    "Rust and Xcode Command Line Tools build the pinned CLI.",
-                    "ed tools install blitztree")
+                    "folder", "Choose a folder",
+                    "Enable BlitzTree and choose a readable local folder.",
+                    "ed app reveal blitztree")
             ],
             examples: ["ed extensions enable blitztree", "ed app reveal blitztree"],
             docs: [documentation("guide", "BlitzTree guide", "docs/blitztree.md")],
             recovery: [
                 instruction(
-                    "install", "Repair BlitzTree",
-                    "Retry CLI setup after installing Rust and Xcode Command Line Tools.",
-                    "ed tools install blitztree")
+                    "access", "Check folder access",
+                    "Use Full Disk Access to include protected folders when needed.",
+                    "ed permissions request fullDisk")
             ],
             verification: [
                 instruction(
-                    "verify", "Verify BlitzTree", "Check the CLI and extension readiness.",
+                    "verify", "Verify BlitzTree", "Check the extension readiness.",
                     "ed extensions verify blitztree --json")
             ]),
         descriptor(

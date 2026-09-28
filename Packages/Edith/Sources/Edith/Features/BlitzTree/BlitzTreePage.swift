@@ -5,7 +5,8 @@ import SwiftUI
 struct BlitzTreePage: View {
     @State private var model = BlitzTreeModel()
     @State private var list = BlitzTreeList.children
-    @State private var showingSetup = false
+    @State private var rings = false
+    @State private var pendingRemoval: BlitzTreeReport.Entry?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -26,6 +27,7 @@ struct BlitzTreePage: View {
                         }
                         Button("Choose folder", systemImage: "folder") { chooseFolder() }
                             .buttonStyle(.borderedProminent)
+                            .disabled(model.removing)
                     }
                 }
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -47,28 +49,36 @@ struct BlitzTreePage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .onDisappear { model.cancel() }
-        .sheet(isPresented: $showingSetup) {
-            ToolProvisioningPanel(
-                title: "Set up BlitzTree", tools: [.blitzTree],
-                continueAction: {
-                    showingSetup = false
-                }
-            )
-            .frame(width: UIScale.pt(520))
+        .confirmationDialog(
+            "Move this item to Trash?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }
+            ), titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let entry = pendingRemoval { model.trash(entry) }
+                pendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        } message: {
+            if let entry = pendingRemoval {
+                Text(
+                    "\(entry.path)\n\(bytes(entry.allocatedBytes)) allocated. The item stays in Trash until you empty it."
+                )
+            }
         }
     }
 
     private var navigation: some View {
         HStack {
             Button("Back", systemImage: "chevron.left", action: model.back)
-                .disabled(model.history.isEmpty)
+                .disabled(model.history.isEmpty || model.removing)
             Text(model.root ?? "Choose a folder to explore its disk usage")
                 .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
             Spacer()
-            Button("Set up CLI") { showingSetup = true }
         }
     }
 
@@ -81,13 +91,10 @@ struct BlitzTreePage: View {
                 .font(DashSkin.heading(24))
             Text(
                 model.scanning
-                    ? "BlitzTree is reading filesystem metadata. You can cancel at any time."
+                    ? "\(model.scannedEntries.formatted()) entries scanned. You can cancel at any time."
                     : "Explore a disk-space treemap, large files and cleanup candidates."
             )
             .foregroundStyle(.secondary)
-            Link(
-                "About BlitzTree",
-                destination: URL(string: "https://github.com/ahmedkhaleel2004/blitztree")!)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(64))
@@ -108,8 +115,26 @@ struct BlitzTreePage: View {
             .font(.callout)
             .foregroundStyle(.orange)
         }
-        BlitzTreeMap(report: report) { entry in activate(entry) }
-            .frame(height: UIScale.pt(280))
+        HStack {
+            Text(model.removing ? "Moving to Trash..." : "Folder overview")
+                .font(.headline)
+            Spacer()
+            Picker("Visualization", selection: $rings) {
+                Text("Treemap").tag(false)
+                Text("Rings").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: UIScale.pt(180))
+        }
+        Group {
+            if rings {
+                BlitzTreeRings(report: report) { entry in activate(entry) }
+            } else {
+                BlitzTreeMap(report: report) { entry in activate(entry) }
+            }
+        }
+        .frame(height: UIScale.pt(280))
+        .disabled(model.removing)
         Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -152,7 +177,7 @@ struct BlitzTreePage: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     if !entry.complete {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
@@ -162,6 +187,10 @@ struct BlitzTreePage: View {
                     Button("Reveal", systemImage: "arrow.up.forward.square") { reveal(entry) }
                         .labelStyle(.iconOnly)
                         .help("Reveal in Finder")
+                    Button("Move to Trash", systemImage: "trash") { pendingRemoval = entry }
+                        .labelStyle(.iconOnly)
+                        .help("Move to Trash")
+                        .disabled(model.removing)
                 }
                 .padding(.vertical, UIScale.pt(10))
                 Divider()

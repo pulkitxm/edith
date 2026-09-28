@@ -20,7 +20,6 @@ public enum CLIToolPresenceStrategy: Equatable, Sendable {
 }
 
 public enum CLIToolInstallStrategy: Equatable, Sendable {
-    case cargo(arguments: [String], instruction: String)
     case manual(instruction: String)
     case standaloneBinary(url: URL, destinationName: String, instruction: String)
     case homebrew(arguments: [String], instruction: String)
@@ -30,8 +29,6 @@ public enum CLIToolInstallStrategy: Equatable, Sendable {
 
     public var instruction: String {
         switch self {
-        case let .cargo(_, instruction):
-            return instruction
         case let .manual(instruction):
             return instruction
         case let .standaloneBinary(_, _, instruction):
@@ -146,19 +143,6 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         presenceStrategy: .executable(name: "brew", versionArguments: ["--version"]),
         installStrategy: .manual(
             instruction: "Install Homebrew from https://brew.sh, then check again."))
-
-    public static let blitzTree = CLIToolSpec(
-        id: "blitztree", displayName: "BlitzTree",
-        why: "Scans allocated disk space and finds cleanup candidates using the BlitzTree engine.",
-        presenceStrategy: .executable(name: "blitztree", versionArguments: ["--version"]),
-        installStrategy: .cargo(
-            arguments: [
-                "install", "--locked", "--git", "https://github.com/ahmedkhaleel2004/blitztree",
-                "--rev", "d5a0fc8c30b150969f4c6066520f0cadc87a9eb6",
-                "--features", "cli", "--bin", "blitztree", "blitztree",
-            ],
-            instruction:
-                "Install Rust from https://rustup.rs and Xcode Command Line Tools, then retry."))
 }
 
 public enum CLIToolEnvironment {
