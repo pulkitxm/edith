@@ -33,7 +33,8 @@ struct DatabaseGridProjection {
         let prefix = value.prefix(previewLimit + 1)
         let truncated = prefix.count > previewLimit
         let visible = truncated ? prefix.prefix(previewLimit - 1) : prefix
-        let compact = visible.replacingOccurrences(of: "\n", with: " ")
+        let compact = visible.replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
         return truncated ? compact + "…" : compact
     }

@@ -46,6 +46,7 @@ struct DatabaseGridProjectionTests {
         let family = "👨‍👩‍👧‍👦"
         #expect(DatabaseGridProjection.preview("") == "")
         #expect(DatabaseGridProjection.preview("a\nb\rc") == "a b c")
+        #expect(DatabaseGridProjection.preview(String(repeating: "\r\n", count: 600)).count == 512)
         let exact = String(repeating: family, count: 512)
         #expect(DatabaseGridProjection.preview(exact) == exact)
         let large = String(repeating: "x", count: 8_000_000)
