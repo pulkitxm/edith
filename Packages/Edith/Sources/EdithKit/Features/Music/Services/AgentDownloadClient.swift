@@ -8,7 +8,9 @@ public enum AgentDownloadOperation {
 }
 
 public enum AgentDownloadMutation: Codable, Sendable {
-    case enqueue(urls: [URL], prefix: String, kind: DownloadKind, outputDirectory: URL)
+    case enqueue(
+        urls: [URL], prefix: String, kind: DownloadKind, outputDirectory: URL,
+        browser: DownloadBrowser? = nil)
     case retry(id: UUID?, all: Bool)
     case cancel(id: UUID?, includeQueued: Bool, reason: String)
     case remove(id: UUID)

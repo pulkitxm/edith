@@ -245,16 +245,18 @@ public enum DownloadOperationExecution {
     public static func enqueue(
         urls: [URL], prefix: String = "", kind: DownloadKind = .audio,
         now: Date = Date(), file: URL = DownloadQueue.file,
-        outputDirectory: URL = Repo.musicDir
+        outputDirectory: URL? = nil, browser: DownloadBrowser? = nil
     ) throws -> [DownloadRecord] {
+        let outputDirectory = outputDirectory ?? MediaDownloadInput.defaultDirectory(for: kind)
         if isDaemonQueue(file) {
             return try AgentDownloadClient().mutate(
-                .enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: outputDirectory)
+                .enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: outputDirectory,
+                    browser: browser)
             ).added
         }
         return try DownloadQueue.enqueue(
             urls: urls, prefix: prefix, kind: kind, now: now, file: file,
-            outputDirectory: outputDirectory)
+            outputDirectory: outputDirectory, browser: browser)
     }
 
     public static func retry(

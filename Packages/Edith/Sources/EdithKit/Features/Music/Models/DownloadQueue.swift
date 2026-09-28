@@ -8,11 +8,12 @@ public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
     public var createdAt: Date
     public var kind: DownloadKind?
     public var resultPaths: [String]?
+    public var browser: DownloadBrowser?
 
     public init(
         id: UUID = UUID(), url: URL, status: DownloadStatus, outputFilename: String?,
         createdAt: Date,
-        kind: DownloadKind?, resultPaths: [String]? = nil
+        kind: DownloadKind?, resultPaths: [String]? = nil, browser: DownloadBrowser? = nil
     ) {
         self.id = id
         self.url = url
@@ -21,6 +22,7 @@ public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.kind = kind
         self.resultPaths = resultPaths
+        self.browser = browser
     }
 
     public var state: String {
@@ -90,19 +92,22 @@ public enum DownloadQueue {
     }
 
     public static func outputTemplate(prefix: String, directory: URL = Repo.musicDir) -> String {
-        let name = prefix.isEmpty ? "%(title)s.%(ext)s" : "\(prefix)%(title)s.%(ext)s"
+        let escaped = prefix.replacingOccurrences(of: "%", with: "%%")
+        let name = "\(escaped)%(title).160B [%(id)s].%(ext)s"
         return directory.appendingPathComponent(name).path
     }
 
     @discardableResult
     public static func enqueue(
         urls: [URL], prefix: String = "", kind: DownloadKind = .audio, now: Date = Date(),
-        file: URL = DownloadQueue.file, outputDirectory: URL = Repo.musicDir
+        file: URL = DownloadQueue.file, outputDirectory: URL = Repo.musicDir,
+        browser: DownloadBrowser? = nil
     ) throws -> [DownloadRecord] {
         let template = outputTemplate(prefix: prefix, directory: outputDirectory)
         let added = urls.map {
             DownloadRecord(
-                url: $0, status: .queued, outputFilename: template, createdAt: now, kind: kind)
+                url: $0, status: .queued, outputFilename: template, createdAt: now, kind: kind,
+                browser: browser)
         }
         try save(added + load(from: file), to: file)
         return added

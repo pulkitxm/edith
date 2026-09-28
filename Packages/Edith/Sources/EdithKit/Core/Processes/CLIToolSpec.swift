@@ -68,7 +68,7 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
 
     public static let youtubeDownloader = CLIToolSpec(
         id: "yt-dlp", displayName: "yt-dlp",
-        why: "Downloads YouTube audio into your Music library.",
+        why: "Downloads videos and audio from YouTube and other supported sites.",
         presenceStrategy: .executable(name: "yt-dlp", versionArguments: ["--version"]),
         installStrategy: .standaloneBinary(
             url: URL(
@@ -80,6 +80,14 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
                 "Download yt-dlp_macos from the official yt-dlp release and place it in a folder on PATH."
         ),
         versionProbeTimeout: 30)
+
+    public static let galleryDownloader = CLIToolSpec(
+        id: "gallery-dl", displayName: "gallery-dl",
+        why: "Saves photos, carousels and mixed-media social posts.",
+        presenceStrategy: .executable(name: "gallery-dl", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "gallery-dl"],
+            instruction: "Install with `brew install gallery-dl`."))
 
     public static let ffmpeg = CLIToolSpec(
         id: "ffmpeg", displayName: "FFmpeg",

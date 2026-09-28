@@ -1,0 +1,123 @@
+import Foundation
+import Testing
+
+@testable import EdithAgent
+@testable import EdithKit
+
+@Suite struct MediaDownloadTests {
+    @Test(arguments: [
+        "https://www.instagram.com/p/fixture/", "https://www.tiktok.com/@demo/video/123",
+        "https://x.com/demo/status/123", "https://www.youtube.com/shorts/fixture",
+        "https://www.facebook.com/reel/123", "https://www.linkedin.com/posts/demo",
+        "https://www.snapchat.com/spotlight/fixture", "https://www.reddit.com/r/demo/comments/123",
+        "https://www.pinterest.com/pin/123/", "https://www.flickr.com/photos/demo/123",
+        "https://vimeo.com/123", "https://www.twitch.tv/videos/123",
+        "https://example.com/photo.jpg",
+    ])
+    func acceptsSocialLinks(_ source: String) {
+        #expect(YoutubeDownloader.parseURLs(from: source).map(\.absoluteString) == [source])
+    }
+
+    @Test func rejectsNonWebAndCredentialURLsAndDeduplicates() {
+        let input =
+            "file:///etc/hosts\nftp://example.com/a\nhttps://user:pass@example.com/a\nhttps://x.com/a\nhttps://x.com/a"
+        #expect(
+            YoutubeDownloader.parseURLs(from: input).map(\.absoluteString) == ["https://x.com/a"])
+    }
+
+    @Test func galleryRequestKeepsAlbumsTogetherAndFiltersImages() {
+        let record = record(kind: .images)
+        let request = MediaDownloadRequest.gallery(
+            record, executable: URL(fileURLWithPath: "/bin/gallery-dl"))
+        #expect(request.arguments.contains("--config-ignore"))
+        #expect(request.arguments.contains("--filter"))
+        #expect(request.arguments.contains("after:{_path}"))
+        #expect(request.arguments.contains("skip:{_path}"))
+        #expect(request.arguments.contains("/tmp/media-test/\(record.id.uuidString)"))
+        #expect(request.arguments.suffix(2) == ["--", "https://example.com/image.jpg"])
+        #expect(request.terminatesProcessGroup)
+    }
+
+    @Test func videoRequestIsIsolatedAndUsesExplicitBrowser() {
+        var record = record(kind: .video)
+        record.browser = .firefox
+        let request = DownloadWorker.request(
+            record, executable: URL(fileURLWithPath: "/bin/yt-dlp"))
+        #expect(request.arguments.contains("--ignore-config"))
+        #expect(request.arguments.contains("--no-overwrites"))
+        #expect(request.arguments.contains("firefox"))
+        #expect(request.arguments.contains("bv*+ba/b"))
+        #expect(request.arguments.suffix(2) == ["--", record.url.absoluteString])
+    }
+
+    @Test func prefixCannotInjectAnOutputTemplate() {
+        let template = DownloadQueue.outputTemplate(prefix: "%(title)s")
+        #expect(template.contains("%%(title)s%(title).160B"))
+    }
+
+    @Test func postFallsBackToVideoOnlyWhenGalleryProducesNoFiles() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let calls = MediaDownloadCalls()
+        let worker = DownloadWorker(
+            file: folder.appendingPathComponent("queue.json"),
+            executable: { URL(fileURLWithPath: "/bin/yt-dlp") },
+            galleryExecutable: { URL(fileURLWithPath: "/bin/gallery-dl") },
+            isEnabled: { true },
+            runCommand: { request, _ in
+                await calls.append(request.executableURL.lastPathComponent)
+                if request.executableURL.lastPathComponent == "gallery-dl" {
+                    return CLICommandResult(terminationStatus: 1, output: "unsupported")
+                }
+                let output = folder.appendingPathComponent("video.mp4")
+                try Data([1, 2, 3]).write(to: output)
+                return CLICommandResult(terminationStatus: 0, output: output.path)
+            })
+        try await worker.start()
+        _ = try await worker.mutate(
+            .enqueue(
+                urls: [URL(string: "https://example.com/post")!], prefix: "", kind: .post,
+                outputDirectory: folder))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+        while await worker.snapshot().finished == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await worker.snapshot().finished == 1)
+        #expect(await calls.values == ["gallery-dl", "yt-dlp"])
+        await worker.stop()
+    }
+
+    @Test func missingGalleryFailsWithoutBlockingLaterVideos() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let worker = DownloadWorker(
+            file: folder.appendingPathComponent("queue.json"),
+            executable: { URL(fileURLWithPath: "/bin/yt-dlp") }, galleryExecutable: { nil },
+            isEnabled: { true })
+        try await worker.start()
+        _ = try await worker.mutate(
+            .enqueue(
+                urls: [URL(string: "https://example.com/post")!], prefix: "", kind: .images,
+                outputDirectory: folder))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+        while await worker.snapshot().failed == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await worker.snapshot().records.first?.detail.contains("gallery-dl") == true)
+        #expect(await worker.snapshot().running == 0)
+        await worker.stop()
+    }
+
+    private func record(kind: DownloadKind) -> DownloadRecord {
+        DownloadRecord(
+            url: URL(string: "https://example.com/image.jpg")!, status: .queued,
+            outputFilename: "/tmp/media-test/%(title)s.%(ext)s", createdAt: Date(), kind: kind)
+    }
+}
+
+private actor MediaDownloadCalls {
+    var values: [String] = []
+    func append(_ value: String) { values.append(value) }
+}

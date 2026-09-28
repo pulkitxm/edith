@@ -61,10 +61,11 @@ import Testing
         #expect(urls.map(\.absoluteString) == ["https://www.youtube.com/watch?v=abc123"])
     }
 
-    @Test func parseURLsFiltersNonYouTubeHosts() {
+    @Test func parseURLsAcceptsOtherMediaHosts() {
         let text = "https://example.com/video, https://youtu.be/keep"
         let urls = YoutubeDownloader.parseURLs(from: text)
-        #expect(urls.map(\.absoluteString) == ["https://youtu.be/keep"])
+        #expect(
+            urls.map(\.absoluteString) == ["https://example.com/video", "https://youtu.be/keep"])
     }
 
     @Test func parseURLsReturnsEmptyForBlankInput() {
