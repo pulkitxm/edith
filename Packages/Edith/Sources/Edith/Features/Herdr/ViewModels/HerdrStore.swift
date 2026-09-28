@@ -20,6 +20,11 @@ struct HerdrClosedTabRecord: Equatable {
     let rightNeighborID: String?
 }
 
+struct HerdrRailItem: Identifiable {
+    let id: String
+    let agents: [HerdrAgent]
+}
+
 typealias HerdrNewAgentLauncher =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
@@ -630,9 +635,27 @@ final class HerdrStore {
         currentTab.flatMap { session($0.focused) }
     }
 
-    var openSplitAgents: [HerdrAgent] {
-        guard selectedTab != Self.boardID, let tab = currentTab, tab.isSplit else { return [] }
-        return tab.agentIDs.compactMap { session($0)?.agent }
+    func railItems(for agents: [HerdrAgent]) -> [HerdrRailItem] {
+        guard !spaceGroupingEnabled else {
+            return agents.map { HerdrRailItem(id: $0.id, agents: [$0]) }
+        }
+        var visible: [String: HerdrAgent] = [:]
+        for agent in agents { visible[agent.id] = agent }
+        var groups: [String: HerdrRailItem] = [:]
+        for tab in tabs where tab.isSplit {
+            var members: [HerdrAgent] = []
+            for id in tab.agentIDs {
+                if let agent = visible[id] { members.append(agent) }
+            }
+            guard members.count > 1 else { continue }
+            let item = HerdrRailItem(id: tab.id, agents: members)
+            for member in members { groups[member.id] = item }
+        }
+        var seen = Set<String>()
+        return agents.compactMap { agent in
+            let item = groups[agent.id] ?? HerdrRailItem(id: agent.id, agents: [agent])
+            return seen.insert(item.id).inserted ? item : nil
+        }
     }
 
     func railHighlight(for agentID: String) -> HerdrRailHighlight {
