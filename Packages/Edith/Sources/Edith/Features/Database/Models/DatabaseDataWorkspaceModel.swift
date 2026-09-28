@@ -154,8 +154,12 @@ final class DatabaseDataWorkspaceModel {
     private(set) var state = DatabaseDataWorkspaceState.idle
     private(set) var resultMode = DatabaseDataResultMode.browse
     private(set) var recordsRevision = 0
+    private(set) var recordsAppendedFrom: Int?
     private(set) var records: [DatabaseRecord] = [] {
-        didSet { recordsRevision &+= 1 }
+        didSet {
+            recordsRevision &+= 1
+            recordsAppendedFrom = nil
+        }
     }
     private(set) var fields: [DatabaseFieldDescriptor] = []
     private(set) var selectedRecordIndex: Int?
@@ -1486,7 +1490,9 @@ final class DatabaseDataWorkspaceModel {
             return
         }
         if appending {
+            let previousCount = records.count
             records.append(contentsOf: page.records)
+            recordsAppendedFrom = previousCount
         } else {
             records = page.records
             selectedRecordIndex = nil

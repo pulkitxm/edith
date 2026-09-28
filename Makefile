@@ -96,6 +96,7 @@ ci-scripts-batch:
 
 ci-performance:
 	bun scripts/check-performance-audit.mjs
+	bun scripts/check-database-size.mjs
 	./scripts/bench-helper.sh --fixture scripts/fixtures/bench-helper.samples >/dev/null
 
 bench-cli:
