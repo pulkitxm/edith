@@ -169,6 +169,9 @@ enum NavigationCatalog {
             id: "studio", title: "Studio", symbolName: "wand.and.stars",
             band: .suite(.media), abilityIDs: ["studio"], parentID: "media"),
         SidebarPage(
+            id: "downloads", title: "Downloads", symbolName: "arrow.down.circle",
+            band: .suite(.media), abilityIDs: ["downloads"], parentID: "media"),
+        SidebarPage(
             id: "music", title: "Music", symbolName: "music.note", band: .suite(.media),
             abilityIDs: ["music"], parentID: "media"),
         SidebarPage(
@@ -280,7 +283,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case appMaintenance, blitztree
     case system, runningApps
     case desk
-    case media, studio, music, calendar, virtualCamera
+    case media, studio, downloads, music, calendar, virtualCamera
     case data, database, attention, seoAudit
     case extensions, settings, about
 

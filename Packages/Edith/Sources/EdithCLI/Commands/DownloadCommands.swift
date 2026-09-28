@@ -5,7 +5,7 @@ import Foundation
 struct DownloadCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "download",
-        abstract: "The download queue Edith feeds to yt-dlp.",
+        abstract: "Download videos, images and social posts with yt-dlp and gallery-dl.",
         discussion: """
             The Edith daemon runs queued downloads even when the app is closed.
             Queue mutations require the daemon; saved history remains readable offline.
@@ -160,11 +160,17 @@ struct DownloadAddCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Option(help: "What to fetch: audio or video.")
+    @Option(help: "What to fetch: post, images, audio or video.")
     var kind: String = "audio"
 
-    @Option(help: "Prefix for the saved filename.")
+    @Option(help: "Prefix for saved video and audio filenames.")
     var prefix: String = ""
+
+    @Option(help: "Destination folder. Defaults to Music for audio and Downloads/Edith otherwise.")
+    var directory: String?
+
+    @Option(help: "Read login cookies from safari, chrome, firefox, brave or edge.")
+    var browser: String?
 
     @Argument(help: "The URLs to download.")
     var urls: [String]
@@ -177,13 +183,22 @@ struct DownloadAddCommand: AsyncParsableCommand {
                     hint: "kinds: " + DownloadKind.allCases.map(\.rawValue).joined(separator: ", "))
             }
             let parsed = YoutubeDownloader.parseURLs(from: urls.joined(separator: "\n"))
+            let cookieBrowser = browser.flatMap(DownloadBrowser.init(rawValue:))
+            if browser != nil, cookieBrowser == nil {
+                throw CLIFailure(
+                    "unknown browser", hint: "use safari, chrome, firefox, brave or edge")
+            }
             guard !parsed.isEmpty else {
                 throw CLIFailure(
                     "none of that looked like a URL",
                     hint: "pass a link, for example https://youtu.be/dQw4w9WgXcQ")
             }
             let added = try DownloadOperationExecution.enqueue(
-                urls: parsed, prefix: prefix, kind: wanted, file: DownloadBridge.file)
+                urls: parsed, prefix: prefix, kind: wanted, file: DownloadBridge.file,
+                outputDirectory: directory.map {
+                    URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
+                },
+                browser: cookieBrowser)
             let records = DownloadBridge.records()
             guard !json else {
                 CLIOut.json(

@@ -38,6 +38,7 @@ public actor DownloadWorker {
 
     private let file: URL
     private let executable: @Sendable () -> URL?
+    private let galleryExecutable: @Sendable () -> URL?
     private let isEnabled: @Sendable () -> Bool
     private let runCommand: RunCommand
     private let publish: Publish
@@ -63,6 +64,9 @@ public actor DownloadWorker {
         executable: @escaping @Sendable () -> URL? = {
             CLIToolEnvironment.executable(named: "yt-dlp")
         },
+        galleryExecutable: @escaping @Sendable () -> URL? = {
+            CLIToolEnvironment.executable(named: "gallery-dl")
+        },
         isEnabled: @escaping @Sendable () -> Bool = {
             ExtensionRegistry.entry("downloads")?.isEnabled(in: SharedDefaults.store) ?? false
         },
@@ -75,6 +79,7 @@ public actor DownloadWorker {
     ) {
         self.file = file
         self.executable = executable
+        self.galleryExecutable = galleryExecutable
         self.isEnabled = isEnabled
         self.runCommand = runCommand
         self.publish = publish
@@ -167,13 +172,12 @@ public actor DownloadWorker {
         var changed = 0
         var added: [DownloadRecord] = []
         switch request {
-        case let .enqueue(urls, prefix, kind, outputDirectory):
+        case let .enqueue(urls, prefix, kind, outputDirectory, browser):
             guard urls.count <= 100, !urls.isEmpty,
                 records.count(where: { !$0.isFinished }) + urls.count <= 128,
-                urls.allSatisfy({
-                    ["https", "http"].contains($0.scheme?.lowercased() ?? "") && $0.host != nil
-                }),
+                urls.allSatisfy(MediaDownloadInput.isValid),
                 prefix.utf8.count <= 200, !prefix.contains("/"), !prefix.contains("\\"),
+                !prefix.contains(where: { $0.isNewline }),
                 outputDirectory.isFileURL
             else { throw AgentError(.refused, "The download request is invalid.") }
             try FileManager.default.createDirectory(
@@ -182,7 +186,7 @@ public actor DownloadWorker {
             added = urls.map {
                 DownloadRecord(
                     url: $0, status: .queued, outputFilename: template, createdAt: Date(),
-                    kind: kind)
+                    kind: kind, browser: browser)
             }
             records.insert(contentsOf: added, at: 0)
             changed = added.count
@@ -241,7 +245,8 @@ public actor DownloadWorker {
                 CLICommandRequest(
                     executableURL: executable,
                     arguments: [
-                        "--no-update", "--no-playlist", "--skip-download", "-J", url.absoluteString,
+                        "--ignore-config", "--no-update", "--no-playlist", "--skip-download", "-J",
+                        "--", url.absoluteString,
                     ],
                     environment: CLIToolEnvironment.sanitized(), timeout: 30,
                     maximumOutputBytes: 2 << 20, discardsStandardError: true,
@@ -273,10 +278,31 @@ public actor DownloadWorker {
         output = buffer
         publishedRevision = 0
         let request = Self.request(record, executable: executable)
+        let gallery = galleryExecutable()
         let runCommand = runCommand
         task = Task.detached(priority: .utility) { [weak self] in
             do {
-                let result = try await runCommand(request) { buffer.append($0) }
+                let result: CLICommandResult
+                if record.kind == .images || record.kind == .post {
+                    guard let gallery else {
+                        throw AgentError(
+                            .unavailable,
+                            "Install gallery-dl in Downloads extension settings to save posts and images."
+                        )
+                    }
+                    let extracted = try await runCommand(
+                        MediaDownloadRequest.gallery(record, executable: gallery)
+                    ) { buffer.append($0) }
+                    try Task.checkCancellation()
+                    if record.kind == .post, Self.resultPaths(extracted, record: record).isEmpty {
+                        buffer.append("Trying yt-dlp for video media...")
+                        result = try await runCommand(request) { buffer.append($0) }
+                    } else {
+                        result = extracted
+                    }
+                } else {
+                    result = try await runCommand(request) { buffer.append($0) }
+                }
                 await self?.finish(record.id, result: .success(result))
             } catch {
                 await self?.finish(record.id, result: .failure(error))
@@ -321,8 +347,8 @@ public actor DownloadWorker {
             switch result {
             case .success(let result):
                 let paths = Self.resultPaths(result, record: records[index])
+                records[index].resultPaths = paths.isEmpty ? nil : paths
                 if result.terminationStatus == 0, !paths.isEmpty {
-                    YoutubeDownloader.cleanupIntermediates(for: paths)
                     records[index].status = .done(
                         paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "))
                     records[index].resultPaths = paths
@@ -331,7 +357,9 @@ public actor DownloadWorker {
                     let message = String(result.standardError.suffix(2_000)).trimmingCharacters(
                         in: .whitespacesAndNewlines)
                     records[index].status = .error(
-                        message.isEmpty ? "The downloader produced no completed file." : message)
+                        message.isEmpty
+                            ? "No completed media found. Check the post URL, update the download tools, or select a signed-in browser for login-required posts."
+                            : message)
                 }
             case .failure(let error):
                 records[index].status =
@@ -376,19 +404,25 @@ public actor DownloadWorker {
 
     public static func request(_ record: DownloadRecord, executable: URL) -> CLICommandRequest {
         let format =
-            record.kind == .video
-            ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-x", "--audio-format", "m4a"]
+            record.kind != .audio && record.kind != nil
+            ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
+            : ["-f", "ba/b", "-x", "--audio-format", "m4a", "--keep-video"]
         return CLICommandRequest(
             executableURL: executable,
-            arguments: ["--no-update", "--no-playlist", "--no-quiet"] + format + [
-                "--embed-thumbnail", "--convert-thumbnails", "jpg", "--progress", "--newline",
-                "-o", record.outputFilename ?? DownloadQueue.outputTemplate(prefix: ""),
-                "--print", "after_move:filepath", record.url.absoluteString,
-            ], environment: CLIToolEnvironment.sanitized(), timeout: 7_200,
+            arguments: [
+                "--ignore-config", "--no-update", "--no-playlist", "--no-quiet", "--no-overwrites",
+                "--windows-filenames", "--playlist-end", "100",
+            ] + format
+                + (record.browser.map { ["--cookies-from-browser", $0.rawValue] } ?? []) + [
+                    "--embed-thumbnail", "--convert-thumbnails", "jpg", "--progress", "--newline",
+                    "-o", record.outputFilename ?? DownloadQueue.outputTemplate(prefix: ""),
+                    "--print", "after_move:filepath", "--", record.url.absoluteString,
+                ], environment: CLIToolEnvironment.sanitized(), timeout: 7_200,
             maximumOutputBytes: 2 << 20, terminatesProcessGroup: true)
     }
 
     public static func resultPaths(_ result: CLICommandResult, record: DownloadRecord) -> [String] {
+        var seen = Set<String>()
         let directory =
             URL(fileURLWithPath: record.outputFilename ?? DownloadQueue.outputTemplate(prefix: ""))
             .deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path + "/"
@@ -396,7 +430,9 @@ public actor DownloadWorker {
             let value = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard value.hasPrefix("/") else { return nil }
             let url = URL(fileURLWithPath: value).resolvingSymlinksInPath().standardizedFileURL
-            guard url.path.hasPrefix(directory), FileManager.default.fileExists(atPath: url.path)
+            guard url.path.hasPrefix(directory),
+                (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                seen.insert(url.path).inserted
             else { return nil }
             return url.path
         }

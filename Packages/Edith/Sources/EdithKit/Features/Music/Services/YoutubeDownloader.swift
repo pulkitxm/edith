@@ -63,11 +63,15 @@ public enum DownloadStatus: Equatable, Codable, Sendable {
 }
 
 public enum DownloadKind: String, Codable, Sendable, CaseIterable {
+    case post
+    case images
     case audio
     case video
 
     public var title: String {
         switch self {
+        case .post: "Entire post"
+        case .images: "Images"
         case .audio: "Audio"
         case .video: "Video"
         }
@@ -75,6 +79,7 @@ public enum DownloadKind: String, Codable, Sendable, CaseIterable {
 
     public var fileExtension: String {
         switch self {
+        case .post, .images: "original"
         case .audio: "m4a"
         case .video: "mp4"
         }
@@ -94,6 +99,7 @@ public struct DownloadEstimate: Codable, Equatable, Sendable {
 
     public func bytes(for kind: DownloadKind) -> Int64? {
         switch kind {
+        case .post, .images: nil
         case .audio: audioBytes
         case .video: videoBytes
         }
@@ -205,6 +211,7 @@ public final class YoutubeDownloader {
         public var kind: DownloadKind = .audio
         public var logs: String = ""
         public var resultPaths: [String]?
+        public var browser: DownloadBrowser?
 
         public init(record: DownloadRecord, logs: String = "") {
             id = record.id
@@ -215,16 +222,13 @@ public final class YoutubeDownloader {
             kind = record.kind ?? .audio
             self.logs = logs
             resultPaths = record.resultPaths
+            browser = record.browser
         }
 
         public var record: DownloadRecord {
             DownloadRecord(
                 id: id, url: url, status: status, outputFilename: outputFilename,
-                createdAt: createdAt, kind: kind, resultPaths: resultPaths)
-        }
-
-        public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
-            lhs.id == rhs.id
+                createdAt: createdAt, kind: kind, resultPaths: resultPaths, browser: browser)
         }
 
         public var resolvedTitle: String? {
@@ -247,11 +251,11 @@ public final class YoutubeDownloader {
 
     nonisolated public static func videoID(from url: URL) -> String? {
         let host = url.host?.lowercased() ?? ""
-        if host.contains("youtu.be") {
+        if host == "youtu.be" || host.hasSuffix(".youtu.be") {
             let id = url.lastPathComponent
             return id.isEmpty || id == "/" ? nil : id
         }
-        guard host.contains("youtube.com") else { return nil }
+        guard host == "youtube.com" || host.hasSuffix(".youtube.com") else { return nil }
         if let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first(where: { $0.name == "v" })?.value, !v.isEmpty
         {
@@ -314,7 +318,7 @@ public final class YoutubeDownloader {
                 "Downloads are disabled. Enable the Downloads extension to continue."
         } else if snapshot.executable == nil {
             unavailableReason =
-                "yt-dlp is not installed. Open Music extension settings to install it."
+                "yt-dlp is not installed. Open Downloads extension settings to install it."
         } else if ytdlpVersion != nil {
             unavailableReason = nil
         }
@@ -338,7 +342,8 @@ public final class YoutubeDownloader {
                 guard downloadsEnabled else { return }
                 unavailableReason =
                     status.installed
-                    ? nil : "yt-dlp is not installed. Open Music extension settings to install it."
+                    ? nil
+                    : "yt-dlp is not installed. Open Downloads extension settings to install it."
                 ytdlpVersion = status.version
             } catch is CancellationError {
                 return
@@ -384,21 +389,28 @@ public final class YoutubeDownloader {
     }
 
     nonisolated public static func parseURLs(from text: String) -> [URL] {
-        text
-            .components(separatedBy: CharacterSet([",", "\n", "\r"]))
+        var seen = Set<URL>()
+        return
+            text
+            .replacingOccurrences(
+                of: #",(?=\s*(?:https?://|,|$))"#, with: "\n", options: .regularExpression
+            )
+            .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .compactMap { URL(string: $0) }
-            .filter { isYouTubeURL($0) }
+            .filter { MediaDownloadInput.isValid($0) && seen.insert($0).inserted }
     }
 
-    nonisolated private static func isYouTubeURL(_ url: URL) -> Bool {
-        let host = url.host?.lowercased() ?? ""
-        return host.contains("youtube.com") || host.contains("youtu.be")
-    }
-
-    public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
-        mutate(.enqueue(urls: urls, prefix: prefix, kind: kind, outputDirectory: Repo.musicDir))
+    public func enqueue(
+        urls: [URL], prefix: String, kind: DownloadKind = .audio,
+        outputDirectory: URL? = nil, browser: DownloadBrowser? = nil
+    ) {
+        mutate(
+            .enqueue(
+                urls: urls, prefix: prefix, kind: kind,
+                outputDirectory: outputDirectory ?? MediaDownloadInput.defaultDirectory(for: kind),
+                browser: browser))
     }
 
     public func estimate(for url: URL) async -> DownloadEstimate? {
@@ -425,7 +437,7 @@ public final class YoutubeDownloader {
 
     public func retry(_ item: DownloadItem) { mutate(.retry(id: item.id, all: false)) }
     public func retryAll() { mutate(.retry(id: nil, all: true)) }
-    public func clearHistory() { mutate(.clear(includeActive: true)) }
+    public func clearHistory() { mutate(.clear(includeActive: false)) }
     public func remove(_ item: DownloadItem) { mutate(.remove(id: item.id)) }
     public func cancel(_ item: DownloadItem) {
         mutate(.cancel(id: item.id, includeQueued: true, reason: "Cancelled"))

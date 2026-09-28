@@ -28,6 +28,7 @@ struct PageContent: View {
         case .desk: SuiteLandingPage(suite: SuiteRegistry.suite(.desk))
         case .media: SuiteLandingPage(suite: SuiteRegistry.suite(.media))
         case .studio: StudioPage()
+        case .downloads: DownloadSheet(isPage: true)
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .virtualCamera: VirtualCameraPage()

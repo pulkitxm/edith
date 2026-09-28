@@ -414,8 +414,11 @@ public enum CommandTree {
         "ed download ls": Spec(options: ["--json", "--help", "--active", "--limit"]),
         "ed download status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed download add": Spec(
-            options: ["--json", "--help", "--kind", "--prefix"],
-            optionValues: ["--kind": .downloadKind], arguments: [.free]),
+            options: ["--json", "--help", "--kind", "--prefix", "--directory", "--browser"],
+            optionValues: [
+                "--kind": .downloadKind, "--directory": .localPath,
+                "--browser": .free,
+            ], arguments: [.free]),
         "ed download retry": Spec(
             options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
         "ed download rm": Spec(

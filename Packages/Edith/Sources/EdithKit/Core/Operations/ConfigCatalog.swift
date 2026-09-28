@@ -707,8 +707,9 @@ public enum ConfigCatalog {
             summary: "Relative paths of favourited tracks."),
         SettingDefinition(
             AppStorageKeys.Music.downloadKind, .string, group: "music",
-            summary: "Default format for downloads.", allowed: ["audio", "video"],
-            fallback: .string("audio")),
+            summary: "Default format for downloads.",
+            allowed: ["post", "images", "audio", "video"],
+            fallback: .string("post")),
         SettingDefinition(
             AppStorageKeys.Music.backup, .bool, group: "music",
             summary: "Include the music folder in the iCloud backup."),
