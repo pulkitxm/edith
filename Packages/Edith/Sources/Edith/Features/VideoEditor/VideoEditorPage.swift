@@ -32,10 +32,9 @@ struct VideoEditorPage: View {
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
     @State private var showingInspector = true
+    @State private var showingMedia = false
     @State private var showingRecorder = false
-    @State private var editingTextID: String?
     @State private var titleDraft = ""
-    @State private var timelineZoom = 80.0
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -45,22 +44,24 @@ struct VideoEditorPage: View {
             if model.project == nil {
                 emptyState
             } else {
-                HStack(spacing: 0) {
-                    mediaRail
-                    Divider()
-                    VStack(spacing: 0) {
-                        preview
-                        transport
-                        Divider()
-                        toolStrip
-                        Divider()
-                        timeline
+                VSplitView {
+                    HStack(spacing: 0) {
+                        if showingMedia { mediaRail; Divider() }
+                        VStack(spacing: 0) {
+                            preview
+                            transport
+                            Divider()
+                            toolStrip
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if showingInspector {
+                            Divider()
+                            VideoInspector(model: model)
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if showingInspector {
-                        Divider()
-                        VideoInspector(model: model)
-                    }
+                    .frame(minHeight: 400)
+                    .layoutPriority(1)
+                    VideoTimeline(model: model)
                 }
                 .background(VideoPlaybackKeys(onToggle: model.togglePlayback))
             }
@@ -88,6 +89,9 @@ struct VideoEditorPage: View {
         }
         .onChange(of: model.project?.title) { _, _ in
             titleDraft = model.project?.title ?? ""
+        }
+        .onChange(of: model.editingZoomID) { _, id in
+            if id != nil { editorTool = .zoom }
         }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) {
             notification in
@@ -133,6 +137,9 @@ struct VideoEditorPage: View {
                 .onSubmit { model.renameProject(titleDraft) }
                 .help("Rename project")
             Spacer()
+            Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
+            Toggle("Canvas", isOn: $model.canvasEditing).toggleStyle(.button)
+            Toggle("Guides", isOn: $model.safeAreas).toggleStyle(.button)
             if #available(macOS 15.0, *) {
                 Button("Record", systemImage: "record.circle") { showingRecorder = true }
             }
@@ -262,6 +269,8 @@ struct VideoEditorPage: View {
                             ) { focus in
                                 model.setZoomFocus(x: focus.x, y: focus.y)
                             }
+                        } else {
+                            VideoCanvas(model: model, display: display)
                         }
                     }
                 } else {
@@ -270,10 +279,10 @@ struct VideoEditorPage: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            .coordinateSpace(name: "videoCanvas")
         }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(UIScale.pt(22))
+        .padding(UIScale.pt(14))
     }
 
     private func videoRect(in viewport: CGSize) -> CGRect {
@@ -351,162 +360,6 @@ struct VideoEditorPage: View {
         .buttonStyle(.borderless)
         .padding(.horizontal, UIScale.pt(22))
         .frame(height: UIScale.pt(42))
-    }
-
-    private var timeline: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack {
-                Text("Timeline")
-                    .font(.subheadline.weight(.semibold))
-                Text("Drag a zoom to move it; drag an edge to change its length")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: UIScale.pt(10))
-                Image(systemName: "minus.magnifyingglass")
-                    .foregroundStyle(.secondary)
-                Slider(value: $timelineZoom, in: 40...180)
-                    .frame(width: UIScale.pt(110))
-                    .help("Timeline zoom")
-                Image(systemName: "plus.magnifyingglass")
-                    .foregroundStyle(.secondary)
-            }
-            ScrollView(.horizontal) {
-                let scale = UIScale.pt(timelineZoom)
-                let width = max(scale, ceil(model.duration) * scale)
-                ZStack(alignment: .topLeading) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        ZStack(alignment: .leading) {
-                            HStack(spacing: 0) {
-                                ForEach(0..<max(1, Int(ceil(model.duration))), id: \.self) {
-                                    second in
-                                    Text(timestamp(Double(second)))
-                                        .font(.caption2.monospacedDigit())
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: scale, alignment: .leading)
-                                }
-                            }
-                            Color.clear.contentShape(Rectangle())
-                                .onTapGesture { location in
-                                    model.seek(to: Double(location.x) / scale)
-                                }
-                        }
-                        .frame(width: width, height: UIScale.pt(18))
-                        ZStack(alignment: .topLeading) {
-                            HStack(spacing: 0) {
-                                ForEach(model.project?.clips ?? []) { clip in
-                                    let clipWidth = max(1, scale * timelineDuration(for: clip))
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.accentColor.opacity(0.17))
-                                        .frame(width: clipWidth, height: UIScale.pt(52))
-                                        .overlay(alignment: .leading) {
-                                            Text("Video · \(timestamp(clip.duration))")
-                                                .font(.subheadline.weight(.medium))
-                                                .padding(.horizontal, UIScale.pt(10))
-                                        }
-                                }
-                            }
-                        }
-                        .frame(width: width, height: UIScale.pt(52), alignment: .leading)
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(Color.accentColor.opacity(0.08))
-                                .frame(width: width, height: UIScale.pt(38))
-                            Text("ZOOM")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, UIScale.pt(8))
-                            ForEach(model.project?.zooms ?? []) { zoom in
-                                let start = model.outputTime(forRulerTime: zoom.startMs / 1000)
-                                let end = model.outputTime(forRulerTime: zoom.endMs / 1000)
-                                let others = (model.project?.zooms ?? []).filter {
-                                    $0.id != zoom.id
-                                }
-                                let previous =
-                                    others.map {
-                                        model.outputTime(forRulerTime: $0.endMs / 1000)
-                                    }.filter { $0 <= start }.max() ?? 0
-                                let next =
-                                    others.map {
-                                        model.outputTime(forRulerTime: $0.startMs / 1000)
-                                    }.filter { $0 >= end }.min() ?? model.duration
-                                ZoomTimelineRegion(
-                                    zoom: zoom,
-                                    start: start, end: end, lowerBound: previous,
-                                    upperBound: next, pointsPerSecond: scale,
-                                    selected: model.editingZoomID == zoom.id,
-                                    select: {
-                                        editorTool = .zoom
-                                        model.selectZoom(zoom)
-                                    },
-                                    adjust: { range in
-                                        model.setZoomTiming(
-                                            zoom.id, start: range.start, end: range.end)
-                                    }
-                                )
-                                .offset(x: start * scale)
-                            }
-                        }
-                        .frame(width: width, height: UIScale.pt(38), alignment: .leading)
-                        .coordinateSpace(name: "zoomTimeline")
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(Color.orange.opacity(0.08))
-                                .frame(width: width, height: UIScale.pt(28))
-                            Text("OVERLAYS")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, UIScale.pt(8))
-                            ForEach(model.project?.annotations ?? []) { annotation in
-                                let start = model.outputTime(
-                                    forRulerTime: annotation.startMs / 1000)
-                                let end = model.outputTime(forRulerTime: annotation.endMs / 1000)
-                                Button {
-                                    model.seek(to: start)
-                                    editorTool = .text
-                                    editingTextID = annotation.id
-                                } label: {
-                                    Text(
-                                        annotation.type == "text"
-                                            ? annotation.text : annotation.type.capitalized
-                                    )
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .padding(.horizontal, UIScale.pt(6))
-                                    .frame(
-                                        width: max(UIScale.pt(30), (end - start) * scale),
-                                        height: UIScale.pt(24), alignment: .leading
-                                    )
-                                    .background(Color.orange.opacity(0.35), in: Capsule())
-                                }
-                                .buttonStyle(.borderless)
-                                .offset(x: start * scale)
-                                .popover(
-                                    isPresented: Binding(
-                                        get: { editingTextID == annotation.id },
-                                        set: { if !$0 { editingTextID = nil } }
-                                    )
-                                ) {
-                                    EditorAnnotationRow(annotation: annotation, model: model)
-                                        .padding(UIScale.pt(16))
-                                        .frame(width: UIScale.pt(280))
-                                }
-                            }
-                        }
-                        .frame(width: width, height: UIScale.pt(28), alignment: .leading)
-                    }
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(width: UIScale.pt(2), height: UIScale.pt(168))
-                        .offset(x: min(model.playhead, model.duration) * scale)
-                        .allowsHitTesting(false)
-                }
-                .frame(width: width, height: UIScale.pt(168), alignment: .topLeading)
-            }
-            .frame(height: UIScale.pt(172))
-        }
-        .padding(UIScale.pt(18))
-        .frame(height: UIScale.pt(230), alignment: .top)
     }
 
     private var mediaRail: some View {
@@ -677,10 +530,6 @@ struct VideoEditorPage: View {
         return String(format: "%02d:%02d", Int(value) / 60, Int(value) % 60)
     }
 
-    private func timelineDuration(for clip: VideoProject.Clip) -> Double {
-        model.pipeline?.segments.filter { $0.clip.id == clip.id }
-            .reduce(0) { $0 + $1.outputDuration } ?? clip.duration / clip.rate
-    }
 }
 
 struct EditorAnnotationRow: View {
@@ -778,7 +627,7 @@ struct EditorAnnotationRow: View {
     }
 }
 
-private struct ZoomTimelineRegion: View {
+struct ZoomTimelineRegion: View {
     let zoom: VideoProject.Zoom
     let start: Double
     let end: Double

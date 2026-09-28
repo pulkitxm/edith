@@ -46,6 +46,15 @@ struct VideoInspector: View {
         .font(.callout)
         .padding(14)
         .frame(width: 250)
+        .onChange(of: model.selection) { _, selection in
+            switch selection {
+            case .clip, .speed: tab = .clip
+            case .annotation: tab = .overlays
+            case .audio: tab = .audio
+            case .webcam, .camera: tab = .camera
+            default: break
+            }
+        }
     }
 
     private var selectedClip: VideoProject.Clip? {
@@ -112,6 +121,27 @@ struct VideoInspector: View {
             }
             Button("Reset crop", action: model.resetCrop)
             Button("Remove clip", role: .destructive, action: model.removeSelected)
+            Divider()
+            Text("Incoming transition").font(.headline)
+            let transition = model.project?.transitions.first { $0.clipID == clip.id }
+            Picker(
+                "Transition",
+                selection: Binding(
+                    get: { transition?.kind ?? "none" },
+                    set: {
+                        model.setTransition(
+                            before: clip.id, kind: $0, duration: transition?.duration ?? 0.5)
+                    })
+            ) {
+                Text("Cut").tag("none")
+                Text("Fade through black").tag("fade")
+                Text("Flash").tag("flash")
+            }
+            if let transition {
+                number("Transition length", value: transition.duration, range: 0.2...2) {
+                    model.setTransition(before: clip.id, kind: transition.kind, duration: $0)
+                }
+            }
         } else {
             Text("Select a source clip to trim, crop, or change its speed.").foregroundStyle(
                 .secondary)

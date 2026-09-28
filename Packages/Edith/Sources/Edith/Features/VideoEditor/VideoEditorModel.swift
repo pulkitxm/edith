@@ -14,6 +14,9 @@ final class VideoEditorModel {
     }
     var project: VideoProject?
     var selectedClipID: String?
+    var selection: VideoSelection?
+    var canvasEditing = true
+    var safeAreas = false
     var playhead = 0.0
     var zoomDepth = 4
     var regionSpeed = 2.0
@@ -925,7 +928,7 @@ final class VideoEditorModel {
         rebuild()
     }
 
-    private func mutate(_ action: (inout VideoProject) -> Void) {
+    func mutate(_ action: (inout VideoProject) -> Void) {
         guard var project else { return }
         undoHistory.append(project)
         redoHistory.removeAll()
@@ -975,7 +978,7 @@ final class VideoEditorModel {
         }
     }
 
-    private func rebuild(refreshFocusPreview: Bool = true) {
+    func rebuild(refreshFocusPreview: Bool = true) {
         generation += 1
         let version = generation
         let oldTime = playhead
