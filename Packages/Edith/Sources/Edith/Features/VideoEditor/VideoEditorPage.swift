@@ -31,6 +31,8 @@ struct VideoEditorPage: View {
     @State private var model = VideoEditorModel()
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
+    @State private var showingInspector = true
+    @State private var showingRecorder = false
     @State private var editingTextID: String?
     @State private var titleDraft = ""
     @State private var timelineZoom = 80.0
@@ -55,6 +57,10 @@ struct VideoEditorPage: View {
                         timeline
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if showingInspector {
+                        Divider()
+                        VideoInspector(model: model)
+                    }
                 }
                 .background(VideoPlaybackKeys(onToggle: model.togglePlayback))
             }
@@ -63,6 +69,11 @@ struct VideoEditorPage: View {
         .navigationTitle("Video editor")
         .sheet(isPresented: $showingExport) {
             VideoExportSheet(model: model)
+        }
+        .sheet(isPresented: $showingRecorder) {
+            if #available(macOS 15.0, *) {
+                VideoRecorderSheet { model.startProject(with: [$0]) }
+            }
         }
         .task {
             if let project {
@@ -122,6 +133,15 @@ struct VideoEditorPage: View {
                 .onSubmit { model.renameProject(titleDraft) }
                 .help("Rename project")
             Spacer()
+            if #available(macOS 15.0, *) {
+                Button("Record", systemImage: "record.circle") { showingRecorder = true }
+            }
+            Button {
+                showingInspector.toggle()
+            } label: {
+                Label("Inspector", systemImage: "sidebar.right")
+            }
+            .disabled(model.project == nil)
             Menu {
                 Button("New project", action: model.newProject)
                 Button("Open project…", action: model.openProject)
@@ -433,15 +453,11 @@ struct VideoEditorPage: View {
                             RoundedRectangle(cornerRadius: 7)
                                 .fill(Color.orange.opacity(0.08))
                                 .frame(width: width, height: UIScale.pt(28))
-                            Text("TEXT")
+                            Text("OVERLAYS")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
                                 .padding(.leading, UIScale.pt(8))
-                            ForEach(
-                                (model.project?.annotations ?? []).filter {
-                                    $0.type == "text"
-                                }
-                            ) { annotation in
+                            ForEach(model.project?.annotations ?? []) { annotation in
                                 let start = model.outputTime(
                                     forRulerTime: annotation.startMs / 1000)
                                 let end = model.outputTime(forRulerTime: annotation.endMs / 1000)
@@ -450,15 +466,18 @@ struct VideoEditorPage: View {
                                     editorTool = .text
                                     editingTextID = annotation.id
                                 } label: {
-                                    Text(annotation.text)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                        .padding(.horizontal, UIScale.pt(6))
-                                        .frame(
-                                            width: max(UIScale.pt(30), (end - start) * scale),
-                                            height: UIScale.pt(24), alignment: .leading
-                                        )
-                                        .background(Color.orange.opacity(0.35), in: Capsule())
+                                    Text(
+                                        annotation.type == "text"
+                                            ? annotation.text : annotation.type.capitalized
+                                    )
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, UIScale.pt(6))
+                                    .frame(
+                                        width: max(UIScale.pt(30), (end - start) * scale),
+                                        height: UIScale.pt(24), alignment: .leading
+                                    )
+                                    .background(Color.orange.opacity(0.35), in: Capsule())
                                 }
                                 .buttonStyle(.borderless)
                                 .offset(x: start * scale)
@@ -574,7 +593,7 @@ struct VideoEditorPage: View {
     }
 
     private var zoomControls: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text(
                 model.editingZoomID == nil
                     ? "Add zoom at playhead"
@@ -583,49 +602,51 @@ struct VideoEditorPage: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
-            .frame(maxWidth: UIScale.pt(140), alignment: .leading)
-            Picker(
-                "Zoom",
-                selection: Binding(
-                    get: { model.zoomDepth },
-                    set: { model.setZoomDepth($0) }
-                )
-            ) {
-                Text("1.25×").tag(1)
-                Text("1.5×").tag(2)
-                Text("1.8×").tag(3)
-                Text("2.2×").tag(4)
-                Text("3.5×").tag(5)
-                Text("5×").tag(6)
-            }
-            .frame(width: UIScale.pt(105))
-            HStack(spacing: UIScale.pt(5)) {
-                Text("Length")
-                Slider(
-                    value: Binding(
-                        get: { model.zoomDuration },
-                        set: { model.setZoomDuration($0) }
-                    ), in: 0.1...max(0.5, model.maximumZoomDuration), step: 0.1
-                )
-                .frame(width: UIScale.pt(90))
-                Text(String(format: "%.1fs", model.zoomDuration))
-                    .monospacedDigit()
-            }
-            .font(.caption)
-            Button(
-                "Add zoom",
-                systemImage: "plus.magnifyingglass", action: model.addZoom
-            )
-            .buttonStyle(.borderedProminent)
-            .disabled(model.pipeline == nil)
-            if let id = model.editingZoomID {
-                Button {
-                    model.removeZoom(id)
-                } label: {
-                    Image(systemName: "trash")
+            HStack(spacing: UIScale.pt(12)) {
+                Picker(
+                    "Zoom",
+                    selection: Binding(
+                        get: { model.zoomDepth },
+                        set: { model.setZoomDepth($0) }
+                    )
+                ) {
+                    Text("1.25×").tag(1)
+                    Text("1.5×").tag(2)
+                    Text("1.8×").tag(3)
+                    Text("2.2×").tag(4)
+                    Text("3.5×").tag(5)
+                    Text("5×").tag(6)
                 }
-                .accessibilityLabel("Remove zoom")
-                .help("Remove selected zoom")
+                .frame(width: UIScale.pt(105))
+                HStack(spacing: UIScale.pt(5)) {
+                    Text("Length")
+                    Slider(
+                        value: Binding(
+                            get: { model.zoomDuration },
+                            set: { model.setZoomDuration($0) }
+                        ), in: 0.1...max(0.5, model.maximumZoomDuration), step: 0.1
+                    )
+                    .frame(width: UIScale.pt(90))
+                    Text(String(format: "%.1fs", model.zoomDuration))
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .fixedSize(horizontal: true, vertical: false)
+                Button(
+                    "Add zoom",
+                    systemImage: "plus.magnifyingglass", action: model.addZoom
+                )
+                .buttonStyle(.borderedProminent)
+                .disabled(model.pipeline == nil)
+                if let id = model.editingZoomID {
+                    Button {
+                        model.removeZoom(id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .accessibilityLabel("Remove zoom")
+                    .help("Remove selected zoom")
+                }
             }
         }
     }
@@ -644,6 +665,7 @@ struct VideoEditorPage: View {
                     .monospacedDigit()
             }
             .font(.caption)
+            .fixedSize(horizontal: true, vertical: false)
             Button("Add text", systemImage: "plus", action: model.addCaption)
                 .buttonStyle(.borderedProminent)
                 .disabled(model.pipeline == nil || model.captionText.isEmpty)
@@ -661,7 +683,7 @@ struct VideoEditorPage: View {
     }
 }
 
-private struct EditorAnnotationRow: View {
+struct EditorAnnotationRow: View {
     let annotation: VideoProject.Annotation
     let model: VideoEditorModel
     @State private var draft = ""
@@ -720,19 +742,35 @@ private struct EditorAnnotationRow: View {
                             }
                         ), in: 16...96, step: 4)
                 }
-                let position = annotation.raw["position"] as? [String: Double] ?? [:]
-                ForEach([("x", "Horizontal"), ("y", "Vertical")], id: \.0) { axis, title in
+            }
+            if annotation.type != "text" {
+                let size = annotation.raw["size"] as? [String: Double] ?? [:]
+                ForEach(["width", "height"], id: \.self) { axis in
                     HStack {
-                        Text(title)
+                        Text(axis.capitalized)
                         Slider(
                             value: Binding(
-                                get: { position[axis] ?? (axis == "x" ? 50 : 80) },
+                                get: { size[axis] ?? 25 },
                                 set: {
-                                    model.setAnnotationPosition(
-                                        annotation.id, axis: axis, value: $0)
+                                    model.setAnnotationSize(annotation.id, axis: axis, value: $0)
                                 }
-                            ), in: 0...100, step: 5)
+                            ), in: 1...100, step: 1
+                        ).accessibilityLabel(axis.capitalized)
                     }
+                }
+            }
+            let position = annotation.raw["position"] as? [String: Double] ?? [:]
+            ForEach([("x", "Horizontal"), ("y", "Vertical")], id: \.0) { axis, title in
+                HStack {
+                    Text(title)
+                    Slider(
+                        value: Binding(
+                            get: { position[axis] ?? (axis == "x" ? 50 : 80) },
+                            set: {
+                                model.setAnnotationPosition(
+                                    annotation.id, axis: axis, value: $0)
+                            }
+                        ), in: 0...100, step: 5)
                 }
             }
         }
