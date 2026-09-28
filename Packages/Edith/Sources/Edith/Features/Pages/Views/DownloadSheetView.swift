@@ -35,22 +35,6 @@ struct DownloadSheet: View {
         parsedCount > 0
     }
 
-    private var activeItems: [YoutubeDownloader.DownloadItem] {
-        downloader.items.filter {
-            switch $0.status {
-            case .queued, .resolving, .downloading, .error: true
-            default: false
-            }
-        }
-    }
-    private var historyItems: [YoutubeDownloader.DownloadItem] {
-        downloader.items.filter {
-            switch $0.status {
-            case .queued, .resolving, .downloading, .error: false
-            default: true
-            }
-        }
-    }
     private var summaryText: String {
         let active = downloader.items.filter {
             switch $0.status {
@@ -219,8 +203,12 @@ struct DownloadSheet: View {
                             .frame(maxWidth: .infinity)
                     } else {
                         LazyVStack(spacing: UIScale.pt(4)) {
-                            ForEach(activeItems) { item in queueCard(item) }
-                            ForEach(historyItems) { item in historyRow(item) }
+                            ForEach(downloader.items) { item in
+                                switch item.status {
+                                case .queued, .resolving, .downloading, .error: queueCard(item)
+                                case .done, .interrupted: historyRow(item)
+                                }
+                            }
                         }
                         .padding(UIScale.pt(8))
                         .background(

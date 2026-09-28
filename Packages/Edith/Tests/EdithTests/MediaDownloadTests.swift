@@ -81,7 +81,18 @@ import Testing
         #expect(request.arguments.contains("firefox"))
     }
 
-    @Test func partialGalleryRemainsRetryableWithoutVideoFallback() async throws {
+    @Test @MainActor func completedItemsInvalidateQueuedRows() {
+        let queued = record(kind: .images)
+        var completed = queued
+        completed.status = .done("photo.png")
+        completed.resultPaths = ["/synthetic/photo.png"]
+        #expect(
+            YoutubeDownloader.DownloadItem(record: queued)
+                != YoutubeDownloader.DownloadItem(record: completed))
+    }
+
+    @Test(arguments: [Int32(0), Int32(1)])
+    func galleryResultsPreserveEveryFileAndFailureState(_ status: Int32) async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -93,9 +104,12 @@ import Testing
             runCommand: { request, _ in
                 await calls.append(request.executableURL.lastPathComponent)
                 let image = folder.appendingPathComponent("first.png")
+                let video = folder.appendingPathComponent("second.mp4")
                 try Data([1]).write(to: image)
+                try Data([2]).write(to: video)
                 return CLICommandResult(
-                    terminationStatus: 1, output: image.path + "\n" + image.path)
+                    terminationStatus: status,
+                    output: image.path + "\n" + image.path + "\n" + video.path)
             })
         try await worker.start()
         let added = try await worker.mutate(
@@ -104,13 +118,15 @@ import Testing
                 outputDirectory: folder)
         ).added[0]
         let deadline = ContinuousClock.now.advanced(by: .seconds(4))
-        while await worker.snapshot().failed == 0, ContinuousClock.now < deadline {
+        while await worker.snapshot().records.first?.isFinished != true,
+            ContinuousClock.now < deadline
+        {
             try await Task.sleep(for: .milliseconds(10))
         }
         let snapshot = await worker.snapshot()
-        #expect(snapshot.records[0].canRetry)
+        #expect(snapshot.records[0].canRetry == (status != 0))
         #expect(snapshot.records[0].id == added.id)
-        #expect(snapshot.records[0].resultPaths?.count == 1)
+        #expect(snapshot.records[0].resultPaths?.count == 2)
         #expect(await calls.values == ["gallery-dl"])
         await worker.stop()
     }

@@ -231,10 +231,6 @@ public final class YoutubeDownloader {
                 createdAt: createdAt, kind: kind, resultPaths: resultPaths, browser: browser)
         }
 
-        public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
-            lhs.id == rhs.id
-        }
-
         public var resolvedTitle: String? {
             if case let .done(output) = status {
                 let first = output.components(separatedBy: ", ").first ?? output
