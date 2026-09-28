@@ -65,6 +65,7 @@ final class HerdrSearchModel {
 
     @ObservationIgnored private let searcher: HerdrSessionSearcher
     @ObservationIgnored private let decider: @MainActor () -> JevDeciding?
+    private let usage: LauncherUsage
     @ObservationIgnored private var serial = 0
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
@@ -72,10 +73,12 @@ final class HerdrSearchModel {
 
     init(
         searcher: @escaping HerdrSessionSearcher = { try await AgentSearchClient().search($0) },
-        decider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() }
+        decider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
+        usage: LauncherUsage? = nil
     ) {
         self.searcher = searcher
         self.decider = decider
+        self.usage = usage ?? .shared
     }
 
     var bestRows: [HerdrSearchRow] {
@@ -133,7 +136,12 @@ final class HerdrSearchModel {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         searchedQuery = query
         best = .hidden
-        sections = HerdrSearchPlan.sections(agents: agents, hosts: hosts, query: query)
+        sections = usage.ordered(
+            HerdrSearchPlan.sections(agents: agents, hosts: hosts, query: query)
+        ) { ["machine", $0.id] }
+        for index in sections.indices {
+            sections[index].rows = recentRows(sections[index].rows)
+        }
         selectedID = rows.first?.id
         let searcher = searcher
         let requests = HerdrSearchPlan.requests(sections: sections, query: query)
@@ -183,8 +191,9 @@ final class HerdrSearchModel {
         if let error = reply.error {
             sections[index].state = .failed(error)
         } else {
-            sections[index].rows = HerdrSearchPlan.rows(
-                for: sections[index].agents, hits: reply.hits, query: searchedQuery ?? "")
+            sections[index].rows = recentRows(
+                HerdrSearchPlan.rows(
+                    for: sections[index].agents, hits: reply.hits, query: searchedQuery ?? ""))
             sections[index].state = reply.pending > 0 ? .indexing(reply.pending) : .ready
             sections[index].milliseconds = reply.milliseconds
         }
@@ -219,6 +228,10 @@ final class HerdrSearchModel {
     private func keepSelection() {
         let rows = rows
         if !rows.contains(where: { $0.id == selectedID }) { selectedID = rows.first?.id }
+    }
+
+    private func recentRows(_ rows: [HerdrSearchRow]) -> [HerdrSearchRow] {
+        usage.ordered(rows) { ["agent", $0.id] }
     }
 
     private func scheduleJev() {

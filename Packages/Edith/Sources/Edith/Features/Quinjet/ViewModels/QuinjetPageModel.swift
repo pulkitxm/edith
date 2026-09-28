@@ -34,6 +34,7 @@ final class QuinjetPageModel {
     typealias ExternalWorkspaceAction = @Sendable (String) async throws -> Void
 
     private let client: QuinjetClient
+    let usage: LauncherUsage
     private let focusExternalWorkspace: ExternalWorkspaceAction
     private let closeExternalWorkspace: ExternalWorkspaceAction
 
@@ -53,6 +54,7 @@ final class QuinjetPageModel {
 
     init(
         client: QuinjetClient = .live,
+        usage: LauncherUsage? = nil,
         focusExternalWorkspace: @escaping ExternalWorkspaceAction = {
             try await QuinjetCMUXLauncher.focus(workspaceID: $0)
         },
@@ -61,6 +63,7 @@ final class QuinjetPageModel {
         }
     ) {
         self.client = client
+        self.usage = usage ?? .shared
         self.focusExternalWorkspace = focusExternalWorkspace
         self.closeExternalWorkspace = closeExternalWorkspace
         let tab = QuinjetTab()
@@ -73,7 +76,7 @@ final class QuinjetPageModel {
     }
 
     var filteredProjects: [QuinjetProject] {
-        filtered(projects)
+        filtered(recentProjects(projects, machineID: "local"))
     }
 
     func projects(for remote: QuinjetRemote) -> [QuinjetProject] {
@@ -81,7 +84,7 @@ final class QuinjetPageModel {
     }
 
     func filteredProjects(for remote: QuinjetRemote) -> [QuinjetProject] {
-        filtered(projects(for: remote))
+        filtered(recentProjects(projects(for: remote), machineID: remote.machineID.uuidString))
     }
 
     func isLoadingProjects(for remote: QuinjetRemote) -> Bool {
@@ -102,6 +105,22 @@ final class QuinjetPageModel {
                         || $0.displayName.localizedCaseInsensitiveContains(search)
                 }
         }
+    }
+
+    private func recentProjects(_ projects: [QuinjetProject], machineID: String) -> [QuinjetProject]
+    {
+        usage.history.projects(projects, machineID: machineID)
+    }
+
+    func recentWorktrees(for tab: QuinjetTab) -> [QuinjetWorktree] {
+        let machineID = tab.remote?.machineID.uuidString ?? "local"
+        return usage.ordered(tab.worktrees) { ["worktree", machineID, $0.path] }
+    }
+
+    private func recordUse(of tab: QuinjetTab) {
+        guard let worktree = tab.worktree else { return }
+        let machineID = tab.remote?.machineID.uuidString ?? "local"
+        usage.record([["machine", machineID], ["worktree", machineID, worktree.path]])
     }
 
     func refreshProjects() async {
@@ -182,7 +201,10 @@ final class QuinjetPageModel {
         if select { selected = tab.id }
         tab.externalLaunchGeneration += 1
         let externalLaunchGeneration = tab.externalLaunchGeneration
-        guard launchEnabled else { return }
+        guard launchEnabled else {
+            if select { recordUse(of: tab) }
+            return
+        }
         guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
             tab.errorMessage = QuinjetClientError.notInstalled.localizedDescription
             return
@@ -214,6 +236,7 @@ final class QuinjetPageModel {
                     }
                     tab.externalWorkspaceID = workspaceID
                     tab.externalLaunchMessage = "Opened in cmux"
+                    if select { self.recordUse(of: tab) }
                 } catch {
                     guard
                         let tab,
@@ -240,6 +263,7 @@ final class QuinjetPageModel {
             executable: request.executableURL.path, arguments: request.arguments,
             environment: environment, currentDirectory: request.currentDirectory,
             allowsLocalFileLinks: remote == nil)
+        if select { recordUse(of: tab) }
     }
 
     func openFolder(
@@ -339,6 +363,7 @@ final class QuinjetPageModel {
                     throw QuinjetSessionError.operationFailed(error.localizedDescription)
                 }
             }
+            recordUse(of: tab)
             return sessionResult(for: .focus, affected: tab.id)
         case .close:
             let tab = try session(matching: request.session)

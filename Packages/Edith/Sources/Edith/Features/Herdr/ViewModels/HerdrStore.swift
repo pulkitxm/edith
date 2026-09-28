@@ -93,6 +93,7 @@ final class HerdrStore {
         didSet {
             guard selectedTab != oldValue else { return }
             guard let agent = focusedSession?.agent else { return }
+            usage.record(agent)
             revealSpace(containing: agent)
         }
     }
@@ -186,6 +187,7 @@ final class HerdrStore {
     @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
     let terminalPanels: HerdrTerminalPanels
     let messaging: HerdrMessaging
+    let usage: LauncherUsage
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
@@ -234,6 +236,7 @@ final class HerdrStore {
         messaging: HerdrMessaging? = nil
     ) {
         self.defaults = defaults
+        usage = defaults === SharedDefaults.store ? .shared : LauncherUsage(defaults: defaults)
         self.terminalPanels = terminalPanels ?? HerdrTerminalPanels(defaults: defaults)
         self.messaging = messaging ?? HerdrMessaging()
         self.liveWatcher = liveWatcher
@@ -284,10 +287,21 @@ final class HerdrStore {
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
-    var listedAgents: [HerdrAgent] { filteredAgents }
+    var listedAgents: [HerdrAgent] {
+        usage.ordered(filteredAgents) { ["agent", $0.id] }
+    }
+
+    var recentHosts: [HerdrHostSnapshot] {
+        usage.ordered(hosts) { ["machine", $0.id] }
+    }
 
     var agentSpaces: [HerdrAgentSpace] {
-        HerdrAgentSpace.group(listedAgents)
+        usage.ordered(
+            HerdrAgentSpace.group(listedAgents),
+            date: { space in
+                space.agents.map { usage.lastUsed(["space", $0.machineID, $0.workspace]) }.max()
+                    ?? .distantPast
+            })
     }
 
     func spaceIsCollapsed(_ id: String) -> Bool {
@@ -333,7 +347,7 @@ final class HerdrStore {
 
     var machineTerminals: [HerdrAgent] {
         var terminals: [HerdrAgent] = []
-        for host in hosts where host.herdrPresent {
+        for host in recentHosts where host.herdrPresent {
             let terminal = HerdrMachineTerminal.agent(for: host)
             switch machineFilter {
             case "all": terminals.append(terminal)
@@ -346,8 +360,11 @@ final class HerdrStore {
     }
 
     var machineChoices: [(id: String, name: String)] {
-        [("all", "All machines"), ("local", "This Mac")]
-            + hosts.filter { !$0.isLocal }.map { ($0.id, $0.name) }
+        [("all", "All machines")]
+            + usage.ordered(
+                [(id: "local", name: "This Mac")]
+                    + hosts.filter { !$0.isLocal }.map { (id: $0.id, name: $0.name) }
+            ) { ["machine", $0.id] }
     }
 
     var kindChoices: [String] {
@@ -355,7 +372,7 @@ final class HerdrStore {
         for kind in Set(agents.map(\.kind)).sorted() where !labels.contains(kind) {
             labels.append(kind)
         }
-        return labels
+        return usage.ordered(labels) { ["kind", $0] }
     }
 
     var filteredAgents: [HerdrAgent] {
@@ -653,6 +670,7 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
+        usage.record(agent)
         revealSpace(containing: agent)
         if sessions.contains(where: { $0.id == agent.id }) {
             if let view { setView(view, for: agent.id) }
@@ -667,6 +685,7 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent, beside side: InsertSide) {
+        usage.record(agent)
         if session(agent.id) == nil, HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         guard let current = currentTab, !current.layout.contains(agent.id) else {
             open(agent)
@@ -751,7 +770,10 @@ final class HerdrStore {
         terminalPanels.releaseFocus()
         guard let tab = tab(containing: agentID), tab.focused != agentID else { return }
         updateTab(tab.id) { $0.focused = agentID }
-        if let agent = session(agentID)?.agent { revealSpace(containing: agent) }
+        if let agent = session(agentID)?.agent {
+            usage.record(agent)
+            revealSpace(containing: agent)
+        }
     }
 
     func focusNeighbor(toward side: InsertSide) {
@@ -799,11 +821,15 @@ final class HerdrStore {
             tab.focused = next
             if tab.zoomed != nil { tab.zoomed = next }
         }
-        if let agent = session(next)?.agent { revealSpace(containing: agent) }
+        if let agent = session(next)?.agent {
+            usage.record(agent)
+            revealSpace(containing: agent)
+        }
     }
 
     func toggleZoom(_ agentID: String) {
         guard let tab = tab(containing: agentID), tab.isSplit else { return }
+        if let agent = session(agentID)?.agent { usage.record(agent) }
         updateTab(tab.id) { tab in
             tab.zoomed = tab.zoomed == agentID ? nil : agentID
             tab.focused = agentID

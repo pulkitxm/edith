@@ -358,7 +358,8 @@ private struct QuinjetTerminalWorkspace: View {
             .frame(width: UIScale.pt(360), height: UIScale.pt(220))
         } else {
             QuinjetWorktreePicker(
-                projectName: tab.projectName ?? "Project", worktrees: tab.worktrees,
+                projectName: tab.projectName ?? "Project",
+                worktrees: model.recentWorktrees(for: tab),
                 selectedPath: tab.worktree?.path,
                 select: { worktree in
                     Task {

@@ -504,10 +504,16 @@ struct QuinjetMachineStrip: View {
     let selection: UUID
     let select: (Machine) -> Void
 
+    private var recentMachines: [Machine] {
+        LauncherUsage.shared.ordered(machines.allMachines) {
+            ["machine", machines.isLocal($0.id) ? "local" : $0.id.uuidString]
+        }
+    }
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UIScale.pt(8)) {
-                ForEach(machines.allMachines) { machine in
+                ForEach(recentMachines) { machine in
                     QuinjetMachineChip(
                         machine: machine, session: machines.session(for: machine.id),
                         selected: machine.id == selection,

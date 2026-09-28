@@ -217,10 +217,17 @@ final class HerdrSpaceWindowModel {
     let spaceTitle: String
     let contexts: [HerdrSpaceTerminalContext]
     private(set) var tabs: [HerdrSpaceTabModel]
-    var selected: UUID?
+    var selected: UUID? {
+        didSet {
+            guard selected != oldValue, let agent = selectedTab?.agentTab?.agent else { return }
+            usage.record(agent)
+        }
+    }
+    private let usage: LauncherUsage
     private var shellNumber = 0
 
     init(space: HerdrAgentSpace, store: HerdrStore) {
+        usage = store.usage
         spaceID = space.id
         spaceTitle = space.title
         contexts = HerdrSpaceTerminalContext.unique(for: space.agents)
@@ -231,6 +238,7 @@ final class HerdrSpaceWindowModel {
                 context: HerdrSpaceTerminalContext.make(for: agent))
         }
         selected = tabs.first?.id
+        if let agent = selectedTab?.agentTab?.agent { usage.record(agent) }
         if tabs.isEmpty { addTerminal() }
     }
 

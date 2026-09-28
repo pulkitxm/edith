@@ -6,12 +6,27 @@ struct HerdrNewAgentPopup: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @State private var model = HerdrNewAgentPopupModel()
+    @State private var model: HerdrNewAgentPopupModel
     @State private var selectionIndex = 0
     @FocusState private var fieldFocused: Bool
 
     private var dark: Bool { scheme == .dark }
-    private var hosts: [HerdrHostSnapshot] { store.hosts }
+    init(store: HerdrStore, model: HerdrNewAgentPopupModel? = nil) {
+        self.store = store
+        _model = State(initialValue: model ?? HerdrNewAgentPopupModel())
+    }
+
+    private var hosts: [HerdrHostSnapshot] { store.recentHosts }
+    private var matchingKinds: [String] {
+        store.usage.ordered(HerdrNewAgentPopupModel.matchingKinds(model.kindQuery)) {
+            ["kind", $0]
+        }
+    }
+    private var matchingSpaces: [HerdrWorkspaceSummary] {
+        store.usage.ordered(
+            HerdrNewAgentPopupModel.matchingSpaces(model.spaceQuery, in: model.workspaces)
+        ) { ["space", model.selectedHost?.id ?? "local", $0.label] }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -150,7 +165,7 @@ struct HerdrNewAgentPopup: View {
 
     @ViewBuilder
     private var kindRows: some View {
-        let kinds = HerdrNewAgentPopupModel.matchingKinds(model.kindQuery)
+        let kinds = matchingKinds
         ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
             row(index: index) {
                 HerdrKindMark(kind: kind, size: UIScale.pt(16))
@@ -193,7 +208,7 @@ struct HerdrNewAgentPopup: View {
 
     @ViewBuilder
     private var spaceRows: some View {
-        let matches = HerdrNewAgentPopupModel.matchingSpaces(model.spaceQuery, in: model.workspaces)
+        let matches = matchingSpaces
         let trimmedQuery = model.spaceQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let showsCreateRow =
             !trimmedQuery.isEmpty
@@ -223,7 +238,7 @@ struct HerdrNewAgentPopup: View {
                 }
             }
             if matches.isEmpty, !showsCreateRow {
-                emptyState("No spaces yet — type a name to create one")
+                emptyState("No spaces yet. Type a name to create one")
             }
         }
     }
@@ -277,12 +292,11 @@ struct HerdrNewAgentPopup: View {
     private var currentRowCount: Int {
         switch model.step {
         case .kind:
-            return HerdrNewAgentPopupModel.matchingKinds(model.kindQuery).count
+            return matchingKinds.count
         case .machine:
             return HerdrNewAgentPopupModel.matchingMachines(model.machineQuery, in: hosts).count
         case .space:
-            let matches = HerdrNewAgentPopupModel.matchingSpaces(
-                model.spaceQuery, in: model.workspaces)
+            let matches = matchingSpaces
             let trimmedQuery = model.spaceQuery.trimmingCharacters(in: .whitespacesAndNewlines)
             let showsCreateRow =
                 !trimmedQuery.isEmpty
@@ -295,7 +309,7 @@ struct HerdrNewAgentPopup: View {
     private func activateSelection() {
         switch model.step {
         case .kind:
-            let kinds = HerdrNewAgentPopupModel.matchingKinds(model.kindQuery)
+            let kinds = matchingKinds
             guard kinds.indices.contains(selectionIndex) else { return }
             model.selectKind(kinds[selectionIndex])
         case .machine:
@@ -303,8 +317,7 @@ struct HerdrNewAgentPopup: View {
             guard machines.indices.contains(selectionIndex) else { return }
             model.selectMachine(machines[selectionIndex])
         case .space:
-            let matches = HerdrNewAgentPopupModel.matchingSpaces(
-                model.spaceQuery, in: model.workspaces)
+            let matches = matchingSpaces
             if matches.indices.contains(selectionIndex) {
                 launch(space: matches[selectionIndex], newLabel: nil)
             } else {
