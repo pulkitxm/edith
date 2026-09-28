@@ -354,12 +354,24 @@ struct VirtualCameraBackgroundPanel: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
 
+    private var cameraGuidance: String {
+        if let route = model.snapshot?.route {
+            return "Select \(route.cameraName) in your video app to see this background."
+        }
+        return
+            "Set up a virtual camera in Output, then select it in your video app to see this background."
+    }
+
     var body: some View {
         VirtualCameraPanelSection(
             title: "Background",
             detail: "Edith finds you in the picture and blurs or replaces everything behind you.",
             dark: dark
         ) {
+            Text(cameraGuidance + " The macOS Video Effects menu for your webcam is separate.")
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
             Picker("Background", selection: model.binding(\.background.mode)) {
                 ForEach(VirtualCameraBackgroundMode.allCases, id: \.self) { mode in
                     Text(mode.title).tag(mode)
