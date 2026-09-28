@@ -835,7 +835,7 @@ final class VideoEditorModel {
             var assets = $0.root["assets"] as? [[String: Any]] ?? []
             guard let index = assets.firstIndex(where: { $0["id"] as? String == clip.assetID })
             else { return }
-            assets[index].removeValue(forKey: "cameraTrack")
+            assets[index]["cameraTrack"] = nil
             $0.root["assets"] = assets
         }
         rebuild()

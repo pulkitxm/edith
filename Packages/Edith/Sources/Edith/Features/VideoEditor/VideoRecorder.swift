@@ -21,7 +21,7 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     private var output: SCRecordingOutput?
     private var destination: URL?
     private var finished: ((URL) -> Void)?
-    private var cursorTimer: Timer?
+    private var cursorTask: Task<Void, Never>?
     private var cursorSamples: [[String: Any]] = []
     private var captureRect = CGRect.zero
     private var capturedWindow: CGWindowID?
@@ -112,21 +112,28 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
             startedAt = Date()
             recordingStart = ProcessInfo.processInfo.systemUptime
             previousButtons = NSEvent.pressedMouseButtons
-            cursorTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) {
-                [weak self] _ in
-                MainActor.assumeIsolated { self?.sampleCursor() }
+            cursorTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else { return }
+                    await sampleCursor()
+                    try? await Task.sleep(for: .milliseconds(33))
+                }
             }
         }
     }
 
-    private func sampleCursor() {
-        if let capturedWindow,
-            let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, capturedWindow)
-                as? [[String: Any]],
-            let raw = windows.first?[kCGWindowBounds as String] as? [String: Any],
-            let rect = CGRect(dictionaryRepresentation: raw as CFDictionary)
-        {
-            captureRect = rect
+    private func sampleCursor() async {
+        if let capturedWindow {
+            let rect = await Task.detached(priority: .userInitiated) {
+                guard
+                    let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, capturedWindow)
+                        as? [[String: Any]],
+                    let raw = windows.first?[kCGWindowBounds as String] as? [String: Any]
+                else { return CGRect?.none }
+                return CGRect(dictionaryRepresentation: raw as CFDictionary)
+            }.value
+            guard !Task.isCancelled else { return }
+            if let rect { captureRect = rect }
         }
         guard captureRect.width > 0, captureRect.height > 0,
             let point = CGEvent(source: nil)?.location
@@ -187,14 +194,16 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         Task { @MainActor in
             guard stream === self.stream else { return }
             self.error = error.localizedDescription
+            cursorTask?.cancel()
+            cursorTask = nil
             recording = false
             busy = false
         }
     }
 
     private func reset() {
-        cursorTimer?.invalidate()
-        cursorTimer = nil
+        cursorTask?.cancel()
+        cursorTask = nil
         cursorSamples.removeAll()
         stream = nil
         output = nil
