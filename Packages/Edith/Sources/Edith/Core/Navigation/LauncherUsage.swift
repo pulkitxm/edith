@@ -58,9 +58,14 @@ struct LauncherUsageHistory: Sendable {
     }
 
     func ordered<Item>(_ items: [Item], date: (Item) -> Date) -> [Item] {
-        items.enumerated().map { (offset: $0.offset, item: $0.element, date: date($0.element)) }
-            .sorted { $0.date == $1.date ? $0.offset < $1.offset : $0.date > $1.date }
-            .map(\.item)
+        let ranked = items.enumerated().map { entry in
+            (offset: entry.offset, item: entry.element, date: date(entry.element))
+        }
+        let ordered = ranked.sorted { lhs, rhs in
+            if lhs.date == rhs.date { return lhs.offset < rhs.offset }
+            return lhs.date > rhs.date
+        }
+        return ordered.map { $0.item }
     }
 
     func projects(_ projects: [QuinjetProject], machineID: String) -> [QuinjetProject] {
