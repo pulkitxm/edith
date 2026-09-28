@@ -59,7 +59,8 @@ struct VideoEditorPage: View {
                             VideoInspector(model: model)
                         }
                     }
-                    .frame(minHeight: 300)
+                    .frame(minHeight: 400)
+                    .layoutPriority(1)
                     VideoTimeline(model: model)
                 }
                 .background(VideoPlaybackKeys(onToggle: model.togglePlayback))

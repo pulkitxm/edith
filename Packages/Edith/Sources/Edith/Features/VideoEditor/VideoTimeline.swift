@@ -55,7 +55,7 @@ struct VideoTimeline: View {
             }
             .coordinateSpace(name: "editTimeline")
         }
-        .frame(minHeight: 200, idealHeight: 280)
+        .frame(minHeight: 180, idealHeight: 240, maxHeight: 280)
     }
 
     private func ruler(width: Double) -> some View {
