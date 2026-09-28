@@ -4,6 +4,14 @@ import Foundation
 @MainActor
 @Observable
 final class HerdrNewAgentPopupModel {
+    enum LaunchError: LocalizedError {
+        case spaceUnavailable
+
+        var errorDescription: String? {
+            "This space is no longer available. Refresh the agent list and try again."
+        }
+    }
+
     enum Step: Equatable {
         case kind
         case machine
@@ -43,6 +51,34 @@ final class HerdrNewAgentPopupModel {
     var loadingWorkspaces = false
     var errorMessage: String?
     var launching = false
+    let space: HerdrAgentSpace?
+
+    init(space: HerdrAgentSpace? = nil) {
+        self.space = space
+    }
+
+    func launchInSpace(
+        store: HerdrStore,
+        listWorkspaces: (Machine?) async throws -> [HerdrWorkspaceSummary] = {
+            try await HerdrLaunchOperations.listWorkspaces(on: $0)
+        }
+    ) async throws {
+        guard let space, let kind = selectedKind,
+            let machineID = space.agents.first?.machineID,
+            space.agents.allSatisfy({ $0.machineID == machineID }),
+            let host = store.hosts.first(where: { $0.id == machineID }),
+            host.reachable, host.herdrPresent
+        else { throw LaunchError.spaceUnavailable }
+        let machine = store.machine(for: host)
+        guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
+        let workspaces = try await listWorkspaces(machine)
+        let matches = workspaces.filter { $0.label == space.title || $0.id == space.title }
+        guard matches.count == 1, let workspace = matches.first else {
+            throw LaunchError.spaceUnavailable
+        }
+        try await store.launchNewAgent(
+            kind: kind, host: host, existingSpace: workspace, newSpaceLabel: nil)
+    }
 
     nonisolated static func matchingKinds(_ query: String) -> [String] {
         guard !query.isEmpty else { return HerdrKind.filterLabels }
@@ -77,7 +113,7 @@ final class HerdrNewAgentPopupModel {
 
     func selectKind(_ kind: String) {
         selectedKind = kind
-        step = .machine
+        if space == nil { step = .machine }
     }
 
     func selectMachine(_ host: HerdrHostSnapshot) {

@@ -79,4 +79,95 @@ import Testing
         #expect(model.back() == false)
         #expect(model.step == .kind)
     }
+
+    @Test(arguments: [false, true])
+    func spaceLaunchOnlyAsksForKindAndUsesTheSelectedMachine(remote: Bool) async throws {
+        let machine = Machine(name: "Demo server", host: "demo.invalid")
+        let host =
+            remote
+            ? HerdrHostSnapshot(
+                id: machine.id.uuidString, name: machine.name, isLocal: false,
+                herdrPresent: true, reachable: true)
+            : .local(herdrPresent: true)
+        let agent = spaceAgent(host)
+        let space = try #require(HerdrAgentSpace.group([agent]).first)
+        let workspace = HerdrWorkspaceSummary(id: "w4", label: "demo", tabCount: 1, paneCount: 1)
+        let store = HerdrStore(
+            newAgentLauncher: { kind, destination, existingSpace, newLabel in
+                #expect(kind == "OpenCode")
+                #expect(destination?.id == (remote ? machine.id : nil))
+                #expect(existingSpace == workspace)
+                #expect(newLabel == nil)
+                return HerdrCreatedPane(workspaceID: "w4", tabID: "w4:t2", paneID: "w4:p2")
+            }, machinesProvider: { [machine] })
+        store.hosts = [host]
+        let model = HerdrNewAgentPopupModel(space: space)
+        model.selectKind("OpenCode")
+        #expect(model.step == .kind)
+        #expect(!model.back())
+        try await model.launchInSpace(store: store) { destination in
+            #expect(destination?.id == (remote ? machine.id : nil))
+            return [workspace]
+        }
+        #expect(store.focusedSession?.agent.machineID == host.id)
+        #expect(store.focusedSession?.agent.workspace == "demo")
+        #expect(store.focusedSession?.agent.pane == "w4:p2")
+        store.closeAll()
+    }
+
+    @Test func spaceLaunchDoesNotCreateAReplacementForAMissingOrAmbiguousSpace() async throws {
+        let host = HerdrHostSnapshot.local(herdrPresent: true)
+        let space = try #require(HerdrAgentSpace.group([spaceAgent(host)]).first)
+        let store = HerdrStore(newAgentLauncher: { _, _, _, _ in
+            Issue.record("An unavailable space must not launch an agent")
+            throw HerdrNewAgentPopupModel.LaunchError.spaceUnavailable
+        })
+        store.hosts = [host]
+        let model = HerdrNewAgentPopupModel(space: space)
+        model.selectKind("OpenCode")
+        let duplicate = HerdrWorkspaceSummary(id: "w4", label: "demo", tabCount: 1, paneCount: 1)
+        for workspaces in [[], [duplicate, duplicate]] {
+            await #expect(throws: HerdrNewAgentPopupModel.LaunchError.self) {
+                try await model.launchInSpace(store: store) { _ in workspaces }
+            }
+        }
+        #expect(store.tabs.isEmpty)
+    }
+
+    @Test func aRemovedRemoteMachineCannotFallBackToThisMac() async throws {
+        let host = HerdrHostSnapshot(
+            id: "missing", name: "Demo server", isLocal: false,
+            herdrPresent: true, reachable: true)
+        let space = try #require(HerdrAgentSpace.group([spaceAgent(host)]).first)
+        let store = HerdrStore(machinesProvider: { [] })
+        store.hosts = [host]
+        let model = HerdrNewAgentPopupModel(space: space)
+        model.selectKind("OpenCode")
+        await #expect(throws: HerdrQuinjetError.self) {
+            try await model.launchInSpace(store: store) { _ in
+                Issue.record("A removed remote machine must not query local workspaces")
+                return []
+            }
+        }
+        #expect(store.tabs.isEmpty)
+    }
+
+    @Test func sameNamedSpacesOnDifferentMachinesStaySeparate() {
+        let local = spaceAgent(.local(herdrPresent: true))
+        let remote = spaceAgent(
+            HerdrHostSnapshot(
+                id: "remote", name: "Demo server", isLocal: false,
+                herdrPresent: true, reachable: true))
+        let spaces = HerdrAgentSpace.group([local, remote])
+        #expect(spaces.count == 2)
+        #expect(Set(spaces.map(\.id)).count == 2)
+        #expect(spaces.allSatisfy { $0.agents.count == 1 && $0.title == "demo" })
+    }
+
+    private func spaceAgent(_ host: HerdrHostSnapshot) -> HerdrAgent {
+        HerdrAgent.make(
+            machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
+            sshTarget: nil, session: "default", pane: "w4:p1", kind: "OpenCode", status: .idle,
+            title: "Review demo", workspace: "demo", cwd: "/demo")
+    }
 }

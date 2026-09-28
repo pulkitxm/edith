@@ -6,9 +6,14 @@ struct HerdrNewAgentPopup: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @State private var model = HerdrNewAgentPopupModel()
+    @State private var model: HerdrNewAgentPopupModel
     @State private var selectionIndex = 0
     @FocusState private var fieldFocused: Bool
+
+    init(store: HerdrStore, space: HerdrAgentSpace? = nil) {
+        self.store = store
+        _model = State(initialValue: HerdrNewAgentPopupModel(space: space))
+    }
 
     private var dark: Bool { scheme == .dark }
     private var hosts: [HerdrHostSnapshot] { store.hosts }
@@ -26,6 +31,7 @@ struct HerdrNewAgentPopup: View {
                     .padding(UIScale.pt(12))
             }
             resultsList
+                .disabled(model.launching)
         }
         .frame(width: UIScale.pt(440), height: UIScale.pt(380))
         .onAppear { fieldFocused = true }
@@ -41,6 +47,31 @@ struct HerdrNewAgentPopup: View {
     }
 
     private var header: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            if let space = model.space {
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text("New agent in \(space.title)")
+                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    Text(space.agents.first?.machineName ?? "")
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+            } else {
+                steps
+            }
+            Spacer()
+            if model.launching {
+                Text("Launching…")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.secondary)
+            }
+            if model.space == nil { layoutChoiceMenu }
+        }
+        .padding(UIScale.pt(14))
+    }
+
+    private var steps: some View {
         HStack(spacing: UIScale.pt(8)) {
             ForEach(
                 [
@@ -60,15 +91,7 @@ struct HerdrNewAgentPopup: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            Spacer()
-            if model.launching {
-                Text("Launching…")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.secondary)
-            }
-            layoutChoiceMenu
         }
-        .padding(UIScale.pt(14))
     }
 
     private var layoutChoiceMenu: some View {
@@ -223,7 +246,7 @@ struct HerdrNewAgentPopup: View {
                 }
             }
             if matches.isEmpty, !showsCreateRow {
-                emptyState("No spaces yet — type a name to create one")
+                emptyState("No spaces yet. Type a name to create one")
             }
         }
     }
@@ -293,11 +316,13 @@ struct HerdrNewAgentPopup: View {
     }
 
     private func activateSelection() {
+        guard !model.launching else { return }
         switch model.step {
         case .kind:
             let kinds = HerdrNewAgentPopupModel.matchingKinds(model.kindQuery)
             guard kinds.indices.contains(selectionIndex) else { return }
             model.selectKind(kinds[selectionIndex])
+            if model.space != nil { launchInSpace() }
         case .machine:
             let machines = HerdrNewAgentPopupModel.matchingMachines(model.machineQuery, in: hosts)
             guard machines.indices.contains(selectionIndex) else { return }
@@ -339,6 +364,21 @@ struct HerdrNewAgentPopup: View {
                 try await store.launchNewAgent(
                     kind: kind, host: host, existingSpace: space, newSpaceLabel: newLabel,
                     openBeside: model.layoutChoice == .sideBySide)
+                model.launching = false
+                dismiss()
+            } catch {
+                model.launching = false
+                model.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func launchInSpace() {
+        model.launching = true
+        model.errorMessage = nil
+        Task {
+            do {
+                try await model.launchInSpace(store: store)
                 model.launching = false
                 dismiss()
             } catch {

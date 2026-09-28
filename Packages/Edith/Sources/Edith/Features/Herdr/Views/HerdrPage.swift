@@ -18,6 +18,7 @@ struct HerdrPage: View {
     @State private var layoutPopoverOpen = false
     @State private var launchSettingsPresented = false
     @State private var newAgentPopupPresented = false
+    @State private var newAgentSpace: HerdrAgentSpace?
     @State private var filterMenu = false
     @State private var filterDismissedAt: Date?
 
@@ -117,6 +118,9 @@ struct HerdrPage: View {
         }
         .sheet(isPresented: $newAgentPopupPresented) {
             HerdrNewAgentPopup(store: store)
+        }
+        .sheet(item: $newAgentSpace) { space in
+            HerdrNewAgentPopup(store: store, space: space)
         }
         .sheet(isPresented: $store.searchPresented) {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
@@ -823,6 +827,17 @@ struct HerdrPage: View {
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                         .presenterTextBlur(hideAgents, fontSize: 10.5)
+                    if store.agentSpaces.contains(where: {
+                        $0.title == space.title && $0.id != space.id
+                    }),
+                        let machineName = space.agents.first?.machineName
+                    {
+                        Text(machineName)
+                            .font(DashSkin.mono(9))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .lineLimit(1)
+                            .presenterTextBlur(hideAgents, fontSize: 9)
+                    }
                     Text("\(shownCount)")
                         .font(DashSkin.mono(9.5, weight: .medium))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -833,6 +848,22 @@ struct HerdrPage: View {
             .buttonStyle(.edith(.borderless))
             .help(collapsed ? "Show \(accessibleTitle)" : "Hide \(accessibleTitle)")
             .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
+
+            Button {
+                newAgentSpace = space
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+            }
+            .buttonStyle(.edith(.borderless))
+            .disabled(
+                space.agents.first?.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty != false
+            )
+            .help("New agent in \(accessibleTitle)")
+            .accessibilityLabel("New agent in \(accessibleTitle)")
 
             Button {
                 openSpace(space)

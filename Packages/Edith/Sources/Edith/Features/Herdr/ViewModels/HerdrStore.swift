@@ -38,8 +38,11 @@ struct HerdrAgentSpace: Identifiable, Equatable {
 
     static func group(_ agents: [HerdrAgent]) -> [HerdrAgentSpace] {
         Dictionary(grouping: agents, by: spaceID)
-            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            .map { HerdrAgentSpace(id: $0.key, title: spaceTitle($0.value[0]), agents: $0.value) }
+            .sorted {
+                let order = $0.title.localizedCaseInsensitiveCompare($1.title)
+                return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+            }
     }
 
     static func counts(_ spaces: [HerdrAgentSpace]) -> [String: Int] {
@@ -47,6 +50,10 @@ struct HerdrAgentSpace: Identifiable, Equatable {
     }
 
     static func spaceID(_ agent: HerdrAgent) -> String {
+        "\(agent.machineID)|\(spaceTitle(agent))"
+    }
+
+    private static func spaceTitle(_ agent: HerdrAgent) -> String {
         let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Unassigned" : title
     }
@@ -1432,8 +1439,10 @@ final class HerdrStore {
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
         newSpaceLabel: String?, openBeside: Bool = false
     ) async throws {
+        let machine = machine(for: host)
+        guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
         let created = try await newAgentLauncher(
-            kind, machine(for: host), existingSpace, newSpaceLabel)
+            kind, machine, existingSpace, newSpaceLabel)
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,

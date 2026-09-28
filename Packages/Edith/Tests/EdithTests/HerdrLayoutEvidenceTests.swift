@@ -47,6 +47,17 @@ import Testing
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-grid.png"), options: .atomic)
 
+        store.spaceGroupingEnabled = true
+        try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
+            .write(to: output.appendingPathComponent("herdr-spaces.png"), options: .atomic)
+        let space = try #require(store.agentSpaces.first)
+        try render(
+            HerdrNewAgentPopup(store: store, space: space),
+            size: NSSize(width: 440, height: 380)
+        )
+        .write(to: output.appendingPathComponent("herdr-space-launcher.png"), options: .atomic)
+        store.spaceGroupingEnabled = false
+
         store.arrange(tabID, as: .focusLeft)
         try render(HerdrPage(store: store), size: NSSize(width: 1440, height: 900))
             .write(to: output.appendingPathComponent("herdr-focus-left.png"), options: .atomic)
