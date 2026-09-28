@@ -7,6 +7,40 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoRenderPipelineTests {
+    @Test func styledFramesPersistAndExportWithExistingZooms() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-presentation-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.mov")
+        try await createVideo(at: source, brightness: 220)
+        var project = VideoProject.create()
+        project.addAsset(source, duration: 1, width: 64, height: 64)
+        project.padding = 20
+        project.backgroundColor = "#FF0000"
+        var settings = project.presentation
+        settings.gradient = true
+        settings.gradientEnd = "#0000FF"
+        settings.cornerRadius = 20
+        settings.shadow = 50
+        project.presentation = settings
+        project.addZoom(startMs: 250, endMs: 750, depth: 2, x: 0.5, y: 0.5)
+        let url = directory.appendingPathComponent("styled.openscreen")
+        try project.save(to: url)
+        let reopened = try VideoProject.open(url)
+        #expect(reopened.presentation == settings)
+        #expect(reopened.zooms.count == 1)
+        let pipeline = try await VideoRenderPipeline.make(project: reopened)
+        let output = directory.appendingPathComponent("styled.mp4")
+        try await pipeline.exportMP4(to: output)
+        let bitmap = NSBitmapImageRep(cgImage: try frame(at: 0.5, in: output))
+        let center = try #require(bitmap.colorAt(x: 32, y: 32)?.usingColorSpace(.deviceRGB))
+        let corner = try #require(bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB))
+        #expect(center.greenComponent > 0.6)
+        #expect(corner.greenComponent < 0.2)
+        #expect(corner.redComponent + corner.blueComponent > 0.5)
+    }
+
     @Test func transitionFadesAtClipBoundaryInPreviewAndExport() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-transition-test-\(UUID().uuidString)")

@@ -111,7 +111,7 @@ struct VideoRenderPipeline {
     }
 
     private static func cursorSample(
-        at timeMs: Double, in samples: [CursorSample]
+        at timeMs: Double, in samples: [CursorSample], smooth: Bool = false
     ) -> (current: CursorSample?, clicked: Bool) {
         var low = 0
         var high = samples.count
@@ -120,7 +120,20 @@ struct VideoRenderPipeline {
             if samples[middle].timeMs <= timeMs { low = middle + 1 } else { high = middle }
         }
         guard low > 0 else { return (nil, false) }
-        let current = samples[low - 1]
+        var current = samples[low - 1]
+        if smooth, low < samples.count {
+            let next = samples[low]
+            let gap = next.timeMs - current.timeMs
+            if gap > 0, gap <= 150, current.visible, next.visible {
+                let fraction = min(1, max(0, (timeMs - current.timeMs) / gap))
+                let weight = fraction * fraction * (3 - 2 * fraction)
+                current = CursorSample(
+                    timeMs: current.timeMs,
+                    x: current.x + (next.x - current.x) * weight,
+                    y: current.y + (next.y - current.y) * weight,
+                    visible: true, click: current.click)
+            }
+        }
         var index = low - 1
         var clicked = false
         while index >= 0 && timeMs - samples[index].timeMs <= 300 {
@@ -392,6 +405,9 @@ struct VideoRenderPipeline {
         let background = CIColor(hex: project.backgroundColor)
         let wallpaper = CIImage(contentsOf: URL(fileURLWithPath: project.backgroundColor))
         let padding = CGFloat(project.padding / 100)
+        let presentation = project.presentation
+        let backdrop = presentation.backdrop(
+            color: background, wallpaper: wallpaper, bounds: CGRect(origin: .zero, size: canvas))
         let zooms = project.zooms
         let annotations = project.annotations
         let cameraFullscreenRegions = project.cameraFullscreenRegions
@@ -400,6 +416,7 @@ struct VideoRenderPipeline {
         let finalCameras = cameras
         let finalCursors = cursors
         let size = canvas
+        let cursorImage = pointerImage()
         let baseComposition = AVVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
             guard let segment = finalSegments.last(where: { $0.outputStart <= time }) else {
@@ -427,12 +444,16 @@ struct VideoRenderPipeline {
             let cursor = cursorSample(
                 at: segment.sourceTime(at: time) * 1000,
                 in: finalCursors[segment.clip.assetID] ?? [])
+            let renderedCursor = cursorSample(
+                at: segment.sourceTime(at: time) * 1000,
+                in: finalCursors[segment.clip.assetID] ?? [],
+                smooth: presentation.cursorSmoothing)
             let webcam = finalCameras[segment.clip.assetID]?.frame(
                 at: segment.sourceTime(at: time))
             var image = render(
                 sourceImage, clip: segment.clip, at: rulerMs, size: size,
-                zooms: zooms, annotations: annotations, background: background,
-                wallpaper: wallpaper, padding: padding,
+                zooms: zooms, annotations: annotations, backdrop: backdrop,
+                padding: padding, presentation: presentation,
                 webcam: webcam, webcamLayout: project.webcamLayout,
                 webcamSize: project.webcamSize,
                 webcamPosition: project.webcamPosition,
@@ -440,6 +461,7 @@ struct VideoRenderPipeline {
                 webcamMirrored: project.webcamMirrored,
                 cameraFullscreenRegions: cameraFullscreenRegions,
                 cursor: cursor.current,
+                renderedCursor: renderedCursor.current, cursorImage: cursorImage,
                 cursorClicked: project.cursorHighlight && cursor.clicked)
             if let edge = transitions.first(where: {
                 abs(time - $0.time) < $0.halfDuration
@@ -658,11 +680,12 @@ struct VideoRenderPipeline {
     private static func render(
         _ input: CIImage, clip: VideoProject.Clip, at timeMs: Double, size: CGSize,
         zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation],
-        background: CIColor, wallpaper: CIImage?, padding: CGFloat,
+        backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
         webcamPosition: [String: Double], webcamMask: String, webcamMirrored: Bool,
         cameraFullscreenRegions: [[String: Any]],
-        cursor: CursorSample?, cursorClicked: Bool
+        cursor: CursorSample?, renderedCursor: CursorSample?, cursorImage: CIImage?,
+        cursorClicked: Bool
     ) -> CIImage {
         let bounds = CGRect(origin: .zero, size: size)
         let full = input.extent
@@ -698,30 +721,51 @@ struct VideoRenderPipeline {
             by: CGAffineTransform(
                 translationX: -source.minX, y: -source.minY)
         ).transformed(by: transform)
-        var backdrop = CIImage(color: background).cropped(to: bounds)
-        if let wallpaper, wallpaper.extent.width > 0, wallpaper.extent.height > 0 {
-            let fill = max(
-                size.width / wallpaper.extent.width,
-                size.height / wallpaper.extent.height)
-            let scaled = wallpaper.transformed(by: CGAffineTransform(scaleX: fill, y: fill))
-            backdrop = scaled.transformed(
-                by: CGAffineTransform(
-                    translationX: (size.width - scaled.extent.width) / 2 - scaled.extent.minX,
-                    y: (size.height - scaled.extent.height) / 2 - scaled.extent.minY)
-            )
-            .cropped(to: bounds)
+        var output = image.composited(over: backdrop).cropped(to: bounds)
+        if presentation.cornerRadius > 0 || presentation.shadow > 0 {
+            output = VideoPresentation.framed(
+                image, rect: image.extent.intersection(bounds),
+                radius: presentation.cornerRadius, shadow: presentation.shadow, over: backdrop)
         }
-        var output = image.composited(over: backdrop)
-            .cropped(to: bounds)
+        if presentation.cursorVisible, let cursor = renderedCursor, cursor.visible,
+            let cursorImage
+        {
+            let position = CGPoint(
+                x: full.minX + full.width * cursor.x - source.minX,
+                y: full.minY + full.height * (1 - cursor.y) - source.minY)
+            if CGRect(origin: .zero, size: source.size).contains(position) {
+                let cursorScale = size.width / 1920 * presentation.cursorSize * zoom.scale * 0.5
+                let pointer = cursorImage.transformed(
+                    by: CGAffineTransform(scaleX: cursorScale, y: cursorScale)
+                )
+                .transformed(
+                    by: CGAffineTransform(
+                        translationX: position.x * scale + size.width / 2 - focusX * scale - 6
+                            * cursorScale,
+                        y: position.y * scale + size.height / 2 - focusY * scale - 90 * cursorScale)
+                )
+                output = pointer.composited(over: output).cropped(to: bounds)
+            }
+        }
         if let webcam, webcamLayout != "no-webcam", webcam.extent.width > 0,
             webcam.extent.height > 0
         {
-            let targetWidth = size.width * CGFloat(webcamSize / 100)
+            let reaction = presentation.cameraZoomReactive ? 1 / sqrt(zoom.scale) : 1
+            let margin = min(size.width, size.height) * presentation.cameraMargin / 100
+            let targetWidth = min(
+                size.width * CGFloat(webcamSize / 100) * reaction,
+                (size.height - 2 * margin) * webcam.extent.width / webcam.extent.height)
             let targetHeight = targetWidth * webcam.extent.height / webcam.extent.width
-            let x = size.width * CGFloat(webcamPosition["cx"] ?? 0.84) - targetWidth / 2
-            let y =
-                size.height * (1 - CGFloat(webcamPosition["cy"] ?? 0.8))
-                - targetHeight / 2
+            let x = max(
+                margin,
+                min(
+                    size.width - margin - targetWidth,
+                    size.width * CGFloat(webcamPosition["cx"] ?? 0.84) - targetWidth / 2))
+            let y = max(
+                margin,
+                min(
+                    size.height - margin - targetHeight,
+                    size.height * (1 - CGFloat(webcamPosition["cy"] ?? 0.8)) - targetHeight / 2))
             let local = webcam.transformed(
                 by: CGAffineTransform(
                     translationX: -webcam.extent.minX, y: -webcam.extent.minY))
@@ -738,62 +782,20 @@ struct VideoRenderPipeline {
             )
             .transformed(by: CGAffineTransform(translationX: x, y: y))
             let cameraRect = CGRect(x: x, y: y, width: targetWidth, height: targetHeight)
-            if webcamMask == "circle",
-                let circle = CIFilter(
-                    name: "CIRadialGradient",
-                    parameters: [
-                        "inputCenter": CIVector(x: cameraRect.midX, y: cameraRect.midY),
-                        "inputRadius0": min(targetWidth, targetHeight) / 2 - 1,
-                        "inputRadius1": min(targetWidth, targetHeight) / 2 + 1,
-                        "inputColor0": CIColor.white,
-                        "inputColor1": CIColor.black,
-                    ])?.outputImage
-            {
-                output = scaled.applyingFilter(
-                    "CIBlendWithMask",
-                    parameters: [
-                        kCIInputBackgroundImageKey: output,
-                        kCIInputMaskImageKey: circle,
-                    ]
-                ).cropped(to: bounds)
-            } else if webcamMask == "square" || webcamMask == "rounded" {
-                let maskRect: CGRect
-                if webcamMask == "square" {
-                    let side = min(targetWidth, targetHeight)
-                    maskRect = CGRect(
-                        x: cameraRect.midX - side / 2, y: cameraRect.midY - side / 2,
-                        width: side, height: side)
-                } else {
-                    maskRect = cameraRect
-                }
-                let white: CIImage?
-                if webcamMask == "rounded" {
-                    white =
-                        CIFilter(
-                            name: "CIRoundedRectangleGenerator",
-                            parameters: [
-                                "inputExtent": CIVector(cgRect: maskRect),
-                                "inputRadius": min(maskRect.width, maskRect.height) * 0.12,
-                                "inputColor": CIColor.white,
-                            ])?.outputImage
-                } else {
-                    white = CIImage(color: .white).cropped(to: maskRect)
-                }
-                if let white {
-                    let mask = white.composited(over: CIImage(color: .black).cropped(to: bounds))
-                        .cropped(to: bounds)
-                    output = scaled.applyingFilter(
-                        "CIBlendWithMask",
-                        parameters: [
-                            kCIInputBackgroundImageKey: output,
-                            kCIInputMaskImageKey: mask,
-                        ]
-                    ).cropped(to: bounds)
-                }
+            let maskRect: CGRect
+            if webcamMask == "square" || webcamMask == "circle" {
+                let side = min(targetWidth, targetHeight)
+                maskRect = CGRect(
+                    x: cameraRect.midX - side / 2, y: cameraRect.midY - side / 2,
+                    width: side, height: side)
             } else {
-                output = scaled.cropped(to: cameraRect).composited(over: output)
-                    .cropped(to: bounds)
+                maskRect = cameraRect
             }
+            output = VideoPresentation.framed(
+                scaled, rect: maskRect,
+                radius: webcamMask == "circle"
+                    ? 50 : webcamMask == "rounded" ? presentation.cameraRoundness : 0,
+                shadow: presentation.cameraShadow, over: output)
         }
         if let webcam, webcam.extent.width > 0, webcam.extent.height > 0 {
             let fullscreenAmount = cameraFullscreenRegions.reduce(0.0) { amount, region in
@@ -952,6 +954,28 @@ struct VideoRenderPipeline {
         return output
     }
 
+    private static func pointerImage() -> CIImage? {
+        guard
+            let context = CGContext(
+                data: nil, width: 64, height: 96, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.move(to: CGPoint(x: 6, y: 90))
+        for point in [
+            CGPoint(x: 6, y: 26), CGPoint(x: 22, y: 42), CGPoint(x: 36, y: 12),
+            CGPoint(x: 47, y: 18), CGPoint(x: 33, y: 48), CGPoint(x: 57, y: 48),
+        ] {
+            context.addLine(to: point)
+        }
+        context.closePath()
+        context.setFillColor(CGColor(gray: 0.08, alpha: 1))
+        context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+        context.setLineWidth(3)
+        context.drawPath(using: .fillStroke)
+        return context.makeImage().map(CIImage.init(cgImage:))
+    }
+
     private static func arrowImage(size: CGSize, region: CGRect, color: CIColor) -> CIImage? {
         guard
             let context = CGContext(
@@ -995,7 +1019,7 @@ struct VideoRenderPipeline {
     }
 }
 
-private extension CIColor {
+extension CIColor {
     convenience init(hex: String) {
         let value =
             Int(hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x171b25
