@@ -738,6 +738,21 @@ final class VideoEditorModel {
         rebuild()
     }
 
+    func setAnnotationSize(_ id: String, axis: String, value: Double) {
+        guard ["width", "height"].contains(axis), value.isFinite else { return }
+        mutate {
+            var regions = $0.root["annotations"] as? [[String: Any]] ?? []
+            guard let index = regions.firstIndex(where: { $0["id"] as? String == id }) else {
+                return
+            }
+            var size = regions[index]["size"] as? [String: Double] ?? [:]
+            size[axis] = min(100, max(1, value))
+            regions[index]["size"] = size
+            $0.root["annotations"] = regions
+        }
+        rebuild()
+    }
+
     func addOverlay(_ type: String) {
         guard
             let segment = pipeline?.segments.first(where: {
@@ -755,10 +770,14 @@ final class VideoEditorModel {
                     try? Data(contentsOf: url)
                 }.value
                 guard let data else { return }
-                let mime = url.pathExtension.lowercased() == "png" ? "image/png" : "image/jpeg"
+                let mime =
+                    UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "image/png"
                 mutate {
                     $0.addOverlay(
-                        type: type, startMs: start, endMs: start + 2500,
+                        type: type, startMs: start,
+                        endMs: min(
+                            start + 2500,
+                            (segment.clip.timelineStart + segment.clip.duration) * 1000),
                         x: focusX, y: focusY,
                         content: "data:\(mime);base64,\(data.base64EncodedString())")
                 }
@@ -768,7 +787,9 @@ final class VideoEditorModel {
         }
         mutate {
             $0.addOverlay(
-                type: type, startMs: start, endMs: start + 2500,
+                type: type, startMs: start,
+                endMs: min(
+                    start + 2500, (segment.clip.timelineStart + segment.clip.duration) * 1000),
                 x: focusX, y: focusY)
         }
         rebuild()
@@ -784,6 +805,7 @@ final class VideoEditorModel {
         panel.allowedContentTypes = [.png, .jpeg, .heic]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         setBackground(url.path)
+        setPresentation(\.gradient, false)
     }
 
     func setAspectRatio(_ ratio: String) {
@@ -793,6 +815,29 @@ final class VideoEditorModel {
 
     func setPadding(_ value: Double) {
         mutate { $0.padding = value }
+        rebuild()
+    }
+
+    func setPresentation<Value>(
+        _ keyPath: WritableKeyPath<VideoPresentation, Value>, _ value: Value
+    ) {
+        mutate {
+            var settings = $0.presentation
+            settings[keyPath: keyPath] = value
+            $0.presentation = settings
+        }
+        rebuild(refreshFocusPreview: false)
+    }
+
+    func removeCameraFromSelectedClip() {
+        guard let clip = project?.clips.first(where: { $0.id == selectedClipID }) else { return }
+        mutate {
+            var assets = $0.root["assets"] as? [[String: Any]] ?? []
+            guard let index = assets.firstIndex(where: { $0["id"] as? String == clip.assetID })
+            else { return }
+            assets[index].removeValue(forKey: "cameraTrack")
+            $0.root["assets"] = assets
+        }
         rebuild()
     }
 
