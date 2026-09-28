@@ -1220,6 +1220,13 @@ struct VideoProject {
                     startMs: startMs, endMs: endMs)
                 var annotations = root["annotations"] as? [[String: Any]] ?? []
                 annotations[annotations.count - 1]["annotationSource"] = "auto-caption"
+                let duration = max(0.001, last.end - first.start)
+                annotations[annotations.count - 1]["captionWords"] = phrase.map {
+                    [
+                        "start": ($0.start - first.start) / duration,
+                        "end": ($0.end - first.start) / duration,
+                    ]
+                }
                 root["annotations"] = annotations
             }
         }

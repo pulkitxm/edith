@@ -9,6 +9,7 @@ struct VideoInspector: View {
         case camera = "Camera"
         case audio = "Audio"
         case overlays = "Overlays"
+        case captions = "Captions"
     }
 
     let model: VideoEditorModel
@@ -38,6 +39,7 @@ struct VideoInspector: View {
                     case .camera: cameraControls
                     case .audio: audioControls
                     case .overlays: overlayControls
+                    case .captions: VideoCaptionEditor(model: model)
                     }
                 }
                 .padding(.trailing, 4)
@@ -259,6 +261,34 @@ struct VideoInspector: View {
     private var audioControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Audio tracks").font(.headline)
+            if let status = model.audioStatus {
+                ProgressView(status).font(.caption)
+                Button("Cancel audio processing") { model.audioTask?.cancel() }
+            }
+            if let clip = selectedClip {
+                Toggle(
+                    "Mute source",
+                    isOn: Binding(
+                        get: { clip.raw["audioMuted"] as? Bool ?? false },
+                        set: { model.setClipAudio(muted: $0) }))
+                number(
+                    "Source gain (dB)",
+                    value: (clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0,
+                    range: -40...12, step: 1
+                ) {
+                    model.setClipAudio(gain: $0)
+                }
+                audioCleanup(clip.assetID)
+                Button("Detect silence", action: model.detectSilence).disabled(
+                    model.audioTask != nil)
+                if model.silenceClipID == clip.id {
+                    Text("\(model.silentRanges.count) quiet sections").font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Remove detected silence", action: model.removeSilence).disabled(
+                        model.silentRanges.isEmpty)
+                }
+                Divider()
+            }
             Button("Add audio…", action: model.importMedia)
             number("Preview volume", value: Double(model.player.volume), range: 0...1, step: 0.05) {
                 model.player.volume = Float($0)
@@ -267,6 +297,7 @@ struct VideoInspector: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(model.project?.assets.first { $0.id == track.assetID }?.label ?? "Audio")
                         .lineLimit(1)
+                    audioCleanup(track.assetID)
                     Toggle(
                         "Muted",
                         isOn: Binding(
@@ -332,6 +363,15 @@ struct VideoInspector: View {
                 Divider()
             }
         }
+    }
+
+    private func audioCleanup(_ assetID: String) -> some View {
+        VStack(alignment: .leading) {
+            Button("Normalize loudness") { model.processAudio(assetID: assetID, denoise: false) }
+            Button("Reduce noise + normalize") {
+                model.processAudio(assetID: assetID, denoise: true)
+            }
+        }.disabled(model.audioTask != nil)
     }
 
     private func presentation<Value>(
