@@ -55,6 +55,80 @@ import Testing
         #expect(template.contains("%%(title)s%(title).160B"))
     }
 
+    @Test func audioExtractionPreservesExistingSourceVideo() {
+        let request = DownloadWorker.request(
+            record(kind: .audio), executable: URL(fileURLWithPath: "/bin/yt-dlp"))
+        #expect(request.arguments.contains("--keep-video"))
+        #expect(request.arguments.contains("ba/b"))
+    }
+
+    @Test func commaInsideAMediaURLIsPreserved() {
+        let source = "https://example.com/image.jpg?crop=1,2,3,4"
+        #expect(YoutubeDownloader.parseURLs(from: source).map(\.absoluteString) == [source])
+        #expect(
+            YoutubeDownloader.parseURLs(from: source + ", https://example.com/video.mp4").count == 2
+        )
+    }
+
+    @Test @MainActor func browserChoiceSurvivesPersistenceAndDisplayProjection() throws {
+        var original = record(kind: .post)
+        original.browser = .firefox
+        let decoded = try JSONDecoder().decode(
+            DownloadRecord.self, from: JSONEncoder().encode(original))
+        #expect(YoutubeDownloader.DownloadItem(record: decoded).record.browser == .firefox)
+        let request = MediaDownloadRequest.gallery(
+            decoded, executable: URL(fileURLWithPath: "/bin/gallery-dl"))
+        #expect(request.arguments.contains("firefox"))
+    }
+
+    @Test func partialGalleryRemainsRetryableWithoutVideoFallback() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let calls = MediaDownloadCalls()
+        let worker = DownloadWorker(
+            file: folder.appendingPathComponent("queue.json"),
+            executable: { URL(fileURLWithPath: "/bin/yt-dlp") },
+            galleryExecutable: { URL(fileURLWithPath: "/bin/gallery-dl") }, isEnabled: { true },
+            runCommand: { request, _ in
+                await calls.append(request.executableURL.lastPathComponent)
+                let image = folder.appendingPathComponent("first.png")
+                try Data([1]).write(to: image)
+                return CLICommandResult(
+                    terminationStatus: 1, output: image.path + "\n" + image.path)
+            })
+        try await worker.start()
+        let added = try await worker.mutate(
+            .enqueue(
+                urls: [URL(string: "https://example.com/album")!], prefix: "", kind: .post,
+                outputDirectory: folder)
+        ).added[0]
+        let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+        while await worker.snapshot().failed == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let snapshot = await worker.snapshot()
+        #expect(snapshot.records[0].canRetry)
+        #expect(snapshot.records[0].id == added.id)
+        #expect(snapshot.records[0].resultPaths?.count == 1)
+        #expect(await calls.values == ["gallery-dl"])
+        await worker.stop()
+    }
+
+    @Test func resultPathsExcludeFoldersAndEscapingSymlinks() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let link = folder.appendingPathComponent("outside")
+        try FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: URL(fileURLWithPath: "/etc/hosts"))
+        var record = record(kind: .images)
+        record.outputFilename = folder.appendingPathComponent("template").path
+        let result = CLICommandResult(terminationStatus: 0, output: "\(folder.path)\n\(link.path)")
+        #expect(DownloadWorker.resultPaths(result, record: record).isEmpty)
+    }
+
     @Test func postFallsBackToVideoOnlyWhenGalleryProducesNoFiles() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
@@ -88,7 +162,7 @@ import Testing
         await worker.stop()
     }
 
-    @Test func missingGalleryFailsWithoutBlockingLaterVideos() async throws {
+    @Test func missingGalleryFailsWithAnActionableError() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }

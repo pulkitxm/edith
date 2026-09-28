@@ -46,6 +46,9 @@ default to `~/Downloads/Edith`. Choose a folder in the UI or pass `--directory`.
 Each gallery gets its own queue-ID subfolder so different posts do not collide.
 Video and audio filenames include the source ID. Existing files are not
 overwritten, and removing queue entries never deletes downloaded files.
+Audio extraction prefers audio-only streams and preserves its source file when
+only a combined audio/video stream is available, protecting existing downloads
+in the same destination.
 
 For login-required posts, explicitly choose Safari, Chrome, Firefox, Brave or
 Edge under **Login cookies**, or pass `--browser`. The local download tool reads

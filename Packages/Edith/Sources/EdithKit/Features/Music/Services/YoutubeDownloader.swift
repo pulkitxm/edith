@@ -211,6 +211,7 @@ public final class YoutubeDownloader {
         public var kind: DownloadKind = .audio
         public var logs: String = ""
         public var resultPaths: [String]?
+        public var browser: DownloadBrowser?
 
         public init(record: DownloadRecord, logs: String = "") {
             id = record.id
@@ -221,12 +222,13 @@ public final class YoutubeDownloader {
             kind = record.kind ?? .audio
             self.logs = logs
             resultPaths = record.resultPaths
+            browser = record.browser
         }
 
         public var record: DownloadRecord {
             DownloadRecord(
                 id: id, url: url, status: status, outputFilename: outputFilename,
-                createdAt: createdAt, kind: kind, resultPaths: resultPaths)
+                createdAt: createdAt, kind: kind, resultPaths: resultPaths, browser: browser)
         }
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
@@ -394,7 +396,10 @@ public final class YoutubeDownloader {
         var seen = Set<URL>()
         return
             text
-            .components(separatedBy: CharacterSet([",", "\n", "\r"]))
+            .replacingOccurrences(
+                of: #",(?=\s*(?:https?://|,|$))"#, with: "\n", options: .regularExpression
+            )
+            .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .compactMap { URL(string: $0) }
@@ -436,7 +441,7 @@ public final class YoutubeDownloader {
 
     public func retry(_ item: DownloadItem) { mutate(.retry(id: item.id, all: false)) }
     public func retryAll() { mutate(.retry(id: nil, all: true)) }
-    public func clearHistory() { mutate(.clear(includeActive: true)) }
+    public func clearHistory() { mutate(.clear(includeActive: false)) }
     public func remove(_ item: DownloadItem) { mutate(.remove(id: item.id)) }
     public func cancel(_ item: DownloadItem) {
         mutate(.cancel(id: item.id, includeQueued: true, reason: "Cancelled"))

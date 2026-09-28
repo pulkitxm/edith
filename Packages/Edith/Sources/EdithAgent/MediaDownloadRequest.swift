@@ -3,8 +3,13 @@ import Foundation
 
 enum MediaDownloadRequest {
     static func gallery(_ record: DownloadRecord, executable: URL) -> CLICommandRequest {
-        let directory = URL(fileURLWithPath: record.outputFilename!)
-            .deletingLastPathComponent().appendingPathComponent(record.id.uuidString)
+        let directory = URL(
+            fileURLWithPath: record.outputFilename
+                ?? DownloadQueue.outputTemplate(
+                    prefix: "",
+                    directory: MediaDownloadInput.defaultDirectory(for: record.kind ?? .post))
+        )
+        .deletingLastPathComponent().appendingPathComponent(record.id.uuidString)
         var arguments = [
             "--config-ignore", "--no-input", "--no-colors", "--retries", "2",
             "--http-timeout", "30", "--range", "1-100", "--directory", directory.path,

@@ -405,7 +405,8 @@ public actor DownloadWorker {
     public static func request(_ record: DownloadRecord, executable: URL) -> CLICommandRequest {
         let format =
             record.kind != .audio && record.kind != nil
-            ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"] : ["-x", "--audio-format", "m4a"]
+            ? ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
+            : ["-f", "ba/b", "-x", "--audio-format", "m4a", "--keep-video"]
         return CLICommandRequest(
             executableURL: executable,
             arguments: [
