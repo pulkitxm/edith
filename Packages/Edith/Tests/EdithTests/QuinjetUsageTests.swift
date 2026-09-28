@@ -16,12 +16,11 @@ import Testing
         let projects = [
             QuinjetProject(name: "Demo", commonDir: "/demo/.git", worktrees: [first, second])
         ]
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let data = try encoder.encode(projects)
+        let data = try JSONEncoder().encode(projects)
         let client = QuinjetClient { _ in data }
         let model = QuinjetPageModel(client: client, usage: usage)
         await model.refreshProjects()
+        try #require(model.projectError == nil)
         let firstTab = try #require(model.selectedTab)
         model.open(
             first, projectName: "Demo", available: [first, second], in: firstTab,
