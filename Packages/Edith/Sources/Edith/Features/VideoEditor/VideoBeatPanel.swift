@@ -106,7 +106,9 @@ struct VideoBeatPanel: View {
     @Environment(\.dismiss) private var dismiss
 
     private var assets: [VideoProject.Asset] {
-        model.project?.assets.filter { $0.raw["edithSourceImagePath"] == nil } ?? []
+        model.project?.assets.filter {
+            $0.raw["edithSourceImagePath"] == nil && $0.raw["kind"] as? String != "image"
+        } ?? []
     }
 
     private var sourceURL: URL? {

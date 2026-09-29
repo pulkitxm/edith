@@ -65,6 +65,17 @@ import Testing
         }
     }
 
+    @Test func renderFrameDurationPreservesVisualSettingsRates() throws {
+        let unreduced = try VideoBeatPanelState.frameRate(
+            CMTime(value: 100_000, timescale: 2_000_000))
+        #expect(unreduced == (try VideoMarkerFrameRate(numerator: 20)))
+        #expect(try unreduced.frame(at: 1) == 20)
+        let fractional = try VideoBeatPanelState.frameRate(CMTime(value: 1001, timescale: 60000))
+        #expect(fractional.numerator == 60000 && fractional.denominator == 1001)
+        #expect(fractional.timecode(at: 3600) == "00:01:00:00")
+        #expect(abs(fractional.seconds(at: 3600) - 60.06) < 0.000001)
+    }
+
     @Test func newAnalysisAndCancellationDiscardStaleResults() async throws {
         let first = try fixture(duration: 4)
         let second = try fixture(duration: 1)

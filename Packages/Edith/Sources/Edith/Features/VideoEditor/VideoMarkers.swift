@@ -7,8 +7,8 @@ struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
     static let fps30 = VideoMarkerFrameRate(uncheckedNumerator: 30, denominator: 1)
 
     init(numerator: Int, denominator: Int = 1) throws {
-        guard numerator > 0, numerator <= 1_000_000,
-            denominator > 0, denominator <= 100_000,
+        guard numerator > 0, numerator <= Int32.max,
+            denominator > 0, denominator <= Int32.max,
             Double(numerator) / Double(denominator) >= 1,
             Double(numerator) / Double(denominator) <= 240
         else { throw VideoMarkerError.invalidFrameRate }

@@ -67,6 +67,18 @@ import Testing
         #expect(try VideoMarkerFrameRate(numerator: 60000, denominator: 2002) == rate)
     }
 
+    @Test func rationalRatesAcceptTheVisualSettingsIntegerRange() throws {
+        let rate = try VideoMarkerFrameRate(numerator: 2_000_000, denominator: 100_000)
+        #expect(rate.numerator == 20 && rate.denominator == 1)
+        let maximum = try VideoMarkerFrameRate(numerator: Int(Int32.max), denominator: 100_000_000)
+        #expect(maximum.numerator == Int(Int32.max))
+        let data = try VideoMarkers.export([VideoMarker(frame: 100, frameRate: maximum)])
+        #expect(try VideoMarkers.parse(data).first?.frameRate == maximum)
+        #expect(throws: VideoMarkerError.self) {
+            try VideoMarkerFrameRate(numerator: Int(Int32.max) + 1, denominator: 100_000_000)
+        }
+    }
+
     @Test func invalidImportsAndUpdatesAreAtomic() throws {
         var project = VideoProject.create()
         let marker = try project.addMarker(atFrame: 10)
