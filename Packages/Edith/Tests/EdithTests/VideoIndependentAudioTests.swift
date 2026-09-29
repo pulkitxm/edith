@@ -6,6 +6,65 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoIndependentAudioTests {
+    @Test func loopTrimKeepsUnwrappedOffsetWhenVideoAndAudioLengthsDiffer() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("short.caf")
+        try await createVideo(video, duration: 5)
+        try createAudio(sound, duration: 2) {
+            Float(sin($0 * 2 * .pi * 440)) * ($0 < 1 ? 0.1 : 0.6)
+        }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 5, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        project.addAsset(video, duration: 3, width: 64, height: 64)
+        let detached = project.detachAudio(clipID: project.clips[0].id)
+        let id = try #require(detached.first)
+        project.setAudioOptions(id, loop: true)
+        project.retimeAudio(id, start: 0, end: 8, trimStart: false)
+        let before = try await VideoRenderPipeline.make(project: project)
+        let original = try await readAudio(before.composition, mix: before.audioMix)
+        project.retimeAudio(id, start: 6, end: 8, trimStart: true)
+        #expect(project.audioTracks[0].offsetMs == 6000)
+        let after = try await VideoRenderPipeline.make(project: project)
+        let samples = try await readAudio(after.composition, mix: after.audioMix)
+        for start in [6.2, 7.2] {
+            #expect(
+                abs(
+                    rms(original, from: start, to: start + 0.5)
+                        - rms(samples, from: start, to: start + 0.5)) < 0.001)
+        }
+    }
+
+    @Test func loopRendersTheLastSingleSampleAtFortyEightKilohertz() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("one-sample-short.caf")
+        try await createVideo(video, duration: 1)
+        let sourceDuration = 47999.0 / 48000
+        try createAudio(sound, duration: sourceDuration) { _ in 0.25 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 1, width: 64, height: 64)
+        project.addAudio(sound, duration: sourceDuration, at: 0)
+        let id = try #require(project.audioTracks.first?.id)
+        project.setAudioOptions(id, loop: true)
+        project.retimeAudio(id, start: 0, end: 1, trimStart: false)
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        let track = try #require(pipeline.composition.tracks(withMediaType: .audio).first)
+        let last = try #require(track.segments.last)
+        #expect(
+            CMTimeCompare(last.timeMapping.target.duration, CMTime(value: 1, timescale: 48000)) == 0
+        )
+        let samples = try await readAudio(pipeline.composition, mix: pipeline.audioMix)
+        #expect(samples.count == 48000)
+        let finalSample = try #require(samples.indices.contains(47999) ? samples[47999] : nil)
+        #expect(finalSample > 0.2)
+    }
+
     @Test func detachmentSnapshotsSourceSpeedCutsGainAndMuteRanges() throws {
         var project = VideoProject.create()
         project.addAsset(
@@ -407,16 +466,21 @@ import Testing
     }
 
     private func readAudio(_ url: URL) async throws -> [Float] {
-        let asset = AVURLAsset(url: url)
-        let track = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        try await readAudio(AVURLAsset(url: url), mix: nil)
+    }
+
+    private func readAudio(_ asset: AVAsset, mix: AVAudioMix?) async throws -> [Float] {
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(!tracks.isEmpty)
         let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(
-            track: track,
-            outputSettings: [
+        let output = AVAssetReaderAudioMixOutput(
+            audioTracks: tracks,
+            audioSettings: [
                 AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000,
                 AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 32,
                 AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
             ])
+        output.audioMix = mix
         reader.add(output)
         #expect(reader.startReading())
         var result: [Float] = []

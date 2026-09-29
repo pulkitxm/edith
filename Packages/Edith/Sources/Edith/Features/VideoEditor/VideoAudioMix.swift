@@ -92,46 +92,58 @@ enum VideoAudioMix {
             else { continue }
             let available = try await sourceAudio.load(.timeRange)
             let sourceEnd = available.end.seconds
-            let sourceStart = available.start.seconds
             let sourceDuration = available.duration.seconds
             guard sourceDuration.isFinite, sourceDuration > 0, sourceEnd > 0 else {
                 composition.removeTrack(mixTrack)
                 continue
             }
-            var cursor = start
-            var offset = track.offsetMs / 1000
-            if track.loop { offset = offset.truncatingRemainder(dividingBy: sourceEnd) }
+            var cursor = time(start)
+            let limit = time(end)
+            let offsetSeconds =
+                track.loop
+                ? (track.offsetMs / 1000).truncatingRemainder(dividingBy: sourceEnd)
+                : track.offsetMs / 1000
+            var offset = CMTime(
+                seconds: offsetSeconds, preferredTimescale: max(48000, available.end.timescale))
             var insertedAudio = false
-            while cursor < end - 0.0001 && offset < sourceEnd {
+            while cursor < limit && offset < available.end {
                 try Task.checkCancellation()
-                if offset < sourceStart {
-                    cursor += (sourceStart - offset) / track.rate
-                    offset = sourceStart
+                if offset < available.start {
+                    cursor =
+                        cursor
+                        + CMTimeMultiplyByFloat64(
+                            available.start - offset, multiplier: 1 / track.rate)
+                    offset = available.start
                 }
-                guard cursor < end else { break }
-                let length = min((end - cursor) * track.rate, sourceEnd - offset)
-                let insertion = time(cursor)
-                let range = CMTimeRange(start: time(offset), duration: time(length))
-                try mixTrack.insertTimeRange(range, of: sourceAudio, at: insertion)
+                guard cursor < limit else { break }
+                let outputLength = min(
+                    limit - cursor,
+                    CMTimeMultiplyByFloat64(available.end - offset, multiplier: 1 / track.rate))
+                let length = min(
+                    available.end - offset,
+                    CMTimeMultiplyByFloat64(outputLength, multiplier: track.rate))
+                guard outputLength > .zero, length > .zero else { break }
+                let range = CMTimeRange(start: offset, duration: length)
+                try mixTrack.insertTimeRange(range, of: sourceAudio, at: cursor)
                 insertedAudio = true
                 if track.rate != 1 {
                     mixTrack.scaleTimeRange(
-                        CMTimeRange(start: insertion, duration: range.duration),
-                        toDuration: time(length / track.rate))
+                        CMTimeRange(start: cursor, duration: range.duration),
+                        toDuration: outputLength)
                 }
-                cursor += length / track.rate
+                cursor = cursor + outputLength
                 if !track.loop { break }
-                offset = 0
+                offset = .zero
             }
             guard insertedAudio else {
                 composition.removeTrack(mixTrack)
                 continue
             }
-            cursor = min(cursor, end)
+            let audibleEnd = min(cursor.seconds, end)
             let input = AVMutableAudioMixInputParameters(track: mixTrack)
             let amplitude = level(track.gainDb)
-            let fadeIn = min(max(0, track.fadeInMs) / 1000, (cursor - start) / 2)
-            let fadeOut = min(max(0, track.fadeOutMs) / 1000, (cursor - start) / 2)
+            let fadeIn = min(max(0, track.fadeInMs) / 1000, (audibleEnd - start) / 2)
+            let fadeOut = min(max(0, track.fadeOutMs) / 1000, (audibleEnd - start) / 2)
             input.setVolume(fadeIn > 0 ? 0 : amplitude, at: time(start))
             if fadeIn > 0 {
                 input.setVolumeRamp(
@@ -141,7 +153,8 @@ enum VideoAudioMix {
             if fadeOut > 0 {
                 input.setVolumeRamp(
                     fromStartVolume: amplitude, toEndVolume: 0,
-                    timeRange: CMTimeRange(start: time(cursor - fadeOut), duration: time(fadeOut)))
+                    timeRange: CMTimeRange(
+                        start: time(audibleEnd - fadeOut), duration: time(fadeOut)))
             }
             parameters.append(input)
         }

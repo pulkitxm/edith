@@ -91,12 +91,7 @@ extension VideoProject {
             let track = audioTracks.first(where: { $0.id == id }),
             let asset = assets.first(where: { $0.id == track.assetID })
         else { return }
-        var offset = track.offsetMs + (trimStart ? (start * 1000 - track.startMs) * track.rate : 0)
-        if track.loop, asset.duration > 0 {
-            let length = asset.duration * 1000
-            offset = (offset.truncatingRemainder(dividingBy: length) + length)
-                .truncatingRemainder(dividingBy: length)
-        }
+        let offset = track.offsetMs + (trimStart ? (start * 1000 - track.startMs) * track.rate : 0)
         guard offset >= 0 else { return }
         let availableEnd =
             track.loop ? end : min(end, start + (asset.duration - offset / 1000) / track.rate)
