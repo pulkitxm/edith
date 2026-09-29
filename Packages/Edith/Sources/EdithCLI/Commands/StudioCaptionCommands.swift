@@ -8,7 +8,7 @@ struct StudioCaptionCommand: AsyncParsableCommand {
         subcommands: [
             StudioCaptionList.self, StudioCaptionAdd.self, StudioCaptionUpdate.self,
             StudioCaptionRemove.self,
-        ])
+        ], defaultSubcommand: StudioCaptionList.self)
 }
 
 struct StudioCaptionOptions: ParsableArguments {
@@ -17,9 +17,9 @@ struct StudioCaptionOptions: ParsableArguments {
 }
 
 struct StudioCaptionTiming: ParsableArguments {
-    @Option(help: "Inclusive nonnegative output frame; excludes --start-marker.") var startFrame:
-        Int64?
-    @Option(help: "Exclusive output frame; excludes --end-marker.") var endFrame: Int64?
+    @Option(help: "Inclusive nonnegative output frame; excludes the start-marker option.")
+    var startFrame: Int64?
+    @Option(help: "Exclusive output frame; excludes the end-marker option.") var endFrame: Int64?
     @Option(help: "Snapshot this marker's exact start position.") var startMarker: String?
     @Option(help: "Snapshot this marker's exact end position.") var endMarker: String?
     @Option(

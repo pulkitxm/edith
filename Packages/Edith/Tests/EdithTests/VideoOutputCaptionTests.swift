@@ -61,7 +61,10 @@ import Testing
         #expect(originalAnchor.start.markerID == start.id)
         project = try VideoProject.open(url)
         try project.updateMarker(start.id, frame: 15)
-        project.root["edithVideoSettings"] = ["frameRateNumerator": 24, "frameRateDenominator": 1]
+        var settings = project.videoSettings
+        settings.frameRateNumerator = 24
+        settings.frameRateDenominator = 1
+        project.videoSettings = settings
         project.setClips(project.clips.reversed())
         try project.save(to: url)
         let updated = try await VideoEditorService.changeCaption(
