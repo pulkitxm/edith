@@ -187,6 +187,50 @@ import Testing
         #expect(try ledger.reservations().isEmpty)
     }
 
+    @Test func ledgerRejectsSymlinkAliasesAndIncompleteReceipts() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = VideoMediaLibrary.Source(
+            identity: try VideoMediaLibrary.identity(of: file(folder, "a", "shared")),
+            provenance: .init(sourceFamilyID: "session", declaration: "original"))
+        let url = folder.appendingPathComponent("ledger.json")
+        let ledger = VideoMediaLibrary.Ledger(url: url)
+        let receipt = try ledger.reserve([source], reelID: "first")
+        let alias = folder.appendingPathComponent("alias.json")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: url)
+        #expect(throws: VideoMediaLibrary.Failure.invalidLedger) {
+            try VideoMediaLibrary.Ledger(url: alias).release(receipt)
+        }
+        #expect(try ledger.reservations() == [receipt])
+        var raw = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var reservations = try #require(raw["reservations"] as? [String: Any])
+        reservations.removeValue(forKey: "family:session")
+        raw["reservations"] = reservations
+        try JSONSerialization.data(withJSONObject: raw).write(to: url)
+        #expect(throws: VideoMediaLibrary.Failure.invalidLedger) { try ledger.reservations() }
+        #expect(throws: VideoMediaLibrary.Failure.invalidLedger) {
+            try ledger.reserve([source], reelID: "second")
+        }
+    }
+
+    @Test func reservationsRejectMissingTimelineAssets() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let original = try file(folder, "source.mov", "original")
+        var project = VideoProject.create()
+        project.addAsset(original, duration: 1, width: 1, height: 1)
+        var clips = project.clips
+        clips.append(
+            .init(raw: ["id": "missing-clip", "assetId": "missing-asset", "sourceEndSec": 1.0]))
+        project.setClips(clips)
+        let ledger = VideoMediaLibrary.Ledger(url: folder.appendingPathComponent("ledger.json"))
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try project.reserveOriginalMedia(in: ledger, reelID: "reel")
+        }
+        #expect(try ledger.reservations().isEmpty)
+    }
+
     @Test func probesActualAudioFormat() async throws {
         let folder = try directory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -434,6 +478,150 @@ import Testing
         #expect(throws: VideoMediaLibrary.Failure.self) {
             try VideoProject.openMediaPackage(result.directory)
         }
+    }
+
+    @Test func concurrentLedgerAliasCannotBypassTheCanonicalReservation() async throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = VideoMediaLibrary.Source(
+            identity: try VideoMediaLibrary.identity(of: file(folder, "source", "same")))
+        let url = folder.appendingPathComponent("ledger.json")
+        let alias = folder.appendingPathComponent("alias.json")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: url)
+        let receipts = await withTaskGroup(of: VideoMediaLibrary.Reservation?.self) { group in
+            for index in 0..<16 {
+                group.addTask {
+                    try? VideoMediaLibrary.Ledger(url: index.isMultiple(of: 2) ? url : alias)
+                        .reserve([source], reelID: "reel-\(index)")
+                }
+            }
+            var result: [VideoMediaLibrary.Reservation] = []
+            for await receipt in group { if let receipt { result.append(receipt) } }
+            return result
+        }
+        #expect(receipts.count == 1)
+        #expect(try VideoMediaLibrary.Ledger(url: url).reservations() == receipts)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: alias.path) == url.path)
+    }
+
+    @Test func packagePreservesProcessedAudioWallpaperAndBothAnnotationImageFields() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sources = folder.appendingPathComponent("sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: false)
+        let video = try file(sources, "video.mov", "video")
+        let processed = try file(sources, "clean.wav", "clean audio")
+        let wallpaper = try file(sources, "wallpaper.png", "wallpaper")
+        let image = try file(sources, "overlay.png", "overlay")
+        let fallback = try file(sources, "fallback.jpg", "fallback")
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 1, width: 10, height: 10)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = processed.path
+        project.root["assets"] = assets
+        project.backgroundColor = wallpaper.path
+        project.addOverlay(type: "image", startMs: 0, endMs: 1000, x: 0, y: 0, content: image.path)
+        var annotations = project.annotations.map(\.raw)
+        annotations[0]["content"] = fallback.absoluteString
+        project.root["annotations"] = annotations
+        project.addOverlay(
+            type: "image", startMs: 0, endMs: 1000, x: 0, y: 0,
+            content: "data:image/png;base64,c3ludGhldGlj")
+        project.addOverlay(type: "image", startMs: 0, endMs: 1000, x: 0, y: 0, content: "#ffffff")
+        let result = try project.packageOriginalMedia(to: folder.appendingPathComponent("package"))
+        #expect(result.copiedFileCount == 5)
+        #expect(
+            Set(result.manifest.entries.map(\.reference.role)) == [
+                .original, .processedAudio, .wallpaper, .annotationImage, .annotationContent,
+            ])
+        try FileManager.default.removeItem(at: sources)
+        let reopened = try VideoProject.openMediaPackage(result.directory)
+        #expect(
+            try String(
+                contentsOfFile: reopened.assets[0].raw["edithAudioPath"] as! String, encoding: .utf8
+            ) == "clean audio")
+        #expect(
+            try String(contentsOfFile: reopened.backgroundColor, encoding: .utf8) == "wallpaper")
+        #expect(
+            try String(
+                contentsOfFile: reopened.annotations[0].raw["imageContent"] as! String,
+                encoding: .utf8) == "overlay")
+        #expect(
+            try String(
+                contentsOfFile: reopened.annotations[0].raw["content"] as! String, encoding: .utf8)
+                == "fallback")
+        #expect(
+            reopened.annotations[1].raw["imageContent"] as? String
+                == "data:image/png;base64,c3ludGhldGlj")
+        #expect(reopened.annotations[2].raw["content"] as? String == "#ffffff")
+        let cleaned = try reopened.mediaURL(
+            for: .init(assetID: reopened.assets[0].id, role: .processedAudio))
+        try Data("tampered".utf8).write(to: cleaned)
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try VideoProject.openMediaPackage(result.directory)
+        }
+    }
+
+    @Test func identicalVideosWithDifferentCursorTelemetryKeepDistinctAssociations() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sources = folder.appendingPathComponent("sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: false)
+        let first = try file(sources, "first.mov", "identical video")
+        let second = try file(sources, "second.mov", "identical video")
+        let third = try file(sources, "third.mov", "identical video")
+        let a =
+            "{\"samples\":[{\"timeMs\":200,\"cx\":0.2,\"cy\":0.3,\"interactionType\":\"click\"}]}"
+        let b =
+            "{\"samples\":[{\"timeMs\":500,\"cx\":0.8,\"cy\":0.7,\"interactionType\":\"click\"}]}"
+        _ = try file(sources, "first.mov.cursor.json", a)
+        _ = try file(sources, "second.mov.cursor.json", b)
+        var project = VideoProject.create()
+        for video in [first, second, third] {
+            project.addAsset(video, duration: 1, width: 10, height: 10)
+        }
+        let result = try project.packageOriginalMedia(to: folder.appendingPathComponent("package"))
+        #expect(result.copiedFileCount == 5)
+        #expect(result.manifest.entries.filter { $0.reference.role == .cursor }.count == 2)
+        let moved = folder.appendingPathComponent("moved")
+        try FileManager.default.moveItem(at: result.directory, to: moved)
+        try FileManager.default.removeItem(at: sources)
+        var reopened = try VideoProject.openMediaPackage(moved)
+        #expect(Set(reopened.assets.map(\.url)).count == 3)
+        #expect(
+            try String(
+                contentsOfFile: reopened.assets[0].url.path + ".cursor.json", encoding: .utf8) == a)
+        #expect(
+            try String(
+                contentsOfFile: reopened.assets[1].url.path + ".cursor.json", encoding: .utf8) == b)
+        #expect(
+            !FileManager.default.fileExists(atPath: reopened.assets[2].url.path + ".cursor.json"))
+        #expect(reopened.addAutomaticZooms() == 2)
+        #expect(reopened.zooms.map(\.focusX) == [0.2, 0.8])
+        let cursor = URL(fileURLWithPath: reopened.assets[0].url.path + ".cursor.json")
+        try Data(b.utf8).write(to: cursor)
+        #expect(throws: VideoMediaLibrary.Failure.self) { try VideoProject.openMediaPackage(moved) }
+        try FileManager.default.removeItem(at: cursor)
+        #expect(throws: (any Error).self) { try reopened.indexMedia() }
+    }
+
+    @Test func strictOriginalRelinkAlsoValidatesAssociatedTelemetry() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let first = try file(folder, "first.mov", "same")
+        let second = try file(folder, "second.mov", "same")
+        _ = try file(folder, "first.mov.cursor.json", "first telemetry")
+        let otherCursor = try file(folder, "second.mov.cursor.json", "different telemetry")
+        var project = VideoProject.create()
+        project.addAsset(first, duration: 1, width: 1, height: 1)
+        try project.indexMedia()
+        let reference = VideoMediaLibrary.Reference(assetID: project.assets[0].id, role: .original)
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try project.relinkOriginalMedia(reference, to: second)
+        }
+        #expect(project.assets[0].url == first)
+        try Data("first telemetry".utf8).write(to: otherCursor)
+        #expect(try !project.relinkOriginalMedia(reference, to: second).contentChanged)
     }
 
     @Test func probesActualVideoCodecDimensionsTransformAndFrameRate() async throws {

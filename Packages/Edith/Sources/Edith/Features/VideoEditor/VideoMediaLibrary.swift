@@ -277,6 +277,11 @@ enum VideoMediaLibrary {
         case original
         case camera
         case sourceImage
+        case processedAudio
+        case cursor
+        case wallpaper
+        case annotationImage
+        case annotationContent
     }
 
     struct Reference: Codable, Hashable, Sendable {
@@ -331,6 +336,39 @@ enum VideoMediaLibrary {
             var version = 1
             var families: [String: String] = [:]
             var reservations: [String: Reservation] = [:]
+
+            func validate() throws {
+                guard version == 1 else { throw Failure.invalidLedger }
+                for (hash, family) in families {
+                    try Identity(sha256: hash, byteCount: 0).validate()
+                    guard !family.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw Failure.invalidLedger
+                    }
+                }
+                for (key, receipt) in reservations {
+                    guard !receipt.reelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        receipt.keys.contains(key), Set(receipt.keys).count == receipt.keys.count,
+                        receipt.keys.allSatisfy({ reservations[$0] == receipt })
+                    else { throw Failure.invalidLedger }
+                    if key.hasPrefix("sha256:") {
+                        let hash = String(key.dropFirst(7))
+                        try Identity(sha256: hash, byteCount: 0).validate()
+                        if let family = families[hash], reservations["family:\(family)"] != receipt
+                        {
+                            throw Failure.invalidLedger
+                        }
+                    } else if key.hasPrefix("family:") {
+                        guard
+                            families.contains(where: {
+                                $0.value == String(key.dropFirst(7))
+                                    && reservations["sha256:\($0.key)"] == receipt
+                            })
+                        else { throw Failure.invalidLedger }
+                    } else {
+                        throw Failure.invalidLedger
+                    }
+                }
+            }
         }
 
         func reserve(
@@ -417,21 +455,33 @@ enum VideoMediaLibrary {
             }
             defer { flock(lock, LOCK_UN) }
             try checkCancellation()
-            var state: State
-            do {
-                state = try JSONDecoder().decode(State.self, from: Data(contentsOf: target))
-            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-                state = State()
-            }
-            guard state.version == 1 else { throw Failure.invalidLedger }
+            var state = try readState(at: target)
+            try state.validate()
             let result = try operation(&state)
             try checkCancellation()
             if write {
+                try state.validate()
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 try encoder.encode(state).write(to: target, options: .atomic)
             }
             return result
+        }
+
+        private func readState(at target: URL) throws -> State {
+            let descriptor = Darwin.open(
+                target.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
+            guard descriptor >= 0 else {
+                if errno == ENOENT { return State() }
+                if errno == ELOOP { throw Failure.invalidLedger }
+                throw posixError()
+            }
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+            defer { try? handle.close() }
+            var status = stat()
+            guard fstat(descriptor, &status) == 0 else { throw posixError() }
+            guard status.st_mode & S_IFMT == S_IFREG else { throw Failure.invalidLedger }
+            return try JSONDecoder().decode(State.self, from: handle.readToEnd() ?? Data())
         }
     }
 }
@@ -440,6 +490,7 @@ extension VideoProject {
     func mediaReferences() throws -> [VideoMediaLibrary.Reference] {
         var ids = Set<String>()
         var result: [VideoMediaLibrary.Reference] = []
+        let recorded = try mediaManifest().entries.map(\.reference)
         for asset in assets {
             guard !asset.id.isEmpty, ids.insert(asset.id).inserted else {
                 throw VideoMediaLibrary.Failure.invalidReference(asset.id)
@@ -449,19 +500,59 @@ extension VideoProject {
             if asset.raw["edithSourceImagePath"] != nil {
                 result.append(.init(assetID: asset.id, role: .sourceImage))
             }
+            if asset.raw["edithAudioPath"] != nil {
+                result.append(.init(assetID: asset.id, role: .processedAudio))
+            }
+            let cursor = VideoMediaLibrary.Reference(assetID: asset.id, role: .cursor)
+            if try recorded.contains(cursor)
+                || FileManager.default.fileExists(atPath: mediaURL(for: cursor).path)
+            {
+                result.append(cursor)
+            }
+        }
+        if Self.externalImagePath(backgroundColor) != nil {
+            result.append(.init(assetID: id, role: .wallpaper))
+        }
+        var annotationIDs = Set<String>()
+        for annotation in annotations where annotation.type == "image" {
+            guard !annotation.id.isEmpty, annotationIDs.insert(annotation.id).inserted else {
+                throw VideoMediaLibrary.Failure.invalidReference(annotation.id)
+            }
+            for (key, role) in [
+                ("imageContent", VideoMediaLibrary.Role.annotationImage),
+                ("content", .annotationContent),
+            ] {
+                if let value = annotation.raw[key] as? String, Self.externalImagePath(value) != nil
+                {
+                    result.append(.init(assetID: annotation.id, role: role))
+                }
+            }
         }
         return result
     }
 
     func mediaURL(for reference: VideoMediaLibrary.Reference) throws -> URL {
-        guard let asset = assets.first(where: { $0.id == reference.assetID }) else {
-            throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
-        }
+        let asset = assets.first(where: { $0.id == reference.assetID })
         let path: String?
         switch reference.role {
-        case .original: path = asset.raw["originalPath"] as? String
-        case .camera: path = asset.cameraTrack?["sourcePath"] as? String
-        case .sourceImage: path = asset.raw["edithSourceImagePath"] as? String
+        case .original: path = asset?.raw["originalPath"] as? String
+        case .camera: path = asset?.cameraTrack?["sourcePath"] as? String
+        case .sourceImage: path = asset?.raw["edithSourceImagePath"] as? String
+        case .processedAudio: path = asset?.raw["edithAudioPath"] as? String
+        case .cursor:
+            return URL(
+                fileURLWithPath: try mediaURL(
+                    for: .init(assetID: reference.assetID, role: .original)
+                ).path + ".cursor.json")
+        case .wallpaper:
+            guard reference.assetID == id else {
+                throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
+            }
+            path = Self.externalImagePath(backgroundColor)
+        case .annotationImage, .annotationContent:
+            let key = reference.role == .annotationImage ? "imageContent" : "content"
+            path = (annotations.first { $0.id == reference.assetID }?.raw[key] as? String)
+                .flatMap(Self.externalImagePath)
         }
         guard let path, !path.isEmpty else {
             throw VideoMediaLibrary.Failure.invalidReference(
@@ -470,6 +561,21 @@ extension VideoProject {
         if (path as NSString).isAbsolutePath { return URL(fileURLWithPath: path) }
         guard let fileURL else { throw VideoMediaLibrary.Failure.invalidReference(path) }
         return fileURL.deletingLastPathComponent().appendingPathComponent(path).standardizedFileURL
+    }
+
+    private static func externalImagePath(_ value: String) -> String? {
+        let lower = value.lowercased()
+        guard !value.isEmpty, !value.hasPrefix("#"), !lower.hasPrefix("data:"),
+            !lower.hasPrefix("http:"), !lower.hasPrefix("https:")
+        else { return nil }
+        if lower.hasPrefix("file:"), let url = URL(string: value), url.isFileURL { return url.path }
+        let imageExtensions = [
+            "png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "webp", "gif", "bmp", "avif",
+            "svg",
+        ]
+        return (value as NSString).isAbsolutePath || value.contains("/")
+            || imageExtensions.contains((value as NSString).pathExtension.lowercased())
+            ? value : nil
     }
 
     func mediaManifest() throws -> VideoMediaLibrary.Manifest {
@@ -530,6 +636,7 @@ extension VideoProject {
         var candidate = self
         var manifest = try candidate.indexMedia()
         for index in manifest.entries.indices {
+            if manifest.entries[index].reference.role == .cursor { continue }
             let url = try mediaURL(for: manifest.entries[index].reference)
             let inspected = try await VideoMediaLibrary.inspect(
                 url, provenance: manifest.entries[index].source.provenance)
@@ -569,6 +676,19 @@ extension VideoProject {
             throw VideoMediaLibrary.Failure.identityMismatch(url.path)
         }
         let changed = expected != actual
+        if reference.role == .original {
+            let cursor = VideoMediaLibrary.Reference(assetID: reference.assetID, role: .cursor)
+            if changed {
+                manifest.entries.removeAll { $0.reference == cursor }
+            } else if let recorded = manifest.entries.first(where: { $0.reference == cursor }) {
+                let cursorURL = URL(fileURLWithPath: url.path + ".cursor.json")
+                guard
+                    try VideoMediaLibrary.identity(
+                        of: cursorURL, checkCancellation: checkCancellation)
+                        == recorded.source.identity
+                else { throw VideoMediaLibrary.Failure.identityMismatch(cursorURL.path) }
+            }
+        }
         manifest.entries.removeAll { $0.reference == reference }
         manifest.entries.append(
             .init(
@@ -593,8 +713,15 @@ extension VideoProject {
         var candidate = self
         let manifest = try candidate.indexMedia(checkCancellation: checkCancellation)
         let usedAssetIDs = Set(clips.map(\.assetID) + audioTracks.map(\.assetID))
-        let sources = manifest.entries.filter { usedAssetIDs.contains($0.reference.assetID) }.map(
-            \.source)
+        guard usedAssetIDs.isSubset(of: Set(assets.map(\.id))) else {
+            throw VideoMediaLibrary.Failure.invalidReference("timeline media asset IDs")
+        }
+        let sourceRoles: Set<VideoMediaLibrary.Role> = [
+            .original, .camera, .sourceImage, .processedAudio,
+        ]
+        let sources = manifest.entries.filter {
+            sourceRoles.contains($0.reference.role) && usedAssetIDs.contains($0.reference.assetID)
+        }.map(\.source)
         return try ledger.reserve(sources, reelID: reelID, checkCancellation: checkCancellation)
     }
 
@@ -618,26 +745,45 @@ extension VideoProject {
         defer { try? manager.removeItem(at: stage) }
         try manager.createDirectory(
             at: stage.appendingPathComponent("originals"), withIntermediateDirectories: false)
-        var copied: [VideoMediaLibrary.Identity: String] = [:]
+        var paths: [VideoMediaLibrary.Reference: String] = [:]
+        for entry in manifest.entries where entry.reference.role != .cursor {
+            let suffix = try mediaURL(for: entry.reference).pathExtension.lowercased()
+            let safeSuffix =
+                !suffix.isEmpty && suffix.count <= 16
+                && suffix.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+            let cursor = manifest.entries.first {
+                entry.reference.role == .original && $0.reference.role == .cursor
+                    && $0.reference.assetID == entry.reference.assetID
+            }
+            let association = cursor.map { "-cursor-\($0.source.identity.sha256)" } ?? ""
+            paths[entry.reference] =
+                "originals/\(entry.source.identity.sha256)\(association)"
+                + (safeSuffix ? ".\(suffix)" : "")
+        }
+        for entry in manifest.entries where entry.reference.role == .cursor {
+            guard let video = paths[.init(assetID: entry.reference.assetID, role: .original)] else {
+                throw VideoMediaLibrary.Failure.invalidReference("cursor source")
+            }
+            paths[entry.reference] = video + ".cursor.json"
+        }
+        var copied: [String: VideoMediaLibrary.Identity] = [:]
         for index in manifest.entries.indices {
             try checkCancellation()
             let entry = manifest.entries[index]
             let sourceURL = try mediaURL(for: entry.reference)
-            let relative: String
-            if let existing = copied[entry.source.identity] {
-                relative = existing
+            guard let relative = paths[entry.reference] else {
+                throw VideoMediaLibrary.Failure.invalidReference("package path")
+            }
+            if let existing = copied[relative] {
+                guard existing == entry.source.identity else {
+                    throw VideoMediaLibrary.Failure.identityMismatch(sourceURL.path)
+                }
             } else {
-                let suffix = sourceURL.pathExtension.lowercased()
-                let safeSuffix =
-                    !suffix.isEmpty && suffix.count <= 16
-                    && suffix.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
-                relative =
-                    "originals/\(entry.source.identity.sha256)" + (safeSuffix ? ".\(suffix)" : "")
                 try VideoMediaLibrary.copy(
                     sourceURL, to: stage.appendingPathComponent(relative),
                     expected: entry.source.identity,
                     checkCancellation: checkCancellation)
-                copied[entry.source.identity] = relative
+                copied[relative] = entry.source.identity
             }
             manifest.entries[index].packagedPath = relative
             try candidate.setMediaURL(target.appendingPathComponent(relative), for: entry.reference)
@@ -652,7 +798,7 @@ extension VideoProject {
         return .init(
             directory: target, projectURL: target.appendingPathComponent("project.openscreen"),
             copiedFileCount: copied.count,
-            copiedByteCount: copied.keys.reduce(0) { $0 + $1.byteCount },
+            copiedByteCount: copied.values.reduce(0) { $0 + $1.byteCount },
             manifest: manifest)
     }
 
@@ -666,7 +812,9 @@ extension VideoProject {
         guard project.root["edithMediaLibrary"] != nil,
             Set(try project.mediaReferences()) == Set(manifest.entries.map(\.reference))
         else { throw VideoMediaLibrary.Failure.invalidReference("incomplete package manifest") }
-        for entry in manifest.entries {
+        for entry in manifest.entries.sorted(by: {
+            $0.reference.role != .cursor && $1.reference.role == .cursor
+        }) {
             guard let relative = entry.packagedPath,
                 relative.hasPrefix("originals/"), relative.split(separator: "/").count == 2,
                 !relative.contains("..")
@@ -693,6 +841,31 @@ extension VideoProject {
 
     private mutating func setMediaURL(_ url: URL, for reference: VideoMediaLibrary.Reference) throws
     {
+        switch reference.role {
+        case .cursor:
+            guard try mediaURL(for: reference).standardizedFileURL == url.standardizedFileURL else {
+                throw VideoMediaLibrary.Failure.invalidReference("cursor association")
+            }
+            return
+        case .wallpaper:
+            guard reference.assetID == id else {
+                throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
+            }
+            backgroundColor = url.path
+            return
+        case .annotationImage, .annotationContent:
+            var entries = annotations.map(\.raw)
+            guard
+                let index = entries.firstIndex(where: { $0["id"] as? String == reference.assetID })
+            else {
+                throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
+            }
+            entries[index][reference.role == .annotationImage ? "imageContent" : "content"] =
+                url.path
+            root["annotations"] = entries
+            return
+        default: break
+        }
         var entries = assets.map(\.raw)
         guard let index = entries.firstIndex(where: { $0["id"] as? String == reference.assetID })
         else {
@@ -701,12 +874,15 @@ extension VideoProject {
         switch reference.role {
         case .original: entries[index]["originalPath"] = url.path
         case .sourceImage: entries[index]["edithSourceImagePath"] = url.path
+        case .processedAudio: entries[index]["edithAudioPath"] = url.path
         case .camera:
             guard var camera = entries[index]["cameraTrack"] as? [String: Any] else {
                 throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
             }
             camera["sourcePath"] = url.path
             entries[index]["cameraTrack"] = camera
+        case .cursor, .wallpaper, .annotationImage, .annotationContent:
+            throw VideoMediaLibrary.Failure.invalidReference(reference.assetID)
         }
         root["assets"] = entries
     }
