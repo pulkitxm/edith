@@ -1,7 +1,11 @@
 import copy
+import os
+import pathlib
+import tempfile
 import unittest
 
 from editor_acceptance_captions import caption_snapshot, unchanged_captions
+from editor_acceptance_publications import protected_snapshot, publication_reordered
 
 
 class CaptionContractTests(unittest.TestCase):
@@ -43,6 +47,44 @@ class CaptionContractTests(unittest.TestCase):
         report["captions"].append(copy.deepcopy(report["captions"][0]))
         with self.assertRaisesRegex(RuntimeError, "unique"):
             caption_snapshot(report)
+
+
+class PublicationContractTests(unittest.TestCase):
+    def manifest(self):
+        return {"version": 1, "items": [
+            {"projectID": f"project-{index}", "projectPath": f"/synthetic/cut-{index}.openscreen", "title": f"Synthetic {index}"}
+            for index in range(6)
+        ]}
+
+    def test_first_to_second_preserves_complete_entries(self):
+        before = self.manifest()
+        order = ["project-1", "project-0", "project-2", "project-3", "project-4", "project-5"]
+        after = {"version": 1, "items": [before["items"][index] for index in (1, 0, 2, 3, 4, 5)]}
+        publication_reordered(before, after, order)
+        changed = copy.deepcopy(after)
+        changed["items"][1]["title"] = "Unexpected retitle"
+        with self.assertRaisesRegex(RuntimeError, "identity, path, or title"):
+            publication_reordered(before, changed, order)
+
+    def test_missing_or_repeated_projects_are_rejected(self):
+        before = self.manifest()
+        with self.assertRaisesRegex(RuntimeError, "every project exactly once"):
+            publication_reordered(before, before, ["project-0"] * 6)
+        with self.assertRaisesRegex(RuntimeError, "every project exactly once"):
+            publication_reordered(before, before, [f"project-{index}" for index in range(5)])
+
+    def test_ledger_receipt_changes_are_detected(self):
+        root = pathlib.Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "opencode"
+        root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="publication-contract-", dir=root) as directory:
+            receipt = pathlib.Path(directory) / "synthetic-receipt.json"
+            receipt.write_text('{"source":"synthetic-001"}')
+            before = protected_snapshot([directory])
+            self.assertEqual(before, protected_snapshot([directory]))
+            receipt.write_text('{"source":"synthetic-002"}')
+            self.assertNotEqual(before, protected_snapshot([directory]))
+            receipt.unlink()
+            self.assertNotEqual(before, protected_snapshot([directory]))
 
 
 if __name__ == "__main__":

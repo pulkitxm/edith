@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from editor_acceptance_captions import exercise_caption_preservation
+from editor_acceptance_publications import exercise_publications
 
 
 def require(condition, message):
@@ -94,6 +95,8 @@ def main():
     parser.add_argument("--baseline", action="store_true", help="Exercise current rendering without exact delivery assertions")
     parser.add_argument("--contact-sheet", action="store_true", help="Verify a 45-shot contact sheet through the public CLI")
     parser.add_argument("--captions", action="store_true", help="Verify public caption timing across crop, speed, and reorder edits")
+    parser.add_argument("--publication-plan", type=pathlib.Path, help="Public publication create plan referencing five or six synthetic projects")
+    parser.add_argument("--publication-protected-path", type=pathlib.Path, action="append", default=[], help="Synthetic ledger or receipt file/directory that publication operations must preserve")
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Public v1 plan containing integrated delivery operations")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
@@ -188,6 +191,12 @@ def main():
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     if args.captions:
         report["captionAcceptance"] = exercise_caption_preservation(edit, saved, workspace)
+    if args.publication_plan:
+        publication_plan = args.publication_plan.resolve(strict=True)
+        collection = json.loads(publication_plan.read_text())
+        require(collection["version"] == 1, "Publication plan must use version 1")
+        projects = [(publication_plan.parent / item["path"]).resolve(strict=True) for item in collection["projects"]]
+        report["publicationAcceptance"] = exercise_publications(edit, projects, workspace, args.publication_protected_path)
     report.update({"planRoundTrip": True, "projectRoundTrip": True, "sourcesUnchanged": True, "previewVerified": True})
     write_json(workspace / "result.json", report)
     print(json.dumps(report, indent=2, sort_keys=True))
