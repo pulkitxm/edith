@@ -4,6 +4,7 @@ import Testing
 @testable import Edith
 @testable import EdithCLI
 import EdithKit
+import EdithDocs
 
 @Suite struct VideoEditorMediaServiceTests {
     static func fixture(_ folder: URL) throws -> URL {
@@ -161,6 +162,10 @@ import EdithKit
             let tool = try #require(
                 OperationMCPCatalog.tool(named: "edith_studio_edit_media_\(name)"))
             #expect(tool.route == route)
+            let manual = try #require(DocsLibrary.bundled())
+            let location = try #require(
+                manual.location(forCommand: "ed " + route.joined(separator: " ")))
+            #expect(location.path == "studio/edit-media.md")
             #expect(
                 OperationMCPRunner.executionTimeout(for: tool)
                     == OperationMCPRunner.videoRenderTimeout)
