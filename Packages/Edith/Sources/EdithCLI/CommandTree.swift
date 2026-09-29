@@ -463,6 +463,18 @@ public enum CommandTree {
             optionValues: [
                 "--asset": .free, "--family": .free, "--declaration": .free, "--output": .localPath,
             ], arguments: [.localPath]),
+        "ed studio edit publications create": Spec(
+            options: [
+                "--input", "--dry-run", "--overwrite", "--json", "-h", "--help", "--version",
+            ],
+            optionValues: ["--input": .localPath], arguments: [.localPath]),
+        "ed studio edit publications show": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit publications reorder": Spec(
+            options: [
+                "--input", "--dry-run", "--overwrite", "--json", "-h", "--help", "--version",
+            ],
+            optionValues: ["--input": .localPath], arguments: [.localPath]),
         "ed studio edit create": Spec(
             options: ["--json", "--overwrite", "--title", "-h", "--help", "--version"],
             optionValues: ["--title": .free], arguments: [.localPath]),
