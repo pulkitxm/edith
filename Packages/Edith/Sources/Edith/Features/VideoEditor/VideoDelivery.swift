@@ -194,6 +194,7 @@ public struct VideoDeliveryReport: Codable, Sendable {
     public let audioChannels: Int?
     public let bytes: Int64
     public let sha256: String
+    public var range: VideoDeliveryRangeReport? = nil
 
     static func inspect(_ url: URL) async throws -> Self {
         let asset = AVURLAsset(url: url)
@@ -279,6 +280,7 @@ public struct VideoDeliveryReport: Codable, Sendable {
 extension VideoRenderPipeline {
     func export(
         to destination: URL, settings: VideoDeliverySettings = .init(), overwrite: Bool = false,
+        range: VideoDeliveryFrameRange? = nil,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> VideoDeliveryReport {
         var settings = settings
@@ -313,12 +315,17 @@ extension VideoRenderPipeline {
             throw VideoDeliveryError.invalidSettings(
                 "The project needs a valid canvas, frame rate and duration.")
         }
+        let selection = try VideoDeliverySelection(
+            range, duration: composition.duration, frameDuration: videoComposition.frameDuration)
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(
             ".\(UUID().uuidString).partial.\(settings.codec.fileExtension)")
         defer { try? FileManager.default.removeItem(at: temporary) }
         let reader = try AVAssetReader(asset: composition)
+        reader.timeRange = selection.timeRange
         let writer = try AVAssetWriter(
             outputURL: temporary, fileType: settings.codec.isMaster ? .mov : .mp4)
+        writer.movieTimeScale =
+            CMTimeAdd(videoComposition.frameDuration, composition.duration).timescale
         let videoTracks = try await composition.loadTracks(withMediaType: .video)
         let videoOutput = AVAssetReaderVideoCompositionOutput(
             videoTracks: videoTracks,
@@ -385,41 +392,33 @@ extension VideoRenderPipeline {
             guard writer.startWriting() else {
                 throw writer.error ?? VideoDeliveryError.failed("Could not start writing.")
             }
-            writer.startSession(atSourceTime: .zero)
+            writer.startSession(atSourceTime: selection.timeRange.start)
             guard reader.startReading() else {
                 throw reader.error ?? VideoDeliveryError.failed("Could not start rendering.")
             }
             let finalAudioOutput = audioOutput
             let finalAudioInput = audioInput
             async let video: Void = Self.transfer(
-                videoOutput, to: videoInput, reader: reader, writer: writer, duration: duration,
+                videoOutput, to: videoInput, reader: reader, writer: writer,
+                timeRange: selection.timeRange,
                 progress: progress)
             async let audio: Void = Self.transfer(
                 finalAudioOutput, to: finalAudioInput, reader: reader, writer: writer,
-                duration: duration)
+                timeRange: selection.timeRange)
             try await video
             try await audio
             guard reader.status == .completed else {
                 throw reader.error ?? VideoDeliveryError.failed("Rendering did not finish.")
             }
-            writer.endSession(atSourceTime: composition.duration)
+            writer.endSession(atSourceTime: selection.timeRange.end)
             await writer.finishWriting()
             try Task.checkCancellation()
             guard writer.status == .completed else {
                 throw writer.error ?? VideoDeliveryError.failed("Encoding did not finish.")
             }
-            let report = try await VideoDeliveryReport.inspect(temporary)
-            let frameDuration = videoComposition.frameDuration
-            let ticks = CMTimeConvertScale(
-                composition.duration, timescale: frameDuration.timescale, method: .roundAwayFromZero
-            )
-            guard ticks.isNumeric, ticks.value > 0, frameDuration.value > 0 else {
-                throw VideoDeliveryError.failed("The rendered timeline has invalid frame timing.")
-            }
-            let expectedFrames =
-                Int(ticks.value / frameDuration.value)
-                + (ticks.value % frameDuration.value == 0 ? 0 : 1)
-            guard report.frameCount == expectedFrames, report.width == Int(canvas.width),
+            var report = try await VideoDeliveryReport.inspect(temporary)
+            report.range = selection.report
+            guard report.frameCount == selection.frameCount, report.width == Int(canvas.width),
                 report.height == Int(canvas.height)
             else {
                 throw VideoDeliveryError.failed(
@@ -444,7 +443,7 @@ extension VideoRenderPipeline {
 
     private static func transfer(
         _ output: AVAssetReaderOutput?, to input: AVAssetWriterInput?, reader: AVAssetReader,
-        writer: AVAssetWriter, duration: Double,
+        writer: AVAssetWriter, timeRange: CMTimeRange,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
         guard let output, let input else { return }
@@ -467,7 +466,11 @@ extension VideoRenderPipeline {
                 throw writer.error ?? VideoDeliveryError.failed("Could not encode a media sample.")
             }
             let fraction = min(
-                0.99, max(0, CMSampleBufferGetPresentationTimeStamp(sample).seconds / duration))
+                0.99,
+                max(
+                    0,
+                    (CMSampleBufferGetPresentationTimeStamp(sample) - timeRange.start).seconds
+                        / timeRange.duration.seconds))
             if fraction - lastProgress >= 0.01 {
                 progress(fraction)
                 lastProgress = fraction

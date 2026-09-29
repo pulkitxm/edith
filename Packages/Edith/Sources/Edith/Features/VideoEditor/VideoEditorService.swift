@@ -92,6 +92,7 @@ public enum VideoEditorService {
     public static func render(
         _ url: URL, to output: URL, overwrite: Bool = false,
         settings: VideoDeliverySettings = .init(),
+        range: VideoDeliveryFrameRange? = nil,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> Result {
         let project = try open(url)
@@ -110,7 +111,7 @@ public enum VideoEditorService {
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
-        let report = try await pipeline.export(to: temporary, settings: settings) {
+        let report = try await pipeline.export(to: temporary, settings: settings, range: range) {
             progress(min(0.99, $0))
         }
         try Task.checkCancellation()
@@ -124,6 +125,7 @@ public enum VideoEditorService {
     public static func renderAudio(
         _ url: URL, to output: URL, overwrite: Bool = false,
         settings: VideoAudioDeliverySettings = .init(),
+        range: VideoDeliveryFrameRange? = nil,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> Result {
         do { try settings.validate() } catch {
@@ -137,7 +139,8 @@ public enum VideoEditorService {
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
-        let report = try await pipeline.exportAudio(to: temporary, settings: settings) {
+        let report = try await pipeline.exportAudio(to: temporary, settings: settings, range: range)
+        {
             progress(min(0.99, $0))
         }
         try Task.checkCancellation()
