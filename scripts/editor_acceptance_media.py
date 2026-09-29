@@ -49,7 +49,7 @@ def unique_usage(report, projects, count):
             and report["conflictCount"] == 0 and report["assessment"] == "noKnownReuse", "Unexpected known source reuse")
 
 
-def exercise_media(edit, ed, projects, workspace, fixture, audit_project):
+def exercise_media(edit, ed, projects, workspace, fixture, audit_project, publications=True):
     require(len(projects) == 6, "Media collection acceptance requires six synthetic projects")
     fixture = fixture.resolve(strict=True)
     source_snapshot = protected_snapshot([*projects, fixture])
@@ -129,7 +129,7 @@ def exercise_media(edit, ed, projects, workspace, fixture, audit_project):
         require(page["nextOffset"] > offset, "Reservation pagination did not advance")
         offset = page["nextOffset"]
     require({receipt["reelID"] for receipt in listed} == {f"synthetic-reel-{index + 1}" for index in range(6)}, "Reservation pagination lost owners")
-    publication = exercise_publications(edit, copies, workspace, [ledger, receipts])
+    publication = exercise_publications(edit, copies, workspace, [ledger, receipts]) if publications else {"pending": True}
     require(protected_snapshot([*copies, ledger, receipts]) == protected, "Publication or rejected reservations changed protected state")
     package = workspace / "synthetic-package"
     packaged = envelope(edit("media", "package", copies[0], "--output", package, "--json"), "package", True)

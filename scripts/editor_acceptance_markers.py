@@ -62,7 +62,7 @@ def check_analysis(report, expected_source):
             "sampleUnitsVerified": True, "rationalMappingVerified": True}
 
 
-def exercise_markers(edit, source, workspace, manifest):
+def exercise_markers(edit, source, workspace, manifest, captions=True):
     project = workspace / "marker-acceptance.openscreen"
     plan = workspace / "marker-copy-plan.json"
     plan.write_text(json.dumps({"version": 1, "operations": []}) + "\n")
@@ -118,6 +118,9 @@ def exercise_markers(edit, source, workspace, manifest):
         edit("markers", "update", caption_project, "--id", ids[39], "--frame", "40", "--fps", "60", "--json")
         edit("markers", "remove", caption_project, "--id", ids[0], "--json")
 
+    if not captions:
+        return {"markers": 45, "rationalCRUDVerified": True, "snapTieVerified": True,
+                "interchangeRoundTripVerified": True, "analysis": analysis_result, "captions": {"pending": True}}
     captions = exercise_caption_preservation(edit, project, workspace, ids, verify_then_move_markers)
     return {"markers": 45, "exactBeatFramesPreserved": True, "rationalCRUDVerified": True,
             "snapTieVerified": True, "interchangeRoundTripVerified": True, "analysis": analysis_result,
