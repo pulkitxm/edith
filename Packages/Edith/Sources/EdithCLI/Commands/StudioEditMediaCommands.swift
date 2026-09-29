@@ -10,7 +10,7 @@ struct StudioEditMediaCommand: AsyncParsableCommand {
             StudioMediaIdentity.self, StudioMediaProbe.self, StudioMediaDuplicates.self,
             StudioMediaChronology.self, StudioMediaIndex.self, StudioMediaProvenance.self,
             StudioMediaUsage.self,
-        ])
+        ], defaultSubcommand: StudioMediaIdentity.self)
 }
 
 struct StudioMediaReadOptions: ParsableArguments {
