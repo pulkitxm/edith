@@ -33,6 +33,9 @@ import Testing
         #expect(report.audioSampleRate == 48_000)
         #expect(report.audioChannels == 2)
         #expect(report.colorPrimaries == "ITU_R_709_2")
+        if codec == .proRes422 || codec == .proRes422HQ || codec == .hevc10 {
+            #expect(report.bitsPerComponent == 10)
+        }
         let data = try Data(contentsOf: url)
         #expect(report.bytes == data.count)
         #expect(
@@ -151,6 +154,8 @@ import Testing
         #expect(report.frames == 24_000)
         #expect(report.duration == 0.5)
         #expect(report.channels == 2)
+        #expect(report.codec == (container == .m4a ? "aac " : "lpcm"))
+        if container != .m4a { #expect(report.bitsPerSample == 24) }
         let file = try AVAudioFile(forReading: output)
         let buffer = try #require(
             AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 24_000))

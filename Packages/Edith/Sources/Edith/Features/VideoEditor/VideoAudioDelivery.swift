@@ -33,6 +33,8 @@ struct VideoAudioDeliverySettings: Codable, Equatable, Sendable {
 }
 
 struct VideoAudioDeliveryReport: Codable, Sendable {
+    let codec: String
+    let bitsPerSample: Int?
     let duration: Double
     let sampleRate: Double
     let channels: Int
@@ -51,7 +53,14 @@ struct VideoAudioDeliveryReport: Codable, Sendable {
             hasher.update(data: data)
             bytes += Int64(data.count)
         }
+        let format = audio.fileFormat.streamDescription.pointee
+        let codec =
+            String(
+                bytes: [24, 16, 8, 0].map { UInt8((format.mFormatID >> $0) & 255) },
+                encoding: .ascii) ?? String(format.mFormatID)
         return Self(
+            codec: codec,
+            bitsPerSample: format.mBitsPerChannel > 0 ? Int(format.mBitsPerChannel) : nil,
             duration: Double(audio.length) / audio.processingFormat.sampleRate,
             sampleRate: audio.processingFormat.sampleRate,
             channels: Int(audio.processingFormat.channelCount), frames: audio.length, bytes: bytes,

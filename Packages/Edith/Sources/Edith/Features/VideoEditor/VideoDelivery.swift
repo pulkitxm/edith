@@ -230,15 +230,22 @@ struct VideoDeliveryReport: Codable, Sendable {
         var remainder = frameDuration.isNumeric ? frameDuration.value : 0
         while remainder != 0 { (divisor, remainder) = (remainder, divisor % remainder) }
         divisor = max(1, divisor)
+        let subtype = CMFormatDescriptionGetMediaSubType(format)
+        let bits: Int? =
+            [
+                kCMVideoCodecType_AppleProRes422, kCMVideoCodecType_AppleProRes422HQ,
+                kCMVideoCodecType_AppleProRes422LT, kCMVideoCodecType_AppleProRes422Proxy,
+            ].contains(subtype)
+            ? 10 : extensions[kCMFormatDescriptionExtension_BitsPerComponent] as? Int
         return Self(
             width: Int(size.width), height: Int(size.height), duration: duration.seconds,
             frameCount: frameCount,
             frameRateNumerator: frameDuration.isNumeric
                 ? Int64(frameDuration.timescale) / divisor : 0,
             frameRateDenominator: frameDuration.isNumeric ? frameDuration.value / divisor : 0,
-            videoCodec: fourCC(CMFormatDescriptionGetMediaSubType(format)),
+            videoCodec: fourCC(subtype),
             videoBitRate: Double(bitRate),
-            bitsPerComponent: extensions[kCMFormatDescriptionExtension_BitsPerComponent] as? Int,
+            bitsPerComponent: bits,
             colorPrimaries: extensions[kCMFormatDescriptionExtension_ColorPrimaries] as? String,
             transferFunction: extensions[kCMFormatDescriptionExtension_TransferFunction] as? String,
             audioCodec: audioCodec, audioSampleRate: sampleRate, audioChannels: channels,
@@ -274,7 +281,9 @@ extension VideoRenderPipeline {
         else {
             throw VideoDeliveryError.invalidSettings("An export cannot replace its source media.")
         }
-        guard duration.isFinite, duration > 0, canvas.width >= 2, canvas.height >= 2,
+        guard duration.isFinite, duration > 0, canvas.width.isFinite, canvas.height.isFinite,
+            (2...16_384).contains(canvas.width), (2...16_384).contains(canvas.height),
+            canvas.width.rounded() == canvas.width, canvas.height.rounded() == canvas.height,
             videoComposition.frameDuration.isNumeric, videoComposition.frameDuration.seconds > 0
         else {
             throw VideoDeliveryError.invalidSettings(
