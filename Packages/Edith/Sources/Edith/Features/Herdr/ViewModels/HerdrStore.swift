@@ -20,11 +20,6 @@ struct HerdrClosedTabRecord: Equatable {
     let rightNeighborID: String?
 }
 
-struct HerdrRailItem: Identifiable {
-    let id: String
-    let agents: [HerdrAgent]
-}
-
 typealias HerdrNewAgentLauncher =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
@@ -87,7 +82,21 @@ final class HerdrStore {
     static let shared = HerdrStore()
     static let boardID = "board"
 
-    var hosts: [HerdrHostSnapshot] = []
+    var hosts: [HerdrHostSnapshot] = [] {
+        didSet { rememberSidebarOrder() }
+    }
+    private var sidebarAgentOrder: HerdrSidebarOrder {
+        didSet {
+            guard sidebarAgentOrder.ids != oldValue.ids else { return }
+            defaults.set(sidebarAgentOrder.ids, forKey: AppStorageKeys.Herdr.sidebarAgentOrder)
+        }
+    }
+    private var sidebarSpaceOrder: HerdrSidebarOrder {
+        didSet {
+            guard sidebarSpaceOrder.ids != oldValue.ids else { return }
+            defaults.set(sidebarSpaceOrder.ids, forKey: AppStorageKeys.Herdr.sidebarSpaceOrder)
+        }
+    }
     var searchPresented = false
     var machineFilter = "all" {
         didSet {
@@ -248,6 +257,10 @@ final class HerdrStore {
         messaging: HerdrMessaging? = nil
     ) {
         self.defaults = defaults
+        sidebarAgentOrder = HerdrSidebarOrder(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
+        sidebarSpaceOrder = HerdrSidebarOrder(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarSpaceOrder) ?? [])
         usage = defaults === SharedDefaults.store ? .shared : LauncherUsage(defaults: defaults)
         self.terminalPanels = terminalPanels ?? HerdrTerminalPanels(defaults: defaults)
         self.messaging = messaging ?? HerdrMessaging()
@@ -300,7 +313,7 @@ final class HerdrStore {
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
     var listedAgents: [HerdrAgent] {
-        usage.ordered(filteredAgents) { ["agent", $0.id] }
+        sidebarAgentOrder.ordered(filteredAgents)
     }
 
     var recentHosts: [HerdrHostSnapshot] {
@@ -308,12 +321,23 @@ final class HerdrStore {
     }
 
     var agentSpaces: [HerdrAgentSpace] {
-        usage.ordered(
-            HerdrAgentSpace.group(listedAgents),
-            date: { space in
-                space.agents.map { usage.lastUsed(["space", $0.machineID, $0.workspace]) }.max()
-                    ?? .distantPast
-            })
+        sidebarSpaceOrder.ordered(HerdrAgentSpace.group(listedAgents))
+    }
+
+    private func rememberSidebarOrder() {
+        var ids: [String] = []
+        for agent in agents { ids.append(agent.id) }
+        for host in hosts { ids.append(HerdrMachineTerminal.agent(for: host).id) }
+        sidebarAgentOrder.remember(ids)
+        sidebarSpaceOrder.remember(HerdrAgentSpace.group(agents).map(\.id))
+    }
+
+    func moveSidebarAgent(_ id: String, relativeTo target: String, after: Bool) {
+        sidebarAgentOrder.move(id, relativeTo: target, after: after)
+    }
+
+    func moveSidebarSpace(_ id: String, relativeTo target: String, after: Bool) {
+        sidebarSpaceOrder.move(id, relativeTo: target, after: after)
     }
 
     func spaceIsCollapsed(_ id: String) -> Bool {
@@ -359,7 +383,7 @@ final class HerdrStore {
 
     var machineTerminals: [HerdrAgent] {
         var terminals: [HerdrAgent] = []
-        for host in recentHosts where host.herdrPresent {
+        for host in hosts where host.herdrPresent {
             let terminal = HerdrMachineTerminal.agent(for: host)
             switch machineFilter {
             case "all": terminals.append(terminal)
@@ -368,7 +392,7 @@ final class HerdrStore {
             default: break
             }
         }
-        return terminals
+        return sidebarAgentOrder.ordered(terminals)
     }
 
     var machineChoices: [(id: String, name: String)] {
@@ -657,29 +681,6 @@ final class HerdrStore {
 
     var focusedSession: HerdrOpenTab? {
         currentTab.flatMap { session($0.focused) }
-    }
-
-    func railItems(for agents: [HerdrAgent]) -> [HerdrRailItem] {
-        guard !spaceGroupingEnabled else {
-            return agents.map { HerdrRailItem(id: $0.id, agents: [$0]) }
-        }
-        var visible: [String: HerdrAgent] = [:]
-        for agent in agents { visible[agent.id] = agent }
-        var groups: [String: HerdrRailItem] = [:]
-        for tab in tabs where tab.isSplit {
-            var members: [HerdrAgent] = []
-            for id in tab.agentIDs {
-                if let agent = visible[id] { members.append(agent) }
-            }
-            guard members.count > 1 else { continue }
-            let item = HerdrRailItem(id: tab.id, agents: members)
-            for member in members { groups[member.id] = item }
-        }
-        var seen = Set<String>()
-        return agents.compactMap { agent in
-            let item = groups[agent.id] ?? HerdrRailItem(id: agent.id, agents: [agent])
-            return seen.insert(item.id).inserted ? item : nil
-        }
     }
 
     func railHighlight(for agentID: String) -> HerdrRailHighlight {
@@ -1169,12 +1170,26 @@ final class HerdrStore {
             var order = base?.panes ?? []
             order.insert(agent.id, at: min(max(0, index), order.count))
             return template.layout(order)
-        case .tabBar, .intoTab, .newTab, .window:
+        case .tabBar, .intoTab, .newTab, .window, .sidebarAgent, .sidebarSpace:
             return nil
         }
     }
 
     func accepts(_ item: HerdrDragItem, _ target: HerdrDropTarget) -> Bool {
+        if case let .sidebarAgent(id, _) = target {
+            guard case let .agent(agent) = item, agent.id != id else { return false }
+            let candidates = agent.isTerminal ? machineTerminals : listedAgents
+            guard candidates.contains(where: { $0.id == agent.id }),
+                let destination = candidates.first(where: { $0.id == id })
+            else { return false }
+            return !spaceGroupingEnabled || agent.isTerminal
+                || HerdrAgentSpace.spaceID(agent) == HerdrAgentSpace.spaceID(destination)
+        }
+        if case let .sidebarSpace(id, _) = target {
+            guard case let .space(source) = item, source != id else { return false }
+            return agentSpaces.contains { $0.id == source } && agentSpaces.contains { $0.id == id }
+        }
+        if case .space = item { return false }
         let item = normalized(item)
         if case let .agent(agent) = item, session(agent.id) == nil,
             HerdrSpaceWindow.holds(agent: agent.id)
@@ -1187,6 +1202,8 @@ final class HerdrStore {
         case let .tabBar(index):
             let moving: String?
             switch item {
+            case .space:
+                return false
             case let .tab(id):
                 moving = id
             case let .agent(agent):
@@ -1200,11 +1217,14 @@ final class HerdrStore {
         case let .intoTab(id):
             guard let destination = tab(id) else { return false }
             switch item {
+            case .space: return false
             case let .tab(source): return source != id
             case let .agent(agent): return !destination.layout.contains(agent.id)
             }
         case .newTab, .window:
             if case .agent = item { return true }
+            return false
+        case .sidebarAgent, .sidebarSpace:
             return false
         }
     }
@@ -1219,6 +1239,7 @@ final class HerdrStore {
             insertTab(item, at: index)
         case let .intoTab(id):
             switch item {
+            case .space: break
             case let .tab(source): merge(source, into: id)
             case let .agent(agent): add(agent, into: id)
             }
@@ -1231,6 +1252,12 @@ final class HerdrStore {
             }
         case .window:
             break
+        case let .sidebarAgent(id, after):
+            guard case let .agent(agent) = item else { return }
+            moveSidebarAgent(agent.id, relativeTo: id, after: after)
+        case let .sidebarSpace(id, after):
+            guard case let .space(source) = item else { return }
+            moveSidebarSpace(source, relativeTo: id, after: after)
         }
     }
 
@@ -1243,6 +1270,8 @@ final class HerdrStore {
 
     private func draggedNode(_ item: HerdrDragItem) -> (node: HerdrLayout, focus: String)? {
         switch item {
+        case .space:
+            return nil
         case let .agent(agent):
             return (.pane(agent.id), agent.id)
         case let .tab(id):
@@ -1257,6 +1286,8 @@ final class HerdrStore {
         else { return }
         var displaced: String?
         switch item {
+        case .space:
+            return
         case let .agent(agent):
             if session(agent.id) == nil {
                 adoptSession(for: agent, showing: nil)
@@ -1289,6 +1320,8 @@ final class HerdrStore {
 
     private func insertTab(_ item: HerdrDragItem, at index: Int) {
         switch item {
+        case .space:
+            return
         case let .tab(id):
             moveTab(id, to: index)
             selectedTab = id

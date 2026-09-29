@@ -745,12 +745,15 @@ struct HerdrPage: View {
                             ForEach(store.agentSpaces) { space in
                                 let visible = space.agents
                                 if !visible.isEmpty {
-                                    spaceHeader(space, count: visible.count)
-                                    if !store.spaceIsCollapsed(space.id) {
-                                        ForEach(visible) { agent in
-                                            agentRow(agent)
+                                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                        spaceHeader(space, count: visible.count)
+                                        if !store.spaceIsCollapsed(space.id) {
+                                            ForEach(visible) { agent in
+                                                agentRow(agent)
+                                            }
                                         }
                                     }
+                                    .herdrDropFrame(HerdrDropGeometry.spacePrefix + space.id)
                                 }
                             }
                         } else {
@@ -764,6 +767,7 @@ struct HerdrPage: View {
         }
         .frame(maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+        .herdrDropFrame(HerdrDropGeometry.sidebarKey)
     }
 
     private var agentsRailHeader: some View {
@@ -798,12 +802,8 @@ struct HerdrPage: View {
     }
 
     private func railRows(_ agents: [HerdrAgent]) -> some View {
-        ForEach(store.railItems(for: agents)) { item in
-            if item.agents.count > 1 {
-                splitGroup(item.agents)
-            } else if let agent = item.agents.first {
-                agentRow(agent)
-            }
+        ForEach(agents) { agent in
+            agentRow(agent)
         }
     }
 
@@ -846,8 +846,9 @@ struct HerdrPage: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .help(collapsed ? "Show \(accessibleTitle)" : "Hide \(accessibleTitle)")
+            .help("\(collapsed ? "Show" : "Hide") \(accessibleTitle). Drag to reorder spaces.")
             .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
+            .herdrDraggable(.space(space.id), simultaneous: true)
 
             Button {
                 newAgentSpace = space
@@ -912,35 +913,7 @@ struct HerdrPage: View {
         .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
 
-    private func splitGroup(_ agents: [HerdrAgent]) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            ForEach(agents) { agent in
-                agentRow(agent, inGroup: true)
-            }
-        }
-        .padding(UIScale.pt(3))
-        .widgetBar(
-            cornerRadius: 10,
-            fill: DashSkin.paper2(dark).opacity(0.72),
-            stroke: DashSkin.line(dark)
-        )
-        .padding(.horizontal, UIScale.pt(2))
-        .padding(.bottom, UIScale.pt(6))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(splitGroupLabel(agents))
-    }
-
-    private func splitGroupLabel(_ agents: [HerdrAgent]) -> String {
-        let noun = agents.count == 1 ? "agent" : "agents"
-        guard !hideAgents,
-            let focused = agents.first(where: { store.railHighlight(for: $0.id) == .focused })
-        else {
-            return "Side by side, \(agents.count) \(noun)"
-        }
-        return "Side by side, \(agents.count) \(noun). Focused, \(focused.title)"
-    }
-
-    private func agentRow(_ agent: HerdrAgent, inGroup: Bool = false) -> some View {
+    private func agentRow(_ agent: HerdrAgent) -> some View {
         let highlight = store.railHighlight(for: agent.id)
         let selected = highlight == .solo || highlight == .focused
         return Button {
@@ -978,17 +951,15 @@ struct HerdrPage: View {
                         .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
                 }
             }
-            .padding(.leading, UIScale.pt(inGroup ? 8 : 12))
+            .padding(.leading, UIScale.pt(12))
             .padding(.trailing, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(inGroup ? 6 : 8))
+            .padding(.vertical, UIScale.pt(8))
             .widgetBar(
                 cornerRadius: 8,
-                fill: rowFill(agent, inGroup: inGroup, selected: selected),
-                stroke: inGroup
-                    ? nil
-                    : (selected
-                        ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear),
-                strokeWidth: selected && !inGroup ? 1.4 : 0
+                fill: HerdrStatusColor.fill(agent, dark: dark, selected: selected),
+                stroke: selected
+                    ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear,
+                strokeWidth: selected ? 1.4 : 0
             )
             .overlay(alignment: .leading) {
                 if selected {
@@ -996,46 +967,41 @@ struct HerdrPage: View {
                         .fill(DashSkin.accent(dark))
                         .frame(width: UIScale.pt(3))
                         .padding(.vertical, UIScale.pt(6))
-                        .padding(.leading, UIScale.pt(inGroup ? 3 : 5))
+                        .padding(.leading, UIScale.pt(5))
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .accessibilityValueIfPresent(rowValue(highlight, inGroup: inGroup))
+        .accessibilityValueIfPresent(rowValue(highlight))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help(rowHelp(agent, highlight: highlight, inGroup: inGroup, selected: selected))
+        .help(rowHelp(agent, highlight: highlight, selected: selected))
         .herdrDraggable(.agent(agent), simultaneous: true)
         .contextMenu { agentRowMenu(agent) }
+        .herdrDropFrame(HerdrDropGeometry.agentPrefix + agent.id)
     }
 
-    private func rowFill(_ agent: HerdrAgent, inGroup: Bool, selected: Bool) -> Color {
-        if inGroup {
-            return selected ? DashSkin.accent(dark).opacity(dark ? 0.22 : 0.14) : .clear
-        }
-        return HerdrStatusColor.fill(agent, dark: dark, selected: selected)
-    }
-
-    private func rowValue(_ highlight: HerdrRailHighlight, inGroup: Bool) -> String {
+    private func rowValue(_ highlight: HerdrRailHighlight) -> String {
         if highlight == .focused { return "Focused" }
-        if inGroup { return "In this side by side tab" }
+        if highlight == .grouped { return "In this side by side tab" }
         if highlight == .solo { return "Open on the right" }
         return ""
     }
 
     private func rowHelp(
-        _ agent: HerdrAgent, highlight: HerdrRailHighlight, inGroup: Bool, selected: Bool
+        _ agent: HerdrAgent, highlight: HerdrRailHighlight, selected: Bool
     ) -> String {
-        if inGroup, highlight == .focused {
+        if highlight == .focused {
             return "\(agent.title): focused in this side by side tab"
         }
-        if inGroup {
+        if highlight == .grouped {
             return "\(agent.title): in this side by side tab"
         }
         if selected {
             return "\(agent.title): open on the right"
         }
-        return "\(agent.title). Drag onto the right side to place it beside other agents."
+        return
+            "\(agent.title). Drag in the sidebar to reorder, or onto the right side to place it beside other agents."
     }
 
     @ViewBuilder

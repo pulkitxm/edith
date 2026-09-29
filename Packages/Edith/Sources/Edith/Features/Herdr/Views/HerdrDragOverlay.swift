@@ -49,6 +49,10 @@ struct HerdrDragOverlay: View {
             region(canvas.insetBy(dx: 12, dy: 12), label: "Open in a New Tab")
         case .window:
             EmptyView()
+        case let .sidebarAgent(id, after):
+            sidebarCaret(HerdrDropGeometry.agentPrefix + id, after: after)
+        case let .sidebarSpace(id, after):
+            sidebarCaret(HerdrDropGeometry.spacePrefix + id, after: after)
         }
     }
 
@@ -117,7 +121,7 @@ struct HerdrDragOverlay: View {
             drag.item.map { dragged($0).allSatisfy { store.session($0) != nil } } == true
                 ? "Swap places" : "Replace, the other agent gets its own tab"
         case let .slot(template, _): template.title
-        case .tabBar, .intoTab, .newTab, .window: nil
+        case .tabBar, .intoTab, .newTab, .window, .sidebarAgent, .sidebarSpace: nil
         }
     }
 
@@ -133,6 +137,19 @@ struct HerdrDragOverlay: View {
             .fill(accent)
             .frame(width: UIScale.pt(3), height: frame.height + UIScale.pt(6))
             .offset(x: x - UIScale.pt(1.5), y: frame.minY - UIScale.pt(3))
+    }
+
+    @ViewBuilder
+    private func sidebarCaret(_ key: String, after: Bool) -> some View {
+        if let frame = drag.frames[key], let sidebar = drag.frames[HerdrDropGeometry.sidebarKey] {
+            let y = after ? frame.maxY : frame.minY
+            if y >= sidebar.minY, y <= sidebar.maxY {
+                Capsule()
+                    .fill(accent)
+                    .frame(width: frame.width, height: UIScale.pt(3))
+                    .offset(x: frame.minX, y: y - UIScale.pt(1.5))
+            }
+        }
     }
 
     private func region(_ rect: CGRect, label: String) -> some View {
@@ -245,6 +262,9 @@ struct HerdrDragOverlay: View {
             } else if let agent = agents.first {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.ink(dark))
+            } else if case .space = item {
+                Image(systemName: "folder")
+                    .foregroundStyle(DashSkin.ink(dark))
             }
             Text(ghostTitle(agents, tearing: tearing))
                 .font(.system(size: UIScale.pt(11.5), weight: .semibold))
@@ -270,6 +290,9 @@ struct HerdrDragOverlay: View {
     }
 
     private func ghostTitle(_ agents: [HerdrAgent], tearing: Bool) -> String {
+        if case let .space(id) = drag.item {
+            return hideAgents ? "Space" : store.agentSpaces.first { $0.id == id }?.title ?? "Space"
+        }
         if tearing { return "Open in a New Window" }
         guard let first = agents.first else { return "Agent" }
         let title = hideAgents ? first.kind : first.title
@@ -280,6 +303,7 @@ struct HerdrDragOverlay: View {
         switch store.normalized(item) {
         case let .agent(agent): [agent.id]
         case let .tab(id): store.tab(id)?.agentIDs ?? []
+        case .space: []
         }
     }
 
