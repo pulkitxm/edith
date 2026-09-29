@@ -28,7 +28,10 @@ struct VideoAudioAutomation {
             points: times.map { Point(time: $0 - start, level: value(at: $0)) })
     }
 
-    func apply(to input: AVMutableAudioMixInputParameters, at start: Double, gain: Float) {
+    func apply(
+        to input: AVMutableAudioMixInputParameters, at start: CMTime,
+        timescale: CMTimeScale, gain: Float
+    ) {
         input.audioTimePitchAlgorithm = .spectral
         input.setVolume(gain * Float(value(at: 0)), at: .zero)
         for (left, right) in zip(points, points.dropFirst()) where right.time > left.time {
@@ -36,8 +39,8 @@ struct VideoAudioAutomation {
             input.setVolumeRamp(
                 fromStartVolume: gain * Float(left.level), toEndVolume: gain * Float(right.level),
                 timeRange: CMTimeRange(
-                    start: VideoAudioMix.time(start + left.time),
-                    end: VideoAudioMix.time(start + right.time)))
+                    start: start + CMTime(seconds: left.time, preferredTimescale: timescale),
+                    end: start + CMTime(seconds: right.time, preferredTimescale: timescale)))
         }
     }
 

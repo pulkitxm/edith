@@ -6,6 +6,69 @@ import Testing
 @testable import Edith
 
 @Suite(.timeLimit(.minutes(1))) struct VideoIndependentAudioTests {
+    @Test func rationalRangesMatchVideoSourceAndDetachedAudioAcrossFortyFiveCuts() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 2)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 2, width: 64, height: 64)
+        project.videoSettings = VideoSettings(
+            width: 64, height: 64, frameRateNumerator: 60000, frameRateDenominator: 1001)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        let original = project.clips[0]
+        project.setClips(
+            (0..<45).map { index in
+                var clip = original
+                clip.raw["id"] = "shot-\(index)"
+                clip.start = Double(index % 5) / 10
+                clip.end = clip.start + 0.08137
+                return clip
+            })
+        project.root["legacyEditor"] = [
+            "speedRegions": project.clips.map {
+                ["clipId": $0.id, "sourceStartSec": $0.start, "sourceEndSec": $0.end, "speed": 1.7]
+                    as [String: Any]
+            }
+        ]
+        let expected = VideoRenderPipeline.timingSegments(project: project).map(\.outputRange)
+        let before = try await VideoRenderPipeline.make(project: project)
+        let visual = try #require(before.composition.tracks(withMediaType: .video).first)
+        #expect(visual.segments.map { $0.timeMapping.target } == expected)
+        #expect(before.segments.map(\.outputRange) == expected)
+        let sourceRanges = before.composition.tracks(withMediaType: .audio).flatMap {
+            $0.segments.filter { !$0.isEmpty }.map { $0.timeMapping.target }
+        }
+        #expect(sourceRanges == expected)
+        var detached = project
+        for clip in detached.clips { detached.detachAudio(clipID: clip.id) }
+        let document = directory.appendingPathComponent("detached.openscreen")
+        try detached.save(to: document)
+        detached = try VideoProject.open(document)
+        #expect(detached.audioTracks.map(\.outputRange) == expected)
+        let after = try await VideoRenderPipeline.make(project: detached)
+        #expect(
+            after.composition.tracks(withMediaType: .audio).flatMap {
+                $0.segments.filter { !$0.isEmpty }.map { $0.timeMapping.target }
+            } == expected)
+        let sourceSamples = try await readAudio(before.composition, mix: before.audioMix)
+        let detachedSamples = try await readAudio(after.composition, mix: after.audioMix)
+        #expect(sourceSamples == detachedSamples)
+        for clip in project.clips { project.setClipAudio(clipID: clip.id, muted: true) }
+        project.addAudio(sound, duration: 4, at: 0)
+        let music = try await VideoRenderPipeline.make(project: project)
+        let musicTrack = try #require(music.composition.tracks(withMediaType: .audio).first)
+        #expect(musicTrack.segments.filter { !$0.isEmpty }.count == 1)
+        #expect(musicTrack.timeRange.end == expected.last?.end)
+        let samples = try await readAudio(music.composition, mix: music.audioMix)
+        let audible = samples.prefix(Int(music.duration * 48000) - 1)
+        #expect(zip(audible, audible.dropFirst()).allSatisfy { abs($0 - $1) < 0.04 })
+    }
+
     @Test(arguments: [true, false])
     func oversizedFadeEditsUseAppliedExtentsWithoutSilencingTheTrack(editHead: Bool) async throws {
         let directory = try temporaryDirectory()

@@ -11,8 +11,8 @@ enum VideoAudioMix {
 
     static func muteIntervals(
         project: VideoProject, segment: VideoRenderPipeline.Segment
-    ) -> [ClosedRange<Double>] {
-        project.muteRanges.compactMap { range -> ClosedRange<Double>? in
+    ) -> [ClosedRange<CMTime>] {
+        project.muteRanges.compactMap { range -> ClosedRange<CMTime>? in
             if let clipID = range["clipId"] as? String {
                 guard clipID == segment.clip.id else { return nil }
             } else {
@@ -25,14 +25,18 @@ enum VideoAudioMix {
             let lower = max(start, segment.sourceStart)
             let upper = min(end, segment.sourceEnd)
             guard upper > lower else { return nil }
-            let outputLower = segment.outputStart + (lower - segment.sourceStart) / segment.rate
-            let outputUpper = segment.outputStart + (upper - segment.sourceStart) / segment.rate
+            let outputLower = CMTimeMapTimeFromRangeToRange(
+                CMTime(seconds: lower, preferredTimescale: segment.sourceRange.duration.timescale),
+                fromRange: segment.sourceRange, toRange: segment.outputRange)
+            let outputUpper = CMTimeMapTimeFromRangeToRange(
+                CMTime(seconds: upper, preferredTimescale: segment.sourceRange.duration.timescale),
+                fromRange: segment.sourceRange, toRange: segment.outputRange)
             return outputLower...outputUpper
         }
     }
 
     static func addTracks(
-        project: VideoProject, composition: AVMutableComposition, duration: Double,
+        project: VideoProject, composition: AVMutableComposition, end outputEnd: CMTime,
         rateSources: inout [VideoAudioRateSource]
     ) async throws -> [AVMutableAudioMixInputParameters] {
         var parameters: [AVMutableAudioMixInputParameters] = []
@@ -41,12 +45,14 @@ enum VideoAudioMix {
             guard track.startMs.isFinite, track.endMs.isFinite, track.offsetMs.isFinite,
                 track.timebase == "output", track.startMs >= 0, track.offsetMs >= 0
             else { continue }
-            let start = track.startMs / 1000
-            let end = min(duration, track.endMs / 1000)
-            guard end > start else { continue }
+            let outputRange = track.outputRange
+            let start = outputRange.start.seconds
+            let limit = min(outputEnd, outputRange.end)
+            guard limit > outputRange.start else { continue }
             guard let source = project.assets.first(where: { $0.id == track.assetID }) else {
                 throw VideoRenderPipeline.RenderError.missingAsset(track.assetID)
             }
+            guard !source.isStill || source.raw["edithAudioPath"] is String else { continue }
             let asset = AVURLAsset(url: source.audioURL)
             guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first,
                 let mixTrack = composition.addMutableTrack(
@@ -67,8 +73,8 @@ enum VideoAudioMix {
             } else {
                 rendered = nil
             }
-            var cursor = time(start)
-            let limit = time(end)
+            mixTrack.naturalTimeScale = outputRange.duration.timescale
+            var cursor = outputRange.start
             let offsetSeconds =
                 track.loop
                 ? (track.offsetMs / 1000).truncatingRemainder(dividingBy: sourceEnd)
@@ -111,10 +117,12 @@ enum VideoAudioMix {
                 composition.removeTrack(mixTrack)
                 continue
             }
-            let audibleEnd = min(cursor.seconds, end)
+            let audibleEnd = min(cursor, limit).seconds
             let input = AVMutableAudioMixInputParameters(track: mixTrack)
             VideoAudioAutomation.track(track).slice(from: 0, to: audibleEnd - start)
-                .apply(to: input, at: start, gain: level(track.gainDb))
+                .apply(
+                    to: input, at: outputRange.start, timescale: outputRange.duration.timescale,
+                    gain: level(track.gainDb))
             parameters.append(input)
         }
         return parameters

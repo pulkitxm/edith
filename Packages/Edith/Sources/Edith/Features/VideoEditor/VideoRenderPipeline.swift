@@ -189,15 +189,16 @@ struct VideoRenderPipeline {
 
     struct Segment {
         let clip: VideoProject.Clip
-        let sourceStart: Double
-        let sourceEnd: Double
+        let sourceRange: CMTimeRange
+        var sourceStart: Double { sourceRange.start.seconds }
+        var sourceEnd: Double { sourceRange.end.seconds }
         let rate: Double
         let outputRange: CMTimeRange
         var outputStart: Double { outputRange.start.seconds }
         var outputDuration: Double { outputRange.duration.seconds }
         var outputEnd: Double { outputRange.end.seconds }
         func sourceTime(at outputTime: Double) -> Double {
-            sourceStart + (outputTime - outputStart) * rate
+            sourceStart + (outputTime - outputStart) / outputDuration * sourceRange.duration.seconds
         }
         func rulerTime(at outputTime: Double) -> Double {
             clip.timelineStart + sourceTime(at: outputTime) - clip.start
@@ -213,7 +214,7 @@ struct VideoRenderPipeline {
     let composition: AVMutableComposition
     let videoComposition: AVVideoComposition
     let audioMix: AVAudioMix?
-    let audioRateSources: [VideoAudioRateSource]
+    var audioRateSources: [VideoAudioRateSource] = []
     let segments: [Segment]
     let canvas: CGSize
 
@@ -238,18 +239,16 @@ struct VideoRenderPipeline {
             let video = composition.addMutableTrack(
                 withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { throw RenderError.noVideo }
-        let numerator = project.videoSettings.frameRateNumerator
-        let timelineTimescale = Int32(numerator * max(1, 60000 / numerator))
+        let timelineTimescale = timingTimescale(project: project)
         video.naturalTimeScale = timelineTimescale
 
-        var segments: [Segment] = []
+        let segments = timingSegments(project: project)
         var visualEffects: [String: VideoVisualEffects] = [:]
         var frameGenerators: [String: FrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
         var stillImages: [String: CIImage] = [:]
         var sourceTransforms: [String: CGAffineTransform] = [:]
-        var cursor = CMTime.zero
         for clip in project.clips where clip.duration > 0 {
             if let raw = clip.raw["edithVisualEffects"] {
                 visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
@@ -306,43 +305,27 @@ struct VideoRenderPipeline {
                         a: 1, b: 0, c: 0, d: -1, tx: 0,
                         ty: displayBounds.minY + displayBounds.maxY))
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
-            for slice in speedSlices(
-                for: clip, regions: project.speedRegions, trims: project.trimRanges
-            ) {
+            for segment in segments where segment.clip.id == clip.id {
                 guard
-                    cursor.seconds + (slice.end - slice.start) / slice.rate < Double(Int64.max)
+                    segment.outputEnd < Double(Int64.max)
                         / 600
                 else {
                     throw RenderError.exportFailed("The timeline exceeds the supported time range.")
                 }
-                let sourceRange = CMTimeRange(
-                    start: CMTime(seconds: slice.start, preferredTimescale: timelineTimescale),
-                    duration: CMTime(
-                        seconds: slice.end - slice.start, preferredTimescale: timelineTimescale))
-                let insertion = cursor
-                let outputDuration = CMTime(
-                    seconds: (slice.end - slice.start) / slice.rate,
-                    preferredTimescale: timelineTimescale)
+                let sourceRange = segment.sourceRange
+                let insertion = segment.outputRange.start
+                let outputDuration = segment.outputRange.duration
                 guard sourceRange.duration > .zero, outputDuration > .zero else {
                     throw RenderError.exportFailed(
                         "A clip is shorter than the timeline time resolution.")
                 }
                 let visualRange = carrierRange ?? sourceRange
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
-                if source.isStill {
+                if visualRange.duration != outputDuration {
                     video.scaleTimeRange(
                         CMTimeRange(start: insertion, duration: visualRange.duration),
-                        toDuration: sourceRange.duration)
+                        toDuration: outputDuration)
                 }
-                let segment = Segment(
-                    clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
-                    rate: slice.rate, outputRange: CMTimeRange(start: insertion, duration: outputDuration))
-                if slice.rate != 1 {
-                    let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
-                    video.scaleTimeRange(inserted, toDuration: outputDuration)
-                }
-                segments.append(segment)
-                cursor = cursor + outputDuration
             }
         }
         guard !segments.isEmpty else { throw RenderError.noVideo }
@@ -351,9 +334,9 @@ struct VideoRenderPipeline {
         let mix = AVMutableAudioMix()
         var audioProject = project
         var rateSources: [VideoAudioRateSource] = []
-        for clip in project.clips { audioProject.detachAudio(clipID: clip.id) }
+        for clip in project.clips { audioProject.detachAudio(clipID: clip.id, segments: segments) }
         mix.inputParameters = try await VideoAudioMix.addTracks(
-            project: audioProject, composition: composition, duration: cursor.seconds,
+            project: audioProject, composition: composition, end: segments.last!.outputRange.end,
             rateSources: &rateSources)
 
         let nativeCanvas = project.videoSettings.size
@@ -514,17 +497,28 @@ struct VideoRenderPipeline {
     }
 
     static func timingSegments(project: VideoProject) -> [Segment] {
-        var cursor = 0.0
+        let timescale = timingTimescale(project: project)
+        var cursor = CMTime.zero
         return project.clips.flatMap { clip in
             speedSlices(for: clip, regions: project.speedRegions, trims: project.trimRanges).map {
                 slice in
-                let duration = (slice.end - slice.start) / slice.rate
-                defer { cursor += duration }
+                let sourceRange = CMTimeRange(
+                    start: CMTime(seconds: slice.start, preferredTimescale: timescale),
+                    end: CMTime(seconds: slice.end, preferredTimescale: timescale))
+                let duration = CMTime(
+                    seconds: sourceRange.duration.seconds / slice.rate,
+                    preferredTimescale: timescale)
+                defer { cursor = cursor + duration }
                 return Segment(
-                    clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
-                    rate: slice.rate, outputStart: cursor, outputDuration: duration)
+                    clip: clip, sourceRange: sourceRange, rate: slice.rate,
+                    outputRange: CMTimeRange(start: cursor, duration: duration))
             }
         }
+    }
+
+    static func timingTimescale(project: VideoProject) -> CMTimeScale {
+        let numerator = project.videoSettings.frameRateNumerator
+        return Int32(numerator * max(1, 60000 / numerator))
     }
 
     private static func speedSlices(

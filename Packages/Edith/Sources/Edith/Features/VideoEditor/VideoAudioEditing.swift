@@ -17,13 +17,16 @@ extension VideoProject {
     }
 
     @discardableResult
-    mutating func detachAudio(clipID: String) -> [String] {
+    mutating func detachAudio(
+        clipID: String, segments suppliedSegments: [VideoRenderPipeline.Segment]? = nil
+    ) -> [String] {
         guard let clip = clips.first(where: { $0.id == clipID }),
             clip.raw["audioDetached"] as? Bool != true,
             let asset = assets.first(where: { $0.id == clip.assetID })
         else { return [] }
+        guard !asset.isStill || asset.raw["edithAudioPath"] is String else { return [] }
         let laneID = "audio_\(UUID().uuidString.lowercased())"
-        let segments = VideoRenderPipeline.timingSegments(project: self)
+        let segments = suppliedSegments ?? VideoRenderPipeline.timingSegments(project: self)
         let clipSegments = segments.filter { $0.clip.id == clipID }
         guard let first = clipSegments.first, let last = clipSegments.last else { return [] }
         let envelope = VideoAudioAutomation.source(
@@ -33,24 +36,33 @@ extension VideoProject {
         for segment in clipSegments {
             let mutes = VideoAudioMix.muteIntervals(project: self, segment: segment)
             let boundaries = Set(
-                [segment.outputStart, segment.outputEnd]
+                [segment.outputRange.start, segment.outputRange.end]
                     + mutes.flatMap { [$0.lowerBound, $0.upperBound] }
             ).sorted()
             for (start, end) in zip(boundaries, boundaries.dropFirst()) {
-                detached.append([
+                var entry: [String: Any] = [
                     "id": "audio_\(UUID().uuidString.lowercased())", "laneId": laneID,
                     "assetId": clip.assetID, "timebase": "output", "kind": "audio",
-                    "startMs": start * 1000, "endMs": end * 1000,
-                    "offsetMs": segment.sourceTime(at: start) * 1000, "rate": segment.rate,
+                    "offsetMs": CMTimeMapTimeFromRangeToRange(
+                        start, fromRange: segment.outputRange, toRange: segment.sourceRange
+                    ).seconds * 1000,
+                    "rate": segment.rate,
                     "gainDb": (clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0,
                     "muted": clip.raw["audioMuted"] as? Bool == true
-                        || mutes.contains { $0.contains((start + end) / 2) },
+                        || mutes.contains {
+                            $0.contains(
+                                start
+                                    + CMTimeMultiplyByRatio(end - start, multiplier: 1, divisor: 2))
+                        },
                     "loop": false, "fadeInMs": 0, "fadeOutMs": 0,
                     "gainEnvelope": envelope.slice(
-                        from: start - first.outputStart, to: end - first.outputStart
+                        from: (start - first.outputRange.start).seconds,
+                        to: (end - first.outputRange.start).seconds
                     ).raw,
                     "label": "Detached · \(asset.label)", "origin": "user",
-                ])
+                ]
+                VideoAudioTiming.store(CMTimeRange(start: start, end: end), in: &entry)
+                detached.append(entry)
             }
         }
         guard !detached.isEmpty else { return [] }
@@ -87,8 +99,11 @@ extension VideoProject {
         right["fadeInMs"] = max(0, fadeInMs - leftDuration * 1000)
         right["fadeOutMs"] = min(fadeOutMs, rightDuration * 1000)
         right["gainEnvelope"] = envelope.slice(from: leftDuration, to: duration).raw
+        let range = track.outputRange
+        let splitTime = CMTime(seconds: outputTime, preferredTimescale: range.duration.timescale)
+        VideoAudioTiming.store(CMTimeRange(start: splitTime, end: range.end), in: &right)
         editRegion("audioTracks", id: id) {
-            $0["endMs"] = outputTime * 1000
+            VideoAudioTiming.store(CMTimeRange(start: range.start, end: splitTime), in: &$0)
             $0["fadeInMs"] = min(fadeInMs, leftDuration * 1000)
             $0["fadeOutMs"] = max(0, fadeOutMs - rightDuration * 1000)
             $0["gainEnvelope"] = envelope.slice(from: 0, to: leftDuration).raw
@@ -124,8 +139,11 @@ extension VideoProject {
                     ).raw
             }
             $0["timebase"] = "output"
-            $0["startMs"] = start * 1000
-            $0["endMs"] = availableEnd * 1000
+            let timescale = track.outputRange.duration.timescale
+            VideoAudioTiming.store(
+                CMTimeRange(
+                    start: CMTime(seconds: start, preferredTimescale: timescale),
+                    end: CMTime(seconds: availableEnd, preferredTimescale: timescale)), in: &$0)
             $0["offsetMs"] = offset
         }
     }
@@ -161,6 +179,10 @@ extension VideoEditorModel {
             let clip = project.clips.first(where: { $0.id == clipID }),
             let asset = project.assets.first(where: { $0.id == clip.assetID })
         else { return }
+        guard !asset.isStill || asset.raw["edithAudioPath"] is String else {
+            errorMessage = "This source has no audio track."
+            return
+        }
         audioStatus = "Detaching source audio…"
         audioTask = Task {
             defer { audioTask = nil; audioStatus = nil }

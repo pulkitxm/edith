@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import EdithKit
 
@@ -683,10 +684,10 @@ struct VideoProject {
         guard duration.isFinite, duration > 0, startMs.isFinite, sourceOffsetMs.isFinite else {
             return
         }
-        let end = VideoRenderPipeline.timingSegments(project: self).last?.outputEnd ?? 0
-        let start = min(max(0, startMs), end * 1000)
+        let end = VideoRenderPipeline.timingSegments(project: self).last?.outputRange.end ?? .zero
+        let start = min(VideoAudioMix.time(max(0, startMs) / 1000), end)
         let offset = max(0, sourceOffsetMs)
-        let audioEnd = min(end * 1000, start + duration * 1000 - offset)
+        let audioEnd = min(end, start + VideoAudioMix.time(duration - offset / 1000))
         guard audioEnd > start else { return }
         let id = "asset_\(UUID().uuidString.lowercased())"
         var assets = root["assets"] as? [[String: Any]] ?? []
@@ -698,13 +699,15 @@ struct VideoProject {
         ])
         root["assets"] = assets
         var tracks = root["audioTracks"] as? [[String: Any]] ?? []
-        tracks.append([
+        var track: [String: Any] = [
             "id": "audio_\(UUID().uuidString.lowercased())",
-            "assetId": id, "startMs": start, "endMs": audioEnd,
+            "assetId": id,
             "timebase": "output", "rate": 1, "kind": "music", "offsetMs": offset,
             "gainDb": 0, "loop": false, "fadeInMs": 0, "fadeOutMs": 0,
             "muted": false, "label": url.lastPathComponent, "origin": "user",
-        ])
+        ]
+        VideoAudioTiming.store(CMTimeRange(start: start, end: audioEnd), in: &track)
+        tracks.append(track)
         root["audioTracks"] = tracks
     }
 

@@ -281,7 +281,7 @@ import Testing
             fadeInMs: 750, fadeOutMs: 500)
         #expect(project.audioTracks[0].muted)
         #expect(project.audioTracks[0].loop)
-        #expect(project.audioTracks[0].raw["fadeInMs"] as? Int == 750)
+        #expect(project.audioTracks[0].fadeInMs == 750)
         project.removeAudioTrack(id)
         #expect(project.audioTracks.isEmpty)
     }
