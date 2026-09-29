@@ -33,6 +33,31 @@ extension VideoEditorService {
                 value.isFinite && (-60...12).contains(value), "Gain must be between -60 and 12 dB.")
         }
         switch operation {
+        case let .addStill(path, name, duration):
+            try newName(name)
+            try require(
+                duration.isFinite && duration > 0 && duration <= 604800,
+                "Still source duration must be positive and no longer than seven days.")
+            let url = try mediaURL(path, directory: directory)
+            try project.addStillAsset(
+                url, duration: duration, metadata: VideoStillMedia.metadata(at: url))
+            aliases[name] = project.clips.last!.id
+        case let .stillDuration(reference, duration):
+            let selected = try clip(reference)
+            try require(
+                project.assets.first { $0.id == selected.assetID }?.isStill == true,
+                "Still duration requires an image clip.")
+            try require(
+                duration.isFinite && duration > 0 && duration <= 604800,
+                "Still source duration must be positive and no longer than seven days.")
+            try project.setStillDuration(duration, clipID: selected.id)
+        case let .videoSettings(settings):
+            try require(
+                settings.isValid, "Invalid canvas pixels, rational frame rate, or color space.")
+            project.videoSettings = settings
+        case let .visualEffects(reference, effects):
+            let selected = try clip(reference)
+            try project.setVisualEffects(effects, clipID: selected.id)
         case let .addMedia(path, name):
             try newName(name)
             let url = try mediaURL(path, directory: directory)
@@ -48,8 +73,10 @@ extension VideoEditorService {
             try require(
                 size.width.isFinite && size.height.isFinite && size.width > 0 && size.height > 0
                     && size.width <= 16384 && size.height <= 16384, "Invalid media dimensions.")
+            let metadata = try await VideoSourceMetadata.probe(track)
             project.addAsset(
-                url, duration: duration, width: Int(size.width), height: Int(size.height))
+                url, duration: duration, width: metadata["width"] as! Int,
+                height: metadata["height"] as! Int, sourceMetadata: metadata)
             aliases[name] = project.clips.last!.id
         case let .split(reference, sourceTime, rightName):
             let selected = try clip(reference)
