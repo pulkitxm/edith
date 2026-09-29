@@ -164,6 +164,7 @@ final class VirtualCameraEngine {
             sourceHeight: statistics.sourceHeight, sources: sources,
             format: route == .edithCamera ? extensionStatus?.format ?? .standard : .standard,
             cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
+            systemBackgroundActive: statistics.systemBackgroundActive,
             state: state, message: message)
     }
 

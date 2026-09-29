@@ -6,7 +6,7 @@ import Foundation
 public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate,
     @unchecked Sendable
 {
-    public typealias FrameHandler = (CVPixelBuffer, CMTime) -> Void
+    public typealias FrameHandler = (CVPixelBuffer, CMTime, Bool) -> Void
 
     public struct Configuration: Equatable, Sendable {
         public var sourceID: String?
@@ -187,6 +187,13 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         guard let pixelBuffer = sampleBuffer.imageBuffer,
             let handler = lock.withLock({ handler })
         else { return }
-        handler(pixelBuffer, sampleBuffer.presentationTimeStamp)
+        let systemBackgroundActive: Bool
+        if #available(macOS 15.0, *) {
+            let input = connection.inputPorts.first?.input as? AVCaptureDeviceInput
+            systemBackgroundActive = input?.device.isBackgroundReplacementActive == true
+        } else {
+            systemBackgroundActive = false
+        }
+        handler(pixelBuffer, sampleBuffer.presentationTimeStamp, systemBackgroundActive)
     }
 }

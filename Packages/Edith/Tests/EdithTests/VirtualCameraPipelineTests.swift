@@ -68,6 +68,21 @@ enum VirtualCameraFixtures {
         #expect(topLeft.red > 240 && topLeft.green < 15)
     }
 
+    @Test func systemBackgroundPassesThroughWithoutChangingTheSavedSelection() throws {
+        var state = VirtualCameraState()
+        state.composition.background.mode = .color
+        let pipeline = VirtualCameraPipeline(state: state, outputSize: output)
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        let frame = try #require(pipeline.process(input, at: 1, systemBackgroundActive: true))
+        let pixel = VirtualCameraFixtures.pixel(frame, x: 20, y: 20)
+        #expect(pixel.red > 240 && pixel.green < 15)
+        #expect(pipeline.statistics.systemBackgroundActive)
+        #expect(pipeline.currentState.composition.background.mode == .color)
+        _ = pipeline.process(input, at: 2, systemBackgroundActive: false)
+        #expect(!pipeline.statistics.systemBackgroundActive)
+        #expect(pipeline.currentState.composition.background.mode == .color)
+    }
+
     @Test func outputSizeChangesRebuildTheBufferPool() throws {
         let pipeline = VirtualCameraPipeline(state: VirtualCameraState(), outputSize: output)
         let input = try #require(VirtualCameraFixtures.quadrants())

@@ -355,6 +355,10 @@ struct VirtualCameraBackgroundPanel: View {
     let dark: Bool
 
     private var cameraGuidance: String {
+        if model.systemBackgroundActive {
+            return
+                "macOS Background is active and passes through to your video app. Turn it off in the macOS Video Effects menu to use Edith's backgrounds."
+        }
         if let route = model.snapshot?.route {
             return "Select \(route.cameraName) in your video app to see this background."
         }
@@ -368,7 +372,7 @@ struct VirtualCameraBackgroundPanel: View {
             detail: "Edith finds you in the picture and blurs or replaces everything behind you.",
             dark: dark
         ) {
-            Text(cameraGuidance + " The macOS Video Effects menu for your webcam is separate.")
+            Text(cameraGuidance)
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
@@ -379,9 +383,10 @@ struct VirtualCameraBackgroundPanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            switch model.composition.background.mode {
+            .disabled(model.systemBackgroundActive)
+            switch model.systemBackgroundActive ? .none : model.composition.background.mode {
             case .none:
-                Text("Apps see your real background.")
+                Text("Apps see your camera picture, including any macOS video effects.")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             case .blur:

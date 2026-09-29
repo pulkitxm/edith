@@ -14,6 +14,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         public var sourceHeight = 0
         public var usingCamera = false
         public var running = false
+        public var systemBackgroundActive = false
 
         public init() {}
     }
@@ -115,8 +116,10 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         }
     }
 
-    public func process(_ pixelBuffer: CVPixelBuffer, at time: TimeInterval) -> CVPixelBuffer? {
-        queue.sync { render(pixelBuffer, at: time) }
+    public func process(
+        _ pixelBuffer: CVPixelBuffer, at time: TimeInterval, systemBackgroundActive: Bool = false
+    ) -> CVPixelBuffer? {
+        queue.sync { render(pixelBuffer, at: time, systemBackgroundActive: systemBackgroundActive) }
     }
 
     public func privacyFrame() -> CVPixelBuffer? {
@@ -169,8 +172,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             if capture.isRunning {
                 capture.update(captureConfiguration())
             } else {
-                capture.start(captureConfiguration()) { [weak self] buffer, _ in
-                    self?.handleCapture(buffer)
+                capture.start(captureConfiguration()) { [weak self] buffer, _, systemBackground in
+                    self?.handleCapture(buffer, systemBackgroundActive: systemBackground)
                 }
             }
         } else {
@@ -181,9 +184,11 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         updateStats { $0.usingCamera = self.state.privacy.usesCamera }
     }
 
-    private func handleCapture(_ buffer: CVPixelBuffer) {
+    private func handleCapture(_ buffer: CVPixelBuffer, systemBackgroundActive: Bool) {
         guard running, state.privacy.usesCamera, let output else { return }
-        if let rendered = render(buffer, at: clock()) {
+        if let rendered = render(
+            buffer, at: clock(), systemBackgroundActive: systemBackgroundActive)
+        {
             output(rendered)
         }
         if let active = capture.active {
@@ -195,7 +200,10 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         }
     }
 
-    private func render(_ pixelBuffer: CVPixelBuffer, at time: TimeInterval) -> CVPixelBuffer? {
+    private func render(
+        _ pixelBuffer: CVPixelBuffer, at time: TimeInterval, systemBackgroundActive: Bool
+    ) -> CVPixelBuffer? {
+        updateStats { $0.systemBackgroundActive = systemBackgroundActive }
         let composition = state.composition
         let manual = composition.framing
         var framing = manual
@@ -209,7 +217,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         }
         let image = CIImage(cvPixelBuffer: pixelBuffer)
         let oriented = VirtualCameraRenderer.oriented(image, framing: manual)
-        let wantsMask = composition.background.needsSegmentation
+        let wantsMask = composition.background.needsSegmentation && !systemBackgroundActive
         let wantsFaces = manual.autoFrame != .off
         analyzer.submit(oriented, wantsMask: wantsMask, wantsFaces: wantsFaces)
         let analysis = analyzer.latest()
@@ -221,7 +229,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         effectiveFraming = framing
         let input = VirtualCameraFrameInput(
             image: image, composition: composition, framing: framing,
-            mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets)
+            mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets,
+            systemBackgroundActive: systemBackgroundActive)
         let composed = renderer.compose(input, output: outputSize)
         if referenceAt.map({ time - $0 >= Self.referenceInterval || time < $0 }) ?? true {
             referenceAt = time

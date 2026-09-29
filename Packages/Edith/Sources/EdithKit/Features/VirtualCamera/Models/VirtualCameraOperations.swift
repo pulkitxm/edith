@@ -91,6 +91,7 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var sources: [VirtualCameraSource]
     public var format: VirtualCameraFormat
     public var cameraAccess: String
+    public var systemBackgroundActive: Bool
     public var state: VirtualCameraState
     public var message: String?
 
@@ -100,7 +101,8 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
         clients: [VirtualCameraClient] = [], live: Bool = false, framesPerSecond: Double = 0,
         source: VirtualCameraSource? = nil, sourceWidth: Int = 0, sourceHeight: Int = 0,
         sources: [VirtualCameraSource] = [], format: VirtualCameraFormat = .standard,
-        cameraAccess: String = "unknown", state: VirtualCameraState, message: String? = nil
+        cameraAccess: String = "unknown", systemBackgroundActive: Bool = false,
+        state: VirtualCameraState, message: String? = nil
     ) {
         self.enabled = enabled
         self.helperRunning = helperRunning
@@ -117,6 +119,7 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
         self.sources = sources
         self.format = format
         self.cameraAccess = cameraAccess
+        self.systemBackgroundActive = systemBackgroundActive
         self.state = state
         self.message = message
     }

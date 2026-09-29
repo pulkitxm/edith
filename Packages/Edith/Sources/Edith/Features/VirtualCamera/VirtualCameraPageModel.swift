@@ -142,6 +142,10 @@ final class VirtualCameraPageModel: ObservableObject {
 
     var isLive: Bool { snapshot?.live == true }
 
+    var systemBackgroundActive: Bool {
+        isLive ? snapshot?.systemBackgroundActive == true : previewStatistics.systemBackgroundActive
+    }
+
     func appear() {
         guard !visible else { return }
         visible = true
@@ -202,6 +206,7 @@ final class VirtualCameraPageModel: ObservableObject {
         if statistics.sourceWidth != previewStatistics.sourceWidth
             || statistics.sourceHeight != previewStatistics.sourceHeight
             || statistics.source != previewStatistics.source
+            || statistics.systemBackgroundActive != previewStatistics.systemBackgroundActive
         {
             previewStatistics = statistics
         }

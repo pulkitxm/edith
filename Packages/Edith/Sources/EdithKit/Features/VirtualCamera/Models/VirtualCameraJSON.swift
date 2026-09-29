@@ -62,6 +62,7 @@ public extension VirtualCameraSnapshot {
             ]),
             "look": .string(state.composition.look.preset.rawValue),
             "background": .string(state.composition.background.mode.rawValue),
+            "systemBackgroundActive": .bool(systemBackgroundActive),
             "message": .optional(message),
         ])
     }
@@ -83,7 +84,7 @@ public extension VirtualCameraSnapshot {
             "zoom: \(String(format: "%.2f", framing.zoom))x"
                 + (framing.autoFrame == .off ? "" : ", auto framing \(framing.autoFrame.rawValue)"),
             "look: \(state.composition.look.preset.title)",
-            "background: \(state.composition.background.mode.title)",
+            "background: \(systemBackgroundActive ? "macOS" : state.composition.background.mode.title)",
             "privacy: \(state.privacy.title)",
             "scene: \(state.activeScene?.name ?? "none")"
                 + (state.activeSceneIsModified ? " (changed)" : ""),

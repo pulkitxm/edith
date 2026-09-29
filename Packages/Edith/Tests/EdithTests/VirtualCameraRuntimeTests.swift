@@ -248,7 +248,7 @@ import Testing
             enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
             extensionBuild: "7",
             source: VirtualCameraSource(id: "a", name: "Cam", kind: .builtIn), sourceWidth: 1920,
-            sourceHeight: 1080, state: VirtualCameraState())
+            sourceHeight: 1080, systemBackgroundActive: true, state: VirtualCameraState())
         snapshot.message = "Done."
         guard case .object(let object) = snapshot.jsonValue else {
             Issue.record("status JSON is not an object")
@@ -260,10 +260,12 @@ import Testing
                 "extensionBuild", "live",
                 "headline", "apps", "framesPerSecond", "camera", "cameraResolution", "output",
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
-                "look", "background", "message",
+                "look", "background", "systemBackgroundActive", "message",
             ])
         #expect(object["cameraResolution"] == .string("1920x1080"))
         #expect(object["message"] == .string("Done."))
+        #expect(object["systemBackgroundActive"] == .bool(true))
+        #expect(snapshot.summaryLines.contains("background: macOS"))
         guard case .array(let scenes) = snapshot.scenesJSON else {
             Issue.record("scenes JSON is not an array")
             return

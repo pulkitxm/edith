@@ -205,6 +205,34 @@ import Testing
         #expect(withoutMask(280, 30).near(.green))
     }
 
+    @Test(arguments: [VirtualCameraBackgroundMode.blur, .color, .image])
+    func systemBackgroundTakesPriorityAndEdithResumesWhenDisabled(
+        mode: VirtualCameraBackgroundMode
+    ) throws {
+        let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
+        var input = VirtualCameraFrameInput(
+            image: Self.quadrants(),
+            composition: VirtualCameraComposition(
+                background: VirtualCameraBackground(
+                    mode: mode, blur: 1, color: VirtualCameraColor(red: 1, green: 0, blue: 1))),
+            mask: Self.solid(0, 0, 0, rect),
+            assets: VirtualCameraAssets(background: Self.solid(1, 0, 1, rect)),
+            systemBackgroundActive: true)
+        let passedThrough = try pixels(Self.renderer.compose(input, output: output))
+        #expect(passedThrough(40, 30).near(.red))
+        #expect(passedThrough(280, 150).near(.white))
+        let reference = try pixels(Self.renderer.framedReference(input, output: output))
+        #expect(reference(40, 30).near(.red))
+        #expect(reference(280, 150).near(.white))
+        input.systemBackgroundActive = false
+        let resumed = try pixels(Self.renderer.compose(input, output: output))
+        if mode == .blur {
+            #expect(!resumed(160, 150).near(.white, tolerance: 20))
+        } else {
+            #expect(resumed(40, 30).near(RGB(red: 255, green: 0, blue: 255)))
+        }
+    }
+
     @Test func blurredBackgroundKeepsThePersonSharp() throws {
         let mask = Self.solid(1, 1, 1, CGRect(x: 0, y: 450, width: 800, height: 450))
             .composited(over: Self.solid(0, 0, 0, CGRect(x: 0, y: 0, width: 1600, height: 900)))

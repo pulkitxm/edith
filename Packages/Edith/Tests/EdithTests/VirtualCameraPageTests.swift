@@ -718,6 +718,25 @@ enum VirtualCameraSyntheticStudio {
                 model, preview: preview, renderer: renderer,
                 to: output.appendingPathComponent("page-\(tab.rawValue).png"))
         }
+        model.updateComposition {
+            $0.background = VirtualCameraBackground(
+                mode: .color, color: VirtualCameraColor(hex: "#1E293B") ?? .black)
+        }
+        model.flushSave()
+        var snapshot = try #require(model.snapshot)
+        snapshot.systemBackgroundActive = true
+        snapshot.state = model.state
+        model.injectForTesting(snapshot: snapshot, sources: VirtualCameraPageModelTests.sources)
+        let nativePreview = renderer.compose(
+            VirtualCameraFrameInput(
+                image: studio, composition: model.composition, mask: mask,
+                systemBackgroundActive: true), output: size)
+        renderer.render(nativePreview, into: buffer)
+        model.showPreviewFrame(buffer)
+        model.tab = .background
+        try renderPage(
+            model, preview: nativePreview, renderer: renderer,
+            to: output.appendingPathComponent("page-system-background.png"))
     }
 
     private func renderPage(
