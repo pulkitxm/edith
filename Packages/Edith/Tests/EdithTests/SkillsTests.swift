@@ -149,11 +149,38 @@ import Testing
     }
 
     @Test func libraryContainsTheBundledGitHubSkills() {
-        #expect(EdithSkillLibrary.skills.map(\.id) == ["edith-remote-work", "edith-video-edit"])
+        #expect(
+            EdithSkillLibrary.skills.map(\.id) == [
+                "edith-remote-work", "edith-video-edit", "edith-video-delivery",
+            ])
         #expect(
             skill.sourceURL.absoluteString
                 == "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-remote-work/SKILL.md"
         )
+    }
+
+    @MainActor @Test func bundledCatalogDocumentsLoadForPreviewWithoutInstallation() async throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("skills")
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let store = SkillDocumentStore(cacheDirectory: cache) { url in
+            let id = url.deletingLastPathComponent().lastPathComponent
+            return try Data(contentsOf: root.appendingPathComponent(id + "/SKILL.md"))
+        }
+        for entry in EdithSkillLibrary.skills {
+            let document = try await store.load(entry)
+            #expect(document.metadata.contains("name: " + entry.id))
+            #expect(!document.body.isEmpty)
+            #expect(!document.isCached)
+        }
+        let offline = SkillDocumentStore(cacheDirectory: cache) { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        for entry in EdithSkillLibrary.skills {
+            #expect(try await offline.load(entry).isCached)
+        }
     }
 
     @Test func installerTargetsExactlyTheSelectedAgentsWithoutAShell() throws {

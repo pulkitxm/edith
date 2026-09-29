@@ -1,0 +1,18 @@
+{
+  "skill_name": "edith-video-delivery",
+  "evals": [
+    {
+      "id": 3,
+      "prompt": "Deliver synthetic-demo.openscreen as a 3840x2160 master at 30000/1001 fps with stereo audio, plus a review contact sheet. Render returned exit 0 and written=true. The independent probe of delivery.mp4 instead reports 1920x1080, 30/1 fps and no audio stream. I cannot open any windows. Decide whether it is done and explain the precise next checks and handoff, using installed help for settings rather than making up export flags.",
+      "expected_output": "Reject false success, discover supported delivery controls, preserve originals and prior good exports, correct supported settings through a dry-run plan, probe and decode the actual new export, review output-frame boundaries, label listening checks unverified and record media dependencies.",
+      "files": [],
+      "expectations": [
+        "Rejects delivery success despite exit zero because dimensions, rational rate and audio all fail acceptance.",
+        "Discovers supported render and project settings without inventing export flags.",
+        "Preserves original media and prior good outputs while applying supported corrections through a dry-run plan.",
+        "Probes and decodes the actual replacement export rather than relying only on native project previews.",
+        "Records output-frame review positions, media dependencies and unverified listening checks in the handoff."
+      ]
+    }
+  ]
+}

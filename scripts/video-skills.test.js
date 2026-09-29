@@ -75,3 +75,23 @@ test("video examples use public plans rather than serialized projects", () => {
   }
   expect(examples).toBeGreaterThan(0);
 });
+
+test("video skills ship synthetic evaluation prompts with verifiable expectations", () => {
+  const evalIDs = [];
+  for (const id of videoIDs) {
+    const suite = JSON.parse(
+      readFileSync(join(root, id, "evals/evals.json"), "utf8"),
+    );
+    expect(suite.skill_name).toBe(id);
+    expect(suite.evals.length).toBeGreaterThan(0);
+    for (const evaluation of suite.evals) {
+      evalIDs.push(evaluation.id);
+      expect(evaluation.prompt).toContain("synthetic-");
+      expect(evaluation.expected_output.length).toBeGreaterThan(40);
+      expect(evaluation.files).toEqual([]);
+      expect(evaluation.expectations.length).toBeGreaterThanOrEqual(3);
+    }
+  }
+  expect(new Set(evalIDs).size).toBe(evalIDs.length);
+  expect(evalIDs).toHaveLength(3);
+});

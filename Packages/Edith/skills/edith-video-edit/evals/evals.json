@@ -1,0 +1,31 @@
+{
+  "skill_name": "edith-video-edit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make a 180-frame square teaser from synthetic-street.mov and synthetic-detail.mov at exactly 30000/1001 fps. Keep the original files untouched and give me a native editable cut. Put the cut nearest the supplied music cue at 1 second, with the song independent of the shots. I only have command-line access. The installed help lists create/show/apply/validate/render/frame/schema; the schema supports addMedia, trim, speed, sourceAudio, canvas and only clip-anchored addAudio. Explain what can actually be completed and give the command sequence without inventing unavailable controls.",
+      "expected_output": "Help/schema-first workflow, original references, rational frame math, native public plan, dry-run before atomic apply, explicit independent-audio and exact-rate support limitations, and actual output verification.",
+      "files": [],
+      "expectations": [
+        "Discovers help and schema before writing a public edit plan and does not handwrite internal project JSON.",
+        "Keeps source media unchanged and dry-runs before applying atomically.",
+        "Computes 180 frames as 6.006 seconds and the nearest one-second cue as frame 30 at 1.001 seconds.",
+        "Explicitly says independent audio and an exact output rate cannot be guaranteed by the stated schema.",
+        "Verifies actual rendered output and labels unfinished requirements instead of claiming completion."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Create an alternate cut of synthetic-launch.openscreen, avoiding the source ranges used in synthetic-previous.openscreen. Both reference synthetic-wide.mov. Do not change either existing project. Available help also lists list, clone and contact-sheet, but no media reservations or catalog API. A previous apply response was lost. Describe how you would recover, make the variation and prove which footage is reused without touching a GUI.",
+      "expected_output": "Inspect current persisted state before retries, clone with independent identity, compare original source ranges rather than filenames, preserve inputs, disclose lack of shared reservation guarantees, and verify the new project plus output-time review samples.",
+      "files": [],
+      "expectations": [
+        "Inspects persisted project state before repeating a command whose response was lost.",
+        "Preserves both existing projects and verifies independent identity for the alternate cut.",
+        "Compares source identities and source-time ranges rather than filenames alone.",
+        "Does not invent a reservation API or claim global reuse guarantees from a local ledger.",
+        "Dry-runs the alternate plan and verifies saved state plus output-time review samples."
+      ]
+    }
+  ]
+}
