@@ -25,6 +25,16 @@ the selected project, and validate source availability before rendering. If
 locating an existing edit or making a variant, discover `list` and `clone` first.
 Do not recreate a native project by writing its internal JSON.
 
+When using an existing Edith MCP connection, discover registered tools first.
+Edit tools are generated under `edith_studio_edit_<route>`; use exact advertised
+names instead of assuming a route exists. A registered `edith_studio_edit_render`
+accepts tool input `{"arguments": ["synthetic.openscreen", "--output", "delivery.mp4"]}`:
+the array contains the same arguments/options as the CLI subcommand, without the
+`ed studio edit` prefix. JSON output is enabled by the transport. Inspect MCP
+`isError` and the payload, including JSON `error.code` and `error.message` for
+runtime failures. Parser or transport failures can differ. Discover supported
+settings rather than inventing flags from the tool-name pattern.
+
 ## 2. Define the delivery contract
 
 Read [full-quality delivery](references/full-quality-delivery.md) before choosing

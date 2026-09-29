@@ -25,6 +25,16 @@ the installed schema and help as authoritative: operation names, field types,
 time units, enum values and delivery settings can differ between installations.
 Do not invent flags or send fields merely because the native editor has a feature.
 
+When using an existing Edith MCP connection, discover its registered tools first.
+Edit tools are generated under `edith_studio_edit_<route>`; use the exact advertised
+name rather than assuming every CLI route is registered. For example, the
+registered `edith_studio_edit_validate` takes tool input
+`{"arguments": ["synthetic.openscreen"]}`. This array contains the same positional
+arguments and options as the CLI subcommand, without the `ed studio edit` prefix.
+The transport enables JSON output. Inspect the MCP `isError` result and payload:
+runtime failures include JSON `error.code` and `error.message`; parser or transport
+failures can differ. Discover supported arguments instead of inventing flags.
+
 ## 2. Establish the edit and its media
 
 Extract the requested aspect ratio, duration, pace, audio intent and deliverables.
@@ -33,9 +43,10 @@ the result. Inspect existing projects with `show`, and discover `list` or `clone
 through help when finding projects or creating an alternate cut.
 
 Read [originals and reuse](references/originals-and-reuse.md) before importing,
-reserving or relinking assets. Read local `references/` files when the full skill
-folder is available. The Plugins preview and copy contain only `SKILL.md`; for a
-Markdown-only attachment, fetch each referenced path from GitHub repository
+sorting by capture date, reserving or relinking assets. Read local `references/`
+files when the full skill folder is available. The Plugins preview and copy contain
+only `SKILL.md`; for a Markdown-only attachment, fetch each referenced path from
+GitHub repository
 `pulkitxm/edith`, branch `main`, beneath
 `Packages/Edith/skills/edith-video-edit/`. If a blueprint is unavailable, report
 that limitation and use installed help rather than guessing its contract.
