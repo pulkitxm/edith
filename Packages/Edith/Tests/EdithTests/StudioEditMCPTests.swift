@@ -12,13 +12,14 @@ import Testing
             let descriptor = try #require(
                 UserOperationCatalog.descriptor(id: operation.descriptor.id))
             #expect(descriptor.cli == ["studio", "edit", operation.rawValue])
-            let name = "edith_studio_edit_\(operation.rawValue)"
+            let route = operation.rawValue.replacingOccurrences(of: "-", with: "_")
+            let name = "edith_studio_edit_\(route)"
             #expect(names.contains(name))
             let tool = try #require(OperationMCPCatalog.tool(named: name))
             #expect(tool.route == descriptor.cli)
             #expect(
                 tool.effect
-                    == (["schema", "show", "validate"].contains(operation.rawValue)
+                    == (["schema", "show", "validate", "list"].contains(operation.rawValue)
                         ? .read : .write))
             #expect(!tool.arguments([], confirm: true).contains("--yes"))
         }

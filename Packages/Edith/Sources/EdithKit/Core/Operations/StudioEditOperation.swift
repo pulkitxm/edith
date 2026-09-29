@@ -2,6 +2,8 @@ import EdithCore
 
 public enum StudioEditOperation: String, CaseIterable, Sendable {
     case schema, create, show, apply, validate, render, frame
+    case list, clone
+    case contactSheet = "contact-sheet"
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -16,8 +18,8 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
 
     private var effect: UserOperationEffect {
         switch self {
-        case .schema, .show, .validate: .read
-        case .create, .apply, .render, .frame: .write
+        case .schema, .show, .validate, .list: .read
+        case .create, .apply, .render, .frame, .clone, .contactSheet: .write
         }
     }
 
@@ -30,6 +32,9 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .validate: "Validate a project's structure, local media and native composition."
         case .render: "Render a native project to MP4, with a six-hour execution limit."
         case .frame: "Extract a composited PNG frame at a rendered output time."
+        case .list: "List project identities and titles in a local directory."
+        case .clone: "Copy a native edit with a fresh project identity."
+        case .contactSheet: "Render a labeled contact sheet of up to 64 output frames."
         }
     }
 }
