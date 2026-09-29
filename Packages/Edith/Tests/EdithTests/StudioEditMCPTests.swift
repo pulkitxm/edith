@@ -40,7 +40,8 @@ import Testing
             ])
         for tool in OperationMCPCatalog.tools {
             let expected: TimeInterval =
-                tool.name == "edith_studio_edit_audio_analyze"
+                ["edith_studio_edit_audio_analyze", "edith_studio_edit_contact_sheet"].contains(
+                    tool.name)
                 ? 300
                 : longRoutes.contains(tool.route) ? 21600 : 120
             #expect(OperationMCPRunner.executionTimeout(for: tool) == expected, "\(tool.name)")

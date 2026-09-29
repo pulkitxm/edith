@@ -575,10 +575,14 @@ public enum CommandTree {
         "ed studio edit contact-sheet": Spec(
             options: [
                 "--json", "--overwrite", "--time", "--columns", "--cell-width", "--output",
+                "--show-beat-markers", "--waveform-asset", "--source-in", "--source-out",
+                "--output-start", "--playback-rate",
                 "-h", "--help", "--version",
             ],
             optionValues: [
                 "--time": .free, "--columns": .free, "--cell-width": .free,
+                "--waveform-asset": .free, "--source-in": .free, "--source-out": .free,
+                "--output-start": .free, "--playback-rate": .free,
                 "--output": .localPath,
             ], arguments: [.localPath]),
         "ed studio edit captions list": Spec(

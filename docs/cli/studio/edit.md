@@ -72,6 +72,47 @@ Each tile reports its selected frame index and timestamp. Use 1 to 64 times,
 1 to 8 columns, and a cell width from 64 to 1920 pixels. The completed PNG report
 includes its dimensions and SHA-256 checksum.
 
+### Contact-sheet waveform and saved beat markers
+
+Append `--show-beat-markers` to show saved project markers on an output-time strip
+below the unchanged rendered frames and labels. Pink ticks are manual markers;
+orange ticks are saved transients. Their positions use each marker's saved rational
+frame rate, even if it differs from the render cadence. Cyan ticks indicate the
+selected review-cell times; repeated cells retain separate entries in JSON.
+
+For a waveform, supply `--waveform-asset <asset-or-audio-track-id>` and all four mapping options:
+
+```sh
+ed studio edit contact-sheet demo.openscreen --time 0 --time 0.5005 --time 0.5005 --columns 3 --output rhythm.png --show-beat-markers --waveform-asset audio_asset_id --source-in 1 --source-out 3 --output-start 0.25 --playback-rate 2 --json
+```
+
+Source and output positions are seconds. The source interval is half-open and maps
+as `output = output-start + (source - source-in) / playback-rate`. Asset selection
+and mapping are explicit; selecting a track resolves its source asset but does not
+infer offsets, loops or mix routing. The
+shared native analyzer reads processed audio when available. Its source-sample bins
+are converted using the decoded sample rate, clipped to the selected source range
+and output duration, then placed on the strip. Amplitudes are source linear peaks
+before gain, effects and mixing, not measurements of the delivered mix. Boundary
+bins retain their full source-bin peak. Newly detected transients are not added to
+the project or drawn as confirmed beats: the marker strip uses saved markers only.
+
+The optional JSON `overlays` object contains source/output spans, mapping, source
+sample rate, rational marker frames, one-based cell indices, and absolute pixel X
+positions measured from the image's left edge. The strip adds 132 pixels of height,
+supports at most 2048 waveform bins and 10000 visible markers, and keeps the sheet
+within 64 million pixels. Markers at or beyond output end are excluded. Invalid
+selection, missing mapping, a still-image waveform source, a source without audio,
+or a mapping outside the output returns a structured runtime error with `--json`
+and preserves the project and any existing destination. Still-only projects can
+use the saved-marker strip without waveform analysis.
+
+MCP uses `edith_studio_edit_contact_sheet` with the same flags in `arguments`:
+
+```json
+{"name":"edith_studio_edit_contact_sheet","arguments":{"arguments":["demo.openscreen","--time","0.5005","--output","rhythm.png","--show-beat-markers","--waveform-asset","audio_asset_id","--source-in","1","--source-out","3","--output-start","0.25","--playback-rate","2"]}}
+```
+
 ## Delivery settings
 
 `ed studio edit render` accepts `--codec`, `--bit-rate`, `--key-frame-interval`,

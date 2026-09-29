@@ -49,10 +49,17 @@ extension VideoEditorService {
         _ url: URL, assetID: String, options: AudioAnalysisOptions = .init(),
         mapping: AudioMarkerMapping? = nil, rate: MarkerRate? = nil
     ) async throws -> AudioAnalysisReport {
+        try await analyzeAudio(
+            open(url), assetID: assetID, options: options, mapping: mapping, rate: rate)
+    }
+
+    static func analyzeAudio(
+        _ project: VideoProject, assetID: String, options: AudioAnalysisOptions = .init(),
+        mapping: AudioMarkerMapping? = nil, rate: MarkerRate? = nil
+    ) async throws -> AudioAnalysisReport {
         try require(
             (mapping == nil) == (rate == nil),
             "Mapping and an FPS choice must be supplied together.")
-        let project = try open(url)
         let sourceAssetID =
             project.audioTracks.first(where: { $0.id == assetID })?.assetID ?? assetID
         guard let asset = project.assets.first(where: { $0.id == sourceAssetID }),

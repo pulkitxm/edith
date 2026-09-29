@@ -82,7 +82,13 @@ public enum OperationMCPRunner {
     public static let maximumOutputBytes = 4 << 20
 
     static func executionTimeout(for tool: OperationMCPTool) -> TimeInterval {
-        if tool.route == StudioEditMarkerOperation.analyze.descriptor.cli { return 300 }
+        if [
+            StudioEditMarkerOperation.analyze.descriptor.cli,
+            StudioEditOperation.contactSheet.descriptor.cli,
+        ]
+        .contains(tool.route) {
+            return 300
+        }
         return [
             StudioEditOperation.render.descriptor.cli,
             StudioDeliveryOperation.renderAudio.descriptor.cli,

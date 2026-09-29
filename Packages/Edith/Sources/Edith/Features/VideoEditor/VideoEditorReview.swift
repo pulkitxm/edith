@@ -25,6 +25,7 @@ extension VideoEditorService {
         public let height: Int
         public let frames: [ReviewFrame]
         public let sha256: String
+        public let overlays: ReviewOverlayReport?
     }
 
     public static func list(in directory: URL) throws -> [ProjectSummary] {
@@ -58,7 +59,7 @@ extension VideoEditorService {
 
     public static func contactSheet(
         _ source: URL, times: [Double], columns: Int = 4, cellWidth: Int = 320,
-        to output: URL, overwrite: Bool = false
+        to output: URL, overwrite: Bool = false, overlays: ReviewOverlays = .init()
     ) async throws -> ContactSheetReport {
         try require((1...64).contains(times.count), "Choose between 1 and 64 review frames.")
         try require((1...8).contains(columns), "Contact sheets support 1 to 8 columns.")
@@ -66,6 +67,7 @@ extension VideoEditorService {
         let project = try open(source)
         try requireOutput(output, extension: "png", project: project, source: source)
         try checkDestination(output, overwrite: overwrite)
+        if overlays.showBeatMarkers { try validateMarkerStorage(project) }
         try await validateMedia(project)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         try require(
@@ -101,7 +103,23 @@ extension VideoEditorService {
         let gap = 12
         let labelHeight = 28
         let sheetWidth = columnCount * (tileWidth + gap) + gap
-        let sheetHeight = rows * (height + labelHeight + gap) + gap
+        let overlayReport: ReviewOverlayReport?
+        if overlays.enabled {
+            let analysis = try await reviewOverlayAnalysis(
+                project: project, options: overlays, pipeline: pipeline)
+            overlayReport = try reviewOverlayGeometry(
+                options: overlays, analysis: analysis, markers: project.markers,
+                frames: selections.map(\.2), duration: pipeline.duration, sheetWidth: sheetWidth)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try require(
+                encoder.encode(overlayReport).count <= 3 << 20,
+                "Contact sheet overlay report exceeds the 3 MiB limit.")
+        } else {
+            overlayReport = nil
+        }
+        let sheetHeight =
+            rows * (height + labelHeight + gap) + gap + (overlayReport?.stripHeight ?? 0)
         try require(
             sheetWidth > 0 && sheetHeight > 0 && sheetWidth * sheetHeight <= 64_000_000,
             "Contact sheet exceeds 64 million pixels. Reduce cell width or frame count.")
@@ -132,6 +150,7 @@ extension VideoEditorService {
             context.textPosition = CGPoint(x: x, y: y + 8)
             CTLineDraw(selection.1, context)
         }
+        if let overlayReport { drawReviewOverlay(overlayReport, in: context) }
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard let image = context.makeImage(),
@@ -148,7 +167,7 @@ extension VideoEditorService {
         try publish(temporary, to: output, overwrite: overwrite)
         return ContactSheetReport(
             version: 1, path: output.path, width: sheetWidth, height: sheetHeight,
-            frames: selections.map(\.2), sha256: hash)
+            frames: selections.map(\.2), sha256: hash, overlays: overlayReport)
     }
 
 }
