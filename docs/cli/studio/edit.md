@@ -80,7 +80,7 @@ orange ticks are saved transients. Their positions use each marker's saved ratio
 frame rate, even if it differs from the render cadence. Cyan ticks indicate the
 selected review-cell times; repeated cells retain separate entries in JSON.
 
-For a waveform, supply `--waveform-asset <asset-id>` and all four mapping options:
+For a waveform, supply `--waveform-asset <asset-or-audio-track-id>` and all four mapping options:
 
 ```sh
 ed studio edit contact-sheet demo.openscreen --time 0 --time 0.5005 --time 0.5005 --columns 3 --output rhythm.png --show-beat-markers --waveform-asset audio_asset_id --source-in 1 --source-out 3 --output-start 0.25 --playback-rate 2 --json
@@ -88,7 +88,8 @@ ed studio edit contact-sheet demo.openscreen --time 0 --time 0.5005 --time 0.500
 
 Source and output positions are seconds. The source interval is half-open and maps
 as `output = output-start + (source - source-in) / playback-rate`. Asset selection
-and mapping are explicit; offsets, loops and mix routing are not inferred. The
+and mapping are explicit; selecting a track resolves its source asset but does not
+infer offsets, loops or mix routing. The
 shared native analyzer reads processed audio when available. Its source-sample bins
 are converted using the decoded sample rate, clipped to the selected source range
 and output duration, then placed on the strip. Amplitudes are source linear peaks

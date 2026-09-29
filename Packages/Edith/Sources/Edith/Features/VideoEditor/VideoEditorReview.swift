@@ -106,7 +106,7 @@ extension VideoEditorService {
         let overlayReport: ReviewOverlayReport?
         if overlays.enabled {
             let analysis = try await reviewOverlayAnalysis(
-                source: source, options: overlays, pipeline: pipeline)
+                project: project, options: overlays, pipeline: pipeline)
             overlayReport = try reviewOverlayGeometry(
                 options: overlays, analysis: analysis, markers: project.markers,
                 frames: selections.map(\.2), duration: pipeline.duration, sheetWidth: sheetWidth)

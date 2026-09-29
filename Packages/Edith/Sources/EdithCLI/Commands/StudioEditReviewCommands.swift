@@ -51,7 +51,7 @@ struct StudioEditContactSheet: AsyncParsableCommand {
     @Flag(help: "Append saved manual and transient markers on an output-time strip.")
     var showBeatMarkers = false
     @Option(
-        help: "Audio or video asset ID for a source waveform; requires all four mapping options.")
+        help: "Audio/video asset or audio track ID for a waveform; requires all four mapping options.")
     var waveformAsset: String?
     @Option(help: "Waveform source-range start in seconds.") var sourceIn: Double?
     @Option(help: "Waveform source-range end in seconds (exclusive).") var sourceOut: Double?

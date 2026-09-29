@@ -76,7 +76,7 @@ import Testing
             url, times: times, columns: 2, cellWidth: 160, to: plain)
         var options = VideoEditorService.ReviewOverlays()
         options.showBeatMarkers = true
-        options.waveformAssetID = audioID
+        options.waveformAssetID = try #require(project.audioTracks.first?.id)
         options.waveformMapping = .init(
             sourceInSeconds: 1, sourceOutSeconds: 3, outputStartSeconds: 0.25, playbackRate: 2)
         let report = try await VideoEditorService.contactSheet(
@@ -198,6 +198,57 @@ import Testing
             "--waveform-asset", "--source-in", "--source-out", "--output-start", "--playback-rate",
         ] {
             #expect(node.optionValues[flag] == .free)
+        }
+    }
+
+    @Test func waveformUsesCapturedProjectWhenTheSavedAudioReferenceChanges() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let movie = try await VideoEditorServiceTests.movie(in: directory)
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8000))
+        buffer.frameLength = 8000
+        let samples = try #require(buffer.floatChannelData?[0])
+        let original = directory.appendingPathComponent("original.caf")
+        let replacement = directory.appendingPathComponent("replacement.caf")
+        for (path, peak) in [(original, Float(0.8)), (replacement, Float(0.2))] {
+            for index in 0..<8000 { samples[index] = peak }
+            try AVAudioFile(forWriting: path, settings: format.settings).write(from: buffer)
+        }
+        let url = directory.appendingPathComponent("snapshot.openscreen")
+        var project = VideoProject.create(title: "Synthetic snapshot")
+        project.addAsset(movie, duration: 1, width: 64, height: 64)
+        project.addAudio(original, duration: 1, at: 0)
+        try project.save(to: url)
+        let captured = try VideoEditorService.open(url)
+        let track = try #require(captured.audioTracks.first)
+        let pipeline = try await VideoRenderPipeline.make(project: captured)
+        let destination = directory.appendingPathComponent("existing.png")
+        let existing = Data("existing synthetic destination".utf8)
+        try existing.write(to: destination)
+        for field in ["originalPath", "edithAudioPath"] {
+            var revised = try VideoProject.open(url)
+            var assets = revised.assets.map(\.raw)
+            let index = try #require(assets.firstIndex { $0["id"] as? String == track.assetID })
+            assets[index]["originalPath"] = original.path
+            assets[index][field] = replacement.path
+            revised.root["assets"] = assets
+            try revised.save(to: url)
+            let saved = try Data(contentsOf: url)
+            var options = VideoEditorService.ReviewOverlays()
+            options.waveformAssetID = track.id
+            options.waveformMapping = .init(
+                sourceInSeconds: 0, sourceOutSeconds: 1, outputStartSeconds: 0, playbackRate: 1)
+            let report = try #require(
+                try await VideoEditorService.reviewOverlayAnalysis(
+                    project: captured, options: options, pipeline: pipeline))
+            #expect(report.sourcePath == original.path)
+            #expect(report.analysis.waveform.map(\.peak).max() == 0.8)
+            let reopened = try await VideoEditorService.analyzeAudio(url, assetID: track.id)
+            #expect(reopened.sourcePath == replacement.path)
+            #expect(reopened.analysis.waveform.map(\.peak).max() == 0.2)
+            #expect(try Data(contentsOf: destination) == existing)
+            #expect(try Data(contentsOf: url) == saved)
         }
     }
 }

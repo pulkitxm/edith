@@ -64,7 +64,7 @@ def main():
         {'videoSettings': {'settings': {'width': 640, 'height': 360, 'frameRateNumerator': 30000,
                                         'frameRateDenominator': 1001, 'colorSpace': 'rec709'}}},
         {'canvas': {'aspectRatio': 'native', 'padding': 0, 'backgroundColor': '#111111'}},
-        {'addAudio': {'path': str(root / 'clicks.wav'), 'start': 0.25, 'offset': 1}},
+        {'addAudio': {'path': str(root / 'clicks.wav'), 'start': 0.25, 'offset': 1, 'name': 'clicks'}},
         {'text': {'content': 'SYNTHETIC RHYTHM REVIEW', 'start': 0, 'end': 2.002}},
     ]}
     (root / 'plan.json').write_text(json.dumps(plan))
@@ -84,6 +84,10 @@ def main():
     flags = ['--show-beat-markers', '--waveform-asset', asset, '--source-in', '1',
              '--source-out', '4', '--output-start', '0.25', '--playback-rate', '2']
     report = cli('contact-sheet', *args, '--output', root / 'cli.png', *flags)
+    track_flags = flags.copy()
+    track_flags[2] = document['audioTracks'][0]['id']
+    track_report = cli('contact-sheet', *args, '--output', root / 'track.png', *track_flags)
+    assert track_report['sha256'] == report['sha256']
     assert report['height'] == plain['height'] + 132 and report['width'] == plain['width']
     assert [frame['frame'] for frame in report['frames']] == [0, 15, 15, 45]
     overlay = report['overlays']
@@ -133,6 +137,7 @@ def main():
                'frames': [frame['frame'] for frame in report['frames']],
                'savedMarkers': len(overlay['markers']), 'waveformBins': len(overlay['waveform']),
                'sourceMapping': overlay['waveformMapping'], 'unchangedOnInvalidSelection': True,
+               'audioTrackSelection': 'passed',
                'width': report['width'], 'height': report['height'], 'sha256': report['sha256']}
     (root / 'evidence.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))

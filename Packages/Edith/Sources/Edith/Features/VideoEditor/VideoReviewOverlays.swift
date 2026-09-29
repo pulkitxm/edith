@@ -58,7 +58,7 @@ extension VideoEditorService {
     }
 
     static func reviewOverlayAnalysis(
-        source: URL, options: ReviewOverlays, pipeline: VideoRenderPipeline
+        project: VideoProject, options: ReviewOverlays, pipeline: VideoRenderPipeline
     ) async throws -> AudioAnalysisReport? {
         guard options.waveformAssetID != nil || options.waveformMapping != nil else { return nil }
         guard let asset = options.waveformAssetID, let mapping = options.waveformMapping else {
@@ -69,7 +69,7 @@ extension VideoEditorService {
         let duration = pipeline.videoComposition.frameDuration
         do {
             return try await analyzeAudio(
-                source, assetID: asset, mapping: mapping,
+                project, assetID: asset, mapping: mapping,
                 rate: .explicit(
                     VideoMarkerFrameRate(
                         numerator: Int(duration.timescale), denominator: Int(duration.value))))
