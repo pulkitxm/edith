@@ -136,6 +136,7 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
 
     public var headline: String {
         if !enabled { return "Off" }
+        if state.privacy == .stopped { return "Stopped" }
         if !helperRunning { return "Waiting for Edith" }
         switch route {
         case nil:

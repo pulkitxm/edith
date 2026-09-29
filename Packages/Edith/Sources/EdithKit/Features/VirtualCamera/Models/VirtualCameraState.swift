@@ -5,6 +5,7 @@ public enum VirtualCameraPrivacy: String, Codable, CaseIterable, Sendable {
     case card
     case blank
     case freeze
+    case stopped
 
     public var title: String {
         switch self {
@@ -12,6 +13,7 @@ public enum VirtualCameraPrivacy: String, Codable, CaseIterable, Sendable {
         case .card: "Be right back"
         case .blank: "Blank"
         case .freeze: "Freeze"
+        case .stopped: "Stop completely"
         }
     }
 

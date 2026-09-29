@@ -83,6 +83,7 @@ final class FakeCameraHelper: @unchecked Sendable {
         #expect(try CameraCLI.look("Noir") == .noir)
         #expect(try CameraCLI.background("original") == VirtualCameraBackgroundMode.none)
         #expect(try CameraCLI.pause("freeze") == .freeze)
+        #expect(try CameraCLI.pause("stopped") == .stopped)
         #expect(throws: CLIFailure.self) { try CameraCLI.number("big", "zoom") }
         #expect(throws: CLIFailure.self) { try CameraCLI.autoFrame("tight") }
         #expect(throws: CLIFailure.self) { try CameraCLI.look("sepia") }

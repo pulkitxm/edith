@@ -15,7 +15,7 @@ ed camera frame [--zoom <level>] [--x <0-1>] [--y <0-1>] [--tilt <degrees>] [--t
 ed camera reset [--json]
 ed camera look <preset> [--json]
 ed camera background none|blur|color|image [--color <hex>] [--blur <0-1>] [--image <path>] [--json]
-ed camera pause [--style card|blank|freeze] [--message <text>] [--json]
+ed camera pause [--style card|blank|freeze|stopped] [--message <text>] [--json]
 ed camera resume [--json]
 ed camera scene list [--json]
 ed camera scene apply <scene> [--json]
@@ -164,8 +164,15 @@ switch to the first nine scenes.
 `pause` hides the camera without leaving the call. `--style card` shows a card
 with your message over a blurred copy of the last frame, `blank` sends black
 and `freeze` holds the last frame. The real camera turns off while paused.
-`resume` goes live again. The global shortcut ⌃⌥⌘V pauses behind a card or goes
-live again from any app, and you can change it in Settings under Shortcuts.
+Choose **Pause > Stop completely**, or run `ed camera pause --style stopped`,
+to stop capture, preview and virtual-camera output completely. This state
+persists across app restarts. Opening a video app, changing scenes or pressing
+the pause shortcut does not restart it. Choose **Go live** or run
+`ed camera resume` to resume explicitly.
+
+For the other pause styles, `resume` goes live again. The global shortcut
+⌃⌥⌘V pauses behind a card or goes live again from any app, and you can change it
+in Settings under Shortcuts.
 
 ## Output
 

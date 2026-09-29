@@ -656,9 +656,13 @@ struct VirtualCameraOutputPanel: View {
             }
             VirtualCameraPanelSection(
                 title: "Pause",
-                detail: "Pausing turns your camera off while apps keep showing a picture.",
+                detail:
+                    "Stop completely shuts down capture, preview and output until you choose Go live.",
                 dark: dark
             ) {
+                Button("Stop completely") { model.pause(.stopped) }
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(model.state.privacy == .stopped)
                 TextField("Card message", text: model.stateBinding(\.privacyMessage))
                     .textFieldStyle(.roundedBorder)
                 HStack {

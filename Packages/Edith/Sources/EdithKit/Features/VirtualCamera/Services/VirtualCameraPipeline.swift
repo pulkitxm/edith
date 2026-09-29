@@ -152,7 +152,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             privacyKey = ""
         }
         guard running else { return }
-        if next.privacy.usesCamera != previous.privacy.usesCamera {
+        if next.privacy != previous.privacy {
             applyRunMode()
         } else if next.privacy.usesCamera {
             capture.update(captureConfiguration())
@@ -167,6 +167,15 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     private func applyRunMode() {
+        if state.privacy == .stopped {
+            capture.stop()
+            stopPrivacyTimer()
+            analyzer.reset()
+            lastLiveBuffer = nil
+            privacyBuffer = nil
+            updateStats { $0 = Statistics() }
+            return
+        }
         if state.privacy.usesCamera {
             stopPrivacyTimer()
             if capture.isRunning {
@@ -203,6 +212,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private func render(
         _ pixelBuffer: CVPixelBuffer, at time: TimeInterval, systemBackgroundActive: Bool
     ) -> CVPixelBuffer? {
+        guard state.privacy != .stopped else { return nil }
         updateStats { $0.systemBackgroundActive = systemBackgroundActive }
         let composition = state.composition
         let manual = composition.framing
@@ -293,6 +303,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     private func makePrivacyFrame() -> CVPixelBuffer? {
+        guard state.privacy != .stopped else { return nil }
         if state.privacy == .freeze, let lastLiveBuffer { return lastLiveBuffer }
         let key = "\(state.privacy.rawValue)|\(state.privacyMessage)|\(outputSize)"
         if key == privacyKey, let privacyBuffer { return privacyBuffer }

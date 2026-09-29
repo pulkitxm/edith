@@ -126,7 +126,8 @@ enum CameraCLI {
 
     static func pause(_ raw: String) throws -> VirtualCameraPrivacy {
         guard let value = VirtualCameraPrivacy(rawValue: raw.lowercased()), value != .live else {
-            throw CLIFailure("\(raw) is not a pause style", hint: "use card, blank or freeze")
+            throw CLIFailure(
+                "\(raw) is not a pause style", hint: "use card, blank, freeze or stopped")
         }
         return value
     }
@@ -352,7 +353,7 @@ struct CameraPauseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pause", abstract: VirtualCameraOperation.pause.descriptor.summary)
 
-    @Option(help: "card, blank or freeze.")
+    @Option(help: "card, blank, freeze or stopped (stops capture and output completely).")
     var style = "card"
 
     @Option(help: "The message on the card.")

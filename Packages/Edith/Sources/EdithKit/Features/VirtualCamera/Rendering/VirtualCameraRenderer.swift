@@ -324,7 +324,7 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         switch privacy {
         case .live, .freeze:
             return backdrop?.cropped(to: bounds) ?? black
-        case .blank:
+        case .blank, .stopped:
             return black
         case .card:
             let base =
