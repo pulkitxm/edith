@@ -91,7 +91,7 @@ private actor HerdrCloseRecorder {
             steps: steps(recorder), patience: .seconds(2), interval: .milliseconds(1))
 
         #expect(
-            await recorder.events == ["state", "interrupt", "state", "state", "close"])
+            await recorder.events == ["state", "preserve", "state", "interrupt", "state", "close"])
     }
 
     @Test func anAgentThatIgnoresInterruptsIsInterruptedAgainThenItsPaneCloses() async throws {
@@ -118,6 +118,7 @@ private actor HerdrCloseRecorder {
 
     private func steps(_ recorder: HerdrCloseRecorder) -> HerdrAgentCloseSteps {
         HerdrAgentCloseSteps(
+            preserveSpace: { await recorder.record("preserve") },
             interrupt: { await recorder.record("interrupt") },
             state: { await recorder.nextState() },
             closePane: { await recorder.record("close") })
