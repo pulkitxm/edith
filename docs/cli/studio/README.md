@@ -23,6 +23,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [`ed studio edit`](./edit.md) | Creates, edits, validates and renders native video projects. |
 | [Native project delivery](./delivery.md) | Renders native video, audio mixes and exact output frames. |
 | [`ed studio edit media`](./edit-media.md) | Inspects original identity and capture dates, indexes provenance, and audits clip reuse across projects. |
+| [Media packages and reservations](./edit-media-storage.md) | Packages and relinks originals, verifies moved packages, and manages shared source reservations. |
 
 ## What is in Studio
 

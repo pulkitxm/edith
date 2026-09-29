@@ -183,7 +183,8 @@ import Testing
         #expect(try String(contentsOf: url, encoding: .utf8) == "broken")
         try FileManager.default.removeItem(at: url)
         #expect(throws: CancellationError.self) {
-            try ledger.reserve([source], reelID: "reel") { throw CancellationError() }
+            try ledger.reserve(
+                [source], reelID: "reel", checkCancellation: { throw CancellationError() })
         }
         #expect(try ledger.reservations().isEmpty)
     }

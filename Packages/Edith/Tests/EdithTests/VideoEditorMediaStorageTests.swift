@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import EdithDocs
 import Testing
 @testable import Edith
 @testable import EdithCLI
@@ -149,6 +150,10 @@ import Testing
             let tool = try #require(
                 OperationMCPCatalog.tool(named: "edith_studio_edit_media_\(name)"))
             #expect(tool.effect == .write && tool.route == route)
+            let manual = try #require(DocsLibrary.bundled())
+            let location = try #require(
+                manual.location(forCommand: "ed " + route.joined(separator: " ")))
+            #expect(location.path == "studio/edit-media-storage.md")
             let result = await CLIProbe.run(route + arguments + ["--json"])
             #expect(result.code != 0 && result.stdout.isEmpty)
             let error = try #require(
