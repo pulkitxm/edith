@@ -50,8 +50,7 @@ struct StudioEditContactSheet: AsyncParsableCommand {
     @Option(help: "Destination .png file.") var output: String
     @Flag(help: "Append saved manual and transient markers on an output-time strip.")
     var showBeatMarkers = false
-    @Option(
-        help: "Audio/video asset or audio track ID for a waveform; requires all four mapping options.")
+    @Option(help: "Audio/video asset or track ID for a waveform; supply all four mapping options.")
     var waveformAsset: String?
     @Option(help: "Waveform source-range start in seconds.") var sourceIn: Double?
     @Option(help: "Waveform source-range end in seconds (exclusive).") var sourceOut: Double?
