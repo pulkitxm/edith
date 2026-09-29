@@ -112,7 +112,7 @@ import Testing
         document.setClips(
             (0..<600).map { index in
                 var copy = clip
-            copy.raw["id"] = index == 0 ? clip.id : "clip_\(index)"
+                copy.raw["id"] = index == 0 ? clip.id : "clip_\(index)"
                 return copy
             })
         try document.save(to: project)
