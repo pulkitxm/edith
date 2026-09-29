@@ -5,7 +5,102 @@ import SwiftUI
 import Testing
 @testable import Edith
 
-@Suite struct VideoIndependentAudioTests {
+@Suite(.timeLimit(.minutes(1))) struct VideoIndependentAudioTests {
+    @Test func splittingInsideBothFadesPreservesTheDecodedEnvelope() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        project.addAudio(sound, duration: 4, at: 0)
+        let id = try #require(project.audioTracks.first?.id)
+        project.setAudioOptions(id, fadeInMs: 2000, fadeOutMs: 2000)
+        let before = try await VideoRenderPipeline.make(project: project)
+        let original = try await readAudio(before.composition, mix: before.audioMix)
+        let first = directory.appendingPathComponent("before.mp4")
+        try await before.exportMP4(to: first)
+        let split = project.splitAudio(id, at: 1)
+        let rightID = try #require(split)
+        project.splitAudio(rightID, at: 3)
+        let document = directory.appendingPathComponent("split.openscreen")
+        try project.save(to: document)
+        project = try VideoProject.open(document)
+        let after = try await VideoRenderPipeline.make(project: project)
+        let changed = try await readAudio(after.composition, mix: after.audioMix)
+        let second = directory.appendingPathComponent("after.mp4")
+        try await after.exportMP4(to: second)
+        let exportedBefore = try await readAudio(first)
+        let exportedAfter = try await readAudio(second)
+        for start in stride(from: 0.05, through: 3.85, by: 0.1) {
+            #expect(
+                abs(
+                    rms(original, from: start, to: start + 0.09)
+                        - rms(changed, from: start, to: start + 0.09)) < 0.002)
+            #expect(
+                abs(
+                    rms(exportedBefore, from: start, to: start + 0.09)
+                        - rms(exportedAfter, from: start, to: start + 0.09)) < 0.004)
+        }
+        #expect(abs(VideoAudioAutomation.track(project.audioTracks[1]).value(at: 0) - 0.5) < 0.001)
+    }
+
+    @Test func detachPreservesTransitionFadesAcrossSpeedAndMuteSlices() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        project.split(clipID: project.clips[0].id, at: 2)
+        project.addSpeed(startMs: 1400, endMs: 2000, rate: 2)
+        project.addSpeed(startMs: 2000, endMs: 2400, rate: 2)
+        project.setTransition(before: project.clips[1].id, kind: "fade", duration: 0.8)
+        var timeline = project.root["timeline"] as? [String: Any] ?? [:]
+        timeline["muteRanges"] = [
+            ["clipId": project.clips[0].id, "startSec": 1.5, "endSec": 1.7],
+            ["clipId": project.clips[1].id, "startSec": 2.2, "endSec": 2.3],
+        ]
+        project.root["timeline"] = timeline
+        let before = try await VideoRenderPipeline.make(project: project)
+        let first = directory.appendingPathComponent("before.mp4")
+        try await before.exportMP4(to: first)
+        for clip in project.clips { project.detachAudio(clipID: clip.id) }
+        #expect(project.audioTracks.count >= 6)
+        let after = try await VideoRenderPipeline.make(project: project)
+        let second = directory.appendingPathComponent("after.mp4")
+        try await after.exportMP4(to: second)
+        let original = try await readAudio(first)
+        let detached = try await readAudio(second)
+        let nativeBefore = try await readAudio(before.composition, mix: before.audioMix)
+        let nativeAfter = try await readAudio(after.composition, mix: after.audioMix)
+        for start in stride(from: 0.1, through: before.duration - 0.15, by: 0.05) {
+            let nativeDifference = abs(
+                rms(nativeBefore, from: start, to: start + 0.04)
+                    - rms(nativeAfter, from: start, to: start + 0.04))
+            #expect(nativeDifference < 0.002, "native window \(start)")
+            #expect(
+                abs(
+                    rms(original, from: start, to: start + 0.04)
+                        - rms(detached, from: start, to: start + 0.04)) < 0.005,
+                "window \(start): native difference \(nativeDifference), before \(rms(original, from: start, to: start + 0.04)), after \(rms(detached, from: start, to: start + 0.04))"
+            )
+        }
+        let edge = try #require(
+            VideoRenderPipeline.audioTransitions(project: project, segments: before.segments).first)
+        #expect(rms(detached, from: edge.time - 0.015, to: edge.time + 0.015) < 0.025)
+        let outgoing = rms(original, from: edge.time - 0.35, to: edge.time - 0.31)
+        #expect(outgoing > 0.27 && outgoing < 0.31)
+        #expect(rms(original, from: edge.time + 0.9, to: edge.time + 1.1) > 0.33)
+    }
+
     @Test func loopTrimKeepsUnwrappedOffsetWhenVideoAndAudioLengthsDiffer() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -365,7 +460,6 @@ import Testing
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let exported = directory.appendingPathComponent("source-mix.mp4")
         #expect(abs(pipeline.duration - 2.5) < 0.001)
-        #expect(pipeline.composition.tracks(withMediaType: .audio).count == 1)
         try await pipeline.exportMP4(to: exported)
         let samples = try await readAudio(exported)
         #expect(abs(rms(samples, from: 0.1, to: 0.4) - 0.25 / sqrt(2)) < 0.03)

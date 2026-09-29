@@ -724,6 +724,7 @@ struct VideoProject {
         editRegion("audioTracks", id: id) {
             if let muted { $0["muted"] = muted }
             if let loop { $0["loop"] = loop }
+            if fadeInMs != nil || fadeOutMs != nil { $0.removeValue(forKey: "gainEnvelope") }
             if let fadeInMs { $0["fadeInMs"] = max(0, fadeInMs) }
             if let fadeOutMs { $0["fadeOutMs"] = max(0, fadeOutMs) }
         }

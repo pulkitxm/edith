@@ -213,6 +213,7 @@ struct VideoRenderPipeline {
     let composition: AVMutableComposition
     let videoComposition: AVVideoComposition
     let audioMix: AVAudioMix?
+    let audioRateSources: [VideoAudioRateSource]
     let segments: [Segment]
     let canvas: CGSize
 
@@ -240,7 +241,6 @@ struct VideoRenderPipeline {
         let numerator = project.videoSettings.frameRateNumerator
         let timelineTimescale = Int32(numerator * max(1, 60000 / numerator))
         video.naturalTimeScale = timelineTimescale
-        var sourceAudioTracks: [(track: AVMutableCompositionTrack, clipID: String)] = []
 
         var segments: [Segment] = []
         var visualEffects: [String: VideoVisualEffects] = [:]
@@ -306,20 +306,6 @@ struct VideoRenderPipeline {
                         a: 1, b: 0, c: 0, d: -1, tx: 0,
                         ty: displayBounds.minY + displayBounds.maxY))
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
-            let audioAsset =
-                (source.raw["edithAudioPath"] as? String).map {
-                    AVURLAsset(url: URL(fileURLWithPath: $0))
-                } ?? asset
-            let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first
-            let audioRange = try await sourceAudio?.load(.timeRange)
-            let audio: AVMutableCompositionTrack?
-            if sourceAudio != nil, clip.raw["audioMuted"] as? Bool != true {
-                audio = composition.addMutableTrack(
-                    withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-                if let audio { sourceAudioTracks.append((audio, clip.id)) }
-            } else {
-                audio = nil
-            }
             for slice in speedSlices(
                 for: clip, regions: project.speedRegions, trims: project.trimRanges
             ) {
@@ -351,26 +337,6 @@ struct VideoRenderPipeline {
                 let segment = Segment(
                     clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
                     rate: slice.rate, outputRange: CMTimeRange(start: insertion, duration: outputDuration))
-                if let audio, let sourceAudio, let audioRange {
-                    for interval in VideoAudioMix.audibleSourceRanges(
-                        project: project, segment: segment)
-                    {
-                        let range = CMTimeRange(
-                            start: VideoAudioMix.time(interval.lowerBound),
-                            end: VideoAudioMix.time(interval.upperBound))
-                        let available = CMTimeRangeGetIntersection(range, otherRange: audioRange)
-                        guard available.duration.seconds > 0 else { continue }
-                        let audioInsertion = VideoAudioMix.time(
-                            cursor.seconds + (available.start.seconds - slice.start) / slice.rate)
-                        try audio.insertTimeRange(available, of: sourceAudio, at: audioInsertion)
-                        if slice.rate != 1 {
-                            audio.scaleTimeRange(
-                                CMTimeRange(start: audioInsertion, duration: available.duration),
-                                toDuration: VideoAudioMix.time(
-                                    available.duration.seconds / slice.rate))
-                        }
-                    }
-                }
                 if slice.rate != 1 {
                     let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
                     video.scaleTimeRange(inserted, toDuration: outputDuration)
@@ -383,19 +349,12 @@ struct VideoRenderPipeline {
         let transitions = transitionEdges(project: project, segments: segments)
 
         let mix = AVMutableAudioMix()
-        var parameters = try await VideoAudioMix.addTracks(
-            project: project, composition: composition, duration: cursor.seconds)
-        for source in sourceAudioTracks {
-            guard source.track.segments.contains(where: { !$0.isEmpty }) else {
-                composition.removeTrack(source.track)
-                continue
-            }
-            parameters.append(
-                VideoAudioMix.sourceParameters(
-                    track: source.track, segments: segments.filter { $0.clip.id == source.clipID },
-                    transitions: transitions.map { ($0.time, $0.halfDuration) }))
-        }
-        mix.inputParameters = parameters
+        var audioProject = project
+        var rateSources: [VideoAudioRateSource] = []
+        for clip in project.clips { audioProject.detachAudio(clipID: clip.id) }
+        mix.inputParameters = try await VideoAudioMix.addTracks(
+            project: audioProject, composition: composition, duration: cursor.seconds,
+            rateSources: &rateSources)
 
         let nativeCanvas = project.videoSettings.size
         let canvas: CGSize
@@ -517,8 +476,15 @@ struct VideoRenderPipeline {
         videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
-            audioMix: parameters.isEmpty ? nil : mix,
+            audioMix: mix.inputParameters.isEmpty ? nil : mix,
+            audioRateSources: rateSources,
             segments: segments, canvas: canvas)
+    }
+
+    static func audioTransitions(
+        project: VideoProject, segments: [Segment]
+    ) -> [(time: Double, half: Double)] {
+        transitionEdges(project: project, segments: segments).map { ($0.time, $0.halfDuration) }
     }
 
     private static func transitionEdges(

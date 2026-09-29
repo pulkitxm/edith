@@ -23,9 +23,14 @@ extension VideoProject {
             let asset = assets.first(where: { $0.id == clip.assetID })
         else { return [] }
         let laneID = "audio_\(UUID().uuidString.lowercased())"
+        let segments = VideoRenderPipeline.timingSegments(project: self)
+        let clipSegments = segments.filter { $0.clip.id == clipID }
+        guard let first = clipSegments.first, let last = clipSegments.last else { return [] }
+        let envelope = VideoAudioAutomation.source(
+            start: first.outputStart, end: last.outputEnd,
+            transitions: VideoRenderPipeline.audioTransitions(project: self, segments: segments))
         var detached: [[String: Any]] = []
-        for segment in VideoRenderPipeline.timingSegments(project: self)
-        where segment.clip.id == clipID {
+        for segment in clipSegments {
             let mutes = VideoAudioMix.muteIntervals(project: self, segment: segment)
             let boundaries = Set(
                 [segment.outputStart, segment.outputEnd]
@@ -41,6 +46,9 @@ extension VideoProject {
                     "muted": clip.raw["audioMuted"] as? Bool == true
                         || mutes.contains { $0.contains((start + end) / 2) },
                     "loop": false, "fadeInMs": 0, "fadeOutMs": 0,
+                    "gainEnvelope": envelope.slice(
+                        from: start - first.outputStart, to: end - first.outputStart
+                    ).raw,
                     "label": "Detached · \(asset.label)", "origin": "user",
                 ])
             }
@@ -65,14 +73,22 @@ extension VideoProject {
         var right = track.raw
         let newID = "audio_\(UUID().uuidString.lowercased())"
         let laneID = track.raw["laneId"] as? String ?? id
+        let leftDuration = outputTime - track.startMs / 1000
+        let duration = (track.endMs - track.startMs) / 1000
+        let rightDuration = duration - leftDuration
+        let envelope = VideoAudioAutomation.track(track)
         right["id"] = newID
         right["laneId"] = laneID
         right["startMs"] = outputTime * 1000
         right["offsetMs"] = track.offsetMs + (outputTime * 1000 - track.startMs) * track.rate
-        right["fadeInMs"] = 0
+        right["fadeInMs"] = max(0, track.fadeInMs - leftDuration * 1000)
+        right["fadeOutMs"] = min(track.fadeOutMs, rightDuration * 1000)
+        right["gainEnvelope"] = envelope.slice(from: leftDuration, to: duration).raw
         editRegion("audioTracks", id: id) {
             $0["endMs"] = outputTime * 1000
-            $0["fadeOutMs"] = 0
+            $0["fadeInMs"] = min(track.fadeInMs, leftDuration * 1000)
+            $0["fadeOutMs"] = max(0, track.fadeOutMs - rightDuration * 1000)
+            $0["gainEnvelope"] = envelope.slice(from: 0, to: leftDuration).raw
             $0["laneId"] = laneID
         }
         root["audioTracks"] = audioTracks.map(\.raw) + [right]
@@ -97,6 +113,13 @@ extension VideoProject {
             track.loop ? end : min(end, start + (asset.duration - offset / 1000) / track.rate)
         guard availableEnd - start >= 0.05 else { return }
         editRegion("audioTracks", id: id) {
+            if track.raw["gainEnvelope"] != nil {
+                let from = trimStart ? start - track.startMs / 1000 : 0
+                $0["gainEnvelope"] =
+                    VideoAudioAutomation.track(track).slice(
+                        from: from, to: from + availableEnd - start
+                    ).raw
+            }
             $0["timebase"] = "output"
             $0["startMs"] = start * 1000
             $0["endMs"] = availableEnd * 1000

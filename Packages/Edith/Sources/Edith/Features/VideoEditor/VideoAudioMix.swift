@@ -31,47 +31,9 @@ enum VideoAudioMix {
         }
     }
 
-    static func audibleSourceRanges(
-        project: VideoProject, segment: VideoRenderPipeline.Segment
-    ) -> [ClosedRange<Double>] {
-        let mutes = muteIntervals(project: project, segment: segment)
-        let boundaries = Set(
-            [segment.outputStart, segment.outputEnd]
-                + mutes.flatMap { [$0.lowerBound, $0.upperBound] }
-        ).sorted()
-        return zip(boundaries, boundaries.dropFirst()).compactMap { start, end in
-            guard !mutes.contains(where: { $0.contains((start + end) / 2) }) else { return nil }
-            return segment.sourceTime(at: start)...segment.sourceTime(at: end)
-        }
-    }
-
-    static func sourceParameters(
-        track: AVCompositionTrack, segments: [VideoRenderPipeline.Segment],
-        transitions: [(time: Double, half: Double)]
-    ) -> AVMutableAudioMixInputParameters {
-        let input = AVMutableAudioMixInputParameters(track: track)
-        guard let first = segments.first, let last = segments.last else { return input }
-        let gain = (first.clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0
-        let amplitude = level(gain)
-        input.setVolume(amplitude, at: .zero)
-        for edge in transitions {
-            for (lower, upper) in [
-                (edge.time - edge.half, edge.time), (edge.time, edge.time + edge.half),
-            ] {
-                let start = max(first.outputStart, lower)
-                let end = min(last.outputEnd, upper)
-                guard end > start else { continue }
-                input.setVolumeRamp(
-                    fromStartVolume: amplitude * Float(abs(start - edge.time) / edge.half),
-                    toEndVolume: amplitude * Float(abs(end - edge.time) / edge.half),
-                    timeRange: CMTimeRange(start: time(start), end: time(end)))
-            }
-        }
-        return input
-    }
-
     static func addTracks(
-        project: VideoProject, composition: AVMutableComposition, duration: Double
+        project: VideoProject, composition: AVMutableComposition, duration: Double,
+        rateSources: inout [VideoAudioRateSource]
     ) async throws -> [AVMutableAudioMixInputParameters] {
         var parameters: [AVMutableAudioMixInputParameters] = []
         for track in project.audioTracks where !track.muted {
@@ -96,6 +58,14 @@ enum VideoAudioMix {
             guard sourceDuration.isFinite, sourceDuration > 0, sourceEnd > 0 else {
                 composition.removeTrack(mixTrack)
                 continue
+            }
+            let rendered: VideoAudioRateSource?
+            if track.rate != 1 {
+                rendered = try await VideoAudioRateCache.shared.source(
+                    url: source.audioURL, track: sourceAudio, range: available, rate: track.rate)
+                if let rendered { rateSources.append(rendered) }
+            } else {
+                rendered = nil
             }
             var cursor = time(start)
             let limit = time(end)
@@ -123,14 +93,16 @@ enum VideoAudioMix {
                     available.end - offset,
                     CMTimeMultiplyByFloat64(outputLength, multiplier: track.rate))
                 guard outputLength > .zero, length > .zero else { break }
-                let range = CMTimeRange(start: offset, duration: length)
-                try mixTrack.insertTimeRange(range, of: sourceAudio, at: cursor)
-                insertedAudio = true
-                if track.rate != 1 {
-                    mixTrack.scaleTimeRange(
-                        CMTimeRange(start: cursor, duration: range.duration),
-                        toDuration: outputLength)
+                let range: CMTimeRange
+                if rendered != nil {
+                    range = CMTimeRange(
+                        start: time((offset - available.start).seconds / track.rate),
+                        duration: outputLength)
+                } else {
+                    range = CMTimeRange(start: offset, duration: length)
                 }
+                try mixTrack.insertTimeRange(range, of: rendered?.track ?? sourceAudio, at: cursor)
+                insertedAudio = true
                 cursor = cursor + outputLength
                 if !track.loop { break }
                 offset = .zero
@@ -141,21 +113,8 @@ enum VideoAudioMix {
             }
             let audibleEnd = min(cursor.seconds, end)
             let input = AVMutableAudioMixInputParameters(track: mixTrack)
-            let amplitude = level(track.gainDb)
-            let fadeIn = min(max(0, track.fadeInMs) / 1000, (audibleEnd - start) / 2)
-            let fadeOut = min(max(0, track.fadeOutMs) / 1000, (audibleEnd - start) / 2)
-            input.setVolume(fadeIn > 0 ? 0 : amplitude, at: time(start))
-            if fadeIn > 0 {
-                input.setVolumeRamp(
-                    fromStartVolume: 0, toEndVolume: amplitude,
-                    timeRange: CMTimeRange(start: time(start), duration: time(fadeIn)))
-            }
-            if fadeOut > 0 {
-                input.setVolumeRamp(
-                    fromStartVolume: amplitude, toEndVolume: 0,
-                    timeRange: CMTimeRange(
-                        start: time(audibleEnd - fadeOut), duration: time(fadeOut)))
-            }
+            VideoAudioAutomation.track(track).slice(from: 0, to: audibleEnd - start)
+                .apply(to: input, at: start, gain: level(track.gainDb))
             parameters.append(input)
         }
         return parameters
