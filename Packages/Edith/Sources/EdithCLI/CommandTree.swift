@@ -424,6 +424,20 @@ public enum CommandTree {
         "ed studio edit frame": Spec(
             options: ["--json", "--overwrite", "--time", "--output", "-h", "--help", "--version"],
             optionValues: ["--time": .free, "--output": .localPath], arguments: [.localPath]),
+        "ed studio edit list": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit clone": Spec(
+            options: ["--json", "--overwrite", "--title", "--output", "-h", "--help", "--version"],
+            optionValues: ["--title": .free, "--output": .localPath], arguments: [.localPath]),
+        "ed studio edit contact-sheet": Spec(
+            options: [
+                "--json", "--overwrite", "--time", "--columns", "--cell-width", "--output",
+                "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--time": .free, "--columns": .free, "--cell-width": .free,
+                "--output": .localPath,
+            ], arguments: [.localPath]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),

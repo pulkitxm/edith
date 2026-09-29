@@ -193,6 +193,20 @@ enum JSONContract {
                 "--output", "/nonexistent/frame.png", "--json",
             ]),
         JSONCase(
+            "ed studio edit list", ["studio", "edit", "list", "/nonexistent", "--json"]),
+        JSONCase(
+            "ed studio edit clone",
+            [
+                "studio", "edit", "clone", "/nonexistent/demo.openscreen", "--output",
+                "/nonexistent/copy.openscreen", "--title", "Copy", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit contact-sheet",
+            [
+                "studio", "edit", "contact-sheet", "/nonexistent/demo.openscreen", "--time", "0",
+                "--output", "/nonexistent/sheet.png", "--json",
+            ]),
+        JSONCase(
             "ed database connections add",
             [
                 "database", "connections", "add", "Analytics staging",

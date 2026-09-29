@@ -15,6 +15,9 @@ ed studio edit show demo.openscreen --json
 ed studio edit validate demo.openscreen --json
 ed studio edit render demo.openscreen --output demo.mp4 --json
 ed studio edit frame demo.openscreen --time 0.25 --output preview.png --json
+ed studio edit list . --json
+ed studio edit clone demo.openscreen --output alternate.openscreen --title "Alternate cut" --json
+ed studio edit contact-sheet demo.openscreen --time 0 --time 0.25 --output review.png --json
 ```
 
 Create the destination directory first. Every write refuses an existing destination
@@ -134,3 +137,29 @@ Existing destinations still require an explicit `--overwrite` argument.
 Native video rendering has a bounded six-hour MCP execution deadline. Other routes keep
 the standard 120-second deadline. Output capture stays capped at 4 MiB, and cancellation
 continues to terminate the child process group.
+
+## Project copies and visual review
+
+`list DIRECTORY` returns a path-sorted JSON array with project identity, title and clip
+count. Unreadable project files have an `error` entry, allowing valid neighbors to remain
+visible. Listing does not load source media or change any project.
+
+`clone PROJECT --output COPY --title TITLE` creates an independent project identity while
+preserving the complete edit, clip IDs and original-media references. The source project
+cannot be its own clone destination, even with `--overwrite`. This copies the project
+document, not its media files or any external source reservations.
+
+`contact-sheet PROJECT --time SECONDS ... --output REVIEW.png` renders a labeled PNG grid
+through the same native composition as video export. Times are output seconds, after
+trim and speed changes, snapped to the preceding output frame. The JSON report includes
+the exact selected frame numbers and times, dimensions and SHA-256 checksum. Each frame
+is labeled with its frame number and output time in the image.
+
+Use `--columns` for 1 to 8 columns and `--cell-width` for a maximum thumbnail dimension
+from 64 to 1920 pixels. Labels can widen a narrow thumbnail's cell. Defaults are 4 columns
+and 320 pixels. A sheet supports 1 to 64 frames
+and at most 64 million pixels. Invalid times or failed rendering leave an existing
+destination intact. Source images and project files cannot be review destinations.
+
+These operations are also registered as `edith_studio_edit_list`,
+`edith_studio_edit_clone`, and `edith_studio_edit_contact_sheet` in the MCP server.
