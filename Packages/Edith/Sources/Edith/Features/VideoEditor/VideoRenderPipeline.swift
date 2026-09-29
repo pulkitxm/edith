@@ -192,9 +192,10 @@ struct VideoRenderPipeline {
         let sourceStart: Double
         let sourceEnd: Double
         let rate: Double
-        let outputStart: Double
-        let outputDuration: Double
-        var outputEnd: Double { outputStart + outputDuration }
+        let outputRange: CMTimeRange
+        var outputStart: Double { outputRange.start.seconds }
+        var outputDuration: Double { outputRange.duration.seconds }
+        var outputEnd: Double { outputRange.end.seconds }
         func sourceTime(at outputTime: Double) -> Double {
             sourceStart + (outputTime - outputStart) * rate
         }
@@ -244,7 +245,7 @@ struct VideoRenderPipeline {
         var cursors: [String: [CursorSample]] = [:]
         var stillImages: [String: CIImage] = [:]
         var sourceTransforms: [String: CGAffineTransform] = [:]
-        var cursor = 0.0
+        var cursor = CMTime.zero
         for clip in project.clips where clip.duration > 0 {
             if let raw = clip.raw["edithVisualEffects"] {
                 visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
@@ -309,7 +310,9 @@ struct VideoRenderPipeline {
             for slice in speedSlices(
                 for: clip, regions: project.speedRegions, trims: project.trimRanges
             ) {
-                guard cursor + (slice.end - slice.start) / slice.rate < Double(Int64.max) / 600
+                guard
+                    cursor.seconds + (slice.end - slice.start) / slice.rate < Double(Int64.max)
+                        / 600
                 else {
                     throw RenderError.exportFailed("The timeline exceeds the supported time range.")
                 }
@@ -317,7 +320,14 @@ struct VideoRenderPipeline {
                     start: CMTime(seconds: slice.start, preferredTimescale: timelineTimescale),
                     duration: CMTime(
                         seconds: slice.end - slice.start, preferredTimescale: timelineTimescale))
-                let insertion = CMTime(seconds: cursor, preferredTimescale: timelineTimescale)
+                let insertion = cursor
+                let outputDuration = CMTime(
+                    seconds: (slice.end - slice.start) / slice.rate,
+                    preferredTimescale: timelineTimescale)
+                guard sourceRange.duration > .zero, outputDuration > .zero else {
+                    throw RenderError.exportFailed(
+                        "A clip is shorter than the timeline time resolution.")
+                }
                 let visualRange = carrierRange ?? sourceRange
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
                 if source.isStill {
@@ -332,19 +342,17 @@ struct VideoRenderPipeline {
                     }
                     try audio?.insertTimeRange(sourceRange, of: sourceAudio, at: insertion)
                 }
-                let outputDuration = (slice.end - slice.start) / slice.rate
                 if slice.rate != 1 {
                     let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
-                    let scaled = CMTime(
-                        seconds: outputDuration, preferredTimescale: timelineTimescale)
-                    video.scaleTimeRange(inserted, toDuration: scaled)
-                    audio?.scaleTimeRange(inserted, toDuration: scaled)
+                    video.scaleTimeRange(inserted, toDuration: outputDuration)
+                    audio?.scaleTimeRange(inserted, toDuration: outputDuration)
                 }
                 segments.append(
                     Segment(
                         clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
-                        rate: slice.rate, outputStart: cursor, outputDuration: outputDuration))
-                cursor += outputDuration
+                        rate: slice.rate,
+                        outputRange: CMTimeRange(start: insertion, duration: outputDuration)))
+                cursor = cursor + outputDuration
             }
         }
         guard !segments.isEmpty else { throw RenderError.noVideo }
@@ -490,7 +498,11 @@ struct VideoRenderPipeline {
         let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
-            guard let segment = finalSegments.last(where: { $0.outputStart <= time }) else {
+            guard
+                let segment = finalSegments.last(where: {
+                    $0.outputRange.containsTime(request.compositionTime)
+                })
+            else {
                 request.finish(with: request.sourceImage, context: imageContext)
                 return
             }

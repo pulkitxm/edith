@@ -193,10 +193,14 @@ import Testing
                 data: nil, width: 2304, height: 64,
                 bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: 1152, height: 64))
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
         context.fill(CGRect(x: 1152, y: 0, width: 1152, height: 64))
+        context.setFillColor(red: 0, green: 1, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 32, width: 1152, height: 32))
+        context.setFillColor(red: 1, green: 1, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 1152, y: 32, width: 1152, height: 32))
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(CGRect(x: 600, y: 0, width: 1, height: 64))
         let destination = try #require(
@@ -220,22 +224,33 @@ import Testing
         #expect(project.assets[0].isStill)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         #expect(pipeline.videoComposition.frameDuration == CMTime(value: 1001, timescale: 60000))
-        let original = try VideoStillMedia.image(at: url)
-        let expected = NSBitmapImageRep(
-            cgImage: try #require(
-                VideoImageContext.shared.createCGImage(original, from: original.extent)))
-        let actual = NSBitmapImageRep(cgImage: try renderedFrame(pipeline, at: 0.2))
+        let frame = try renderedFrame(pipeline, at: 0.2)
+        let actual = NSBitmapImageRep(cgImage: frame)
         #expect(actual.pixelsWide == 64 && actual.pixelsHigh == 2304)
+        #expect(try pixel(frame, x: 16, y: 16).redComponent > 0.9)
+        #expect(try pixel(frame, x: 48, y: 16).greenComponent > 0.9)
+        #expect(try pixel(frame, x: 48, y: 16).redComponent < 0.1)
+        #expect(try pixel(frame, x: 16, y: 2288).blueComponent > 0.9)
+        #expect(try pixel(frame, x: 48, y: 2288).redComponent > 0.9)
+        #expect(try pixel(frame, x: 48, y: 2288).greenComponent > 0.9)
+        var pixels = [UInt8](repeating: 0, count: 64 * 2304 * 4)
+        VideoImageContext.shared.render(
+            CIImage(cgImage: frame), toBitmap: &pixels, rowBytes: 64 * 4,
+            bounds: CGRect(x: 0, y: 0, width: 64, height: 2304), format: .RGBA8,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
         var brightRows = 0
         var maximumDifference = CGFloat.zero
         for y in 0..<2304 {
-            let reference = try #require(expected.colorAt(x: 32, y: y)?.usingColorSpace(.sRGB))
-            let pixel = try #require(actual.colorAt(x: 32, y: y)?.usingColorSpace(.sRGB))
+            let red: CGFloat = y < 1152 ? 1 : 0
+            let green: CGFloat = y == 600 ? 1 : 0
+            let blue: CGFloat = y == 600 || y >= 1152 ? 1 : 0
+            let offset = (y * 64 + 16) * 4
             maximumDifference = max(
                 maximumDifference,
-                abs(pixel.redComponent - reference.redComponent),
-                abs(pixel.blueComponent - reference.blueComponent))
-            if pixel.greenComponent > 0.8 { brightRows += 1 }
+                abs(CGFloat(pixels[offset]) / 255 - red),
+                abs(CGFloat(pixels[offset + 1]) / 255 - green),
+                abs(CGFloat(pixels[offset + 2]) / 255 - blue))
+            if pixels[offset + 1] > 204 { brightRows += 1 }
         }
         #expect(brightRows == 1)
         #expect(maximumDifference < 0.08)
@@ -275,16 +290,17 @@ import Testing
             let samples = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
             reader.add(samples)
             #expect(reader.startReading())
-            var times: [Double] = []
+            var times: [CMTime] = []
             while let sample = samples.copyNextSampleBuffer() {
                 if CMSampleBufferGetNumSamples(sample) > 0 {
-                    times.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds)
+                    times.append(CMSampleBufferGetPresentationTimeStamp(sample))
                 }
             }
             times.sort()
+            #expect(reader.status == .completed)
             #expect(times.count >= Int(project.videoSettings.frameRate * 0.5) - 1)
             let invalidGaps = zip(times, times.dropFirst()).map { $1 - $0 }.filter {
-                abs($0 - project.frameDuration.seconds) >= 0.0001
+                $0 != project.frameDuration
             }
             #expect(invalidGaps.isEmpty)
         }
