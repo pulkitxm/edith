@@ -99,4 +99,12 @@ import Testing
         try project.updateMarker(marker.id, frame: 60, frameRate: .fps30)
         #expect(project.markers.first?.seconds == 2)
     }
+
+    @Test func invalidRootEntriesDoNotCrashInspection() {
+        let values: [Any] = ["invalid", 17, NSNull(), ["frame": 10]]
+        for value in values {
+            let project = VideoProject(root: ["edithMarkers": value])
+            #expect(project.markers.isEmpty)
+        }
+    }
 }

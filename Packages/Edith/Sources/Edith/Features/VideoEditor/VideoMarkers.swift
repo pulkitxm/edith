@@ -142,7 +142,9 @@ enum VideoMarkers {
         try validate(markers)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(Document(version: 1, markers: sorted(markers)))
+        let data = try encoder.encode(Document(version: 1, markers: sorted(markers)))
+        guard data.count <= 32 * 1024 * 1024 else { throw VideoMarkerError.invalidDocument }
+        return data
     }
 
     static func parse(_ data: Data) throws -> [VideoMarker] {
@@ -185,7 +187,7 @@ enum VideoMarkers {
 
 extension VideoProject {
     var markers: [VideoMarker] {
-        guard let entries = root["edithMarkers"],
+        guard let entries = root["edithMarkers"] as? [[String: Any]],
             let data = try? JSONSerialization.data(withJSONObject: entries),
             let decoded = try? JSONDecoder().decode([VideoMarker].self, from: data),
             (try? VideoMarkers.validate(decoded)) != nil
