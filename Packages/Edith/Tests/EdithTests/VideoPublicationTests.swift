@@ -130,9 +130,17 @@ import Testing
             to: fixture.projects[0], overwrite: true)
         let sidecar = URL(fileURLWithPath: source.path + ".cursor.json")
         try Data("[]".utf8).write(to: sidecar)
-        for (index, protected) in [fixture.projects[0], source, sidecar, fixture.input].enumerated()
+        let session = URL(fileURLWithPath: source.path + ".session.json")
+        try Data(#"{"microphone":true,"webcam":false}"#.utf8).write(to: session)
+        for (index, protected) in [fixture.projects[0], source, sidecar, session, fixture.input]
+            .enumerated()
         {
             let before = try Data(contentsOf: protected)
+            await #expect(throws: (any Error).self) {
+                try await VideoPublicationService.create(
+                    at: protected, input: fixture.input, overwrite: true)
+            }
+            #expect(try Data(contentsOf: protected) == before)
             for symbolic in [false, true] {
                 let alias = fixture.directory.appendingPathComponent(
                     "alias-\(index)-\(symbolic).json")

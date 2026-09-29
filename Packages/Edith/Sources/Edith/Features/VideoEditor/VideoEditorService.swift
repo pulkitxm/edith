@@ -413,11 +413,10 @@ public enum VideoEditorService {
                 .compactMap { ($0 as? String).map { URL(fileURLWithPath: $0) } }
         }
         if includeSidecars {
-            sources += sources.flatMap {
-                [
-                    URL(fileURLWithPath: $0.path + ".cursor.json"),
-                    URL(fileURLWithPath: $0.path + ".session.json"),
-                ]
+            sources += sources.flatMap { source in
+                [".cursor.json", ".session.json"].map {
+                    URL(fileURLWithPath: source.path + $0)
+                }
             }
         }
         if project.backgroundColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression)

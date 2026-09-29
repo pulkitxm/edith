@@ -87,7 +87,8 @@ entries, so the existing media ledger remains the authority for reuse policy.
   IDs/titles over 1000 UTF-8 bytes, and paths over 4096 UTF-8 bytes are rejected.
 - Output must be a local `.json` file. Existing destinations require
   `--overwrite`, including dry runs. Symlink outputs are rejected. Project,
-  media, sidecar and plan aliases are protected, including hardlinks.
+  media, `.cursor.json` and `.session.json` sidecars, and plan aliases are
+  protected, including hardlinks.
 - Writes use a sibling temporary file and atomic publication. Cancellation,
   changed inputs, and validation failures leave the destination intact.
 - Project loading performs no migration writes. A manifest whose stored ID no
