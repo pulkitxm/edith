@@ -13,12 +13,13 @@ func detailImage() -> CIImage {
     return detail.composited(over: field)
 }
 
-func tone(_ url: URL, samples: Int) throws {
+func tone(_ url: URL, samples: Int, resetAt: Int? = nil) throws {
     let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
     let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples))!
     buffer.frameLength = buffer.frameCapacity
     for index in 0..<samples {
-        buffer.floatChannelData![0][index] = Float(sin(2 * .pi * 440 * Double(index) / 48_000)) * 0.2
+        let position = resetAt.map { index >= $0 ? index - $0 : index } ?? index
+        buffer.floatChannelData![0][index] = Float(sin(2 * .pi * 440 * Double(position) / 48_000)) * 0.2
     }
     try AVAudioFile(forWriting: url, settings: format.settings).write(from: buffer)
 }
@@ -43,6 +44,11 @@ func generateExtended(_ directory: URL) async throws {
     }
     try tone(directory.appendingPathComponent("music-45-cuts.wav"), samples: 1_382_400)
     try tone(directory.appendingPathComponent("music-variable-speed.wav"), samples: 216_000)
+    try tone(directory.appendingPathComponent("music-phase-reset.wav"), samples: 216_000, resetAt: 100_000)
+    try tone(directory.appendingPathComponent("music-truncated.wav"), samples: 215_840)
+    let audio = AVURLAsset(url: directory.appendingPathComponent("music-variable-speed.wav"))
+    let encoder = AVAssetExportSession(asset: audio, presetName: AVAssetExportPresetAppleM4A)!
+    try await encoder.export(to: directory.appendingPathComponent("music-aac-control.m4a"), as: .m4a)
     let sourceFolder = directory.appendingPathComponent("collection-sources")
     try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
     var groups: [[[String: Any]]] = Array(repeating: [], count: 6)
@@ -199,6 +205,17 @@ func verifyExtended(_ directory: URL) async throws {
         frames: 240, numerator: 60000, denominator: 1001, emit: false)
     try await verifyMusic(directory.appendingPathComponent("music-45-cuts.wav"), expectedSamples: 1_382_400, emit: false)
     try await verifyMusic(directory.appendingPathComponent("music-variable-speed.wav"), expectedSamples: 216_000, emit: false)
+    try await verifyMusic(directory.appendingPathComponent("music-aac-control.m4a"), expectedSamples: 216_000, emit: false)
+    for (name, message) in [("music-phase-reset.wav", "Music phase, frequency, or level changed"),
+        ("music-truncated.wav", "Music stream must cover exactly")] {
+        do {
+            try await verifyMusic(directory.appendingPathComponent(name), expectedSamples: 216_000, emit: false)
+            throw AcceptanceError(description: "Music negative control unexpectedly passed: \(name)")
+        } catch let error as AcceptanceError {
+            try require(error.description.hasPrefix(message), error.description)
+        }
+    }
     try json(["extendedFixtureVerified": true, "originalDetail": true, "proxyNegativeControl": true,
-        "fps120": true, "fps60000Over1001": true, "music45Cuts": true, "musicVariableSpeed": true])
+        "fps120": true, "fps60000Over1001": true, "music45Cuts": true, "musicVariableSpeed": true,
+        "aacPositiveControl": true, "musicPhaseResetRejected": true, "musicTruncationRejected": true])
 }
