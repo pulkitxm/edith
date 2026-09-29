@@ -160,7 +160,8 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
     let track = video[0]
     let size = try await track.load(.naturalSize)
     let fps = try await track.load(.nominalFrameRate)
-    let duration = try await asset.load(.duration).seconds
+    let mediaDuration = try await asset.load(.duration)
+    let duration = mediaDuration.seconds
     let descriptions = try await track.load(.formatDescriptions)
     let codec = CMFormatDescriptionGetMediaSubType(descriptions[0])
     try require(codec == kCMVideoCodecType_H264, "Expected H.264 video")
@@ -168,6 +169,11 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
     if exact {
         try require(size == CGSize(width: 1080, height: 1920), "Expected 1080x1920, got \(size)")
         try require(abs(fps - 60) < 0.001, "Expected 60 fps, got \(fps)")
+        let expectedDuration = CMTime(value: 1728, timescale: 60)
+        let range = try await track.load(.timeRange)
+        try require(CMTimeCompare(mediaDuration, expectedDuration) == 0
+            && CMTimeCompare(range.start, .zero) == 0 && CMTimeCompare(range.duration, expectedDuration) == 0,
+            "Delivery must span exactly 1728 rational frames from zero")
     }
     let reader = try AVAssetReader(asset: asset)
     let output = AVAssetReaderTrackOutput(track: track,
@@ -185,7 +191,8 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         let number = identity(CMSampleBufferGetImageBuffer(sample)!)
         identities.insert(number)
         if exact {
-            try require(abs(time - Double(frames) / 60) < 0.0001, "Frame timestamp mismatch at \(frames)")
+            try require(CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sample),
+                CMTime(value: Int64(frames), timescale: 60)) == 0, "Frame timestamp mismatch at \(frames)")
             let expected = frames < 702 ? frames / 39 + 1 : (frames - 702) / 38 + 19
             try require(number == expected, "Shot identity mismatch at frame \(frames): \(number), expected \(expected)")
         }
