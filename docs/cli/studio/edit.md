@@ -17,12 +17,13 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 | `ed studio edit clone <project> --output <copy.openscreen> --title <title>` | Copies an edit with a new project identity while preserving its original-media references. |
 | `ed studio edit apply <project> --plan <file> [--output <project>] [--dry-run]` | Validates and atomically applies every operation in a plan. |
 | `ed studio edit validate <project>` | Checks structure, source availability and native composition. |
-| `ed studio edit render <project> --output <file.mp4>` | Renders the project to MP4. |
-| `ed studio edit frame <project> --time <seconds> --output <file.png>` | Saves one composited frame at an output timeline time. |
+| `ed studio edit render <project> --output <file> [--codec <codec>]` | Delivers H.264/HEVC MP4 or a ProRes MOV master, with a measured report. |
+| `ed studio edit render-audio <project> --output <file> [--container wav\|aiff\|m4a]` | Delivers the native audio mix with a measured sample-frame count. |
+| `ed studio edit frame <project> --frame <index> --output <file.png>` | Saves an exact output frame; alternatively use `--time <seconds>`. |
 | `ed studio edit contact-sheet <project> --time <seconds> --output <file.png>` | Creates a labeled sheet of composited output frames. Repeat `--time` for each frame. |
 
 All commands accept `--json` for structured runtime errors. Create, list, clone, apply,
-validate, render, frame and contact-sheet also use it for structured results.
+validate, render, render-audio, frame and contact-sheet also use it for structured results.
 Schema and show always print JSON.
 Write commands require `--overwrite` to replace an existing destination. Apply without
 `--output` replaces its input, so it requires `--overwrite` except during dry-run.
@@ -36,6 +37,7 @@ ed studio edit apply demo.openscreen --plan edit.json --dry-run --json
 ed studio edit apply demo.openscreen --plan edit.json --overwrite --json
 ed studio edit validate demo.openscreen --json
 ed studio edit render demo.openscreen --output demo.mp4 --json
+ed studio edit render-audio demo.openscreen --output mix.wav --json
 ed studio edit frame demo.openscreen --time 0.25 --output preview.png --json
 ed studio edit list . --json
 ed studio edit clone demo.openscreen --output alternate.openscreen --title "Alternate cut" --json
@@ -69,6 +71,27 @@ Contact-sheet times use rendered output seconds after trim and speed changes.
 Each tile reports its selected frame index and timestamp. Use 1 to 64 times,
 1 to 8 columns, and a cell width from 64 to 1920 pixels. The completed PNG report
 includes its dimensions and SHA-256 checksum.
+
+## Delivery settings
+
+`ed studio edit render` accepts `--codec`, `--bit-rate`, `--key-frame-interval`,
+`--audio-codec`, `--audio-bit-rate`, `--audio-sample-rate`, `--audio-channels`,
+`--color-space` and `--require-hardware`. Codec values are `h264`, `hevc`, `hevc10`,
+`proRes422`, `proRes422HQ` and `proRes4444`. H.264/HEVC require `.mp4`; ProRes requires
+`.mov`. Omitted color space follows the validated project settings.
+
+`ed studio edit render-audio` accepts `--container wav|aiff|m4a`, `--sample-rate`,
+`--channels` and `--bit-rate`. WAV/AIFF use 24-bit PCM; M4A uses AAC. Both delivery
+commands accept `--progress` for bounded stderr updates, preserve `written` and
+`path` in their JSON result, and add a measured video or audio report. SIGINT and
+SIGTERM cooperatively cancel delivery and preserve an existing destination.
+
+`ed studio edit frame` requires exactly one of `--frame` or `--time`. Frame indices
+are zero-based output frames. Times are output seconds, snapped to the preceding
+frame using the exact rational cadence. JSON returns the selected `frame` and `time`.
+
+See [native project delivery](./delivery.md) for every setting, default, unit,
+report field and MCP route.
 
 ## Where to go next
 

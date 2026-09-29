@@ -1,17 +1,19 @@
 @preconcurrency import AVFoundation
 import CryptoKit
 
-struct VideoAudioDeliverySettings: Codable, Equatable, Sendable {
-    enum Container: String, CaseIterable, Codable, Sendable {
+public struct VideoAudioDeliverySettings: Codable, Equatable, Sendable {
+    public enum Container: String, CaseIterable, Codable, Sendable {
         case wav, aiff, m4a
     }
 
-    var container: Container = .wav
-    var sampleRate = 48_000
-    var channels = 2
-    var bitRate = 320_000
+    public var container: Container = .wav
+    public var sampleRate = 48_000
+    public var channels = 2
+    public var bitRate = 320_000
 
-    func validate() throws {
+    public init() {}
+
+    public func validate() throws {
         guard [44_100, 48_000, 96_000].contains(sampleRate), (1...2).contains(channels),
             (32_000...320_000).contains(bitRate), container != .m4a || sampleRate != 96_000
         else { throw VideoDeliveryError.invalidSettings("Invalid audio delivery settings.") }
@@ -32,15 +34,15 @@ struct VideoAudioDeliverySettings: Codable, Equatable, Sendable {
     }
 }
 
-struct VideoAudioDeliveryReport: Codable, Sendable {
-    let codec: String
-    let bitsPerSample: Int?
-    let duration: Double
-    let sampleRate: Double
-    let channels: Int
-    let frames: Int64
-    let bytes: Int64
-    let sha256: String
+public struct VideoAudioDeliveryReport: Codable, Sendable {
+    public let codec: String
+    public let bitsPerSample: Int?
+    public let duration: Double
+    public let sampleRate: Double
+    public let channels: Int
+    public let frames: Int64
+    public let bytes: Int64
+    public let sha256: String
 
     static func inspect(_ url: URL) throws -> Self {
         let audio = try AVAudioFile(forReading: url)

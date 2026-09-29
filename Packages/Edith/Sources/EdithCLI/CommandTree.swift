@@ -419,11 +419,33 @@ public enum CommandTree {
             ],
             optionValues: ["--plan": .localPath, "--output": .localPath], arguments: [.localPath]),
         "ed studio edit render": Spec(
-            options: ["--json", "--overwrite", "--output", "-h", "--help", "--version"],
-            optionValues: ["--output": .localPath], arguments: [.localPath]),
+            options: [
+                "--json", "--overwrite", "--output", "--codec", "--bit-rate",
+                "--key-frame-interval",
+                "--audio-codec", "--audio-bit-rate", "--audio-sample-rate", "--audio-channels",
+                "--color-space", "--require-hardware", "--progress", "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--output": .localPath, "--codec": .free, "--bit-rate": .free,
+                "--key-frame-interval": .free, "--audio-codec": .free, "--audio-bit-rate": .free,
+                "--audio-sample-rate": .free, "--audio-channels": .free, "--color-space": .free,
+            ], arguments: [.localPath]),
+        "ed studio edit render-audio": Spec(
+            options: [
+                "--json", "--overwrite", "--output", "--container", "--sample-rate", "--channels",
+                "--bit-rate", "--progress", "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--output": .localPath, "--container": .free, "--sample-rate": .free,
+                "--channels": .free, "--bit-rate": .free,
+            ], arguments: [.localPath]),
         "ed studio edit frame": Spec(
-            options: ["--json", "--overwrite", "--time", "--output", "-h", "--help", "--version"],
-            optionValues: ["--time": .free, "--output": .localPath], arguments: [.localPath]),
+            options: [
+                "--json", "--overwrite", "--time", "--frame", "--output", "-h", "--help",
+                "--version",
+            ],
+            optionValues: ["--time": .free, "--frame": .free, "--output": .localPath],
+            arguments: [.localPath]),
         "ed studio edit list": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio edit clone": Spec(

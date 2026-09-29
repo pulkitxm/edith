@@ -23,11 +23,11 @@ extension VideoProject {
     }
 }
 
-struct VideoDeliverySettings: Codable, Equatable, Sendable {
-    enum Codec: String, Codable, CaseIterable, Identifiable, Sendable {
+public struct VideoDeliverySettings: Codable, Equatable, Sendable {
+    public enum Codec: String, Codable, CaseIterable, Identifiable, Sendable {
         case h264, hevc, hevc10, proRes422, proRes422HQ, proRes4444
 
-        var id: String { rawValue }
+        public var id: String { rawValue }
         var title: String {
             switch self {
             case .h264: "H.264"
@@ -49,30 +49,47 @@ struct VideoDeliverySettings: Codable, Equatable, Sendable {
         }
         var isMaster: Bool { [.proRes422, .proRes422HQ, .proRes4444].contains(self) }
         var highPrecision: Bool { isMaster || self == .hevc10 }
-        var fileExtension: String { isMaster ? "mov" : "mp4" }
+        public var fileExtension: String { isMaster ? "mov" : "mp4" }
     }
 
-    enum AudioCodec: String, Codable, CaseIterable, Sendable {
+    public enum AudioCodec: String, Codable, CaseIterable, Sendable {
         case aac, pcm
     }
 
-    var codec: Codec = .h264
-    var bitRate: Int = 40_000_000
-    var keyFrameInterval: Int = 120
-    var audioCodec: AudioCodec = .aac
-    var audioBitRate: Int = 320_000
-    var audioSampleRate: Int = 48_000
-    var audioChannels: Int = 2
-    var requireHardware = false
+    public enum ColorSpace: String, Codable, CaseIterable, Sendable {
+        case rec709, displayP3
 
-    static func master(_ codec: Codec = .proRes422HQ) -> Self {
+        var primaries: String {
+            self == .displayP3 ? AVVideoColorPrimaries_P3_D65 : AVVideoColorPrimaries_ITU_R_709_2
+        }
+
+        var transfer: String {
+            self == .displayP3
+                ? kCVImageBufferTransferFunction_sRGB as String
+                : AVVideoTransferFunction_ITU_R_709_2
+        }
+    }
+
+    public var codec: Codec = .h264
+    public var bitRate: Int = 40_000_000
+    public var keyFrameInterval: Int = 120
+    public var audioCodec: AudioCodec = .aac
+    public var audioBitRate: Int = 320_000
+    public var audioSampleRate: Int = 48_000
+    public var audioChannels: Int = 2
+    public var requireHardware = false
+    public var colorSpace: ColorSpace?
+
+    public init() {}
+
+    public static func master(_ codec: Codec = .proRes422HQ) -> Self {
         var settings = Self()
         settings.codec = codec
         settings.audioCodec = .pcm
         return settings
     }
 
-    func validate() throws {
+    public func validate() throws {
         guard (100_000...1_000_000_000).contains(bitRate),
             (1...10_000).contains(keyFrameInterval),
             (32_000...320_000).contains(audioBitRate),
@@ -98,12 +115,13 @@ struct VideoDeliverySettings: Codable, Equatable, Sendable {
     }
 
     func videoSettings(size: CGSize, frameDuration: CMTime) -> [String: Any] {
+        let color = colorSpace ?? .rec709
         var result: [String: Any] = [
             AVVideoCodecKey: codec.native,
             AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
             AVVideoColorPropertiesKey: [
-                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoColorPrimariesKey: color.primaries,
+                AVVideoTransferFunctionKey: color.transfer,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
             ],
         ]
@@ -159,23 +177,23 @@ enum VideoDeliveryError: LocalizedError {
     }
 }
 
-struct VideoDeliveryReport: Codable, Sendable {
-    let width: Int
-    let height: Int
-    let duration: Double
-    let frameCount: Int
-    let frameRateNumerator: Int64
-    let frameRateDenominator: Int64
-    let videoCodec: String
-    let videoBitRate: Double
-    let bitsPerComponent: Int?
-    let colorPrimaries: String?
-    let transferFunction: String?
-    let audioCodec: String?
-    let audioSampleRate: Double?
-    let audioChannels: Int?
-    let bytes: Int64
-    let sha256: String
+public struct VideoDeliveryReport: Codable, Sendable {
+    public let width: Int
+    public let height: Int
+    public let duration: Double
+    public let frameCount: Int
+    public let frameRateNumerator: Int64
+    public let frameRateDenominator: Int64
+    public let videoCodec: String
+    public let videoBitRate: Double
+    public let bitsPerComponent: Int?
+    public let colorPrimaries: String?
+    public let transferFunction: String?
+    public let audioCodec: String?
+    public let audioSampleRate: Double?
+    public let audioChannels: Int?
+    public let bytes: Int64
+    public let sha256: String
 
     static func inspect(_ url: URL) async throws -> Self {
         let asset = AVURLAsset(url: url)
@@ -263,6 +281,12 @@ extension VideoRenderPipeline {
         to destination: URL, settings: VideoDeliverySettings = .init(), overwrite: Bool = false,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> VideoDeliveryReport {
+        var settings = settings
+        let color =
+            settings.colorSpace
+            ?? (videoComposition.colorPrimaries == AVVideoColorPrimaries_P3_D65
+                ? VideoDeliverySettings.ColorSpace.displayP3 : .rec709)
+        settings.colorSpace = color
         try settings.validate()
         guard destination.isFileURL,
             destination.pathExtension.lowercased() == settings.codec.fileExtension
@@ -301,11 +325,12 @@ extension VideoRenderPipeline {
             videoSettings: [
                 kCVPixelBufferPixelFormatTypeKey as String:
                     settings.codec.highPrecision
-                    ? kCVPixelFormatType_64RGBAHalf : kCVPixelFormatType_32BGRA
+                    ? kCVPixelFormatType_64RGBAHalf : kCVPixelFormatType_32BGRA,
+                AVVideoAllowWideColorKey: color == .displayP3,
             ])
         let deliveryComposition = videoComposition.mutableCopy() as! AVMutableVideoComposition
-        deliveryComposition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
-        deliveryComposition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        deliveryComposition.colorPrimaries = color.primaries
+        deliveryComposition.colorTransferFunction = color.transfer
         deliveryComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         videoOutput.videoComposition = deliveryComposition
         videoOutput.alwaysCopiesSampleData = false

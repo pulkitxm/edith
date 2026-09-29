@@ -82,7 +82,12 @@ public enum OperationMCPRunner {
     public static let maximumOutputBytes = 4 << 20
 
     static func executionTimeout(for tool: OperationMCPTool) -> TimeInterval {
-        tool.route == StudioEditOperation.render.descriptor.cli ? videoRenderTimeout : timeout
+        [
+            StudioEditOperation.render.descriptor.cli,
+            StudioDeliveryOperation.renderAudio.descriptor.cli,
+        ]
+        .contains(tool.route)
+            ? videoRenderTimeout : timeout
     }
 
     public static func run(
@@ -105,10 +110,21 @@ public enum OperationMCPRunner {
             return OperationMCPInvocation(output: error.localizedDescription, failed: true)
         }
         guard result.terminationStatus == 0 else {
-            let detail = result.standardError
+            let detail = deliveryError(result.standardError, for: tool)
             return OperationMCPInvocation(
                 output: detail.isEmpty ? result.standardOutput : detail, failed: true)
         }
         return OperationMCPInvocation(output: result.standardOutput, failed: false)
+    }
+
+    static func deliveryError(_ stderr: String, for tool: OperationMCPTool) -> String {
+        guard executionTimeout(for: tool) == videoRenderTimeout else { return stderr }
+        return stderr.split(separator: "\n").filter { line in
+            guard
+                let value = try? JSONSerialization.jsonObject(with: Data(line.utf8))
+                    as? [String: Any]
+            else { return true }
+            return value["event"] as? String != "progress"
+        }.joined(separator: "\n")
     }
 }

@@ -11,7 +11,8 @@ struct StudioEditCommand: AsyncParsableCommand {
         subcommands: [
             StudioEditSchema.self, StudioEditCreate.self, StudioEditShow.self,
             StudioEditApply.self, StudioEditValidate.self, StudioEditRender.self,
-            StudioEditFrame.self, StudioEditList.self, StudioEditClone.self,
+            StudioEditFrame.self, StudioEditRenderAudio.self, StudioEditList.self,
+            StudioEditClone.self,
             StudioEditContactSheet.self,
         ], defaultSubcommand: StudioEditSchema.self)
 }
@@ -30,7 +31,11 @@ enum StudioEditBridge {
         do {
             try await body()
         } catch {
-            let code = (error as? VideoEditorService.Failure)?.code ?? "edit_failed"
+            let interrupted = error as? StudioEditInterrupted
+            let code =
+                interrupted != nil
+                ? "cancelled"
+                : (error as? VideoEditorService.Failure)?.code ?? "edit_failed"
             if json {
                 let data = try JSONSerialization.data(
                     withJSONObject: [
@@ -41,7 +46,8 @@ enum StudioEditBridge {
             } else {
                 CLIOut.note("error: " + error.localizedDescription)
             }
-            throw ExitCode(code.hasPrefix("invalid_") ? 2 : 1)
+            throw ExitCode(
+                interrupted.map { 128 + $0.signal } ?? (code.hasPrefix("invalid_") ? 2 : 1))
         }
     }
 
@@ -148,35 +154,27 @@ struct StudioEditValidate: AsyncParsableCommand {
     }
 }
 
-struct StudioEditRender: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "render", abstract: "Render MP4 through the native editor pipeline.")
-    @Argument var project: String
-    @Option(help: "Destination .mp4 file.") var output: String
-    @OptionGroup var options: StudioEditOutput
-
-    func run() async throws {
-        try await StudioEditBridge.run(json: options.json) {
-            let result = try await VideoEditorService.render(
-                StudioEditBridge.url(project), to: StudioEditBridge.url(output),
-                overwrite: options.overwrite)
-            try StudioEditBridge.printResult(result, json: options.json)
-        }
-    }
-}
-
 struct StudioEditFrame: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "frame", abstract: "Render one composited frame as PNG.")
     @Argument var project: String
-    @Option(help: "Time in rendered output seconds, after speed and trim edits.") var time: Double
+    @Option(help: "Output seconds, snapped to the preceding output frame; excludes --frame.")
+    var time: Double?
+    @Option(help: "Exact zero-based output frame index; excludes --time.") var frame: Int64?
     @Option(help: "Destination .png file.") var output: String
     @OptionGroup var options: StudioEditOutput
+
+    func validate() throws {
+        guard (time != nil) != (frame != nil) else {
+            throw ValidationError("Choose exactly one of --time or --frame.")
+        }
+    }
 
     func run() async throws {
         try await StudioEditBridge.run(json: options.json) {
             let result = try await VideoEditorService.frame(
-                StudioEditBridge.url(project), at: time, to: StudioEditBridge.url(output),
+                StudioEditBridge.url(project), at: time, frameIndex: frame,
+                to: StudioEditBridge.url(output),
                 overwrite: options.overwrite)
             try StudioEditBridge.printResult(result, json: options.json)
         }

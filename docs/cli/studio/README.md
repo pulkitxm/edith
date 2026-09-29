@@ -21,6 +21,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [`ed studio run <tool> <files...>`](./run.md) | Runs a tool and saves the results. |
 | [`ed studio probe <file>`](./probe.md) | Describes a file and lists the tools that accept it. |
 | [`ed studio edit`](./edit.md) | Creates, edits, validates and renders native video projects. |
+| [Native project delivery](./delivery.md) | Renders native video, audio mixes and exact output frames. |
 
 ## What is in Studio
 

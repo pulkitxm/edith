@@ -14,7 +14,10 @@ ed studio edit apply demo.openscreen --plan edit.json --overwrite --json
 ed studio edit show demo.openscreen --json
 ed studio edit validate demo.openscreen --json
 ed studio edit render demo.openscreen --output demo.mp4 --json
+ed studio edit render demo.openscreen --output master.mov --codec proRes422HQ --progress --json
+ed studio edit render-audio demo.openscreen --output mix.wav --json
 ed studio edit frame demo.openscreen --time 0.25 --output preview.png --json
+ed studio edit frame demo.openscreen --frame 15 --output exact-frame.png --json
 ed studio edit list . --json
 ed studio edit clone demo.openscreen --output alternate.openscreen --title "Alternate cut" --json
 ed studio edit contact-sheet demo.openscreen --time 0 --time 0.25 --output review.png --json
@@ -106,6 +109,10 @@ the project lives elsewhere. Absolute paths and `~` paths are also supported.
 Text and audio placement use the native source-time ruler in seconds, before speed
 changes and removed trim ranges. `frame --time` uses rendered output seconds instead,
 snapped to the preceding output frame using the exact rational cadence.
+Frame extraction requires exactly one of `--time SECONDS` or `--frame INDEX`.
+`--frame` is a zero-based output-frame index, evaluated with the composition's exact
+rational frame duration. Result JSON includes the selected `frame` and its `time` in
+output seconds. An index at or beyond the frame count is rejected.
 Transitions use the editor's fade-through-color behavior, not overlapping dissolves.
 The schema exposes only implemented edit-plan operations. Detached audio, marker edits
 and explicit delivery codecs use their separate interfaces.
@@ -147,8 +154,8 @@ Canvas dimensions are even integers from 2 to 16384 pixels. Frame-rate numerator
 denominator are positive 32-bit integers whose quotient is from 1 to 240. The frame
 duration is exactly denominator/numerator seconds. For 120 fps, use numerator `120`
 and denominator `1`. Adding, removing or reordering clips does not change these settings.
-Color space is `rec709` or `displayP3`; PNG frames honor that choice. Current MP4 delivery
-normalizes output to Rec.709.
+Color space is `rec709` or `displayP3`; PNG frames and native delivery honor that choice.
+Delivery can explicitly override it with `--color-space`.
 
 `visualEffects` is a full replacement, not a partial patch. `framing` is `fit` or `fill`.
 Focal coordinates range from 0 to 1, measured from the left and top. Exposure is in
@@ -165,7 +172,7 @@ after the last keyframe. Use `keyframes: []` to clear animation.
 
 ## Results and errors
 
-With `--json`, create/apply/validate/render/frame return a versioned object containing
+With `--json`, create/apply/validate/render/render-audio/frame return a versioned object containing
 `path`, `written`, `clipIDs` and `aliases` on stdout. Show always prints project JSON;
 schema always prints JSON Schema. Runtime failures return a JSON object on stderr with
 `version: 1` and `error: {code, message}`, leaving stdout empty. Invalid edit operations
@@ -173,15 +180,72 @@ exit 2; other runtime failures exit 1. Command syntax errors use the standard CL
 diagnostic and exit 2. Success exits 0.
 
 Validate checks project structure, source availability and native composition. Empty
-projects validate successfully, but need video before rendering. Render exports MP4
-using the current native high-quality preset; frame exports a composited PNG. Rendering
+projects validate successfully, but need video before rendering. Render uses the native
+reader/writer delivery pipeline; frame exports a composited PNG. Rendering
 honors existing supported project effects, including effects configured in the UI.
+
+## Native delivery
+
+`render` accepts the following settings. Frame cadence, canvas dimensions and duration
+come from the project composition, after speed and trim edits.
+
+| Flag | Values / default |
+| --- | --- |
+| `--codec` | `h264` (default), `hevc`, `hevc10`, `proRes422`, `proRes422HQ`, `proRes4444` |
+| `--bit-rate` | Video bits/second, 100000 to 1000000000; default 40000000; unused for ProRes |
+| `--key-frame-interval` | Maximum frames between keyframes, 1 to 10000; default 120; unused for ProRes |
+| `--audio-codec` | `aac` or `pcm`; defaults to PCM for ProRes, AAC otherwise; PCM requires ProRes |
+| `--audio-bit-rate` | AAC bits/second, 32000 to 320000; default 320000; mono maximum 256000 |
+| `--audio-sample-rate` | 44100, 48000 (default), or 96000; 96000 requires PCM |
+| `--audio-channels` | 1 or 2 (default) |
+| `--color-space` | `rec709` or `displayP3`; omitted uses project/composition color, then Rec.709 |
+| `--require-hardware` | Fail if hardware encoding is unavailable; H.264/HEVC only |
+| `--progress` | Opt-in bounded progress on stderr |
+
+H.264/HEVC destinations require `.mp4`; ProRes requires `.mov`. HEVC Main 10 and
+ProRes use high-precision rendering buffers. Unsupported formats fail without replacing
+an existing destination. Color conversion and output tags use the selected color space.
+
+`render-audio` accepts `--container wav|aiff|m4a` (default `wav`),
+`--sample-rate 44100|48000|96000` (default `48000`), `--channels 1|2` (default `2`),
+and `--bit-rate` (default `320000`). WAV/AIFF encode 24-bit PCM; M4A encodes AAC
+and supports only 44100/48000 Hz. Mono AAC requires at most 256000 bits/second.
+The output extension must match the selected container. Audio export includes the
+mixed timeline's leading silence, gaps and tail, with measured sample-frame counts.
+
+```sh
+ed studio edit render demo.openscreen --output delivery.mp4 --codec hevc10 \
+  --bit-rate 60000000 --key-frame-interval 60 --color-space displayP3 --progress --json
+ed studio edit render-audio demo.openscreen --output mix.aiff --container aiff \
+  --sample-rate 96000 --channels 2 --progress --json
+```
+
+Result JSON retains `version`, `path`, `written`, `clipIDs` and `aliases`. Video delivery
+adds `videoReport`: `width`, `height`, `duration` in output seconds, `frameCount`,
+`frameRateNumerator`, `frameRateDenominator`, `videoCodec`, `videoBitRate`,
+`bitsPerComponent`, `colorPrimaries`, `transferFunction`, `audioCodec`,
+`audioSampleRate`, `audioChannels`, `bytes` and `sha256`. Unavailable optional
+measurements are omitted. `videoBitRate` is measured bits/second, not the requested target.
+Audio delivery instead adds `audioReport`: `codec`, optional `bitsPerSample`,
+`duration` in seconds, `sampleRate` in Hz, `channels`, sample `frames`, `bytes`, `sha256`.
+Reports describe the completed file and are returned only after atomic publication.
+
+With `--progress --json`, stderr receives at most 101 newline-delimited objects such as
+`{"version":1,"event":"progress","percent":42}`. Updates increase monotonically;
+100 means publication completed. Stdout remains exactly one final result document.
+Without `--json`, progress is human-readable. Without `--progress`, progress is silent.
+On a failure after progress begins, the final stderr line is the error object.
+
+SIGINT and SIGTERM cancel the native task cooperatively, remove temporary files and
+preserve an existing destination before publication. Cancellation leaves stdout empty,
+emits error code `cancelled` and exits 130 for SIGINT or 143 for SIGTERM.
 
 ## MCP
 
 The running `ed mcp` server registers `edith_studio_edit_schema`,
 `edith_studio_edit_create`, `edith_studio_edit_show`, `edith_studio_edit_apply`,
-`edith_studio_edit_validate`, `edith_studio_edit_render` and `edith_studio_edit_frame`.
+`edith_studio_edit_validate`, `edith_studio_edit_render`, `edith_studio_edit_render_audio`
+and `edith_studio_edit_frame`.
 Each takes the usual MCP `arguments` array, containing the same positional arguments and
 options as the corresponding CLI command. JSON output is enabled by the transport.
 Existing destinations still require an explicit `--overwrite` argument.
@@ -193,9 +257,10 @@ Existing destinations still require an explicit `--overwrite` argument.
 }
 ```
 
-Native video rendering has a bounded six-hour MCP execution deadline. Other routes keep
+Native video and audio rendering have a bounded six-hour MCP execution deadline. Other routes keep
 the standard 120-second deadline. Output capture stays capped at 4 MiB, and cancellation
-continues to terminate the child process group.
+continues to terminate the child process group. MCP returns the final report; optional
+child-process stderr progress does not alter the result JSON.
 
 ## Project copies and visual review
 

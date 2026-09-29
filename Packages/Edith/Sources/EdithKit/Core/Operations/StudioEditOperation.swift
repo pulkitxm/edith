@@ -30,7 +30,8 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .show: "Inspect native project JSON and persisted clip and audio IDs."
         case .apply: "Atomically apply a typed edit plan; --dry-run validates without writing."
         case .validate: "Validate a project's structure, local media and native composition."
-        case .render: "Render a native project to MP4, with a six-hour execution limit."
+        case .render:
+            "Encode native video with explicit codec settings and a measured delivery report."
         case .frame: "Extract a composited PNG frame at a rendered output time."
         case .list: "List project identities and titles in a local directory."
         case .clone: "Copy a native edit with a fresh project identity."
