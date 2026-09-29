@@ -77,17 +77,20 @@ extension VideoProject {
         let duration = (track.endMs - track.startMs) / 1000
         let rightDuration = duration - leftDuration
         let envelope = VideoAudioAutomation.track(track)
+        let fadeLimit = duration * (track.raw["gainEnvelope"] == nil ? 500 : 1000)
+        let fadeInMs = min(track.fadeInMs, fadeLimit)
+        let fadeOutMs = min(track.fadeOutMs, fadeLimit)
         right["id"] = newID
         right["laneId"] = laneID
         right["startMs"] = outputTime * 1000
         right["offsetMs"] = track.offsetMs + (outputTime * 1000 - track.startMs) * track.rate
-        right["fadeInMs"] = max(0, track.fadeInMs - leftDuration * 1000)
-        right["fadeOutMs"] = min(track.fadeOutMs, rightDuration * 1000)
+        right["fadeInMs"] = max(0, fadeInMs - leftDuration * 1000)
+        right["fadeOutMs"] = min(fadeOutMs, rightDuration * 1000)
         right["gainEnvelope"] = envelope.slice(from: leftDuration, to: duration).raw
         editRegion("audioTracks", id: id) {
             $0["endMs"] = outputTime * 1000
-            $0["fadeInMs"] = min(track.fadeInMs, leftDuration * 1000)
-            $0["fadeOutMs"] = max(0, track.fadeOutMs - rightDuration * 1000)
+            $0["fadeInMs"] = min(fadeInMs, leftDuration * 1000)
+            $0["fadeOutMs"] = max(0, fadeOutMs - rightDuration * 1000)
             $0["gainEnvelope"] = envelope.slice(from: 0, to: leftDuration).raw
             $0["laneId"] = laneID
         }

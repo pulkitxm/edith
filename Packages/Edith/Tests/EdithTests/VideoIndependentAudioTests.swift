@@ -6,6 +6,60 @@ import Testing
 @testable import Edith
 
 @Suite(.timeLimit(.minutes(1))) struct VideoIndependentAudioTests {
+    @Test(arguments: [true, false])
+    func oversizedFadeEditsUseAppliedExtentsWithoutSilencingTheTrack(editHead: Bool) async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        project.addAudio(sound, duration: 4, at: 0)
+        let id = try #require(project.audioTracks.first?.id)
+        let right = project.splitAudio(id, at: 2)
+        let selectedID = editHead ? id : try #require(right)
+        project.setAudioOptions(
+            selectedID, fadeInMs: editHead ? nil : 500, fadeOutMs: editHead ? 500 : nil)
+        for milliseconds in [500, 0] {
+            project.setAudioOptions(
+                selectedID, fadeInMs: editHead ? 3000 : nil, fadeOutMs: editHead ? nil : 3000)
+            let oversized = try #require(project.audioTracks.first { $0.id == selectedID })
+            #expect((editHead ? oversized.fadeInMs : oversized.fadeOutMs) == 1000)
+            project.setAudioOptions(
+                selectedID, fadeInMs: editHead ? milliseconds : nil,
+                fadeOutMs: editHead ? nil : milliseconds)
+            let selected = try #require(project.audioTracks.first { $0.id == selectedID })
+            let envelope = VideoAudioAutomation.track(selected)
+            #expect(envelope.value(at: 1) == 1)
+            #expect(envelope.value(at: editHead ? 1.75 : 0.25) == 0.5)
+            #expect(envelope.value(at: editHead ? 0 : 2) == (milliseconds == 0 ? 1 : 0))
+            let pipeline = try await VideoRenderPipeline.make(project: project)
+            let samples = try await readAudio(pipeline.composition, mix: pipeline.audioMix)
+            let middle = selected.startMs / 1000 + 0.8
+            #expect(rms(samples, from: middle, to: middle + 0.4) > 0.3)
+        }
+        var inherited = VideoProject.create()
+        inherited.addAsset(video, duration: 4, width: 64, height: 64)
+        inherited.addAudio(sound, duration: 4, at: 0)
+        let inheritedID = try #require(inherited.audioTracks.first?.id)
+        inherited.setAudioOptions(
+            inheritedID, fadeInMs: editHead ? 2000 : nil, fadeOutMs: editHead ? nil : 2000)
+        let inheritedRight = inherited.splitAudio(inheritedID, at: editHead ? 3 : 1)
+        let fragmentID = editHead ? inheritedID : try #require(inheritedRight)
+        for milliseconds in [500, 0] {
+            var edited = inherited
+            edited.setAudioOptions(
+                fragmentID, fadeInMs: editHead ? milliseconds : nil,
+                fadeOutMs: editHead ? nil : milliseconds)
+            let fragment = try #require(edited.audioTracks.first { $0.id == fragmentID })
+            let envelope = VideoAudioAutomation.track(fragment)
+            #expect(envelope.value(at: 1) == 1)
+            #expect(envelope.value(at: 2) == 1)
+        }
+    }
+
     @Test func rateAudioFilesFollowPipelineOwnershipAndReclaimOrphans() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

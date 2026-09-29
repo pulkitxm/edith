@@ -724,12 +724,14 @@ struct VideoProject {
         guard let track = audioTracks.first(where: { $0.id == id }) else { return }
         var envelope = VideoAudioAutomation.track(track)
         let duration = (track.endMs - track.startMs) / 1000
-        if let fadeInMs {
+        let appliedFadeInMs = fadeInMs.map { min(Double(max(0, $0)), max(0, duration * 500)) }
+        let appliedFadeOutMs = fadeOutMs.map { min(Double(max(0, $0)), max(0, duration * 500)) }
+        if let fadeInMs = appliedFadeInMs {
             envelope = envelope.replacingFade(
                 fromStart: true, seconds: Double(fadeInMs) / 1000,
                 previousSeconds: track.fadeInMs / 1000, duration: duration)
         }
-        if let fadeOutMs {
+        if let fadeOutMs = appliedFadeOutMs {
             envelope = envelope.replacingFade(
                 fromStart: false, seconds: Double(fadeOutMs) / 1000,
                 previousSeconds: track.fadeOutMs / 1000, duration: duration)
@@ -740,8 +742,8 @@ struct VideoProject {
             if track.raw["gainEnvelope"] != nil, fadeInMs != nil || fadeOutMs != nil {
                 $0["gainEnvelope"] = envelope.raw
             }
-            if let fadeInMs { $0["fadeInMs"] = max(0, fadeInMs) }
-            if let fadeOutMs { $0["fadeOutMs"] = max(0, fadeOutMs) }
+            if let appliedFadeInMs { $0["fadeInMs"] = appliedFadeInMs }
+            if let appliedFadeOutMs { $0["fadeOutMs"] = appliedFadeOutMs }
         }
     }
 
