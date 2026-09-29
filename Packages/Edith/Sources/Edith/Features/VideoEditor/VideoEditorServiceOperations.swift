@@ -4,7 +4,7 @@ import Foundation
 extension VideoEditorService {
     static func apply(
         _ operation: VideoEditPlan.Operation, project: inout VideoProject,
-        aliases: inout [String: String], directory: URL
+        aliases: inout [String: String], audioAliases: inout [String: [String]], directory: URL
     ) async throws {
         func clip(_ reference: String) throws -> VideoProject.Clip {
             let id = aliases[reference] ?? reference
@@ -16,11 +16,10 @@ extension VideoEditorService {
         func newName(_ name: String) throws {
             try require(
                 !name.isEmpty && name.count <= 100 && aliases[name] == nil
-                    && !project.clips.contains { $0.id == name },
+                    && audioAliases[name] == nil
+                    && !project.clips.contains { $0.id == name }
+                    && !project.audioTracks.contains { $0.id == name },
                 "Clip alias must be unique and contain 1 to 100 characters.")
-        }
-        func audio(_ id: String) throws {
-            try require(project.audioTracks.contains { $0.id == id }, "Unknown audio track: \(id)")
         }
         func range(_ start: Double, _ end: Double) throws {
             let duration = project.clips.last.map { $0.timelineStart + $0.duration } ?? 0
@@ -157,28 +156,11 @@ extension VideoEditorService {
                     && (0.2...2).contains(duration),
                 "Transition must be none, fade or flash with duration 0.2 to 2 seconds.")
             project.setTransition(before: selected.id, kind: kind, duration: duration)
-        case let .addAudio(path, start, offset):
-            let url = try mediaURL(path, directory: directory)
-            let asset = AVURLAsset(url: url)
-            try require(
-                try await !asset.loadTracks(withMediaType: .audio).isEmpty,
-                "Expected media with an audio track.")
-            let duration = try await asset.load(.duration).seconds
-            try require(
-                duration.isFinite && duration > 0 && duration <= 604800 && offset.isFinite
-                    && offset >= 0 && offset < duration, "Invalid audio duration or source offset.")
-            let end = project.clips.last.map { $0.timelineStart + $0.duration } ?? 0
-            try range(start, min(end, start + duration - offset))
-            project.addAudio(
-                url, duration: duration, at: start * 1000, sourceOffsetMs: offset * 1000)
-        case let .audioOptions(id, gainDb, muted, loop):
-            try audio(id)
-            try gain(gainDb)
-            project.setAudioGain(id, decibels: gainDb)
-            project.setAudioOptions(id, muted: muted, loop: loop)
-        case let .removeAudio(id):
-            try audio(id)
-            project.removeAudioTrack(id)
+        case .addAudio, .audioOptions, .removeAudio, .detachAudio, .moveAudio, .splitAudio,
+            .trimAudio, .audioFades:
+            try await applyAudio(
+                operation, project: &project, aliases: aliases,
+                audioAliases: &audioAliases, directory: directory)
         case let .rename(title):
             try requireTitle(title)
             project.rename(title)

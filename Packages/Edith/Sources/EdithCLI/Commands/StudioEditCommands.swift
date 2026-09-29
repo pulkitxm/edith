@@ -64,6 +64,9 @@ enum StudioEditBridge {
             for name in result.aliases.keys.sorted() {
                 CLIOut.out("\(name): \(result.aliases[name]!)")
             }
+            for name in result.audioAliases.keys.sorted() {
+                CLIOut.out("\(name): \(result.audioAliases[name]!.joined(separator: ", "))")
+            }
         }
     }
 }

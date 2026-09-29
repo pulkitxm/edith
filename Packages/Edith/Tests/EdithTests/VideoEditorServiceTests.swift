@@ -205,7 +205,7 @@ import Testing
             VideoEditPlan(operations: [
                 .addMedia(path: source.path, name: "intro"),
                 .split(clipID: "intro", sourceTime: 0.5, rightName: "outro"),
-                .addAudio(path: audioURL.path, start: 0.1, offset: 0.2),
+                .addAudio(path: audioURL.path, start: 0.1, offset: 0.2, name: "score"),
             ]), to: url, overwrite: true)
         let project = try VideoProject.open(url)
         let id = try #require(project.audioTracks.first?.id)
