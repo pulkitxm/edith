@@ -148,8 +148,8 @@ import Testing
         }
     }
 
-    @Test func libraryContainsOnlyTheRequestedGitHubSkill() {
-        #expect(EdithSkillLibrary.skills.map(\.id) == ["edith-remote-work"])
+    @Test func libraryContainsTheBundledGitHubSkills() {
+        #expect(EdithSkillLibrary.skills.map(\.id) == ["edith-remote-work", "edith-video-edit"])
         #expect(
             skill.sourceURL.absoluteString
                 == "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-remote-work/SKILL.md"
