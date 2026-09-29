@@ -22,7 +22,7 @@ import Testing
                 == ["newer", "older"])
     }
 
-    @Test func openingAndRefocusingUpdatesAgentMachineKindAndSpace() throws {
+    @Test func openingAndRefocusingRecordsUsageWithoutReorderingTheSidebar() throws {
         let suite = "LauncherUsageTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -37,12 +37,15 @@ import Testing
         ])
         store.open(first)
         store.open(second, beside: .right)
-        #expect(store.listedAgents.map(\.id) == [second.id, first.id])
+        #expect(store.listedAgents.map(\.id) == [first.id, second.id])
         #expect(store.recentHosts.map(\.id) == ["remote", "local"])
-        #expect(store.agentSpaces.map(\.title) == ["Zeta", "Alpha"])
+        #expect(store.agentSpaces.map(\.title) == ["Alpha", "Zeta"])
+        #expect(
+            store.usage.lastUsed(["agent", second.id]) > store.usage.lastUsed(["agent", first.id]))
         #expect(store.usage.lastUsed(["space", "local", "Zeta"]) == .distantPast)
         store.focus(first.id)
         #expect(store.listedAgents.map(\.id) == [first.id, second.id])
+        #expect(store.agentSpaces.map(\.title) == ["Alpha", "Zeta"])
         #expect(store.recentHosts.map(\.id) == ["local", "remote"])
         #expect(
             store.usage.lastUsed(["kind", "Terminal"]) > store.usage.lastUsed(["kind", "Shell"]))
