@@ -61,7 +61,7 @@ def check_sources(fixture, manifest):
     require(digest(fixture / manifest["music"]) == manifest["musicSHA256"], "Music source was modified")
 
 
-def check_project(project, manifest, source_kind="video"):
+def check_project(project, manifest, fixture, source_kind="video"):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
     require(len(clips) == 45, "Expected 45 clips")
@@ -70,7 +70,8 @@ def check_project(project, manifest, source_kind="video"):
     position = 0
     for clip, shot in zip(clips, manifest["shots"]):
         source = assets[clip["assetId"]]
-        require(pathlib.Path(source["originalPath"]).name == shot[source_kind], "Shot source or order changed")
+        require(pathlib.Path(source["originalPath"]).resolve(strict=True) == (fixture / shot[source_kind]).resolve(strict=True),
+                "Shot must retain its exact original source path and order")
         require(abs(clip["sourceStartSec"]) < 1e-8, "Unexpected source trim start")
         require(abs(clip["sourceEndSec"] - shot["frames"] / 60) < 1e-8, "Shot frame duration changed")
         require(abs(clip["timelineStartSec"] - position / 60) < 1e-8, "Timeline gap or overlap")
@@ -170,7 +171,7 @@ def main():
         require(len(result["aliases"]) == 45, "Missing shot aliases")
         edit("validate", project, "--json")
         shown = edit("show", project, "--json")
-        check_project(shown, manifest, "still" if args.stills else "video")
+        check_project(shown, manifest, fixture, "still" if args.stills else "video")
         snapshots.append(normalized(shown))
     require(snapshots[0] == snapshots[1], "Repeated plans produced different semantic projects")
     project = workspace / "edit-0.openscreen"
