@@ -34,6 +34,7 @@ struct VideoEditorPage: View {
     @State private var showingInspector = true
     @State private var showingMedia = false
     @State private var showingRecorder = false
+    @State private var showingBeats = false
     @State private var titleDraft = ""
     @Environment(\.colorScheme) private var scheme
 
@@ -70,6 +71,9 @@ struct VideoEditorPage: View {
         .navigationTitle("Video editor")
         .sheet(isPresented: $showingExport) {
             VideoExportSheet(model: model)
+        }
+        .sheet(isPresented: $showingBeats) {
+            VideoBeatPanel(model: model)
         }
         .sheet(isPresented: $showingRecorder) {
             if #available(macOS 15.0, *) {
@@ -138,6 +142,8 @@ struct VideoEditorPage: View {
                 .help("Rename project")
             Spacer()
             Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
+            Button("Markers", systemImage: "waveform") { showingBeats = true }
+                .disabled(model.project == nil)
             Toggle("Canvas", isOn: $model.canvasEditing).toggleStyle(.button)
             Toggle("Guides", isOn: $model.safeAreas).toggleStyle(.button)
             if #available(macOS 15.0, *) {
