@@ -112,6 +112,13 @@ struct VideoProject {
         var muted: Bool { raw["muted"] as? Bool ?? false }
         var loop: Bool { raw["loop"] as? Bool ?? false }
         var label: String { raw["label"] as? String ?? "Audio" }
+        var timebase: String { raw["timebase"] as? String ?? "output" }
+        var rate: Double {
+            let value = (raw["rate"] as? NSNumber)?.doubleValue ?? 1
+            return value.isFinite ? min(5, max(0.25, value)) : 1
+        }
+        var fadeInMs: Double { (raw["fadeInMs"] as? NSNumber)?.doubleValue ?? 0 }
+        var fadeOutMs: Double { (raw["fadeOutMs"] as? NSNumber)?.doubleValue ?? 0 }
     }
 
     struct TranscriptWord: Identifiable {
@@ -172,6 +179,9 @@ struct VideoProject {
     }
     var trimRanges: [[String: Any]] {
         (root["timeline"] as? [String: Any])?["trimRanges"] as? [[String: Any]] ?? []
+    }
+    var muteRanges: [[String: Any]] {
+        (root["timeline"] as? [String: Any])?["muteRanges"] as? [[String: Any]] ?? []
     }
 
     var transitions: [Transition] {
@@ -560,7 +570,7 @@ struct VideoProject {
         let relocated = clips
         for key in [
             "zoomRanges", "annotations", "speedRegions",
-            "cameraFullscreenRegions", "audioTracks",
+            "cameraFullscreenRegions",
         ] {
             let regions =
                 key == "speedRegions"
@@ -581,10 +591,6 @@ struct VideoProject {
                 result["sourceEndSec"] = end
                 result["startMs"] = (newClip.timelineStart + start - newClip.start) * 1000
                 result["endMs"] = (newClip.timelineStart + end - newClip.start) * 1000
-                if key == "audioTracks", start > sourceStart {
-                    let offset = (region["offsetMs"] as? NSNumber)?.doubleValue ?? 0
-                    result["offsetMs"] = Int(offset + (start - sourceStart) * 1000)
-                }
                 return result
             }
             if key == "speedRegions" || key == "cameraFullscreenRegions" {
@@ -674,7 +680,14 @@ struct VideoProject {
         _ url: URL, duration: Double, at startMs: Double,
         sourceOffsetMs: Double = 0
     ) {
-        guard duration > 0 else { return }
+        guard duration.isFinite, duration > 0, startMs.isFinite, sourceOffsetMs.isFinite else {
+            return
+        }
+        let end = VideoRenderPipeline.timingSegments(project: self).last?.outputEnd ?? 0
+        let start = min(max(0, startMs), end * 1000)
+        let offset = max(0, sourceOffsetMs)
+        let audioEnd = min(end * 1000, start + duration * 1000 - offset)
+        guard audioEnd > start else { return }
         let id = "asset_\(UUID().uuidString.lowercased())"
         var assets = root["assets"] as? [[String: Any]] ?? []
         assets.append([
@@ -684,72 +697,36 @@ struct VideoProject {
             "cameraTrack": NSNull(),
         ])
         root["assets"] = assets
-        let end = (clips.last.map { $0.timelineStart + $0.duration } ?? 0) * 1000
-        let start = min(max(0, startMs), end)
-        guard start < end else { return }
         var tracks = root["audioTracks"] as? [[String: Any]] ?? []
-        let trackID = "audio_\(UUID().uuidString.lowercased())"
-        let sourceOffsetMs = max(0, sourceOffsetMs)
-        let audioEnd = min(end, start + max(0, duration * 1000 - sourceOffsetMs))
-        for clip in clips {
-            let pieceStart = max(start, clip.timelineStart * 1000)
-            let pieceEnd = min(audioEnd, (clip.timelineStart + clip.duration) * 1000)
-            guard pieceEnd > pieceStart else { continue }
-            var fragment: [String: Any] = [
-                "id": "audio_\(UUID().uuidString.lowercased())", "trackId": trackID,
-                "assetId": id, "startMs": pieceStart, "endMs": pieceEnd,
-                "kind": "music", "durationSec": duration,
-                "offsetMs": Int(sourceOffsetMs + pieceStart - start),
-                "gainDb": 0, "loop": false, "fadeInMs": 0, "fadeOutMs": 0,
-                "muted": false, "label": url.lastPathComponent, "origin": "user",
-            ]
-            anchor(&fragment)
-            tracks.append(fragment)
-        }
+        tracks.append([
+            "id": "audio_\(UUID().uuidString.lowercased())",
+            "assetId": id, "startMs": start, "endMs": audioEnd,
+            "timebase": "output", "rate": 1, "kind": "music", "offsetMs": offset,
+            "gainDb": 0, "loop": false, "fadeInMs": 0, "fadeOutMs": 0,
+            "muted": false, "label": url.lastPathComponent, "origin": "user",
+        ])
         root["audioTracks"] = tracks
     }
 
     mutating func removeAudioTrack(_ id: String) {
-        guard let selected = audioTracks.first(where: { $0.id == id }) else { return }
-        let groupID = selected.raw["trackId"] as? String ?? id
-        root["audioTracks"] = audioTracks.filter {
-            ($0.raw["trackId"] as? String ?? $0.id) != groupID
-        }.map(\.raw)
+        root["audioTracks"] = audioTracks.filter { $0.id != id }.map(\.raw)
     }
 
     mutating func setAudioGain(_ id: String, decibels: Double) {
-        var tracks = audioTracks.map(\.raw)
-        guard let selected = tracks.first(where: { $0["id"] as? String == id }) else { return }
-        let groupID = selected["trackId"] as? String ?? id
-        for index in tracks.indices {
-            let currentGroupID =
-                tracks[index]["trackId"] as? String
-                ?? tracks[index]["id"] as? String
-            if currentGroupID == groupID {
-                tracks[index]["gainDb"] = max(-60, min(12, decibels))
-            }
-        }
-        root["audioTracks"] = tracks
+        guard decibels.isFinite else { return }
+        editRegion("audioTracks", id: id) { $0["gainDb"] = max(-60, min(12, decibels)) }
     }
 
     mutating func setAudioOptions(
         _ id: String, muted: Bool? = nil, loop: Bool? = nil,
         fadeInMs: Int? = nil, fadeOutMs: Int? = nil
     ) {
-        var tracks = audioTracks.map(\.raw)
-        guard let selected = tracks.first(where: { $0["id"] as? String == id }) else { return }
-        let groupID = selected["trackId"] as? String ?? id
-        for index in tracks.indices {
-            let current =
-                tracks[index]["trackId"] as? String
-                ?? tracks[index]["id"] as? String
-            guard current == groupID else { continue }
-            if let muted { tracks[index]["muted"] = muted }
-            if let loop { tracks[index]["loop"] = loop }
-            if let fadeInMs { tracks[index]["fadeInMs"] = max(0, fadeInMs) }
-            if let fadeOutMs { tracks[index]["fadeOutMs"] = max(0, fadeOutMs) }
+        editRegion("audioTracks", id: id) {
+            if let muted { $0["muted"] = muted }
+            if let loop { $0["loop"] = loop }
+            if let fadeInMs { $0["fadeInMs"] = max(0, fadeInMs) }
+            if let fadeOutMs { $0["fadeOutMs"] = max(0, fadeOutMs) }
         }
-        root["audioTracks"] = tracks
     }
 
     mutating func split(clipID: String, at sourceTime: Double) {
@@ -780,7 +757,7 @@ struct VideoProject {
 
         let delta = (clips[index + 1].timelineStart - clips[index].timelineStart) * 1000
         for key in [
-            "zoomRanges", "annotations", "audioTracks", "speedRegions", "cameraFullscreenRegions",
+            "zoomRanges", "annotations", "speedRegions", "cameraFullscreenRegions",
         ] {
             var regions: [[String: Any]]
             switch key {
@@ -812,9 +789,6 @@ struct VideoProject {
                 copy["clipId"] = newID
                 copy["startMs"] = ((original["startMs"] as? NSNumber)?.doubleValue ?? 0) + delta
                 copy["endMs"] = ((original["endMs"] as? NSNumber)?.doubleValue ?? 0) + delta
-                if key == "audioTracks" {
-                    copy["trackId"] = "audio_\(UUID().uuidString.lowercased())"
-                }
                 return copy
             }
             regions.append(contentsOf: copies)
@@ -869,7 +843,7 @@ struct VideoProject {
         root["timeline"] = timeline
         for key in [
             "zoomRanges", "annotations", "speedRegions",
-            "cameraFullscreenRegions", "audioTracks",
+            "cameraFullscreenRegions",
         ] {
             var regions: [[String: Any]]
             if key == "speedRegions" {
@@ -897,10 +871,6 @@ struct VideoProject {
                     rightRegion["id"] = "\(key)_\(UUID().uuidString.lowercased())"
                     rightRegion["sourceStartSec"] = splitTime
                     rightRegion["startMs"] = right.timelineStart * 1000
-                    if key == "audioTracks" {
-                        let offset = (rightRegion["offsetMs"] as? NSNumber)?.doubleValue ?? 0
-                        rightRegion["offsetMs"] = Int(offset + (splitTime - start) * 1000)
-                    }
                 } else {
                     rightRegion["startMs"] =
                         (right.timelineStart + start - splitTime) * 1000

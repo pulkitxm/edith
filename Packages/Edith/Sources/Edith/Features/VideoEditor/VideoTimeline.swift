@@ -159,7 +159,7 @@ struct VideoTimeline: View {
         {
             VideoWaveform(
                 url: asset.url, start: track.offsetMs / 1000,
-                end: track.offsetMs / 1000 + (track.endMs - track.startMs) / 1000)
+                end: track.offsetMs / 1000 + (track.endMs - track.startMs) * track.rate / 1000)
         }
     }
 
@@ -190,8 +190,8 @@ struct VideoTimeline: View {
         (model.project?.audioTracks ?? []).map {
             Item(
                 id: $0.id, label: $0.label,
-                start: model.outputTime(forRulerTime: $0.startMs / 1000),
-                end: model.outputTime(forRulerTime: $0.endMs / 1000), selection: .audio($0.id),
+                start: $0.startMs / 1000,
+                end: $0.endMs / 1000, selection: .audio($0.id),
                 key: "audioTracks")
         }
     }

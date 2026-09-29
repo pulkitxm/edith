@@ -228,8 +228,9 @@ import Testing
         let audioSegments = try #require(
             audioWithCut.composition.tracks(withMediaType: .audio).first?.segments
         ).filter { !$0.isEmpty }
-        #expect(audioSegments.count == 2)
-        #expect(abs(audioSegments[1].timeMapping.source.start.seconds - 0.4) < 0.02)
+        #expect(audioSegments.count == 1)
+        #expect(abs(audioSegments[0].timeMapping.source.start.seconds) < 0.02)
+        #expect(abs(audioSegments[0].timeMapping.target.duration.seconds - 0.6) < 0.02)
         let mixedURL = directory.appendingPathComponent("mixed.mp4")
         try await mixed.exportMP4(to: mixedURL)
         #expect(try await !AVURLAsset(url: mixedURL).loadTracks(withMediaType: .audio).isEmpty)
