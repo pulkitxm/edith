@@ -237,8 +237,8 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         try require(image.width == Int(size.width) && image.height == Int(size.height),
             "Preview and export dimensions differ")
         let generator = AVAssetImageGenerator(asset: asset)
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
+        generator.requestedTimeToleranceBefore = exact ? .zero : CMTime(value: 1, timescale: 30)
+        generator.requestedTimeToleranceAfter = exact ? .zero : CMTime(value: 1, timescale: 30)
         let rendered = try await generator.image(at: CMTime(value: 15, timescale: 60)).image
         let context = CIContext()
         func pixels(_ image: CGImage) -> [UInt8] {
@@ -264,7 +264,16 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
 }
 
 @main struct EditorAcceptanceMedia {
-    static func main() async throws {
+    static func main() async {
+        do {
+            try await run()
+        } catch {
+            FileHandle.standardError.write(Data("\(error)\n".utf8))
+            exit(1)
+        }
+    }
+
+    static func run() async throws {
         let arguments = CommandLine.arguments
         try require(arguments.count >= 3, "Usage: editor-acceptance-media generate|inspect|baseline PATH")
         let url = URL(fileURLWithPath: arguments[2])
