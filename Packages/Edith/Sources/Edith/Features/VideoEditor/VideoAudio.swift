@@ -96,6 +96,7 @@ struct VideoWaveform: View {
     let url: URL
     let start: Double
     let end: Double
+    var loop = false
     @State private var envelope: VideoAudioEnvelope?
 
     var body: some View {
@@ -104,7 +105,10 @@ struct VideoWaveform: View {
             var bars = Path()
             let count = max(1, min(2000, Int(size.width / 3)))
             for index in 0..<count {
-                let time = start + (end - start) * Double(index) / Double(count)
+                var time = start + (end - start) * Double(index) / Double(count)
+                if loop, envelope.duration > 0 {
+                    time.formTruncatingRemainder(dividingBy: envelope.duration)
+                }
                 let bucket = min(envelope.peaks.count - 1, max(0, Int(time / envelope.interval)))
                 let height = max(
                     1, min(size.height, CGFloat(sqrt(envelope.peaks[bucket])) * size.height))
@@ -219,13 +223,7 @@ extension VideoEditorModel {
 
     func setClipAudio(gain: Double? = nil, muted: Bool? = nil) {
         guard let selectedClipID else { return }
-        mutate { document in
-            var clips = document.clips
-            guard let index = clips.firstIndex(where: { $0.id == selectedClipID }) else { return }
-            if let gain { clips[index].raw["audioGainDb"] = gain }
-            if let muted { clips[index].raw["audioMuted"] = muted }
-            document.setClips(clips)
-        }
+        mutate { $0.setClipAudio(clipID: selectedClipID, gain: gain, muted: muted) }
         rebuild()
     }
 }

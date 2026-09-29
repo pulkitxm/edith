@@ -424,6 +424,10 @@ final class VideoEditorModel {
     }
 
     func splitAtPlayhead() {
+        if case .audio(let id) = selection {
+            splitAudio(id, at: playhead)
+            return
+        }
         guard
             let segment = pipeline?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd

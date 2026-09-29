@@ -311,6 +311,7 @@ struct VideoRenderPipeline {
                     AVURLAsset(url: URL(fileURLWithPath: $0))
                 } ?? asset
             let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first
+            let audioRange = try await sourceAudio?.load(.timeRange)
             for slice in speedSlices(
                 for: clip, regions: project.speedRegions, trims: project.trimRanges
             ) {
@@ -339,17 +340,27 @@ struct VideoRenderPipeline {
                         CMTimeRange(start: insertion, duration: visualRange.duration),
                         toDuration: sourceRange.duration)
                 }
-                if let sourceAudio {
+                if let sourceAudio, let audioRange {
                     if audio == nil {
                         audio = composition.addMutableTrack(
                             withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
                     }
-                    try audio?.insertTimeRange(sourceRange, of: sourceAudio, at: insertion)
+                    let available = CMTimeRangeGetIntersection(sourceRange, otherRange: audioRange)
+                    if available.duration.seconds > 0 {
+                        let audioInsertion = VideoAudioMix.time(
+                            cursor.seconds + (available.start.seconds - slice.start) / slice.rate)
+                        try audio?.insertTimeRange(available, of: sourceAudio, at: audioInsertion)
+                        if slice.rate != 1 {
+                            audio?.scaleTimeRange(
+                                CMTimeRange(start: audioInsertion, duration: available.duration),
+                                toDuration: VideoAudioMix.time(
+                                    available.duration.seconds / slice.rate))
+                        }
+                    }
                 }
                 if slice.rate != 1 {
                     let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
                     video.scaleTimeRange(inserted, toDuration: outputDuration)
-                    if sourceAudio != nil { audio?.scaleTimeRange(inserted, toDuration: outputDuration) }
                 }
                 segments.append(
                     Segment(

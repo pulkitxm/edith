@@ -811,12 +811,25 @@ struct VideoProject {
         trims.append(contentsOf: copies)
         timeline["trimRanges"] = trims
         root["timeline"] = timeline
+        var audioTimeline = timeline
+        audioTimeline["muteRanges"] =
+            muteRanges
+            + muteRanges.filter {
+                $0["clipId"] as? String == clipID
+            }.map {
+                var copy = $0
+                copy["id"] = "mute_\(UUID().uuidString.lowercased())"
+                copy["clipId"] = newID
+                return copy
+            }
+        root["timeline"] = audioTimeline
         return newID
     }
 
     private mutating func reanchorRegionsAfterSplit(
         left: Clip, right: Clip, at splitTime: Double
     ) {
+        splitMuteRanges(left: left, right: right, at: splitTime)
         var timeline = root["timeline"] as? [String: Any] ?? [:]
         var trims: [[String: Any]] = []
         for var trim in trimRanges {

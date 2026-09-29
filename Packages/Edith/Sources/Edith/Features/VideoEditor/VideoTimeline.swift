@@ -40,7 +40,7 @@ struct VideoTimeline: View {
                         ForEach(packed(annotationItems), id: \.first?.id) { items in
                             lane("OVERLAYS", color: .orange, items: items, width: width)
                         }
-                        ForEach(packed(audioItems), id: \.first?.id) { items in
+                        ForEach(audioLanes, id: \.first?.id) { items in
                             lane("AUDIO", color: .green, items: items, width: width)
                         }
                         lane("SPEED", color: .purple, items: regions("speedRegions"), width: width)
@@ -159,7 +159,8 @@ struct VideoTimeline: View {
         {
             VideoWaveform(
                 url: asset.url, start: track.offsetMs / 1000,
-                end: track.offsetMs / 1000 + (track.endMs - track.startMs) * track.rate / 1000)
+                end: track.offsetMs / 1000 + (track.endMs - track.startMs) * track.rate / 1000,
+                loop: track.loop)
         }
     }
 
@@ -194,6 +195,16 @@ struct VideoTimeline: View {
                 end: $0.endMs / 1000, selection: .audio($0.id),
                 key: "audioTracks")
         }
+    }
+
+    private var audioLanes: [[Item]] {
+        let lanes = Dictionary(
+            uniqueKeysWithValues: (model.project?.audioTracks ?? []).map {
+                ($0.id, $0.raw["laneId"] as? String ?? $0.id)
+            })
+        let grouped = Dictionary(grouping: audioItems) { lanes[$0.id] ?? $0.id }
+        return grouped.values.sorted { ($0.first?.id ?? "") < ($1.first?.id ?? "") }
+            .flatMap { packed($0) }
     }
 
     private func regions(_ key: String) -> [Item] {

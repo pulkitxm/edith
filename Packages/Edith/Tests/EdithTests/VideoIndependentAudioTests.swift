@@ -1,10 +1,177 @@
 import AVFoundation
 import AppKit
 import CoreVideo
+import SwiftUI
 import Testing
 @testable import Edith
 
 @Suite struct VideoIndependentAudioTests {
+    @Test func detachmentSnapshotsSourceSpeedCutsGainAndMuteRanges() throws {
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/source.mov"), duration: 8, width: 64, height: 64)
+        let clipID = project.clips[0].id
+        project.trim(clipID: clipID, start: 1, end: 7)
+        project.addSpeed(startMs: 1000, endMs: 3000, rate: 2)
+        project.addTrim(clipID: clipID, start: 4, end: 5)
+        var clips = project.clips
+        clips[0].raw["audioGainDb"] = -9.0
+        project.setClips(clips)
+        var timeline = project.root["timeline"] as? [String: Any] ?? [:]
+        timeline["muteRanges"] = [["clipId": clipID, "startSec": 2.5, "endSec": 3.0]]
+        project.root["timeline"] = timeline
+        let ids = project.detachAudio(clipID: clipID)
+        #expect(ids.count == 5)
+        #expect(project.clips[0].raw["audioMuted"] as? Bool == true)
+        #expect(project.audioTracks.map(\.offsetMs) == [1000, 2000, 2500, 3000, 5000])
+        #expect(project.audioTracks.map(\.rate) == [1, 2, 2, 2, 1])
+        #expect(project.audioTracks.map(\.startMs) == [0, 1000, 1250, 1500, 2000])
+        #expect(project.audioTracks.map(\.endMs) == [1000, 1250, 1500, 2000, 4000])
+        #expect(project.audioTracks.map(\.muted) == [false, false, true, false, false])
+        #expect(project.audioTracks.allSatisfy { $0.gainDb == -9 && $0.raw["clipId"] == nil })
+        #expect(project.detachAudio(clipID: clipID).isEmpty)
+        project.setClips([])
+        #expect(project.audioTracks.map(\.id) == ids)
+    }
+
+    @Test func detachedTrimMoveAndSplitUseSourceRate() throws {
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/source.mov"), duration: 8, width: 64, height: 64)
+        var clips = project.clips
+        clips[0].rate = 2
+        project.setClips(clips)
+        let id = try #require(project.detachAudio(clipID: clips[0].id).first)
+        project.retimeAudio(id, start: 0.5, end: 3.5, trimStart: true)
+        #expect(project.audioTracks[0].offsetMs == 1000)
+        project.moveAudio(id, to: 1)
+        #expect(project.audioTracks[0].offsetMs == 1000)
+        #expect(project.audioTracks[0].endMs == 4000)
+        project.setAudioOptions(id, fadeInMs: 200, fadeOutMs: 300)
+        let splitID = project.splitAudio(id, at: 2)
+        let rightID = try #require(splitID)
+        let right = try #require(project.audioTracks.first { $0.id == rightID })
+        #expect(right.offsetMs == 3000)
+        #expect(right.startMs == 2000 && right.endMs == 4000)
+        #expect(project.audioTracks[0].fadeInMs == 200 && project.audioTracks[0].fadeOutMs == 0)
+        #expect(right.fadeInMs == 0 && right.fadeOutMs == 300)
+        project.removeAudioTrack(id)
+        #expect(project.audioTracks.map(\.id) == [rightID])
+        project.moveAudio(rightID, to: .nan)
+        #expect(project.audioTracks[0].startMs == 2000)
+    }
+
+    @Test func detachmentPreservesExportedSamplesAndSurvivesVideoRetime() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("source.mov")
+        let sound = directory.appendingPathComponent("voice.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) {
+            Float(sin($0 * 2 * .pi * 440)) * ($0 < 2 ? 0.2 : 0.6)
+        }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        var clips = project.clips
+        clips[0].rate = 2
+        project.setClips(clips)
+        let before = try await VideoRenderPipeline.make(project: project)
+        let first = directory.appendingPathComponent("before.mp4")
+        try await before.exportMP4(to: first)
+        project.detachAudio(clipID: clips[0].id)
+        let after = try await VideoRenderPipeline.make(project: project)
+        let second = directory.appendingPathComponent("after.mp4")
+        try await after.exportMP4(to: second)
+        let original = try await readAudio(first)
+        let detached = try await readAudio(second)
+        for start in [0.2, 1.2] {
+            #expect(
+                abs(
+                    rms(original, from: start, to: start + 0.5)
+                        - rms(detached, from: start, to: start + 0.5)) < 0.01)
+        }
+        var retimed = project.clips
+        retimed[0].rate = 1
+        project.setClips(retimed)
+        let independent = try await VideoRenderPipeline.make(project: project)
+        let third = directory.appendingPathComponent("retimed.mp4")
+        try await independent.exportMP4(to: third)
+        let samples = try await readAudio(third)
+        #expect(rms(samples, from: 1.2, to: 1.8) > 0.38)
+        #expect(rms(samples, from: 2.3, to: 3.5) < 0.003)
+    }
+
+    @Test @MainActor func nativeAudioEditsSupportUndoAndSeparateLanes() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("Demo.mov")
+        let sound = directory.appendingPathComponent("Music.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.4 }
+        var project = VideoProject.create(title: "Synthetic audio edit")
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        project.addAudio(sound, duration: 4, at: 0)
+        let model = VideoEditorModel()
+        defer { model.close() }
+        model.project = project
+        model.selectedClipID = project.clips[0].id
+        model.detachAudio(clipID: project.clips[0].id)
+        for _ in 0..<200 where model.audioTask != nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(model.audioTask == nil)
+        let id = try #require(model.project?.audioTracks.last?.id)
+        model.moveAudio(id, to: 0.5)
+        #expect(model.project?.audioTracks.last?.startMs == 500)
+        model.undo()
+        #expect(model.project?.audioTracks.last?.startMs == 0)
+        model.redo()
+        #expect(model.project?.audioTracks.last?.startMs == 500)
+        model.trimAudio(id, start: 1, end: 3.5)
+        model.setAudioGain(id, decibels: -6)
+        model.setAudioFade(id, milliseconds: 500, fadeIn: true)
+        model.setAudioFade(id, milliseconds: 500, fadeIn: false)
+        model.selectedClipID = nil
+        model.seek(to: 2)
+        for _ in 0..<200 where model.pipeline == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(model.pipeline != nil)
+        #expect(model.errorMessage == nil)
+        if let path = ProcessInfo.processInfo.environment["EDITH_AUDIO_EVIDENCE_DIR"] {
+            _ = NSApplication.shared
+            let output = URL(fileURLWithPath: path, isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            let view = NSHostingView(
+                rootView: HStack(alignment: .top, spacing: 0) {
+                    VideoTimeline(model: model).frame(width: 960, height: 280)
+                    Divider()
+                    VideoInspector(model: model).frame(height: 760)
+                }.padding().background(Color(nsColor: .windowBackgroundColor)))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1272, height: 792), styleMask: [.borderless],
+                backing: .buffered, defer: false)
+            window.contentView = view
+            window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            model.selection = nil
+            try await Task.sleep(for: .milliseconds(100))
+            model.selection = .audio(id)
+            try await Task.sleep(for: .seconds(2))
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: output.appendingPathComponent("independent-audio.png"))
+        }
+    }
+
     @Test func outputAudioDoesNotFollowVideoSpeedTrimOrReorder() throws {
         var project = VideoProject.create()
         project.addAsset(

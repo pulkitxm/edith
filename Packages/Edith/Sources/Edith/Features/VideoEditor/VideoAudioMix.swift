@@ -12,7 +12,7 @@ enum VideoAudioMix {
     static func muteIntervals(
         project: VideoProject, segment: VideoRenderPipeline.Segment
     ) -> [ClosedRange<Double>] {
-        project.muteRanges.compactMap { range in
+        project.muteRanges.compactMap { range -> ClosedRange<Double>? in
             if let clipID = range["clipId"] as? String {
                 guard clipID == segment.clip.id else { return nil }
             } else {
@@ -25,8 +25,9 @@ enum VideoAudioMix {
             let lower = max(start, segment.sourceStart)
             let upper = min(end, segment.sourceEnd)
             guard upper > lower else { return nil }
-            return (segment.outputStart + (lower - segment.sourceStart) / segment.rate)
-            ...(segment.outputStart + (upper - segment.sourceStart) / segment.rate)
+            let outputLower = segment.outputStart + (lower - segment.sourceStart) / segment.rate
+            let outputUpper = segment.outputStart + (upper - segment.sourceStart) / segment.rate
+            return outputLower...outputUpper
         }
     }
 
