@@ -66,6 +66,8 @@ struct VideoInspector: View {
     @ViewBuilder private var clipControls: some View {
         if let clip = selectedClip {
             Text("Selected clip").font(.headline)
+            VideoVisualInspector(model: model, clip: clip)
+            Divider()
             HStack {
                 Button("Split", action: model.splitAtPlayhead)
                 Button("Duplicate", action: model.duplicateSelected)
@@ -80,7 +82,9 @@ struct VideoInspector: View {
             let asset = model.project?.assets.first { $0.id == clip.assetID }
             number(
                 "Trim end", value: clip.end,
-                range: (clip.start + 0.1)...max(clip.start + 0.1, asset?.duration ?? clip.end)
+                range: (clip.start + 0.1)...max(
+                    clip.start + 0.1,
+                    asset?.isStill == true ? clip.end : asset?.duration ?? clip.end)
             ) {
                 model.trimSelected(start: clip.start, end: $0)
             }
@@ -152,16 +156,9 @@ struct VideoInspector: View {
 
     private var frameControls: some View {
         VStack(alignment: .leading, spacing: 14) {
+            VideoSettingsInspector(model: model)
+            Divider()
             Text("Canvas & background").font(.headline)
-            Picker(
-                "Aspect",
-                selection: Binding(
-                    get: { model.project?.aspectRatio ?? "native" }, set: model.setAspectRatio)
-            ) {
-                ForEach(["native", "16:9", "9:16", "1:1", "4:3", "4:5", "21:9"], id: \.self) {
-                    Text($0 == "native" ? "Original" : $0).tag($0)
-                }
-            }
             ColorPicker(
                 "Color",
                 selection: Binding(
