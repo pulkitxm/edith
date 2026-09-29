@@ -27,11 +27,12 @@ Do not recreate a native project by writing its internal JSON.
 
 ## 2. Define the delivery contract
 
-Read [full-quality delivery](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-delivery/references/full-quality-delivery.md)
-before choosing output settings. Read local `references/` files if the full skill
-folder is attached; otherwise fetch the linked blueprint. These absolute links
-also work with the Plugins Markdown-only preview or copy. If fetching fails,
-use installed help and report the unavailable guidance rather than guessing.
+Read [full-quality delivery](references/full-quality-delivery.md) before choosing
+output settings. Read local `references/` files if the full skill folder is
+attached. The Plugins preview and copy contain only `SKILL.md`; for a Markdown-only
+attachment, fetch each referenced path from GitHub repository `pulkitxm/edith`,
+branch `main`, beneath `Packages/Edith/skills/edith-video-delivery/`. If fetching
+fails, use installed help and report the unavailable guidance rather than guessing.
 
 Extract resolution, aspect ratio, exact rational frame rate, duration, container,
 codec, audio needs and destination from the brief. Check which controls the
@@ -61,7 +62,7 @@ command and output path. If a long render's response is lost, inspect its status
 and destination before starting another render. Do not treat a timeout as proof
 that an export never started or finished.
 
-Read [review and handoff](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-delivery/references/review-and-handoff.md)
+Read [review and handoff](references/review-and-handoff.md)
 for output-frame sampling and measured acceptance. Use `contact-sheet` when help
 advertises it, with deliberate times around cuts, transitions, captions and beat
 accents. The workflow uses shell and image inspection without opening a player

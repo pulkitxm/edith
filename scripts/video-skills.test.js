@@ -10,8 +10,6 @@ const catalog = readFileSync(
 const ids = [...catalog.matchAll(/id: "(edith-[a-z-]+)"/g)].map(
   (match) => match[1],
 );
-const rawPrefix =
-  "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/";
 const videoIDs = ids.filter((id) => id.startsWith("edith-video-"));
 
 test("Plugins catalog discovers every bundled skill with matching metadata", () => {
@@ -37,19 +35,20 @@ test("Plugins catalog discovers every bundled skill with matching metadata", () 
 test("every video blueprint is reachable even from a Markdown-only attachment", () => {
   for (const id of videoIDs) {
     const text = readFileSync(join(root, id, "SKILL.md"), "utf8");
-    const links = [...text.matchAll(/\]\((https:\/\/[^)]+)\)/g)].map(
+    const links = [...text.matchAll(/\]\((references\/[^)]+)\)/g)].map(
       (match) => match[1],
     );
+    expect(text).toContain("`pulkitxm/edith`");
+    expect(text).toContain("`main`");
+    expect(text).toContain(`\`${root}/${id}/\``);
     const references = readdirSync(join(root, id, "references"));
     expect(references.length).toBeGreaterThan(0);
     for (const file of references) {
-      expect(links).toContain(`${rawPrefix}${id}/references/${file}`);
+      expect(links).toContain(`references/${file}`);
     }
-    for (const url of links) {
-      expect(url.startsWith(rawPrefix)).toBe(true);
-      const path = url.slice(rawPrefix.length);
+    for (const path of links) {
       expect(path.split("/")).not.toContain("..");
-      expect(readFileSync(join(root, path), "utf8").startsWith("# ")).toBe(
+      expect(readFileSync(join(root, id, path), "utf8").startsWith("# ")).toBe(
         true,
       );
     }

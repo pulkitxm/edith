@@ -32,11 +32,12 @@ Use supplied constraints; ask only about decisions that would materially change
 the result. Inspect existing projects with `show`, and discover `list` or `clone`
 through help when finding projects or creating an alternate cut.
 
-Read [originals and reuse](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-edit/references/originals-and-reuse.md)
-before importing, reserving or relinking assets. Read local `references/` files
-when the full skill folder is available; otherwise fetch the linked blueprint.
-The Plugins Markdown preview and copy contain this direction file, so the links
-also work when only `SKILL.md` is attached. If a blueprint is unavailable, report
+Read [originals and reuse](references/originals-and-reuse.md) before importing,
+reserving or relinking assets. Read local `references/` files when the full skill
+folder is available. The Plugins preview and copy contain only `SKILL.md`; for a
+Markdown-only attachment, fetch each referenced path from GitHub repository
+`pulkitxm/edith`, branch `main`, beneath
+`Packages/Edith/skills/edith-video-edit/`. If a blueprint is unavailable, report
 that limitation and use installed help rather than guessing its contract.
 
 Keep originals unchanged. Import their paths into the native project rather than
@@ -47,9 +48,9 @@ the same files and may not copy reservations or make the project portable.
 
 ## 3. Build a public plan
 
-Read [native plans and time](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-edit/references/native-plans-and-time.md)
+Read [native plans and time](references/native-plans-and-time.md)
 for source versus output time, frame arithmetic, aliases and atomic changes.
-Read [audio and beats](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-edit/references/audio-and-beats.md)
+Read [audio and beats](references/audio-and-beats.md)
 when the edit includes music, voiceover, detached audio or rhythm-driven cuts.
 
 Use the schema's public plan format. Never handwrite internal `.openscreen` JSON.
@@ -81,7 +82,7 @@ automatically replay imports after a lost response: inspect whether they landed.
 
 ## 5. Verify and hand off
 
-Read [verification and ledger](https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-video-edit/references/verification-and-ledger.md).
+Read [verification and ledger](references/verification-and-ledger.md).
 Inspect project state and actual rendered artifacts, including cut boundaries,
 first and last usable frames, overlays, sound and sync. Use `frame` and, when
 listed in help, `contact-sheet` for focused review. Sample output time after trim
