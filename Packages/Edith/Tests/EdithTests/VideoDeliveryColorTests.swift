@@ -59,9 +59,14 @@ import Testing
             project, to: standardURL, settings: settings)
         #expect(standard.videoReport?.colorPrimaries == AVVideoColorPrimaries_ITU_R_709_2)
         let clipped = try await Self.pixels(standardURL, in: space)
-        let gamutDifference =
-            zip(pixels.flatMap { $0.prefix(3) }, clipped.flatMap { $0.prefix(3) })
-            .map { abs(Int($0) - Int($1)) }.max() ?? 0
+        let wideChannels: [UInt8] = pixels.flatMap { $0.prefix(3) }
+        let clippedChannels: [UInt8] = clipped.flatMap { $0.prefix(3) }
+        let channelDifferences: [Int] = zip(wideChannels, clippedChannels).map { pair in
+            let wideValue: Int = Int(pair.0)
+            let clippedValue: Int = Int(pair.1)
+            return abs(wideValue - clippedValue)
+        }
+        let gamutDifference: Int = channelDifferences.max() ?? 0
         #expect(gamutDifference > 12)
         #expect(try Data(contentsOf: source) == original)
         #expect(try Data(contentsOf: project) == originalProject)
