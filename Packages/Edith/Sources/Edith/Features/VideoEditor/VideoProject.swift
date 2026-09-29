@@ -721,10 +721,25 @@ struct VideoProject {
         _ id: String, muted: Bool? = nil, loop: Bool? = nil,
         fadeInMs: Int? = nil, fadeOutMs: Int? = nil
     ) {
+        guard let track = audioTracks.first(where: { $0.id == id }) else { return }
+        var envelope = VideoAudioAutomation.track(track)
+        let duration = (track.endMs - track.startMs) / 1000
+        if let fadeInMs {
+            envelope = envelope.replacingFade(
+                fromStart: true, seconds: Double(fadeInMs) / 1000,
+                previousSeconds: track.fadeInMs / 1000, duration: duration)
+        }
+        if let fadeOutMs {
+            envelope = envelope.replacingFade(
+                fromStart: false, seconds: Double(fadeOutMs) / 1000,
+                previousSeconds: track.fadeOutMs / 1000, duration: duration)
+        }
         editRegion("audioTracks", id: id) {
             if let muted { $0["muted"] = muted }
             if let loop { $0["loop"] = loop }
-            if fadeInMs != nil || fadeOutMs != nil { $0.removeValue(forKey: "gainEnvelope") }
+            if track.raw["gainEnvelope"] != nil, fadeInMs != nil || fadeOutMs != nil {
+                $0["gainEnvelope"] = envelope.raw
+            }
             if let fadeInMs { $0["fadeInMs"] = max(0, fadeInMs) }
             if let fadeOutMs { $0["fadeOutMs"] = max(0, fadeOutMs) }
         }

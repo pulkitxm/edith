@@ -41,6 +41,28 @@ struct VideoAudioAutomation {
         }
     }
 
+    func replacingFade(
+        fromStart: Bool, seconds: Double, previousSeconds: Double, duration: Double
+    ) -> VideoAudioAutomation {
+        let length = min(max(0, seconds), duration / 2)
+        let affected = min(duration, max(length, previousSeconds))
+        guard affected > 0 else { return self }
+        let boundary = fromStart ? affected : duration - affected
+        let join = fromStart ? length : duration - length
+        let level = value(at: boundary)
+        let preserved = points.filter { fromStart ? $0.time > boundary : $0.time < boundary }
+        let times = Set(preserved.map(\.time) + [0, duration, boundary, join]).sorted()
+        return VideoAudioAutomation(
+            points: times.map { time in
+                let inside = fromStart ? time <= boundary : time >= boundary
+                let distance = fromStart ? time : duration - time
+                return Point(
+                    time: time,
+                    level: inside
+                        ? level * (length > 0 ? min(1, distance / length) : 1) : value(at: time))
+            })
+    }
+
     static func track(_ track: VideoProject.AudioTrack) -> VideoAudioAutomation {
         if let stored = track.raw["gainEnvelope"] as? [[String: Double]], !stored.isEmpty {
             let points = stored.compactMap { item -> Point? in

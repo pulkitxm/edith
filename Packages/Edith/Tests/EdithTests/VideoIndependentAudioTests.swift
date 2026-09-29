@@ -6,6 +6,45 @@ import Testing
 @testable import Edith
 
 @Suite(.timeLimit(.minutes(1))) struct VideoIndependentAudioTests {
+    @Test(arguments: [true, false])
+    func editingOneFadePreservesTheOppositeSplitEnvelope(editTail: Bool) async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 4) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        project.addAudio(sound, duration: 4, at: 0)
+        let id = try #require(project.audioTracks.first?.id)
+        project.setAudioOptions(id, fadeInMs: editTail ? 2000 : 0, fadeOutMs: editTail ? 0 : 2000)
+        let splitID = project.splitAudio(id, at: editTail ? 1 : 3)
+        let selectedID = editTail ? try #require(splitID) : id
+        let before = try await VideoRenderPipeline.make(project: project)
+        let original = try await readAudio(before.composition, mix: before.audioMix)
+        project.setAudioOptions(
+            selectedID, fadeInMs: editTail ? nil : 500, fadeOutMs: editTail ? 500 : nil)
+        let selected = try #require(project.audioTracks.first { $0.id == selectedID })
+        let envelope = VideoAudioAutomation.track(selected)
+        #expect(envelope.value(at: editTail ? 0 : 3) == 0.5)
+        #expect(envelope.value(at: editTail ? 1 : 2) == 1)
+        #expect(envelope.value(at: editTail ? 3 : 0) == 0)
+        let after = try await VideoRenderPipeline.make(project: project)
+        let changed = try await readAudio(after.composition, mix: after.audioMix)
+        for start in stride(from: 1.05, through: 2.85, by: 0.1) {
+            #expect(
+                abs(
+                    rms(original, from: start, to: start + 0.09)
+                        - rms(changed, from: start, to: start + 0.09)) < 0.002)
+        }
+        project.setAudioOptions(
+            selectedID, fadeInMs: editTail ? nil : 0, fadeOutMs: editTail ? 0 : nil)
+        let restored = try #require(project.audioTracks.first { $0.id == selectedID })
+        #expect(VideoAudioAutomation.track(restored).value(at: editTail ? 0 : 3) == 0.5)
+        #expect(VideoAudioAutomation.track(restored).value(at: editTail ? 3 : 0) == 1)
+    }
+
     @Test func splittingInsideBothFadesPreservesTheDecodedEnvelope() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
