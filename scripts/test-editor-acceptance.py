@@ -101,7 +101,8 @@ def main():
     helper = args.media_helper.absolute() if args.media_helper else workspace / "editor-acceptance-media"
     if not args.media_helper:
         source = pathlib.Path(__file__).with_name("editor-acceptance-media.swift")
-        subprocess.run(["xcrun", "swiftc", "-parse-as-library", str(source), "-o", str(helper)], check=True, timeout=180)
+        cases = source.with_name("editor-acceptance-cases.swift")
+        subprocess.run(["xcrun", "swiftc", "-parse-as-library", str(source), str(cases), "-o", str(helper)], check=True, timeout=180)
     fixture = args.fixture.absolute() if args.fixture else workspace / "media"
     if not args.fixture:
         run([helper, "generate", fixture])

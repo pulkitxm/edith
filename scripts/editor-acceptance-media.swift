@@ -36,13 +36,18 @@ func shotImage(_ number: Int) -> CIImage {
     return image
 }
 
-func movie(_ image: CIImage, to url: URL, context: CIContext) async throws {
+func movie(
+    _ image: CIImage, to url: URL, context: CIContext, frameCount: Int = 60,
+    step: CMTime = CMTime(value: 1, timescale: 60), imageAtFrame: ((Int) -> CIImage)? = nil
+) async throws {
     let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+    writer.movieTimeScale = step.timescale
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
         AVVideoCodecKey: AVVideoCodecType.h264,
         AVVideoWidthKey: 180, AVVideoHeightKey: 320,
         AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 500_000],
     ])
+    input.mediaTimeScale = step.timescale
     let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,
         sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -53,7 +58,7 @@ func movie(_ image: CIImage, to url: URL, context: CIContext) async throws {
     writer.add(input)
     try require(writer.startWriting(), "Could not start fixture writer")
     writer.startSession(atSourceTime: .zero)
-    for frame in 0..<60 {
+    for frame in 0..<frameCount {
         while !input.isReadyForMoreMediaData {
             try require(writer.status == .writing, "Fixture writer failed")
             try await Task.sleep(for: .milliseconds(2))
@@ -61,11 +66,11 @@ func movie(_ image: CIImage, to url: URL, context: CIContext) async throws {
         var buffer: CVPixelBuffer?
         try require(CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &buffer) == kCVReturnSuccess,
             "Could not allocate fixture frame")
-        context.render(image, to: buffer!)
-        try require(adaptor.append(buffer!, withPresentationTime: CMTime(value: Int64(frame), timescale: 60)),
+        context.render(imageAtFrame?(frame) ?? image, to: buffer!)
+        try require(adaptor.append(buffer!, withPresentationTime: CMTimeMultiply(step, multiplier: Int32(frame))),
             "Could not append fixture frame")
     }
-    writer.endSession(atSourceTime: CMTime(value: 1, timescale: 1))
+    writer.endSession(atSourceTime: CMTimeMultiply(step, multiplier: Int32(frameCount)))
     input.markAsFinished()
     await writer.finishWriting()
     try require(writer.status == .completed, "Could not finish fixture movie")
@@ -257,6 +262,7 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         try require(Double(differences.reduce(0, +)) / Double(differences.count) < 8,
             "Preview does not match the rendered output")
     }
+    if exact { try await verifyMusic(url, expectedSamples: 1_382_400, emit: false) }
     try json([
         "mode": exact ? "delivery" : "baseline", "codec": "h264", "audioCodec": "aac",
         "width": Int(size.width), "height": Int(size.height), "fps": fps,
@@ -306,6 +312,21 @@ func verifyContactSheet(_ url: URL) throws {
         let url = URL(fileURLWithPath: arguments[2])
         switch arguments[1] {
         case "generate": try await generate(url)
+        case "generate-extended": try await generateExtended(url)
+        case "verify-extended": try await verifyExtended(url)
+        case "verify-original-detail": try verifyOriginalDetail(url)
+        case "verify-music":
+            try require(arguments.count == 4, "verify-music PATH EXPECTED-SAMPLES")
+            guard let samples = Int(arguments[3]), samples > 0 else {
+                throw AcceptanceError(description: "Expected a positive sample count")
+            }
+            try await verifyMusic(url, expectedSamples: samples)
+        case "verify-cadence":
+            try require(arguments.count == 6, "verify-cadence PATH FRAMES FPS-NUMERATOR FPS-DENOMINATOR")
+            guard let frames = Int(arguments[3]), let numerator = Int32(arguments[4]),
+                let denominator = Int64(arguments[5]), frames > 0, numerator > 0, denominator > 0
+            else { throw AcceptanceError(description: "Invalid cadence values") }
+            try await verifyCadence(url, frames: frames, numerator: numerator, denominator: denominator)
         case "verify-fixture": try await verifyFixture(url)
         case "verify-contact-sheet": try verifyContactSheet(url)
         case "inspect", "baseline":
