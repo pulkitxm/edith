@@ -26,6 +26,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [Media packages and reservations](./edit-media-storage.md) | Packages and relinks originals, verifies moved packages, and manages shared source reservations. |
 | [`ed studio edit audio`](./edit-audio.md) | Measures native source audio and maps transients to output frames. |
 | [`ed studio edit markers`](./edit-markers.md) | Lists, edits, imports, exports and snaps output-frame markers. |
+| [`ed studio edit captions`](./captions.md) | Adds, lists, updates and removes output-frame or marker-timed native captions. |
 
 ## What is in Studio
 

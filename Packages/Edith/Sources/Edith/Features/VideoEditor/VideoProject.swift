@@ -97,8 +97,12 @@ struct VideoProject {
         var raw: [String: Any]
         var id: String { raw["id"] as? String ?? "" }
         var type: String { raw["type"] as? String ?? "text" }
-        var startMs: Double { raw["startMs"] as? Double ?? 0 }
-        var endMs: Double { raw["endMs"] as? Double ?? 0 }
+        var startMs: Double {
+            outputCaption.map { $0.start.seconds * 1000 } ?? (raw["startMs"] as? Double ?? 0)
+        }
+        var endMs: Double {
+            outputCaption.map { $0.end.seconds * 1000 } ?? (raw["endMs"] as? Double ?? 0)
+        }
         var text: String { raw["content"] as? String ?? "" }
     }
 

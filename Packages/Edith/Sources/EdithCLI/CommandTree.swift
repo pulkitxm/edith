@@ -569,6 +569,31 @@ public enum CommandTree {
                 "--time": .free, "--columns": .free, "--cell-width": .free,
                 "--output": .localPath,
             ], arguments: [.localPath]),
+        "ed studio edit captions list": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit captions add": Spec(
+            options: [
+                "--json", "--dry-run", "--text", "--start-frame", "--end-frame", "--start-marker",
+                "--end-marker", "--fps", "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--text": .free, "--start-frame": .free, "--end-frame": .free,
+                "--start-marker": .free, "--end-marker": .free, "--fps": .free,
+            ],
+            arguments: [.localPath]),
+        "ed studio edit captions update": Spec(
+            options: [
+                "--json", "--dry-run", "--text", "--start-frame", "--end-frame", "--start-marker",
+                "--end-marker", "--fps", "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--text": .free, "--start-frame": .free, "--end-frame": .free,
+                "--start-marker": .free, "--end-marker": .free, "--fps": .free,
+            ],
+            arguments: [.localPath, .free]),
+        "ed studio edit captions remove": Spec(
+            options: ["--json", "--dry-run", "-h", "--help", "--version"],
+            arguments: [.localPath, .free]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),

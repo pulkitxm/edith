@@ -28,8 +28,9 @@ struct VideoCanvas: View {
             if model.canvasEditing, model.player.rate == 0, model.editingZoomID == nil {
                 ForEach(
                     model.project?.annotations.filter {
-                        model.rulerPlayhead * 1000 >= $0.startMs
-                            && model.rulerPlayhead * 1000 < $0.endMs
+                        $0.visible(
+                            at: model.player.currentTime(),
+                            rulerMilliseconds: model.rulerPlayhead * 1000)
                     } ?? []
                 ) { annotation in
                     VideoCanvasHandle(

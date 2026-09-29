@@ -9,6 +9,10 @@ source provenance, and multi-project clip-occurrence reuse audits.
 
 ## Commands
 
+Output-clock caption commands are documented in `docs/cli/studio/captions.md`.
+They accept exact output frames or marker IDs and retain their timing after visual edits.
+Their targeted mutations save the input project with revision checks and support `--dry-run`.
+
 ```sh
 ed studio edit schema
 ed studio edit create demo.openscreen --title "Synthetic demo" --json

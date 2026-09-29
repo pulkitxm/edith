@@ -22,6 +22,10 @@ extension VideoProject {
     mutating func retimeRegion(
         _ key: String, id: String, start: Double, end: Double, trimStart: Bool
     ) {
+        if key == "annotations", annotations.first(where: { $0.id == id })?.outputCaption != nil {
+            try? retimeOutputCaption(id, start: start, end: end)
+            return
+        }
         guard start.isFinite, end.isFinite, start >= 0, end - start >= 0.05 else { return }
         if key == "audioTracks" {
             retimeAudio(id, start: start, end: end, trimStart: trimStart)
@@ -63,7 +67,7 @@ extension VideoEditorModel {
             }
         case .annotation(let id):
             if let region = project?.annotations.first(where: { $0.id == id }) {
-                seek(to: outputTime(forRulerTime: region.startMs / 1000))
+                seek(to: captionOutputRange(region).start)
             }
         default: break
         }
@@ -84,6 +88,17 @@ extension VideoEditorModel {
     }
 
     func retime(_ key: String, id: String, range: ZoomTimelineTiming.Range, edge: String) {
+        if key == "annotations",
+            project?.annotations.first(where: { $0.id == id })?.outputCaption != nil
+        {
+            do {
+                guard var candidate = project else { return }
+                try candidate.retimeOutputCaption(id, start: range.start, end: range.end)
+                mutate { $0 = candidate }
+                rebuild()
+            } catch { errorMessage = error.localizedDescription }
+            return
+        }
         mutate {
             $0.retimeRegion(
                 key, id: id, start: key == "audioTracks" ? range.start : rulerTime(at: range.start),

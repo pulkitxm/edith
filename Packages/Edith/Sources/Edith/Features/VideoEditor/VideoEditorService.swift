@@ -248,6 +248,7 @@ public enum VideoEditorService {
     }
 
     static func validateStructure(_ project: VideoProject) throws {
+        try project.validateOutputCaptions()
         try validateValues(project.root)
         try project.validateVideoSettings()
         try require(
