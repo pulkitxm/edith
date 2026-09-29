@@ -26,7 +26,7 @@ import Testing
             VideoEditPlan(operations: [
                 .videoSettings(settings: VideoSettings(width: 64, height: 64)),
                 .addMedia(path: source.path, name: "intro"),
-                .addAudio(path: audio.path, start: 0, offset: 0),
+                .addAudio(path: audio.path, start: 0, offset: 0, name: "score"),
             ]), to: url, overwrite: true)
         return url
     }
