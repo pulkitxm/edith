@@ -98,6 +98,28 @@ import Testing
         #expect(throws: VideoDeliveryError.self) { try settings.validate() }
     }
 
+    @Test func compositionColorSurvivesDeliveryUnlessExplicitlyOverridden() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = try await fixture(in: directory)
+        let video = source.videoComposition.mutableCopy() as! AVMutableVideoComposition
+        video.colorPrimaries = AVVideoColorPrimaries_P3_D65
+        video.colorTransferFunction = kCVImageBufferTransferFunction_sRGB as String
+        let pipeline = VideoRenderPipeline(
+            composition: source.composition, videoComposition: video, audioMix: source.audioMix,
+            segments: source.segments, canvas: source.canvas)
+        let wide = try await pipeline.export(to: directory.appendingPathComponent("wide.mp4"))
+        #expect(wide.colorPrimaries == AVVideoColorPrimaries_P3_D65)
+        #expect(wide.transferFunction == kCVImageBufferTransferFunction_sRGB as String)
+        var settings = VideoDeliverySettings()
+        settings.colorSpace = .rec709
+        let standard = try await pipeline.export(
+            to: directory.appendingPathComponent("standard.mp4"), settings: settings)
+        #expect(standard.colorPrimaries == AVVideoColorPrimaries_ITU_R_709_2)
+        #expect(standard.transferFunction == AVVideoTransferFunction_ITU_R_709_2)
+        #expect(video.colorPrimaries == AVVideoColorPrimaries_P3_D65)
+    }
+
     @Test func rejectsReplacingOriginalMediaThroughAnAlias() async throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }

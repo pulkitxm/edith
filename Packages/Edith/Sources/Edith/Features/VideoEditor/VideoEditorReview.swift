@@ -77,9 +77,9 @@ extension VideoEditorService {
         let scale = min(1, Double(cellWidth) / max(pipeline.canvas.width, pipeline.canvas.height))
         let width = max(1, Int((pipeline.canvas.width * scale).rounded()))
         let height = max(1, Int((pipeline.canvas.height * scale).rounded()))
-        let selections = times.map { seconds -> (CMTime, CTLine, ReviewFrame) in
-            let selection = outputFrame(seconds, in: pipeline)
-            let frame = selection.number
+        let selections = try times.map { seconds -> (CMTime, CTLine, ReviewFrame) in
+            let selection = try frameSelection(in: pipeline, seconds: seconds)
+            let frame = selection.frame
             let selected = selection.time
             let label = String(format: "#%lld  %.3f s", frame, selected.seconds)
             let line = CTLineCreateWithAttributedString(
@@ -154,18 +154,4 @@ extension VideoEditorService {
             frames: selections.map(\.2), sha256: hash)
     }
 
-    static func outputFrame(_ seconds: Double, in pipeline: VideoRenderPipeline)
-        -> (number: Int64, time: CMTime)
-    {
-        let duration = pipeline.videoComposition.frameDuration
-        var frame = Int64(floor(seconds / duration.seconds))
-        func time(_ number: Int64) -> CMTime {
-            CMTime(value: number * duration.value, timescale: duration.timescale)
-        }
-        while frame > 0, time(frame).seconds > seconds { frame -= 1 }
-        while time(frame + 1).seconds <= seconds, time(frame + 1) < pipeline.composition.duration {
-            frame += 1
-        }
-        return (frame, time(frame))
-    }
 }

@@ -22,6 +22,10 @@ public enum VideoEditorService {
         public let written: Bool
         public let clipIDs: [String]
         public let aliases: [String: String]
+        public var videoReport: VideoDeliveryReport? = nil
+        public var audioReport: VideoAudioDeliveryReport? = nil
+        public var frame: Int64? = nil
+        public var time: Double? = nil
     }
 
     public static func create(at url: URL, title: String, overwrite: Bool = false) throws -> Result
@@ -86,40 +90,85 @@ public enum VideoEditorService {
     }
 
     public static func render(
-        _ url: URL, to output: URL, overwrite: Bool = false
+        _ url: URL, to output: URL, overwrite: Bool = false,
+        settings: VideoDeliverySettings = .init(),
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> Result {
         let project = try open(url)
+        var settings = settings
+        if settings.colorSpace == nil,
+            let raw = project.root["edithVideoSettings"] as? [String: Any],
+            let name = raw["colorSpace"] as? String
+        {
+            guard let color = VideoDeliverySettings.ColorSpace(rawValue: name) else {
+                throw Failure("invalid_settings", "Unknown project output color space: \(name)")
+            }
+            settings.colorSpace = color
+        }
+        do { try settings.validate() } catch {
+            throw Failure("invalid_settings", error.localizedDescription)
+        }
         try await validateMedia(project)
-        try requireOutput(output, extension: "mp4", project: project, source: url)
+        try requireOutput(
+            output, extension: settings.codec.fileExtension, project: project, source: url)
         try checkDestination(output, overwrite: overwrite)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
-        try await pipeline.exportMP4(to: temporary)
+        let report = try await pipeline.export(to: temporary, settings: settings) {
+            progress(min(0.99, $0))
+        }
         try Task.checkCancellation()
         try publish(temporary, to: output, overwrite: overwrite)
-        return result(project, url: output, written: true)
+        progress(1)
+        var result = result(project, url: output, written: true)
+        result.videoReport = report
+        return result
+    }
+
+    public static func renderAudio(
+        _ url: URL, to output: URL, overwrite: Bool = false,
+        settings: VideoAudioDeliverySettings = .init(),
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> Result {
+        do { try settings.validate() } catch {
+            throw Failure("invalid_settings", error.localizedDescription)
+        }
+        let project = try open(url)
+        try await validateMedia(project)
+        try requireOutput(
+            output, extension: settings.container.rawValue, project: project, source: url)
+        try checkDestination(output, overwrite: overwrite)
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        let temporary = temporaryOutput(output)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let report = try await pipeline.exportAudio(to: temporary, settings: settings) {
+            progress(min(0.99, $0))
+        }
+        try Task.checkCancellation()
+        try publish(temporary, to: output, overwrite: overwrite)
+        progress(1)
+        var result = result(project, url: output, written: true)
+        result.audioReport = report
+        return result
     }
 
     public static func frame(
-        _ url: URL, at seconds: Double, to output: URL, overwrite: Bool = false
+        _ url: URL, at seconds: Double? = nil, frameIndex: Int64? = nil,
+        to output: URL, overwrite: Bool = false
     ) async throws -> Result {
-        try require(seconds.isFinite && seconds >= 0, "Frame time must be finite and nonnegative.")
         let project = try open(url)
         try await validateMedia(project)
         try requireOutput(output, extension: "png", project: project, source: url)
         try checkDestination(output, overwrite: overwrite)
         let pipeline = try await VideoRenderPipeline.make(project: project)
-        try require(
-            seconds.isFinite && seconds >= 0 && seconds < pipeline.duration,
-            "Frame time is outside the rendered timeline.")
+        let selection = try frameSelection(in: pipeline, seconds: seconds, frameIndex: frameIndex)
         let generator = AVAssetImageGenerator(asset: pipeline.composition)
         generator.videoComposition = pipeline.videoComposition
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        let image = try await generator.image(at: outputFrame(seconds, in: pipeline).time)
-            .image
+        let image = try await generator.image(at: selection.time).image
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard
@@ -132,7 +181,10 @@ public enum VideoEditorService {
         }
         try Task.checkCancellation()
         try publish(temporary, to: output, overwrite: overwrite)
-        return result(project, url: output, written: true)
+        var result = result(project, url: output, written: true)
+        result.frame = selection.frame
+        result.time = selection.time.seconds
+        return result
     }
 
     static func require(_ condition: Bool, _ message: String) throws {
