@@ -403,6 +403,11 @@ public enum VideoEditorService {
         }
     }
 
+    static func sourceURLs(_ project: VideoProject, includeSidecars: Bool) -> [URL] {
+        VideoProjectExportDestination.dependencies(project)
+            .filter { includeSidecars || !$0.optional }.map(\.url)
+    }
+
     static func requireOutput(
         _ output: URL, extension suffix: String, project: VideoProject, source: URL
     ) throws {

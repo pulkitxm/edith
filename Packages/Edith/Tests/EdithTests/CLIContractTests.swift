@@ -165,6 +165,21 @@ enum JSONContract {
         JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
         JSONCase("ed studio edit schema", ["studio", "edit", "schema", "--json"]),
         JSONCase(
+            "ed studio edit publications create",
+            [
+                "studio", "edit", "publications", "create", "/nonexistent/uploads.json", "--input",
+                "/nonexistent/plan.json", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit publications show",
+            ["studio", "edit", "publications", "show", "/nonexistent/uploads.json", "--json"]),
+        JSONCase(
+            "ed studio edit publications reorder",
+            [
+                "studio", "edit", "publications", "reorder", "/nonexistent/uploads.json", "--input",
+                "/nonexistent/order.json", "--overwrite", "--json",
+            ]),
+        JSONCase(
             "ed studio edit create",
             ["studio", "edit", "create", "/nonexistent/demo.openscreen", "--json"],
             mutatesTheMachine: true),

@@ -577,6 +577,9 @@ public enum Guide {
         ed studio edit audio analyze demo.openscreen --asset ASSET_ID --json
         ed studio edit markers add demo.openscreen --frame 60 --fps 60000/1001 --label Cue --json
         ed studio edit markers snap demo.openscreen --frame 62 --fps 60000/1001 --threshold-frames 2 --json
+        ed studio edit publications create uploads.json --input projects.json --json
+        ed studio edit publications show uploads.json --json
+        ed studio edit publications reorder uploads.json --input order.json --overwrite --json
         ed studio run pdf.merge a.pdf b.pdf
         ed studio run image.convert photo.heic --set format=jpg
         ed cleaner scan                 developer caches worth reclaiming

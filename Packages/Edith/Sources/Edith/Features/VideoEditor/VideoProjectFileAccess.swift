@@ -68,6 +68,14 @@ enum VideoProjectFileAccess {
         return sensitive == false ? path.lowercased() : path
     }
 
+    static func sameFile(_ lhs: URL, _ rhs: URL) -> Bool {
+        if identity(lhs) == identity(rhs) { return true }
+        var left = stat()
+        var right = stat()
+        return stat(lhs.path, &left) == 0 && stat(rhs.path, &right) == 0
+            && left.st_dev == right.st_dev && left.st_ino == right.st_ino
+    }
+
     private static func acquire(_ url: URL, purpose: String) throws -> Lock? {
         let canonical = url.resolvingSymlinksInPath().standardizedFileURL
         let hash = SHA256.hash(data: Data(identity(canonical).utf8)).map {

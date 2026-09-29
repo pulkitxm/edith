@@ -9,8 +9,8 @@ enum VideoProjectExportDestination {
         }
     }
 
-    static func validate(_ destination: URL, project: VideoProject) throws {
-        var dependencies = project.fileURL.map { [$0] } ?? []
+    static func dependencies(_ project: VideoProject) -> [(url: URL, optional: Bool)] {
+        var dependencies: [(url: URL, optional: Bool)] = []
         for asset in project.assets {
             let paths = [
                 asset.raw["originalPath"] as? String,
@@ -19,14 +19,14 @@ enum VideoProjectExportDestination {
                 asset.cameraTrack?["sourcePath"] as? String,
             ]
             for path in paths.compactMap({ $0 }) where !path.isEmpty {
-                dependencies.append(URL(fileURLWithPath: path))
-                dependencies.append(URL(fileURLWithPath: path + ".cursor.json"))
-                dependencies.append(URL(fileURLWithPath: path + ".session.json"))
+                dependencies.append((URL(fileURLWithPath: path), false))
+                dependencies.append((URL(fileURLWithPath: path + ".cursor.json"), true))
+                dependencies.append((URL(fileURLWithPath: path + ".session.json"), true))
             }
         }
         let wallpaper = project.backgroundColor
         if !wallpaper.isEmpty, !wallpaper.hasPrefix("#") {
-            dependencies.append(URL(fileURLWithPath: wallpaper))
+            dependencies.append((URL(fileURLWithPath: wallpaper), false))
         }
         for annotation in project.annotations where annotation.type == "image" {
             let content = annotation.raw["imageContent"] as? String ?? annotation.text
@@ -36,8 +36,17 @@ enum VideoProjectExportDestination {
             {
                 continue
             }
-            dependencies.append(URL(fileURLWithPath: content))
+            dependencies.append((URL(fileURLWithPath: content), false))
         }
+        let requiredPaths = Set(dependencies.filter { !$0.optional }.map(\.url.path))
+        var seen = Set<String>()
+        return dependencies.filter { seen.insert($0.url.path).inserted }.map {
+            ($0.url, !requiredPaths.contains($0.url.path))
+        }
+    }
+
+    static func validate(_ destination: URL, project: VideoProject) throws {
+        let dependencies = dependencies(project).map(\.url) + (project.fileURL.map { [$0] } ?? [])
         let resolved = destination.resolvingSymlinksInPath().standardizedFileURL
         let identity = fileIdentity(destination)
         for dependency in dependencies {
