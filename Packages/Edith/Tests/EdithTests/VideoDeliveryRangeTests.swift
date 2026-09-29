@@ -183,14 +183,24 @@ import Testing
         let pipeline = VideoRenderPipeline(
             composition: composition, videoComposition: source.videoComposition,
             audioMix: source.audioMix, segments: source.segments, canvas: source.canvas)
-        let full = try await pipeline.export(to: directory.appendingPathComponent("full.mp4"))
+        let fullURL = directory.appendingPathComponent("full.mp4")
+        let full = try await pipeline.export(to: fullURL)
+        let lastURL = directory.appendingPathComponent("last.mp4")
         let last = try await pipeline.export(
-            to: directory.appendingPathComponent("last.mp4"),
+            to: lastURL,
             range: .init(startFrame: 119, endFrame: 120))
         #expect(full.frameCount == 120)
         #expect(abs(full.duration - 1.99) < 0.00001)
         #expect(last.frameCount == 1)
         #expect(abs(last.duration - (1.99 - 119.0 / 60)) < 0.00001)
+        for url in [fullURL, lastURL] {
+            let asset = AVURLAsset(url: url)
+            let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+            let timescale = try await track.load(.naturalTimeScale)
+            let end = composition.duration
+            #expect(CMTimeConvertScale(end, timescale: timescale, method: .default) == end)
+        }
+        #expect(try await Self.timestamps(lastURL) == [.zero])
     }
 
     static func pixels(_ image: CGImage) -> [UInt8] {

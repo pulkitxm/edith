@@ -349,7 +349,7 @@ extension VideoRenderPipeline {
         }
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: encoding)
         videoInput.expectsMediaDataInRealTime = false
-        videoInput.mediaTimeScale = videoComposition.frameDuration.timescale
+        videoInput.mediaTimeScale = writer.movieTimeScale
         guard reader.canAdd(videoOutput), writer.canAdd(videoInput) else {
             throw VideoDeliveryError.failed("Could not configure the native video encoder.")
         }
