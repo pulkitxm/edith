@@ -112,6 +112,70 @@ import Testing
         #expect(project.markers.first?.seconds == 2)
     }
 
+    @Test func nativeExportPreservesProjectDependenciesAndSidecars() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func file(_ name: String) -> URL { directory.appendingPathComponent(name) }
+        let media = [
+            "source.mov", "audio.caf", "processed.caf", "still.png", "native-still.png",
+            "camera.mov",
+        ]
+        let dependencies =
+            ["project.openscreen", "wallpaper.png", "overlay.png", "fallback.png"]
+            + media + media.flatMap { [$0 + ".cursor.json", $0 + ".session.json"] }
+        let original = Data("synthetic dependency bytes".utf8)
+        for name in dependencies { try original.write(to: file(name)) }
+        var project = VideoProject(
+            root: [
+                "assets": [
+                    [
+                        "id": "video", "originalPath": file("source.mov").path,
+                        "edithAudioPath": file("processed.caf").path,
+                        "edithSourceImagePath": file("still.png").path,
+                        "cameraTrack": ["sourcePath": file("camera.mov").path],
+                    ],
+                    ["id": "audio", "kind": "audio", "originalPath": file("audio.caf").path],
+                    [
+                        "id": "still", "kind": "image",
+                        "originalPath": file("native-still.png").path,
+                    ],
+                ],
+                "legacyEditor": ["wallpaper": file("wallpaper.png").path],
+                "annotations": [
+                    [
+                        "type": "image", "imageContent": file("overlay.png").path,
+                        "content": "unused",
+                    ],
+                    ["type": "image", "content": file("fallback.png").path],
+                    ["type": "image", "imageContent": "data:image/png;base64,c3ludGhldGlj"],
+                ],
+            ], fileURL: file("project.openscreen"))
+        try project.addMarker(atFrame: 30, label: "Synthetic cue")
+        for name in dependencies {
+            #expect(throws: VideoProjectExportDestination.DestinationError.projectDependency) {
+                try project.exportMarkers(to: file(name))
+            }
+            #expect(try Data(contentsOf: file(name)) == original)
+        }
+        let sidecar = file("source.mov.cursor.json")
+        let symbolic = file("symbolic.json")
+        let hard = file("hard.json")
+        try FileManager.default.createSymbolicLink(at: symbolic, withDestinationURL: sidecar)
+        try FileManager.default.linkItem(at: sidecar, to: hard)
+        for alias in [symbolic, hard] {
+            #expect(throws: VideoProjectExportDestination.DestinationError.projectDependency) {
+                try project.exportMarkers(to: alias)
+            }
+            #expect(try Data(contentsOf: alias) == original)
+            #expect(try Data(contentsOf: sidecar) == original)
+        }
+        let destination = file("markers.json")
+        try project.exportMarkers(to: destination)
+        #expect(try VideoMarkers.parse(Data(contentsOf: destination)) == project.markers)
+    }
+
     @Test func invalidRootEntriesDoNotCrashInspection() {
         let values: [Any] = ["invalid", 17, NSNull(), ["frame": 10]]
         for value in values {

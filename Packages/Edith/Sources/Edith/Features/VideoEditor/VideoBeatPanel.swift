@@ -402,7 +402,7 @@ struct VideoBeatPanel: View {
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "markers.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try model.project?.exportMarkers().write(to: url, options: .atomic) } catch {
+        do { try model.project?.exportMarkers(to: url) } catch {
             analysis.error = error.localizedDescription
         }
     }

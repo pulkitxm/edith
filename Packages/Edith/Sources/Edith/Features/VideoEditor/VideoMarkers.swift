@@ -241,6 +241,11 @@ extension VideoProject {
 
     func exportMarkers() throws -> Data { try VideoMarkers.export(markers) }
 
+    func exportMarkers(to destination: URL) throws {
+        try VideoProjectExportDestination.validate(destination, project: self)
+        try exportMarkers().write(to: destination, options: .atomic)
+    }
+
     func snapToMarker(
         frame: Int64, thresholdFrames: Int64 = 3,
         frameRate: VideoMarkerFrameRate = .fps30
