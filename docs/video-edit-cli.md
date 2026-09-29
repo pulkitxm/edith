@@ -86,7 +86,10 @@ formatting, during both apply and dry-run.
 
 Operations run in order. `addMedia.name`, `addStill.name` and `split.rightName` define plan-local aliases
 for newly created clips. Later operations can use either an alias or a persisted clip ID
-from `show`. Result JSON returns aliases and the final ordered clip IDs. Aliases are not
+from `show`. `addAudio.name` defines a plan-local audio group alias. Audio operations accept
+an audio alias or a persisted track ID. Names must be unique across clip and audio aliases.
+Result JSON returns `aliases`, `clipIDs`, `audioAliases` (arrays of track IDs), and `audioIDs`.
+Aliases are not
 saved as project IDs. Relative media paths resolve beside the plan file, including when
 the project lives elsewhere. Absolute paths and `~` paths are also supported.
 
@@ -107,14 +110,15 @@ the project lives elsewhere. Absolute paths and `~` paths are also supported.
 | `resetCrop` | `clipID`. Restore the full source image. |
 | `text` | `content`, `start`, `end`. Add a text annotation using native defaults. |
 | `transition` | `clipID`, `kind`, `duration`. Before a non-first clip; `fade`, `flash`, or `none`; 0.2 to 2 seconds. |
-| `addAudio` | `path`, `start`, `offset`. Add native clip-anchored audio, clipped at the timeline end. Offset is source seconds. |
-| `audioOptions` | `trackID`, `gainDb`, `muted`, `loop`. Apply to the selected native audio group. IDs come from `show`. |
+| `addAudio` | `path`, `start`, `offset`, `name`. Add one independent audio track. Start is rendered output seconds and must be inside the current rendered timeline. Offset is source seconds. The track is clipped at the rendered timeline end. |
+| `audioOptions` | `trackID`, `gainDb`, `muted`, `loop`. Apply to every track in an audio alias, or one persisted track ID. |
 | `removeAudio` | `trackID`. Remove the selected native audio group. |
 | `rename` | `title`. A nonempty title up to 1000 characters. |
 | `canvas` | `aspectRatio`, `padding`, `backgroundColor`. Ratio: `native`, `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`. Writes explicit pixels once, preserving fps and color. Presets preserve the current longest edge; `native` reads the first current clip's displayed dimensions once. Padding: 0 to 25 percent. Color: `#RRGGBB`. |
 
-Text and audio placement use the native source-time ruler in seconds, before speed
-changes and removed trim ranges. `frame --time` uses rendered output seconds instead,
+Text placement uses the native source-time ruler in seconds, before speed changes and
+removed trim ranges. Audio placement uses the independent rendered output clock.
+`frame --time` also uses rendered output seconds,
 snapped to the preceding output frame using the exact rational cadence.
 Frame extraction requires exactly one of `--time SECONDS` or `--frame INDEX`.
 `--frame` is a zero-based output-frame index, evaluated with the composition's exact
@@ -180,7 +184,7 @@ after the last keyframe. Use `keyframes: []` to clear animation.
 ## Results and errors
 
 With `--json`, create/apply/validate/render/render-audio/frame return a versioned object containing
-`path`, `written`, `clipIDs` and `aliases` on stdout. Show always prints project JSON;
+`path`, `written`, `clipIDs`, `aliases`, `audioIDs` and `audioAliases` on stdout. Show always prints project JSON;
 schema always prints JSON Schema. Runtime failures return a JSON object on stderr with
 `version: 1` and `error: {code, message}`, leaving stdout empty. Invalid edit operations
 exit 2; other runtime failures exit 1. Command syntax errors use the standard CLI parser

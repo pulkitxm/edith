@@ -25,7 +25,7 @@ public struct VideoEditPlan: Codable, Sendable {
         case resetCrop(clipID: String)
         case text(content: String, start: Double, end: Double)
         case transition(clipID: String, kind: String, duration: Double)
-        case addAudio(path: String, start: Double, offset: Double)
+        case addAudio(path: String, start: Double, offset: Double, name: String)
         case audioOptions(trackID: String, gainDb: Double, muted: Bool, loop: Bool)
         case removeAudio(trackID: String)
         case rename(title: String)

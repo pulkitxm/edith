@@ -28,6 +28,8 @@ extension VideoEditPlan {
         let sourceTime = number(0, nil, "Source seconds, before speed changes and removed ranges.")
         let rulerTime = number(
             0, nil, "Source-time timeline seconds, before speed changes and removed ranges.")
+        let outputTime = number(
+            0, nil, "Rendered output seconds, after video speed changes and cuts.")
         let gain = number(-60, 12, "Decibels.")
         let fraction = number(0, 1, "Normalized fraction, from left or top.")
         let cropSize = number(0.05, 1, "Normalized source dimension.")
@@ -97,7 +99,7 @@ extension VideoEditPlan {
                 "clipID": reference, "kind": choice(["none", "fade", "flash"]),
                 "duration": number(0.2, 2, "Rendered output seconds."),
             ],
-            "addAudio": ["path": path, "start": rulerTime, "offset": sourceTime],
+            "addAudio": ["path": path, "start": outputTime, "offset": sourceTime, "name": alias],
             "audioOptions": [
                 "trackID": reference, "gainDb": gain, "muted": boolean, "loop": boolean,
             ],

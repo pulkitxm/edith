@@ -26,6 +26,8 @@ public enum VideoEditorService {
         public var audioReport: VideoAudioDeliveryReport? = nil
         public var frame: Int64? = nil
         public var time: Double? = nil
+        public let audioIDs: [String]
+        public let audioAliases: [String: [String]]
     }
 
     public static func create(at url: URL, title: String, overwrite: Bool = false) throws -> Result
@@ -62,12 +64,14 @@ public enum VideoEditorService {
         let snapshot = try readProject(url)
         var project = snapshot.project
         var aliases: [String: String] = [:]
+        var audioAliases: [String: [String]] = [:]
         let directory = mediaDirectory ?? url.deletingLastPathComponent()
         for (index, operation) in plan.operations.enumerated() {
             try Task.checkCancellation()
             do {
                 try await apply(
-                    operation, project: &project, aliases: &aliases, directory: directory)
+                    operation, project: &project, aliases: &aliases,
+                    audioAliases: &audioAliases, directory: directory)
             } catch {
                 throw Failure(
                     "invalid_operation", "Operation \(index): \(error.localizedDescription)")
@@ -86,7 +90,9 @@ public enum VideoEditorService {
             try saveEncoded(
                 encoded, to: destination, overwrite: overwrite, expectedSource: snapshot.revision)
         }
-        return result(project, url: destination, written: !dryRun, aliases: aliases)
+        return result(
+            project, url: destination, written: !dryRun, aliases: aliases,
+            audioAliases: audioAliases)
     }
 
     public static func render(
@@ -196,11 +202,12 @@ public enum VideoEditorService {
     }
 
     static func result(
-        _ project: VideoProject, url: URL, written: Bool, aliases: [String: String] = [:]
+        _ project: VideoProject, url: URL, written: Bool, aliases: [String: String] = [:],
+        audioAliases: [String: [String]] = [:]
     ) -> Result {
         Result(
             version: 1, path: url.path, written: written, clipIDs: project.clips.map(\.id),
-            aliases: aliases)
+            aliases: aliases, audioIDs: project.audioTracks.map(\.id), audioAliases: audioAliases)
     }
 
     static func open(_ url: URL) throws -> VideoProject {
