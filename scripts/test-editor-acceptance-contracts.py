@@ -9,6 +9,7 @@ from fractions import Fraction
 from editor_acceptance_captions import caption_snapshot, unchanged_captions
 from editor_acceptance_delivery import checked_progress
 from editor_acceptance_markers import mapped_frames, marker_snapshot
+from editor_acceptance_media import envelope, unique_usage
 from editor_acceptance_publications import protected_snapshot, publication_reordered
 
 
@@ -51,6 +52,24 @@ class CaptionContractTests(unittest.TestCase):
         report["captions"].append(copy.deepcopy(report["captions"][0]))
         with self.assertRaisesRegex(RuntimeError, "unique"):
             caption_snapshot(report)
+
+
+class MediaContractTests(unittest.TestCase):
+    def test_known_reuse_cannot_pass_unique_original_acceptance(self):
+        report = {"projectCount": 1, "occurrenceCount": 45, "uniqueClipCount": 45,
+                  "uniqueByteIdentityCount": 45, "uniqueOriginalCount": 45,
+                  "conflictCount": 0, "assessment": "noKnownReuse"}
+        unique_usage(report, 1, 45)
+        report.update(uniqueOriginalCount=44, conflictCount=1, assessment="knownReuseDetected")
+        with self.assertRaisesRegex(RuntimeError, "known source reuse"):
+            unique_usage(report, 1, 45)
+
+    def test_read_only_media_envelope_cannot_report_a_write(self):
+        value = {"version": 1, "operation": "usage", "written": False, "result": {"projectCount": 6}}
+        self.assertEqual(envelope(value, "usage"), {"projectCount": 6})
+        value["written"] = True
+        with self.assertRaisesRegex(RuntimeError, "envelope mismatch"):
+            envelope(value, "usage")
 
 
 class MarkerContractTests(unittest.TestCase):
