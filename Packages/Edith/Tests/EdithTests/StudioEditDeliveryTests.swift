@@ -40,8 +40,9 @@ import Testing
                 "--codec", "proRes422HQ", "--color-space", "displayP3", "--audio-codec", "pcm",
                 "--audio-sample-rate", "96000", "--audio-channels", "1", "--progress", "--json",
             ], timeout: 60)
-        #expect(run.code == 0, "\(run.stderr)")
-        let result = try StudioCLITests.json(run.stdout)
+        try #require(run.code == 0, "\(run.stderr)")
+        let result = try #require(
+            try? StudioCLITests.json(run.stdout), "Invalid delivery stdout: \(run.stdout)")
         #expect(result["written"] as? Bool == true)
         #expect(result["path"] as? String == output.path)
         let report = try #require(result["videoReport"] as? [String: Any])
@@ -50,8 +51,12 @@ import Testing
         #expect(report["colorPrimaries"] as? String == "P3_D65")
         #expect(report["audioSampleRate"] as? Int == 96000)
         #expect(report["audioChannels"] as? Int == 1)
-        let events = try run.stderr.split(separator: "\n").map {
-            try StudioCLITests.json(String($0))
+        var events: [[String: Any]] = []
+        for line in run.stderr.split(separator: "\n") {
+            if line == "IOServiceMatchingfailed for: AppleM2ScalerParavirtDriver" { continue }
+            let event = try #require(
+                try? StudioCLITests.json(String(line)), "Unexpected delivery stderr: \(line)")
+            events.append(event)
         }
         #expect(!events.isEmpty && events.count <= 101)
         #expect(events.allSatisfy { $0["event"] as? String == "progress" })
