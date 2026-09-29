@@ -363,6 +363,84 @@ import Testing
         return directory
     }
 
+    @Test func sourceTimeKeyframesSurviveTrimCropAndSpeedChanges() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("crop-animation.png")
+        let image = CIImage(color: .blue).cropped(to: CGRect(x: 64, y: 0, width: 64, height: 64))
+            .composited(
+                over: CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 128, height: 64)))
+        try VideoImageContext.shared.writePNGRepresentation(
+            of: image, to: url, format: .RGBA8,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 128, height: 128, frameRateNumerator: 120)
+        project.backgroundColor = "#000000"
+        let metadata = try VideoStillMedia.metadata(at: url)
+        try project.addStillAsset(url, duration: 1, metadata: metadata)
+        try project.addStillAsset(url, duration: 6, metadata: metadata)
+        let id = project.clips[1].id
+        project.trim(clipID: id, start: 2, end: 6)
+        project.crop(clipID: id, x: 0.5, y: 0, width: 0.5, height: 1)
+        var effects = VideoVisualEffects()
+        effects.keyframes = [
+            .init(time: 2, scale: 0.25, positionX: -0.25),
+            .init(time: 4, scale: 0.25, positionX: 0.25),
+            .init(time: 6, scale: 0.25, positionX: -0.25),
+        ]
+        try project.setVisualEffects(effects, clipID: id)
+        var legacy = project.root["legacyEditor"] as? [String: Any] ?? [:]
+        legacy["speedRegions"] = [
+            ["clipId": id, "sourceStartSec": 3.0, "sourceEndSec": 5.0, "speed": 2.0]
+        ]
+        project.root["legacyEditor"] = legacy
+        var timeline = project.root["timeline"] as? [String: Any] ?? [:]
+        timeline["trimRanges"] = [["clipId": id, "startSec": 3.5, "endSec": 4.0]]
+        project.root["timeline"] = timeline
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        #expect(pipeline.duration == 3.75)
+        let samples: [(Double, Int)] = [
+            (1, 32), (1.5, 48), (2, 64), (2.125, 72),
+            (2.25, 96), (2.5, 80), (2.75, 64), (3.25, 48),
+        ]
+        for (time, center) in samples {
+            let frame = try renderedFrame(pipeline, at: time)
+            #expect(try pixel(frame, x: center, y: 64).blueComponent > 0.9)
+            #expect(try pixel(frame, x: center, y: 64).redComponent < 0.1)
+            #expect(try pixel(frame, x: center - 20, y: 64).blueComponent < 0.1)
+            #expect(try pixel(frame, x: center + 20, y: 64).blueComponent < 0.1)
+        }
+    }
+
+    @Test func pipelineRejectsDuplicateIDsAndMalformedEffects() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("validation.png")
+        try VideoImageContext.shared.writePNGRepresentation(
+            of: CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64)),
+            to: url, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+        var project = VideoProject.create()
+        try project.addStillAsset(url, duration: 1, metadata: VideoStillMedia.metadata(at: url))
+        var duplicate = project
+        var other = project.clips[0]
+        other.visualEffects = VideoVisualEffects(exposure: 1)
+        duplicate.setClips([project.clips[0], other])
+        await #expect(throws: VideoRenderPipeline.RenderError.self) {
+            try await VideoRenderPipeline.make(project: duplicate)
+        }
+        let invalidEffects = VideoVisualEffects(keyframes: [.init(time: 0, scale: -1)]).raw
+        let malformed: [Any] = ["invalid", ["exposure": "invalid"], invalidEffects]
+        for raw in malformed {
+            var invalid = project
+            var clip = project.clips[0]
+            clip.raw["edithVisualEffects"] = raw
+            invalid.setClips([clip])
+            await #expect(throws: (any Error).self) {
+                try await VideoRenderPipeline.make(project: invalid)
+            }
+        }
+    }
+
     private func renderedFrame(_ pipeline: VideoRenderPipeline, at seconds: Double) throws
         -> CGImage
     {

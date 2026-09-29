@@ -222,6 +222,10 @@ struct VideoRenderPipeline {
         project: VideoProject, maxDimension: Int? = nil, previewOnly: Bool = false
     ) async throws -> VideoRenderPipeline {
         try project.validateVideoSettings()
+        let clipIDs = project.clips.map(\.id)
+        guard Set(clipIDs).count == clipIDs.count, clipIDs.allSatisfy({ !$0.isEmpty }) else {
+            throw RenderError.exportFailed("The timeline contains missing or duplicate clip IDs.")
+        }
         guard
             project.clips.allSatisfy({
                 $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end > $0.start
