@@ -163,6 +163,35 @@ enum JSONContract {
         JSONCase(
             "ed studio probe", ["studio", "probe", "/nonexistent/studio-probe.pdf", "--json"]),
         JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
+        JSONCase("ed studio edit schema", ["studio", "edit", "schema", "--json"]),
+        JSONCase(
+            "ed studio edit create",
+            ["studio", "edit", "create", "/nonexistent/demo.openscreen", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed studio edit show",
+            ["studio", "edit", "show", "/nonexistent/demo.openscreen", "--json"]),
+        JSONCase(
+            "ed studio edit validate",
+            ["studio", "edit", "validate", "/nonexistent/demo.openscreen", "--json"]),
+        JSONCase(
+            "ed studio edit apply",
+            [
+                "studio", "edit", "apply", "/nonexistent/demo.openscreen", "--plan",
+                "/nonexistent/edit.json", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit render",
+            [
+                "studio", "edit", "render", "/nonexistent/demo.openscreen", "--output",
+                "/nonexistent/demo.mp4", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit frame",
+            [
+                "studio", "edit", "frame", "/nonexistent/demo.openscreen", "--time", "0",
+                "--output", "/nonexistent/frame.png", "--json",
+            ]),
         JSONCase(
             "ed database connections add",
             [

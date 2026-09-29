@@ -571,6 +571,9 @@ public enum Guide {
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
         ed studio tools --kind pdf      Studio's tools for one kind of file
+        ed studio edit schema           Headless video edit-plan schema
+        ed studio edit apply demo.openscreen --plan edit.json --dry-run --json
+        ed studio edit render demo.openscreen --output demo.mp4 --json
         ed studio run pdf.merge a.pdf b.pdf
         ed studio run image.convert photo.heic --set format=jpg
         ed cleaner scan                 developer caches worth reclaiming

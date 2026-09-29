@@ -144,6 +144,7 @@ let targets: [Target] = [
     .target(
         name: "EdithCLI",
         dependencies: [
+            "Edith",
             "EdithCameraSupport",
             "EdithCore",
             "EdithDatabase",

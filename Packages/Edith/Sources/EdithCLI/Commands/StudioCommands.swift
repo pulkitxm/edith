@@ -14,7 +14,7 @@ struct StudioCommand: AsyncParsableCommand {
             """,
         subcommands: [
             StudioToolsCommand.self, StudioInfoCommand.self, StudioRunCommand.self,
-            StudioProbeCommand.self,
+            StudioProbeCommand.self, StudioEditCommand.self,
         ],
         defaultSubcommand: StudioToolsCommand.self)
 }
