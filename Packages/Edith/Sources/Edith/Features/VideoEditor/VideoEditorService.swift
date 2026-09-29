@@ -96,14 +96,9 @@ public enum VideoEditorService {
     ) async throws -> Result {
         let project = try open(url)
         var settings = settings
-        if settings.colorSpace == nil,
-            let raw = project.root["edithVideoSettings"] as? [String: Any],
-            let name = raw["colorSpace"] as? String
-        {
-            guard let color = VideoDeliverySettings.ColorSpace(rawValue: name) else {
-                throw Failure("invalid_settings", "Unknown project output color space: \(name)")
-            }
-            settings.colorSpace = color
+        if settings.colorSpace == nil {
+            settings.colorSpace =
+                project.videoSettings.colorSpace == .displayP3 ? .displayP3 : .rec709
         }
         do { try settings.validate() } catch {
             throw Failure("invalid_settings", error.localizedDescription)

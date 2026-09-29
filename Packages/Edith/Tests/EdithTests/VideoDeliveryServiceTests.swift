@@ -24,6 +24,7 @@ import Testing
         _ = try VideoEditorService.create(at: url, title: "Synthetic delivery")
         _ = try await VideoEditorService.apply(
             VideoEditPlan(operations: [
+                .videoSettings(settings: VideoSettings(width: 64, height: 64)),
                 .addMedia(path: source.path, name: "intro"),
                 .addAudio(path: audio.path, start: 0, offset: 0),
             ]), to: url, overwrite: true)
