@@ -947,6 +947,8 @@ extension VideoProject {
 
     func packageOriginalMedia(
         to destination: URL,
+        validatePackage: (VideoProject, VideoMediaLibrary.PackageResult) throws -> Void = { _, _ in
+        },
         checkCancellation: () throws -> Void = { try Task.checkCancellation() }
     ) throws -> VideoMediaLibrary.PackageResult {
         guard destination.isFileURL else {
@@ -1009,17 +1011,18 @@ extension VideoProject {
             try candidate.setMediaURL(target.appendingPathComponent(relative), for: entry.reference)
         }
         try candidate.setMediaManifest(manifest)
+        let result = VideoMediaLibrary.PackageResult(
+            directory: target, projectURL: target.appendingPathComponent("project.openscreen"),
+            copiedFileCount: copied.count,
+            copiedByteCount: copied.values.reduce(0) { $0 + $1.byteCount }, manifest: manifest)
+        try validatePackage(candidate, result)
         try candidate.save(to: stage.appendingPathComponent("project.openscreen"))
         try checkCancellation()
         guard renamex_np(stage.path, target.path, UInt32(RENAME_EXCL)) == 0 else {
             if errno == EEXIST { throw VideoMediaLibrary.Failure.destinationExists(target.path) }
             throw VideoMediaLibrary.posixError()
         }
-        return .init(
-            directory: target, projectURL: target.appendingPathComponent("project.openscreen"),
-            copiedFileCount: copied.count,
-            copiedByteCount: copied.values.reduce(0) { $0 + $1.byteCount },
-            manifest: manifest)
+        return result
     }
 
     static func openMediaPackage(

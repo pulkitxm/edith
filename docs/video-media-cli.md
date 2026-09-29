@@ -5,6 +5,8 @@ version 1 typed JSON envelope. `--json` also makes runtime errors JSON on stderr
 No application window, permission dialog, or installed skill is needed.
 MCP media calls allow up to six hours for streaming large original collections.
 
+See [portable media and relinking](video-media-storage-cli.md) for package commands.
+
 ## Inspect and compare
 
 ```sh
