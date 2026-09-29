@@ -56,6 +56,48 @@ import Testing
         }
     }
 
+    @Test func replacingPathDuringReadRejectsStaleIdentity() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try file(folder, "source.mov", "original bytes")
+        let replacement = try file(folder, "replacement.mov", "replacement bytes")
+        var checks = 0
+        #expect(throws: VideoMediaLibrary.Failure.changedDuringRead(source.path)) {
+            try VideoMediaLibrary.identity(of: source) {
+                checks += 1
+                if checks == 3 {
+                    try FileManager.default.removeItem(at: source)
+                    try FileManager.default.moveItem(at: replacement, to: source)
+                }
+            }
+        }
+    }
+
+    @Test func conflictingBatchRollsBackProvenanceDeclarations() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let a = try VideoMediaLibrary.identity(of: file(folder, "a", "first"))
+        let b = try VideoMediaLibrary.identity(of: file(folder, "b", "second"))
+        let ledger = VideoMediaLibrary.Ledger(url: folder.appendingPathComponent("ledger.json"))
+        let receipt = try ledger.reserve([.init(identity: a)], reelID: "first")
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try ledger.reserve(
+                [
+                    .init(
+                        identity: b,
+                        provenance: .init(sourceFamilyID: "rolled-back", declaration: "test")),
+                    .init(identity: a),
+                ], reelID: "second")
+        }
+        let other = try ledger.reserve(
+            [
+                .init(
+                    identity: b, provenance: .init(sourceFamilyID: "retained", declaration: "test"))
+            ], reelID: "second")
+        try ledger.release(other)
+        try ledger.release(receipt)
+    }
+
     @Test func reservationsAreAtomicAndSafeToRelease() throws {
         let folder = try directory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -341,6 +383,56 @@ import Testing
         #expect(throws: VideoMediaLibrary.Failure.self) { try project.indexMedia() }
         #expect(throws: VideoMediaLibrary.Failure.self) {
             try project.packageOriginalMedia(to: folder.appendingPathComponent("other"))
+        }
+    }
+
+    @Test func packageCommitNeverOverwritesARacingDestination() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try file(folder, "original.mov", "original")
+        var project = VideoProject.create()
+        project.addAsset(source, duration: 1, width: 1, height: 1)
+        let destination = folder.appendingPathComponent("package")
+        var raced = false
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try project.packageOriginalMedia(to: destination) {
+                let stages = try FileManager.default.contentsOfDirectory(
+                    at: folder, includingPropertiesForKeys: nil
+                )
+                .filter { $0.lastPathComponent.hasPrefix(".media-stage-") }
+                if !raced, let stage = stages.first,
+                    FileManager.default.fileExists(
+                        atPath: stage.appendingPathComponent("project.openscreen").path)
+                {
+                    try FileManager.default.createDirectory(
+                        at: destination, withIntermediateDirectories: false)
+                    _ = try file(destination, "keep", "winner")
+                    raced = true
+                }
+            }
+        }
+        #expect(raced)
+        #expect(
+            try String(contentsOf: destination.appendingPathComponent("keep"), encoding: .utf8)
+                == "winner")
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == [
+                "original.mov", "package",
+            ])
+    }
+
+    @Test func packageRejectsSymlinksThatEscapeItsOriginalsFolder() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try file(folder, "original.mov", "original")
+        var project = VideoProject.create()
+        project.addAsset(source, duration: 1, width: 1, height: 1)
+        let result = try project.packageOriginalMedia(to: folder.appendingPathComponent("package"))
+        let packaged = try VideoProject.openMediaPackage(result.directory).assets[0].url
+        try FileManager.default.removeItem(at: packaged)
+        try FileManager.default.createSymbolicLink(at: packaged, withDestinationURL: source)
+        #expect(throws: VideoMediaLibrary.Failure.self) {
+            try VideoProject.openMediaPackage(result.directory)
         }
     }
 

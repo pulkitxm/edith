@@ -232,6 +232,10 @@ enum VideoMediaLibrary {
         }
         var after = stat()
         guard fstat(handle.fileDescriptor, &after) == 0 else { throw posixError() }
+        var currentPath = stat()
+        guard stat(url.path, &currentPath) == 0,
+            currentPath.st_dev == after.st_dev, currentPath.st_ino == after.st_ino
+        else { throw Failure.changedDuringRead(url.path) }
         guard count == before.st_size, before.st_size == after.st_size,
             before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
             before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
