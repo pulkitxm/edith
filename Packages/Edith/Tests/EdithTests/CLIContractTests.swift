@@ -321,6 +321,27 @@ enum JSONContract {
                 "--output", "/nonexistent/sheet.png", "--json",
             ]),
         JSONCase(
+            "ed studio edit captions list",
+            ["studio", "edit", "captions", "list", "/nonexistent/demo.openscreen", "--json"]),
+        JSONCase(
+            "ed studio edit captions add",
+            [
+                "studio", "edit", "captions", "add", "/nonexistent/demo.openscreen", "--text",
+                "Beat", "--start-frame", "0", "--end-frame", "30", "--fps", "60", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit captions update",
+            [
+                "studio", "edit", "captions", "update", "/nonexistent/demo.openscreen",
+                "annotation_demo", "--text", "Beat", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit captions remove",
+            [
+                "studio", "edit", "captions", "remove", "/nonexistent/demo.openscreen",
+                "annotation_demo", "--json",
+            ]),
+        JSONCase(
             "ed database connections add",
             [
                 "database", "connections", "add", "Analytics staging",
