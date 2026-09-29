@@ -1,0 +1,66 @@
+# Full-quality delivery
+
+## Decide what the file must be
+
+Resolve the target before encoding:
+
+| Property | Decision |
+| --- | --- |
+| Geometry | Width, height, aspect ratio, crop or padding intent |
+| Time | Exact rational rate, expected frame count or duration |
+| Video | Container, codec, quality or bitrate, color requirements |
+| Audio | Required tracks, channels, sample rate, gain or loudness intent |
+| Handoff | Master, review copy, editable project and media dependencies |
+
+Use original media, not a previous review encode, as the source for the master.
+Native project operations preserve the ability to revise an edit without another
+generation of lossy intermediates. A full-quality delivery means meeting the
+agreed output properties; it does not mean a lossy export is mathematically
+identical to its original.
+
+## Map requirements to supported controls
+
+Read `ed studio edit render --help` and the current plan schema. Project settings
+and render flags serve different purposes: establish canvas and timing through
+the supported project interface, then select delivery controls actually exposed
+by render. Do not invent `--quality`, `--codec` or frame-rate flags because another
+media tool uses those names.
+
+Preserve a rate such as `24000/1001` or `30000/1001` exactly where the API supports
+it. Record whether any conversion was intentional. Source frame rate can differ
+from project or export frame rate. Matching a rounded decimal is insufficient for
+an exact-frame request. Do not upscale a low-resolution input and claim newly
+recovered detail.
+
+For required stills, effects, HDR/color or independent audio, first check that the
+installed native pipeline supports the needed behavior. If it does not, identify
+the unmet requirement. An accepted fallback should be clearly labeled, with its
+quality and editability tradeoffs, rather than silently substituted.
+
+## Render predictably
+
+Choose a new destination for a new delivery. Use an explicit overwrite only when
+replacing that output is intended. A render destination must not alias original
+media, the project or an auxiliary input. Preserve a known-good output when a
+replacement fails, and distinguish an old file from a newly published result by
+checking the returned path, checksum and file metadata where available.
+
+For faster iteration, sample targeted native frames or create a clearly labeled
+review copy if the installed controls permit it. Render the final master from
+the originals after the edit is accepted, using the agreed settings. Do not
+promote a proxy to master by renaming it.
+
+## Prove the file matches
+
+Use the installed inspection API or a discovered media probe to read the actual
+export's streams and properties. Container suffixes do not prove codec or stream
+quality. Compare dimensions and rational rate exactly when required. Compare
+duration with an explicit frame-based tolerance and account for the operation's
+documented rounding or audio packet padding instead of accepting arbitrary drift.
+
+Decode representative frames from the final file. Check orientation, scaling,
+captions and cut boundaries. For exact-frame acceptance, inspect the affected
+neighboring frames and confirm their timestamps. Check sound availability and
+sync separately. If an export is missing a required track or differs from the
+delivery contract, report it as a failed check and investigate the native settings
+or render options before declaring success.

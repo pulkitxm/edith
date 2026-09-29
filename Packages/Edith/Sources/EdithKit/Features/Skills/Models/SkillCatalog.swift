@@ -23,7 +23,19 @@ public enum EdithSkillLibrary {
             summary: "Your harness here. Your projects on any Edith machine.",
             detail:
                 "Discover connected machines, explore their projects, and run edits, builds, tests and containers through the ed CLI.",
-            symbol: "terminal")
+            symbol: "terminal"),
+        EdithSkill(
+            id: "edith-video-edit", name: "Edith Video Edit",
+            summary: "Original media to a native edit, from the command line.",
+            detail:
+                "Plan frame-accurate cuts, reuse source media, arrange audio and beats, and apply verified edits without opening an editor.",
+            symbol: "film"),
+        EdithSkill(
+            id: "edith-video-delivery", name: "Edith Video Delivery",
+            summary: "Review the finished cut and verify the actual export.",
+            detail:
+                "Render native projects at the requested quality, inspect frames and contact sheets, and verify delivery properties and media dependencies.",
+            symbol: "checkmark.rectangle.stack"),
     ]
 }
 
