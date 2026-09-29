@@ -53,14 +53,17 @@ extension VideoEditorService {
             (mapping == nil) == (rate == nil),
             "Mapping and an FPS choice must be supplied together.")
         let project = try open(url)
-        guard let asset = project.assets.first(where: { $0.id == assetID }),
+        let sourceAssetID =
+            project.audioTracks.first(where: { $0.id == assetID })?.assetID ?? assetID
+        guard let asset = project.assets.first(where: { $0.id == sourceAssetID }),
             asset.raw["kind"] as? String != "image", asset.raw["edithSourceImagePath"] == nil
         else {
             throw Failure(
-                "invalid_asset", "Select an existing audio or video asset, not a still image.")
+                "invalid_asset",
+                "Select an existing audio or video asset, or an audio track with a valid source, not a still image."
+            )
         }
-        let source =
-            (asset.raw["edithAudioPath"] as? String).map(URL.init(fileURLWithPath:)) ?? asset.url
+        let source = asset.audioURL
         try requireLocalFile(source)
         try require(
             options.maximumWaveformBins <= 2048 && options.maximumTransients <= 10_000,

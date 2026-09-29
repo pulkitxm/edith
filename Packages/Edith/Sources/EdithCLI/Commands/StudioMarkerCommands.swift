@@ -207,8 +207,10 @@ struct StudioAudioAnalyze: AsyncParsableCommand {
     )
     @OptionGroup var target: StudioMarkerTarget
     @OptionGroup var rate: StudioMarkerFPS
-    @Option(help: "Project audio or video asset ID; processed audio takes precedence.") var asset:
-        String
+    @Option(
+        help:
+            "Project audio/video asset ID or audio-track ID; processed source audio takes precedence."
+    ) var asset: String
     @Option(help: "Transient sensitivity from 0 to 1.") var sensitivity: Double = 0.5
     @Option(help: "Refractory duration in seconds.") var refractorySeconds: Double = 0.08
     @Option(help: "Minimum transient spacing in seconds.") var minimumSpacingSeconds: Double = 0.15

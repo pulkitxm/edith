@@ -6,7 +6,7 @@ import Testing
 @Suite struct VideoMarkerServiceTests {
     static let fps = VideoEditorService.MarkerRate.explicit(.fps30)
 
-    static func fixture(in directory: URL) throws -> (URL, String) {
+    static func fixture(in directory: URL) async throws -> (URL, String) {
         let audio = directory.appendingPathComponent("clicks.caf")
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1))
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 24000))
@@ -15,10 +15,12 @@ import Testing
         for index in 0..<24000 { samples[index] = index % 4000 == 2000 ? 0.8 : 0 }
         try AVAudioFile(forWriting: audio, settings: format.settings).write(from: buffer)
         var project = VideoProject.create(title: "Synthetic rhythm")
+        let movie = try await VideoEditorServiceTests.movie(in: directory)
+        project.addAsset(movie, duration: 1, width: 64, height: 64)
         project.addAudio(audio, duration: 3, at: 0)
         let url = directory.appendingPathComponent("rhythm.openscreen")
         try project.save(to: url)
-        return (url, try #require(project.assets.first?.id))
+        return (url, try #require(project.audioTracks.first?.id))
     }
 
     @Test func mutationRoundTripDryRunAndSnapAreTyped() async throws {
@@ -82,6 +84,10 @@ import Testing
 
     @Test func projectFPSUsesSavedRationalAndNeverDefaultsForEmptyProjects() async throws {
         var project = VideoProject.create()
+        #expect(
+            try await VideoEditorService.markerFrameRate(.project, project: project).framesPerSecond
+                == 60)
+        project.root.removeValue(forKey: "edithVideoSettings")
         await #expect(throws: (any Error).self) {
             try await VideoEditorService.markerFrameRate(.project, project: project)
         }
@@ -101,20 +107,86 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let movie = try await VideoEditorServiceTests.movie(in: directory)
         project = .create()
+        project.root.removeValue(forKey: "edithVideoSettings")
         project.addAsset(movie, duration: 1, width: 64, height: 64)
         #expect(
             try await VideoEditorService.markerFrameRate(.project, project: project).framesPerSecond
                 == 60)
     }
 
-    @Test func analysisMapsSourceSecondsToOutputFramesAndUsesProcessedAudio() async throws {
+    @Test func independentMusicAnalysisUsesRawSourceTimeAndProcessedPrecedence() async throws {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let (url, id) = try Self.fixture(in: directory)
+        let (url, id) = try await Self.fixture(in: directory)
         var project = try VideoProject.open(url)
+        let track = try #require(project.audioTracks.first(where: { $0.id == id }))
+        #expect(!project.clips.contains { $0.assetID == track.assetID })
+        #expect(track.endMs == 1000)
+        project.editRegion("audioTracks", id: id) {
+            $0["offsetMs"] = 500
+            $0["rate"] = 2
+            $0["loop"] = true
+            $0["muted"] = true
+        }
+        try project.save(to: url)
+        let before = try Data(contentsOf: url)
+        let mapping = VideoEditorService.AudioMarkerMapping(
+            sourceInSeconds: 1, sourceOutSeconds: 3, outputStartSeconds: 10, playbackRate: 2)
+        let report = try await VideoEditorService.analyzeAudio(
+            url, assetID: id, mapping: mapping, rate: Self.fps)
+        #expect(report.assetID == id)
+        #expect(report.durationSeconds == 3)
+        #expect(report.analysis.sampleCount == 24000)
+        #expect(report.analysis.transients.count == 6)
+        #expect(report.markerDocument?.markers.map(\.frame) == [304, 311, 319, 326])
+        #expect(try Data(contentsOf: url) == before)
+        let sourceReport = try await VideoEditorService.analyzeAudio(url, assetID: track.assetID)
+        #expect(sourceReport.analysis == report.analysis)
+        let processed = directory.appendingPathComponent("processed.caf")
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8000))
+        buffer.frameLength = 8000
+        let samples = try #require(buffer.floatChannelData?[0])
+        for index in 0..<8000 { samples[index] = 0 }
+        try AVAudioFile(forWriting: processed, settings: format.settings).write(from: buffer)
         var assets = project.assets.map(\.raw)
-        assets[0]["edithAudioPath"] = assets[0]["originalPath"]
-        assets[0]["originalPath"] = directory.appendingPathComponent("not-used.caf").path
+        let index = try #require(assets.firstIndex { $0["id"] as? String == track.assetID })
+        assets[index]["edithAudioPath"] = processed.path
+        project.root["assets"] = assets
+        try project.save(to: url)
+        let processedReport = try await VideoEditorService.analyzeAudio(url, assetID: id)
+        #expect(processedReport.sourcePath == processed.path)
+        #expect(processedReport.durationSeconds == 1)
+        #expect(processedReport.analysis.transients.isEmpty)
+        await #expect(throws: (any Error).self) {
+            try await VideoEditorService.analyzeAudio(
+                url, assetID: id, mapping: mapping, rate: Self.fps)
+        }
+        var options = VideoEditorService.AudioAnalysisOptions()
+        options.maximumWaveformBins = 3
+        await #expect(throws: (any Error).self) {
+            try await VideoEditorService.analyzeAudio(url, assetID: id, options: options)
+        }
+        await #expect(throws: (any Error).self) {
+            try await VideoEditorService.analyzeAudio(url, assetID: "missing-track")
+        }
+        project.editRegion("audioTracks", id: id) { $0["assetId"] = "missing-source" }
+        try project.save(to: url)
+        await #expect(throws: (any Error).self) {
+            try await VideoEditorService.analyzeAudio(url, assetID: id)
+        }
+    }
+
+    @Test func visualAssetAnalysisMapsSourceSecondsAndUsesProcessedAudio() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (url, _) = try await Self.fixture(in: directory)
+        var project = try VideoProject.open(url)
+        let id = try #require(
+            project.assets.first(where: { $0.raw["kind"] as? String == "video" })?.id)
+        var assets = project.assets.map(\.raw)
+        let index = try #require(assets.firstIndex(where: { $0["id"] as? String == id }))
+        assets[index]["edithAudioPath"] = directory.appendingPathComponent("clicks.caf").path
         project.root["assets"] = assets
         try project.save(to: url)
         let before = try Data(contentsOf: url)
@@ -124,11 +196,13 @@ import Testing
                 sourceInSeconds: 1, sourceOutSeconds: 3, outputStartSeconds: 10, playbackRate: 2),
             rate: Self.fps)
         #expect(report.analysis.transients.count == 6)
+        #expect(report.durationSeconds == 3)
+        #expect(report.sourcePath == directory.appendingPathComponent("clicks.caf").path)
         #expect(report.markerDocument?.markers.map(\.frame) == [304, 311, 319, 326])
         #expect(report.samplePositionUnit == "source_samples" && report.sampleRateUnit == "Hz")
         #expect(try JSONEncoder().encode(report).count < 4 << 20)
         #expect(try Data(contentsOf: url) == before)
-        assets[0]["kind"] = "image"
+        assets[index]["kind"] = "image"
         project.root["assets"] = assets
         try project.save(to: url)
         await #expect(throws: (any Error).self) {
@@ -139,7 +213,7 @@ import Testing
     @Test func corruptMarkersAndProtectedExportsPreserveBytes() async throws {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let (url, _) = try Self.fixture(in: directory)
+        let (url, _) = try await Self.fixture(in: directory)
         let sentinel = Data("synthetic cursor telemetry".utf8)
         for suffix in [".cursor.json", ".session.json"] {
             let sidecar = directory.appendingPathComponent("clicks.caf" + suffix)

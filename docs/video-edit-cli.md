@@ -382,8 +382,13 @@ is the version 1 interchange document. Snap reports include `requestedOutputFram
 
 ### Source audio and mapping
 
-Analysis selects a project asset by ID, using processed `edithAudioPath` if present,
-otherwise its original URL. Still images are rejected. Controls are `--sensitivity`
+Analysis selects a project audio/video asset or audio-track ID with `--asset`.
+An audio track resolves its referenced source asset. The shared audio source accessor
+uses processed `edithAudioPath` if present, otherwise the original URL. Still images
+are rejected. The report's `assetID` preserves the requested asset or track ID.
+Analysis decodes the complete source in source time regardless of track placement,
+offset, rate, loop, mute or gain. Mapping bounds use the actual decoded duration,
+including shorter processed audio. Controls are `--sensitivity`
 (0 to 1), `--refractory-seconds`, `--minimum-spacing-seconds`,
 `--maximum-waveform-bins` (even, 2 to 2048), and `--maximum-transients` (1 to 10000).
 Defaults are 0.5, 0.08 seconds, 0.15 seconds, 2048 bins, and 10000 transients.

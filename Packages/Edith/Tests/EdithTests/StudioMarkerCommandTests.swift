@@ -28,7 +28,7 @@ import Testing
     {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let (project, assetID) = try VideoMarkerServiceTests.fixture(in: directory)
+        let (project, assetID) = try await VideoMarkerServiceTests.fixture(in: directory)
         let original = try Data(contentsOf: project)
         let analysis = try await call(
             .analyze,

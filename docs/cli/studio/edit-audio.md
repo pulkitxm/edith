@@ -2,7 +2,7 @@
 
 [Back to `ed studio`](./README.md) · [All CLI commands](../README.md)
 
-Analyze a native project audio or video asset without opening the app. The default
+Analyze a native project audio or video asset, or an independent audio track, without opening the app. The default
 subcommand is `analyze`. Audio-track offsets and loops are not inferred.
 
 ## `ed studio edit audio analyze`
@@ -21,7 +21,7 @@ ed studio edit markers import demo.openscreen --input markers.json --json
 
 | Option | Meaning and default |
 | --- | --- |
-| `--asset ID` | Required project audio or video asset ID. Still images are rejected. Processed audio takes precedence over the original URL. |
+| `--asset ID` | Required project audio/video asset ID or audio-track ID. Tracks resolve their referenced source asset. Still images are rejected. Processed source audio takes precedence over the original URL. |
 | `--sensitivity N` | Transient sensitivity from 0 to 1; default 0.5. |
 | `--refractory-seconds N` | Refractory duration in seconds; default 0.08. |
 | `--minimum-spacing-seconds N` | Minimum transient spacing in seconds; default 0.15. |
@@ -39,6 +39,12 @@ Supply all four mapping options and exactly one FPS choice together, or omit map
 and FPS entirely. Mapping uses
 `outputStartSeconds + (sourceSeconds - sourceInSeconds) / playbackRate`.
 Empty projects without saved FPS require explicit `--fps`.
+
+Analysis decodes the complete source file in source time, regardless of the track's
+output placement, offset, playback rate, loop, mute or gain. Mapping is explicit and
+its source range must fit the actual decoded duration, including when processed audio
+is shorter than the original. The report's `assetID` preserves the requested asset or
+track ID.
 
 The version 1 report contains `assetID`, `sourcePath`, `durationSeconds`,
 `samplePositionUnit: "source_samples"`, `sampleRateUnit: "Hz"`, and `analysis`.
