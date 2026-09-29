@@ -121,7 +121,7 @@ extension VideoProject {
                 (try? merged.store(in: &raw)) != nil
             else { return }
             raw["content"] = left.text + " " + right.text
-            raw.removeValue(forKey: "captionWords")
+            raw["captionWords"] = nil
             editRegion("annotations", id: id) { $0 = raw }
             root["annotations"] = annotations.filter { $0.id != right.id }.map(\.raw)
             return

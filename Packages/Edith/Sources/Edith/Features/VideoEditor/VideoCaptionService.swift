@@ -68,7 +68,7 @@ extension VideoEditorService {
                 try requireCaptionText(content)
                 raw["content"] = content
                 raw["textContent"] = content
-                raw.removeValue(forKey: "captionWords")
+                raw["captionWords"] = nil
             }
             if start != nil || end != nil {
                 let anchor = try await captionAnchor(
