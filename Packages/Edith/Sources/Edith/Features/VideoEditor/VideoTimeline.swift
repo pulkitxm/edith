@@ -181,8 +181,8 @@ struct VideoTimeline: View {
         (model.project?.annotations ?? []).map {
             Item(
                 id: $0.id, label: $0.type == "text" ? $0.text : $0.type.capitalized,
-                start: model.outputTime(forRulerTime: $0.startMs / 1000),
-                end: model.outputTime(forRulerTime: $0.endMs / 1000),
+                start: model.captionOutputRange($0).start,
+                end: model.captionOutputRange($0).end,
                 selection: .annotation($0.id), key: "annotations")
         }
     }

@@ -224,6 +224,7 @@ struct VideoRenderPipeline {
         project: VideoProject, maxDimension: Int? = nil, previewOnly: Bool = false
     ) async throws -> VideoRenderPipeline {
         try project.validateVideoSettings()
+        try project.validateOutputCaptions()
         let clipIDs = project.clips.map(\.id)
         guard Set(clipIDs).count == clipIDs.count, clipIDs.allSatisfy({ !$0.isEmpty }) else {
             throw RenderError.exportFailed("The timeline contains missing or duplicate clip IDs.")
@@ -415,7 +416,8 @@ struct VideoRenderPipeline {
                 sourceImage, clip: segment.clip,
                 effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
                 size: size,
-                zooms: zooms, annotations: annotations, backdrop: backdrop,
+                zooms: zooms, annotations: annotations, outputTime: request.compositionTime,
+                backdrop: backdrop,
                 padding: padding, presentation: presentation,
                 webcam: webcam, webcamLayout: project.webcamLayout,
                 webcamSize: project.webcamSize,
@@ -652,7 +654,7 @@ struct VideoRenderPipeline {
     private static func render(
         _ input: CIImage, clip: VideoProject.Clip, effects: VideoVisualEffects, at timeMs: Double,
         size: CGSize,
-        zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation],
+        zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation], outputTime: CMTime,
         backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
         webcamPosition: [String: Double], webcamMask: String, webcamMirrored: Bool,
@@ -820,7 +822,7 @@ struct VideoRenderPipeline {
             }
         }
         for annotation in annotations
-        where timeMs >= annotation.startMs && timeMs <= annotation.endMs {
+        where annotation.visible(at: outputTime, rulerMilliseconds: timeMs) {
             let position = annotation.raw["position"] as? [String: Double] ?? [:]
             let proportions = annotation.raw["size"] as? [String: Double] ?? [:]
             let centerX = size.width * (position["x"] ?? 50) / 100
@@ -832,7 +834,11 @@ struct VideoRenderPipeline {
                 height: size.height * (proportions["height"] ?? 20) / 100)
             switch annotation.type {
             case "text":
-                if let text = VideoCaptionImage.make(annotation, time: timeMs, size: size) {
+                if let text = VideoCaptionImage.make(
+                    annotation,
+                    time: annotation.outputCaption == nil ? timeMs : outputTime.seconds * 1000,
+                    size: size)
+                {
                     output = text.transformed(
                         by: CGAffineTransform(translationX: region.minX, y: region.minY)
                     )

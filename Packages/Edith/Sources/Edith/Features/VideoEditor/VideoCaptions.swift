@@ -61,10 +61,17 @@ struct VideoSubtitle: Equatable {
 }
 
 extension VideoProject {
-    mutating func splitCaption(_ id: String, at time: Double) {
+    mutating func splitCaption(_ id: String, at requestedTime: Double) {
         var entries = annotations.map(\.raw)
         guard let index = annotations.firstIndex(where: { $0.id == id }) else { return }
         let caption = annotations[index]
+        let time: Double
+        if let anchor = caption.outputCaption {
+            guard let position = try? anchor.start.moved(to: requestedTime / 1000) else { return }
+            time = position.seconds * 1000
+        } else {
+            time = requestedTime
+        }
         guard time > caption.startMs + 100, time < caption.endMs - 100 else { return }
         let words = caption.text.split(whereSeparator: \.isWhitespace)
         guard words.count > 1 else { return }
@@ -77,6 +84,16 @@ extension VideoProject {
         right["content"] = words.dropFirst(boundary).joined(separator: " ")
         entries[index]["captionWords"] = nil
         right["captionWords"] = nil
+        if let anchor = caption.outputCaption {
+            do {
+                let cut = try anchor.start.moved(to: time / 1000)
+                try VideoCaptionAnchor(start: anchor.start, end: cut).store(in: &entries[index])
+                try VideoCaptionAnchor(start: cut, end: anchor.end).store(in: &right)
+            } catch { return }
+            entries.insert(right, at: index + 1)
+            root["annotations"] = entries
+            return
+        }
         entries.insert(right, at: index + 1)
         root["annotations"] = entries
         retimeRegion(
@@ -88,11 +105,27 @@ extension VideoProject {
     }
 
     mutating func mergeCaption(_ id: String) {
-        let captions = annotations.filter { $0.type == "text" }.sorted { $0.startMs < $1.startMs }
+        guard let selected = annotations.first(where: { $0.id == id }) else { return }
+        let captions = annotations.filter {
+            $0.type == "text" && ($0.outputCaption != nil) == (selected.outputCaption != nil)
+        }.sorted { $0.startMs < $1.startMs }
         guard let index = captions.firstIndex(where: { $0.id == id }), index + 1 < captions.count
         else { return }
         let left = captions[index]
         let right = captions[index + 1]
+        if let leftAnchor = left.outputCaption, let rightAnchor = right.outputCaption {
+            var raw = left.raw
+            let end =
+                leftAnchor.end.seconds >= rightAnchor.end.seconds ? leftAnchor.end : rightAnchor.end
+            guard let merged = try? VideoCaptionAnchor(start: leftAnchor.start, end: end),
+                (try? merged.store(in: &raw)) != nil
+            else { return }
+            raw["content"] = left.text + " " + right.text
+            raw.removeValue(forKey: "captionWords")
+            editRegion("annotations", id: id) { $0 = raw }
+            root["annotations"] = annotations.filter { $0.id != right.id }.map(\.raw)
+            return
+        }
         editRegion("annotations", id: id) {
             $0["content"] = left.text + " " + right.text; $0["captionWords"] = nil
         }
@@ -135,8 +168,8 @@ extension VideoEditorModel {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let cues = (project?.annotations ?? []).filter { $0.type == "text" }.compactMap {
             caption -> VideoSubtitle? in
-            let start = outputTime(forRulerTime: caption.startMs / 1000)
-            let end = outputTime(forRulerTime: caption.endMs / 1000)
+            let start = captionOutputRange(caption).start
+            let end = captionOutputRange(caption).end
             return end > start ? VideoSubtitle(start: start, end: end, text: caption.text) : nil
         }.sorted { $0.start < $1.start }
         do {
@@ -170,7 +203,7 @@ struct VideoCaptionEditor: View {
             .font(.caption).foregroundStyle(.secondary)
             ForEach(
                 (model.project?.annotations ?? []).filter { $0.type == "text" }.sorted {
-                    $0.startMs < $1.startMs
+                    model.captionOutputRange($0).start < model.captionOutputRange($1).start
                 }
             ) { caption in
                 VideoCaptionRow(caption: caption, model: model)
@@ -223,10 +256,15 @@ private struct VideoCaptionRow: View {
                     }))
             HStack {
                 Button("Split") {
-                    model.mutate { $0.splitCaption(caption.id, at: model.rulerPlayhead * 1000) };
+                    model.mutate {
+                        $0.splitCaption(
+                            caption.id,
+                            at: (caption.outputCaption == nil
+                                ? model.rulerPlayhead : model.playhead) * 1000)
+                    };
                     model.rebuild()
                 }
-                Button("Merge next") {
+                Button("Merge next in same clock") {
                     model.mutate { $0.mergeCaption(caption.id) }; model.rebuild()
                 }
             }
@@ -242,8 +280,8 @@ private struct VideoCaptionRow: View {
 
     private func refresh() {
         text = caption.text
-        start = model.outputTime(forRulerTime: caption.startMs / 1000)
-        end = model.outputTime(forRulerTime: caption.endMs / 1000)
+        start = model.captionOutputRange(caption).start
+        end = model.captionOutputRange(caption).end
     }
 }
 
