@@ -50,6 +50,53 @@ import Testing
         #expect(stored.composition.look.preset == .film)
     }
 
+    @Test func leavingThePageDoesNotOverwriteAHelperBackgroundChange() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.appear()
+        model.updateComposition { $0.background.mode = .color }
+        model.flushSave()
+        var external = model.state
+        external.composition.background.mode = .none
+        VirtualCameraStore.save(external, to: defaults)
+        model.disappear()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
+        model.appear()
+        defer { model.disappear() }
+        #expect(model.composition.background.mode == .none)
+    }
+
+    @Test func helperStatusRepairsAMissedStateNotification() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.updateComposition { $0.background.mode = .color }
+        model.flushSave()
+        var external = model.state
+        external.composition.background.mode = .none
+        VirtualCameraStore.save(external, to: defaults)
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                state: external))
+        #expect(model.composition.background.mode == .none)
+        model.setZoom(2)
+        model.flushSave()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
+    }
+
+    @Test func helperStatusDoesNotDiscardPendingWindowEdits() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let previous = model.state
+        model.updateComposition { $0.background.mode = .blur }
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                state: previous))
+        model.flushSave()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .blur)
+    }
+
     @Test func dragEditsSaveDuringEventTracking() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }

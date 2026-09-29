@@ -227,6 +227,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard let decoded else { return }
         snapshot = decoded
         helperReachable = true
+        if saveTimer == nil { reloadState() }
         if visible { syncPreviewFeed() }
     }
 
@@ -359,6 +360,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func flushSave() {
+        guard saveTimer != nil else { return }
         saveTimer?.invalidate()
         saveTimer = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
