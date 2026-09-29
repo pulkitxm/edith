@@ -18,6 +18,7 @@ enum VideoSyntheticMovie {
                 AVVideoHeightKey: Int(image.extent.height),
             ])
         input.transform = transform
+        input.mediaTimeScale = frameDuration.timescale
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: input,
             sourcePixelBufferAttributes: [

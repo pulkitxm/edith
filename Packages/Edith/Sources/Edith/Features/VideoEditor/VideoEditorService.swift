@@ -118,7 +118,7 @@ public enum VideoEditorService {
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        let image = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600))
+        let image = try await generator.image(at: outputFrame(seconds, in: pipeline).time)
             .image
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }

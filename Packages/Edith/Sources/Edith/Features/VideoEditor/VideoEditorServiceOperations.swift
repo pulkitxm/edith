@@ -73,8 +73,10 @@ extension VideoEditorService {
             try require(
                 size.width.isFinite && size.height.isFinite && size.width > 0 && size.height > 0
                     && size.width <= 16384 && size.height <= 16384, "Invalid media dimensions.")
+            let metadata = try await VideoSourceMetadata.probe(track)
             project.addAsset(
-                url, duration: duration, width: Int(size.width), height: Int(size.height))
+                url, duration: duration, width: metadata["width"] as! Int,
+                height: metadata["height"] as! Int, sourceMetadata: metadata)
             aliases[name] = project.clips.last!.id
         case let .split(reference, sourceTime, rightName):
             let selected = try clip(reference)

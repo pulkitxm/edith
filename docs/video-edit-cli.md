@@ -68,12 +68,13 @@ Save this as `edit.json`, beside a local video named `synthetic.mov`:
 The input video must be at least one second long for this example. Use the public
 schema to construct plans; project JSON itself is not the edit interface. Each operation
 is one object with one operation name and its required, typed fields. Unknown fields,
-unknown operations and unsupported versions are rejected. Plans are limited to 4 MiB
+unknown operations and unsupported versions are rejected, including unknown or missing
+fields inside settings, effects and individual keyframes. Plans are limited to 4 MiB
 and 1000 operations. Project files are limited to 32 MiB and 10000 clips or assets.
 The 32 MiB limit also applies to the final serialized output, including pretty-print
 formatting, during both apply and dry-run.
 
-Operations run in order. `addMedia.name` and `split.rightName` define plan-local aliases
+Operations run in order. `addMedia.name`, `addStill.name` and `split.rightName` define plan-local aliases
 for newly created clips. Later operations can use either an alias or a persisted clip ID
 from `show`. Result JSON returns aliases and the final ordered clip IDs. Aliases are not
 saved as project IDs. Relative media paths resolve beside the plan file, including when
@@ -81,7 +82,11 @@ the project lives elsewhere. Absolute paths and `~` paths are also supported.
 
 | Operation | Fields and semantics |
 | --- | --- |
-| `addMedia` | `path`, `name`. Probe and append a local file with a native-decodable video track. |
+| `addMedia` | `path`, `name`. Probe and append a local file with a native-decodable video track. Records actual dimensions, codec, frame cadence and available color metadata. |
+| `addStill` | `path`, `name`, `duration`. Append an original ImageIO-readable still. Duration is positive source seconds, at most seven days. |
+| `stillDuration` | `clipID`, `duration`. Set a still clip's source duration from its current trimmed start. Does not change its original file or the asset's import duration. |
+| `videoSettings` | `settings`. Replace explicit canvas pixels, rational output fps and project color space. All nested fields are required. |
+| `visualEffects` | `clipID`, `effects`. Replace framing, focal anchor, grading and source-time transform keyframes. All nested fields are required. |
 | `split` | `clipID`, `sourceTime`, `rightName`. Source seconds; each side must exceed 0.05 seconds. |
 | `trim` | `clipID`, `start`, `end`. Keep this source range, longer than 0.05 seconds. |
 | `reorder` | `clipIDs`. Every current clip exactly once, in the desired order. |
@@ -96,13 +101,67 @@ the project lives elsewhere. Absolute paths and `~` paths are also supported.
 | `audioOptions` | `trackID`, `gainDb`, `muted`, `loop`. Apply to the selected native audio group. IDs come from `show`. |
 | `removeAudio` | `trackID`. Remove the selected native audio group. |
 | `rename` | `title`. A nonempty title up to 1000 characters. |
-| `canvas` | `aspectRatio`, `padding`, `backgroundColor`. Ratio: `native`, `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`. Padding: 0 to 25 percent. Color: `#RRGGBB`. |
+| `canvas` | `aspectRatio`, `padding`, `backgroundColor`. Ratio: `native`, `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`. Writes explicit pixels once, preserving fps and color. Presets preserve the current longest edge; `native` reads the first current clip's displayed dimensions once. Padding: 0 to 25 percent. Color: `#RRGGBB`. |
 
 Text and audio placement use the native source-time ruler in seconds, before speed
-changes and removed trim ranges. `frame --time` uses rendered output seconds instead.
+changes and removed trim ranges. `frame --time` uses rendered output seconds instead,
+snapped to the preceding output frame using the exact rational cadence.
 Transitions use the editor's fade-through-color behavior, not overlapping dissolves.
-The schema exposes only implemented operations. Still-image conversion, detached audio,
-markers, transform/grade settings and explicit delivery codecs are not part of version 1.
+The schema exposes only implemented edit-plan operations. Detached audio, marker edits
+and explicit delivery codecs use their separate interfaces.
+
+## Original stills and visual settings
+
+Save this plan beside a local image named `synthetic.png`:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"videoSettings": {"settings": {
+      "width": 1920, "height": 1080,
+      "frameRateNumerator": 60000, "frameRateDenominator": 1001,
+      "colorSpace": "rec709"
+    }}},
+    {"addStill": {"path": "synthetic.png", "name": "cover", "duration": 5}},
+    {"stillDuration": {"clipID": "cover", "duration": 8}},
+    {"visualEffects": {"clipID": "cover", "effects": {
+      "framing": "fill", "focalX": 0.5, "focalY": 0.5,
+      "exposure": 0, "brightness": 0, "contrast": 1, "saturation": 1,
+      "keyframes": [
+        {"time": 0, "scale": 1, "positionX": 0, "positionY": 0,
+         "rotation": 0, "interpolation": "smooth"},
+        {"time": 8, "scale": 1.045, "positionX": 0.02, "positionY": 0,
+         "rotation": 2, "interpolation": "linear"}
+      ]
+    }}}
+  ]
+}
+```
+
+Still assets retain their original paths and decode at original resolution for native
+rendering. EXIF orientation is applied. Extending or trimming a still does not create a
+replacement movie. Preview downsampling does not change the stored asset.
+
+Canvas dimensions are even integers from 2 to 16384 pixels. Frame-rate numerator and
+denominator are positive 32-bit integers whose quotient is from 1 to 240. The frame
+duration is exactly denominator/numerator seconds. For 120 fps, use numerator `120`
+and denominator `1`. Adding, removing or reordering clips does not change these settings.
+Color space is `rec709` or `displayP3`; PNG frames honor that choice. Current MP4 delivery
+normalizes output to Rec.709.
+
+`visualEffects` is a full replacement, not a partial patch. `framing` is `fit` or `fill`.
+Focal coordinates range from 0 to 1, measured from the left and top. Exposure is in
+stops from -10 to 10; brightness is -1 to 1; contrast and saturation are 0 to 4 with
+identity at 1. Grading uses the same native Core Image pipeline as the editor.
+
+Keyframe times are strictly increasing source seconds, so trimming, changing speed and
+skipping source ranges preserve the animation's source anchors. Scale is a positive
+multiplier up to 100, applied after fit/fill. Position is in canvas-width/height fractions,
+from -100 to 100; positive X moves right and positive Y moves down. Rotation is degrees,
+positive counterclockwise, bounded to ±36000. `linear` or `smooth` interpolation on a
+keyframe controls the interval to the next keyframe. Values hold before the first and
+after the last keyframe. Use `keyframes: []` to clear animation.
 
 ## Results and errors
 
