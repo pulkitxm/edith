@@ -17,6 +17,8 @@ final class VideoExporter {
         let startedAt = Date()
         var progress = 0.0
         var phase = Phase.exporting
+        var report: VideoDeliveryReport?
+        var audioReport: VideoAudioDeliveryReport?
 
         var secondsRemaining: Double? {
             let elapsed = Date().timeIntervalSince(startedAt)
@@ -68,6 +70,16 @@ final class VideoExporter {
     func clear() {
         guard !isExporting else { return }
         job = nil
+    }
+
+    func setReport(_ report: VideoDeliveryReport, for destination: URL) {
+        guard job?.destination == destination, isExporting else { return }
+        job?.report = report
+    }
+
+    func setAudioReport(_ report: VideoAudioDeliveryReport, for destination: URL) {
+        guard job?.destination == destination, isExporting else { return }
+        job?.audioReport = report
     }
 
     private func report(_ progress: Double, for id: UUID) {

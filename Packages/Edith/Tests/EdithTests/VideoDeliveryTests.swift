@@ -95,6 +95,98 @@ import Testing
         #expect(throws: VideoDeliveryError.self) { try settings.validate() }
     }
 
+    @Test func rejectsReplacingOriginalMediaThroughAnAlias() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = try await fixture(in: directory)
+        let source = directory.appendingPathComponent("source.mov")
+        let original = try Data(contentsOf: source)
+        let alias = directory.appendingPathComponent("alias.mov")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: source)
+        await #expect(throws: VideoDeliveryError.self) {
+            try await pipeline.export(to: alias, settings: .master(), overwrite: true)
+        }
+        #expect(try Data(contentsOf: source) == original)
+    }
+
+    @Test func verifiesQuantizedCompositionRatherThanUnroundedProjectSeconds() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        _ = try await fixture(in: directory)
+        var project = VideoProject.create()
+        project.addAsset(
+            directory.appendingPathComponent("source.mov"), duration: 0.5005, width: 128,
+            height: 128)
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        let report = try await pipeline.export(
+            to: directory.appendingPathComponent("quantized.mp4"))
+        #expect(report.frameCount == 30)
+    }
+
+    @Test func encodesMonoAACAndRejectsUnsupportedBitrate() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = try await fixture(in: directory)
+        var settings = VideoDeliverySettings()
+        settings.audioChannels = 1
+        #expect(throws: VideoDeliveryError.self) { try settings.validate() }
+        settings.audioBitRate = 192_000
+        let report = try await pipeline.export(
+            to: directory.appendingPathComponent("mono.mp4"), settings: settings)
+        #expect(report.audioChannels == 1)
+        #expect(report.audioSampleRate == 48_000)
+    }
+
+    @Test(arguments: VideoAudioDeliverySettings.Container.allCases)
+    func exportsAudioMixWithSilentTailAndVerifiedSampleCount(
+        _ container: VideoAudioDeliverySettings.Container
+    ) async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = try await fixture(in: directory, audioFrames: 12_000)
+        var settings = VideoAudioDeliverySettings()
+        settings.container = container
+        let output = directory.appendingPathComponent("mix.\(container.rawValue)")
+        let report = try await pipeline.exportAudio(to: output, settings: settings)
+        #expect(report.frames == 24_000)
+        #expect(report.duration == 0.5)
+        #expect(report.channels == 2)
+        let file = try AVAudioFile(forReading: output)
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 24_000))
+        try file.read(into: buffer)
+        try #require(buffer.frameLength == 24_000)
+        let samples = try #require(buffer.floatChannelData?[0])
+        #expect((1_000..<10_000).contains { abs(samples[$0]) > 0.03 })
+        #expect((18_000..<24_000).allSatisfy { abs(samples[$0]) < 0.001 })
+    }
+
+    @Test func audioExportPreservesLeadingSilenceAndCancelledDestination() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pipeline = try await fixture(in: directory, audioFrames: 12_000, audioStartMs: 125)
+        let output = directory.appendingPathComponent("offset.wav")
+        _ = try await pipeline.exportAudio(to: output)
+        let original = try Data(contentsOf: output)
+        let file = try AVAudioFile(forReading: output)
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 24_000))
+        try file.read(into: buffer)
+        try #require(buffer.frameLength == 24_000)
+        let samples = try #require(buffer.floatChannelData?[0])
+        #expect((0..<5_000).allSatisfy { abs(samples[$0]) < 0.001 })
+        #expect((7_000..<16_000).contains { abs(samples[$0]) > 0.03 })
+        let task = Task {
+            try await pipeline.exportAudio(to: output, overwrite: true) { _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+            }
+        }
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(try Data(contentsOf: output) == original)
+        let children = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        #expect(!children.contains { $0.contains(".partial.") })
+    }
+
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-delivery-\(UUID().uuidString)")
@@ -102,7 +194,10 @@ import Testing
         return url
     }
 
-    private func fixture(in directory: URL) async throws -> VideoRenderPipeline {
+    private func fixture(in directory: URL, audioFrames: Int = 24_000, audioStartMs: Double = 0)
+        async throws
+        -> VideoRenderPipeline
+    {
         let imageURL = directory.appendingPathComponent("synthetic.png")
         let image = CIImage(color: CIColor(red: 0.2, green: 0.4, blue: 0.8))
             .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
@@ -115,16 +210,17 @@ import Testing
         let audio = directory.appendingPathComponent("tone.caf")
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
         let file = try AVAudioFile(forWriting: audio, settings: format.settings)
-        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 24_000))
-        buffer.frameLength = 24_000
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(audioFrames)))
+        buffer.frameLength = AVAudioFrameCount(audioFrames)
         let samples = try #require(buffer.floatChannelData?[0])
-        for index in 0..<24_000 {
+        for index in 0..<audioFrames {
             samples[index] = Float(sin(Double(index) * 2 * .pi * 440 / 48_000)) * 0.1
         }
         try file.write(from: buffer)
         var project = VideoProject.create()
         project.addAsset(source, duration: 0.5, width: 128, height: 128)
-        project.addAudio(audio, duration: 0.5, at: 0)
+        project.addAudio(audio, duration: Double(audioFrames) / 48_000, at: audioStartMs)
         return try await VideoRenderPipeline.make(project: project)
     }
 }

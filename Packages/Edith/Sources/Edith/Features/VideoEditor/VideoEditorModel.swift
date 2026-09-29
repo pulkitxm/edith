@@ -352,30 +352,38 @@ final class VideoEditorModel {
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func export(gif: Bool, quality: VideoExportQuality = .source) {
+    func export(
+        gif: Bool, quality: VideoExportQuality = .source,
+        delivery: VideoDeliverySettings = .init()
+    ) {
         guard let pipeline, let project else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [gif ? .gif : .mpeg4Movie]
-        panel.nameFieldStringValue = "\(project.title).\(gif ? "gif" : "mp4")"
+        panel.allowedContentTypes = [
+            gif ? .gif : delivery.codec.isMaster ? .quickTimeMovie : .mpeg4Movie
+        ]
+        panel.nameFieldStringValue =
+            "\(project.title).\(gif ? "gif" : delivery.codec.fileExtension)"
         let fps = gifFPS
         let width = gifWidth
         let loop = gifLoop
         let chosen: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
+            guard !project.protectsMedia(at: url) else {
+                self.errorMessage =
+                    "Choose an export destination different from your project and source media."
+                return
+            }
             VideoExporter.shared.start(to: url) { progress in
                 if gif {
                     try await pipeline.exportGIF(
                         to: url, fps: fps, maxWidth: width, loop: loop, progress: progress)
                     return
                 }
-                let render =
-                    if let dimension = quality.maxDimension {
-                        try await VideoRenderPipeline.make(
-                            project: project, maxDimension: dimension)
-                    } else {
-                        pipeline
-                    }
-                try await render.exportMP4(to: url, progress: progress)
+                let render = try await VideoRenderPipeline.make(
+                    project: project, maxDimension: quality.maxDimension)
+                let report = try await render.export(
+                    to: url, settings: delivery, overwrite: true, progress: progress)
+                await MainActor.run { VideoExporter.shared.setReport(report, for: url) }
             }
         }
         if let window = NSApp.keyWindow {

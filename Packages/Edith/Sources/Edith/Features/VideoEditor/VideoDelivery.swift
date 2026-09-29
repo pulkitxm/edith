@@ -2,6 +2,27 @@
 import CryptoKit
 import VideoToolbox
 
+extension VideoProject {
+    func protectsMedia(at destination: URL) -> Bool {
+        let destination = destination.resolvingSymlinksInPath()
+        if fileURL?.resolvingSymlinksInPath() == destination { return true }
+        for asset in assets {
+            if asset.url.resolvingSymlinksInPath() == destination { return true }
+            var paths: [String] = []
+            for key in ["edithSourceImagePath", "edithAudioPath"] {
+                if let path = asset.raw[key] as? String { paths.append(path) }
+            }
+            if let camera = asset.cameraTrack?["sourcePath"] as? String { paths.append(camera) }
+            for path in paths {
+                if URL(fileURLWithPath: path).resolvingSymlinksInPath() == destination {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+}
+
 struct VideoDeliverySettings: Codable, Equatable, Sendable {
     enum Codec: String, Codable, CaseIterable, Identifiable, Sendable {
         case h264, hevc, hevc10, proRes422, proRes422HQ, proRes4444
@@ -66,6 +87,9 @@ struct VideoDeliverySettings: Codable, Equatable, Sendable {
         }
         guard audioCodec != .aac || audioSampleRate != 96_000 else {
             throw VideoDeliveryError.invalidSettings("AAC delivery supports 44.1 or 48 kHz.")
+        }
+        guard audioCodec != .aac || audioChannels != 1 || audioBitRate <= 256_000 else {
+            throw VideoDeliveryError.invalidSettings("Mono AAC supports at most 256 kbps.")
         }
         guard !requireHardware || !codec.isMaster else {
             throw VideoDeliveryError.invalidSettings(
@@ -242,6 +266,14 @@ extension VideoRenderPipeline {
         guard !FileManager.default.fileExists(atPath: destination.path) || overwrite else {
             throw VideoDeliveryError.destinationExists
         }
+        let sources = composition.tracks.flatMap(\.segments).compactMap(\.sourceURL)
+        guard
+            !sources.contains(where: {
+                $0.resolvingSymlinksInPath() == destination.resolvingSymlinksInPath()
+            })
+        else {
+            throw VideoDeliveryError.invalidSettings("An export cannot replace its source media.")
+        }
         guard duration.isFinite, duration > 0, canvas.width >= 2, canvas.height >= 2,
             videoComposition.frameDuration.isNumeric, videoComposition.frameDuration.seconds > 0
         else {
@@ -262,7 +294,11 @@ extension VideoRenderPipeline {
                     settings.codec.highPrecision
                     ? kCVPixelFormatType_64RGBAHalf : kCVPixelFormatType_32BGRA
             ])
-        videoOutput.videoComposition = videoComposition
+        let deliveryComposition = videoComposition.mutableCopy() as! AVMutableVideoComposition
+        deliveryComposition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        deliveryComposition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        deliveryComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        videoOutput.videoComposition = deliveryComposition
         videoOutput.alwaysCopiesSampleData = false
         let encoding = settings.videoSettings(
             size: canvas, frameDuration: videoComposition.frameDuration)
@@ -339,8 +375,16 @@ extension VideoRenderPipeline {
                 throw writer.error ?? VideoDeliveryError.failed("Encoding did not finish.")
             }
             let report = try await VideoDeliveryReport.inspect(temporary)
-            let expectedFrames = Int(
-                ceil(duration / videoComposition.frameDuration.seconds - 0.000_001))
+            let frameDuration = videoComposition.frameDuration
+            let ticks = CMTimeConvertScale(
+                composition.duration, timescale: frameDuration.timescale, method: .roundAwayFromZero
+            )
+            guard ticks.isNumeric, ticks.value > 0, frameDuration.value > 0 else {
+                throw VideoDeliveryError.failed("The rendered timeline has invalid frame timing.")
+            }
+            let expectedFrames =
+                Int(ticks.value / frameDuration.value)
+                + (ticks.value % frameDuration.value == 0 ? 0 : 1)
             guard report.frameCount == expectedFrames, report.width == Int(canvas.width),
                 report.height == Int(canvas.height)
             else {
