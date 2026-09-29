@@ -189,15 +189,16 @@ struct VideoRenderPipeline {
 
     struct Segment {
         let clip: VideoProject.Clip
-        let sourceStart: Double
-        let sourceEnd: Double
+        let sourceRange: CMTimeRange
+        var sourceStart: Double { sourceRange.start.seconds }
+        var sourceEnd: Double { sourceRange.end.seconds }
         let rate: Double
         let outputRange: CMTimeRange
         var outputStart: Double { outputRange.start.seconds }
         var outputDuration: Double { outputRange.duration.seconds }
         var outputEnd: Double { outputRange.end.seconds }
         func sourceTime(at outputTime: Double) -> Double {
-            sourceStart + (outputTime - outputStart) * rate
+            sourceStart + (outputTime - outputStart) / outputDuration * sourceRange.duration.seconds
         }
         func rulerTime(at outputTime: Double) -> Double {
             clip.timelineStart + sourceTime(at: outputTime) - clip.start
@@ -213,6 +214,7 @@ struct VideoRenderPipeline {
     let composition: AVMutableComposition
     let videoComposition: AVVideoComposition
     let audioMix: AVAudioMix?
+    var audioRateSources: [VideoAudioRateSource] = []
     let segments: [Segment]
     let canvas: CGSize
 
@@ -237,19 +239,16 @@ struct VideoRenderPipeline {
             let video = composition.addMutableTrack(
                 withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { throw RenderError.noVideo }
-        let numerator = project.videoSettings.frameRateNumerator
-        let timelineTimescale = Int32(numerator * max(1, 60000 / numerator))
+        let timelineTimescale = timingTimescale(project: project)
         video.naturalTimeScale = timelineTimescale
-        var audio: AVMutableCompositionTrack?
 
-        var segments: [Segment] = []
+        let segments = timingSegments(project: project)
         var visualEffects: [String: VideoVisualEffects] = [:]
         var frameGenerators: [String: FrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
         var stillImages: [String: CIImage] = [:]
         var sourceTransforms: [String: CGAffineTransform] = [:]
-        var cursor = CMTime.zero
         for clip in project.clips where clip.duration > 0 {
             if let raw = clip.raw["edithVisualEffects"] {
                 visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
@@ -306,168 +305,39 @@ struct VideoRenderPipeline {
                         a: 1, b: 0, c: 0, d: -1, tx: 0,
                         ty: displayBounds.minY + displayBounds.maxY))
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
-            let audioAsset =
-                (source.raw["edithAudioPath"] as? String).map {
-                    AVURLAsset(url: URL(fileURLWithPath: $0))
-                } ?? asset
-            let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first
-            for slice in speedSlices(
-                for: clip, regions: project.speedRegions, trims: project.trimRanges
-            ) {
+            for segment in segments where segment.clip.id == clip.id {
                 guard
-                    cursor.seconds + (slice.end - slice.start) / slice.rate < Double(Int64.max)
+                    segment.outputEnd < Double(Int64.max)
                         / 600
                 else {
                     throw RenderError.exportFailed("The timeline exceeds the supported time range.")
                 }
-                let sourceRange = CMTimeRange(
-                    start: CMTime(seconds: slice.start, preferredTimescale: timelineTimescale),
-                    duration: CMTime(
-                        seconds: slice.end - slice.start, preferredTimescale: timelineTimescale))
-                let insertion = cursor
-                let outputDuration = CMTime(
-                    seconds: (slice.end - slice.start) / slice.rate,
-                    preferredTimescale: timelineTimescale)
+                let sourceRange = segment.sourceRange
+                let insertion = segment.outputRange.start
+                let outputDuration = segment.outputRange.duration
                 guard sourceRange.duration > .zero, outputDuration > .zero else {
                     throw RenderError.exportFailed(
                         "A clip is shorter than the timeline time resolution.")
                 }
                 let visualRange = carrierRange ?? sourceRange
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
-                if source.isStill {
+                if visualRange.duration != outputDuration {
                     video.scaleTimeRange(
                         CMTimeRange(start: insertion, duration: visualRange.duration),
-                        toDuration: sourceRange.duration)
+                        toDuration: outputDuration)
                 }
-                if let sourceAudio {
-                    if audio == nil {
-                        audio = composition.addMutableTrack(
-                            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-                    }
-                    try audio?.insertTimeRange(sourceRange, of: sourceAudio, at: insertion)
-                }
-                if slice.rate != 1 {
-                    let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
-                    video.scaleTimeRange(inserted, toDuration: outputDuration)
-                    audio?.scaleTimeRange(inserted, toDuration: outputDuration)
-                }
-                segments.append(
-                    Segment(
-                        clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
-                        rate: slice.rate,
-                        outputRange: CMTimeRange(start: insertion, duration: outputDuration)))
-                cursor = cursor + outputDuration
             }
         }
         guard !segments.isEmpty else { throw RenderError.noVideo }
         let transitions = transitionEdges(project: project, segments: segments)
 
         let mix = AVMutableAudioMix()
-        var parameters: [AVMutableAudioMixInputParameters] = []
-        for track in project.audioTracks where !track.muted && track.endMs > track.startMs {
-            guard let source = project.assets.first(where: { $0.id == track.assetID }) else {
-                throw RenderError.missingAsset(track.assetID)
-            }
-            guard FileManager.default.fileExists(atPath: source.url.path) else {
-                throw RenderError.missingAsset(source.url.path)
-            }
-            let asset = AVURLAsset(
-                url: (source.raw["edithAudioPath"] as? String).map {
-                    URL(fileURLWithPath: $0)
-                } ?? source.url)
-            guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first,
-                let mixTrack = composition.addMutableTrack(
-                    withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            else { continue }
-            let sourceDuration = try await asset.load(.duration).seconds
-            let start = outputTime(for: track.startMs / 1000, segments: segments)
-            let end = outputTime(for: track.endMs / 1000, segments: segments)
-            for segment in segments {
-                let rulerStart =
-                    segment.clip.timelineStart + segment.sourceStart - segment.clip.start
-                let rulerEnd = segment.clip.timelineStart + segment.sourceEnd - segment.clip.start
-                let overlapStart = max(track.startMs / 1000, rulerStart)
-                let overlapEnd = min(track.endMs / 1000, rulerEnd)
-                guard overlapEnd > overlapStart else { continue }
-                var cursor = segment.outputStart + (overlapStart - rulerStart) / segment.rate
-                let outputEnd = segment.outputStart + (overlapEnd - rulerStart) / segment.rate
-                var offset = track.offsetMs / 1000 + overlapStart - track.startMs / 1000
-                if track.loop, sourceDuration > 0 {
-                    offset.formTruncatingRemainder(dividingBy: sourceDuration)
-                }
-                while cursor < outputEnd - 0.001 && sourceDuration > offset {
-                    let length = min(outputEnd - cursor, sourceDuration - offset)
-                    let range = CMTimeRange(
-                        start: CMTime(seconds: offset, preferredTimescale: 600),
-                        duration: CMTime(seconds: length, preferredTimescale: 600))
-                    try mixTrack.insertTimeRange(
-                        range, of: sourceAudio,
-                        at: CMTime(seconds: cursor, preferredTimescale: 600))
-                    cursor += length
-                    if !track.loop { break }
-                    offset = 0
-                }
-            }
-            let level = Float(pow(10, track.gainDb / 20))
-            let input = AVMutableAudioMixInputParameters(track: mixTrack)
-            let fadeIn =
-                min(
-                    (track.raw["fadeInMs"] as? NSNumber)?.doubleValue ?? 0,
-                    (end - start) * 500) / 1000
-            let fadeOut =
-                min(
-                    (track.raw["fadeOutMs"] as? NSNumber)?.doubleValue ?? 0,
-                    (end - start) * 500) / 1000
-            let startTime = CMTime(seconds: start, preferredTimescale: 600)
-            input.setVolume(fadeIn > 0 ? 0 : level, at: startTime)
-            if fadeIn > 0 {
-                input.setVolumeRamp(
-                    fromStartVolume: 0, toEndVolume: level,
-                    timeRange: CMTimeRange(
-                        start: startTime,
-                        duration: CMTime(seconds: fadeIn, preferredTimescale: 600)))
-            }
-            if fadeOut > 0 {
-                input.setVolumeRamp(
-                    fromStartVolume: level, toEndVolume: 0,
-                    timeRange: CMTimeRange(
-                        start: CMTime(seconds: end - fadeOut, preferredTimescale: 600),
-                        duration: CMTime(seconds: fadeOut, preferredTimescale: 600)))
-            }
-            parameters.append(input)
-        }
-        if let audio {
-            let input = AVMutableAudioMixInputParameters(track: audio)
-            for segment in segments {
-                let gain = (segment.clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0
-                let level: Float =
-                    segment.clip.raw["audioMuted"] as? Bool == true ? 0 : Float(pow(10, gain / 20))
-                input.setVolume(
-                    level, at: CMTime(seconds: segment.outputStart, preferredTimescale: 600))
-            }
-            for edge in transitions {
-                let half = CMTime(seconds: edge.halfDuration, preferredTimescale: 600)
-                let midpoint = CMTime(seconds: edge.time, preferredTimescale: 600)
-                let outgoing = segments.last { $0.outputStart < edge.time }?.clip
-                let incoming = segments.first { $0.outputStart >= edge.time }?.clip
-                func level(_ clip: VideoProject.Clip?) -> Float {
-                    clip?.raw["audioMuted"] as? Bool == true
-                        ? 0
-                        : Float(
-                            pow(
-                                10, ((clip?.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0) / 20
-                            ))
-                }
-                input.setVolumeRamp(
-                    fromStartVolume: level(outgoing), toEndVolume: 0,
-                    timeRange: CMTimeRange(start: midpoint - half, duration: half))
-                input.setVolumeRamp(
-                    fromStartVolume: 0, toEndVolume: level(incoming),
-                    timeRange: CMTimeRange(start: midpoint, duration: half))
-            }
-            parameters.append(input)
-        }
-        mix.inputParameters = parameters
+        var audioProject = project
+        var rateSources: [VideoAudioRateSource] = []
+        for clip in project.clips { audioProject.detachAudio(clipID: clip.id, segments: segments) }
+        mix.inputParameters = try await VideoAudioMix.addTracks(
+            project: audioProject, composition: composition, end: segments.last!.outputRange.end,
+            rateSources: &rateSources)
 
         let nativeCanvas = project.videoSettings.size
         let canvas: CGSize
@@ -589,8 +459,15 @@ struct VideoRenderPipeline {
         videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
-            audioMix: parameters.isEmpty ? nil : mix,
+            audioMix: mix.inputParameters.isEmpty ? nil : mix,
+            audioRateSources: rateSources,
             segments: segments, canvas: canvas)
+    }
+
+    static func audioTransitions(
+        project: VideoProject, segments: [Segment]
+    ) -> [(time: Double, half: Double)] {
+        transitionEdges(project: project, segments: segments).map { ($0.time, $0.halfDuration) }
     }
 
     private static func transitionEdges(
@@ -619,18 +496,29 @@ struct VideoRenderPipeline {
         }
     }
 
-    private static func outputTime(for rulerTime: Double, segments: [Segment]) -> Double {
-        guard
-            let segment = segments.first(where: {
-                rulerTime < $0.clip.timelineStart + $0.sourceEnd - $0.clip.start
-            })
-        else { return segments.last?.outputEnd ?? 0 }
-        let source = segment.clip.start + rulerTime - segment.clip.timelineStart
-        return min(
-            segment.outputEnd,
-            max(
-                segment.outputStart,
-                segment.outputStart + (source - segment.sourceStart) / segment.rate))
+    static func timingSegments(project: VideoProject) -> [Segment] {
+        let timescale = timingTimescale(project: project)
+        var cursor = CMTime.zero
+        return project.clips.flatMap { clip in
+            speedSlices(for: clip, regions: project.speedRegions, trims: project.trimRanges).map {
+                slice in
+                let sourceRange = CMTimeRange(
+                    start: CMTime(seconds: slice.start, preferredTimescale: timescale),
+                    end: CMTime(seconds: slice.end, preferredTimescale: timescale))
+                let duration = CMTime(
+                    seconds: sourceRange.duration.seconds / slice.rate,
+                    preferredTimescale: timescale)
+                defer { cursor = cursor + duration }
+                return Segment(
+                    clip: clip, sourceRange: sourceRange, rate: slice.rate,
+                    outputRange: CMTimeRange(start: cursor, duration: duration))
+            }
+        }
+    }
+
+    static func timingTimescale(project: VideoProject) -> CMTimeScale {
+        let numerator = project.videoSettings.frameRateNumerator
+        return Int32(numerator * max(1, 60000 / numerator))
     }
 
     private static func speedSlices(

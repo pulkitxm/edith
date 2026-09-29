@@ -262,7 +262,7 @@ struct VideoInspector: View {
                 ProgressView(status).font(.caption)
                 Button("Cancel audio processing") { model.audioTask?.cancel() }
             }
-            if let clip = selectedClip {
+            if let clip = audioSourceClip {
                 Toggle(
                     "Mute source",
                     isOn: Binding(
@@ -276,6 +276,8 @@ struct VideoInspector: View {
                     model.setClipAudio(gain: $0)
                 }
                 audioCleanup(clip.assetID)
+                Button("Detach source audio") { model.detachAudio(clipID: clip.id) }
+                    .disabled(model.audioTask != nil || clip.raw["audioDetached"] as? Bool == true)
                 Button("Detect silence", action: model.detectSilence).disabled(
                     model.audioTask != nil)
                 if model.silenceClipID == clip.id {
@@ -290,10 +292,34 @@ struct VideoInspector: View {
             number("Preview volume", value: Double(model.player.volume), range: 0...1, step: 0.05) {
                 model.player.volume = Float($0)
             }
-            ForEach(model.project?.audioTracks ?? []) { track in
+            ForEach(audioInspectorTracks) { track in
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(model.project?.assets.first { $0.id == track.assetID }?.label ?? "Audio")
+                    Text(track.label)
                         .lineLimit(1)
+                    Text("Output time · \(track.rate.formatted())× source rate")
+                        .font(.caption).foregroundStyle(.secondary)
+                    number(
+                        "Start (s)", value: track.startMs / 1000, range: 0...max(1, model.duration),
+                        step: 0.1
+                    ) {
+                        model.moveAudio(track.id, to: $0)
+                    }
+                    number(
+                        "Trim in (s)", value: track.startMs / 1000,
+                        range: 0...max(1, track.endMs / 1000), step: 0.1
+                    ) {
+                        model.trimAudio(track.id, start: $0, end: track.endMs / 1000)
+                    }
+                    number(
+                        "Trim out (s)", value: track.endMs / 1000,
+                        range: 0...max(1, model.duration), step: 0.1
+                    ) {
+                        model.trimAudio(track.id, start: track.startMs / 1000, end: $0)
+                    }
+                    Button("Split at playhead") { model.splitAudio(track.id, at: model.playhead) }
+                        .disabled(
+                            model.playhead <= track.startMs / 1000 + 0.05
+                                || model.playhead >= track.endMs / 1000 - 0.05)
                     audioCleanup(track.assetID)
                     Toggle(
                         "Muted",
@@ -320,6 +346,17 @@ struct VideoInspector: View {
                 Divider()
             }
         }
+    }
+
+    private var audioInspectorTracks: [VideoProject.AudioTrack] {
+        let tracks = model.project?.audioTracks ?? []
+        guard case .audio(let selected) = model.selection else { return tracks }
+        return tracks.sorted { $0.id == selected && $1.id != selected }
+    }
+
+    private var audioSourceClip: VideoProject.Clip? {
+        if case .audio = model.selection { return nil }
+        return selectedClip
     }
 
     private var overlayControls: some View {

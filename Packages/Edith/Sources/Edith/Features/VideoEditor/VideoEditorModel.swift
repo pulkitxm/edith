@@ -219,11 +219,8 @@ final class VideoEditorModel {
             throw VideoRenderPipeline.RenderError.exportFailed(
                 "This audio file has no playable duration.")
         }
-        let start =
-            pipeline?.segments.first(where: {
-                playhead >= $0.outputStart && playhead < $0.outputEnd
-            })?.rulerTime(at: playhead) ?? 0
-        mutate { $0.addAudio(url, duration: duration, at: start * 1000) }
+        guard !Task.isCancelled, self.project?.id == project.id else { return }
+        mutate { $0.addAudio(url, duration: duration, at: playhead * 1000) }
     }
 
     func removeAudio(_ id: String) {
@@ -310,7 +307,9 @@ final class VideoEditorModel {
             }
             if let microphoneURL, let microphoneDuration,
                 microphoneDuration.isFinite, microphoneDuration > 0,
-                let clipStart = $0.clips.last?.timelineStart
+                let clipID = $0.clips.last?.id,
+                let clipStart = VideoRenderPipeline.timingSegments(project: $0)
+                    .first(where: { $0.clip.id == clipID })?.outputStart
             {
                 let offset = session?.microphoneOffset ?? 0
                 $0.addAudio(
@@ -425,6 +424,10 @@ final class VideoEditorModel {
     }
 
     func splitAtPlayhead() {
+        if case .audio(let id) = selection {
+            splitAudio(id, at: playhead)
+            return
+        }
         guard
             let segment = pipeline?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd

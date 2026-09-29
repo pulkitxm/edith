@@ -186,7 +186,7 @@ import Testing
         #expect(try Data(contentsOf: png) == sentinel)
     }
 
-    @Test func audioGroupsApplyGainMuteAndRemoval() async throws {
+    @Test func independentAudioAppliesGainMuteAndRemoval() async throws {
         let directory = try Self.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = try await Self.movie(in: directory)
@@ -209,9 +209,12 @@ import Testing
             ]), to: url, overwrite: true)
         let project = try VideoProject.open(url)
         let id = try #require(project.audioTracks.first?.id)
-        #expect(project.audioTracks.count == 2)
+        #expect(project.audioTracks.count == 1)
+        #expect(project.audioTracks[0].timebase == "output")
+        #expect(project.audioTracks[0].startMs == 100)
+        #expect(project.audioTracks[0].offsetMs == 200)
         let pipeline = try await VideoRenderPipeline.make(project: project)
-        #expect(pipeline.audioMix?.inputParameters.count == 2)
+        #expect(pipeline.audioMix?.inputParameters.count == 1)
         _ = try await VideoEditorService.apply(
             VideoEditPlan(operations: [
                 .audioOptions(trackID: id, gainDb: -9, muted: true, loop: true)

@@ -23,15 +23,14 @@ extension VideoProject {
         _ key: String, id: String, start: Double, end: Double, trimStart: Bool
     ) {
         guard start.isFinite, end.isFinite, start >= 0, end - start >= 0.05 else { return }
+        if key == "audioTracks" {
+            retimeAudio(id, start: start, end: end, trimStart: trimStart)
+            return
+        }
         let anchor = clips.first {
             start >= $0.timelineStart && end <= $0.timelineStart + $0.duration
         }
         editRegion(key, id: id) { region in
-            let oldStart = (region["startMs"] as? NSNumber)?.doubleValue ?? 0
-            if key == "audioTracks", trimStart {
-                let offset = (region["offsetMs"] as? NSNumber)?.doubleValue ?? 0
-                region["offsetMs"] = max(0, offset + start * 1000 - oldStart)
-            }
             region["startMs"] = start * 1000
             region["endMs"] = end * 1000
             region["clipId"] = anchor?.id
@@ -87,8 +86,9 @@ extension VideoEditorModel {
     func retime(_ key: String, id: String, range: ZoomTimelineTiming.Range, edge: String) {
         mutate {
             $0.retimeRegion(
-                key, id: id, start: rulerTime(at: range.start),
-                end: rulerTime(at: range.end), trimStart: edge == "start")
+                key, id: id, start: key == "audioTracks" ? range.start : rulerTime(at: range.start),
+                end: key == "audioTracks" ? range.end : rulerTime(at: range.end),
+                trimStart: edge == "start")
         }
         rebuild()
     }

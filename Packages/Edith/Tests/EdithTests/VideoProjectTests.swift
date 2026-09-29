@@ -160,7 +160,7 @@ import Testing
         #expect(project.zooms.first?.endMs == 5000)
     }
 
-    @Test func duplicatingClipCopiesItsAnchoredEditsAndAudio() throws {
+    @Test func duplicatingClipCopiesAnchoredEditsWithoutMovingAudio() throws {
         var project = VideoProject.create(title: "Original")
         project.addAsset(
             URL(fileURLWithPath: "/private/tmp/a.mov"),
@@ -176,7 +176,7 @@ import Testing
         #expect(project.clips.map(\.id) == [original, duplicate])
         #expect(project.zooms.map(\.startMs) == [500, 3500])
         #expect(project.annotations.map(\.startMs) == [1000, 4000])
-        #expect(project.audioTracks.map(\.startMs) == [0, 3000])
+        #expect(project.audioTracks.map(\.startMs) == [0])
         project.setClips(project.clips.filter { $0.id != original })
         #expect(project.zooms.count == 1)
         #expect(project.annotations.count == 1)
@@ -281,7 +281,7 @@ import Testing
             fadeInMs: 750, fadeOutMs: 500)
         #expect(project.audioTracks[0].muted)
         #expect(project.audioTracks[0].loop)
-        #expect(project.audioTracks[0].raw["fadeInMs"] as? Int == 750)
+        #expect(project.audioTracks[0].fadeInMs == 750)
         project.removeAudioTrack(id)
         #expect(project.audioTracks.isEmpty)
     }
@@ -321,7 +321,7 @@ import Testing
         #expect(project.annotations.count == 2)
     }
 
-    @Test func audioBedAnchorsAcrossMultipleClips() {
+    @Test func audioBedIsIndependentAcrossMultipleClips() {
         var project = VideoProject.create()
         project.addAsset(
             URL(fileURLWithPath: "/private/tmp/video.mov"),
@@ -332,9 +332,10 @@ import Testing
         project.addAudio(
             URL(fileURLWithPath: "/private/tmp/music.caf"),
             duration: 3, at: 500)
-        #expect(project.audioTracks.count == 2)
-        #expect(project.audioTracks.map(\.offsetMs) == [0, 1500])
-        #expect(project.audioTracks[1].raw["clipId"] as? String == project.clips[1].id)
+        #expect(project.audioTracks.count == 1)
+        #expect(project.audioTracks.map(\.offsetMs) == [0])
+        #expect(project.audioTracks[0].raw["clipId"] == nil)
+        #expect(project.audioTracks[0].timebase == "output")
         project.removeAudioTrack(project.audioTracks[0].id)
         #expect(project.audioTracks.isEmpty)
     }
