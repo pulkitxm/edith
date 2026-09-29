@@ -442,6 +442,7 @@ catalog-derived `arguments` array with the same typed CLI options. Analysis, lis
 snap are read operations; the other marker routes are writes. Runtime failures use
 the editor's `{version, error: {code, message}}` envelope. MCP output remains bounded
 to 4 MiB, with process-group cancellation and the analysis-only 300-second deadline.
+
 ## Headless review diagnostics
 
 ```sh
