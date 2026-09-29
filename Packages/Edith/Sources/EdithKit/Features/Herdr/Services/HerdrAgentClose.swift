@@ -22,15 +22,18 @@ public enum HerdrAgentCloseError: LocalizedError, Equatable {
 }
 
 public struct HerdrAgentCloseSteps: Sendable {
+    public var preserveSpace: @Sendable () async throws -> Void
     public var interrupt: @Sendable () async throws -> Void
     public var state: @Sendable () async throws -> HerdrPaneState
     public var closePane: @Sendable () async throws -> Void
 
     public init(
+        preserveSpace: @escaping @Sendable () async throws -> Void,
         interrupt: @escaping @Sendable () async throws -> Void,
         state: @escaping @Sendable () async throws -> HerdrPaneState,
         closePane: @escaping @Sendable () async throws -> Void
     ) {
+        self.preserveSpace = preserveSpace
         self.interrupt = interrupt
         self.state = state
         self.closePane = closePane
@@ -38,14 +41,27 @@ public struct HerdrAgentCloseSteps: Sendable {
 }
 
 public enum HerdrAgentCloseExecution {
+    private static let gate = HerdrTerminalSpaceGate()
     public static let attempts = 2
     public static let pressGap = Duration.milliseconds(250)
 
     public static func close(_ agent: HerdrAgent) async throws {
         let machine = try machine(for: agent)
+        let key = "\(agent.machineID)|\(agent.session)"
+        try await gate.run(key) {
+            try await close(agent, on: machine)
+        }
+    }
+
+    private static func close(_ agent: HerdrAgent, on machine: Machine?) async throws {
         let arguments = HerdrAgentCloseCommand.arguments(for: agent)
         try await close(
             steps: HerdrAgentCloseSteps(
+                preserveSpace: {
+                    try await preserveSpace(for: agent) { arguments in
+                        try await HerdrCommand.run(arguments, timeout: 10, on: machine)
+                    }
+                },
                 interrupt: {
                     _ = try await HerdrCommand.run(arguments, timeout: 10, on: machine)
                     try await Task.sleep(for: pressGap)
@@ -65,6 +81,8 @@ public enum HerdrAgentCloseExecution {
         steps: HerdrAgentCloseSteps, patience: Duration = .seconds(3),
         interval: Duration = .milliseconds(250)
     ) async throws {
+        if case .missing = try await steps.state() { return }
+        try await steps.preserveSpace()
         for _ in 0..<attempts {
             if case .missing? = try? await steps.state() { return }
             try? await steps.interrupt()
@@ -73,6 +91,29 @@ public enum HerdrAgentCloseExecution {
             if exited { break }
         }
         try await steps.closePane()
+    }
+
+    static func preserveSpace(
+        for agent: HerdrAgent,
+        run: @Sendable ([String]) async throws -> String
+    ) async throws {
+        let snapshot = try await run(
+            HerdrSessionCommand.scoped(["api", "snapshot"], session: agent.session))
+        guard let board = HerdrListParser.snapshotBoard(from: snapshot), board.hasPaneList else {
+            throw HerdrCommandError.malformedResponse
+        }
+        guard let pane = board.panes.first(where: { $0.pane == agent.pane }) else { return }
+        guard let workspace = pane.workspaceID, !workspace.isEmpty else {
+            throw HerdrCommandError.malformedResponse
+        }
+        guard board.panes.filter({ $0.workspaceID == workspace }).count == 1 else { return }
+        let output = try await run(
+            HerdrSessionCommand.scoped(
+                HerdrTabCreateCommand.arguments(workspaceID: workspace, cwd: pane.cwd ?? agent.cwd),
+                session: agent.session))
+        guard let created = HerdrListParser.createdPane(from: output),
+            created.workspaceID == workspace, created.paneID != agent.pane
+        else { throw HerdrCommandError.malformedResponse }
     }
 
     private static func machine(for agent: HerdrAgent) throws -> Machine? {
