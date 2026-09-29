@@ -6,6 +6,8 @@ import re
 import subprocess
 import sys
 
+from editor_acceptance_captions import exercise_caption_preservation
+
 
 def require(condition, message):
     if not condition:
@@ -91,6 +93,7 @@ def main():
     parser.add_argument("--fixture-only", action="store_true")
     parser.add_argument("--baseline", action="store_true", help="Exercise current rendering without exact delivery assertions")
     parser.add_argument("--contact-sheet", action="store_true", help="Verify a 45-shot contact sheet through the public CLI")
+    parser.add_argument("--captions", action="store_true", help="Verify public caption timing across crop, speed, and reorder edits")
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Public v1 plan containing integrated delivery operations")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
@@ -183,6 +186,8 @@ def main():
     check_sources(fixture, manifest)
     report = run([helper, "baseline" if args.baseline else "inspect", render, frame], workspace / "result.json")
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
+    if args.captions:
+        report["captionAcceptance"] = exercise_caption_preservation(edit, saved, workspace)
     report.update({"planRoundTrip": True, "projectRoundTrip": True, "sourcesUnchanged": True, "previewVerified": True})
     write_json(workspace / "result.json", report)
     print(json.dumps(report, indent=2, sort_keys=True))
