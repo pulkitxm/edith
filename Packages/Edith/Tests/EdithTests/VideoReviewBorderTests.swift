@@ -1,6 +1,7 @@
 import ArgumentParser
 import AVFoundation
 import CoreImage
+import EdithDocs
 import Testing
 @testable import Edith
 @testable import EdithCLI
@@ -120,6 +121,12 @@ import Testing
         let node = try #require(CommandTree.node(at: ["studio", "edit", "review-report"]))
         #expect(node.optionValues["--output"] == .localPath)
         #expect(node.options.contains("--check-borders"))
+        let library = try #require(DocsLibrary.bundled())
+        let location = try #require(library.location(forCommand: "ed studio edit review-report"))
+        #expect(location.path == "studio/edit-review-report.md")
+        let page = try #require(library.page(location.path))
+        #expect(page.command == "ed studio edit review-report")
+        #expect(page.markdown.contains("--max-border-frames"))
     }
 
     @Test func portraitCropAndAutomaticCursorZoomUseNativeGeometry() async throws {

@@ -28,6 +28,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [`ed studio edit markers`](./edit-markers.md) | Lists, edits, imports, exports and snaps output-frame markers. |
 | [`ed studio edit captions`](./captions.md) | Adds, lists, updates and removes output-frame or marker-timed native captions. |
 | [`ed studio edit publications`](./publications.md) | Create, validate and reorder upload manifests without changing projects. |
+| [`ed studio edit review-report`](./edit-review-report.md) | Reports native timeline ranges, expectations, missing assets and optional border geometry. |
 
 ## What is in Studio
 
