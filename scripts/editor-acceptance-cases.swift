@@ -144,15 +144,18 @@ func verifyMusic(_ url: URL, expectedSamples: Int, sourceOffset: Int = 0, emit: 
     try require(tracks.count == 1, "Expected exactly one rendered music stream")
     let track = tracks[0]
     let descriptions = try await track.load(.formatDescriptions)
-    let rate = CMAudioFormatDescriptionGetStreamBasicDescription(descriptions[0])!.pointee.mSampleRate
+    let format = CMAudioFormatDescriptionGetStreamBasicDescription(descriptions[0])!.pointee
+    let rate = format.mSampleRate
+    let channels = Int(format.mChannelsPerFrame)
     try require(rate == 48_000, "Rendered music must retain 48 kHz")
+    try require((1...2).contains(channels), "Expected mono or stereo fixture music")
     let range = try await track.load(.timeRange)
     let end = Double(expectedSamples) / 48_000
     try require(abs(range.start.seconds) < 1.0 / 48_000 && abs(range.duration.seconds - end) < 1.0 / 48_000,
         "Music stream must cover exactly zero through \(expectedSamples) samples; container priming must be trimmed")
     let reader = try AVAssetReader(asset: asset)
     let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-        AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 1,
+        AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: channels,
         AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
     ])
     reader.add(output)
@@ -160,7 +163,7 @@ func verifyMusic(_ url: URL, expectedSamples: Int, sourceOffset: Int = 0, emit: 
     var samples: [Float] = []
     while let sample = output.copyNextSampleBuffer() {
         let time = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-        try require(abs(time * 48_000 - Double(samples.count)) < 0.51, "Music contains a sample gap or overlap")
+        try require(abs(time * 48_000 - Double(samples.count / channels)) < 0.51, "Music contains a sample gap or overlap")
         let block = CMSampleBufferGetDataBuffer(sample)!
         let length = CMBlockBufferGetDataLength(block)
         var chunk = [Float](repeating: 0, count: length / 4)
@@ -170,24 +173,27 @@ func verifyMusic(_ url: URL, expectedSamples: Int, sourceOffset: Int = 0, emit: 
         try require(status == kCMBlockBufferNoErr, "Could not read continuous music samples")
         samples.append(contentsOf: chunk)
     }
-    try require(reader.status == .completed && samples.count == expectedSamples,
-        "Expected exactly \(expectedSamples) decoded music samples, got \(samples.count)")
+    try require(reader.status == .completed && samples.count == expectedSamples * channels,
+        "Expected exactly \(expectedSamples) decoded music frames, got \(samples.count / channels)")
     var maximumRMSError = 0.0
     var maximumStep = 0.0
-    for start in stride(from: 0, to: samples.count, by: 480) {
-        let stop = min(start + 480, samples.count)
+    for start in stride(from: 0, to: expectedSamples, by: 480) {
+        let stop = min(start + 480, expectedSamples)
         var error = 0.0
         for index in start..<stop {
             let expected = sin(2 * .pi * 440 * Double(index + sourceOffset) / 48_000) * 0.2
-            error += pow(Double(samples[index]) - expected, 2)
-            if index > 0 { maximumStep = max(maximumStep, Double(abs(samples[index] - samples[index - 1]))) }
+            for channel in 0..<channels {
+                let position = index * channels + channel
+                error += pow(Double(samples[position]) - expected, 2)
+                if index > 0 { maximumStep = max(maximumStep, Double(abs(samples[position] - samples[position - channels]))) }
+            }
         }
-        let rms = sqrt(error / Double(stop - start))
+        let rms = sqrt(error / Double((stop - start) * channels))
         maximumRMSError = max(maximumRMSError, rms)
         try require(rms < 0.025, "Music phase, frequency, or level changed in sample window \(start)..<\(stop)")
     }
     try require(maximumStep < 0.045, "Music contains an abrupt sample step of \(maximumStep)")
-    if emit { try json(["continuousMusicVerified": true, "samples": samples.count,
+    if emit { try json(["continuousMusicVerified": true, "samples": expectedSamples, "channels": channels,
         "maximumWindowRMSError": maximumRMSError, "maximumSampleStep": maximumStep, "sampleRate": rate,
         "sourceOffsetSamples": sourceOffset]) }
 }
