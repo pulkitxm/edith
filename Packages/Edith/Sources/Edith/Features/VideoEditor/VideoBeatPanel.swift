@@ -72,6 +72,14 @@ final class VideoBeatPanelState {
 }
 
 struct VideoBeatMapping {
+    enum MappingError: LocalizedError, Equatable {
+        case noAudioOverlap
+
+        var errorDescription: String? {
+            "The selected clip does not overlap the analyzed audio."
+        }
+    }
+
     var sourceStart: Double = 0
     var sourceEnd: Double = 0
     var outputStart: Double = 0
@@ -79,6 +87,16 @@ struct VideoBeatMapping {
 
     func outputTime(for source: Double) -> Double {
         outputStart + (source - sourceStart) / rate
+    }
+
+    func intersectingAudio(duration: Double) throws -> Self {
+        guard duration.isFinite, duration >= 0, sourceStart.isFinite, sourceEnd.isFinite,
+            sourceStart >= 0, sourceEnd > sourceStart, outputStart.isFinite, outputStart >= 0,
+            rate.isFinite, (0.05...20).contains(rate)
+        else { throw VideoBeatAnalysis.AnalysisError.invalidSettings }
+        let end = min(sourceEnd, duration)
+        guard end > sourceStart else { throw MappingError.noAudioOverlap }
+        return Self(sourceStart: sourceStart, sourceEnd: end, outputStart: outputStart, rate: rate)
     }
 
     func markers(
@@ -293,9 +311,14 @@ struct VideoBeatPanel: View {
                 model.playhead >= $0.outputStart && model.playhead < $0.outputEnd
             }) ?? segments.first
         else { return }
-        mapping = VideoBeatMapping(
-            sourceStart: segment.sourceStart, sourceEnd: segment.sourceEnd,
-            outputStart: segment.outputStart, rate: segment.rate)
+        guard let result = analysis.result else { return }
+        do {
+            mapping = try VideoBeatMapping(
+                sourceStart: segment.sourceStart, sourceEnd: segment.sourceEnd,
+                outputStart: segment.outputStart, rate: segment.rate
+            ).intersectingAudio(duration: result.duration)
+            analysis.error = nil
+        } catch { analysis.error = error.localizedDescription }
     }
 
     private var markerControls: some View {

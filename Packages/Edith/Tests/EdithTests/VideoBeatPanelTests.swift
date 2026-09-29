@@ -65,6 +65,28 @@ import Testing
         }
     }
 
+    @Test func selectedClipMappingIntersectsShorterDecodedAudio() async throws {
+        let url = try fixture(duration: 3)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = try await VideoBeatAnalysis.analyze(url)
+        let clip = VideoBeatMapping(sourceStart: 1, sourceEnd: 4, outputStart: 10, rate: 2)
+        let mapping = try clip.intersectingAudio(duration: result.duration)
+        #expect(mapping.sourceStart == 1 && mapping.sourceEnd == 3)
+        #expect(mapping.outputStart == 10 && mapping.rate == 2)
+        #expect(mapping.outputTime(for: 2) == 10.5)
+        #expect(
+            try mapping.markers(from: result, frameRate: .fps30).map(\.frame) == [
+                304, 311, 319, 326,
+            ])
+        for start in [3.0, 3.5] {
+            let silentClip = VideoBeatMapping(
+                sourceStart: start, sourceEnd: 4, outputStart: 10, rate: 2)
+            #expect(throws: VideoBeatMapping.MappingError.noAudioOverlap) {
+                try silentClip.intersectingAudio(duration: result.duration)
+            }
+        }
+    }
+
     @Test func renderFrameDurationPreservesVisualSettingsRates() throws {
         let unreduced = try VideoBeatPanelState.frameRate(
             CMTime(value: 100_000, timescale: 2_000_000))
