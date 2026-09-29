@@ -111,7 +111,9 @@ extension VideoEditPlan {
                 "backgroundColor": ["type": "string", "pattern": "^#[0-9a-fA-F]{6}$"],
             ],
         ]
-        let variants = operations.keys.sorted().map { object([$0: object(operations[$0]!)]) }
+        let variants =
+            operations.keys.sorted().map { object([$0: object(operations[$0]!)]) }
+            + audioEditingSchemas.keys.sorted().map { object([$0: audioEditingSchemas[$0]!]) }
         return object([
             "version": ["type": "integer", "const": 1],
             "operations": ["type": "array", "maxItems": 1000, "items": ["oneOf": variants]],

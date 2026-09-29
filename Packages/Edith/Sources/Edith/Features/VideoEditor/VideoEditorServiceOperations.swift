@@ -156,7 +156,8 @@ extension VideoEditorService {
                     && (0.2...2).contains(duration),
                 "Transition must be none, fade or flash with duration 0.2 to 2 seconds.")
             project.setTransition(before: selected.id, kind: kind, duration: duration)
-        case .addAudio, .audioOptions, .removeAudio:
+        case .addAudio, .audioOptions, .removeAudio, .detachAudio, .moveAudio, .splitAudio,
+            .trimAudio, .audioFades:
             try await applyAudio(
                 operation, project: &project, aliases: aliases,
                 audioAliases: &audioAliases, directory: directory)

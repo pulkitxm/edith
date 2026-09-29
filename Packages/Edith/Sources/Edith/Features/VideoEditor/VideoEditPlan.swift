@@ -28,6 +28,11 @@ public struct VideoEditPlan: Codable, Sendable {
         case addAudio(path: String, start: Double, offset: Double, name: String)
         case audioOptions(trackID: String, gainDb: Double, muted: Bool, loop: Bool)
         case removeAudio(trackID: String)
+        case detachAudio(clipID: String, name: String)
+        case moveAudio(trackID: String, start: Double)
+        case splitAudio(trackID: String, time: Double, rightName: String)
+        case trimAudio(trackID: String, start: Double, end: Double)
+        case audioFades(trackID: String, fadeIn: Double?, fadeOut: Double?)
         case rename(title: String)
         case canvas(aspectRatio: String, padding: Double, backgroundColor: String)
     }
@@ -77,6 +82,10 @@ public struct VideoEditPlan: Codable, Sendable {
     }
 
     private static func validateFields(_ value: Any, schema: [String: Any], path: String) throws {
+        guard !(value is NSNull) else {
+            throw VideoEditorService.Failure(
+                "invalid_plan", "\(path): null is not a valid field value.")
+        }
         if let variants = schema["oneOf"] as? [[String: Any]] {
             guard let object = value as? [String: Any], object.count == 1,
                 let name = object.keys.first,
@@ -92,6 +101,14 @@ public struct VideoEditPlan: Codable, Sendable {
             let object = value as? [String: Any]
         {
             let required = Set(schema["required"] as? [String] ?? [])
+            if let alternatives = schema["anyOf"] as? [[String: [String]]],
+                !alternatives.contains(where: {
+                    Set($0["required"] ?? []).isSubset(of: Set(object.keys))
+                })
+            {
+                throw VideoEditorService.Failure(
+                    "invalid_plan", "\(path): specify at least one fade duration.")
+            }
             guard Set(object.keys).isSubset(of: Set(fields.keys)),
                 required.isSubset(of: Set(object.keys))
             else {

@@ -99,6 +99,54 @@ bounds or neither. Transitions, captions and music retain their original timing;
 encoded timestamps start at zero. The measured report adds `range` with the
 selected project frame bounds and rational frame rate.
 
+## Independent audio plans
+
+Audio placement and editing use rendered output seconds after video speed changes and
+cuts. Imported music remains one independent track when video clips change. Source
+offsets use seconds in the original audio media.
+
+| Operation | Fields and behavior |
+| --- | --- |
+| `addAudio` | `path`, `start`, `offset`, `name`. Import one track at an output start inside the current rendered timeline, clipped at its end. |
+| `detachAudio` | `clipID`, `name`. Snapshot source offsets, speed slices, gain, mute intervals and transition envelopes, then mute the source. Requires source audio; a clip can be detached once. |
+| `moveAudio` | `trackID`, `start`. Move a track or group, preserving offsets and relative positions. The whole selection must fit the rendered timeline. |
+| `splitAudio` | `trackID`, `time`, `rightName`. Split inside the selection at output seconds, preserving envelopes and rate-adjusted offsets. The selected alias keeps the left side; `rightName` names the right side. |
+| `trimAudio` | `trackID`, `start`, `end`. Retain a positive output range inside the selection, remove outside fragments, and slice envelopes and offsets. |
+| `audioFades` | `trackID`, optional `fadeIn`, optional `fadeOut`. Supply at least one duration in output seconds, each clamped to half the selection duration. Zero clears that fade; an omitted end is preserved. |
+| `audioOptions` | `trackID`, `gainDb`, `muted`, `loop`. Apply to every selected fragment; gain is -60 to +12 dB. |
+| `removeAudio` | `trackID`. Remove every selected fragment. |
+
+`addAudio.name` and `detachAudio.name` define plan-local audio group aliases. Audio
+operations accept these aliases or persisted track IDs from `show`. Names are unique
+across audio and clip aliases. Results include `audioIDs` and `audioAliases`, a mapping
+from each alias to its current array of track IDs, alongside `clipIDs` and `aliases`.
+Split and trim keep affected aliases current; removed aliases map to empty arrays.
+Aliases are not saved, so later plans use persisted IDs. Timing and fade operations
+require non-overlapping group fragments. Group fades span the selection's outer bounds.
+Gain envelopes, exact output ranges, and applied fade durations persist in project JSON.
+
+For an existing project with at least four rendered seconds, save this as `audio.json`
+beside a synthetic audio file named `tone.caf`:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"addAudio": {"path": "tone.caf", "start": 0, "offset": 0, "name": "score"}},
+    {"audioFades": {"trackID": "score", "fadeIn": 0.2, "fadeOut": 0.3}},
+    {"splitAudio": {"trackID": "score", "time": 2, "rightName": "tail"}},
+    {"trimAudio": {"trackID": "tail", "start": 2.1, "end": 3.5}},
+    {"moveAudio": {"trackID": "tail", "start": 2}},
+    {"audioOptions": {"trackID": "tail", "gainDb": -6, "muted": false, "loop": false}}
+  ]
+}
+```
+
+Run `ed studio edit apply demo.openscreen --plan audio.json --dry-run --json` to validate,
+then replace `--dry-run` with `--overwrite` to save. Unknown fields, missing required
+fields, null fade durations, invalid output ranges and duplicate aliases are rejected
+atomically. Source and imported audio files are never rewritten.
+
 ## Where to go next
 
 - [`ed studio tools`](./tools.md), for file-based media tools

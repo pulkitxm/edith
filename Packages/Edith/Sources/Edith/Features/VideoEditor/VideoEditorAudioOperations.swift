@@ -66,6 +66,46 @@ extension VideoEditorService {
             for track in tracks { project.removeAudioTrack(track.id) }
             let remaining = Set(project.audioTracks.map(\.id))
             audioAliases = audioAliases.mapValues { $0.filter { remaining.contains($0) } }
+        case let .detachAudio(reference, name):
+            try requireAudioName(
+                name, project: project, aliases: aliases, audioAliases: audioAliases)
+            let id = aliases[reference] ?? reference
+            guard let clip = project.clips.first(where: { $0.id == id }),
+                let source = project.assets.first(where: { $0.id == clip.assetID })
+            else { throw Failure("not_found", "Unknown clip: \(reference)") }
+            try require(
+                !source.isStill || source.raw["edithAudioPath"] is String,
+                "This source has no audio track.")
+            let asset = AVURLAsset(url: source.audioURL)
+            try require(
+                try await !asset.loadTracks(withMediaType: .audio).isEmpty,
+                "This source has no audio track.")
+            let ids = project.detachAudio(clipID: id)
+            try require(
+                !ids.isEmpty,
+                "Audio has already been detached or the clip has no rendered duration.")
+            audioAliases[name] = ids
+        case let .moveAudio(reference, start):
+            let tracks = try audioSelection(reference, project: project, aliases: audioAliases)
+            try moveAudio(tracks, start: start, project: &project)
+        case let .trimAudio(reference, start, end):
+            let tracks = try audioSelection(reference, project: project, aliases: audioAliases)
+            try trimAudio(tracks, start: start, end: end, project: &project)
+            let remaining = Set(project.audioTracks.map(\.id))
+            audioAliases = audioAliases.mapValues { $0.filter { remaining.contains($0) } }
+        case let .splitAudio(reference, time, rightName):
+            try requireAudioName(
+                rightName, project: project, aliases: aliases, audioAliases: audioAliases)
+            let tracks = try audioSelection(reference, project: project, aliases: audioAliases)
+            let split = try splitAudio(tracks, at: time, project: &project)
+            audioAliases = audioAliases.mapValues { ids in
+                ids.flatMap { id in split.created[id].map { [id, $0] } ?? [id] }
+            }
+            if audioAliases[reference] != nil { audioAliases[reference] = split.left }
+            audioAliases[rightName] = split.right
+        case let .audioFades(reference, fadeIn, fadeOut):
+            let tracks = try audioSelection(reference, project: project, aliases: audioAliases)
+            try setAudioFades(tracks, fadeIn: fadeIn, fadeOut: fadeOut, project: &project)
         default:
             throw Failure("invalid_operation", "Expected an audio operation.")
         }

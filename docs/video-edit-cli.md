@@ -113,6 +113,11 @@ the project lives elsewhere. Absolute paths and `~` paths are also supported.
 | `addAudio` | `path`, `start`, `offset`, `name`. Add one independent audio track. Start is rendered output seconds and must be inside the current rendered timeline. Offset is source seconds. The track is clipped at the rendered timeline end. |
 | `audioOptions` | `trackID`, `gainDb`, `muted`, `loop`. Apply to every track in an audio alias, or one persisted track ID. |
 | `removeAudio` | `trackID`. Remove the selected native audio group. |
+| `detachAudio` | `clipID`, `name`. Snapshot source offsets, speed slices, mute intervals, gain and transition envelopes into an independent audio group, then mute the source clip. Requires decodable source audio and cannot detach the same clip twice. |
+| `moveAudio` | `trackID`, `start`. Move a track or group to rendered output seconds, retaining relative positions, source offsets and envelopes. The entire selection must fit the rendered timeline. |
+| `splitAudio` | `trackID`, `time`, `rightName`. Split inside a track or group at rendered output seconds. The selected alias retains the left side; `rightName` names the right side. A persisted ID continues to identify its original fragment. |
+| `trimAudio` | `trackID`, `start`, `end`. Keep a positive rendered output range inside the selection. Removes outside fragments, advances source offsets by each fragment's rate, and slices envelopes. |
+| `audioFades` | `trackID`, optional `fadeIn`, optional `fadeOut`. At least one duration is required, in output seconds. Each fade is clamped to half the group duration; zero clears that fade. Omit the opposite end to preserve it. Envelopes and applied durations persist in the project. |
 | `rename` | `title`. A nonempty title up to 1000 characters. |
 | `canvas` | `aspectRatio`, `padding`, `backgroundColor`. Ratio: `native`, `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`. Writes explicit pixels once, preserving fps and color. Presets preserve the current longest edge; `native` reads the first current clip's displayed dimensions once. Padding: 0 to 25 percent. Color: `#RRGGBB`. |
 
@@ -125,8 +130,15 @@ Frame extraction requires exactly one of `--time SECONDS` or `--frame INDEX`.
 rational frame duration. Result JSON includes the selected `frame` and its `time` in
 output seconds. An index at or beyond the frame count is rejected.
 Transitions use the editor's fade-through-color behavior, not overlapping dissolves.
-The schema exposes only implemented edit-plan operations. Detached audio, marker edits
-and explicit delivery codecs use their separate interfaces.
+The schema exposes only implemented edit-plan operations. Marker edits and explicit
+delivery codecs use their separate interfaces.
+
+Audio aliases can represent multiple detached speed or mute fragments. Timing and fade
+operations require non-overlapping fragments, and group fades span the selection's outer
+bounds. Splitting and trimming update all affected audio aliases; removed groups return
+empty ID arrays. Aliases exist only for the current plan, so use returned `audioIDs` or IDs
+from `show` in later plans. Independent tracks stay on the output clock after subsequent
+video cuts, speed changes, and reordering.
 
 ## Original stills and visual settings
 
