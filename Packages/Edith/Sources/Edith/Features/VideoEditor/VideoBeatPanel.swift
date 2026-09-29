@@ -17,10 +17,10 @@ final class VideoBeatPanelState {
         clear()
         isAnalyzing = true
         let version = generation
-        let task = Task.detached(priority: .userInitiated) {
+        worker = Task.detached(priority: .userInitiated) {
             try await VideoBeatAnalysis.analyze(url, settings: settings)
         }
-        worker = task
+        guard let task = worker else { return }
         observer = Task { [weak self] in
             do {
                 let result = try await task.value
