@@ -57,6 +57,7 @@ struct VideoProject {
         var label: String { raw["label"] as? String ?? "Video" }
         var url: URL { URL(fileURLWithPath: raw["originalPath"] as? String ?? "") }
         var duration: Double { raw["durationSec"] as? Double ?? 0 }
+        var isStill: Bool { raw["kind"] as? String == "image" }
         var cameraTrack: [String: Any]? { raw["cameraTrack"] as? [String: Any] }
     }
 
@@ -429,6 +430,7 @@ struct VideoProject {
         let now = ISO8601DateFormatter().string(from: Date())
         return VideoProject(root: [
             "schemaVersion": 7,
+            "edithVideoSettings": VideoSettings().raw,
             "project": [
                 "id": "proj_\(UUID().uuidString.lowercased())", "title": title,
                 "createdAt": now, "updatedAt": now,
@@ -452,12 +454,15 @@ struct VideoProject {
             root["project"] is [String: Any], root["timeline"] is [String: Any]
         else { throw ProjectError.unsupportedFormat }
         let wasMigrated = source["schemaVersion"] as? Int != 7
-        return VideoProject(
+        let project = VideoProject(
             root: root, fileURL: wasMigrated ? nil : url,
             fileRevision: wasMigrated ? nil : VideoProjectFileAccess.RevisionState(data))
+        try project.validateVideoSettings()
+        return project
     }
 
     mutating func save(to url: URL) throws {
+        try validateVideoSettings()
         let sameFile =
             fileURL.map {
                 VideoProjectFileAccess.identity($0) == VideoProjectFileAccess.identity(url)
@@ -636,17 +641,20 @@ struct VideoProject {
 
     mutating func addAsset(
         _ url: URL, duration: Double, width: Int, height: Int,
-        label: String? = nil, sourceImage: URL? = nil
+        label: String? = nil, sourceImage: URL? = nil, sourceMetadata: [String: Any]? = nil
     ) {
+        guard duration.isFinite, duration > 0, duration < Double(Int64.max) / 600,
+            width > 0, height > 0
+        else { return }
         let id = "asset_\(UUID().uuidString.lowercased())"
         var assets = root["assets"] as? [[String: Any]] ?? []
-        var entry: [String: Any] = [
-            "id": id, "kind": "video", "label": label ?? url.lastPathComponent,
-            "originalPath": url.path, "durationSec": duration,
-            "video": ["codec": "unknown", "width": width, "height": height, "fps": 30],
+        let entry: [String: Any] = [
+            "id": id, "kind": sourceImage == nil ? "video" : "image",
+            "label": label ?? (sourceImage ?? url).lastPathComponent,
+            "originalPath": (sourceImage ?? url).path, "durationSec": duration,
+            "video": sourceMetadata ?? ["codec": "unknown", "width": width, "height": height],
             "cameraTrack": NSNull(),
         ]
-        if let sourceImage { entry["edithSourceImagePath"] = sourceImage.path }
         assets.append(entry)
         root["assets"] = assets
         var project = root["project"] as? [String: Any] ?? [:]
@@ -916,8 +924,9 @@ struct VideoProject {
     mutating func trim(clipID: String, start: Double, end: Double) {
         var clips = self.clips
         guard let index = clips.firstIndex(where: { $0.id == clipID }),
-            start >= 0, end > start + 0.05,
-            end <= (assets.first { $0.id == clips[index].assetID }?.duration ?? 0)
+            start.isFinite, end.isFinite, start >= 0, end > start + 0.05,
+            let asset = assets.first(where: { $0.id == clips[index].assetID }),
+            asset.isStill || end <= asset.duration
         else { return }
         clips[index].start = start
         clips[index].end = end

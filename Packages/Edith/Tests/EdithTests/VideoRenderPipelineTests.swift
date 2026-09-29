@@ -15,6 +15,7 @@ import Testing
         let source = directory.appendingPathComponent("source.mov")
         try await createVideo(at: source, brightness: 220)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 64, height: 64)
         project.addAsset(source, duration: 1, width: 64, height: 64)
         project.padding = 20
         project.backgroundColor = "#FF0000"
@@ -49,6 +50,7 @@ import Testing
         let source = directory.appendingPathComponent("bright.mov")
         try await createVideo(at: source, brightness: 200)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 64, height: 64)
         project.addAsset(source, duration: 1, width: 64, height: 64)
         let firstID = try #require(project.clips.first?.id)
         let secondID = project.duplicate(clipID: firstID)
@@ -86,6 +88,7 @@ import Testing
         let source = directory.appendingPathComponent("sparse.mov")
         try await createVideo(at: source, frameTimes: [0, 0.04, 0.6, 0.62, 0.95], length: 1)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 64, height: 64)
         project.addAsset(source, duration: 1, width: 64, height: 64)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let exported = directory.appendingPathComponent("steady.mp4")
@@ -126,12 +129,10 @@ import Testing
         let tiff = try #require(image.tiffRepresentation)
         let bitmap = try #require(NSBitmapImageRep(data: tiff))
         try #require(bitmap.representation(using: .png, properties: [:])).write(to: imageURL)
-        let movie = try await VideoStillMedia.create(from: imageURL, duration: 0.5)
-        defer { try? FileManager.default.removeItem(at: movie) }
         var project = VideoProject.create()
-        project.addAsset(
-            movie, duration: 0.5, width: 64, height: 64,
-            label: imageURL.lastPathComponent, sourceImage: imageURL)
+        project.videoSettings = VideoSettings(width: 64, height: 64)
+        try project.addStillAsset(
+            imageURL, duration: 0.5, metadata: VideoStillMedia.metadata(at: imageURL))
         #expect(project.assets[0].label == "red.png")
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let generator = AVAssetImageGenerator(asset: pipeline.composition)
@@ -168,6 +169,7 @@ import Testing
         try await createVideo(at: source)
 
         var project = VideoProject.create(title: "Export test")
+        project.videoSettings = VideoSettings(width: 64, height: 64)
         project.addAsset(source, duration: 1, width: 64, height: 64)
         var withTrim = project
         withTrim.addTrim(clipID: withTrim.clips[0].id, start: 0.2, end: 0.6)
@@ -297,6 +299,7 @@ import Testing
         project.crop(clipID: project.clips[0].id, x: 0.1, y: 0.1, width: 0.8, height: 0.8)
         #expect(project.clips[0].crop?["width"] == 0.8)
         project.aspectRatio = "16:9"
+        project.videoSettings = VideoSettings(width: 64, height: 36)
         project.padding = 12
         let pipeline: VideoRenderPipeline
         do { pipeline = try await VideoRenderPipeline.make(project: project) } catch {
@@ -357,6 +360,7 @@ import Testing
         #expect(abs(spedDuration - 0.75) < 0.1)
 
         var partial = VideoProject.create()
+        partial.videoSettings = VideoSettings(width: 64, height: 64)
         partial.addAsset(source, duration: 1, width: 64, height: 64)
         var legacy = partial.root["legacyEditor"] as? [String: Any] ?? [:]
         legacy["speedRegions"] = [
