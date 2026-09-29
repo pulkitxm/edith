@@ -24,6 +24,8 @@ need the app to be running: every tool runs inside `ed` itself.
 | [Native project delivery](./delivery.md) | Renders native video, audio mixes and exact output frames. |
 | [`ed studio edit media`](./edit-media.md) | Inspects original identity and capture dates, indexes provenance, and audits clip reuse across projects. |
 | [Media packages and reservations](./edit-media-storage.md) | Packages and relinks originals, verifies moved packages, and manages shared source reservations. |
+| [`ed studio edit audio`](./edit-audio.md) | Measures native source audio and maps transients to output frames. |
+| [`ed studio edit markers`](./edit-markers.md) | Lists, edits, imports, exports and snaps output-frame markers. |
 
 ## What is in Studio
 

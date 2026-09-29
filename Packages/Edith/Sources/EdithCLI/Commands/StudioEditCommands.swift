@@ -14,6 +14,7 @@ struct StudioEditCommand: AsyncParsableCommand {
             StudioEditFrame.self, StudioEditRenderAudio.self, StudioEditList.self,
             StudioEditClone.self,
             StudioEditContactSheet.self, StudioEditMediaCommand.self,
+            StudioMarkerCommand.self, StudioEditAudio.self,
         ], defaultSubcommand: StudioEditSchema.self)
 }
 

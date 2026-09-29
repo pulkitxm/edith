@@ -1,12 +1,12 @@
 import Foundation
 
-struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
-    let numerator: Int
-    let denominator: Int
+public struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
+    public let numerator: Int
+    public let denominator: Int
 
-    static let fps30 = VideoMarkerFrameRate(uncheckedNumerator: 30, denominator: 1)
+    public static let fps30 = VideoMarkerFrameRate(uncheckedNumerator: 30, denominator: 1)
 
-    init(numerator: Int, denominator: Int = 1) throws {
+    public init(numerator: Int, denominator: Int = 1) throws {
         guard numerator > 0, numerator <= Int32.max,
             denominator > 0, denominator <= Int32.max,
             Double(numerator) / Double(denominator) >= 1,
@@ -24,19 +24,19 @@ struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
         self.denominator = denominator
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         try self.init(
             numerator: values.decode(Int.self, forKey: .numerator),
             denominator: values.decode(Int.self, forKey: .denominator))
     }
 
-    var framesPerSecond: Double { Double(numerator) / Double(denominator) }
-    var label: String {
+    public var framesPerSecond: Double { Double(numerator) / Double(denominator) }
+    public var label: String {
         denominator == 1 ? "\(numerator) fps" : "\(numerator)/\(denominator) fps NDF"
     }
 
-    func frame(at seconds: Double) throws -> Int64 {
+    public func frame(at seconds: Double) throws -> Int64 {
         let value = (seconds * framesPerSecond).rounded()
         guard seconds.isFinite, seconds >= 0, value <= Double(VideoMarker.maximumFrame) else {
             throw VideoMarkerError.invalidFrame
@@ -44,11 +44,11 @@ struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
         return Int64(value)
     }
 
-    func seconds(at frame: Int64) -> Double {
+    public func seconds(at frame: Int64) -> Double {
         Double(frame) * Double(denominator) / Double(numerator)
     }
 
-    func timecode(at frame: Int64) -> String {
+    public func timecode(at frame: Int64) -> String {
         let nominal = Int64(ceil(framesPerSecond))
         let value = max(0, frame)
         let seconds = value / nominal
@@ -58,20 +58,20 @@ struct VideoMarkerFrameRate: Codable, Equatable, Sendable {
     }
 }
 
-struct VideoMarker: Codable, Equatable, Identifiable, Sendable {
-    enum Kind: String, Codable, Sendable {
+public struct VideoMarker: Codable, Equatable, Identifiable, Sendable {
+    public enum Kind: String, Codable, Sendable {
         case manual
         case transient
     }
 
     static let maximumFrame: Int64 = 1_000_000_000_000
-    let id: String
-    var frame: Int64
-    var frameRate: VideoMarkerFrameRate
-    var label: String
-    var kind: Kind
+    public let id: String
+    public var frame: Int64
+    public var frameRate: VideoMarkerFrameRate
+    public var label: String
+    public var kind: Kind
 
-    init(
+    public init(
         id: String = "marker_\(UUID().uuidString.lowercased())",
         frame: Int64, frameRate: VideoMarkerFrameRate = .fps30,
         label: String = "Marker", kind: Kind = .manual
@@ -84,8 +84,8 @@ struct VideoMarker: Codable, Equatable, Identifiable, Sendable {
         try validate()
     }
 
-    var seconds: Double { frameRate.seconds(at: frame) }
-    var timecode: String { "\(frameRate.timecode(at: frame)) (\(frameRate.label))" }
+    public var seconds: Double { frameRate.seconds(at: frame) }
+    public var timecode: String { "\(frameRate.timecode(at: frame)) (\(frameRate.label))" }
 
     func validate() throws {
         guard frame >= 0, frame <= Self.maximumFrame else { throw VideoMarkerError.invalidFrame }
@@ -94,7 +94,7 @@ struct VideoMarker: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         try self.init(
             id: values.decode(String.self, forKey: .id),

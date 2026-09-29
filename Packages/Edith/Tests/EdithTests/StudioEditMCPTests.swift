@@ -32,18 +32,26 @@ import Testing
         }
     }
 
-    @Test func nativeDeliveryReceivesTheLongBoundedDeadline() throws {
-        let tools = OperationMCPCatalog.tools
-        let extended = tools.filter { OperationMCPRunner.executionTimeout(for: $0) != 120 }
-        #expect(
-            extended.map(\.name) == ["edith_studio_edit_render", "edith_studio_edit_render_audio"])
-        #expect(OperationMCPRunner.executionTimeout(for: try #require(extended.first)) == 21600)
+    @Test func onlyNativeVideoWorkReceivesExtendedDeadlines() throws {
+        let longRoutes = Set(StudioEditMediaOperation.allCases.map { $0.descriptor.cli })
+            .union([
+                StudioEditOperation.render.descriptor.cli,
+                StudioDeliveryOperation.renderAudio.descriptor.cli,
+            ])
+        for tool in OperationMCPCatalog.tools {
+            let expected: TimeInterval =
+                tool.name == "edith_studio_edit_audio_analyze"
+                ? 300
+                : longRoutes.contains(tool.route) ? 21600 : 120
+            #expect(OperationMCPRunner.executionTimeout(for: tool) == expected, "\(tool.name)")
+        }
+        let render = try #require(OperationMCPCatalog.tool(named: "edith_studio_edit_render"))
         #expect(OperationMCPRunner.maximumOutputBytes == 4 << 20)
         let error = #"{"version":1,"error":{"code":"cancelled","message":"Delivery cancelled."}}"#
         let progress = #"{"version":1,"event":"progress","percent":42}"#
         #expect(
             OperationMCPRunner.deliveryError(
-                progress + "\n" + error, for: try #require(extended.first)) == error)
+                progress + "\n" + error, for: render) == error)
     }
 
     @Test func mcpCallsCreateApplyValidateRenderAndReturnStructuredErrors() async throws {

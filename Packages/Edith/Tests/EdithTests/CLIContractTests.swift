@@ -264,6 +264,51 @@ enum JSONContract {
                 "--asset", "a", "--family", "f", "--declaration", "original", "--json",
             ]),
         JSONCase(
+            "ed studio edit audio analyze",
+            [
+                "studio", "edit", "audio", "analyze", "/nonexistent/demo.openscreen", "--asset",
+                "missing", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers list",
+            ["studio", "edit", "markers", "list", "/nonexistent/demo.openscreen", "--json"]),
+        JSONCase(
+            "ed studio edit markers add",
+            [
+                "studio", "edit", "markers", "add", "/nonexistent/demo.openscreen", "--frame", "30",
+                "--fps", "30", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers update",
+            [
+                "studio", "edit", "markers", "update", "/nonexistent/demo.openscreen", "--id",
+                "missing", "--label", "Cue", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers remove",
+            [
+                "studio", "edit", "markers", "remove", "/nonexistent/demo.openscreen", "--id",
+                "missing", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers import",
+            [
+                "studio", "edit", "markers", "import", "/nonexistent/demo.openscreen", "--input",
+                "/nonexistent/markers.json", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers export",
+            [
+                "studio", "edit", "markers", "export", "/nonexistent/demo.openscreen", "--output",
+                "/nonexistent/markers.json", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit markers snap",
+            [
+                "studio", "edit", "markers", "snap", "/nonexistent/demo.openscreen", "--frame",
+                "30", "--fps", "30", "--json",
+            ]),
+        JSONCase(
             "ed studio edit clone",
             [
                 "studio", "edit", "clone", "/nonexistent/demo.openscreen", "--output",
