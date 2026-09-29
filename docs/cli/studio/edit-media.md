@@ -124,6 +124,8 @@ Occurrences contain `index`, `project`, `projectID`, `clipID`, `assetID`, `role`
 and `originalGroup`. Ranges use source seconds. Roles are `visual`, `timelineAudio`,
 or `independentAudio`; looping audio has no single source end. Independent audio
 rows are excluded from `uniqueClipCount`.
+Non-looping independent audio consumes its exact persisted output duration multiplied
+by playback rate, starting at its source offset and capped at the source duration.
 
 Still carriers use `edithSourceImagePath` and its indexed `sourceImage` identity;
 other assets use their original URL and `original` identity. Source-image provenance

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 @testable import Edith
@@ -251,6 +252,57 @@ import Testing
         #expect(try paths.map { try Data(contentsOf: $0) } == originals)
         try Data("changed bytes".utf8).write(to: first)
         await #expect(throws: (any Error).self) { try await Self.report(paths) }
+    }
+
+    @Test(arguments: [0.5, 2.0])
+    func independentAudioRangesUsePlaybackRateAndExactOutputDuration(rate: Double) async throws {
+        let folder = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let video = try Self.source("visual.mov", bytes: "visual", in: folder)
+        let music = try Self.source("music.wav", bytes: "music", in: folder)
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 20, width: 64, height: 64)
+        project.addAudio(music, duration: 20, at: 0)
+        var first = try #require(project.audioTracks.first).raw
+        let duration = CMTime(value: 120001, timescale: 30000)
+        VideoAudioTiming.store(CMTimeRange(start: .zero, duration: duration), in: &first)
+        first["endMs"] = 4000.0
+        first["offsetMs"] = 1000.0
+        first["rate"] = rate
+        let secondStart = rate == 0.5 ? 4.0 : 6.0
+        var second = first
+        second["id"] = "second-audio"
+        second["offsetMs"] = secondStart * 1000
+        second["rate"] = 1.0
+        VideoAudioTiming.store(
+            CMTimeRange(
+                start: CMTime(seconds: 5, preferredTimescale: 600),
+                duration: CMTime(seconds: 1, preferredTimescale: 600)), in: &second)
+        project.root["audioTracks"] = [first, second]
+        let path = folder.appendingPathComponent("audio.openscreen")
+        try project.save(to: path)
+        let before = try [path, video, music].map { try Data(contentsOf: $0) }
+        let report = try await Self.report([path], scope: "all")
+        let audio = report.occurrences.filter { $0.role == "independentAudio" }
+        #expect(audio.count == 2)
+        #expect(audio.map(\.sourceIn) == [1, secondStart])
+        let end = try #require(audio[0].sourceOut)
+        #expect(abs(end - (1 + duration.seconds * rate)) < 1e-10)
+        #expect(audio[1].sourceOut == secondStart + 1)
+        let conflict = try #require(report.conflicts.first)
+        #expect(
+            report.conflictCount == 1 && conflict.wholeOriginalReuse && conflict.exactBytesRepeated)
+        #expect(conflict.overlappingExactSourceRanges == (rate == 2))
+        #expect(conflict.rangeRelationship == (rate == 2 ? "overlapping" : "disjoint"))
+        #expect(try [path, video, music].map { try Data(contentsOf: $0) } == before)
+        first["loop"] = true
+        project.root["audioTracks"] = [first, second]
+        try project.save(to: path)
+        let looped = try await Self.report([path], scope: "all")
+        let loopOccurrence = try #require(
+            looped.occurrences.first { $0.clipID == first["id"] as? String })
+        #expect(loopOccurrence.sourceOut == nil)
+        #expect(looped.conflicts[0].rangeRelationship == "unknownAcrossExportsOrLoops")
     }
 
     @Test func visualScopeAllowsReusedMusicAndAllScopeReportsIt() async throws {

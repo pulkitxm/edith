@@ -132,7 +132,9 @@ extension VideoEditorService {
                             start: start,
                             end: track.loop
                                 ? nil
-                                : min(asset.duration, start + (track.endMs - track.startMs) / 1000))
+                                : min(
+                                    asset.duration,
+                                    start + track.outputRange.duration.seconds * track.rate))
                     }
                 }
             }
