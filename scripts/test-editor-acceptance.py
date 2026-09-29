@@ -7,8 +7,9 @@ import subprocess
 import sys
 
 from editor_acceptance_captions import exercise_caption_preservation
-from editor_acceptance_delivery import checked_progress, checked_report, exercise_delivery
+from editor_acceptance_delivery import checked_progress, checked_report, exercise_delivery, exercise_variable_speed
 from editor_acceptance_markers import exercise_markers
+from editor_acceptance_media import exercise_media
 from editor_acceptance_publications import exercise_publications
 
 
@@ -104,12 +105,14 @@ def main():
     parser.add_argument("--stills", action="store_true", help="Import all 45 shots as original still assets")
     parser.add_argument("--delivery-checks", action="store_true", help="Verify PCM audio, half-open excerpts, progress, and a ProRes P3 master excerpt")
     parser.add_argument("--publication-plan", type=pathlib.Path, help="Public publication create plan referencing five or six synthetic projects")
+    parser.add_argument("--media-fixture", type=pathlib.Path, help="Extended synthetic fixtures for collection usage, provenance, ledger, and package checks")
     parser.add_argument("--publication-protected-path", type=pathlib.Path, action="append", default=[], help="Synthetic ledger or receipt file/directory that publication operations must preserve")
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Additional public v1 edit operations, including project videoSettings")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
     require(not workspace.exists(), "Workspace must not already exist")
     require(args.fixture_only or args.ed is not None, "--ed is required for CLI acceptance")
+    require(not args.media_fixture or args.publication_plan, "--media-fixture requires --publication-plan")
     workspace.mkdir(parents=True)
     helper = args.media_helper.absolute() if args.media_helper else workspace / "editor-acceptance-media"
     if not args.media_helper:
@@ -174,6 +177,9 @@ def main():
         edit("validate", project, "--json")
         shown = edit("show", project, "--json")
         check_project(shown, manifest, fixture, "still" if args.stills else "video")
+        if not args.baseline:
+            require(len(shown["audioTracks"]) == 1 and shown["audioTracks"][0]["timebase"] == "output",
+                    "Music must remain one independent output-clock track across all 45 cuts")
         snapshots.append(normalized(shown))
     require(snapshots[0] == snapshots[1], "Repeated plans produced different semantic projects")
     project = workspace / "edit-0.openscreen"
@@ -201,6 +207,8 @@ def main():
     delivery_flags = [] if args.baseline else ["--codec", "h264", "--color-space", "rec709", "--audio-codec", "aac",
                                              "--audio-sample-rate", "48000", "--audio-channels", "2", "--audio-bit-rate", "320000", "--progress"]
     render_result = edit("render", saved, "--output", render, *delivery_flags, "--json")
+    write_json(workspace / "render-result.json", render_result)
+    write_json(workspace / "frame-result.json", frame_result)
     if not args.baseline:
         require(frame_result["frame"] == 15 and frame_result["time"] == 0.25, "Exact frame selection report mismatch")
         checked_report(render_result, render, "video", 1728)
@@ -209,6 +217,8 @@ def main():
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     if args.delivery_checks:
         report["deliveryAcceptance"] = exercise_delivery(ed, saved, workspace, helper)
+        report["variableSpeedMusic"] = exercise_variable_speed(edit, workspace, fixture, helper)
+    check_sources(fixture, manifest)
     if args.markers:
         report["markerAcceptance"] = exercise_markers(edit, saved, workspace, manifest)
     elif args.captions:
@@ -218,8 +228,15 @@ def main():
         collection = json.loads(publication_plan.read_text())
         require(collection["version"] == 1, "Publication plan must use version 1")
         projects = [(publication_plan.parent / item["path"]).resolve(strict=True) for item in collection["projects"]]
-        report["publicationAcceptance"] = exercise_publications(edit, projects, workspace, args.publication_protected_path)
+        if args.media_fixture:
+            report["mediaAcceptance"] = exercise_media(edit, ed, projects, workspace, args.media_fixture, saved)
+        else:
+            report["publicationAcceptance"] = exercise_publications(edit, projects, workspace, args.publication_protected_path)
     report.update({"planRoundTrip": True, "projectRoundTrip": True, "sourcesUnchanged": True, "previewVerified": True})
+    report["pendingGroups"] = [name for name, enabled in (
+        ("markers", args.markers), ("captions", args.markers or args.captions),
+        ("media", args.media_fixture), ("publications", args.publication_plan),
+    ) if not enabled]
     write_json(workspace / "result.json", report)
     print(json.dumps(report, indent=2, sort_keys=True))
 

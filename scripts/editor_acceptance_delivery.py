@@ -48,14 +48,15 @@ def checked_report(result, path, kind, frames, start=None, end=None):
     return report
 
 
-def exercise_delivery(ed, project, workspace, helper):
-    def execute(arguments):
-        process = subprocess.run([str(value) for value in arguments], capture_output=True, text=True, timeout=1800)
-        require(process.returncode == 0, f"Delivery failed ({process.returncode}): {process.stderr}")
-        if "--progress" in arguments:
-            checked_progress(process.stderr)
-        return json.loads(process.stdout)
+def execute(arguments):
+    process = subprocess.run([str(value) for value in arguments], capture_output=True, text=True, timeout=1800)
+    require(process.returncode == 0, f"Delivery failed ({process.returncode}): {process.stderr}")
+    if "--progress" in arguments:
+        checked_progress(process.stderr)
+    return json.loads(process.stdout)
 
+
+def exercise_delivery(ed, project, workspace, helper):
     project_bytes = project.read_bytes()
     results = {}
     for name, start, end in [("full-mix", None, None), ("range-mix", 46, 82)]:
@@ -66,6 +67,7 @@ def exercise_delivery(ed, project, workspace, helper):
                           "--container", "wav", "--sample-rate", "48000", "--channels", "2", *selection, "--progress", "--json"])
         checked_report(result, output, "audio", samples, start, end)
         results[name] = execute([helper, "verify-music", output, str(samples), str(0 if start is None else start * 800)])
+        (workspace / f"{name}-result.json").write_text(json.dumps({"delivery": result["audioReport"], "verification": results[name]}, indent=2) + "\n")
     for name, codec, color, extension in [("range-video", "h264", "rec709", "mp4"),
                                           ("range-master", "proRes422HQ", "displayP3", "mov")]:
         output = workspace / f"{name}.{extension}"
@@ -78,5 +80,37 @@ def exercise_delivery(ed, project, workspace, helper):
         if codec == "proRes422HQ":
             require(report["bitsPerComponent"] == 10, "ProRes HQ must retain 10-bit components")
         results[name] = execute([helper, "verify-range", output, "46", "82", codec, color])
+        (workspace / f"{name}-result.json").write_text(json.dumps({"delivery": report, "verification": results[name]}, indent=2) + "\n")
     require(project.read_bytes() == project_bytes, "Delivery changed the source project")
     return {"cases": results, "projectBytesUnchanged": True, "boundedProgressVerified": True}
+
+
+def exercise_variable_speed(edit, workspace, fixture, helper):
+    project = workspace / "variable-speed.openscreen"
+    plan = workspace / "variable-speed.json"
+    operations = [{"videoSettings": {"settings": {"width": 180, "height": 320,
+                   "frameRateNumerator": 60, "frameRateDenominator": 1, "colorSpace": "rec709"}}}]
+    for index, rate in enumerate([0.5, 1, 2, 1]):
+        operations.extend([
+            {"addMedia": {"path": str(fixture / f"shot-{index + 1:02d}.mov"), "name": f"shot-{index}"}},
+            {"speed": {"clipID": f"shot-{index}", "rate": rate}},
+        ])
+    operations.append({"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0}})
+    plan.write_text(json.dumps({"version": 1, "operations": operations}, indent=2) + "\n")
+    edit("create", project, "--title", "Synthetic variable-speed music", "--json")
+    edit("apply", project, "--plan", plan, "--overwrite", "--json")
+    shown = edit("show", project, "--json")
+    require(len(shown["audioTracks"]) == 1 and shown["audioTracks"][0]["timebase"] == "output", "Music must be one independent output-clock track")
+    before = shown["audioTracks"]
+    plan.write_text(json.dumps({"version": 1, "operations": [
+        {"reorder": {"clipIDs": [clip["id"] for clip in reversed(shown["timeline"]["clips"])]}}
+    ]}) + "\n")
+    edit("apply", project, "--plan", plan, "--overwrite", "--json")
+    require(edit("show", project, "--json")["audioTracks"] == before, "Video reorder retimed independent music")
+    output = workspace / "variable-speed.wav"
+    result = edit("render-audio", project, "--output", output, "--sample-rate", "48000", "--channels", "2", "--progress", "--json")
+    checked_report(result, output, "audio", 216000)
+    verification = execute([helper, "verify-music", output, "216000"])
+    report = {"delivery": result["audioReport"], "verification": verification, "rates": [0.5, 1, 2, 1], "reorderPreservedMusic": True}
+    (workspace / "variable-speed-result.json").write_text(json.dumps(report, indent=2) + "\n")
+    return report
