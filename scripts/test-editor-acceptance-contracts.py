@@ -4,9 +4,11 @@ import os
 import pathlib
 import tempfile
 import unittest
+from fractions import Fraction
 
 from editor_acceptance_captions import caption_snapshot, unchanged_captions
 from editor_acceptance_delivery import checked_progress
+from editor_acceptance_markers import mapped_frames, marker_snapshot
 from editor_acceptance_publications import protected_snapshot, publication_reordered
 
 
@@ -49,6 +51,23 @@ class CaptionContractTests(unittest.TestCase):
         report["captions"].append(copy.deepcopy(report["captions"][0]))
         with self.assertRaisesRegex(RuntimeError, "unique"):
             caption_snapshot(report)
+
+
+class MarkerContractTests(unittest.TestCase):
+    def test_mapping_is_half_open_and_rounds_on_exact_rational_grid(self):
+        actual = mapped_frames([47999, 48000, 72000, 95999, 96000], 48000,
+                               Fraction(1), Fraction(2), Fraction(3), Fraction(2), Fraction(60000, 1001))
+        self.assertEqual(actual, [180, 195, 210])
+
+    def test_marker_output_seconds_must_match_exact_anchor(self):
+        report = {"version": 1, "positionUnit": "output_frames", "markers": [{
+            "id": "synthetic-beat", "frame": 60, "frameRate": {"numerator": 60000, "denominator": 1001},
+            "label": "Synthetic beat", "kind": "manual", "outputSeconds": 1.001,
+        }]}
+        self.assertEqual(marker_snapshot(report)["synthetic-beat"][:3], (60, 60000, 1001))
+        report["markers"][0]["outputSeconds"] = 1
+        with self.assertRaisesRegex(RuntimeError, "rational position"):
+            marker_snapshot(report)
 
 
 class DeliveryContractTests(unittest.TestCase):

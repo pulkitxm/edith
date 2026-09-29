@@ -8,6 +8,7 @@ import sys
 
 from editor_acceptance_captions import exercise_caption_preservation
 from editor_acceptance_delivery import checked_progress, checked_report, exercise_delivery
+from editor_acceptance_markers import exercise_markers
 from editor_acceptance_publications import exercise_publications
 
 
@@ -99,6 +100,7 @@ def main():
     parser.add_argument("--baseline", action="store_true", help="Exercise current rendering without exact delivery assertions")
     parser.add_argument("--contact-sheet", action="store_true", help="Verify a 45-shot contact sheet through the public CLI")
     parser.add_argument("--captions", action="store_true", help="Verify public caption timing across crop, speed, and reorder edits")
+    parser.add_argument("--markers", action="store_true", help="Verify exact beat markers, mapped audio analysis, and caption snapshot anchors")
     parser.add_argument("--stills", action="store_true", help="Import all 45 shots as original still assets")
     parser.add_argument("--delivery-checks", action="store_true", help="Verify PCM audio, half-open excerpts, progress, and a ProRes P3 master excerpt")
     parser.add_argument("--publication-plan", type=pathlib.Path, help="Public publication create plan referencing five or six synthetic projects")
@@ -207,7 +209,9 @@ def main():
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     if args.delivery_checks:
         report["deliveryAcceptance"] = exercise_delivery(ed, saved, workspace, helper)
-    if args.captions:
+    if args.markers:
+        report["markerAcceptance"] = exercise_markers(edit, saved, workspace, manifest)
+    elif args.captions:
         report["captionAcceptance"] = exercise_caption_preservation(edit, saved, workspace)
     if args.publication_plan:
         publication_plan = args.publication_plan.resolve(strict=True)
