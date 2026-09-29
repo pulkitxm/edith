@@ -55,6 +55,7 @@ import Testing
         _ = try await VideoEditorService.apply(
             VideoEditPlan(operations: [
                 .addMedia(path: source.path, name: "intro"),
+                .canvas(aspectRatio: "native", padding: 0, backgroundColor: "#000000"),
                 .speed(clipID: "intro", rate: 2),
             ]), to: project, overwrite: true)
         let output = directory.appendingPathComponent("sheet.png")
@@ -112,16 +113,17 @@ import Testing
             of: CIImage(color: CIColor(red: 0.2, green: 0.3, blue: 0.6)).cropped(
                 to: CGRect(x: 0, y: 0, width: 1280, height: 720)),
             to: imageURL, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
-        let movie = try await VideoStillMedia.create(from: imageURL, duration: 1)
-        defer { try? FileManager.default.removeItem(at: movie) }
         let project = directory.appendingPathComponent("captioned.openscreen")
-        _ = try VideoEditorService.create(at: project, title: "Caption review")
+        var document = VideoProject.create(title: "Caption review")
+        document.videoSettings = VideoSettings(width: 1280, height: 720)
+        try document.addStillAsset(
+            imageURL, duration: 1, metadata: VideoStillMedia.metadata(at: imageURL))
+        try document.save(to: project)
         _ = try await VideoEditorService.apply(
             VideoEditPlan(operations: [
-                .addMedia(path: movie.path, name: "intro"),
                 .text(
                     content: "A caption that keeps its exact layout in smaller review frames",
-                    start: 0, end: 1),
+                    start: 0, end: 1)
             ]), to: project, overwrite: true)
         let frameURL = directory.appendingPathComponent("frame.png")
         _ = try await VideoEditorService.frame(project, at: 0.25, to: frameURL)

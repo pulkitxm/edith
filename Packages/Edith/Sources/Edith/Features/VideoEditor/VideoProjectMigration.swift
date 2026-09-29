@@ -18,10 +18,14 @@ extension VideoProject {
             assets[index]["durationSec"] = duration
             if let video = try? await asset.loadTracks(withMediaType: .video).first {
                 let size = (try? await video.load(.naturalSize)) ?? .zero
-                assets[index]["video"] = [
-                    "codec": "unknown", "width": Int(abs(size.width)),
-                    "height": Int(abs(size.height)), "fps": 30,
-                ]
+                let transform = (try? await video.load(.preferredTransform)) ?? .identity
+                let displayed = CGRect(origin: .zero, size: size).applying(transform).size
+                let fps = (try? await video.load(.nominalFrameRate)) ?? 0
+                let frame = (try? await video.load(.minFrameDuration)) ?? .invalid
+                let formats = (try? await video.load(.formatDescriptions)) ?? []
+                assets[index]["video"] = VideoSourceMetadata.make(
+                    width: Int(abs(displayed.width)), height: Int(abs(displayed.height)),
+                    fps: Double(fps), frameDuration: frame, format: formats.first)
             }
         }
         result.root["assets"] = assets

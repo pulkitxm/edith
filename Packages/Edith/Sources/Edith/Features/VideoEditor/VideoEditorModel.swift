@@ -180,10 +180,13 @@ final class VideoEditorModel {
             for url in urls {
                 let type = UTType(filenameExtension: url.pathExtension)
                 if type?.conforms(to: .image) == true {
-                    let movie = try await Task.detached(priority: .utility) {
-                        try await VideoStillMedia.create(from: url)
+                    let metadata = try await Task.detached(priority: .utility) {
+                        try VideoStillMedia.metadata(at: url)
                     }.value
-                    try await addFile(movie, label: url.lastPathComponent, sourceImage: url)
+                    if project == nil {
+                        project = .create(title: url.deletingPathExtension().lastPathComponent)
+                    }
+                    mutate { try? $0.addStillAsset(url, metadata: metadata) }
                 } else if type?.conforms(to: .movie) == true
                     || type?.conforms(to: .audio) != true
                 {
@@ -255,12 +258,11 @@ final class VideoEditorModel {
     }
 
     private func addFile(
-        _ url: URL, label: String? = nil, sourceImage: URL? = nil
+        _ url: URL, label: String? = nil
     ) async throws {
         if project == nil {
             project = .create(
-                title: sourceImage?.deletingPathExtension().lastPathComponent
-                    ?? url.deletingPathExtension().lastPathComponent)
+                title: url.deletingPathExtension().lastPathComponent)
         }
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration).seconds
@@ -269,7 +271,13 @@ final class VideoEditorModel {
         else { throw VideoRenderPipeline.RenderError.noVideo }
         let size = try await track.load(.naturalSize)
         let transform = try await track.load(.preferredTransform)
-        let displayedSize = size.applying(transform)
+        let displayedSize = CGRect(origin: .zero, size: size).applying(transform).size
+        let fps = try await track.load(.nominalFrameRate)
+        let minimumFrameDuration = try await track.load(.minFrameDuration)
+        let formats = try await track.load(.formatDescriptions)
+        let sourceMetadata = VideoSourceMetadata.make(
+            width: Int(abs(displayedSize.width)), height: Int(abs(displayedSize.height)),
+            fps: Double(fps), frameDuration: minimumFrameDuration, format: formats.first)
         let manifestURL = URL(fileURLWithPath: url.path + ".session.json")
         let session = await Task.detached(priority: .utility) { () -> SessionMedia? in
             guard let data = try? Data(contentsOf: manifestURL),
@@ -292,7 +300,7 @@ final class VideoEditorModel {
             $0.addAsset(
                 url, duration: duration,
                 width: Int(abs(displayedSize.width)), height: Int(abs(displayedSize.height)),
-                label: label, sourceImage: sourceImage)
+                label: label, sourceMetadata: sourceMetadata)
             if let session, let cameraPath = session.cameraPath,
                 let assetID = $0.assets.last?.id
             {
@@ -828,7 +836,7 @@ final class VideoEditorModel {
     }
 
     func setAspectRatio(_ ratio: String) {
-        mutate { $0.aspectRatio = ratio }
+        mutate { try? $0.setCanvasAspectRatio(ratio) }
         rebuild()
     }
 
@@ -976,7 +984,8 @@ final class VideoEditorModel {
         source.root["zoomRanges"] = []
         Task {
             do {
-                let preview = try await VideoRenderPipeline.make(project: source)
+                let preview = try await VideoRenderPipeline.make(
+                    project: source, previewOnly: true)
                 guard version == focusPreviewGeneration else { return }
                 let item = AVPlayerItem(asset: preview.composition)
                 item.videoComposition = preview.videoComposition
@@ -1013,7 +1022,8 @@ final class VideoEditorModel {
         }
         Task {
             do {
-                let next = try await VideoRenderPipeline.make(project: project)
+                let next = try await VideoRenderPipeline.make(
+                    project: project, previewOnly: true)
                 guard version == generation else { return }
                 pipeline = next
                 let item = AVPlayerItem(asset: next.composition)

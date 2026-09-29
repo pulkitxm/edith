@@ -192,9 +192,10 @@ struct VideoRenderPipeline {
         let sourceStart: Double
         let sourceEnd: Double
         let rate: Double
-        let outputStart: Double
-        let outputDuration: Double
-        var outputEnd: Double { outputStart + outputDuration }
+        let outputRange: CMTimeRange
+        var outputStart: Double { outputRange.start.seconds }
+        var outputDuration: Double { outputRange.duration.seconds }
+        var outputEnd: Double { outputRange.end.seconds }
         func sourceTime(at outputTime: Double) -> Double {
             sourceStart + (outputTime - outputStart) * rate
         }
@@ -215,34 +216,64 @@ struct VideoRenderPipeline {
     let segments: [Segment]
     let canvas: CGSize
 
-    static let frameRate: Int32 = 60
-
     var duration: Double { segments.last?.outputEnd ?? 0 }
 
     static func make(
-        project: VideoProject, maxDimension: Int? = nil
+        project: VideoProject, maxDimension: Int? = nil, previewOnly: Bool = false
     ) async throws -> VideoRenderPipeline {
+        try project.validateVideoSettings()
+        let clipIDs = project.clips.map(\.id)
+        guard Set(clipIDs).count == clipIDs.count, clipIDs.allSatisfy({ !$0.isEmpty }) else {
+            throw RenderError.exportFailed("The timeline contains missing or duplicate clip IDs.")
+        }
+        guard
+            project.clips.allSatisfy({
+                $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end > $0.start
+                    && $0.end < Double(Int64.max) / 600
+            })
+        else { throw RenderError.exportFailed("The timeline contains invalid clip timing.") }
         let composition = AVMutableComposition()
         guard
             let video = composition.addMutableTrack(
                 withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { throw RenderError.noVideo }
+        let numerator = project.videoSettings.frameRateNumerator
+        let timelineTimescale = Int32(numerator * max(1, 60000 / numerator))
+        video.naturalTimeScale = timelineTimescale
         var audio: AVMutableCompositionTrack?
 
         var segments: [Segment] = []
+        var visualEffects: [String: VideoVisualEffects] = [:]
         var frameGenerators: [String: FrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
-        var cursor = 0.0
-        var firstSize: CGSize?
+        var stillImages: [String: CIImage] = [:]
+        var sourceTransforms: [String: CGAffineTransform] = [:]
+        var cursor = CMTime.zero
         for clip in project.clips where clip.duration > 0 {
+            if let raw = clip.raw["edithVisualEffects"] {
+                visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
+            } else {
+                visualEffects[clip.id] = VideoVisualEffects()
+            }
             guard let source = project.assets.first(where: { $0.id == clip.assetID }) else {
                 throw RenderError.missingAsset(clip.assetID)
             }
             guard FileManager.default.fileExists(atPath: source.url.path) else {
                 throw RenderError.missingAsset(source.url.path)
             }
-            let asset = AVURLAsset(url: source.url)
+            let mediaURL: URL
+            if source.isStill {
+                if stillImages[source.id] == nil {
+                    stillImages[source.id] = try VideoStillMedia.image(
+                        at: source.url,
+                        previewMaxDimension: previewOnly ? maxDimension ?? 1280 : nil)
+                }
+                mediaURL = try await VideoStillMedia.TimingCarrier.shared.url()
+            } else {
+                mediaURL = source.url
+            }
+            let asset = AVURLAsset(url: mediaURL)
             if cursors[clip.assetID] == nil {
                 cursors[clip.assetID] = cursorSamples(for: source.url)
             }
@@ -263,13 +294,18 @@ struct VideoRenderPipeline {
             guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
                 throw RenderError.noVideo
             }
-            let naturalSize = try await sourceVideo.load(.naturalSize)
             let preferredTransform = try await sourceVideo.load(.preferredTransform)
-            if firstSize == nil {
-                let transformed = naturalSize.applying(preferredTransform)
-                firstSize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
-                video.preferredTransform = preferredTransform
-            }
+            let naturalSize = try await sourceVideo.load(.naturalSize)
+            let displayBounds = CGRect(origin: .zero, size: naturalSize)
+                .applying(preferredTransform)
+            sourceTransforms[source.id] = CGAffineTransform(
+                a: 1, b: 0, c: 0, d: -1, tx: 0, ty: naturalSize.height
+            ).concatenating(preferredTransform)
+                .concatenating(
+                    CGAffineTransform(
+                        a: 1, b: 0, c: 0, d: -1, tx: 0,
+                        ty: displayBounds.minY + displayBounds.maxY))
+            let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
             let audioAsset =
                 (source.raw["edithAudioPath"] as? String).map {
                     AVURLAsset(url: URL(fileURLWithPath: $0))
@@ -278,11 +314,31 @@ struct VideoRenderPipeline {
             for slice in speedSlices(
                 for: clip, regions: project.speedRegions, trims: project.trimRanges
             ) {
+                guard
+                    cursor.seconds + (slice.end - slice.start) / slice.rate < Double(Int64.max)
+                        / 600
+                else {
+                    throw RenderError.exportFailed("The timeline exceeds the supported time range.")
+                }
                 let sourceRange = CMTimeRange(
-                    start: CMTime(seconds: slice.start, preferredTimescale: 600),
-                    duration: CMTime(seconds: slice.end - slice.start, preferredTimescale: 600))
-                let insertion = CMTime(seconds: cursor, preferredTimescale: 600)
-                try video.insertTimeRange(sourceRange, of: sourceVideo, at: insertion)
+                    start: CMTime(seconds: slice.start, preferredTimescale: timelineTimescale),
+                    duration: CMTime(
+                        seconds: slice.end - slice.start, preferredTimescale: timelineTimescale))
+                let insertion = cursor
+                let outputDuration = CMTime(
+                    seconds: (slice.end - slice.start) / slice.rate,
+                    preferredTimescale: timelineTimescale)
+                guard sourceRange.duration > .zero, outputDuration > .zero else {
+                    throw RenderError.exportFailed(
+                        "A clip is shorter than the timeline time resolution.")
+                }
+                let visualRange = carrierRange ?? sourceRange
+                try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
+                if source.isStill {
+                    video.scaleTimeRange(
+                        CMTimeRange(start: insertion, duration: visualRange.duration),
+                        toDuration: sourceRange.duration)
+                }
                 if let sourceAudio {
                     if audio == nil {
                         audio = composition.addMutableTrack(
@@ -290,21 +346,20 @@ struct VideoRenderPipeline {
                     }
                     try audio?.insertTimeRange(sourceRange, of: sourceAudio, at: insertion)
                 }
-                let outputDuration = (slice.end - slice.start) / slice.rate
                 if slice.rate != 1 {
                     let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
-                    let scaled = CMTime(seconds: outputDuration, preferredTimescale: 600)
-                    video.scaleTimeRange(inserted, toDuration: scaled)
-                    audio?.scaleTimeRange(inserted, toDuration: scaled)
+                    video.scaleTimeRange(inserted, toDuration: outputDuration)
+                    audio?.scaleTimeRange(inserted, toDuration: outputDuration)
                 }
                 segments.append(
                     Segment(
                         clip: clip, sourceStart: slice.start, sourceEnd: slice.end,
-                        rate: slice.rate, outputStart: cursor, outputDuration: outputDuration))
-                cursor += outputDuration
+                        rate: slice.rate,
+                        outputRange: CMTimeRange(start: insertion, duration: outputDuration)))
+                cursor = cursor + outputDuration
             }
         }
-        guard !segments.isEmpty, let firstSize else { throw RenderError.noVideo }
+        guard !segments.isEmpty else { throw RenderError.noVideo }
         let transitions = transitionEdges(project: project, segments: segments)
 
         let mix = AVMutableAudioMix()
@@ -414,7 +469,7 @@ struct VideoRenderPipeline {
         }
         mix.inputParameters = parameters
 
-        let nativeCanvas = canvasSize(for: firstSize, ratio: project.aspectRatio)
+        let nativeCanvas = project.videoSettings.size
         let canvas: CGSize
         if let maxDimension, maxDimension > 0,
             max(nativeCanvas.width, nativeCanvas.height) > CGFloat(maxDimension)
@@ -439,15 +494,23 @@ struct VideoRenderPipeline {
         let finalGenerators = frameGenerators
         let finalCameras = cameras
         let finalCursors = cursors
+        let finalStills = stillImages
+        let finalTransforms = sourceTransforms
+        let finalEffects = visualEffects
         let size = canvas
         let cursorImage = pointerImage()
-        let baseComposition = AVVideoComposition(asset: composition) { request in
+        let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
+        let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
-            guard let segment = finalSegments.last(where: { $0.outputStart <= time }) else {
-                request.finish(with: request.sourceImage, context: nil)
+            guard
+                let segment = finalSegments.last(where: {
+                    $0.outputRange.containsTime(request.compositionTime)
+                })
+            else {
+                request.finish(with: request.sourceImage, context: imageContext)
                 return
             }
-            var sourceImage = request.sourceImage
+            var sourceImage = finalStills[segment.clip.assetID] ?? request.sourceImage
             if sourceImage.extent.isInfinite || sourceImage.extent.isEmpty
                 || sourceImage.extent.isNull
             {
@@ -464,6 +527,10 @@ struct VideoRenderPipeline {
                 }
                 sourceImage = CIImage(cgImage: frame)
             }
+            if finalStills[segment.clip.assetID] == nil {
+                sourceImage = sourceImage.transformed(
+                    by: finalTransforms[segment.clip.assetID] ?? .identity)
+            }
             let rulerMs = segment.rulerTime(at: time) * 1000
             let cursor = cursorSample(
                 at: segment.sourceTime(at: time) * 1000,
@@ -475,7 +542,9 @@ struct VideoRenderPipeline {
             let webcam = finalCameras[segment.clip.assetID]?.frame(
                 at: segment.sourceTime(at: time))
             var image = render(
-                sourceImage, clip: segment.clip, at: rulerMs, size: size,
+                sourceImage, clip: segment.clip,
+                effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
+                size: size,
                 zooms: zooms, annotations: annotations, backdrop: backdrop,
                 padding: padding, presentation: presentation,
                 webcam: webcam, webcamLayout: project.webcamLayout,
@@ -506,12 +575,18 @@ struct VideoRenderPipeline {
                 request.finish(with: RenderError.exportFailed("The rendered video frame is empty"))
                 return
             }
-            request.finish(with: image, context: nil)
+            request.finish(with: image, context: imageContext)
         }
-        let videoComposition = baseComposition.mutableCopy() as! AVMutableVideoComposition
         videoComposition.renderSize = canvas
         videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
-        videoComposition.frameDuration = CMTime(value: 1, timescale: frameRate)
+        videoComposition.frameDuration = project.frameDuration
+        videoComposition.colorPrimaries =
+            project.videoSettings.colorSpace == .displayP3
+            ? AVVideoColorPrimaries_P3_D65 : AVVideoColorPrimaries_ITU_R_709_2
+        videoComposition.colorTransferFunction =
+            project.videoSettings.colorSpace == .displayP3
+            ? kCVImageBufferTransferFunction_sRGB as String : AVVideoTransferFunction_ITU_R_709_2
+        videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
             audioMix: parameters.isEmpty ? nil : mix,
@@ -603,21 +678,6 @@ struct VideoRenderPipeline {
         }
     }
 
-    private static func canvasSize(for source: CGSize, ratio: String) -> CGSize {
-        let proportions = ratio.split(separator: ":").compactMap { Double($0) }
-        guard proportions.count == 2, proportions[0] > 0, proportions[1] > 0 else {
-            return CGSize(
-                width: max(2, Int(source.width) / 2 * 2),
-                height: max(2, Int(source.height) / 2 * 2))
-        }
-        let desired = proportions[0] / proportions[1]
-        let width = desired >= 1 ? source.width : source.height * desired
-        let height = desired >= 1 ? source.width / desired : source.height
-        return CGSize(
-            width: max(2, Int(width) / 2 * 2),
-            height: max(2, Int(height) / 2 * 2))
-    }
-
     func exportMP4(
         to url: URL, quality: String = "good",
         progress: @escaping @Sendable (Double) -> Void = { _ in }
@@ -702,7 +762,8 @@ struct VideoRenderPipeline {
     }
 
     private static func render(
-        _ input: CIImage, clip: VideoProject.Clip, at timeMs: Double, size: CGSize,
+        _ input: CIImage, clip: VideoProject.Clip, effects: VideoVisualEffects, at timeMs: Double,
+        size: CGSize,
         zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation],
         backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
@@ -725,23 +786,13 @@ struct VideoRenderPipeline {
             cropped = input
         }
         let source = cropped.extent
-        let fit =
-            min(size.width / source.width, size.height / source.height)
-            * (1 - 2 * padding)
         let zoom = ZoomAnimation.sample(
             at: timeMs, zooms: zooms,
             cursor: cursor.map { CGPoint(x: $0.x, y: $0.y) })
-        let scale: CGFloat = fit * CGFloat(zoom.scale)
-        let focusFractionX = zoom.x
-        let focusFractionY = 1 - zoom.y
-        let focusX: CGFloat = source.width * CGFloat(focusFractionX)
-        let focusY: CGFloat = source.height * CGFloat(focusFractionY)
-        let transform = CGAffineTransform(scaleX: scale, y: scale)
-            .concatenating(
-                CGAffineTransform(
-                    translationX: size.width / 2 - focusX * scale,
-                    y: size.height / 2 - focusY * scale))
-        let image = cropped.transformed(
+        let transform = effects.transform(
+            source: source.size, canvas: size, padding: padding,
+            at: clip.start + timeMs / 1000 - clip.timelineStart, zoom: zoom)
+        let image = effects.graded(cropped).transformed(
             by: CGAffineTransform(
                 translationX: -source.minX, y: -source.minY)
         ).transformed(by: transform)
@@ -758,15 +809,15 @@ struct VideoRenderPipeline {
                 x: full.minX + full.width * cursor.x - source.minX,
                 y: full.minY + full.height * (1 - cursor.y) - source.minY)
             if CGRect(origin: .zero, size: source.size).contains(position) {
+                let location = position.applying(transform)
                 let cursorScale = size.width / 1920 * presentation.cursorSize * zoom.scale * 0.5
                 let pointer = cursorImage.transformed(
                     by: CGAffineTransform(scaleX: cursorScale, y: cursorScale)
                 )
                 .transformed(
                     by: CGAffineTransform(
-                        translationX: position.x * scale + size.width / 2 - focusX * scale - 6
-                            * cursorScale,
-                        y: position.y * scale + size.height / 2 - focusY * scale - 90 * cursorScale)
+                        translationX: location.x - 6 * cursorScale,
+                        y: location.y - 90 * cursorScale)
                 )
                 output = pointer.composited(over: output).cropped(to: bounds)
             }
@@ -862,11 +913,11 @@ struct VideoRenderPipeline {
             }
         }
         if cursorClicked, let cursor, cursor.visible {
-            let location = CIVector(
-                x: (full.width * CGFloat(cursor.x) - source.minX) * scale
-                    + size.width / 2 - focusX * scale,
-                y: (full.height * (1 - CGFloat(cursor.y)) - source.minY) * scale
-                    + size.height / 2 - focusY * scale)
+            let point = CGPoint(
+                x: full.minX + full.width * cursor.x - source.minX,
+                y: full.minY + full.height * (1 - cursor.y) - source.minY
+            ).applying(transform)
+            let location = CIVector(cgPoint: point)
             if let halo = CIFilter(
                 name: "CIRadialGradient",
                 parameters: [

@@ -113,6 +113,7 @@ enum VideoProjectFileAccess {
 
 extension VideoProject {
     mutating func encodedForSaving() throws -> Data {
+        try validateVideoSettings()
         var project = root["project"] as? [String: Any] ?? [:]
         project["updatedAt"] = ISO8601DateFormatter().string(from: Date())
         root["project"] = project

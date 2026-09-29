@@ -21,9 +21,10 @@ import Testing
             .cropped(to: CGRect(x: 0, y: 0, width: 1280, height: 720))
         try CIContext().writePNGRepresentation(
             of: image, to: imageURL, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
-        let source = try await VideoStillMedia.create(from: imageURL, duration: 1)
         var project = VideoProject.create()
-        project.addAsset(source, duration: 1, width: 1280, height: 720)
+        project.videoSettings = VideoSettings(width: 1280, height: 720)
+        try project.addStillAsset(
+            imageURL, duration: 1, metadata: VideoStillMedia.metadata(at: imageURL))
         let projectURL = URL(fileURLWithPath: runtime)
             .appendingPathComponent("synthetic.openscreen")
         try project.save(to: projectURL)
