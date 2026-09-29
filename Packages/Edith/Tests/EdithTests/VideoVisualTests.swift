@@ -50,45 +50,10 @@ import Testing
     }
 
     private func writeAsymmetricMovie(to url: URL, transform: CGAffineTransform) async throws {
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-        let input = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: 128, AVVideoHeightKey: 64,
-            ])
-        input.transform = transform
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: 128,
-                kCVPixelBufferHeightKey as String: 64,
-            ])
-        writer.add(input)
-        #expect(writer.startWriting())
-        writer.startSession(atSourceTime: .zero)
         let bounds = CGRect(x: 0, y: 0, width: 128, height: 64)
         let image = CIImage(color: .blue).cropped(to: CGRect(x: 64, y: 0, width: 64, height: 64))
             .composited(over: CIImage(color: .red).cropped(to: bounds))
-        for frame in 0..<30 {
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(for: .milliseconds(5))
-            }
-            var buffer: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, try #require(adaptor.pixelBufferPool), &buffer)
-            let pixelBuffer = try #require(buffer)
-            VideoImageContext.shared.render(
-                image, to: pixelBuffer, bounds: bounds,
-                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
-            #expect(
-                adaptor.append(
-                    pixelBuffer, withPresentationTime: CMTime(value: Int64(frame), timescale: 30)))
-        }
-        input.markAsFinished()
-        writer.endSession(atSourceTime: CMTime(value: 1, timescale: 1))
-        await writer.finishWriting()
-        #expect(writer.status == .completed)
+        try await VideoSyntheticMovie.write(image, to: url, transform: transform)
     }
 
     @Test func embeddedDisplayP3ColorSurvivesNativeRendering() async throws {

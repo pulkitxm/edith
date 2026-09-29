@@ -117,10 +117,12 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         _ = try await fixture(in: directory)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 128, height: 128)
         project.addAsset(
-            directory.appendingPathComponent("source.mov"), duration: 0.5005, width: 128,
+            directory.appendingPathComponent("source.mov"), duration: 0.500005, width: 128,
             height: 128)
         let pipeline = try await VideoRenderPipeline.make(project: project)
+        #expect(pipeline.composition.duration == CMTime(value: 1, timescale: 2))
         let report = try await pipeline.export(
             to: directory.appendingPathComponent("quantized.mp4"))
         #expect(report.frameCount == 30)
@@ -208,10 +210,8 @@ import Testing
             .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
         try CIContext().writePNGRepresentation(
             of: image, to: imageURL, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
-        let carrier = try await VideoStillMedia.create(from: imageURL, duration: 0.5)
-        defer { try? FileManager.default.removeItem(at: carrier) }
         let source = directory.appendingPathComponent("source.mov")
-        try FileManager.default.copyItem(at: carrier, to: source)
+        try await VideoSyntheticMovie.write(image, to: source, duration: 0.5)
         let audio = directory.appendingPathComponent("tone.caf")
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
         let file = try AVAudioFile(forWriting: audio, settings: format.settings)
@@ -224,6 +224,7 @@ import Testing
         }
         try file.write(from: buffer)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 128, height: 128)
         project.addAsset(source, duration: 0.5, width: 128, height: 128)
         project.addAudio(audio, duration: Double(audioFrames) / 48_000, at: audioStartMs)
         return try await VideoRenderPipeline.make(project: project)

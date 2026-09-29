@@ -836,14 +836,7 @@ final class VideoEditorModel {
     }
 
     func setAspectRatio(_ ratio: String) {
-        mutate {
-            $0.aspectRatio = ratio
-            let parts = ratio.split(separator: ":").compactMap { Double($0) }
-            guard parts.count == 2, parts[0] > 0, parts[1] > 0 else { return }
-            var settings = $0.videoSettings
-            settings.height = max(2, Int(Double(settings.width) * parts[1] / parts[0]) / 2 * 2)
-            $0.videoSettings = settings
-        }
+        mutate { try? $0.setCanvasAspectRatio(ratio) }
         rebuild()
     }
 

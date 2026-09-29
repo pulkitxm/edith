@@ -462,7 +462,6 @@ struct VideoProject {
     }
 
     mutating func save(to url: URL) throws {
-        try validateVideoSettings()
         let sameFile =
             fileURL.map {
                 VideoProjectFileAccess.identity($0) == VideoProjectFileAccess.identity(url)

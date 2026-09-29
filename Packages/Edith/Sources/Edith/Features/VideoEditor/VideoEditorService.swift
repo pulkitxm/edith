@@ -199,6 +199,7 @@ public enum VideoEditorService {
 
     static func validateStructure(_ project: VideoProject) throws {
         try validateValues(project.root)
+        try project.validateVideoSettings()
         try require(
             project.root["assets"] is [[String: Any]]
                 && (project.root["timeline"] as? [String: Any])?["clips"] is [[String: Any]],
@@ -244,13 +245,16 @@ public enum VideoEditorService {
             }
             try require(
                 clip.start.isFinite && clip.end.isFinite && clip.start >= 0 && clip.end > clip.start
-                    && clip.end <= asset.duration + 0.001,
+                    && (asset.isStill || clip.end <= asset.duration + 0.001),
                 "Invalid source range for clip \(clip.id).")
             try require(
                 clip.timelineStart.isFinite && clip.timelineStart >= 0 && clip.rate.isFinite
                     && (0.25...5).contains(clip.rate),
                 "Invalid timeline or speed for clip \(clip.id).")
             let gain = (clip.raw["audioGainDb"] as? NSNumber)?.doubleValue ?? 0
+            if let effects = clip.raw["edithVisualEffects"] {
+                _ = try VideoVisualEffects.decode(effects)
+            }
             try require((-60...12).contains(gain), "Invalid clip audio gain.")
             if let crop = clip.crop {
                 guard let x = crop["x"], let y = crop["y"], let width = crop["width"],
@@ -300,22 +304,32 @@ public enum VideoEditorService {
         for asset in project.assets {
             try Task.checkCancellation()
             try requireLocalFile(asset.url)
-            let media = AVURLAsset(url: asset.url)
-            let duration = try await media.load(.duration).seconds
-            try require(duration.isFinite && duration > 0, "Media duration is invalid: \(asset.id)")
-            if project.clips.contains(where: { $0.assetID == asset.id }) {
-                guard let track = try await media.loadTracks(withMediaType: .video).first else {
-                    throw Failure("unsupported_media", "Clip media has no video track: \(asset.id)")
+            if asset.isStill {
+                let metadata = try VideoStillMedia.metadata(at: asset.url)
+                try require(
+                    (1...16384).contains(metadata.width) && (1...16384).contains(metadata.height),
+                    "Invalid source image dimensions.")
+            } else {
+                let media = AVURLAsset(url: asset.url)
+                let duration = try await media.load(.duration).seconds
+                try require(
+                    duration.isFinite && duration > 0, "Media duration is invalid: \(asset.id)")
+                if project.clips.contains(where: { $0.assetID == asset.id }) {
+                    guard let track = try await media.loadTracks(withMediaType: .video).first else {
+                        throw Failure(
+                            "unsupported_media", "Clip media has no video track: \(asset.id)")
+                    }
+                    let size = try await track.load(.naturalSize)
+                    try require(
+                        size.width.isFinite && size.height.isFinite && size.width > 0
+                            && size.height > 0
+                            && size.width <= 16384 && size.height <= 16384,
+                        "Invalid source video dimensions.")
                 }
-                let size = try await track.load(.naturalSize)
-                try require(
-                    size.width.isFinite && size.height.isFinite && size.width > 0 && size.height > 0
-                        && size.width <= 16384 && size.height <= 16384,
-                    "Invalid source video dimensions.")
-            }
-            for clip in project.clips where clip.assetID == asset.id {
-                try require(
-                    clip.end <= duration + 0.05, "Clip extends beyond the media: \(clip.id)")
+                for clip in project.clips where clip.assetID == asset.id {
+                    try require(
+                        clip.end <= duration + 0.05, "Clip extends beyond the media: \(clip.id)")
+                }
             }
             for key in ["edithAudioPath", "edithSourceImagePath"] {
                 if let path = asset.raw[key] as? String {
@@ -329,31 +343,13 @@ public enum VideoEditorService {
     }
 
     static func protectSources(_ project: VideoProject, destination: URL) throws {
-        let target = VideoProjectFileAccess.identity(destination)
-        var sources = project.assets.flatMap { asset -> [URL] in
-            [asset.url]
-                + [
-                    asset.raw["edithAudioPath"], asset.raw["edithSourceImagePath"],
-                    asset.cameraTrack?["sourcePath"],
-                ]
-                .compactMap { ($0 as? String).map { URL(fileURLWithPath: $0) } }
+        var media = project
+        media.fileURL = nil
+        do {
+            try VideoProjectExportDestination.validate(destination, project: media)
+        } catch {
+            throw Failure("invalid_value", "Output must not replace source media or sidecars.")
         }
-        sources += sources.map { URL(fileURLWithPath: $0.path + ".cursor.json") }
-        if project.backgroundColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression)
-            == nil
-        {
-            sources.append(URL(fileURLWithPath: project.backgroundColor))
-        }
-        sources += project.annotations.filter { $0.type == "image" }.compactMap { annotation in
-            let path =
-                annotation.raw["imageContent"] as? String ?? annotation.raw["content"] as? String
-                ?? ""
-            guard !path.isEmpty, !path.hasPrefix("data:") else { return nil }
-            return URL(fileURLWithPath: path)
-        }
-        try require(
-            !sources.contains { VideoProjectFileAccess.identity($0) == target },
-            "Output must not replace source media or sidecars.")
     }
 
     static func requireOutput(

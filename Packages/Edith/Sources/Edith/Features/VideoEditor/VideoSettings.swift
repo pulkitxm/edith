@@ -76,6 +76,32 @@ extension VideoProject {
 
     var frameDuration: CMTime { videoSettings.frameDuration }
 
+    mutating func setCanvasAspectRatio(_ ratio: String) throws {
+        var settings = videoSettings
+        if ratio == "native" {
+            if let clip = clips.first, let asset = assets.first(where: { $0.id == clip.assetID }) {
+                guard let metadata = asset.raw["video"] as? [String: Any],
+                    let width = metadata["width"] as? Int, let height = metadata["height"] as? Int,
+                    (1...16384).contains(width), (1...16384).contains(height)
+                else { throw VideoSettings.ValidationError.invalidSettings }
+                settings.width = max(2, width / 2 * 2)
+                settings.height = max(2, height / 2 * 2)
+            }
+        } else {
+            let parts = ratio.split(separator: ":").compactMap { Double($0) }
+            guard parts.count == 2, parts.allSatisfy({ $0.isFinite && $0 > 0 }) else {
+                throw VideoSettings.ValidationError.invalidSettings
+            }
+            let longest = Double(max(settings.width, settings.height))
+            let factor = longest / max(parts[0], parts[1])
+            settings.width = max(2, Int((parts[0] * factor / 2).rounded()) * 2)
+            settings.height = max(2, Int((parts[1] * factor / 2).rounded()) * 2)
+        }
+        guard settings.isValid else { throw VideoSettings.ValidationError.invalidSettings }
+        videoSettings = settings
+        aspectRatio = ratio
+    }
+
     func validateVideoSettings() throws {
         if let raw = root["edithVideoSettings"] {
             guard let dictionary = raw as? [String: Any] else {

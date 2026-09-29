@@ -19,9 +19,8 @@ import Testing
         let png = folder.appendingPathComponent("synthetic.png")
         try CIContext().writePNGRepresentation(
             of: image, to: png, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
-        let generated = try await VideoStillMedia.create(from: png, duration: 1)
         let movie = folder.appendingPathComponent("synthetic.mov")
-        try FileManager.default.moveItem(at: generated, to: movie)
+        try await VideoSyntheticMovie.write(image, to: movie)
         return movie
     }
 

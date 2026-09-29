@@ -63,10 +63,10 @@ extension VideoEditorService {
             aliases[rightName] = project.clips.first { !existing.contains($0.id) }!.id
         case let .trim(reference, start, end):
             let selected = try clip(reference)
-            let duration = project.assets.first { $0.id == selected.assetID }!.duration
+            let asset = project.assets.first { $0.id == selected.assetID }!
             try require(
                 start.isFinite && end.isFinite && start >= 0 && end > start + 0.05
-                    && end <= duration,
+                    && (asset.isStill || end <= asset.duration),
                 "Trim must be within the source and longer than 0.05 seconds.")
             project.trim(clipID: selected.id, start: start, end: end)
         case let .reorder(references):
@@ -165,7 +165,7 @@ extension VideoEditorService {
             try require(
                 backgroundColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
                 "Background must be a six-digit hex color.")
-            project.aspectRatio = aspectRatio
+            try project.setCanvasAspectRatio(aspectRatio)
             project.padding = padding
             project.backgroundColor = backgroundColor
         }
