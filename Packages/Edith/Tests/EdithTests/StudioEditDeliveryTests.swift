@@ -100,8 +100,10 @@ import Testing
         #expect(try Data(contentsOf: output) == original)
     }
 
-    @Test(arguments: [SIGINT, SIGTERM])
-    func signalsCancelNativeExportAndCleanPartials(_ signal: Int32) async throws {
+    @Test(arguments: [SIGINT, SIGTERM], ["render", "render-audio"])
+    func signalsCancelNativeRangeExportAndCleanPartials(_ signal: Int32, _ route: String)
+        async throws
+    {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
         let project = try await VideoDeliveryServiceTests.project(in: directory)
@@ -110,11 +112,12 @@ import Testing
         document.setClips(
             (0..<600).map { index in
                 var copy = clip
-                copy.raw["id"] = "clip_\(index)"
+            copy.raw["id"] = index == 0 ? clip.id : "clip_\(index)"
                 return copy
             })
         try document.save(to: project)
-        let output = directory.appendingPathComponent("delivery.mp4")
+        let output = directory.appendingPathComponent(
+            route == "render" ? "delivery.mp4" : "mix.wav")
         let sentinel = Data("previous delivery".utf8)
         try sentinel.write(to: output)
         let outURL = directory.appendingPathComponent("stdout.txt")
@@ -127,8 +130,8 @@ import Testing
         let process = Process()
         process.executableURL = CLIProcessProbe.binary
         process.arguments = [
-            "studio", "edit", "render", project.path, "--output", output.path,
-            "--overwrite", "--json", "--progress",
+            "studio", "edit", route, project.path, "--output", output.path,
+            "--overwrite", "--json", "--progress", "--start-frame", "45", "--end-frame", "20000",
         ]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdout
