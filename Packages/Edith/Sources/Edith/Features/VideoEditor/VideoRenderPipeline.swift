@@ -238,6 +238,7 @@ struct VideoRenderPipeline {
         var audio: AVMutableCompositionTrack?
 
         var segments: [Segment] = []
+        var visualEffects: [String: VideoVisualEffects] = [:]
         var frameGenerators: [String: FrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
@@ -245,7 +246,11 @@ struct VideoRenderPipeline {
         var sourceTransforms: [String: CGAffineTransform] = [:]
         var cursor = 0.0
         for clip in project.clips where clip.duration > 0 {
-            if let raw = clip.raw["edithVisualEffects"] { _ = try VideoVisualEffects.decode(raw) }
+            if let raw = clip.raw["edithVisualEffects"] {
+                visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
+            } else {
+                visualEffects[clip.id] = VideoVisualEffects()
+            }
             guard let source = project.assets.first(where: { $0.id == clip.assetID }) else {
                 throw RenderError.missingAsset(clip.assetID)
             }
@@ -470,6 +475,7 @@ struct VideoRenderPipeline {
         let finalCursors = cursors
         let finalStills = stillImages
         let finalTransforms = sourceTransforms
+        let finalEffects = visualEffects
         let size = canvas
         let cursorImage = pointerImage()
         let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
@@ -511,7 +517,9 @@ struct VideoRenderPipeline {
             let webcam = finalCameras[segment.clip.assetID]?.frame(
                 at: segment.sourceTime(at: time))
             var image = render(
-                sourceImage, clip: segment.clip, at: rulerMs, size: size,
+                sourceImage, clip: segment.clip,
+                effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
+                size: size,
                 zooms: zooms, annotations: annotations, backdrop: backdrop,
                 padding: padding, presentation: presentation,
                 webcam: webcam, webcamLayout: project.webcamLayout,
@@ -729,7 +737,8 @@ struct VideoRenderPipeline {
     }
 
     private static func render(
-        _ input: CIImage, clip: VideoProject.Clip, at timeMs: Double, size: CGSize,
+        _ input: CIImage, clip: VideoProject.Clip, effects: VideoVisualEffects, at timeMs: Double,
+        size: CGSize,
         zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation],
         backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
@@ -752,7 +761,6 @@ struct VideoRenderPipeline {
             cropped = input
         }
         let source = cropped.extent
-        let effects = clip.visualEffects
         let zoom = ZoomAnimation.sample(
             at: timeMs, zooms: zooms,
             cursor: cursor.map { CGPoint(x: $0.x, y: $0.y) })

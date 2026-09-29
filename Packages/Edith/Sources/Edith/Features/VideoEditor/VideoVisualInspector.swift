@@ -78,7 +78,13 @@ struct VideoSettingsInspector: View {
 struct VideoVisualInspector: View {
     let model: VideoEditorModel
     let clip: VideoProject.Clip
-    private var effects: VideoVisualEffects { clip.visualEffects }
+    private let effects: VideoVisualEffects
+
+    init(model: VideoEditorModel, clip: VideoProject.Clip) {
+        self.model = model
+        self.clip = clip
+        effects = clip.visualEffects
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
