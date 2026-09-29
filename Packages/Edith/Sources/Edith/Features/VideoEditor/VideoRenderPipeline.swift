@@ -290,7 +290,16 @@ struct VideoRenderPipeline {
                 throw RenderError.noVideo
             }
             let preferredTransform = try await sourceVideo.load(.preferredTransform)
-            sourceTransforms[source.id] = preferredTransform
+            let naturalSize = try await sourceVideo.load(.naturalSize)
+            let displayBounds = CGRect(origin: .zero, size: naturalSize)
+                .applying(preferredTransform)
+            sourceTransforms[source.id] = CGAffineTransform(
+                a: 1, b: 0, c: 0, d: -1, tx: 0, ty: naturalSize.height
+            ).concatenating(preferredTransform)
+                .concatenating(
+                    CGAffineTransform(
+                        a: 1, b: 0, c: 0, d: -1, tx: 0,
+                        ty: displayBounds.minY + displayBounds.maxY))
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
             let audioAsset =
                 (source.raw["edithAudioPath"] as? String).map {

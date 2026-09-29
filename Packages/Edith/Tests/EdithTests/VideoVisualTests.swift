@@ -6,6 +6,91 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoVisualTests {
+    @Test func rotatedMoviesMatchDisplayOrientationAcrossMixedTimeline() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transforms: [CGAffineTransform] = [
+            .identity,
+            .init(a: 0, b: 1, c: -1, d: 0, tx: 64, ty: 0),
+            .init(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: 128),
+            .init(a: -1, b: 0, c: 0, d: -1, tx: 128, ty: 64),
+        ]
+        let redPoints = [(16, 64), (64, 16), (64, 112), (112, 64)]
+        let bluePoints = [(112, 64), (64, 112), (64, 16), (16, 64)]
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 128, height: 128)
+        for (index, transform) in transforms.enumerated() {
+            let url = directory.appendingPathComponent("orientation-\(index).mov")
+            try await writeAsymmetricMovie(to: url, transform: transform)
+            project.addAsset(url, duration: 1, width: 128, height: 64)
+        }
+        for order in [Array(0..<4), [1, 0, 3, 2]] {
+            var reordered = project
+            reordered.setClips(order.map { project.clips[$0] })
+            let pipeline = try await VideoRenderPipeline.make(project: reordered)
+            for (position, index) in order.enumerated() {
+                let frame = try renderedFrame(pipeline, at: Double(position) + 0.5)
+                let red = redPoints[index]
+                let blue = bluePoints[index]
+                #expect(try pixel(frame, x: red.0, y: red.1).redComponent > 0.8)
+                #expect(try pixel(frame, x: blue.0, y: blue.1).blueComponent > 0.8)
+                let generator = AVAssetImageGenerator(
+                    asset: AVURLAsset(url: project.assets[index].url))
+                generator.appliesPreferredTrackTransform = true
+                let reference = try generator.copyCGImage(at: .zero, actualTime: nil)
+                let offsetX = (128 - reference.width) / 2
+                let offsetY = (128 - reference.height) / 2
+                #expect(
+                    try pixel(reference, x: red.0 - offsetX, y: red.1 - offsetY).redComponent > 0.8)
+                #expect(
+                    try pixel(reference, x: blue.0 - offsetX, y: blue.1 - offsetY).blueComponent
+                        > 0.8)
+            }
+        }
+    }
+
+    private func writeAsymmetricMovie(to url: URL, transform: CGAffineTransform) async throws {
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: 128, AVVideoHeightKey: 64,
+            ])
+        input.transform = transform
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: 128,
+                kCVPixelBufferHeightKey as String: 64,
+            ])
+        writer.add(input)
+        #expect(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        let bounds = CGRect(x: 0, y: 0, width: 128, height: 64)
+        let image = CIImage(color: .blue).cropped(to: CGRect(x: 64, y: 0, width: 64, height: 64))
+            .composited(over: CIImage(color: .red).cropped(to: bounds))
+        for frame in 0..<30 {
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            var buffer: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, try #require(adaptor.pixelBufferPool), &buffer)
+            let pixelBuffer = try #require(buffer)
+            VideoImageContext.shared.render(
+                image, to: pixelBuffer, bounds: bounds,
+                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+            #expect(
+                adaptor.append(
+                    pixelBuffer, withPresentationTime: CMTime(value: Int64(frame), timescale: 30)))
+        }
+        input.markAsFinished()
+        writer.endSession(atSourceTime: CMTime(value: 1, timescale: 1))
+        await writer.finishWriting()
+        #expect(writer.status == .completed)
+    }
+
     @Test func embeddedDisplayP3ColorSurvivesNativeRendering() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
