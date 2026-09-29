@@ -15,7 +15,7 @@ ed camera frame [--zoom <level>] [--x <0-1>] [--y <0-1>] [--tilt <degrees>] [--t
 ed camera reset [--json]
 ed camera look <preset> [--json]
 ed camera background none|blur|color|image [--color <hex>] [--blur <0-1>] [--image <path>] [--json]
-ed camera pause [--style card|blank|freeze] [--message <text>] [--json]
+ed camera pause [--style card|blank|freeze|stopped] [--message <text>] [--json]
 ed camera resume [--json]
 ed camera scene list [--json]
 ed camera scene apply <scene> [--json]
@@ -128,7 +128,9 @@ picture and follows them smoothly, with a little headroom above. `--auto off`
 turns it off. `reset` returns the framing to the full picture.
 
 With sharp zoom on, the default, Edith switches the camera to a higher
-resolution while you are zoomed in, when the camera offers one.
+resolution while you are zoomed in, when the camera offers one. It prefers
+formats that support macOS background replacement so zooming keeps those
+effects available.
 
 ## Looks and background
 
@@ -138,8 +140,14 @@ contrast, saturation, warmth, tint, sharpening, softening and vignette.
 
 `background blur` blurs everything behind you.
 `background color --color #1E293B` replaces it with a color, and
-`background image --image <path>` with a picture. `background none` shows your real background. Edith finds you in the
+`background image --image <path>` with a picture. `background none` passes through
+your camera picture, including macOS video effects. Edith finds you in the
 picture on this Mac with Vision, and no frame leaves the Mac.
+
+When macOS Background is active, Edith preserves it and pauses its own background
+replacement. Turn macOS Background off in the Video Effects menu to resume
+Edith's saved background choice. The Background panel shows when macOS is in
+control, and `status --json` reports `systemBackgroundActive`.
 
 ## Scenes
 
@@ -156,8 +164,15 @@ switch to the first nine scenes.
 `pause` hides the camera without leaving the call. `--style card` shows a card
 with your message over a blurred copy of the last frame, `blank` sends black
 and `freeze` holds the last frame. The real camera turns off while paused.
-`resume` goes live again. The global shortcut ⌃⌥⌘V pauses behind a card or goes
-live again from any app, and you can change it in Settings under Shortcuts.
+Choose **Pause > Stop completely**, or run `ed camera pause --style stopped`,
+to stop capture, preview and virtual-camera output completely. This state
+persists across app restarts. Opening a video app, changing scenes or pressing
+the pause shortcut does not restart it. Choose **Go live** or run
+`ed camera resume` to resume explicitly.
+
+For the other pause styles, `resume` goes live again. The global shortcut
+⌃⌥⌘V pauses behind a card or goes live again from any app, and you can change it
+in Settings under Shortcuts.
 
 ## Output
 
@@ -165,7 +180,7 @@ Plain `status` prints one line per fact. `--json` reports `enabled`,
 `helperRunning`, `extensionInstalled`, `extensionBuild`, `live`, `headline`,
 `apps`, `framesPerSecond`, `camera`, `cameraResolution`, `output`,
 `cameraAccess`, `privacy`, `privacyMessage`, `scene`, `sceneModified`,
-`framing`, `look`, `background` and `message`. Every changing command prints
+`framing`, `look`, `background`, `systemBackgroundActive` and `message`. Every changing command prints
 what it did, or the same JSON with `message` set.
 
 Commands that change the camera need the Edith menu bar app. They exit 4 when it

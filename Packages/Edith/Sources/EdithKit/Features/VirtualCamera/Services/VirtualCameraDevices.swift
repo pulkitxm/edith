@@ -38,12 +38,17 @@ public struct VirtualCameraFormatOption: Equatable, Sendable {
     public let width: Int
     public let height: Int
     public let maxFrameRate: Double
+    public let supportsBackgroundReplacement: Bool
 
-    public init(index: Int, width: Int, height: Int, maxFrameRate: Double) {
+    public init(
+        index: Int, width: Int, height: Int, maxFrameRate: Double,
+        supportsBackgroundReplacement: Bool
+    ) {
         self.index = index
         self.width = width
         self.height = height
         self.maxFrameRate = maxFrameRate
+        self.supportsBackgroundReplacement = supportsBackgroundReplacement
     }
 }
 
@@ -51,8 +56,10 @@ public enum VirtualCameraFormatChooser {
     public static func choose(
         _ options: [VirtualCameraFormatOption], minimumWidth: Int, frameRate: Double
     ) -> VirtualCameraFormatOption? {
-        let fast = options.filter { $0.maxFrameRate + 0.5 >= frameRate }
-        let pool = fast.isEmpty ? options : fast
+        let compatible = options.filter(\.supportsBackgroundReplacement)
+        let candidates = compatible.isEmpty ? options : compatible
+        let fast = candidates.filter { $0.maxFrameRate + 0.5 >= frameRate }
+        let pool = fast.isEmpty ? candidates : fast
         let wideEnough = pool.filter { $0.width >= minimumWidth }
         if let smallest = wideEnough.min(by: {
             area($0) < area($1) || (area($0) == area($1) && $0.maxFrameRate > $1.maxFrameRate)
@@ -137,9 +144,15 @@ public enum VirtualCameraDevices {
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dimensions.width > 0, dimensions.height > 0 else { return nil }
             let rate = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
+            let supportsBackgroundReplacement: Bool
+            if #available(macOS 15.0, *) {
+                supportsBackgroundReplacement = format.isBackgroundReplacementSupported
+            } else {
+                supportsBackgroundReplacement = false
+            }
             return VirtualCameraFormatOption(
                 index: index, width: Int(dimensions.width), height: Int(dimensions.height),
-                maxFrameRate: rate)
+                maxFrameRate: rate, supportsBackgroundReplacement: supportsBackgroundReplacement)
         }
     }
 

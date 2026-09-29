@@ -22,7 +22,7 @@ public actor AttentionBackgroundService {
     private var backupTask: Task<Void, Error>?
     private var restoreTask: Task<Void, Error>?
     private var refreshTask: Task<Void, Never>?
-    private var summaryTasks: [String: AttentionSummaryFlight] = [:]
+    private var summaryTasks: [AttentionSummaryCacheKey: AttentionSummaryFlight] = [:]
     private var summaryCache: [AttentionSummaryCacheEntry] = []
     private var stopped = false
     private var agentRecorder = AttentionAgentRecorder()
@@ -306,7 +306,7 @@ public actor AttentionBackgroundService {
     }
 
     private func summaryKey(_ request: AttentionSummaryRequest, settings: AttentionSettings)
-        throws -> String
+        throws -> AttentionSummaryCacheKey
     {
         var settings = settings
         settings.serverToken = ""
@@ -316,7 +316,7 @@ public actor AttentionBackgroundService {
             AttentionSummaryIdentity(
                 from: request.from, window: request.window, comparePeriod: request.comparePeriod,
                 settings: settings))
-        return "\(identity.hashValue)|\(classifications.hashValue)|\(identity.count)"
+        return AttentionSummaryCacheKey(identity: identity, classifications: classifications)
     }
 
     @discardableResult
@@ -495,10 +495,15 @@ struct AttentionSummaryFlight {
 }
 
 struct AttentionSummaryCacheEntry {
-    let key: String
+    let key: AttentionSummaryCacheKey
     let to: Date
     let computedAt: Date
     let snapshot: AttentionPageSnapshot
+}
+
+struct AttentionSummaryCacheKey: Hashable {
+    let identity: Data
+    let classifications: Data
 }
 
 private struct AttentionSummaryIdentity: Encodable {

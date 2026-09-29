@@ -128,7 +128,12 @@ final class VirtualCameraEngine {
         let outputChanged = next.output != state.output
         state = next
         pipeline.update(state: effectiveState())
-        if outputChanged { refreshExtension() } else { publishIfChanged() }
+        if outputChanged {
+            refreshExtension()
+        } else {
+            evaluate()
+            publishIfChanged()
+        }
     }
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
@@ -140,12 +145,14 @@ final class VirtualCameraEngine {
         VirtualCameraStore.save(state)
         VirtualCameraStore.announceChange(from: "helper", state: state)
         pipeline.update(state: effectiveState())
+        evaluate()
         publishIfChanged()
         return snapshot(message: message)
     }
 
     @discardableResult
     func togglePause() -> VirtualCameraPrivacy {
+        guard state.privacy != .stopped else { return .stopped }
         let request: VirtualCameraRequest =
             state.privacy == .live ? .pause(.card, message: nil) : .resume
         _ = try? perform(request)
@@ -164,6 +171,7 @@ final class VirtualCameraEngine {
             sourceHeight: statistics.sourceHeight, sources: sources,
             format: route == .edithCamera ? extensionStatus?.format ?? .standard : .standard,
             cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
+            systemBackgroundActive: statistics.systemBackgroundActive,
             state: state, message: message)
     }
 
@@ -234,6 +242,12 @@ final class VirtualCameraEngine {
     }
 
     private func evaluate() {
+        guard state.privacy != .stopped else {
+            stopWork?.cancel()
+            stopWork = nil
+            stopStreaming()
+            return
+        }
         switch route {
         case .edithCamera: evaluateEdithCamera()
         case .obs: evaluateOBS()

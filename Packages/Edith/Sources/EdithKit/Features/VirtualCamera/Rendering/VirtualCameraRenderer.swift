@@ -37,11 +37,16 @@ public struct VirtualCameraFrameInput: @unchecked Sendable {
     public var mask: CIImage?
     public var date: Date
     public var assets: VirtualCameraAssets
+    public var systemBackgroundActive: Bool
+
+    var effectiveBackground: VirtualCameraBackground {
+        systemBackgroundActive ? VirtualCameraBackground() : composition.background
+    }
 
     public init(
         image: CIImage, composition: VirtualCameraComposition,
         framing: VirtualCameraFraming? = nil, mask: CIImage? = nil, date: Date = Date(),
-        assets: VirtualCameraAssets = .none
+        assets: VirtualCameraAssets = .none, systemBackgroundActive: Bool = false
     ) {
         self.image = image
         self.composition = composition
@@ -49,6 +54,7 @@ public struct VirtualCameraFrameInput: @unchecked Sendable {
         self.mask = mask
         self.date = date
         self.assets = assets
+        self.systemBackgroundActive = systemBackgroundActive
     }
 }
 
@@ -291,7 +297,7 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         let framing = (input.framing ?? input.composition.framing).sanitized()
         let oriented = Self.oriented(input.image, framing: framing)
         let replaced = Self.backgroundReplaced(
-            oriented, mask: input.mask, background: input.composition.background,
+            oriented, mask: input.mask, background: input.effectiveBackground,
             assets: input.assets)
         return Self.framed(replaced, framing: framing, output: output)
     }
@@ -301,7 +307,7 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         let framing = (input.framing ?? composition.framing).sanitized()
         let oriented = Self.oriented(input.image, framing: framing)
         let replaced = Self.backgroundReplaced(
-            oriented, mask: input.mask, background: composition.background, assets: input.assets)
+            oriented, mask: input.mask, background: input.effectiveBackground, assets: input.assets)
         let framed = Self.framed(replaced, framing: framing, output: output)
         let looked = VirtualCameraLooks.apply(composition.look, to: framed)
         let bordered = Self.bordered(looked, border: composition.overlays.border, output: output)
@@ -318,7 +324,7 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         switch privacy {
         case .live, .freeze:
             return backdrop?.cropped(to: bounds) ?? black
-        case .blank:
+        case .blank, .stopped:
             return black
         case .card:
             let base =

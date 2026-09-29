@@ -135,12 +135,19 @@ final class VirtualCameraPageModel: ObservableObject {
     static let statusRefreshTicks = 5
 
     var statusHeadline: String {
+        if state.privacy == .stopped { return "Stopped" }
         if let snapshot, helperReachable { return snapshot.headline }
         if statusPending || helperReachable { return "Checking Edith Bar" }
         return "Edith Bar is not answering"
     }
 
-    var isLive: Bool { snapshot?.live == true }
+    var isLive: Bool { state.privacy != .stopped && snapshot?.live == true }
+
+    var systemBackgroundActive: Bool {
+        guard state.privacy != .stopped else { return false }
+        return isLive
+            ? snapshot?.systemBackgroundActive == true : previewStatistics.systemBackgroundActive
+    }
 
     func appear() {
         guard !visible else { return }
@@ -202,6 +209,7 @@ final class VirtualCameraPageModel: ObservableObject {
         if statistics.sourceWidth != previewStatistics.sourceWidth
             || statistics.sourceHeight != previewStatistics.sourceHeight
             || statistics.source != previewStatistics.source
+            || statistics.systemBackgroundActive != previewStatistics.systemBackgroundActive
         {
             previewStatistics = statistics
         }
@@ -227,6 +235,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard let decoded else { return }
         snapshot = decoded
         helperReachable = true
+        if saveTimer == nil { reloadState() }
         if visible { syncPreviewFeed() }
     }
 
@@ -253,6 +262,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard stored != state else { return }
         state = stored
         pipeline.update(state: stored)
+        syncPreviewFeed()
     }
 
     func refreshSources() {
@@ -261,6 +271,12 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func syncPreviewFeed() {
         guard visible else { return }
+        previewBus.setWanted(state.privacy != .stopped)
+        guard state.privacy != .stopped else {
+            stopPreview()
+            display.clear()
+            return
+        }
         if snapshot?.live == true {
             showHelperPreview()
         } else {
@@ -342,6 +358,7 @@ final class VirtualCameraPageModel: ObservableObject {
         state = next
         pipeline.update(state: next)
         scheduleSave()
+        syncPreviewFeed()
     }
 
     func updateComposition(_ change: (inout VirtualCameraComposition) -> Void) {
@@ -359,6 +376,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func flushSave() {
+        guard saveTimer != nil else { return }
         saveTimer?.invalidate()
         saveTimer = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
@@ -461,10 +479,12 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func pause(_ mode: VirtualCameraPrivacy) {
         update { $0.privacy = mode }
+        flushSave()
     }
 
     func resume() {
         update { $0.privacy = .live }
+        flushSave()
     }
 
     func chooseImage(for target: VirtualCameraImageTarget) {

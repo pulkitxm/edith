@@ -57,7 +57,7 @@ struct VirtualCameraHeaderControls: View {
             if model.state.privacy == .live {
                 Menu {
                     ForEach(
-                        [VirtualCameraPrivacy.card, .blank, .freeze], id: \.self
+                        [VirtualCameraPrivacy.stopped, .card, .blank, .freeze], id: \.self
                     ) { mode in
                         Button(mode.title) { model.pause(mode) }
                     }
@@ -117,7 +117,17 @@ struct VirtualCameraStage: View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous)
                 .fill(Color.black)
-            if model.cameraAccess == .authorized || model.display.current != nil {
+            if model.state.privacy == .stopped {
+                VStack(spacing: UIScale.pt(12)) {
+                    Image(systemName: "video.slash")
+                        .font(.system(size: UIScale.pt(32)))
+                    Text("Camera stopped")
+                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                    Text("Capture, preview and output are off. Choose Go live to resume.")
+                        .font(.system(size: UIScale.pt(12)))
+                }
+                .foregroundStyle(.white.opacity(0.7))
+            } else if model.cameraAccess == .authorized || model.display.current != nil {
                 VirtualCameraPreview(
                     display: model.display, mirrored: model.state.mirrorPreview,
                     onPan: { model.pan(by: $0, in: $1) },
@@ -128,37 +138,39 @@ struct VirtualCameraStage: View {
             } else {
                 VirtualCameraAccessPrompt(model: model)
             }
-            if model.showsGrid {
+            if model.showsGrid, model.state.privacy != .stopped {
                 VirtualCameraThirdsGrid()
                     .allowsHitTesting(false)
             }
-            VStack {
-                HStack(spacing: UIScale.pt(6)) {
-                    VirtualCameraBadge(
-                        text: model.isLive ? "LIVE" : "PREVIEW",
-                        tint: model.isLive ? DashSkin.danger : Color.white.opacity(0.25))
-                    if model.state.privacy != .live {
+            if model.state.privacy != .stopped {
+                VStack {
+                    HStack(spacing: UIScale.pt(6)) {
                         VirtualCameraBadge(
-                            text: model.state.privacy.title.uppercased(), tint: DashSkin.warn)
+                            text: model.isLive ? "LIVE" : "PREVIEW",
+                            tint: model.isLive ? DashSkin.danger : Color.white.opacity(0.25))
+                        if model.state.privacy != .live {
+                            VirtualCameraBadge(
+                                text: model.state.privacy.title.uppercased(), tint: DashSkin.warn)
+                        }
+                        Spacer()
+                        if model.composition.framing.autoFrame != .off {
+                            VirtualCameraBadge(text: "AUTO FRAME", tint: Color.white.opacity(0.25))
+                        }
                     }
                     Spacer()
-                    if model.composition.framing.autoFrame != .off {
-                        VirtualCameraBadge(text: "AUTO FRAME", tint: Color.white.opacity(0.25))
+                    HStack {
+                        Spacer()
+                        Text(String(format: "%.1fx", model.composition.framing.zoom))
+                            .font(DashSkin.mono(12, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, UIScale.pt(8))
+                            .padding(.vertical, UIScale.pt(4))
+                            .background(Capsule().fill(Color.black.opacity(0.55)))
                     }
                 }
-                Spacer()
-                HStack {
-                    Spacer()
-                    Text(String(format: "%.1fx", model.composition.framing.zoom))
-                        .font(DashSkin.mono(12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, UIScale.pt(8))
-                        .padding(.vertical, UIScale.pt(4))
-                        .background(Capsule().fill(Color.black.opacity(0.55)))
-                }
+                .padding(UIScale.pt(12))
+                .allowsHitTesting(false)
             }
-            .padding(UIScale.pt(12))
-            .allowsHitTesting(false)
         }
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)

@@ -248,7 +248,7 @@ import Testing
             enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
             extensionBuild: "7",
             source: VirtualCameraSource(id: "a", name: "Cam", kind: .builtIn), sourceWidth: 1920,
-            sourceHeight: 1080, state: VirtualCameraState())
+            sourceHeight: 1080, systemBackgroundActive: true, state: VirtualCameraState())
         snapshot.message = "Done."
         guard case .object(let object) = snapshot.jsonValue else {
             Issue.record("status JSON is not an object")
@@ -260,10 +260,12 @@ import Testing
                 "extensionBuild", "live",
                 "headline", "apps", "framesPerSecond", "camera", "cameraResolution", "output",
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
-                "look", "background", "message",
+                "look", "background", "systemBackgroundActive", "message",
             ])
         #expect(object["cameraResolution"] == .string("1920x1080"))
         #expect(object["message"] == .string("Done."))
+        #expect(object["systemBackgroundActive"] == .bool(true))
+        #expect(snapshot.summaryLines.contains("background: macOS"))
         guard case .array(let scenes) = snapshot.scenesJSON else {
             Issue.record("scenes JSON is not an array")
             return
@@ -579,11 +581,21 @@ final class FakeCameraHardware: VirtualCameraHardware, @unchecked Sendable {
 
 @Suite struct VirtualCameraFormatChooserTests {
     let options = [
-        VirtualCameraFormatOption(index: 0, width: 640, height: 480, maxFrameRate: 30),
-        VirtualCameraFormatOption(index: 1, width: 1280, height: 720, maxFrameRate: 60),
-        VirtualCameraFormatOption(index: 2, width: 1920, height: 1080, maxFrameRate: 30),
-        VirtualCameraFormatOption(index: 3, width: 3840, height: 2160, maxFrameRate: 15),
-        VirtualCameraFormatOption(index: 4, width: 1920, height: 1080, maxFrameRate: 60),
+        VirtualCameraFormatOption(
+            index: 0, width: 640, height: 480, maxFrameRate: 30,
+            supportsBackgroundReplacement: false),
+        VirtualCameraFormatOption(
+            index: 1, width: 1280, height: 720, maxFrameRate: 60,
+            supportsBackgroundReplacement: false),
+        VirtualCameraFormatOption(
+            index: 2, width: 1920, height: 1080, maxFrameRate: 30,
+            supportsBackgroundReplacement: false),
+        VirtualCameraFormatOption(
+            index: 3, width: 3840, height: 2160, maxFrameRate: 15,
+            supportsBackgroundReplacement: false),
+        VirtualCameraFormatOption(
+            index: 4, width: 1920, height: 1080, maxFrameRate: 60,
+            supportsBackgroundReplacement: false),
     ]
 
     @Test func picksTheSmallestFormatThatIsWideAndFastEnough() {
@@ -601,10 +613,64 @@ final class FakeCameraHardware: VirtualCameraHardware, @unchecked Sendable {
                 == 3)
         #expect(VirtualCameraFormatChooser.choose([], minimumWidth: 1920, frameRate: 30) == nil)
         let slow = [
-            VirtualCameraFormatOption(index: 0, width: 1920, height: 1080, maxFrameRate: 15)
+            VirtualCameraFormatOption(
+                index: 0, width: 1920, height: 1080, maxFrameRate: 15,
+                supportsBackgroundReplacement: false)
         ]
         #expect(
             VirtualCameraFormatChooser.choose(slow, minimumWidth: 1280, frameRate: 30)?.index == 0)
+    }
+
+    @Test(arguments: [1.0, 1.2, 2.0, 3.0])
+    func zoomKeepsSystemBackgroundsAvailable(zoom: Double) throws {
+        let formats = [
+            VirtualCameraFormatOption(
+                index: 0, width: 1280, height: 720, maxFrameRate: 30,
+                supportsBackgroundReplacement: true),
+            VirtualCameraFormatOption(
+                index: 1, width: 1920, height: 1080, maxFrameRate: 30,
+                supportsBackgroundReplacement: true),
+            VirtualCameraFormatOption(
+                index: 2, width: 2560, height: 1440, maxFrameRate: 30,
+                supportsBackgroundReplacement: false),
+            VirtualCameraFormatOption(
+                index: 3, width: 2592, height: 1944, maxFrameRate: 30,
+                supportsBackgroundReplacement: false),
+        ]
+        var state = VirtualCameraState()
+        state.composition.framing.zoom = zoom
+        let width = VirtualCameraPipeline.minimumSourceWidth(
+            for: state, output: CGSize(width: 1920, height: 1080))
+        let choice = try #require(
+            VirtualCameraFormatChooser.choose(formats, minimumWidth: width, frameRate: 30))
+        #expect(choice.index == 1)
+        #expect(choice.supportsBackgroundReplacement)
+    }
+
+    @Test func supportedHighResolutionFormatsRemainAvailable() {
+        let formats = options.map {
+            VirtualCameraFormatOption(
+                index: $0.index, width: $0.width, height: $0.height,
+                maxFrameRate: $0.maxFrameRate, supportsBackgroundReplacement: true)
+        }
+        #expect(
+            VirtualCameraFormatChooser.choose(formats, minimumWidth: 3840, frameRate: 15)?.index
+                == 3)
+        #expect(
+            VirtualCameraFormatChooser.choose(formats, minimumWidth: 1280, frameRate: 30)?.index
+                == 1)
+    }
+
+    @Test func slowerCompatibleFormatsKeepBackgroundsAvailable() {
+        let formats =
+            options + [
+                VirtualCameraFormatOption(
+                    index: 5, width: 1920, height: 1080, maxFrameRate: 15,
+                    supportsBackgroundReplacement: true)
+            ]
+        #expect(
+            VirtualCameraFormatChooser.choose(formats, minimumWidth: 3840, frameRate: 30)?.index
+                == 5)
     }
 
     @Test func sharpZoomRequestsStandardWidthSteps() {

@@ -154,7 +154,8 @@ public enum VirtualCameraRequestReducer {
                 state.privacyMessage = message
             }
             state = state.sanitized()
-            return "Paused with \(mode.title.lowercased())."
+            return mode == .stopped
+                ? "Camera stopped completely." : "Paused with \(mode.title.lowercased())."
         case .resume:
             state.privacy = .live
             return "Camera is live."

@@ -50,6 +50,53 @@ import Testing
         #expect(stored.composition.look.preset == .film)
     }
 
+    @Test func leavingThePageDoesNotOverwriteAHelperBackgroundChange() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.appear()
+        model.updateComposition { $0.background.mode = .color }
+        model.flushSave()
+        var external = model.state
+        external.composition.background.mode = .none
+        VirtualCameraStore.save(external, to: defaults)
+        model.disappear()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
+        model.appear()
+        defer { model.disappear() }
+        #expect(model.composition.background.mode == .none)
+    }
+
+    @Test func helperStatusRepairsAMissedStateNotification() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.updateComposition { $0.background.mode = .color }
+        model.flushSave()
+        var external = model.state
+        external.composition.background.mode = .none
+        VirtualCameraStore.save(external, to: defaults)
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                state: external))
+        #expect(model.composition.background.mode == .none)
+        model.setZoom(2)
+        model.flushSave()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
+    }
+
+    @Test func helperStatusDoesNotDiscardPendingWindowEdits() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let previous = model.state
+        model.updateComposition { $0.background.mode = .blur }
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                state: previous))
+        model.flushSave()
+        #expect(VirtualCameraStore.load(defaults).composition.background.mode == .blur)
+    }
+
     @Test func dragEditsSaveDuringEventTracking() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -170,6 +217,37 @@ import Testing
                 enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
                 route: .obs, live: false, state: model.state))
         #expect(!model.showsHelperPreview)
+    }
+
+    @Test func completeStopClearsPreviewAndSurvivesReopeningAndLateStatus() throws {
+        let (model, defaults, name) = Self.model()
+        defer {
+            model.disappear()
+            defaults.removePersistentDomain(forName: name)
+        }
+        model.appear()
+        let live = VirtualCameraSnapshot(
+            enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
+            route: .obs, live: true, state: model.state)
+        model.receive(live)
+        model.showPreviewFrame(try #require(VirtualCameraFixtures.quadrants()))
+        #expect(model.previewRunning)
+        model.pause(.stopped)
+        #expect(!model.previewRunning)
+        #expect(model.display.current == nil)
+        #expect(!model.isLive)
+        #expect(model.statusHeadline == "Stopped")
+        #expect(VirtualCameraStore.load(defaults).privacy == .stopped)
+        model.receive(live)
+        model.setZoom(2)
+        model.disappear()
+        model.appear()
+        #expect(model.state.privacy == .stopped)
+        #expect(!model.previewRunning)
+        #expect(!model.showsHelperPreview)
+        model.resume()
+        #expect(model.state.privacy == .live)
+        #expect(model.showsHelperPreview)
     }
 
     @Test func statusCombinesTheHelperAndTheState() {
@@ -671,6 +749,36 @@ enum VirtualCameraSyntheticStudio {
                 model, preview: preview, renderer: renderer,
                 to: output.appendingPathComponent("page-\(tab.rawValue).png"))
         }
+        model.updateComposition {
+            $0.background = VirtualCameraBackground(
+                mode: .color, color: VirtualCameraColor(hex: "#1E293B") ?? .black)
+        }
+        model.flushSave()
+        var snapshot = try #require(model.snapshot)
+        snapshot.systemBackgroundActive = true
+        snapshot.state = model.state
+        model.injectForTesting(snapshot: snapshot, sources: VirtualCameraPageModelTests.sources)
+        let nativePreview = renderer.compose(
+            VirtualCameraFrameInput(
+                image: studio, composition: model.composition, mask: mask,
+                systemBackgroundActive: true), output: size)
+        renderer.render(nativePreview, into: buffer)
+        model.showPreviewFrame(buffer)
+        model.tab = .background
+        try renderPage(
+            model, preview: nativePreview, renderer: renderer,
+            to: output.appendingPathComponent("page-system-background.png"))
+        model.pause(.stopped)
+        snapshot.state = model.state
+        snapshot.live = false
+        snapshot.framesPerSecond = 0
+        snapshot.systemBackgroundActive = false
+        snapshot.clients = []
+        model.injectForTesting(snapshot: snapshot, sources: VirtualCameraPageModelTests.sources)
+        model.tab = .output
+        try renderPage(
+            model, preview: nativePreview, renderer: renderer,
+            to: output.appendingPathComponent("page-stopped.png"))
     }
 
     private func renderPage(
@@ -695,18 +803,23 @@ enum VirtualCameraSyntheticStudio {
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
         }
         #expect(!TestWindowHost.isExposedOnDesktop(window))
-        let previewView = try #require(Self.find(VirtualCameraPreviewNSView.self, in: host))
-        let container = try #require(previewView.superview)
-        let image = try #require(renderer.cgImage(preview, size: CGSize(width: 1280, height: 720)))
-        let frame = previewView.convert(previewView.pictureRect, to: container)
-        let overlay = NSImageView(frame: frame)
-        overlay.image = NSImage(cgImage: image, size: frame.size)
-        overlay.imageScaling = .scaleAxesIndependently
-        overlay.wantsLayer = true
-        overlay.layer?.cornerRadius = 14
-        overlay.layer?.masksToBounds = true
-        container.addSubview(overlay, positioned: .above, relativeTo: previewView)
-        defer { overlay.removeFromSuperview() }
+        var overlay: NSImageView?
+        if model.state.privacy != .stopped {
+            let previewView = try #require(Self.find(VirtualCameraPreviewNSView.self, in: host))
+            let container = try #require(previewView.superview)
+            let image = try #require(
+                renderer.cgImage(preview, size: CGSize(width: 1280, height: 720)))
+            let frame = previewView.convert(previewView.pictureRect, to: container)
+            let imageView = NSImageView(frame: frame)
+            imageView.image = NSImage(cgImage: image, size: frame.size)
+            imageView.imageScaling = .scaleAxesIndependently
+            imageView.wantsLayer = true
+            imageView.layer?.cornerRadius = 14
+            imageView.layer?.masksToBounds = true
+            container.addSubview(imageView, positioned: .above, relativeTo: previewView)
+            overlay = imageView
+        }
+        defer { overlay?.removeFromSuperview() }
         host.displayIfNeeded()
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)

@@ -68,6 +68,21 @@ enum VirtualCameraFixtures {
         #expect(topLeft.red > 240 && topLeft.green < 15)
     }
 
+    @Test func systemBackgroundPassesThroughWithoutChangingTheSavedSelection() throws {
+        var state = VirtualCameraState()
+        state.composition.background.mode = .color
+        let pipeline = VirtualCameraPipeline(state: state, outputSize: output)
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        let frame = try #require(pipeline.process(input, at: 1, systemBackgroundActive: true))
+        let pixel = VirtualCameraFixtures.pixel(frame, x: 20, y: 20)
+        #expect(pixel.red > 240 && pixel.green < 15)
+        #expect(pipeline.statistics.systemBackgroundActive)
+        #expect(pipeline.currentState.composition.background.mode == .color)
+        _ = pipeline.process(input, at: 2, systemBackgroundActive: false)
+        #expect(!pipeline.statistics.systemBackgroundActive)
+        #expect(pipeline.currentState.composition.background.mode == .color)
+    }
+
     @Test func outputSizeChangesRebuildTheBufferPool() throws {
         let pipeline = VirtualCameraPipeline(state: VirtualCameraState(), outputSize: output)
         let input = try #require(VirtualCameraFixtures.quadrants())
@@ -177,6 +192,28 @@ enum VirtualCameraFixtures {
         #expect(natural(20, 110).near(.blue))
     }
 
+    @Test func completeStopProducesNoCameraOrPrivacyFrames() throws {
+        var state = VirtualCameraState(privacy: .card)
+        let pipeline = VirtualCameraPipeline(state: state, outputSize: output)
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        pipeline.start { _ in }
+        #expect(pipeline.privacyFrame() != nil)
+        state.privacy = .stopped
+        pipeline.update(state: state)
+        #expect(pipeline.privacyFrame() == nil)
+        #expect(pipeline.process(input, at: 1) == nil)
+        #expect(pipeline.statistics == VirtualCameraPipeline.Statistics())
+        state.composition.framing.zoom = 2
+        pipeline.update(state: state)
+        pipeline.update(outputSize: CGSize(width: 640, height: 360), frameRate: 30)
+        #expect(pipeline.privacyFrame() == nil)
+        #expect(pipeline.process(input, at: 2) == nil)
+        state.privacy = .card
+        pipeline.update(state: state)
+        #expect(pipeline.privacyFrame() != nil)
+        pipeline.stop()
+    }
+
     @Test func stoppingClearsStatistics() throws {
         let pipeline = VirtualCameraPipeline(state: VirtualCameraState(), outputSize: output)
         let input = try #require(VirtualCameraFixtures.quadrants())
@@ -240,6 +277,48 @@ enum VirtualCameraFixtures {
         engine.refreshExtension()
         #expect(!engine.streaming)
         engine.shutdown()
+    }
+
+    @Test(arguments: [VirtualCameraRoute.obs, .edithCamera])
+    func completeStopDisconnectsAndIgnoresDemandUntilExplicitResume(
+        route: VirtualCameraRoute
+    ) throws {
+        let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
+        defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
+        let hardware = Self.obsHardware(watching: true)
+        if route == .edithCamera {
+            hardware.devices = [
+                40: VirtualCameraIdentity.deviceID(forExtension: Self.identifier).uuidString
+            ]
+            hardware.statuses = [
+                41: VirtualCameraExtensionStatus(
+                    build: "1", clients: ["com.example.VideoCall"], format: .hd1080,
+                    receivingFrames: false
+                ).encoded()
+            ]
+        }
+        let engine = Self.engine(hardware: hardware, state: VirtualCameraState(privacy: .card))
+        defer { engine.shutdown() }
+        engine.refreshExtension()
+        #expect(engine.streamingRoute == route)
+        let result = try engine.perform(.pause(.stopped, message: nil))
+        #expect(!result.live)
+        #expect(result.headline == "Stopped")
+        #expect(hardware.stopped == [42])
+        #expect(VirtualCameraStore.load().privacy == .stopped)
+        engine.refreshExtension()
+        engine.syncSettings()
+        _ = try engine.perform(.zoom(2))
+        #expect(engine.togglePause() == .stopped)
+        #expect(!engine.streaming)
+        #expect(hardware.started == [42])
+        let restarted = Self.engine(hardware: hardware, state: VirtualCameraStore.load())
+        restarted.refreshExtension()
+        #expect(!restarted.streaming)
+        restarted.shutdown()
+        _ = try engine.perform(.resume)
+        #expect(engine.streamingRoute == route)
+        #expect(hardware.started == [42, 42])
     }
 
     @Test func obsCameraWaitsForAnAppAndStepsAsideForOBS() {
