@@ -357,6 +357,9 @@ enum JSONContract {
                 "annotation_demo", "--json",
             ]),
         JSONCase(
+            "ed studio edit review-report",
+            ["studio", "edit", "review-report", "/nonexistent/demo.openscreen", "--json"]),
+        JSONCase(
             "ed database connections add",
             [
                 "database", "connections", "add", "Analytics staging",

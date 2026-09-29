@@ -4,6 +4,7 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
     case schema, create, show, apply, validate, render, frame
     case list, clone
     case contactSheet = "contact-sheet"
+    case reviewReport = "review-report"
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -19,7 +20,7 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
     private var effect: UserOperationEffect {
         switch self {
         case .schema, .show, .validate, .list: .read
-        case .create, .apply, .render, .frame, .clone, .contactSheet: .write
+        case .create, .apply, .render, .frame, .clone, .contactSheet, .reviewReport: .write
         }
     }
 
@@ -36,6 +37,8 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .list: "List project identities and titles in a local directory."
         case .clone: "Copy a native edit with a fresh project identity."
         case .contactSheet: "Render a labeled contact sheet of up to 64 output frames."
+        case .reviewReport:
+            "Report native timing, expected counts, missing assets and optional sampled border geometry."
         }
     }
 }

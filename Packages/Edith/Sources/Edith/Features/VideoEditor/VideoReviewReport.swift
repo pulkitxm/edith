@@ -13,6 +13,8 @@ extension VideoEditorService {
         public var durationTolerance = 0.001
         public var expectedFrameCount: Int64?
         public var expectedShotCount: Int?
+        public var checkBorders = false
+        public var maximumBorderFrames = 10000
         public init() {}
     }
 
@@ -74,6 +76,7 @@ extension VideoEditorService {
         public let clipID: String
         public let assetID: String
         public let sourceRange: ReviewRange
+        public let sourceFrames: ReviewFrameRange?
         public let segmentIndices: [Int]
         public let outputRange: ReviewRange?
         public let outputFrames: ReviewFrameRange?
@@ -101,6 +104,7 @@ extension VideoEditorService {
         public let segments: [ReviewSegment]
         public let checks: [ReviewCheck]
         public let diagnostics: [ReviewDiagnostic]
+        public let borders: ReviewBorders?
     }
 
     public struct ReviewArtifact: Codable, Sendable {
@@ -125,6 +129,9 @@ extension VideoEditorService {
         try require(
             options.expectedShotCount.map { $0 >= 0 } ?? true,
             "Expected shot count must be nonnegative.")
+        try require(
+            (2...100000).contains(options.maximumBorderFrames),
+            "Border frame limit must be between 2 and 100000.")
         let project = try open(url)
         var diagnostics: [ReviewDiagnostic] = []
         for dependency in VideoProjectExportDestination.dependencies(project) {
@@ -164,11 +171,13 @@ extension VideoEditorService {
             guard !asset.isStill else { continue }
             if let track = try? await AVURLAsset(url: asset.url).loadTracks(withMediaType: .video)
                 .first,
-                let fps = try? await track.load(.nominalFrameRate), fps.isFinite, fps > 0
+                let fps = try? await track.load(.nominalFrameRate), fps.isFinite, fps > 0,
+                fps <= 1000000
             {
                 sourceRates[asset.id] = Double(fps)
             }
         }
+        let markers = project.markers
         let segments = nativeSegments.map { segment in
             let asset = project.assets.first { $0.id == segment.clip.assetID }!
             let sourceFrames = sourceRates[asset.id].map { fps in
@@ -195,14 +204,22 @@ extension VideoEditorService {
                         segment.outputRange.end, frameDuration: frameDuration),
                     basis: "output_frame_presentation_times_in_half_open_range"),
                 rate: segment.rate,
-                nearestStartMarker: reviewMarker(at: segment.outputStart, project: project),
-                nearestEndMarker: reviewMarker(at: segment.outputEnd, project: project))
+                nearestStartMarker: reviewMarker(
+                    at: segment.outputStart, markers: markers, fps: project.videoSettings.frameRate),
+                nearestEndMarker: reviewMarker(
+                    at: segment.outputEnd, markers: markers, fps: project.videoSettings.frameRate))
         }
         let clips = project.clips.map { clip in
             let indices = segments.indices.filter { segments[$0].clipID == clip.id }
             return ReviewClip(
                 clipID: clip.id, assetID: clip.assetID,
                 sourceRange: ReviewRange(start: clip.start, endExclusive: clip.end),
+                sourceFrames: sourceRates[clip.assetID].map {
+                    ReviewFrameRange(
+                        start: Int64(floor(clip.start * $0)),
+                        endExclusive: Int64(ceil(clip.end * $0)),
+                        basis: "nominal_source_fps_coordinates_not_decoded_sample_indices")
+                },
                 segmentIndices: indices,
                 outputRange: indices.first.flatMap { first in
                     indices.last.map {
@@ -232,24 +249,34 @@ extension VideoEditorService {
                 "shot_count", expected: options.expectedShotCount.map(Double.init),
                 actual: shotCount.map(Double.init)),
         ]
+        let borders =
+            options.checkBorders
+            ? try await reviewBorders(
+                project: project, pipeline: pipeline, limit: options.maximumBorderFrames) : nil
         let status: ReviewStatus =
             !diagnostics.isEmpty || checks.contains { $0.status == .failed }
+                || borders?.status == .failed
             ? .failed
             : checks.contains { $0.expected != nil && $0.status == .notAssessed }
-                ? .notAssessed : .passed
+                ? .notAssessed : borders?.status ?? .passed
         return ReviewReport(
             version: 1, projectPath: url.path, projectID: project.id, status: status,
             measurementBasis: "native_composition_not_encoded_master",
             frameDuration: ReviewTime(frameDuration), width: project.videoSettings.width,
             height: project.videoSettings.height, duration: duration?.seconds,
             frameCount: frameCount, shotCount: shotCount, clips: clips, segments: segments,
-            checks: checks, diagnostics: diagnostics)
+            checks: checks, diagnostics: diagnostics, borders: borders)
     }
 
     public static func writeReviewReport(
         _ report: ReviewReport, project source: URL, to output: URL, overwrite: Bool = false
     ) throws -> ReviewArtifact {
         let project = try open(source)
+        try require(
+            project.id == report.projectID
+                && VideoProjectFileAccess.identity(source)
+                    == VideoProjectFileAccess.identity(URL(fileURLWithPath: report.projectPath)),
+            "Report does not belong to this project.")
         try requireOutput(output, extension: "json", project: project, source: source)
         try VideoProjectExportDestination.validate(output, project: project)
         try checkDestination(output, overwrite: overwrite)
@@ -290,19 +317,28 @@ extension VideoEditorService {
             name: name, status: status, expected: expected, actual: actual, tolerance: tolerance)
     }
 
-    private static func reviewMarker(at seconds: Double, project: VideoProject)
+    private static func reviewMarker(at seconds: Double, markers: [VideoMarker], fps: Double)
         -> ReviewMarkerDelta?
     {
-        guard
-            let marker = project.markers.min(by: {
-                let left = abs($0.seconds - seconds)
-                let right = abs($1.seconds - seconds)
-                return left == right
-                    ? ($0.seconds == $1.seconds ? $0.id < $1.id : $0.seconds < $1.seconds)
-                    : left < right
-            })
-        else { return nil }
-        let fps = project.videoSettings.frameRate
+        guard !markers.isEmpty else { return nil }
+        func lowerBound(_ time: Double) -> Int {
+            var low = 0
+            var high = markers.count
+            while low < high {
+                let middle = (low + high) / 2
+                if markers[middle].seconds < time { low = middle + 1 } else { high = middle }
+            }
+            return low
+        }
+        let next = lowerBound(seconds)
+        var index = min(next, markers.count - 1)
+        if next > 0
+            && (next == markers.count
+                || seconds - markers[next - 1].seconds <= markers[next].seconds - seconds)
+        {
+            index = lowerBound(markers[next - 1].seconds)
+        }
+        let marker = markers[index]
         let frame = Int64((marker.seconds * fps).rounded())
         return ReviewMarkerDelta(
             markerID: marker.id, kind: marker.kind.rawValue, markerSeconds: marker.seconds,

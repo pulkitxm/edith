@@ -115,4 +115,24 @@ import Testing
             VideoEditorService.reviewFrameCeiling(
                 boundary - CMTime(value: 1, timescale: 60000), frameDuration: frame) == 33)
     }
+
+    @Test func trimSlicesDoNotBecomeShotsAndRemovedClipsHaveNoOutputRange() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fixture = try await Self.fixture(directory)
+        var project = try VideoProject.open(fixture.project)
+        var timeline = project.root["timeline"] as! [String: Any]
+        timeline["trimRanges"] = [
+            ["clipId": project.clips[0].id, "startSec": 0.1, "endSec": 0.2],
+            ["clipId": project.clips[1].id, "startSec": 0.5, "endSec": 1.0],
+        ]
+        project.root["timeline"] = timeline
+        try project.save(to: fixture.project)
+        let report = try await VideoEditorService.reviewReport(fixture.project)
+        #expect(report.shotCount == 1 && report.segments.count == 2)
+        #expect(report.frameCount == 12)
+        #expect(report.segments.map(\.outputFrames.start) == [0, 3])
+        #expect(report.segments.map(\.outputFrames.endExclusive) == [3, 12])
+        #expect(report.clips[1].outputRange == nil && report.clips[1].segmentIndices.isEmpty)
+    }
 }

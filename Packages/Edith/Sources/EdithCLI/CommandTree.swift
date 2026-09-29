@@ -606,6 +606,18 @@ public enum CommandTree {
         "ed studio edit captions remove": Spec(
             options: ["--json", "--dry-run", "-h", "--help", "--version"],
             arguments: [.localPath, .free]),
+        "ed studio edit review-report": Spec(
+            options: [
+                "--json", "--overwrite", "--output", "--expect-duration", "--duration-tolerance",
+                "--expect-frame-count", "--expect-shot-count", "--check-borders",
+                "--max-border-frames",
+                "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--output": .localPath, "--expect-duration": .free, "--duration-tolerance": .free,
+                "--expect-frame-count": .free, "--expect-shot-count": .free,
+                "--max-border-frames": .free,
+            ], arguments: [.localPath]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),
