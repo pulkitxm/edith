@@ -20,6 +20,34 @@ from editor_acceptance_publications import protected_snapshot, publication_reord
 
 
 class OrchestrationContractTests(unittest.TestCase):
+    def check_existing_workspace_preserved(self, symlink):
+        root = pathlib.Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "opencode"
+        root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="acceptance-existing-", dir=root) as directory:
+            target = pathlib.Path(directory) / "unrelated"
+            target.mkdir()
+            result = target / "result.json"
+            original = b'{"unrelated":"existing result"}\n'
+            result.write_bytes(original)
+            workspace = target
+            if symlink:
+                workspace = pathlib.Path(directory) / "workspace-link"
+                workspace.symlink_to(target, target_is_directory=True)
+            process = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("test-editor-acceptance.py")),
+                                      "--workspace", str(workspace), "--fixture-only"], capture_output=True, text=True, timeout=30)
+            self.assertEqual(process.returncode, 1)
+            self.assertIn("Workspace must not already exist", process.stderr)
+            self.assertEqual(result.read_bytes(), original)
+            self.assertEqual(list(target.iterdir()), [result])
+            if symlink:
+                self.assertTrue(workspace.is_symlink())
+
+    def test_existing_unrelated_workspace_is_preserved(self):
+        self.check_existing_workspace_preserved(False)
+
+    def test_existing_symlink_workspace_is_preserved(self):
+        self.check_existing_workspace_preserved(True)
+
     def test_final_success_requires_every_requested_check(self):
         spec = importlib.util.spec_from_file_location("acceptance_runner", pathlib.Path(__file__).with_name("test-editor-acceptance.py"))
         runner = importlib.util.module_from_spec(spec)
@@ -67,8 +95,9 @@ class OrchestrationContractTests(unittest.TestCase):
                     self.assertFalse((workspace / ".result.json.tmp").exists())
                     if not failing:
                         self.assertEqual(json.loads(result.read_text())["pendingGroups"], ["markers", "captions", "media", "publications"])
+                        original = result.read_bytes()
                         self.assertEqual(runner.cli(), 1)
-                        self.assertFalse(result.exists())
+                        self.assertEqual(result.read_bytes(), original)
             self.assertEqual(len(core_calls), 2)
             failed = subprocess.CompletedProcess(["synthetic-helper"], 1, "not JSON", "Synthetic inspector failed")
             with mock.patch.object(runner.subprocess, "run", return_value=failed):

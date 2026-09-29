@@ -108,7 +108,6 @@ def main():
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Additional public v1 edit operations, including project videoSettings")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
-    (workspace / "result.json").unlink(missing_ok=True)
     require(not workspace.exists(), "Workspace must not already exist")
     require(args.fixture_only or args.ed is not None, "--ed is required for CLI acceptance")
     require(not args.media_fixture or args.publication_plan, "--media-fixture requires --publication-plan")
