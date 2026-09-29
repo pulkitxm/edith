@@ -1,0 +1,102 @@
+import Foundation
+import Testing
+@testable import Edith
+
+@Suite struct VideoMarkersTests {
+    @Test func markerCRUDAndDocumentRoundTrip() throws {
+        var project = VideoProject.create()
+        let rate = try VideoMarkerFrameRate(numerator: 30000, denominator: 1001)
+        let first = try project.addMarker(atFrame: 120, frameRate: rate, label: "Verse")
+        let second = try project.addMarker(atFrame: 30, label: "Click", kind: .transient)
+        try project.updateMarker(first.id, frame: 150, label: "Chorus")
+        #expect(project.markers.map(\.id) == [second.id, first.id])
+        #expect(project.markers.last?.frame == 150)
+        #expect(project.markers.last?.frameRate == rate)
+        let data = try project.exportMarkers()
+        var restored = VideoProject.create()
+        try restored.importMarkers(data)
+        #expect(restored.markers == project.markers)
+        #expect(throws: VideoMarkerError.self) { try restored.importMarkers(data) }
+        #expect(restored.markers == project.markers)
+        try restored.removeMarker(second.id)
+        #expect(restored.markers.count == 1)
+        try restored.importMarkers(data, replace: true)
+        #expect(restored.markers == project.markers)
+        let serialized = try JSONSerialization.data(withJSONObject: restored.root)
+        let root = try #require(JSONSerialization.jsonObject(with: serialized) as? [String: Any])
+        #expect(VideoProject(root: root).markers == restored.markers)
+    }
+
+    @Test func markerPositionsSurviveVideoEdits() throws {
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/clip.mov"), duration: 12, width: 640, height: 360)
+        let clip = try #require(project.clips.first)
+        try project.addMarker(atFrame: 90)
+        let original = project.markers
+        project.split(clipID: clip.id, at: 5)
+        project.trim(clipID: clip.id, start: 1, end: 4)
+        project.addSpeed(startMs: 0, endMs: 2000, rate: 2)
+        project.setClips(project.clips.reversed())
+        project.setClips([])
+        #expect(project.markers == original)
+    }
+
+    @Test func snapUsesInclusiveThresholdAndEarlierFrameForTies() throws {
+        var project = VideoProject.create()
+        try project.addMarker(atFrame: 104)
+        try project.addMarker(atFrame: 100)
+        #expect(project.snapToMarker(frame: 102, thresholdFrames: 2) == 100)
+        #expect(project.snapToMarker(frame: 102, thresholdFrames: 1) == 102)
+        #expect(project.snapToMarker(frame: 104, thresholdFrames: 0) == 104)
+        #expect(project.snapToMarker(frame: 103, thresholdFrames: -1) == 103)
+        let rate = try VideoMarkerFrameRate(numerator: 60)
+        #expect(project.snapToMarker(frame: 201, thresholdFrames: 1, frameRate: rate) == 200)
+    }
+
+    @Test func rationalTimecodeUsesExplicitNonDropFrameLabels() throws {
+        let rate = try VideoMarkerFrameRate(numerator: 30000, denominator: 1001)
+        #expect(rate.timecode(at: 1800) == "00:01:00:00")
+        #expect(abs(rate.seconds(at: 1800) - 60.06) < 0.000001)
+        let marker = try VideoMarker(frame: 1800, frameRate: rate)
+        #expect(marker.timecode == "00:01:00:00 (30000/1001 fps NDF)")
+        #expect(!marker.timecode.contains(";"))
+        let film = try VideoMarkerFrameRate(numerator: 24000, denominator: 1001)
+        #expect(film.timecode(at: 24) == "00:00:01:00")
+        #expect(try film.frame(at: film.seconds(at: 86_400)) == 86_400)
+        #expect(try VideoMarkerFrameRate(numerator: 60000, denominator: 2002) == rate)
+    }
+
+    @Test func invalidImportsAndUpdatesAreAtomic() throws {
+        var project = VideoProject.create()
+        let marker = try project.addMarker(atFrame: 10)
+        #expect(throws: VideoMarkerError.self) { try project.updateMarker(marker.id, frame: -1) }
+        #expect(project.markers == [marker])
+        for json in [
+            "{\"version\":2,\"markers\":[]}",
+            "{\"version\":1,\"markers\":[{\"id\":\"bad\",\"frame\":-1,\"frameRate\":{\"numerator\":30,\"denominator\":1},\"label\":\"Bad\",\"kind\":\"manual\"}]}",
+            "{\"version\":1,\"markers\":[{\"id\":\"bad\",\"frame\":1,\"frameRate\":{\"numerator\":30,\"denominator\":0},\"label\":\"Bad\",\"kind\":\"manual\"}]}",
+        ] {
+            #expect(throws: (any Error).self) {
+                try project.importMarkers(Data(json.utf8), replace: true)
+            }
+            #expect(project.markers == [marker])
+        }
+        #expect(throws: VideoMarkerError.self) { try VideoMarkerFrameRate.fps30.frame(at: .nan) }
+        #expect(throws: VideoMarkerError.self) {
+            try VideoMarkerFrameRate.fps30.frame(at: .infinity)
+        }
+        #expect(throws: VideoMarkerError.self) { try VideoMarker(frame: Int64.max) }
+    }
+
+    @Test func updatingRatePreservesTimeUnlessFrameIsExplicit() throws {
+        var project = VideoProject.create()
+        let marker = try project.addMarker(atFrame: 90)
+        let rate = try VideoMarkerFrameRate(numerator: 60)
+        try project.updateMarker(marker.id, frameRate: rate)
+        #expect(project.markers.first?.frame == 180)
+        #expect(project.markers.first?.seconds == 3)
+        try project.updateMarker(marker.id, frame: 60, frameRate: .fps30)
+        #expect(project.markers.first?.seconds == 2)
+    }
+}
