@@ -405,6 +405,38 @@ public enum CommandTree {
         "ed studio probe": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio edit schema": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio edit media usage": Spec(
+            options: [
+                "--json", "--project", "--scope", "--offset", "--limit", "-h", "--help",
+                "--version",
+            ],
+            optionValues: [
+                "--project": .localPath, "--scope": .free, "--offset": .free, "--limit": .free,
+            ]),
+        "ed studio edit media identity": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit media probe": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit media duplicates": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath],
+            repeatingArgument: .localPath),
+        "ed studio edit media chronology": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath],
+            repeatingArgument: .localPath),
+        "ed studio edit media index": Spec(
+            options: [
+                "--json", "--overwrite", "--dry-run", "--probe", "--output", "-h", "--help",
+                "--version",
+            ],
+            optionValues: ["--output": .localPath], arguments: [.localPath]),
+        "ed studio edit media provenance": Spec(
+            options: [
+                "--json", "--overwrite", "--dry-run", "--asset", "--family", "--declaration",
+                "--output", "-h", "--help", "--version",
+            ],
+            optionValues: [
+                "--asset": .free, "--family": .free, "--declaration": .free, "--output": .localPath,
+            ], arguments: [.localPath]),
         "ed studio edit create": Spec(
             options: ["--json", "--overwrite", "--title", "-h", "--help", "--version"],
             optionValues: ["--title": .free], arguments: [.localPath]),

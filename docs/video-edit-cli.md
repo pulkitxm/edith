@@ -4,6 +4,9 @@
 render pipeline as the video editor. It runs locally without opening an editor window.
 Original media remains in place. Projects reference absolute source paths.
 
+See [original media CLI](video-media-cli.md) for identities, capture chronology,
+source provenance, and multi-project clip-occurrence reuse audits.
+
 ## Commands
 
 ```sh

@@ -657,6 +657,26 @@ enum VideoMediaLibrary {
 }
 
 extension VideoProject {
+    mutating func renewMediaProjectIdentity(title: String) throws {
+        let previousID = id
+        var manifest = try mediaManifest()
+        var metadata = root["project"] as? [String: Any] ?? [:]
+        let identity = VideoProject.create(title: title).root["project"] as? [String: Any] ?? [:]
+        let newID = identity["id"] as! String
+        manifest.entries = try manifest.entries.map { entry in
+            guard entry.reference.role == .wallpaper else { return entry }
+            guard entry.reference.assetID == previousID else {
+                throw VideoMediaLibrary.Failure.invalidReference("wallpaper project identity")
+            }
+            return .init(
+                reference: .init(assetID: newID, role: .wallpaper), source: entry.source,
+                metadata: entry.metadata, packagedPath: entry.packagedPath)
+        }
+        metadata.merge(identity) { _, new in new }
+        if root["edithMediaLibrary"] != nil { try setMediaManifest(manifest) }
+        root["project"] = metadata
+    }
+
     func mediaReferences() throws -> [VideoMediaLibrary.Reference] {
         var ids = Set<String>()
         var result: [VideoMediaLibrary.Reference] = []

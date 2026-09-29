@@ -51,10 +51,7 @@ extension VideoEditorService {
         try requireTitle(title)
         var project = try open(source)
         try requireOutput(output, extension: "openscreen", project: project, source: source)
-        var metadata = project.root["project"] as? [String: Any] ?? [:]
-        let identity = VideoProject.create(title: title).root["project"] as? [String: Any] ?? [:]
-        metadata.merge(identity) { _, new in new }
-        project.root["project"] = metadata
+        try project.renewMediaProjectIdentity(title: title)
         try save(project, to: output, overwrite: overwrite)
         return result(project, url: output, written: true)
     }
