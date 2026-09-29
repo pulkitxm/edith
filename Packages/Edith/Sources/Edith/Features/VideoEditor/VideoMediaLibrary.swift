@@ -65,6 +65,136 @@ enum VideoMediaLibrary {
         let video: [VideoTrack]
         let audio: [AudioTrack]
         let image: Image?
+        var captureDate: CaptureDate = .init(
+            source: nil, rawValues: [], utc: nil, timezone: .unknown, offsetMinutes: nil)
+    }
+
+    struct CaptureDate: Codable, Equatable, Sendable {
+        enum Timezone: String, Codable, Sendable {
+            case explicitOffset, unknown, invalid, conflicting
+        }
+        let source: String?
+        let rawValues: [String]
+        let utc: String?
+        let timezone: Timezone
+        let offsetMinutes: Int?
+        let isOriginalMetadata: Bool
+
+        init(
+            source: String?, rawValues: [String], utc: String?, timezone: Timezone,
+            offsetMinutes: Int?
+        ) {
+            self.source = source
+            self.rawValues = rawValues
+            self.utc = utc
+            self.timezone = timezone
+            self.offsetMinutes = offsetMinutes
+            isOriginalMetadata =
+                source == "exif.DateTimeOriginal"
+                || source?.contains("original_creation_time") == true
+        }
+    }
+
+    private static let captureDateKeys = [
+        "mdta/com.apple.quicktime.original_creation_time", "mdta/original_creation_time",
+        AVMetadataIdentifier.quickTimeMetadataCreationDate.rawValue,
+        AVMetadataIdentifier.quickTimeUserDataCreationDate.rawValue,
+        AVMetadataIdentifier.commonIdentifierCreationDate.rawValue,
+    ]
+
+    static func captureDate(
+        exif: [String: Any] = [:], quickTime: [String: [String]] = [:]
+    ) -> CaptureDate {
+        if let original = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+            return parseCaptureDate(
+                original, offset: exif["OffsetTimeOriginal"] as? String,
+                source: "exif.DateTimeOriginal")
+        }
+        for key in captureDateKeys {
+            let values = Array(Set(quickTime[key] ?? [])).sorted()
+            if values.count > 1 {
+                return .init(
+                    source: key, rawValues: values, utc: nil, timezone: .conflicting,
+                    offsetMinutes: nil)
+            }
+            if let value = values.first { return parseCaptureDate(value, source: key) }
+        }
+        if let digitized = exif[kCGImagePropertyExifDateTimeDigitized as String] as? String {
+            return parseCaptureDate(
+                digitized, offset: exif["OffsetTimeDigitized"] as? String,
+                source: "exif.DateTimeDigitized")
+        }
+        return .init(source: nil, rawValues: [], utc: nil, timezone: .unknown, offsetMinutes: nil)
+    }
+
+    private static func parseCaptureDate(_ raw: String, offset: String? = nil, source: String)
+        -> CaptureDate
+    {
+        let rawValues = [raw] + (offset.map { [$0] } ?? [])
+        func result(_ timezone: CaptureDate.Timezone, utc: String? = nil, minutes: Int? = nil)
+            -> CaptureDate
+        {
+            .init(
+                source: source, rawValues: rawValues, utc: utc, timezone: timezone,
+                offsetMinutes: minutes)
+        }
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if source.hasPrefix("exif."), value.count >= 10 {
+            value = value.prefix(10).replacingOccurrences(of: ":", with: "-") + value.dropFirst(10)
+        }
+        let expression = try! NSRegularExpression(
+            pattern: #"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$"#)
+        guard
+            let match = expression.firstMatch(
+                in: value, range: NSRange(value.startIndex..., in: value))
+        else { return result(.invalid) }
+        func group(_ index: Int) -> String {
+            Range(match.range(at: index), in: value).map { String(value[$0]) } ?? ""
+        }
+        let local = group(1) + "T" + group(2)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        formatter.isLenient = false
+        guard let date = formatter.date(from: local), formatter.string(from: date) == local else {
+            return result(.invalid)
+        }
+        let zone = offset ?? group(4)
+        if let offset, !group(4).isEmpty, offset != group(4) { return result(.conflicting) }
+        if zone.isEmpty || zone == "-00:00" || zone == "-0000" { return result(.unknown) }
+        let minutes: Int
+        if zone == "Z" {
+            minutes = 0
+        } else {
+            guard zone.range(of: #"^[+-]\d{2}:?\d{2}$"#, options: .regularExpression) != nil else {
+                return result(.invalid)
+            }
+            let digits = zone.dropFirst().replacingOccurrences(of: ":", with: "")
+            guard let hours = Int(digits.prefix(2)), let remainder = Int(digits.suffix(2)),
+                hours <= 14, remainder < 60, hours != 14 || remainder == 0
+            else { return result(.invalid) }
+            minutes = (hours * 60 + remainder) * (zone.hasPrefix("-") ? -1 : 1)
+        }
+        let fraction = Double("0" + group(3)) ?? 0
+        let utc = date.addingTimeInterval(fraction - Double(minutes * 60))
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        iso.timeZone = TimeZone(secondsFromGMT: 0)
+        return result(.explicitOffset, utc: iso.string(from: utc), minutes: minutes)
+    }
+
+    static func chronologicalOrder(_ media: [InspectedMedia]) -> [InspectedMedia] {
+        media.sorted {
+            let left = $0.metadata.captureDate.utc
+            let right = $1.metadata.captureDate.utc
+            if left != right { return (left ?? "~") < (right ?? "~") }
+            if $0.source.identity.sha256 != $1.source.identity.sha256 {
+                return $0.source.identity.sha256 < $1.source.identity.sha256
+            }
+            return $0.url.absoluteString < $1.url.absoluteString
+        }
     }
 
     struct InspectedMedia: Codable, Equatable, Sendable {
@@ -154,7 +284,10 @@ enum VideoMediaLibrary {
                 duration: nil, video: [], audio: [],
                 image: Image(
                     type: type as String, width: width, height: height,
-                    orientation: properties[kCGImagePropertyOrientation as String] as? Int ?? 1))
+                    orientation: properties[kCGImagePropertyOrientation as String] as? Int ?? 1),
+                captureDate: captureDate(
+                    exif: properties[kCGImagePropertyExifDictionary as String] as? [String: Any]
+                        ?? [:]))
         }
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration).seconds
@@ -190,9 +323,23 @@ enum VideoMediaLibrary {
             }
         }
         guard !video.isEmpty || !audio.isEmpty else { throw Failure.unsupportedMedia(url.path) }
+        var dates: [String: [String]] = [:]
+        var items = try await asset.load(.commonMetadata)
+        for format in try await asset.load(.availableMetadataFormats) {
+            items += try await asset.loadMetadata(for: format)
+        }
+        for item in items {
+            try Task.checkCancellation()
+            if let key = item.identifier?.rawValue, captureDateKeys.contains(key),
+                let value = try await item.load(.stringValue)
+            {
+                dates[key, default: []].append(value)
+            }
+        }
         try Task.checkCancellation()
         return Metadata(
-            duration: duration.isFinite ? duration : nil, video: video, audio: audio, image: nil)
+            duration: duration.isFinite ? duration : nil, video: video, audio: audio, image: nil,
+            captureDate: captureDate(quickTime: dates))
     }
 
     private static func fourCC(_ value: FourCharCode) -> String {
@@ -679,14 +826,33 @@ extension VideoProject {
         if reference.role == .original {
             let cursor = VideoMediaLibrary.Reference(assetID: reference.assetID, role: .cursor)
             if changed {
-                manifest.entries.removeAll { $0.reference == cursor }
-            } else if let recorded = manifest.entries.first(where: { $0.reference == cursor }) {
+                manifest.entries.removeAll {
+                    $0.reference.assetID == reference.assetID
+                        && [.cursor, .processedAudio].contains($0.reference.role)
+                }
+            } else {
+                let oldCursor = URL(fileURLWithPath: previousURL.path + ".cursor.json")
+                let recorded = manifest.entries.first { $0.reference == cursor }
+                let identity =
+                    try recorded?.source.identity
+                    ?? (FileManager.default.fileExists(atPath: oldCursor.path)
+                        ? VideoMediaLibrary.identity(
+                            of: oldCursor, checkCancellation: checkCancellation) : nil)
                 let cursorURL = URL(fileURLWithPath: url.path + ".cursor.json")
-                guard
-                    try VideoMediaLibrary.identity(
-                        of: cursorURL, checkCancellation: checkCancellation)
-                        == recorded.source.identity
-                else { throw VideoMediaLibrary.Failure.identityMismatch(cursorURL.path) }
+                if let identity {
+                    guard
+                        try VideoMediaLibrary.identity(
+                            of: cursorURL, checkCancellation: checkCancellation) == identity
+                    else { throw VideoMediaLibrary.Failure.identityMismatch(cursorURL.path) }
+                    if recorded == nil {
+                        manifest.entries.append(
+                            .init(reference: cursor, source: .init(identity: identity)))
+                    }
+                } else if policy == .requireIdentity,
+                    FileManager.default.fileExists(atPath: cursorURL.path)
+                {
+                    throw VideoMediaLibrary.Failure.identityMismatch(cursorURL.path)
+                }
             }
         }
         manifest.entries.removeAll { $0.reference == reference }
@@ -698,6 +864,14 @@ extension VideoProject {
                 metadata: changed ? nil : previous?.metadata, packagedPath: nil))
         var candidate = self
         try candidate.setMediaURL(url, for: reference)
+        if reference.role == .original, changed {
+            var entries = candidate.assets.map(\.raw)
+            for index in entries.indices where entries[index]["id"] as? String == reference.assetID
+            {
+                entries[index].removeValue(forKey: "edithAudioPath")
+            }
+            candidate.root["assets"] = entries
+        }
         try candidate.setMediaManifest(manifest)
         try checkCancellation()
         self = candidate

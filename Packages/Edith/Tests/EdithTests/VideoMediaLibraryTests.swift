@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import ImageIO
 import Testing
 @testable import Edith
 
@@ -234,7 +235,9 @@ import Testing
     @Test func probesActualAudioFormat() async throws {
         let folder = try directory()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let url = folder.appendingPathComponent("tone.wav")
+        let sources = folder.appendingPathComponent("sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: false)
+        let url = sources.appendingPathComponent("tone.wav")
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 480))
         buffer.frameLength = 480
@@ -248,6 +251,16 @@ import Testing
         #expect(media.metadata.audio.first?.channels == 2)
         #expect(media.metadata.video.isEmpty)
         #expect(abs((media.metadata.duration ?? 0) - 0.01) < 0.001)
+        var project = VideoProject.create()
+        project.addAsset(url, duration: 0.01, width: 1, height: 1)
+        let package = try project.packageOriginalMedia(to: folder.appendingPathComponent("package"))
+        try FileManager.default.removeItem(at: sources)
+        let moved = folder.appendingPathComponent("moved")
+        try FileManager.default.moveItem(at: package.directory, to: moved)
+        let reopened = try VideoProject.openMediaPackage(moved)
+        #expect(
+            try await VideoMediaLibrary.probe(reopened.assets[0].url).audio.first?.sampleRate
+                == 48_000)
     }
 
     @Test func differentSectionsOfCopiedSourceCannotBeReservedAcrossReels() throws {
@@ -480,14 +493,17 @@ import Testing
         }
     }
 
-    @Test func concurrentLedgerAliasCannotBypassTheCanonicalReservation() async throws {
+    @Test(arguments: [false, true])
+    func concurrentLedgerAliasCannotBypassTheCanonicalReservation(parentAlias: Bool) async throws {
         let folder = try directory()
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = VideoMediaLibrary.Source(
             identity: try VideoMediaLibrary.identity(of: file(folder, "source", "same")))
         let url = folder.appendingPathComponent("ledger.json")
-        let alias = folder.appendingPathComponent("alias.json")
-        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: url)
+        let link = folder.appendingPathComponent("alias")
+        try FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: parentAlias ? folder : url)
+        let alias = parentAlias ? link.appendingPathComponent("ledger.json") : link
         let receipts = await withTaskGroup(of: VideoMediaLibrary.Reservation?.self) { group in
             for index in 0..<16 {
                 group.addTask {
@@ -501,7 +517,9 @@ import Testing
         }
         #expect(receipts.count == 1)
         #expect(try VideoMediaLibrary.Ledger(url: url).reservations() == receipts)
-        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: alias.path) == url.path)
+        #expect(
+            try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+                == (parentAlias ? folder : url).path)
     }
 
     @Test func packagePreservesProcessedAudioWallpaperAndBothAnnotationImageFields() throws {
@@ -605,7 +623,8 @@ import Testing
         #expect(throws: (any Error).self) { try reopened.indexMedia() }
     }
 
-    @Test func strictOriginalRelinkAlsoValidatesAssociatedTelemetry() throws {
+    @Test(arguments: [false, true])
+    func strictOriginalRelinkAlsoValidatesAssociatedTelemetry(indexed: Bool) throws {
         let folder = try directory()
         defer { try? FileManager.default.removeItem(at: folder) }
         let first = try file(folder, "first.mov", "same")
@@ -614,14 +633,131 @@ import Testing
         let otherCursor = try file(folder, "second.mov.cursor.json", "different telemetry")
         var project = VideoProject.create()
         project.addAsset(first, duration: 1, width: 1, height: 1)
-        try project.indexMedia()
+        if indexed { try project.indexMedia() }
         let reference = VideoMediaLibrary.Reference(assetID: project.assets[0].id, role: .original)
         #expect(throws: VideoMediaLibrary.Failure.self) {
             try project.relinkOriginalMedia(reference, to: second)
         }
         #expect(project.assets[0].url == first)
+        try FileManager.default.removeItem(at: otherCursor)
+        #expect(throws: (any Error).self) { try project.relinkOriginalMedia(reference, to: second) }
         try Data("first telemetry".utf8).write(to: otherCursor)
         #expect(try !project.relinkOriginalMedia(reference, to: second).contentChanged)
+    }
+
+    @Test func replacingOriginalClearsDerivedAudio() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var project = VideoProject.create()
+        project.addAsset(try file(folder, "old.mov", "old"), duration: 1, width: 1, height: 1)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = try file(folder, "clean.wav", "old audio").path
+        project.root["assets"] = assets
+        try project.indexMedia()
+        try project.relinkOriginalMedia(
+            .init(assetID: project.assets[0].id, role: .original),
+            to: file(folder, "new.mov", "new"), policy: .allowReplacement)
+        #expect(project.assets[0].raw["edithAudioPath"] == nil)
+        #expect(
+            try !project.mediaManifest().entries.contains { $0.reference.role == .processedAudio })
+    }
+
+    private func image(_ folder: URL, name: String, exif: [String: Any]) throws -> URL {
+        let url = folder.appendingPathComponent(name)
+        let context = try #require(
+            CGContext(
+                data: nil, width: 2, height: 2, bitsPerComponent: 8,
+                bytesPerRow: 8, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        let image = try #require(context.makeImage())
+        let output = try #require(
+            CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil))
+        CGImageDestinationAddImage(
+            output, image, [kCGImagePropertyExifDictionary: exif] as CFDictionary)
+        try #require(CGImageDestinationFinalize(output))
+        return url
+    }
+
+    @Test func captureDatesNormalizeOffsetsAndSortDeterministically() async throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sources = folder.appendingPathComponent("sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: false)
+        let a = try image(
+            sources, name: "a.jpg",
+            exif: [
+                "DateTimeOriginal": "2020:02:29 10:00:00", "OffsetTimeOriginal": "+05:30",
+                "DateTimeDigitized": "2026:01:01 00:00:00",
+            ])
+        let b = try image(
+            sources, name: "b.jpg",
+            exif: ["DateTimeOriginal": "2020:02:28 23:00:00", "OffsetTimeOriginal": "-06:00"])
+        let unknown = try image(sources, name: "unknown.jpg", exif: [:])
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 0)], ofItemAtPath: unknown.path)
+        let first = try await VideoMediaLibrary.inspect(a)
+        let second = try await VideoMediaLibrary.inspect(b)
+        let missing = try await VideoMediaLibrary.inspect(unknown)
+        #expect(first.metadata.captureDate.utc == "2020-02-29T04:30:00.000Z")
+        #expect(second.metadata.captureDate.utc == "2020-02-29T05:00:00.000Z")
+        #expect(first.metadata.captureDate.source == "exif.DateTimeOriginal")
+        #expect(first.metadata.captureDate.offsetMinutes == 330)
+        #expect(first.metadata.captureDate.timezone == .explicitOffset)
+        #expect(missing.metadata.captureDate.source == nil)
+        #expect(missing.metadata.captureDate.utc == nil)
+        #expect(
+            VideoMediaLibrary.chronologicalOrder([missing, second, first]).map(\.url) == [
+                a, b, unknown,
+            ])
+        #expect(
+            VideoMediaLibrary.chronologicalOrder([second, missing, first])
+                == VideoMediaLibrary.chronologicalOrder([missing, first, second]))
+        #expect(
+            try JSONDecoder().decode(
+                VideoMediaLibrary.Metadata.self, from: JSONEncoder().encode(first.metadata))
+                == first.metadata)
+        var project = VideoProject.create()
+        project.addAsset(a, duration: 1, width: 2, height: 2)
+        project.backgroundColor = b.path
+        let package = try project.packageOriginalMedia(to: folder.appendingPathComponent("package"))
+        try FileManager.default.removeItem(at: sources)
+        let moved = folder.appendingPathComponent("moved")
+        try FileManager.default.moveItem(at: package.directory, to: moved)
+        let reopened = try VideoProject.openMediaPackage(moved)
+        #expect(try await VideoMediaLibrary.probe(reopened.assets[0].url).image?.width == 2)
+        #expect(
+            try await VideoMediaLibrary.probe(URL(fileURLWithPath: reopened.backgroundColor))
+                .captureDate == second.metadata.captureDate)
+    }
+
+    @Test func captureDatesPreserveUnknownInvalidAndConflictingValues() {
+        let key = AVMetadataIdentifier.quickTimeMetadataCreationDate.rawValue
+        let original = "mdta/com.apple.quicktime.original_creation_time"
+        let export = [key: ["2026-09-29T12:00:00Z"]]
+        let unknown = VideoMediaLibrary.captureDate(
+            exif: ["DateTimeOriginal": "2020:02:29 10:00:00"], quickTime: export)
+        #expect(unknown.utc == nil)
+        #expect(unknown.timezone == .unknown)
+        #expect(unknown.isOriginalMetadata)
+        for value in ["invalid", "2020:02:30 10:00:00", "2020:01:01 25:00:00"] {
+            #expect(
+                VideoMediaLibrary.captureDate(exif: ["DateTimeOriginal": value], quickTime: export)
+                    .timezone == .invalid)
+        }
+        #expect(
+            VideoMediaLibrary.captureDate(exif: [
+                "DateTimeOriginal": "2020:01:01 00:00:00", "OffsetTimeOriginal": "+25:00",
+            ]).timezone == .invalid)
+        let selected = VideoMediaLibrary.captureDate(
+            quickTime: export.merging([original: ["2020-01-01T02:00:00+0200"]]) { $1 })
+        #expect(selected.utc == "2020-01-01T00:00:00.000Z")
+        #expect(selected.isOriginalMetadata)
+        #expect(!VideoMediaLibrary.captureDate(quickTime: export).isOriginalMetadata)
+        #expect(
+            VideoMediaLibrary.captureDate(quickTime: [key: ["2020-01-01T00:00:00-00:00"]]).timezone
+                == .unknown)
+        #expect(
+            VideoMediaLibrary.captureDate(quickTime: [key: ["a", "b"]]).timezone == .conflicting)
     }
 
     @Test func probesActualVideoCodecDimensionsTransformAndFrameRate() async throws {
@@ -629,6 +765,19 @@ import Testing
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("portrait.mov")
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        writer.metadata = [
+            (AVMetadataIdentifier.quickTimeMetadataCreationDate, "2026-01-01T00:00:00Z"),
+            (
+                AVMetadataIdentifier(rawValue: "mdta/com.apple.quicktime.original_creation_time"),
+                "2020-01-01T02:00:00+0200"
+            ),
+        ].map { identifier, date in
+            let item = AVMutableMetadataItem()
+            item.identifier = identifier
+            item.value = date as NSString
+            item.dataType = kCMMetadataBaseDataType_UTF8 as String
+            return item
+        }
         let input = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: [
@@ -670,6 +819,8 @@ import Testing
         var project = VideoProject.create()
         project.addAsset(url, duration: 0.125, width: 999, height: 999)
         let manifest = try await project.inspectMedia()
+        #expect(manifest.entries.first?.metadata?.captureDate.utc == "2020-01-01T00:00:00.000Z")
+        #expect(manifest.entries.first?.metadata?.captureDate.isOriginalMetadata == true)
         let metadata = try #require(manifest.entries.first?.metadata?.video.first)
         #expect(metadata.codecs == ["avc1"])
         #expect(metadata.width == 64)
