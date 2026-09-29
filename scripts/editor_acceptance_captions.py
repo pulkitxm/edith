@@ -77,11 +77,21 @@ def exercise_caption_preservation(edit, source, workspace, marker_ids=None, addi
     plan.write_text(json.dumps({"version": 1, "operations": []}) + "\n")
     edit("apply", source, "--plan", plan, "--output", project, "--json")
     before = seed_beat_captions(edit, project, marker_ids)
-    clips = edit("show", project, "--json")["timeline"]["clips"]
+    shown = edit("show", project, "--json")
+    clips = shown["timeline"]["clips"]
+    settings = {**shown["edithVideoSettings"], "frameRateNumerator": 60000, "frameRateDenominator": 1001}
     plan.write_text(json.dumps({"version": 1, "operations": [
         {"crop": {"clipID": clips[0]["id"], "x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8}},
         {"speed": {"clipID": clips[0]["id"], "rate": 2}},
         {"reorder": {"clipIDs": [clip["id"] for clip in reversed(clips)]}},
+        {"videoSettings": {"settings": settings}},
+        {"visualEffects": {"clipID": clips[0]["id"], "effects": {
+            "framing": "fill", "focalX": 0.5, "focalY": 0.5, "exposure": 0,
+            "brightness": 0, "contrast": 1.1, "saturation": 1, "keyframes": [
+                {"time": 0, "scale": 1, "positionX": 0, "positionY": 0, "rotation": 0, "interpolation": "smooth"},
+                {"time": 0.5, "scale": 1.1, "positionX": 0.02, "positionY": 0, "rotation": 2, "interpolation": "linear"},
+            ],
+        }}},
     ]}, indent=2) + "\n")
     edit("apply", project, "--plan", plan, "--overwrite", "--json")
     unchanged_captions(before, edit("captions", "list", project, "--json"))
@@ -98,4 +108,5 @@ def exercise_caption_preservation(edit, source, workspace, marker_ids=None, addi
     unchanged_captions({key: value for key, value in before.items() if key != identifier}, removed)
     return {"captions": len(before), "rationalAnchorsPreserved": True, "textUpdatePreservedTiming": True,
             "cropSpeedReorderPreservedTiming": True, "markerBindingsExercised": bool(marker_ids),
+            "projectFPSAndVisualEffectsPreservedTiming": True,
             "additionalMutationsExercised": additional_mutations is not None, "removeDryRunPreservedBytes": True}
