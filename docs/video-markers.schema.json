@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Edith output-frame markers v1",
+  "description": "Positions are output frames, independent of later video edits. Seconds equal frame * denominator / numerator. Timecodes are non-drop-frame.",
+  "type": "object",
+  "required": ["version", "markers"],
+  "properties": {
+    "version": { "const": 1 },
+    "markers": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "required": ["id", "frame", "frameRate", "label", "kind"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Unique ID, at most 200 UTF-8 bytes." },
+          "frame": { "type": "integer", "minimum": 0, "maximum": 1000000000000 },
+          "frameRate": {
+            "type": "object",
+            "description": "Positive rational FPS with a ratio between 1 and 240, normalized on import.",
+            "required": ["numerator", "denominator"],
+            "properties": {
+              "numerator": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+              "denominator": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+            }
+          },
+          "label": { "type": "string", "maxLength": 4096, "description": "At most 4096 UTF-8 bytes." },
+          "kind": { "enum": ["manual", "transient"] }
+        }
+      }
+    }
+  }
+}

@@ -574,6 +574,9 @@ public enum Guide {
         ed studio edit schema           Headless video edit-plan schema
         ed studio edit apply demo.openscreen --plan edit.json --dry-run --json
         ed studio edit render demo.openscreen --output demo.mp4 --json
+        ed studio edit audio analyze demo.openscreen --asset ASSET_ID --json
+        ed studio edit markers add demo.openscreen --frame 60 --fps 60000/1001 --label Cue --json
+        ed studio edit markers snap demo.openscreen --frame 62 --fps 60000/1001 --threshold-frames 2 --json
         ed studio run pdf.merge a.pdf b.pdf
         ed studio run image.convert photo.heic --set format=jpg
         ed cleaner scan                 developer caches worth reclaiming

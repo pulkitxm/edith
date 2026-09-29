@@ -510,6 +510,53 @@ public enum CommandTree {
             arguments: [.localPath]),
         "ed studio edit list": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit audio analyze": Spec(
+            options: [
+                "--json", "--asset", "--fps", "--project-fps", "--sensitivity",
+                "--refractory-seconds",
+                "--minimum-spacing-seconds", "--maximum-waveform-bins", "--maximum-transients",
+                "--source-in", "--source-out", "--output-start", "--playback-rate", "-h", "--help",
+                "--version",
+            ],
+            optionValues: [
+                "--asset": .free, "--fps": .free, "--sensitivity": .free,
+                "--refractory-seconds": .free,
+                "--minimum-spacing-seconds": .free, "--maximum-waveform-bins": .free,
+                "--maximum-transients": .free, "--source-in": .free, "--source-out": .free,
+                "--output-start": .free, "--playback-rate": .free,
+            ], arguments: [.localPath]),
+        "ed studio edit markers list": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit markers add": Spec(
+            options: [
+                "--json", "--frame", "--fps", "--project-fps", "--label", "--dry-run", "-h",
+                "--help", "--version",
+            ],
+            optionValues: ["--frame": .free, "--fps": .free, "--label": .free],
+            arguments: [.localPath]),
+        "ed studio edit markers update": Spec(
+            options: [
+                "--json", "--id", "--frame", "--fps", "--project-fps", "--label", "--dry-run", "-h",
+                "--help", "--version",
+            ],
+            optionValues: ["--id": .free, "--frame": .free, "--fps": .free, "--label": .free],
+            arguments: [.localPath]),
+        "ed studio edit markers remove": Spec(
+            options: ["--json", "--id", "--dry-run", "-h", "--help", "--version"],
+            optionValues: ["--id": .free], arguments: [.localPath]),
+        "ed studio edit markers import": Spec(
+            options: ["--json", "--input", "--replace", "--dry-run", "-h", "--help", "--version"],
+            optionValues: ["--input": .localPath], arguments: [.localPath]),
+        "ed studio edit markers export": Spec(
+            options: ["--json", "--output", "--overwrite", "-h", "--help", "--version"],
+            optionValues: ["--output": .localPath], arguments: [.localPath]),
+        "ed studio edit markers snap": Spec(
+            options: [
+                "--json", "--frame", "--fps", "--project-fps", "--threshold-frames", "-h", "--help",
+                "--version",
+            ],
+            optionValues: ["--frame": .free, "--fps": .free, "--threshold-frames": .free],
+            arguments: [.localPath]),
         "ed studio edit clone": Spec(
             options: ["--json", "--overwrite", "--title", "--output", "-h", "--help", "--version"],
             optionValues: ["--title": .free, "--output": .localPath], arguments: [.localPath]),

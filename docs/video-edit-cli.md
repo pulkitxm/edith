@@ -294,7 +294,7 @@ Existing destinations still require an explicit `--overwrite` argument.
 ```
 
 Native video and audio rendering and media operations have a six-hour MCP execution
-deadline. Other routes keep
+deadline. Audio analysis has a five-minute deadline. Other routes keep
 the standard 120-second deadline. Output capture stays capped at 4 MiB, and cancellation
 continues to terminate the child process group. MCP returns the final report; optional
 child-process stderr progress does not alter the result JSON.
@@ -324,3 +324,96 @@ destination intact. Source images and project files cannot be review destination
 
 These operations are also registered as `edith_studio_edit_list`,
 `edith_studio_edit_clone`, and `edith_studio_edit_contact_sheet` in the MCP server.
+
+## Audio analysis and output markers
+
+These commands always return typed, versioned JSON. Add `--json` for structured runtime
+errors on stderr. They work without launching the app. They never rewrite raw project
+JSON from command arguments.
+
+```sh
+ed studio edit audio analyze demo.openscreen --asset ASSET_ID --json > analysis.json
+ed studio edit markers list demo.openscreen --json
+ed studio edit markers add demo.openscreen --frame 60 --fps 60000/1001 --label Cue --dry-run --json
+ed studio edit markers add demo.openscreen --frame 60 --fps 60000/1001 --label Cue --json
+ed studio edit markers update demo.openscreen --id MARKER_ID --label Chorus --json
+ed studio edit markers snap demo.openscreen --frame 62 --fps 60000/1001 --threshold-frames 2 --json
+ed studio edit markers export demo.openscreen --output markers.json --json
+ed studio edit markers remove demo.openscreen --id MARKER_ID --json
+ed studio edit markers import demo.openscreen --input markers.json --json
+```
+
+### Frame-rate and mutation contracts
+
+`add`, `snap`, and updates supplying `--frame` require exactly one of `--fps N/D`
+or `--project-fps`. Integer FPS is accepted too. Project FPS uses the validated rational
+`edithVideoSettings.frameRateNumerator/frameRateDenominator` when present, otherwise the
+native composition's frame duration. An empty project without saved FPS requires
+explicit `--fps`. Invalid settings fail rather than falling back to 30 fps.
+
+An update supplying only FPS preserves output time, rounded to the nearest new frame;
+supplying a frame sets that output frame instead. Label-only updates preserve FPS.
+Markers keep their output positions through later video edits. Timecodes are NDF,
+including fractional rates such as `60000/1001`.
+
+`add`, `update`, `remove`, and `import` accept `--dry-run`. They validate the complete
+change, marker storage, project and media before publishing. Project edits use the
+same transaction lock and revision-checked atomic save as edit plans. A stale source
+returns `project_changed`; invalid edits leave the file unchanged. These targeted
+mutations update the named project in place and do not require `--overwrite`.
+
+Import appends by default; `--replace` replaces the marker list. Duplicate IDs, invalid
+frames and invalid rational rates fail the entire import. Documents are bounded to
+32 MiB and the native document format supports 100,000 markers. Headless project
+validation additionally limits project arrays to 10,000 entries; command result limits
+also apply. See [marker JSON Schema](video-markers.schema.json).
+Export needs `--overwrite` for an existing destination and rejects project files,
+media, recording sidecars, stills, wallpaper and image-annotation dependencies,
+including symlink and hard-link aliases.
+
+List and mutation reports contain `version`, `path`, `written`,
+`positionUnit: "output_frames"`, and `markers`. Each marker includes `id`, `frame`,
+`frameRate: {numerator, denominator}`, `label`, `kind`, `outputSeconds`, and
+`nonDropFrameTimecode`. Mutation reports must fit within 4 MiB before publication.
+Export reports contain `version`, `path`, `written`, and `markerCount`; the file itself
+is the version 1 interchange document. Snap reports include `requestedOutputFrame`,
+`outputFrame`, `thresholdFrames`, `frameRate`, `outputSeconds`,
+`nonDropFrameTimecode`, and `matched`. Snap never writes; ties select the earlier frame.
+
+### Source audio and mapping
+
+Analysis selects a project asset by ID, using processed `edithAudioPath` if present,
+otherwise its original URL. Still images are rejected. Controls are `--sensitivity`
+(0 to 1), `--refractory-seconds`, `--minimum-spacing-seconds`,
+`--maximum-waveform-bins` (even, 2 to 2048), and `--maximum-transients` (1 to 10000).
+Defaults are 0.5, 0.08 seconds, 0.15 seconds, 2048 bins, and 10000 transients.
+
+The report includes `assetID`, `sourcePath`, `samplePositionUnit: "source_samples"`,
+`sampleRateUnit: "Hz"`, `durationSeconds`, and `analysis`. Analysis contains `sampleRate`,
+`sampleCount`, measured waveform bins (`startSample`, `sampleCount`, `peak`,
+`meanSquare`), transients (`sample`, `strength`), `transientsTruncated`, and an optional
+`tempoEstimate`. Tempo is interval evidence, not a confirmed musical beat grid.
+
+To obtain a marker document, supply all four mapping options plus an FPS choice:
+
+```sh
+ed studio edit audio analyze demo.openscreen --asset ASSET_ID \
+  --source-in 1 --source-out 3 --output-start 10 --playback-rate 2 \
+  --fps 60000/1001 --json > analysis.json
+jq '.markerDocument' analysis.json > detected-markers.json
+ed studio edit markers import demo.openscreen --input detected-markers.json --json
+```
+
+Mapping times are seconds, with an inclusive source start and exclusive source end.
+The source range must fit decoded audio. Output time equals
+`outputStartSeconds + (sourceSeconds - sourceInSeconds) / playbackRate`.
+Playback rate must be 0.05 to 20. Audio-track offsets and loops are entered explicitly;
+analysis does not infer their timeline placement. It is read-only and returns
+`mapping`, `frameRate`, and `markerDocument` when mapping is requested.
+
+MCP names are `edith_studio_edit_audio_analyze` and
+`edith_studio_edit_markers_{list,add,update,remove,import,export,snap}`. Each uses the
+catalog-derived `arguments` array with the same typed CLI options. Analysis, list and
+snap are read operations; the other marker routes are writes. Runtime failures use
+the editor's `{version, error: {code, message}}` envelope. MCP output remains bounded
+to 4 MiB, with process-group cancellation and the analysis-only 300-second deadline.
