@@ -1,17 +1,29 @@
 import CoreImage
 import Foundation
 
-struct VideoVisualEffects: Codable, Equatable, Sendable {
-    enum Framing: String, Codable, CaseIterable, Sendable { case fit, fill }
-    enum Interpolation: String, Codable, CaseIterable, Sendable { case linear, smooth }
+public struct VideoVisualEffects: Codable, Equatable, Sendable {
+    public enum Framing: String, Codable, CaseIterable, Sendable { case fit, fill }
+    public enum Interpolation: String, Codable, CaseIterable, Sendable { case linear, smooth }
 
-    struct Keyframe: Codable, Equatable, Sendable {
-        var time: Double
-        var scale = 1.0
-        var positionX = 0.0
-        var positionY = 0.0
-        var rotation = 0.0
-        var interpolation: Interpolation = .linear
+    public struct Keyframe: Codable, Equatable, Sendable {
+        public var time: Double
+        public var scale: Double
+        public var positionX: Double
+        public var positionY: Double
+        public var rotation: Double
+        public var interpolation: Interpolation
+
+        public init(
+            time: Double, scale: Double = 1, positionX: Double = 0, positionY: Double = 0,
+            rotation: Double = 0, interpolation: Interpolation = .linear
+        ) {
+            self.time = time
+            self.scale = scale
+            self.positionX = positionX
+            self.positionY = positionY
+            self.rotation = rotation
+            self.interpolation = interpolation
+        }
 
         var isValid: Bool {
             [time, scale, positionX, positionY, rotation].allSatisfy(\.isFinite)
@@ -20,14 +32,29 @@ struct VideoVisualEffects: Codable, Equatable, Sendable {
         }
     }
 
-    var framing: Framing = .fit
-    var focalX = 0.5
-    var focalY = 0.5
-    var exposure = 0.0
-    var brightness = 0.0
-    var contrast = 1.0
-    var saturation = 1.0
-    var keyframes: [Keyframe] = []
+    public var framing: Framing
+    public var focalX: Double
+    public var focalY: Double
+    public var exposure: Double
+    public var brightness: Double
+    public var contrast: Double
+    public var saturation: Double
+    public var keyframes: [Keyframe]
+
+    public init(
+        framing: Framing = .fit, focalX: Double = 0.5, focalY: Double = 0.5,
+        exposure: Double = 0, brightness: Double = 0, contrast: Double = 1,
+        saturation: Double = 1, keyframes: [Keyframe] = []
+    ) {
+        self.framing = framing
+        self.focalX = focalX
+        self.focalY = focalY
+        self.exposure = exposure
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+        self.keyframes = keyframes
+    }
 
     var isValid: Bool {
         [focalX, focalY, exposure, brightness, contrast, saturation].allSatisfy(\.isFinite)

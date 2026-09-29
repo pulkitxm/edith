@@ -2,8 +2,8 @@ import AVFoundation
 import CoreImage
 import Metal
 
-struct VideoSettings: Equatable, Sendable {
-    enum ColorSpace: String, CaseIterable, Sendable {
+public struct VideoSettings: Codable, Equatable, Sendable {
+    public enum ColorSpace: String, Codable, CaseIterable, Sendable {
         case rec709
         case displayP3
 
@@ -12,11 +12,22 @@ struct VideoSettings: Equatable, Sendable {
         }
     }
 
-    var width = 1920
-    var height = 1080
-    var frameRateNumerator = 60
-    var frameRateDenominator = 1
-    var colorSpace: ColorSpace = .rec709
+    public var width: Int
+    public var height: Int
+    public var frameRateNumerator: Int
+    public var frameRateDenominator: Int
+    public var colorSpace: ColorSpace
+
+    public init(
+        width: Int = 1920, height: Int = 1080, frameRateNumerator: Int = 60,
+        frameRateDenominator: Int = 1, colorSpace: ColorSpace = .rec709
+    ) {
+        self.width = width
+        self.height = height
+        self.frameRateNumerator = frameRateNumerator
+        self.frameRateDenominator = frameRateDenominator
+        self.colorSpace = colorSpace
+    }
 
     var size: CGSize { CGSize(width: width, height: height) }
     var frameRate: Double { Double(frameRateNumerator) / Double(frameRateDenominator) }

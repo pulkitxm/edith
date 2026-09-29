@@ -11,6 +11,10 @@ public struct VideoEditPlan: Codable, Sendable {
 
     public enum Operation: Codable, Sendable {
         case addMedia(path: String, name: String)
+        case addStill(path: String, name: String, duration: Double)
+        case stillDuration(clipID: String, duration: Double)
+        case videoSettings(settings: VideoSettings)
+        case visualEffects(clipID: String, effects: VideoVisualEffects)
         case split(clipID: String, sourceTime: Double, rightName: String)
         case trim(clipID: String, start: Double, end: Double)
         case reorder(clipIDs: [String])
@@ -63,95 +67,44 @@ public struct VideoEditPlan: Codable, Sendable {
             throw VideoEditorService.Failure(
                 "invalid_plan", "Expected version and up to 1000 operations.")
         }
-        for (index, operation) in operations.enumerated() {
-            guard operation.count == 1, let name = operation.keys.first,
-                let fields = operation[name] as? [String: Any],
-                let definition = definitions[name], Set(fields.keys) == Set(definition.keys)
-            else {
-                throw VideoEditorService.Failure(
-                    "invalid_plan", "Operation \(index) has unknown or missing fields.")
-            }
-        }
+        try validateFields(root, schema: documentSchema, path: "plan")
         return try JSONDecoder().decode(Self.self, from: data)
     }
 
-    static let definitions: [String: [String: String]] = [
-        "addMedia": ["path": "string", "name": "string"],
-        "split": ["clipID": "string", "sourceTime": "number", "rightName": "string"],
-        "trim": ["clipID": "string", "start": "number", "end": "number"],
-        "reorder": ["clipIDs": "array"],
-        "remove": ["clipID": "string"],
-        "speed": ["clipID": "string", "rate": "number"],
-        "sourceAudio": ["clipID": "string", "gainDb": "number", "muted": "boolean"],
-        "crop": [
-            "clipID": "string", "x": "number", "y": "number", "width": "number", "height": "number",
-        ],
-        "resetCrop": ["clipID": "string"],
-        "text": ["content": "string", "start": "number", "end": "number"],
-        "transition": ["clipID": "string", "kind": "string", "duration": "number"],
-        "addAudio": ["path": "string", "start": "number", "offset": "number"],
-        "audioOptions": [
-            "trackID": "string", "gainDb": "number", "muted": "boolean", "loop": "boolean",
-        ],
-        "removeAudio": ["trackID": "string"],
-        "rename": ["title": "string"],
-        "canvas": ["aspectRatio": "string", "padding": "number", "backgroundColor": "string"],
-    ]
-
     public static func schema() throws -> Data {
-        let variants: [[String: Any]] = definitions.keys.sorted().map { name in
-            let fields = definitions[name]!
-            let properties = Dictionary(
-                uniqueKeysWithValues: fields.map { field, type in
-                    (
-                        field,
-                        (["type": type] as [String: Any]).merging(constraints(field)) {
-                            _, constraint in constraint
-                        }
-                    )
-                })
-            return [
-                "type": "object", "additionalProperties": false, "required": [name],
-                "properties": [
-                    name: [
-                        "type": "object", "additionalProperties": false,
-                        "required": fields.keys.sorted(), "properties": properties,
-                    ]
-                ],
-            ]
-        }
         return try JSONSerialization.data(
-            withJSONObject: [
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "title": "Edith video edit plan v1", "type": "object",
-                "additionalProperties": false, "required": ["version", "operations"],
-                "properties": [
-                    "version": ["const": 1],
-                    "operations": [
-                        "type": "array", "maxItems": 1000, "items": ["oneOf": variants],
-                    ],
-                ],
-            ], options: [.prettyPrinted, .sortedKeys])
+            withJSONObject: documentSchema, options: [.prettyPrinted, .sortedKeys])
     }
 
-    private static func constraints(_ field: String) -> [String: Any] {
-        switch field {
-        case "clipIDs": ["items": ["type": "string"], "uniqueItems": true]
-        case "rate": ["minimum": 0.25, "maximum": 5]
-        case "gainDb": ["minimum": -60, "maximum": 12]
-        case "padding": ["minimum": 0, "maximum": 25]
-        case "duration": ["minimum": 0.2, "maximum": 2]
-        case "start", "offset", "sourceTime", "end": ["minimum": 0]
-        case "x", "y": ["minimum": 0, "maximum": 0.95]
-        case "width", "height": ["minimum": 0.05, "maximum": 1]
-        case "name", "rightName": ["minLength": 1, "maxLength": 100]
-        case "title": ["minLength": 1, "maxLength": 1000]
-        case "content": ["minLength": 1, "maxLength": 10000]
-        case "path", "clipID", "trackID": ["minLength": 1]
-        case "kind": ["enum": ["none", "fade", "flash"]]
-        case "aspectRatio": ["enum": ["native", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"]]
-        case "backgroundColor": ["pattern": "^#[0-9a-fA-F]{6}$"]
-        default: [:]
+    private static func validateFields(_ value: Any, schema: [String: Any], path: String) throws {
+        if let variants = schema["oneOf"] as? [[String: Any]] {
+            guard let object = value as? [String: Any], object.count == 1,
+                let name = object.keys.first,
+                let variant = variants.first(where: {
+                    ($0["properties"] as? [String: Any])?[name] != nil
+                })
+            else {
+                throw VideoEditorService.Failure(
+                    "invalid_plan", "\(path): expected one known operation.")
+            }
+            try validateFields(value, schema: variant, path: path)
+        } else if let fields = schema["properties"] as? [String: [String: Any]],
+            let object = value as? [String: Any]
+        {
+            let required = Set(schema["required"] as? [String] ?? [])
+            guard Set(object.keys).isSubset(of: Set(fields.keys)),
+                required.isSubset(of: Set(object.keys))
+            else {
+                throw VideoEditorService.Failure(
+                    "invalid_plan", "\(path): unknown or missing fields.")
+            }
+            for (name, child) in object {
+                try validateFields(child, schema: fields[name]!, path: "\(path).\(name)")
+            }
+        } else if let items = schema["items"] as? [String: Any], let array = value as? [Any] {
+            for (index, child) in array.enumerated() {
+                try validateFields(child, schema: items, path: "\(path)[\(index)]")
+            }
         }
     }
 }
