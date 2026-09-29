@@ -147,7 +147,7 @@ def main():
         ])
     operations.extend([
         {"canvas": {"aspectRatio": "9:16", "padding": 0, "backgroundColor": "#000000"}},
-        {"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0}},
+        {"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0, "name": "score"}},
     ])
     if not args.baseline:
         operations.append({"videoSettings": {"settings": {"width": 1080, "height": 1920,

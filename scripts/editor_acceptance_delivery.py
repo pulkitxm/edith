@@ -95,7 +95,7 @@ def exercise_variable_speed(edit, workspace, fixture, helper):
             {"addMedia": {"path": str(fixture / f"shot-{index + 1:02d}.mov"), "name": f"shot-{index}"}},
             {"speed": {"clipID": f"shot-{index}", "rate": rate}},
         ])
-    operations.append({"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0}})
+    operations.append({"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0, "name": "score"}})
     plan.write_text(json.dumps({"version": 1, "operations": operations}, indent=2) + "\n")
     edit("create", project, "--title", "Synthetic variable-speed music", "--json")
     edit("apply", project, "--plan", plan, "--overwrite", "--json")
