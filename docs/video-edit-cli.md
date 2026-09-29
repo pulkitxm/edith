@@ -240,6 +240,39 @@ SIGINT and SIGTERM cancel the native task cooperatively, remove temporary files 
 preserve an existing destination before publication. Cancellation leaves stdout empty,
 emits error code `cancelled` and exits 130 for SIGINT or 143 for SIGTERM.
 
+### Output-frame ranges
+
+Both `render` and `render-audio` accept `--start-frame INDEX --end-frame INDEX`.
+Supply both or neither. The interval is half-open: the start frame is included and
+the end frame is excluded. Bounds must satisfy `0 <= start < end <= frameCount`.
+These indices refer to the original rendered project timeline, after speed and trim
+edits, using the composition's exact rational frame duration.
+
+```sh
+ed studio edit render demo.openscreen --output excerpt.mov --codec proRes422HQ \
+  --start-frame 45 --end-frame 81 --progress --json
+ed studio edit render-audio demo.openscreen --output excerpt.wav \
+  --start-frame 45 --end-frame 81 --json
+```
+
+The renderer evaluates the unchanged original composition, including transitions,
+captions and the audio mix, then selects the requested interval. Output timestamps
+begin at zero. Music phase and any leading silence remain aligned to the selected
+project interval. No project file or clip timing is changed.
+
+A range delivery adds `range` inside `videoReport` or `audioReport`, with
+`startFrame`, `endFrame`, `frameRateNumerator` and `frameRateDenominator`.
+The surrounding report still measures the actual encoded frame count, duration,
+format, bytes and checksum. For example, frames `45..<81` at `60000/1001` fps
+select 36 video frames spanning 0.6006 seconds. At 48000 Hz the audio report contains
+28829 sample frames, with duration rounded to the nearest audio sample.
+If the last project frame is partial, a range ending at the frame count ends at the
+original composition duration. Omit range flags to deliver the complete composition.
+
+MCP accepts the same range flags through each delivery tool's `arguments` array.
+Source protection, overwrite rules, progress, cancellation and codec options apply
+to range delivery exactly as they do to full delivery.
+
 ## MCP
 
 The running `ed mcp` server registers `edith_studio_edit_schema`,

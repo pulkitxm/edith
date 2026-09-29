@@ -424,20 +424,24 @@ public enum CommandTree {
                 "--key-frame-interval",
                 "--audio-codec", "--audio-bit-rate", "--audio-sample-rate", "--audio-channels",
                 "--color-space", "--require-hardware", "--progress", "-h", "--help", "--version",
+                "--start-frame", "--end-frame",
             ],
             optionValues: [
                 "--output": .localPath, "--codec": .free, "--bit-rate": .free,
                 "--key-frame-interval": .free, "--audio-codec": .free, "--audio-bit-rate": .free,
                 "--audio-sample-rate": .free, "--audio-channels": .free, "--color-space": .free,
+                "--start-frame": .free, "--end-frame": .free,
             ], arguments: [.localPath]),
         "ed studio edit render-audio": Spec(
             options: [
                 "--json", "--overwrite", "--output", "--container", "--sample-rate", "--channels",
                 "--bit-rate", "--progress", "-h", "--help", "--version",
+                "--start-frame", "--end-frame",
             ],
             optionValues: [
                 "--output": .localPath, "--container": .free, "--sample-rate": .free,
                 "--channels": .free, "--bit-rate": .free,
+                "--start-frame": .free, "--end-frame": .free,
             ], arguments: [.localPath]),
         "ed studio edit frame": Spec(
             options: [

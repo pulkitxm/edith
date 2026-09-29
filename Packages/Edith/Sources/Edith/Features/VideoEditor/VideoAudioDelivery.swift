@@ -43,6 +43,7 @@ public struct VideoAudioDeliveryReport: Codable, Sendable {
     public let frames: Int64
     public let bytes: Int64
     public let sha256: String
+    public var range: VideoDeliveryRangeReport? = nil
 
     static func inspect(_ url: URL) throws -> Self {
         let audio = try AVAudioFile(forReading: url)
@@ -74,6 +75,7 @@ extension VideoRenderPipeline {
     func exportAudio(
         to destination: URL, settings: VideoAudioDeliverySettings = .init(),
         overwrite: Bool = false,
+        range: VideoDeliveryFrameRange? = nil,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> VideoAudioDeliveryReport {
         try settings.validate()
@@ -100,10 +102,13 @@ extension VideoRenderPipeline {
         guard !tracks.isEmpty else {
             throw VideoDeliveryError.invalidSettings("The timeline has no audio to export.")
         }
+        let selection = try VideoDeliverySelection(
+            range, duration: composition.duration, frameDuration: videoComposition.frameDuration)
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(
             ".\(UUID().uuidString).partial.\(settings.container.rawValue)")
         defer { try? FileManager.default.removeItem(at: temporary) }
         let reader = try AVAssetReader(asset: composition)
+        reader.timeRange = selection.timeRange
         let output = AVAssetReaderAudioMixOutput(
             audioTracks: tracks,
             audioSettings: [
@@ -124,16 +129,18 @@ extension VideoRenderPipeline {
                 throw reader.error ?? VideoDeliveryError.failed("Could not read the audio mix.")
             }
             let frames = CMTimeConvertScale(
-                composition.duration, timescale: Int32(settings.sampleRate),
+                selection.timeRange.duration, timescale: Int32(settings.sampleRate),
                 method: .roundHalfAwayFromZero
             ).value
             try Self.writeAudioMix(
-                output, to: temporary, settings: settings, frames: frames, progress: progress)
+                output, to: temporary, settings: settings, frames: frames,
+                origin: selection.timeRange.start, progress: progress)
             guard reader.status == .completed else {
                 throw reader.error ?? VideoDeliveryError.failed("The audio mix did not finish.")
             }
             try Task.checkCancellation()
-            let report = try VideoAudioDeliveryReport.inspect(temporary)
+            var report = try VideoAudioDeliveryReport.inspect(temporary)
+            report.range = selection.report
             guard report.frames == frames, report.sampleRate == Double(settings.sampleRate),
                 report.channels == settings.channels
             else {
@@ -158,7 +165,7 @@ extension VideoRenderPipeline {
 
     private static func writeAudioMix(
         _ output: AVAssetReaderOutput, to url: URL, settings: VideoAudioDeliverySettings,
-        frames: Int64, progress: @escaping @Sendable (Double) -> Void
+        frames: Int64, origin: CMTime, progress: @escaping @Sendable (Double) -> Void
     ) throws {
         guard frames > 0,
             let format = AVAudioFormat(
@@ -188,7 +195,7 @@ extension VideoRenderPipeline {
         while let sample = output.copyNextSampleBuffer() {
             try Task.checkCancellation()
             let start = CMTimeConvertScale(
-                CMSampleBufferGetPresentationTimeStamp(sample),
+                CMSampleBufferGetPresentationTimeStamp(sample) - origin,
                 timescale: Int32(settings.sampleRate), method: .roundHalfAwayFromZero
             ).value
             try silence(until: min(frames, max(0, start)))

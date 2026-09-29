@@ -67,6 +67,35 @@ cadence. A time selects the preceding output frame, using the same selection
 rules as contact sheets. The selected frame must be inside the composition.
 Result JSON adds `frame` and `time`, with time expressed in output seconds.
 
+## Output-frame intervals
+
+`ed studio edit render` and `ed studio edit render-audio` both accept
+`--start-frame INDEX --end-frame INDEX`. Supply both bounds or neither. The
+interval is half-open: `startFrame..<endFrame`, with
+`0 <= startFrame < endFrame <= frameCount`.
+
+```sh
+ed studio edit render demo.openscreen --output excerpt.mov --codec proRes422HQ \
+  --start-frame 45 --end-frame 81 --progress --json
+ed studio edit render-audio demo.openscreen --output excerpt.wav \
+  --start-frame 45 --end-frame 81 --json
+```
+
+Indices refer to the original rendered project timeline after speed and trim
+edits, using its exact rational frame cadence. The unchanged composition is
+evaluated at its original times, preserving transitions, captions, music phase
+and leading silence. Encoded output timestamps start at zero. The project file
+and its clip timing remain unchanged.
+
+Range delivery adds `range` inside `videoReport` or `audioReport`, containing
+`startFrame`, `endFrame`, `frameRateNumerator` and `frameRateDenominator`.
+The surrounding report measures the actual encoded count, duration, format,
+bytes and checksum. Frames `45..<81` at `60000/1001` fps contain 36 video frames
+over 0.6006 seconds. At 48000 Hz that interval contains 28829 audio sample frames,
+rounded to the nearest sample. A partial final project frame ends at the original
+composition duration. All codec, overwrite, progress and cancellation options
+apply to range delivery too. Omit the bounds to export the entire composition.
+
 ## Output, reports and cancellation
 
 All three commands require `--output PATH`. Create the destination directory

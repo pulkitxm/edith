@@ -8,6 +8,28 @@ extension VideoDeliverySettings.AudioCodec: ExpressibleByArgument {}
 extension VideoDeliverySettings.ColorSpace: ExpressibleByArgument {}
 extension VideoAudioDeliverySettings.Container: ExpressibleByArgument {}
 
+struct StudioEditDeliveryRange: ParsableArguments {
+    @Option(help: "First output frame to include, zero-based. Supply both range bounds.")
+    var startFrame: Int64?
+    @Option(
+        help: "Exclusive output-frame end. Supply both range bounds; effects keep project timing.")
+    var endFrame: Int64?
+
+    func validate() throws {
+        guard (startFrame == nil) == (endFrame == nil) else {
+            throw ValidationError("Provide both --start-frame and --end-frame, or neither.")
+        }
+        if let startFrame, let endFrame, startFrame < 0 || endFrame <= startFrame {
+            throw ValidationError("Choose 0 <= start-frame < end-frame.")
+        }
+    }
+
+    var selection: VideoDeliveryFrameRange? {
+        guard let startFrame, let endFrame else { return nil }
+        return VideoDeliveryFrameRange(startFrame: startFrame, endFrame: endFrame)
+    }
+}
+
 struct StudioEditRender: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "render",
@@ -36,6 +58,7 @@ struct StudioEditRender: AsyncParsableCommand {
     var requireHardware = false
     @Flag(help: "Emit at most 101 progress updates to stderr; JSON lines with --json.")
     var progress = false
+    @OptionGroup var range: StudioEditDeliveryRange
     @OptionGroup var options: StudioEditOutput
 
     func run() async throws {
@@ -55,7 +78,8 @@ struct StudioEditRender: AsyncParsableCommand {
                 update in
                 try await VideoEditorService.render(
                     StudioEditBridge.url(project), to: StudioEditBridge.url(output),
-                    overwrite: options.overwrite, settings: delivery, progress: update)
+                    overwrite: options.overwrite, settings: delivery, range: range.selection,
+                    progress: update)
             }
             try StudioEditBridge.printResult(result, json: options.json)
         }
@@ -77,6 +101,7 @@ struct StudioEditRenderAudio: AsyncParsableCommand {
     @Option(help: "AAC bits per second, 32000...320000; mono maximum 256000.") var bitRate = 320_000
     @Flag(help: "Emit at most 101 progress updates to stderr; JSON lines with --json.")
     var progress = false
+    @OptionGroup var range: StudioEditDeliveryRange
     @OptionGroup var options: StudioEditOutput
 
     func run() async throws {
@@ -91,7 +116,8 @@ struct StudioEditRenderAudio: AsyncParsableCommand {
                 update in
                 try await VideoEditorService.renderAudio(
                     StudioEditBridge.url(project), to: StudioEditBridge.url(output),
-                    overwrite: options.overwrite, settings: delivery, progress: update)
+                    overwrite: options.overwrite, settings: delivery, range: range.selection,
+                    progress: update)
             }
             try StudioEditBridge.printResult(result, json: options.json)
         }
