@@ -8,6 +8,120 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HerdrDragFlowTests {
+    @Test func sidebarDragGesturesMoveRowsAndSpaceHeaders() async throws {
+        let page = try await RenderedHerdrPage(workspaces: ["alpha", "beta", "alpha"])
+        defer { page.close() }
+        try page.captureSidebarEvidence("01-original")
+        let first = try page.sidebarAgent(page.agents[0].id)
+        let last = try page.sidebarAgent(page.agents[2].id)
+        try await page.mouseDrag(
+            from: CGPoint(x: last.midX, y: last.midY),
+            to: CGPoint(x: first.midX, y: first.minY + 2))
+        #expect(
+            page.store.listedAgents.map(\.id) == [
+                page.agents[2].id, page.agents[0].id, page.agents[1].id,
+            ])
+        #expect(page.store.tabs.isEmpty)
+        try page.captureSidebarEvidence("02-sessions-reordered")
+        page.store.spaceGroupingEnabled = true
+        await page.settle()
+        try page.captureSidebarEvidence("03-spaces-original")
+        let alpha = try page.sidebarSpace("local|alpha")
+        let beta = try page.sidebarSpace("local|beta")
+        try await page.mouseDrag(
+            from: CGPoint(x: beta.minX + 80, y: beta.minY + 18),
+            to: CGPoint(x: alpha.minX + 80, y: alpha.minY + 2))
+        #expect(page.store.agentSpaces.map(\.title) == ["beta", "alpha"])
+        #expect(page.store.collapsedSpaces.isEmpty)
+        #expect(page.store.tabs.isEmpty)
+        try page.captureSidebarEvidence("04-spaces-reordered")
+        let order = page.store.listedAgents.map(\.id)
+        page.store.open(page.agents[0])
+        await page.settle()
+        try page.captureSidebarEvidence("05-alpha-selected")
+        page.store.open(page.agents[1])
+        await page.settle()
+        #expect(page.store.listedAgents.map(\.id) == order)
+        #expect(page.store.agentSpaces.map(\.title) == ["beta", "alpha"])
+        try page.captureSidebarEvidence("06-beta-selected")
+    }
+
+    @Test func draggingSidebarRowsReordersWithoutOpeningOrMovingTabs() async throws {
+        let page = try await RenderedHerdrPage()
+        defer { page.close() }
+        page.store.open(page.agents[0])
+        page.store.open(page.agents[2], beside: .right)
+        await page.settle()
+        let tabs = page.store.tabs
+        let selected = page.store.selectedTab
+        let first = try page.sidebarAgent(page.agents[0].id)
+        let last = try page.sidebarAgent(page.agents[2].id)
+        page.drag(
+            .agent(page.agents[2]), from: CGPoint(x: last.midX, y: last.midY),
+            to: CGPoint(x: first.midX, y: first.minY + 2))
+        #expect(
+            page.store.listedAgents.map(\.id) == [
+                page.agents[2].id, page.agents[0].id, page.agents[1].id,
+            ])
+        #expect(page.store.tabs == tabs)
+        #expect(page.store.selectedTab == selected)
+        await page.settle()
+        #expect(
+            try page.sidebarAgent(page.agents[2].id).minY
+                < page.sidebarAgent(page.agents[0].id).minY)
+    }
+
+    @Test func draggingSpacesReordersCollapsedAndExpandedGroups() async throws {
+        let page = try await RenderedHerdrPage(workspaces: ["alpha", "beta", "gamma"])
+        defer { page.close() }
+        page.store.spaceGroupingEnabled = true
+        page.store.toggleSpace("local|gamma")
+        await page.settle()
+        let first = try page.sidebarSpace("local|alpha")
+        let last = try page.sidebarSpace("local|gamma")
+        page.drag(
+            .space("local|gamma"), from: CGPoint(x: last.midX, y: last.midY),
+            to: CGPoint(x: first.midX, y: first.minY + 2))
+        #expect(page.store.agentSpaces.map(\.title) == ["gamma", "alpha", "beta"])
+        #expect(page.store.spaceIsCollapsed("local|gamma"))
+        #expect(page.store.tabs.isEmpty)
+        await page.settle()
+        #expect(try page.sidebarSpace("local|gamma").minY < page.sidebarSpace("local|alpha").minY)
+        let beta = try page.sidebarSpace("local|beta")
+        page.drag(.space("local|gamma"), from: .zero, to: CGPoint(x: beta.midX, y: beta.maxY - 2))
+        #expect(page.store.agentSpaces.map(\.title) == ["alpha", "beta", "gamma"])
+    }
+
+    @Test func groupedRowsUseTheirVisibleOrderAndRejectOtherSpaces() async throws {
+        let page = try await RenderedHerdrPage(workspaces: ["alpha", "beta", "alpha"])
+        defer { page.close() }
+        page.store.spaceGroupingEnabled = true
+        await page.settle()
+        let first = try page.sidebarAgent(page.agents[0].id)
+        let last = try page.sidebarAgent(page.agents[2].id)
+        page.drag(
+            .agent(page.agents[0]), from: CGPoint(x: first.midX, y: first.midY),
+            to: CGPoint(x: last.midX, y: last.maxY - 2))
+        #expect(
+            page.store.agentSpaces[0].agents.map(\.id) == [page.agents[2].id, page.agents[0].id])
+        let other = try page.sidebarAgent(page.agents[1].id)
+        page.drag.update(.agent(page.agents[0]), at: CGPoint(x: other.midX, y: other.midY))
+        #expect(page.drag.target == nil)
+        page.drag.cancel()
+    }
+
+    @Test func cancellingSidebarDragKeepsTheSavedOrder() async throws {
+        let page = try await RenderedHerdrPage()
+        defer { page.close() }
+        let first = try page.sidebarAgent(page.agents[0].id)
+        let destination = CGPoint(x: first.midX, y: first.minY + 2)
+        page.drag.update(.agent(page.agents[2]), at: destination)
+        #expect(page.drag.target == .sidebarAgent(page.agents[0].id, after: false))
+        page.drag.cancel()
+        page.drag.finish(.agent(page.agents[2]), at: destination)
+        #expect(page.store.listedAgents.map(\.id) == page.agents.map(\.id))
+    }
+
     @Test func draggingARailAgentOntoAPaneEdgeSplitsIt() async throws {
         let page = try await RenderedHerdrPage()
         defer { page.close() }
@@ -176,14 +290,14 @@ final class RenderedHerdrPage {
     private let window: NSWindow
     private let suite = "HerdrDragFlowTests-\(UUID().uuidString)"
 
-    init() async throws {
+    init(workspaces: [String] = ["demo", "demo", "demo"]) async throws {
         let defaults = try #require(UserDefaults(suiteName: suite))
         store = HerdrStore(defaults: defaults, liveWatcher: { _ in }, machinesProvider: { [] })
         agents = ["Alpha task", "Beta task", "Gamma task"].enumerated().map { index, title in
             HerdrAgent.make(
                 machineID: "local", machineName: "This Mac", machineIsLocal: true,
                 sshTarget: nil, session: "demo", pane: "w1:p\(index + 1)", kind: "Codex",
-                status: .idle, title: title, workspace: "demo", cwd: "/tmp/demo")
+                status: .idle, title: title, workspace: workspaces[index], cwd: "/tmp/demo")
         }
         store.apply([.local(herdrPresent: true, agents: agents)])
         host = NSHostingView(
@@ -217,6 +331,14 @@ final class RenderedHerdrPage {
         try #require(drag.frames[HerdrDropGeometry.chipPrefix + id])
     }
 
+    func sidebarAgent(_ id: String) throws -> CGRect {
+        try #require(drag.frames[HerdrDropGeometry.agentPrefix + id])
+    }
+
+    func sidebarSpace(_ id: String) throws -> CGRect {
+        try #require(drag.frames[HerdrDropGeometry.spacePrefix + id])
+    }
+
     func paneFrame(_ id: String) throws -> CGRect {
         let tab = try #require(store.tab(containing: id))
         return try #require(
@@ -233,6 +355,49 @@ final class RenderedHerdrPage {
                     y: start.y + (end.y - start.y) * progress))
         }
         drag.finish(item, at: end)
+    }
+
+    func mouseDrag(from start: CGPoint, to end: CGPoint) async throws {
+        try mouse(.leftMouseDown, at: start)
+        for step in 1...12 {
+            let progress = CGFloat(step) / 12
+            try mouse(
+                .leftMouseDragged,
+                at: CGPoint(
+                    x: start.x + (end.x - start.x) * progress,
+                    y: start.y + (end.y - start.y) * progress))
+            await settle()
+        }
+        try mouse(.leftMouseUp, at: end)
+        await settle()
+    }
+
+    private func mouse(_ type: NSEvent.EventType, at point: CGPoint) throws {
+        let event = try #require(
+            NSEvent.mouseEvent(
+                with: type, location: CGPoint(x: point.x, y: host.bounds.height - point.y),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                pressure: type == .leftMouseUp ? 0 : 1))
+        window.sendEvent(event)
+    }
+
+    func captureSidebarEvidence(_ name: String) throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["EDITH_HERDR_SIDEBAR_EVIDENCE_DIR"] else { return }
+        let runtime = try #require(environment["EDITH_TEST_RUNTIME_ROOT"])
+        let dataRoot = try #require(environment["EDITH_DATA_ROOT"])
+        try #require(dataRoot.hasPrefix(runtime + "/"))
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        let bounds = CGRect(x: 0, y: 0, width: 600, height: 650)
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: bounds))
+        host.cacheDisplay(in: bounds, to: bitmap)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        try data.write(to: directory.appendingPathComponent(name + ".png"))
     }
 
     func close() {

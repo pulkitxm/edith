@@ -645,14 +645,12 @@ private actor HerdrWatchHarness {
         let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
         store.hosts = [.local(herdrPresent: true, agents: [first, second, other])]
         store.open(first)
-        #expect(store.railItems(for: [first, second, other]).count == 3)
+        #expect(store.listedAgents.map(\.id) == [first.id, second.id, other.id])
         #expect(store.railHighlight(for: first.id) == .solo)
         #expect(store.railHighlight(for: second.id) == .none)
 
         store.open(second, beside: .right)
-        #expect(
-            store.railItems(for: [first, second, other]).map { $0.agents.map(\.id) }
-                == [[first.id], [second.id], [other.id]])
+        #expect(store.listedAgents.map(\.id) == [first.id, second.id, other.id])
         #expect(store.railHighlight(for: second.id) == .focused)
         #expect(store.railHighlight(for: first.id) == .grouped)
         #expect(store.railHighlight(for: other.id) == .none)
@@ -662,28 +660,25 @@ private actor HerdrWatchHarness {
         #expect(store.railHighlight(for: second.id) == .grouped)
 
         store.selectedTab = HerdrStore.boardID
-        #expect(store.railItems(for: [first, second, other]).count == 3)
+        #expect(store.listedAgents.map(\.id) == [first.id, second.id, other.id])
         #expect(store.railHighlight(for: first.id) == .none)
     }
 
-    @Test func railKeepsListOrderAcrossSplitsFiltersAndWorkspaceGrouping() {
+    @Test func railKeepsListOrderAcrossSplitsAndWorkspaceGrouping() {
         let agents = (1...5).map { agent("OpenCode", pane: "p\($0)") }
         let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        store.hosts = [.local(herdrPresent: true, agents: agents)]
         store.open(agents[1])
         store.open(agents[3], beside: .right)
         store.open(agents[2])
         store.open(agents[4], beside: .right)
-        #expect(
-            store.railItems(for: agents).map { $0.agents.map(\.id) } == [
-                [agents[0].id], [agents[1].id], [agents[2].id], [agents[3].id], [agents[4].id],
-            ])
-        #expect(store.railItems(for: Array(agents.prefix(3))).count == 3)
+        #expect(store.listedAgents.map(\.id) == agents.map(\.id))
         store.spaceGroupingEnabled = true
-        #expect(store.railItems(for: agents).map { $0.agents.count } == [1, 1, 1, 1, 1])
+        #expect(store.agentSpaces.first?.agents.map(\.id) == agents.map(\.id))
         #expect(store.railHighlight(for: agents[4].id) == .focused)
         store.spaceGroupingEnabled = false
         store.separate(store.currentTab!.id)
-        #expect(store.railItems(for: agents).count == 5)
+        #expect(store.listedAgents.map(\.id) == agents.map(\.id))
     }
 
     @Test func launchNewAgentPropagatesLauncherErrors() async {

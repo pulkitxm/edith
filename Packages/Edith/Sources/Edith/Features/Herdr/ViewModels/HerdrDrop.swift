@@ -6,6 +6,7 @@ import SwiftUI
 enum HerdrDragItem: Equatable {
     case agent(HerdrAgent)
     case tab(String)
+    case space(String)
 }
 
 enum HerdrDropTarget: Equatable {
@@ -17,11 +18,13 @@ enum HerdrDropTarget: Equatable {
     case intoTab(String)
     case newTab
     case window
+    case sidebarAgent(String, after: Bool)
+    case sidebarSpace(String, after: Bool)
 
     var placesInCanvas: Bool {
         switch self {
         case .edge, .outerEdge, .center, .slot: true
-        case .tabBar, .intoTab, .newTab, .window: false
+        case .tabBar, .intoTab, .newTab, .window, .sidebarAgent, .sidebarSpace: false
         }
     }
 }
@@ -41,6 +44,9 @@ struct HerdrDropGeometry: Equatable {
     static let tabBarKey = "tabBar"
     static let canvasKey = "canvas"
     static let chipPrefix = "tab:"
+    static let sidebarKey = "sidebar"
+    static let agentPrefix = "sidebarAgent:"
+    static let spacePrefix = "sidebarSpace:"
 
     static func make(frames: [String: CGRect], order: [String]) -> HerdrDropGeometry {
         HerdrDropGeometry(
@@ -134,6 +140,17 @@ enum HerdrDropResolver {
     static let edgeBand: CGFloat = 0.28
     static let stickyBand: CGFloat = 0.36
     static let outerBand: CGFloat = 18
+
+    static func sidebarRow(
+        at point: CGPoint, ids: [String], prefix: String, frames: [String: CGRect]
+    )
+        -> HerdrTabChip?
+    {
+        let rows = ids.compactMap { id in
+            frames[prefix + id].map { HerdrTabChip(id: id, frame: $0) }
+        }.sorted { $0.frame.minY < $1.frame.minY }
+        return rows.first { point.y <= $0.frame.maxY } ?? rows.last
+    }
 
     static func target(
         at point: CGPoint, geometry: HerdrDropGeometry, tab: HerdrTab?, boardID: String,
@@ -313,12 +330,41 @@ final class HerdrDragCoordinator {
         } else {
             snapBar = nil
         }
-        let proposed = HerdrDropResolver.target(
-            at: location, geometry: geometry, tab: tab, boardID: HerdrStore.boardID,
-            snapBar: snapBar, previous: target, gap: gap)
+        let proposed: HerdrDropTarget?
+        if frames[HerdrDropGeometry.sidebarKey]?.contains(location) == true {
+            proposed = sidebarTarget(item, store: store)
+        } else {
+            proposed = HerdrDropResolver.target(
+                at: location, geometry: geometry, tab: tab, boardID: HerdrStore.boardID,
+                snapBar: snapBar, previous: target, gap: gap)
+        }
         let accepted = proposed.flatMap { store.accepts(item, $0) ? $0 : nil }
         if accepted != target { target = accepted }
         spring(toward: accepted)
+    }
+
+    private func sidebarTarget(_ item: HerdrDragItem, store: HerdrStore) -> HerdrDropTarget? {
+        let prefix: String
+        var ids: [String] = []
+        switch item {
+        case .agent:
+            prefix = HerdrDropGeometry.agentPrefix
+            for agent in store.machineTerminals + store.listedAgents { ids.append(agent.id) }
+        case .space:
+            prefix = HerdrDropGeometry.spacePrefix
+            for space in store.agentSpaces { ids.append(space.id) }
+        case .tab:
+            return nil
+        }
+        guard
+            let row = HerdrDropResolver.sidebarRow(
+                at: location, ids: ids, prefix: prefix, frames: frames)
+        else {
+            return nil
+        }
+        let after = location.y >= row.frame.midY
+        if case .space = item { return .sidebarSpace(row.id, after: after) }
+        return .sidebarAgent(row.id, after: after)
     }
 
     private func spring(toward target: HerdrDropTarget?) {

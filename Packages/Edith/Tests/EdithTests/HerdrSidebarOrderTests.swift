@@ -20,7 +20,6 @@ struct HerdrSidebarOrderTests {
         store.apply([.local(herdrPresent: true, agents: agents.reversed())])
         #expect(store.listedAgents.map(\.id) == agents.map(\.id))
         #expect(store.agentSpaces.map(\.id) == spaces)
-        #expect(store.railItems(for: store.listedAgents).map(\.id) == agents.map(\.id))
         store.closeAll()
     }
 
@@ -64,6 +63,7 @@ struct HerdrSidebarOrderTests {
             title: "Task \(index)", workspace: space, cwd: "/demo")
     }
 
+    @MainActor
     private struct Fixture {
         let suite = "HerdrSidebarOrderTests.\(UUID().uuidString)"
         let defaults: UserDefaults
