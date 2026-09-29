@@ -138,7 +138,7 @@ func verifyCadence(_ url: URL, frames: Int, numerator: Int32, denominator: Int64
     if emit { try json(["cadenceVerified": true, "frames": count, "fpsNumerator": numerator, "fpsDenominator": denominator]) }
 }
 
-func verifyMusic(_ url: URL, expectedSamples: Int, emit: Bool = true) async throws {
+func verifyMusic(_ url: URL, expectedSamples: Int, sourceOffset: Int = 0, emit: Bool = true) async throws {
     let asset = AVURLAsset(url: url)
     let tracks = try await asset.loadTracks(withMediaType: .audio)
     try require(tracks.count == 1, "Expected exactly one rendered music stream")
@@ -178,7 +178,7 @@ func verifyMusic(_ url: URL, expectedSamples: Int, emit: Bool = true) async thro
         let stop = min(start + 480, samples.count)
         var error = 0.0
         for index in start..<stop {
-            let expected = sin(2 * .pi * 440 * Double(index) / 48_000) * 0.2
+            let expected = sin(2 * .pi * 440 * Double(index + sourceOffset) / 48_000) * 0.2
             error += pow(Double(samples[index]) - expected, 2)
             if index > 0 { maximumStep = max(maximumStep, Double(abs(samples[index] - samples[index - 1]))) }
         }
@@ -188,7 +188,53 @@ func verifyMusic(_ url: URL, expectedSamples: Int, emit: Bool = true) async thro
     }
     try require(maximumStep < 0.045, "Music contains an abrupt sample step of \(maximumStep)")
     if emit { try json(["continuousMusicVerified": true, "samples": samples.count,
-        "maximumWindowRMSError": maximumRMSError, "maximumSampleStep": maximumStep, "sampleRate": rate]) }
+        "maximumWindowRMSError": maximumRMSError, "maximumSampleStep": maximumStep, "sampleRate": rate,
+        "sourceOffsetSamples": sourceOffset]) }
+}
+
+func verifyRange(_ url: URL, start: Int, end: Int, codec: String, color: String) async throws {
+    let asset = AVURLAsset(url: url)
+    let tracks = try await asset.loadTracks(withMediaType: .video)
+    try require(tracks.count == 1, "Expected one range video stream")
+    let track = tracks[0]
+    let size = try await track.load(.naturalSize)
+    try require(size == CGSize(width: 1080, height: 1920), "Range delivery changed portrait dimensions")
+    let descriptions = try await track.load(.formatDescriptions)
+    let expectedCodec = codec == "proRes422HQ" ? kCMVideoCodecType_AppleProRes422HQ : kCMVideoCodecType_H264
+    try require(CMFormatDescriptionGetMediaSubType(descriptions[0]) == expectedCodec, "Range video codec mismatch")
+    let extensions = CMFormatDescriptionGetExtensions(descriptions[0]).map { $0 as NSDictionary } ?? NSDictionary()
+    let primaries = color == "displayP3" ? AVVideoColorPrimaries_P3_D65 : AVVideoColorPrimaries_ITU_R_709_2
+    let transfer = color == "displayP3" ? kCVImageBufferTransferFunction_sRGB as String : AVVideoTransferFunction_ITU_R_709_2
+    try require(extensions[kCMFormatDescriptionExtension_ColorPrimaries] as? String == primaries
+        && extensions[kCMFormatDescriptionExtension_TransferFunction] as? String == transfer,
+        "Range video color tags mismatch")
+    let duration = try await asset.load(.duration)
+    try require(CMTimeCompare(duration, CMTime(value: Int64(end - start), timescale: 60)) == 0,
+        "Range duration is not the exact half-open selection")
+    let reader = try AVAssetReader(asset: asset)
+    let output = AVAssetReaderTrackOutput(track: track,
+        outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+    reader.add(output)
+    try require(reader.startReading(), "Could not decode range output")
+    var count = 0
+    while let sample = output.copyNextSampleBuffer() {
+        try require(CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sample),
+            CMTime(value: Int64(count), timescale: 60)) == 0, "Range timestamps must start at zero on the exact frame grid")
+        let original = start + count
+        let expected = original < 702 ? original / 39 + 1 : (original - 702) / 38 + 19
+        try require(identity(CMSampleBufferGetImageBuffer(sample)!) == expected, "Range sampled the wrong original timeline frame")
+        count += 1
+    }
+    try require(reader.status == .completed && count == end - start, "Range frame count mismatch")
+    let audio = try await asset.loadTracks(withMediaType: .audio)
+    try require(audio.count == 1, "Range music stream is missing")
+    let audioDescriptions = try await audio[0].load(.formatDescriptions)
+    let expectedAudio = codec == "proRes422HQ" ? kAudioFormatLinearPCM : kAudioFormatMPEG4AAC
+    try require(CMFormatDescriptionGetMediaSubType(audioDescriptions[0]) == expectedAudio, "Range audio codec mismatch")
+    try await verifyMusic(url, expectedSamples: (end - start) * 800, sourceOffset: start * 800, emit: false)
+    try json(["rangeVerified": true, "frames": count, "startFrame": start, "endFrame": end,
+        "codec": codec, "colorSpace": color, "timestampsRebasedToZero": true, "originalMusicPhasePreserved": true,
+        "sha256": try checksum(url)])
 }
 
 func verifyExtended(_ directory: URL) async throws {

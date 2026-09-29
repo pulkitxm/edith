@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from editor_acceptance_captions import exercise_caption_preservation
+from editor_acceptance_delivery import checked_progress, checked_report, exercise_delivery
 from editor_acceptance_publications import exercise_publications
 
 
@@ -28,6 +29,8 @@ def run(arguments, report_path=None):
     if report_path and result.stdout:
         write_json(report_path, json.loads(result.stdout))
     require(result.returncode == 0, f"Command failed ({result.returncode}): {result.stderr}")
+    if "--progress" in arguments:
+        checked_progress(result.stderr)
     return json.loads(result.stdout)
 
 
@@ -58,7 +61,7 @@ def check_sources(fixture, manifest):
     require(digest(fixture / manifest["music"]) == manifest["musicSHA256"], "Music source was modified")
 
 
-def check_project(project, manifest):
+def check_project(project, manifest, source_kind="video"):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
     require(len(clips) == 45, "Expected 45 clips")
@@ -67,7 +70,7 @@ def check_project(project, manifest):
     position = 0
     for clip, shot in zip(clips, manifest["shots"]):
         source = assets[clip["assetId"]]
-        require(pathlib.Path(source["originalPath"]).name == shot["video"], "Shot source or order changed")
+        require(pathlib.Path(source["originalPath"]).name == shot[source_kind], "Shot source or order changed")
         require(abs(clip["sourceStartSec"]) < 1e-8, "Unexpected source trim start")
         require(abs(clip["sourceEndSec"] - shot["frames"] / 60) < 1e-8, "Shot frame duration changed")
         require(abs(clip["timelineStartSec"] - position / 60) < 1e-8, "Timeline gap or overlap")
@@ -95,14 +98,15 @@ def main():
     parser.add_argument("--baseline", action="store_true", help="Exercise current rendering without exact delivery assertions")
     parser.add_argument("--contact-sheet", action="store_true", help="Verify a 45-shot contact sheet through the public CLI")
     parser.add_argument("--captions", action="store_true", help="Verify public caption timing across crop, speed, and reorder edits")
+    parser.add_argument("--stills", action="store_true", help="Import all 45 shots as original still assets")
+    parser.add_argument("--delivery-checks", action="store_true", help="Verify PCM audio, half-open excerpts, progress, and a ProRes P3 master excerpt")
     parser.add_argument("--publication-plan", type=pathlib.Path, help="Public publication create plan referencing five or six synthetic projects")
     parser.add_argument("--publication-protected-path", type=pathlib.Path, action="append", default=[], help="Synthetic ledger or receipt file/directory that publication operations must preserve")
-    parser.add_argument("--delivery-plan", type=pathlib.Path, help="Public v1 plan containing integrated delivery operations")
+    parser.add_argument("--delivery-plan", type=pathlib.Path, help="Additional public v1 edit operations, including project videoSettings")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
     require(not workspace.exists(), "Workspace must not already exist")
     require(args.fixture_only or args.ed is not None, "--ed is required for CLI acceptance")
-    require(args.fixture_only or args.baseline or args.delivery_plan, "Full acceptance requires --delivery-plan")
     workspace.mkdir(parents=True)
     helper = args.media_helper.absolute() if args.media_helper else workspace / "editor-acceptance-media"
     if not args.media_helper:
@@ -131,14 +135,19 @@ def main():
     supported = {next(iter(item["properties"])) for item in definitions}
     operations = []
     for shot in manifest["shots"]:
+        addition = {"addStill": {"path": str(fixture / shot["still"]), "name": shot["name"], "duration": 1}} if args.stills else {
+            "addMedia": {"path": str(fixture / shot["video"]), "name": shot["name"]}}
         operations.extend([
-            {"addMedia": {"path": str(fixture / shot["video"]), "name": shot["name"]}},
+            addition,
             {"trim": {"clipID": shot["name"], "start": 0, "end": shot["frames"] / 60}},
         ])
     operations.extend([
         {"canvas": {"aspectRatio": "9:16", "padding": 0, "backgroundColor": "#000000"}},
         {"addAudio": {"path": str(fixture / "music.wav"), "start": 0, "offset": 0}},
     ])
+    if not args.baseline:
+        operations.append({"videoSettings": {"settings": {"width": 1080, "height": 1920,
+                          "frameRateNumerator": 60, "frameRateDenominator": 1, "colorSpace": "rec709"}}})
     if args.delivery_plan:
         delivery = json.loads(args.delivery_plan.read_text())
         require(delivery["version"] == 1, "Delivery plan must use public v1 operations")
@@ -161,7 +170,7 @@ def main():
         require(len(result["aliases"]) == 45, "Missing shot aliases")
         edit("validate", project, "--json")
         shown = edit("show", project, "--json")
-        check_project(shown, manifest)
+        check_project(shown, manifest, "still" if args.stills else "video")
         snapshots.append(normalized(shown))
     require(snapshots[0] == snapshots[1], "Repeated plans produced different semantic projects")
     project = workspace / "edit-0.openscreen"
@@ -184,11 +193,19 @@ def main():
         require(sheet["sha256"] == digest(workspace / "contact-sheet.png"), "Contact sheet checksum mismatch")
         checked = run([helper, "verify-contact-sheet", workspace / "contact-sheet.png"])
         write_json(workspace / "contact-sheet-result.json", checked)
-    edit("frame", saved, "--time", "0.25", "--output", frame, "--json")
-    edit("render", saved, "--output", render, "--json")
+    frame_selection = ["--time", "0.25"] if args.baseline else ["--frame", "15"]
+    frame_result = edit("frame", saved, *frame_selection, "--output", frame, "--json")
+    delivery_flags = [] if args.baseline else ["--codec", "h264", "--color-space", "rec709", "--audio-codec", "aac",
+                                             "--audio-sample-rate", "48000", "--audio-channels", "2", "--audio-bit-rate", "320000", "--progress"]
+    render_result = edit("render", saved, "--output", render, *delivery_flags, "--json")
+    if not args.baseline:
+        require(frame_result["frame"] == 15 and frame_result["time"] == 0.25, "Exact frame selection report mismatch")
+        checked_report(render_result, render, "video", 1728)
     check_sources(fixture, manifest)
     report = run([helper, "baseline" if args.baseline else "inspect", render, frame], workspace / "result.json")
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
+    if args.delivery_checks:
+        report["deliveryAcceptance"] = exercise_delivery(ed, saved, workspace, helper)
     if args.captions:
         report["captionAcceptance"] = exercise_caption_preservation(edit, saved, workspace)
     if args.publication_plan:

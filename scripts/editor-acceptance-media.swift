@@ -323,11 +323,20 @@ func verifyContactSheet(_ url: URL) throws {
         case "verify-extended": try await verifyExtended(url)
         case "verify-original-detail": try verifyOriginalDetail(url)
         case "verify-music":
-            try require(arguments.count == 4, "verify-music PATH EXPECTED-SAMPLES")
+            try require((4...5).contains(arguments.count), "verify-music PATH EXPECTED-SAMPLES [SOURCE-OFFSET-SAMPLES]")
             guard let samples = Int(arguments[3]), samples > 0 else {
                 throw AcceptanceError(description: "Expected a positive sample count")
             }
-            try await verifyMusic(url, expectedSamples: samples)
+            let offset = arguments.count == 5 ? Int(arguments[4]) : 0
+            guard let offset, offset >= 0 else { throw AcceptanceError(description: "Invalid source sample offset") }
+            try await verifyMusic(url, expectedSamples: samples, sourceOffset: offset)
+        case "verify-range":
+            try require(arguments.count == 7, "verify-range PATH START-FRAME END-FRAME CODEC COLOR-SPACE")
+            guard let start = Int(arguments[3]), let end = Int(arguments[4]), start >= 0, end > start,
+                end <= 1728, ["h264", "proRes422HQ"].contains(arguments[5]),
+                ["rec709", "displayP3"].contains(arguments[6])
+            else { throw AcceptanceError(description: "Invalid range expectations") }
+            try await verifyRange(url, start: start, end: end, codec: arguments[5], color: arguments[6])
         case "verify-cadence":
             try require(arguments.count == 6, "verify-cadence PATH FRAMES FPS-NUMERATOR FPS-DENOMINATOR")
             guard let frames = Int(arguments[3]), let numerator = Int32(arguments[4]),

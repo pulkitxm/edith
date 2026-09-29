@@ -1,10 +1,12 @@
 import copy
+import json
 import os
 import pathlib
 import tempfile
 import unittest
 
 from editor_acceptance_captions import caption_snapshot, unchanged_captions
+from editor_acceptance_delivery import checked_progress
 from editor_acceptance_publications import protected_snapshot, publication_reordered
 
 
@@ -47,6 +49,24 @@ class CaptionContractTests(unittest.TestCase):
         report["captions"].append(copy.deepcopy(report["captions"][0]))
         with self.assertRaisesRegex(RuntimeError, "unique"):
             caption_snapshot(report)
+
+
+class DeliveryContractTests(unittest.TestCase):
+    def progress(self, values):
+        return "\n".join(json.dumps({"version": 1, "event": "progress", "percent": value}) for value in values)
+
+    def test_bounded_completed_progress(self):
+        self.assertEqual(checked_progress(self.progress([0, 12, 99, 100])), 4)
+        self.assertEqual(checked_progress(self.progress(range(101))), 101)
+
+    def test_repeated_reversed_or_unfinished_progress_is_rejected(self):
+        for values in ([0, 20, 20, 100], [0, 50, 25, 100], [0, 99]):
+            with self.assertRaisesRegex(RuntimeError, "increase strictly"):
+                checked_progress(self.progress(values))
+        with self.assertRaisesRegex(RuntimeError, "1 through 101"):
+            checked_progress(self.progress(range(102)))
+        with self.assertRaisesRegex(RuntimeError, "Invalid delivery progress"):
+            checked_progress(self.progress([-1, 100]))
 
 
 class PublicationContractTests(unittest.TestCase):
