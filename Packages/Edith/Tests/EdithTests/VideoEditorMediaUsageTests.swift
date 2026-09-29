@@ -3,6 +3,32 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoEditorMediaUsageTests {
+    @Test func fortyFiveDifferentSourcesStayDistinctAcrossPages() async throws {
+        let folder = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var project = VideoProject.create(title: "45 synthetic shots")
+        for index in 0..<45 {
+            let source = try Self.source(
+                "shot-\(index).mov", bytes: "unique original \(index)", in: folder)
+            project.addAsset(source, duration: 1, width: 64, height: 64)
+        }
+        let path = folder.appendingPathComponent("shots.openscreen")
+        try project.save(to: path)
+        let before = try Data(contentsOf: path)
+        var offset = 0
+        var clipIDs = Set<String>()
+        repeat {
+            let result = try await Self.report([path], offset: offset, limit: 10)
+            #expect(result.uniqueClipCount == 45 && result.uniqueOriginalCount == 45)
+            #expect(result.conflicts.isEmpty && result.assessment == "noKnownReuse")
+            clipIDs.formUnion(result.occurrences.map(\.clipID))
+            guard let next = result.nextOffset else { break }
+            offset = next
+        } while true
+        #expect(clipIDs.count == 45)
+        #expect(try Data(contentsOf: path) == before)
+    }
+
     static func source(_ name: String, bytes: String, in folder: URL) throws -> URL {
         let url = folder.appendingPathComponent(name)
         try Data(bytes.utf8).write(to: url)

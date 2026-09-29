@@ -161,6 +161,9 @@ import EdithKit
             let tool = try #require(
                 OperationMCPCatalog.tool(named: "edith_studio_edit_media_\(name)"))
             #expect(tool.route == route)
+            #expect(
+                OperationMCPRunner.executionTimeout(for: tool)
+                    == OperationMCPRunner.videoRenderTimeout)
             #expect(tool.effect == (["index", "provenance"].contains(name) ? .write : .read))
         }
     }

@@ -3,6 +3,7 @@
 `ed studio edit media` runs headlessly against local files. Each command prints a
 version 1 typed JSON envelope. `--json` also makes runtime errors JSON on stderr.
 No application window, permission dialog, or installed skill is needed.
+MCP media calls allow up to six hours for streaming large original collections.
 
 ## Inspect and compare
 

@@ -87,6 +87,7 @@ public enum OperationMCPRunner {
             StudioDeliveryOperation.renderAudio.descriptor.cli,
         ]
         .contains(tool.route)
+            || tool.route.starts(with: ["studio", "edit", "media"])
             ? videoRenderTimeout : timeout
     }
 

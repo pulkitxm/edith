@@ -293,7 +293,8 @@ Existing destinations still require an explicit `--overwrite` argument.
 }
 ```
 
-Native video and audio rendering have a bounded six-hour MCP execution deadline. Other routes keep
+Native video and audio rendering and media operations have a six-hour MCP execution
+deadline. Other routes keep
 the standard 120-second deadline. Output capture stays capped at 4 MiB, and cancellation
 continues to terminate the child process group. MCP returns the final report; optional
 child-process stderr progress does not alter the result JSON.
