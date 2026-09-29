@@ -6,6 +6,52 @@ import Testing
 @testable import Edith
 
 @Suite(.timeLimit(.minutes(1))) struct VideoIndependentAudioTests {
+    @Test func rateAudioFilesFollowPipelineOwnershipAndReclaimOrphans() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("tone.caf")
+        try await createVideo(video, duration: 2)
+        try createAudio(sound, duration: 2) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 2, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = sound.path
+        project.root["assets"] = assets
+        project.addSpeed(startMs: 0, endMs: 2000, rate: 2)
+        var first: VideoRenderPipeline? = try await VideoRenderPipeline.make(project: project)
+        var second: VideoRenderPipeline? = try await VideoRenderPipeline.make(project: project)
+        let url = try #require(first?.audioRateSources.first?.url)
+        #expect(second?.audioRateSources.first?.url == url)
+        first = nil
+        VideoAudioTemporaryFile.reclaim(in: url.deletingLastPathComponent())
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        let samples = try await readAudio(try #require(second?.composition), mix: second?.audioMix)
+        #expect(rms(samples, from: 0.1, to: 0.8) > 0.3)
+        second = nil
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        let cacheDirectory = directory.appendingPathComponent("cache")
+        let cache = VideoAudioRateCache(directory: cacheDirectory)
+        let asset = AVURLAsset(url: sound)
+        let track = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        let range = try await track.load(.timeRange)
+        for _ in 0..<3 {
+            var source: VideoAudioRateSource? = try await cache.source(
+                url: sound, track: track, range: range, rate: 2)
+            let active = try #require(source?.url)
+            let stale = cacheDirectory.appendingPathComponent(UUID().uuidString)
+            try Data().write(to: stale.appendingPathExtension("lease"))
+            try Data(repeating: 1, count: 4096).write(to: stale.appendingPathExtension("caf"))
+            VideoAudioTemporaryFile.reclaim(in: cacheDirectory)
+            #expect(FileManager.default.fileExists(atPath: active.path))
+            #expect(
+                !FileManager.default.fileExists(atPath: stale.appendingPathExtension("caf").path))
+            source = nil
+            #expect(
+                try FileManager.default.contentsOfDirectory(atPath: cacheDirectory.path).isEmpty)
+        }
+    }
+
     @Test(arguments: [true, false])
     func editingOneFadePreservesTheOppositeSplitEnvelope(editTail: Bool) async throws {
         let directory = try temporaryDirectory()

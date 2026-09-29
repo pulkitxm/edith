@@ -4,19 +4,28 @@ final class VideoAudioRateSource {
     let url: URL
     let asset: AVAsset
     let track: AVAssetTrack
+    private let storage: VideoAudioTemporaryFile
 
-    init(url: URL, asset: AVAsset, track: AVAssetTrack) {
-        self.url = url
+    init(storage: VideoAudioTemporaryFile, asset: AVAsset, track: AVAssetTrack) {
+        self.storage = storage
+        self.url = storage.url
         self.asset = asset
         self.track = track
     }
 
-    deinit { try? FileManager.default.removeItem(at: url) }
 }
 
 actor VideoAudioRateCache {
     static let shared = VideoAudioRateCache()
-    private var entries: [String: VideoAudioRateSource] = [:]
+    private struct Entry {
+        weak var source: VideoAudioRateSource?
+    }
+    private var entries: [String: Entry] = [:]
+    private let directory: URL
+
+    init(directory: URL = VideoAudioTemporaryFile.directory) {
+        self.directory = directory
+    }
 
     func source(url: URL, track: AVAssetTrack, range: CMTimeRange, rate: Double) async throws
         -> VideoAudioRateSource
@@ -24,9 +33,10 @@ actor VideoAudioRateCache {
         let metadata = try url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let key =
             "\(url.absoluteString):\(metadata.contentModificationDate?.timeIntervalSince1970 ?? 0):\(metadata.fileSize ?? 0):\(rate)"
-        if let source = entries[key] { return source }
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-audio-rate-\(UUID().uuidString).caf")
+        entries = entries.filter { $0.value.source != nil }
+        if let source = entries[key]?.source { return source }
+        let storage = try VideoAudioTemporaryFile(directory: directory)
+        let destination = storage.url
         do {
             let composition = AVMutableComposition()
             guard
@@ -67,9 +77,8 @@ actor VideoAudioRateCache {
             guard let rendered = try await asset.loadTracks(withMediaType: .audio).first else {
                 throw VideoRenderPipeline.RenderError.exportFailed("Could not read rendered audio")
             }
-            let source = VideoAudioRateSource(url: destination, asset: asset, track: rendered)
-            if entries.count >= 8 { entries.removeAll() }
-            entries[key] = source
+            let source = VideoAudioRateSource(storage: storage, asset: asset, track: rendered)
+            entries[key] = Entry(source: source)
             return source
         } catch {
             try? FileManager.default.removeItem(at: destination)
