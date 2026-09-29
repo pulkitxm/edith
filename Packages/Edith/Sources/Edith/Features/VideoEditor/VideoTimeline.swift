@@ -148,7 +148,7 @@ struct VideoTimeline: View {
                             .enumerated()), id: \.offset
                 ) { _, segment in
                     VideoWaveform(
-                        url: asset.url, start: segment.sourceStart, end: segment.sourceEnd
+                        url: asset.audioURL, start: segment.sourceStart, end: segment.sourceEnd
                     )
                     .frame(width: max(1, segment.outputDuration * scale - 2))
                 }
@@ -158,7 +158,7 @@ struct VideoTimeline: View {
             let asset = model.project?.assets.first(where: { $0.id == track.assetID })
         {
             VideoWaveform(
-                url: asset.url, start: track.offsetMs / 1000,
+                url: asset.audioURL, start: track.offsetMs / 1000,
                 end: track.offsetMs / 1000 + (track.endMs - track.startMs) * track.rate / 1000,
                 loop: track.loop)
         }

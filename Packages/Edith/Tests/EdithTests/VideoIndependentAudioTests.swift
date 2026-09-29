@@ -104,6 +104,52 @@ import Testing
         #expect(rms(samples, from: 2.3, to: 3.5) < 0.003)
     }
 
+    @Test func detachmentPreservesAnAudioTrackThatStartsAfterTheVideo() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = directory.appendingPathComponent("video.mov")
+        let sound = directory.appendingPathComponent("sound.caf")
+        try await createVideo(video, duration: 4)
+        try createAudio(sound, duration: 2) { Float(sin($0 * 2 * .pi * 440)) * 0.5 }
+        let source = AVURLAsset(url: sound)
+        let audio = try #require(try await source.loadTracks(withMediaType: .audio).first)
+        let composition = AVMutableComposition()
+        let track = try #require(
+            composition.addMutableTrack(
+                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid))
+        try track.insertTimeRange(
+            CMTimeRange(start: .zero, duration: CMTime(seconds: 2, preferredTimescale: 600)),
+            of: audio, at: CMTime(seconds: 1, preferredTimescale: 600))
+        let delayed = directory.appendingPathComponent("delayed.mov")
+        let export = try #require(
+            AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+        export.outputURL = delayed
+        export.outputFileType = .mov
+        await export.export()
+        #expect(export.status == .completed)
+        let delayedTrack = try #require(
+            try await AVURLAsset(url: delayed).loadTracks(withMediaType: .audio).first)
+        #expect(try await delayedTrack.load(.timeRange).duration.seconds >= 2)
+        var project = VideoProject.create()
+        project.addAsset(video, duration: 4, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = delayed.path
+        project.root["assets"] = assets
+        var clips = project.clips
+        clips[0].rate = 2
+        project.setClips(clips)
+        for detached in [false, true] {
+            if detached { project.detachAudio(clipID: clips[0].id) }
+            let pipeline = try await VideoRenderPipeline.make(project: project)
+            let output = directory.appendingPathComponent("delayed-\(detached).mp4")
+            try await pipeline.exportMP4(to: output)
+            let samples = try await readAudio(output)
+            #expect(rms(samples, from: 0.1, to: 0.4) < 0.003)
+            #expect(rms(samples, from: 0.7, to: 1.3) > 0.3)
+            #expect(rms(samples, from: 1.7, to: 1.9) < 0.003)
+        }
+    }
+
     @Test @MainActor func nativeAudioEditsSupportUndoAndSeparateLanes() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -150,7 +196,12 @@ import Testing
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
             let view = NSHostingView(
                 rootView: HStack(alignment: .top, spacing: 0) {
-                    VideoTimeline(model: model).frame(width: 960, height: 280)
+                    ScrollViewReader { proxy in
+                        VideoTimeline(model: model).frame(width: 960, height: 280)
+                            .onChange(of: model.selection) { _, _ in
+                                proxy.scrollTo(Optional(id), anchor: .center)
+                            }
+                    }
                     Divider()
                     VideoInspector(model: model).frame(height: 760)
                 }.padding().background(Color(nsColor: .windowBackgroundColor)))
@@ -164,6 +215,7 @@ import Testing
             try await Task.sleep(for: .milliseconds(100))
             model.selection = .audio(id)
             try await Task.sleep(for: .seconds(2))
+            model.seek(to: 2)
             view.layoutSubtreeIfNeeded()
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -253,12 +305,23 @@ import Testing
         project.root["timeline"] = timeline
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let exported = directory.appendingPathComponent("source-mix.mp4")
+        #expect(abs(pipeline.duration - 2.5) < 0.001)
+        #expect(pipeline.composition.tracks(withMediaType: .audio).count == 1)
         try await pipeline.exportMP4(to: exported)
         let samples = try await readAudio(exported)
         #expect(abs(rms(samples, from: 0.1, to: 0.4) - 0.25 / sqrt(2)) < 0.03)
         #expect(rms(samples, from: 0.6, to: 0.9) < 0.003)
         #expect(rms(samples, from: 1.1, to: 1.4) > 0.14)
         #expect(rms(samples, from: 1.7, to: 2.3) < 0.003)
+        timeline["muteRanges"] = [
+            [
+                "clipId": clips[0].id, "startSec": 0.0, "endSec": 3.0,
+            ]
+        ]
+        project.root["timeline"] = timeline
+        let silent = try await VideoRenderPipeline.make(project: project)
+        #expect(silent.composition.tracks(withMediaType: .audio).isEmpty)
+        try await silent.exportMP4(to: directory.appendingPathComponent("silent.mp4"))
     }
 
     @Test func exportedMusicTrimsLoopsAndFadesInOutputSeconds() async throws {

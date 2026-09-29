@@ -1,6 +1,12 @@
 import AVFoundation
 import Foundation
 
+extension VideoProject.Asset {
+    var audioURL: URL {
+        (raw["edithAudioPath"] as? String).map { URL(fileURLWithPath: $0) } ?? url
+    }
+}
+
 extension VideoProject {
     mutating func setClipAudio(clipID: String, gain: Double? = nil, muted: Bool? = nil) {
         var entries = clips
@@ -138,10 +144,8 @@ extension VideoEditorModel {
         audioTask = Task {
             defer { audioTask = nil; audioStatus = nil }
             do {
-                let url =
-                    (asset.raw["edithAudioPath"] as? String).map { URL(fileURLWithPath: $0) }
-                    ?? asset.url
-                let tracks = try await AVURLAsset(url: url).loadTracks(withMediaType: .audio)
+                let tracks = try await AVURLAsset(url: asset.audioURL).loadTracks(
+                    withMediaType: .audio)
                 guard !Task.isCancelled, self.project?.id == project.id else { return }
                 guard !tracks.isEmpty else {
                     errorMessage = "This source has no audio track."
