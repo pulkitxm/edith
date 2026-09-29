@@ -3,7 +3,10 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoEditorMediaUsageTests {
-    @Test func stillCarriersReusePhotographicOriginalWithinAndAcrossProjects() async throws {
+    @Test(arguments: [VideoMediaLibrary.Role.sourceImage, .original])
+    func stillOriginalsPreserveIdentityAndProvenanceWithinAndAcrossProjects(
+        sourceRole: VideoMediaLibrary.Role
+    ) async throws {
         let folder = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let photo = try Self.source("original.jpg", bytes: "photographic original", in: folder)
@@ -16,7 +19,17 @@ import Testing
             var project = VideoProject.create()
             for index in selection {
                 project.addAsset(
-                    carriers[index], duration: 10, width: 64, height: 64, sourceImage: photo)
+                    carriers[index], duration: 10, width: 64, height: 64,
+                    sourceImage: sourceRole == .original ? photo : nil)
+                if sourceRole == .sourceImage {
+                    var assets = project.assets.map(\.raw)
+                    assets[assets.count - 1]["edithSourceImagePath"] = photo.path
+                    project.root["assets"] = assets
+                }
+                let asset = try #require(project.assets.last)
+                #expect(
+                    asset.raw["kind"] as? String == (sourceRole == .original ? "image" : "video"))
+                #expect(asset.url == (sourceRole == .original ? photo : carriers[index]))
                 project.trim(
                     clipID: project.clips.last!.id, start: Double(index * 5),
                     end: Double(index * 5 + 5))
@@ -44,7 +57,7 @@ import Testing
             #expect(report.assessment == "knownReuseDetected")
             #expect(
                 report.occurrences.allSatisfy {
-                    $0.source.identity == identity && $0.sourceRole == .sourceImage
+                    $0.source.identity == identity && $0.sourceRole == sourceRole
                         && !$0.sourceRangeComparable
                 })
             #expect(
@@ -62,20 +75,33 @@ import Testing
         #expect(try files.map { try Data(contentsOf: $0) } == before)
         var specific = try VideoProject.open(paths[1])
         var manifest = try specific.mediaManifest()
+        let photoEntry = try #require(manifest.entries.first { $0.reference.role == sourceRole })
+        #expect(photoEntry.source.identity == identity)
+        let photoProvenance = VideoMediaLibrary.Provenance(
+            sourceFamilyID: "photo-specific", declaration: "Explicit photo family")
         manifest.entries = manifest.entries.map { entry in
-            guard entry.reference.role == .sourceImage else { return entry }
+            guard entry.reference == photoEntry.reference else { return entry }
             return .init(
                 reference: entry.reference,
-                source: .init(
-                    identity: entry.source.identity,
-                    provenance: .init(
-                        sourceFamilyID: "photo-specific", declaration: "Explicit photo family")))
+                source: .init(identity: entry.source.identity, provenance: photoProvenance),
+                metadata: entry.metadata, packagedPath: entry.packagedPath)
         }
         specific.root["edithMediaLibrary"] = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(manifest))
         try specific.save(to: paths[1])
+        var reopened = try VideoProject.open(paths[1])
+        #expect(try reopened.indexMedia() == manifest)
+        try reopened.save(to: paths[1])
         let declared = try await Self.report([paths[1]])
-        #expect(declared.occurrences[0].source.provenance?.sourceFamilyID == "photo-specific")
+        #expect(declared.occurrences[0].source.provenance == photoProvenance)
+        let retained = try VideoProject.open(paths[1]).mediaManifest()
+        #expect(retained == manifest)
+        if sourceRole == .sourceImage {
+            let carrierEntry = try #require(
+                retained.entries.first { $0.reference.role == .original })
+            #expect(carrierEntry.source.provenance?.sourceFamilyID == "photo-take")
+            #expect(carrierEntry.source.identity != identity)
+        }
         try Data("changed photo".utf8).write(to: photo)
         do {
             _ = try await Self.report([paths[0]])
