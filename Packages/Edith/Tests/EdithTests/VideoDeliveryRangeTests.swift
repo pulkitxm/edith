@@ -11,6 +11,9 @@ import Testing
     ) async throws -> VideoRenderPipeline {
         let source = try await VideoEditorServiceTests.movie(in: directory)
         var project = VideoProject.create()
+        project.videoSettings = VideoSettings(
+            width: 64, height: 64, frameRateNumerator: Int(cadence.timescale),
+            frameRateDenominator: Int(cadence.value))
         project.addAsset(source, duration: 1, width: 64, height: 64)
         let duplicate = project.duplicate(clipID: project.clips[0].id)
         let second = try #require(duplicate)
@@ -33,13 +36,7 @@ import Testing
             try file.write(from: buffer)
         }
         project.addAudio(audio, duration: 2, at: audioStartMs)
-        let sourcePipeline = try await VideoRenderPipeline.make(project: project)
-        let video = sourcePipeline.videoComposition.mutableCopy() as! AVMutableVideoComposition
-        video.frameDuration = cadence
-        return VideoRenderPipeline(
-            composition: sourcePipeline.composition, videoComposition: video,
-            audioMix: sourcePipeline.audioMix, segments: sourcePipeline.segments,
-            canvas: sourcePipeline.canvas)
+        return try await VideoRenderPipeline.make(project: project)
     }
 
     @Test func middleRangeKeepsTransitionCaptionAndMusicPhaseOnOriginalTimeline() async throws {

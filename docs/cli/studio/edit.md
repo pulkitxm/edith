@@ -93,6 +93,12 @@ frame using the exact rational cadence. JSON returns the selected `frame` and `t
 See [native project delivery](./delivery.md) for every setting, default, unit,
 report field and MCP route.
 
+Both delivery commands also accept `--start-frame INDEX --end-frame INDEX` for
+a half-open interval on the unchanged original output timeline. Supply both
+bounds or neither. Transitions, captions and music retain their original timing;
+encoded timestamps start at zero. The measured report adds `range` with the
+selected project frame bounds and rational frame rate.
+
 ## Where to go next
 
 - [`ed studio tools`](./tools.md), for file-based media tools
