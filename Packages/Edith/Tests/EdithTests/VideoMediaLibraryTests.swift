@@ -662,6 +662,58 @@ import Testing
             try !project.mediaManifest().entries.contains { $0.reference.role == .processedAudio })
     }
 
+    @Test(arguments: [0, 1, 2])
+    func unindexedReplacementComparesReadableOriginalBeforeClearingAudio(mode: Int) throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let original = try file(folder, "original.mov", "same")
+        let copy = try file(folder, "copy.mov", "same")
+        let audio = try file(folder, "clean.wav", "derived")
+        var project = VideoProject.create()
+        project.addAsset(original, duration: 1, width: 1, height: 1)
+        var assets = project.assets.map(\.raw)
+        assets[0]["edithAudioPath"] = audio.path
+        project.root["assets"] = assets
+        if mode == 2 { try FileManager.default.removeItem(at: original) }
+        let result = try project.relinkOriginalMedia(
+            .init(assetID: project.assets[0].id, role: .original),
+            to: mode == 0 ? original : copy, policy: .allowReplacement)
+        #expect(result.contentChanged == (mode == 2))
+        #expect(
+            project.assets[0].raw["edithAudioPath"] as? String == (mode == 2 ? nil : audio.path))
+    }
+
+    @Test func subsecondCaptureOrderPrecedesOpposingHashOrder() {
+        func media(_ fraction: String, hash: String, digitized: Bool = false)
+            -> VideoMediaLibrary.InspectedMedia
+        {
+            let field = digitized ? "Digitized" : "Original"
+            let capture = VideoMediaLibrary.captureDate(exif: [
+                "DateTime\(field)": "2020:01:01 00:00:00",
+                "OffsetTime\(field)": "+00:00", "SubsecTime\(field)": fraction,
+            ])
+            return .init(
+                url: URL(fileURLWithPath: "/synthetic/\(fraction).jpg"),
+                source: .init(
+                    identity: .init(sha256: String(repeating: hash, count: 64), byteCount: 1)),
+                metadata: .init(
+                    duration: nil, video: [], audio: [], image: nil, captureDate: capture))
+        }
+        let early = media("100", hash: "f")
+        let late = media("900", hash: "0")
+        #expect(early.source.identity.sha256 > late.source.identity.sha256)
+        #expect(VideoMediaLibrary.chronologicalOrder([late, early]) == [early, late])
+        #expect(early.metadata.captureDate.rawValues.contains("100"))
+        #expect(
+            media("900", hash: "0", digitized: true).metadata.captureDate.utc
+                == "2020-01-01T00:00:00.900Z")
+        #expect(
+            media("1000001", hash: "0").metadata.captureDate.utc == "2020-01-01T00:00:00.1000001Z")
+        #expect(
+            VideoMediaLibrary.chronologicalOrder([media("1000001", hash: "0"), early]).first
+                == early)
+    }
+
     private func image(_ folder: URL, name: String, exif: [String: Any]) throws -> URL {
         let url = folder.appendingPathComponent(name)
         let context = try #require(
@@ -687,7 +739,7 @@ import Testing
             sources, name: "a.jpg",
             exif: [
                 "DateTimeOriginal": "2020:02:29 10:00:00", "OffsetTimeOriginal": "+05:30",
-                "DateTimeDigitized": "2026:01:01 00:00:00",
+                "DateTimeDigitized": "2026:01:01 00:00:00", "SubsecTimeOriginal": "100",
             ])
         let b = try image(
             sources, name: "b.jpg",
@@ -698,7 +750,7 @@ import Testing
         let first = try await VideoMediaLibrary.inspect(a)
         let second = try await VideoMediaLibrary.inspect(b)
         let missing = try await VideoMediaLibrary.inspect(unknown)
-        #expect(first.metadata.captureDate.utc == "2020-02-29T04:30:00.000Z")
+        #expect(first.metadata.captureDate.utc == "2020-02-29T04:30:00.100Z")
         #expect(second.metadata.captureDate.utc == "2020-02-29T05:00:00.000Z")
         #expect(first.metadata.captureDate.source == "exif.DateTimeOriginal")
         #expect(first.metadata.captureDate.offsetMinutes == 330)

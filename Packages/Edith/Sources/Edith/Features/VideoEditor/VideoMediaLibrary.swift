@@ -108,6 +108,7 @@ enum VideoMediaLibrary {
         if let original = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String {
             return parseCaptureDate(
                 original, offset: exif["OffsetTimeOriginal"] as? String,
+                subsecond: exif["SubsecTimeOriginal"] as? String,
                 source: "exif.DateTimeOriginal")
         }
         for key in captureDateKeys {
@@ -122,15 +123,18 @@ enum VideoMediaLibrary {
         if let digitized = exif[kCGImagePropertyExifDateTimeDigitized as String] as? String {
             return parseCaptureDate(
                 digitized, offset: exif["OffsetTimeDigitized"] as? String,
+                subsecond: exif["SubsecTimeDigitized"] as? String,
                 source: "exif.DateTimeDigitized")
         }
         return .init(source: nil, rawValues: [], utc: nil, timezone: .unknown, offsetMinutes: nil)
     }
 
-    private static func parseCaptureDate(_ raw: String, offset: String? = nil, source: String)
+    private static func parseCaptureDate(
+        _ raw: String, offset: String? = nil, subsecond: String? = nil, source: String
+    )
         -> CaptureDate
     {
-        let rawValues = [raw] + (offset.map { [$0] } ?? [])
+        let rawValues = [raw] + (offset.map { [$0] } ?? []) + (subsecond.map { [$0] } ?? [])
         func result(_ timezone: CaptureDate.Timezone, utc: String? = nil, minutes: Int? = nil)
             -> CaptureDate
         {
@@ -177,19 +181,38 @@ enum VideoMediaLibrary {
             else { return result(.invalid) }
             minutes = (hours * 60 + remainder) * (zone.hasPrefix("-") ? -1 : 1)
         }
-        let fraction = Double("0" + group(3)) ?? 0
-        let utc = date.addingTimeInterval(fraction - Double(minutes * 60))
+        let fraction =
+            subsecond?.trimmingCharacters(in: .whitespaces) ?? String(group(3).dropFirst())
+        guard fraction.isEmpty || fraction.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+            return result(.invalid)
+        }
+        if subsecond != nil, !group(3).isEmpty, group(3) != "." + fraction {
+            return result(.conflicting)
+        }
+        let utc = date.addingTimeInterval(-Double(minutes * 60))
         let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        iso.formatOptions = [.withInternetDateTime]
         iso.timeZone = TimeZone(secondsFromGMT: 0)
-        return result(.explicitOffset, utc: iso.string(from: utc), minutes: minutes)
+        let precise =
+            iso.string(from: utc).dropLast() + "."
+            + fraction.padding(toLength: max(3, fraction.count), withPad: "0", startingAt: 0) + "Z"
+        return result(.explicitOffset, utc: precise, minutes: minutes)
     }
 
     static func chronologicalOrder(_ media: [InspectedMedia]) -> [InspectedMedia] {
         media.sorted {
             let left = $0.metadata.captureDate.utc
             let right = $1.metadata.captureDate.utc
-            if left != right { return (left ?? "~") < (right ?? "~") }
+            if left != right {
+                guard let left else { return false }
+                guard let right else { return true }
+                let width = max(left.count, right.count)
+                let a = String(left.dropLast()).padding(
+                    toLength: width, withPad: "0", startingAt: 0)
+                let b = String(right.dropLast()).padding(
+                    toLength: width, withPad: "0", startingAt: 0)
+                if a != b { return a < b }
+            }
             if $0.source.identity.sha256 != $1.source.identity.sha256 {
                 return $0.source.identity.sha256 < $1.source.identity.sha256
             }
@@ -814,7 +837,10 @@ extension VideoProject {
             throw VideoMediaLibrary.Failure.identityMismatch(previousURL.path)
         }
         var expected = expectedIdentity ?? previous?.source.identity
-        if expected == nil, policy == .requireIdentity {
+        if expected == nil,
+            policy == .requireIdentity
+                || FileManager.default.isReadableFile(atPath: previousURL.path)
+        {
             expected = try VideoMediaLibrary.identity(
                 of: previousURL, checkCancellation: checkCancellation)
         }
