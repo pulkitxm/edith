@@ -1,16 +1,79 @@
 import copy
+import contextlib
+import importlib.util
+import io
 import json
 import os
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 from fractions import Fraction
+from unittest import mock
 
 from editor_acceptance_captions import caption_snapshot, unchanged_captions
 from editor_acceptance_delivery import checked_progress
 from editor_acceptance_markers import mapped_frames, marker_snapshot
 from editor_acceptance_media import envelope, unique_usage
 from editor_acceptance_publications import protected_snapshot, publication_reordered
+
+
+class OrchestrationContractTests(unittest.TestCase):
+    def test_final_success_requires_every_requested_check(self):
+        spec = importlib.util.spec_from_file_location("acceptance_runner", pathlib.Path(__file__).with_name("test-editor-acceptance.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        root = pathlib.Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "opencode"
+        root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="acceptance-orchestration-", dir=root) as directory:
+            fixture = pathlib.Path(directory) / "fixture"
+            fixture.mkdir()
+            (fixture / "manifest.json").write_text('{"shots":[]}')
+            core_calls = []
+
+            def process(arguments, **kwargs):
+                if arguments[1] == "inspect":
+                    core_calls.append(arguments)
+                    value = {"checksPassed": True, "sha256": "synthetic"}
+                elif arguments[1] == "verify-fixture":
+                    value = {"fixtureVerified": True}
+                elif arguments[3] == "schema":
+                    value = {"properties": {"operations": {"items": {"oneOf": [
+                        {"properties": {name: {}}} for name in ("canvas", "addAudio", "videoSettings")
+                    ]}}}}
+                elif arguments[3] == "show":
+                    value = {"audioTracks": [{"timebase": "output"}]}
+                else:
+                    value = {"written": "--dry-run" not in arguments, "aliases": {str(i): str(i) for i in range(45)}, "frame": 15, "time": 0.25}
+                progress = '{"version":1,"event":"progress","percent":100}' if "--progress" in arguments else ""
+                return subprocess.CompletedProcess(arguments, 0, json.dumps(value), progress)
+
+            for failing in (True, False):
+                workspace = pathlib.Path(directory) / str(failing)
+                arguments = ["acceptance", "--workspace", str(workspace), "--fixture", str(fixture),
+                             "--ed", sys.executable, "--media-helper", "synthetic-helper", "--delivery-checks"]
+                delivery = mock.Mock(side_effect=RuntimeError("Synthetic delivery failed") if failing else None, return_value={})
+                with mock.patch.object(sys, "argv", arguments), mock.patch.object(runner.subprocess, "run", side_effect=process), \
+                        mock.patch.multiple(runner, check_sources=mock.Mock(), check_project=mock.Mock(), checked_report=mock.Mock(),
+                                            digest=mock.Mock(return_value="synthetic"), exercise_delivery=delivery,
+                                            exercise_variable_speed=mock.Mock(return_value={})), \
+                        contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    code = runner.cli()
+                    delivery.assert_called_once()
+                    self.assertEqual(code, 1 if failing else 0)
+                    result = workspace / "result.json"
+                    self.assertEqual(result.exists(), not failing)
+                    self.assertFalse((workspace / ".result.json.tmp").exists())
+                    if not failing:
+                        self.assertEqual(json.loads(result.read_text())["pendingGroups"], ["markers", "captions", "media", "publications"])
+                        self.assertEqual(runner.cli(), 1)
+                        self.assertFalse(result.exists())
+            self.assertEqual(len(core_calls), 2)
+            failed = subprocess.CompletedProcess(["synthetic-helper"], 1, "not JSON", "Synthetic inspector failed")
+            with mock.patch.object(runner.subprocess, "run", return_value=failed):
+                with self.assertRaisesRegex(RuntimeError, "Synthetic inspector failed"):
+                    runner.run(["synthetic-helper", "inspect"])
 
 
 class CaptionContractTests(unittest.TestCase):

@@ -26,10 +26,8 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
-def run(arguments, report_path=None):
+def run(arguments):
     result = subprocess.run([str(arg) for arg in arguments], capture_output=True, text=True, timeout=1800)
-    if report_path and result.stdout:
-        write_json(report_path, json.loads(result.stdout))
     require(result.returncode == 0, f"Command failed ({result.returncode}): {result.stderr}")
     if "--progress" in arguments:
         checked_progress(result.stderr)
@@ -110,6 +108,7 @@ def main():
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Additional public v1 edit operations, including project videoSettings")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
+    (workspace / "result.json").unlink(missing_ok=True)
     require(not workspace.exists(), "Workspace must not already exist")
     require(args.fixture_only or args.ed is not None, "--ed is required for CLI acceptance")
     require(not args.media_fixture or args.publication_plan, "--media-fixture requires --publication-plan")
@@ -213,7 +212,7 @@ def main():
         require(frame_result["frame"] == 15 and frame_result["time"] == 0.25, "Exact frame selection report mismatch")
         checked_report(render_result, render, "video", 1728)
     check_sources(fixture, manifest)
-    report = run([helper, "baseline" if args.baseline else "inspect", render, frame], workspace / "result.json")
+    report = run([helper, "baseline" if args.baseline else "inspect", render, frame])
     require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     if args.delivery_checks:
         report["deliveryAcceptance"] = exercise_delivery(ed, saved, workspace, helper)
@@ -237,13 +236,23 @@ def main():
         ("markers", args.markers), ("captions", args.markers or args.captions),
         ("media", args.media_fixture), ("publications", args.publication_plan),
     ) if not enabled]
-    write_json(workspace / "result.json", report)
+    temporary = workspace / ".result.json.tmp"
+    try:
+        write_json(temporary, report)
+        temporary.replace(workspace / "result.json")
+    finally:
+        temporary.unlink(missing_ok=True)
     print(json.dumps(report, indent=2, sort_keys=True))
 
 
-if __name__ == "__main__":
+def cli():
     try:
         main()
+        return 0
     except (RuntimeError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(cli())
