@@ -404,6 +404,26 @@ public enum CommandTree {
             arguments: [.studioTool, .localPath], repeatingArgument: .localPath),
         "ed studio probe": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit schema": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio edit create": Spec(
+            options: ["--json", "--overwrite", "--title", "-h", "--help", "--version"],
+            optionValues: ["--title": .free], arguments: [.localPath]),
+        "ed studio edit show": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit validate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit apply": Spec(
+            options: [
+                "--json", "--overwrite", "--dry-run", "--plan", "--output", "-h", "--help",
+                "--version",
+            ],
+            optionValues: ["--plan": .localPath, "--output": .localPath], arguments: [.localPath]),
+        "ed studio edit render": Spec(
+            options: ["--json", "--overwrite", "--output", "-h", "--help", "--version"],
+            optionValues: ["--output": .localPath], arguments: [.localPath]),
+        "ed studio edit frame": Spec(
+            options: ["--json", "--overwrite", "--time", "--output", "-h", "--help", "--version"],
+            optionValues: ["--time": .free, "--output": .localPath], arguments: [.localPath]),
         "ed tools ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed tools install": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.tool]),

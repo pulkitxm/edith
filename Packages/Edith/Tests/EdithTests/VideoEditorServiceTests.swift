@@ -121,7 +121,9 @@ import Testing
         #expect(abs(try await exported.load(.duration).seconds - 0.7) < 0.05)
         let image = try #require(CGImageSourceCreateWithURL(png as CFURL, nil))
         let bitmap = try #require(CGImageSourceCreateImageAtIndex(image, 0, nil))
-        #expect(bitmap.width == 64 && bitmap.height == 64)
+        #expect(
+            bitmap.width == Int(pipeline.canvas.width)
+                && bitmap.height == Int(pipeline.canvas.height))
         let generator = AVAssetImageGenerator(asset: exported)
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
@@ -132,7 +134,8 @@ import Testing
             var bytes = [UInt8](repeating: 0, count: 4)
             context.render(
                 CIImage(cgImage: image), toBitmap: &bytes, rowBytes: 4,
-                bounds: CGRect(x: 32, y: 32, width: 1, height: 1), format: .RGBA8,
+                bounds: CGRect(x: image.width / 2, y: image.height / 2, width: 1, height: 1),
+                format: .RGBA8,
                 colorSpace: CGColorSpaceCreateDeviceRGB())
             return bytes
         }
