@@ -78,7 +78,12 @@ public struct OperationMCPInvocation: Equatable, Sendable {
 
 public enum OperationMCPRunner {
     public static let timeout: TimeInterval = 120
+    public static let videoRenderTimeout: TimeInterval = 6 * 60 * 60
     public static let maximumOutputBytes = 4 << 20
+
+    static func executionTimeout(for tool: OperationMCPTool) -> TimeInterval {
+        tool.route == StudioEditOperation.render.descriptor.cli ? videoRenderTimeout : timeout
+    }
 
     public static func run(
         _ tool: OperationMCPTool, arguments: [String], confirm: Bool,
@@ -90,13 +95,14 @@ public enum OperationMCPRunner {
         }
         let request = CLICommandRequest(
             executableURL: executable, arguments: tool.arguments(arguments, confirm: confirm),
-            environment: CLIToolEnvironment.sanitized(), timeout: timeout,
+            environment: CLIToolEnvironment.sanitized(), timeout: executionTimeout(for: tool),
             maximumOutputBytes: maximumOutputBytes, terminatesProcessGroup: true)
-        guard
-            let result = try? await CLICommandRunner.runSeparated(
+        let result: CLICommandResult
+        do {
+            result = try await CLICommandRunner.runSeparated(
                 request, onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
-        else {
-            return OperationMCPInvocation(output: "ed could not be started.", failed: true)
+        } catch {
+            return OperationMCPInvocation(output: error.localizedDescription, failed: true)
         }
         guard result.terminationStatus == 0 else {
             let detail = result.standardError
