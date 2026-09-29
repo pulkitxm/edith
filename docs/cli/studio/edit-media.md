@@ -119,10 +119,18 @@ optional `nextOffset`, and paginated `occurrences` and `conflicts`. Counts cover
 inputs. Unique originals combine exact bytes and declared families transitively.
 
 Occurrences contain `index`, `project`, `projectID`, `clipID`, `assetID`, `role`,
+`sourceRole`, `sourceRangeComparable`,
 `sourceIn`, optional `sourceOut`, `source.identity`, optional `source.provenance`,
 and `originalGroup`. Ranges use source seconds. Roles are `visual`, `timelineAudio`,
 or `independentAudio`; looping audio has no single source end. Independent audio
 rows are excluded from `uniqueClipCount`.
+
+Still carriers use `edithSourceImagePath` and its indexed `sourceImage` identity;
+other assets use their original URL and `original` identity. Source-image provenance
+takes precedence, falling back to the original asset's explicit family declaration.
+Still images have `sourceRangeComparable: false`: carrier seconds cannot establish
+disjoint photographic originals. Their conflict range relationship is
+`notComparableForStillOriginals`, with no inferred temporal overlap.
 
 Conflict groups expose `originalGroup`, `occurrenceCount`, `withinProject`,
 `crossProject`, `exactBytesRepeated`, `declaredFamilyRepeated`, `wholeOriginalReuse`,

@@ -3,6 +3,110 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoEditorMediaUsageTests {
+    @Test func stillCarriersReusePhotographicOriginalWithinAndAcrossProjects() async throws {
+        let folder = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let photo = try Self.source("original.jpg", bytes: "photographic original", in: folder)
+        let carriers = try ["first encoding", "second encoding"].enumerated().map {
+            try Self.source("carrier-\($0.offset).mov", bytes: $0.element, in: folder)
+        }
+        let identity = try VideoMediaLibrary.identity(of: photo)
+        var paths: [URL] = []
+        for selection in [[0, 1], [0], [1]] {
+            var project = VideoProject.create()
+            for index in selection {
+                project.addAsset(
+                    carriers[index], duration: 10, width: 64, height: 64, sourceImage: photo)
+                project.trim(
+                    clipID: project.clips.last!.id, start: Double(index * 5),
+                    end: Double(index * 5 + 5))
+            }
+            try project.indexMedia(
+                provenanceByAssetID: Dictionary(
+                    uniqueKeysWithValues: project.assets.map {
+                        (
+                            $0.id,
+                            VideoMediaLibrary.Provenance(
+                                sourceFamilyID: "photo-take", declaration: "Explicit original photo"
+                            )
+                        )
+                    }))
+            let path = folder.appendingPathComponent("project-\(paths.count).openscreen")
+            try project.save(to: path)
+            paths.append(path)
+        }
+        let files = paths + carriers + [photo]
+        let before = try files.map { try Data(contentsOf: $0) }
+        for selection in [[paths[0]], [paths[1], paths[2]]] {
+            let report = try await Self.report(selection)
+            #expect(report.occurrenceCount == 2 && report.uniqueOriginalCount == 1)
+            #expect(report.uniqueByteIdentityCount == 1 && report.conflictCount == 1)
+            #expect(report.assessment == "knownReuseDetected")
+            #expect(
+                report.occurrences.allSatisfy {
+                    $0.source.identity == identity && $0.sourceRole == .sourceImage
+                        && !$0.sourceRangeComparable
+                })
+            #expect(
+                report.occurrences.allSatisfy {
+                    $0.source.provenance?.sourceFamilyID == "photo-take"
+                })
+            let conflict = report.conflicts[0]
+            #expect(conflict.withinProject == (selection.count == 1))
+            #expect(conflict.crossProject == (selection.count == 2))
+            #expect(
+                conflict.wholeOriginalReuse && conflict.exactBytesRepeated
+                    && !conflict.overlappingExactSourceRanges)
+            #expect(conflict.rangeRelationship == "notComparableForStillOriginals")
+        }
+        #expect(try files.map { try Data(contentsOf: $0) } == before)
+        var specific = try VideoProject.open(paths[1])
+        var manifest = try specific.mediaManifest()
+        manifest.entries = manifest.entries.map { entry in
+            guard entry.reference.role == .sourceImage else { return entry }
+            return .init(
+                reference: entry.reference,
+                source: .init(
+                    identity: entry.source.identity,
+                    provenance: .init(
+                        sourceFamilyID: "photo-specific", declaration: "Explicit photo family")))
+        }
+        specific.root["edithMediaLibrary"] = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(manifest))
+        try specific.save(to: paths[1])
+        let declared = try await Self.report([paths[1]])
+        #expect(declared.occurrences[0].source.provenance?.sourceFamilyID == "photo-specific")
+        try Data("changed photo".utf8).write(to: photo)
+        do {
+            _ = try await Self.report([paths[0]])
+            Issue.record("Changed indexed photograph was accepted")
+        } catch let error as VideoEditorService.Failure {
+            #expect(error.code == "identity_mismatch")
+        }
+    }
+
+    @Test func directImageAssetsHaveNoComparableSourceTimeRanges() async throws {
+        let folder = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let photo = try Self.source("original.jpg", bytes: "original photo", in: folder)
+        var project = VideoProject.create()
+        project.addAsset(photo, duration: 10, width: 64, height: 64)
+        var assets = project.assets.map(\.raw)
+        assets[0]["kind"] = "image"
+        project.root["assets"] = assets
+        project.split(clipID: project.clips[0].id, at: 5)
+        try project.indexMedia()
+        let path = folder.appendingPathComponent("project.openscreen")
+        try project.save(to: path)
+        let report = try await Self.report([path])
+        #expect(report.uniqueOriginalCount == 1)
+        #expect(
+            report.occurrences.allSatisfy {
+                $0.sourceRole == .original && !$0.sourceRangeComparable
+            })
+        #expect(report.conflicts[0].rangeRelationship == "notComparableForStillOriginals")
+    }
+
     @Test func fortyFiveDifferentSourcesStayDistinctAcrossPages() async throws {
         let folder = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: folder) }

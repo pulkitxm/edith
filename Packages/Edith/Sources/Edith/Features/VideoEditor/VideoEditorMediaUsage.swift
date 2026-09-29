@@ -9,6 +9,8 @@ extension VideoEditorService {
             let clipID: String
             let assetID: String
             let role: String
+            let sourceRole: VideoMediaLibrary.Role
+            let sourceRangeComparable: Bool
             let sourceIn: Double
             let sourceOut: Double?
             let source: VideoMediaLibrary.Source
@@ -75,21 +77,32 @@ extension VideoEditorService {
                     guard let asset = project.assets.first(where: { $0.id == assetID }) else {
                         throw Failure("invalid_project", "Missing occurrence asset.")
                     }
+                    let sourceRole: VideoMediaLibrary.Role =
+                        asset.raw["edithSourceImagePath"] == nil ? .original : .sourceImage
+                    let comparable =
+                        sourceRole != .sourceImage && asset.raw["kind"] as? String != "image"
                     if sources[assetID] == nil {
-                        let identity = try VideoMediaLibrary.identity(of: asset.url)
+                        let sourceURL = try project.mediaURL(
+                            for: .init(assetID: assetID, role: sourceRole))
+                        let identity = try VideoMediaLibrary.identity(of: sourceURL)
                         let indexed = manifest.entries.first {
-                            $0.reference.assetID == assetID && $0.reference.role == .original
+                            $0.reference.assetID == assetID && $0.reference.role == sourceRole
                         }
                         if let indexed, indexed.source.identity != identity {
-                            throw VideoMediaLibrary.Failure.identityMismatch(asset.url.path)
+                            throw VideoMediaLibrary.Failure.identityMismatch(sourceURL.path)
                         }
+                        let assetDeclaration = manifest.entries.first {
+                            $0.reference.assetID == assetID && $0.reference.role == .original
+                        }?.source.provenance
                         sources[assetID] = .init(
-                            identity: identity, provenance: indexed?.source.provenance)
+                            identity: identity,
+                            provenance: indexed?.source.provenance ?? assetDeclaration)
                     }
                     rows.append(
                         .init(
                             index: rows.count, project: path.path, projectID: project.id,
-                            clipID: id, assetID: assetID, role: role, sourceIn: start,
+                            clipID: id, assetID: assetID, role: role, sourceRole: sourceRole,
+                            sourceRangeComparable: comparable, sourceIn: start,
                             sourceOut: end,
                             source: sources[assetID]!, originalGroup: 0))
                 }
@@ -152,6 +165,7 @@ extension VideoEditorService {
                 return .init(
                     index: row.index, project: row.project, projectID: row.projectID,
                     clipID: row.clipID, assetID: row.assetID, role: row.role,
+                    sourceRole: row.sourceRole, sourceRangeComparable: row.sourceRangeComparable,
                     sourceIn: row.sourceIn,
                     sourceOut: row.sourceOut, source: row.source, originalGroup: groupIDs[key]!)
             }
@@ -165,13 +179,14 @@ extension VideoEditorService {
                 for matches in bytes.values {
                     var furthest = -Double.infinity
                     for row in matches.sorted(by: { $0.sourceIn < $1.sourceIn }) {
-                        if let end = row.sourceOut {
+                        if row.sourceRangeComparable, let end = row.sourceOut {
                             if row.sourceIn < furthest { overlap = true }
                             furthest = max(furthest, end)
                         }
                     }
                 }
                 let unknownRanges = bytes.count > 1 || group.contains { $0.sourceOut == nil }
+                let stillOriginal = group.contains { !$0.sourceRangeComparable }
                 let projectCounts = Dictionary(grouping: group, by: \.project)
                 return .init(
                     originalGroup: key, occurrenceCount: group.count,
@@ -181,8 +196,11 @@ extension VideoEditorService {
                     declaredFamilyRepeated: Set(declared).count < declared.count,
                     wholeOriginalReuse: true,
                     overlappingExactSourceRanges: overlap,
-                    rangeRelationship: unknownRanges
-                        ? "unknownAcrossExportsOrLoops" : (overlap ? "overlapping" : "disjoint"),
+                    rangeRelationship: stillOriginal
+                        ? "notComparableForStillOriginals"
+                        : (unknownRanges
+                            ? "unknownAcrossExportsOrLoops"
+                            : (overlap ? "overlapping" : "disjoint")),
                     conflictingFamilyDeclarations: bytes.values.contains {
                         Set($0.compactMap { $0.source.provenance?.sourceFamilyID }).count > 1
                     })

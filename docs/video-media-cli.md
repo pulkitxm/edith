@@ -87,6 +87,13 @@ are seconds in the asset's own coordinate system. Role is `visual`, `timelineAud
 or `independentAudio`. The default `visual` scope excludes independent audio/music;
 `all` includes them, even muted tracks. Looping audio has no single `sourceOut`.
 
+Occurrences also expose `sourceRole` and `sourceRangeComparable`. Still carriers
+hash `edithSourceImagePath`, verify the indexed `sourceImage` identity, and prefer
+that reference's explicit family declaration, falling back to the original asset's
+declaration. Direct image assets hash their original URL. Still-image ranges are
+not comparable: `notComparableForStillOriginals` replaces temporal overlap/disjoint
+claims, because different carrier seconds never prove different photographs.
+
 The report includes `occurrenceCount`, `uniqueClipCount`, `uniqueByteIdentityCount`,
 `uniqueOriginalCount`, and `conflictCount`. Unique clip counts use project path plus
 clip ID, excluding independent audio track rows. Unique originals combine exact
