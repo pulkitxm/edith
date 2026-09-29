@@ -81,7 +81,7 @@ enum ZoomAnimation {
 }
 
 struct VideoRenderPipeline {
-    private struct CursorSample: Sendable {
+    struct CursorSample: Sendable {
         let timeMs: Double
         let x: Double
         let y: Double
@@ -89,7 +89,7 @@ struct VideoRenderPipeline {
         let click: Bool
     }
 
-    private static func cursorSamples(for url: URL) -> [CursorSample] {
+    static func cursorSamples(for url: URL) -> [CursorSample] {
         let sidecar = URL(fileURLWithPath: url.path + ".cursor.json")
         guard let data = try? Data(contentsOf: sidecar),
             let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -110,7 +110,7 @@ struct VideoRenderPipeline {
         }.sorted { $0.timeMs < $1.timeMs }
     }
 
-    private static func cursorSample(
+    static func cursorSample(
         at timeMs: Double, in samples: [CursorSample], smooth: Bool = false
     ) -> (current: CursorSample?, clicked: Bool) {
         var low = 0
@@ -296,15 +296,8 @@ struct VideoRenderPipeline {
             }
             let preferredTransform = try await sourceVideo.load(.preferredTransform)
             let naturalSize = try await sourceVideo.load(.naturalSize)
-            let displayBounds = CGRect(origin: .zero, size: naturalSize)
-                .applying(preferredTransform)
-            sourceTransforms[source.id] = CGAffineTransform(
-                a: 1, b: 0, c: 0, d: -1, tx: 0, ty: naturalSize.height
-            ).concatenating(preferredTransform)
-                .concatenating(
-                    CGAffineTransform(
-                        a: 1, b: 0, c: 0, d: -1, tx: 0,
-                        ty: displayBounds.minY + displayBounds.maxY))
+            sourceTransforms[source.id] = VideoSourceGeometry.orientation(
+                size: naturalSize, preferred: preferredTransform)
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
             for segment in segments where segment.clip.id == clip.id {
                 guard
@@ -664,24 +657,14 @@ struct VideoRenderPipeline {
     ) -> CIImage {
         let bounds = CGRect(origin: .zero, size: size)
         let full = input.extent
-        let cropped: CIImage
-        if let crop = clip.crop {
-            let area = CGRect(
-                x: full.minX + full.width * (crop["x"] ?? 0),
-                y: full.minY + full.height * (1 - (crop["y"] ?? 0) - (crop["height"] ?? 1)),
-                width: full.width * (crop["width"] ?? 1),
-                height: full.height * (crop["height"] ?? 1))
-            cropped = input.cropped(to: area.intersection(full))
-        } else {
-            cropped = input
-        }
-        let source = cropped.extent
-        let zoom = ZoomAnimation.sample(
-            at: timeMs, zooms: zooms,
+        let geometry = VideoSourceGeometry(
+            extent: full, clip: clip, effects: effects, timeMs: timeMs,
+            canvas: size, padding: padding, zooms: zooms,
             cursor: cursor.map { CGPoint(x: $0.x, y: $0.y) })
-        let transform = effects.transform(
-            source: source.size, canvas: size, padding: padding,
-            at: clip.start + timeMs / 1000 - clip.timelineStart, zoom: zoom)
+        let source = geometry.source
+        let cropped = input.cropped(to: source)
+        let zoom = geometry.zoom
+        let transform = geometry.transform
         let image = effects.graded(cropped).transformed(
             by: CGAffineTransform(
                 translationX: -source.minX, y: -source.minY)

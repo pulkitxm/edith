@@ -426,3 +426,49 @@ catalog-derived `arguments` array with the same typed CLI options. Analysis, lis
 snap are read operations; the other marker routes are writes. Runtime failures use
 the editor's `{version, error: {code, message}}` envelope. MCP output remains bounded
 to 4 MiB, with process-group cancellation and the analysis-only 300-second deadline.
+## Headless review diagnostics
+
+```sh
+ed studio edit review-report demo.openscreen --expect-duration 12 --expect-frame-count 720 --expect-shot-count 4 --json
+ed studio edit review-report demo.openscreen --check-borders --max-border-frames 10000 --output review.json --json
+```
+
+`review-report` always produces typed JSON. It measures the native composition,
+not an encoded master. Duration, frame count and surviving shot count are actual
+composition values. A shot is a surviving clip, not each speed slice. Optional
+`--expect-duration`, `--expect-frame-count` and `--expect-shot-count` compare those
+values with supplied expectations. Duration uses `--duration-tolerance` seconds
+(default 0.001); counts require exact equality.
+
+The report lists every clip and rendered segment with half-open source/output
+ranges, rational output timing, output-frame intervals, speed and nearest output
+markers at both boundaries. Marker deltas are marker minus boundary in seconds
+and project-output frames. Source frames are explicitly nominal-FPS coordinates,
+not decoded sample indices for variable-frame-rate sources. Stills have no source
+frame indices. Clips completely removed by trims have no output range.
+
+Missing or unreadable project dependencies remain visible as diagnostics. If the
+composition cannot be constructed, its actual counts and duration are unavailable,
+and expected-count checks are `not_assessed`, never successful guesses. The project
+and its dependencies remain immutable.
+
+Optional `--check-borders` assesses source coverage geometrically, using the same
+crop, affine transform and cursor-driven zoom as native rendering. It does not
+inspect black pixels. Fit margins, padding, rounded corners, shadow and background
+settings are reported separately. Coverage is assessed against the intended content
+region as well as the full canvas; intentional margins are not unexpected borders.
+Webcam compositing is `not_assessed`.
+
+Geometry checks every output frame within `--max-border-frames` (default 10000,
+maximum 100000). Longer timelines report `sampled` coverage, checked frame numbers
+and whether segment endpoints, transform keyframes, zoom boundaries and cursor
+changes fit within that bound. Sampling never claims an all-frame pass.
+
+`passed` exits 0. Failed, sampled or unavailable requested assessments exit 1 with
+the completed JSON on stdout and no error text on stderr, preserving diagnostics
+through MCP. Invalid arguments and I/O errors use the usual structured error path.
+Without `--output`, JSON is limited to 4 MiB. With `--output REPORT.json`, a report
+up to 32 MiB is atomically saved and stdout contains its path, status and checksum.
+Existing reports require `--overwrite`; project dependencies, aliases and sidecars
+are protected destinations. MCP exposes `edith_studio_edit_review_report` with the
+same arguments and bounded output.
