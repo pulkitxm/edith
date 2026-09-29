@@ -36,7 +36,8 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .frame: "Extract a composited PNG frame at a rendered output time."
         case .list: "List project identities and titles in a local directory."
         case .clone: "Copy a native edit with a fresh project identity."
-        case .contactSheet: "Render a labeled contact sheet of up to 64 output frames."
+        case .contactSheet:
+            "Render up to 64 labeled output frames with optional saved-marker and explicitly mapped source-waveform strips."
         case .reviewReport:
             "Report native timing, expected counts, missing assets and optional sampled border geometry."
         }

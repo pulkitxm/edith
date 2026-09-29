@@ -48,13 +48,37 @@ struct StudioEditContactSheet: AsyncParsableCommand {
     @Option(help: "Number of columns, from 1 to 8.") var columns = 4
     @Option(help: "Maximum thumbnail dimension in pixels, from 64 to 1920.") var cellWidth = 320
     @Option(help: "Destination .png file.") var output: String
+    @Flag(help: "Append saved manual and transient markers on an output-time strip.")
+    var showBeatMarkers = false
+    @Option(
+        help: "Audio or video asset ID for a source waveform; requires all four mapping options.")
+    var waveformAsset: String?
+    @Option(help: "Waveform source-range start in seconds.") var sourceIn: Double?
+    @Option(help: "Waveform source-range end in seconds (exclusive).") var sourceOut: Double?
+    @Option(help: "Output offset in seconds for the waveform source-range start.") var outputStart:
+        Double?
+    @Option(help: "Waveform source-to-output rate, from 0.05 to 20.") var playbackRate: Double?
     @OptionGroup var options: StudioEditOutput
 
     func run() async throws {
         try await StudioEditBridge.run(json: options.json) {
+            var overlays = VideoEditorService.ReviewOverlays()
+            overlays.showBeatMarkers = showBeatMarkers
+            overlays.waveformAssetID = waveformAsset
+            if [sourceIn, sourceOut, outputStart, playbackRate].contains(where: { $0 != nil }) {
+                guard let sourceIn, let sourceOut, let outputStart, let playbackRate else {
+                    throw VideoEditorService.Failure(
+                        "invalid_mapping",
+                        "Supply --source-in, --source-out, --output-start and --playback-rate together."
+                    )
+                }
+                overlays.waveformMapping = .init(
+                    sourceInSeconds: sourceIn, sourceOutSeconds: sourceOut,
+                    outputStartSeconds: outputStart, playbackRate: playbackRate)
+            }
             let result = try await VideoEditorService.contactSheet(
                 StudioEditBridge.url(project), times: time, columns: columns, cellWidth: cellWidth,
-                to: StudioEditBridge.url(output), overwrite: options.overwrite)
+                to: StudioEditBridge.url(output), overwrite: options.overwrite, overlays: overlays)
             if options.json {
                 try StudioEditBridge.printJSON(result)
             } else {
