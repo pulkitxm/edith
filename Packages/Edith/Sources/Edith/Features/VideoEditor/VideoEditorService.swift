@@ -53,7 +53,10 @@ public enum VideoEditorService {
             throw Failure(
                 "invalid_plan", "Expected edit plan version 1 with up to 1000 operations.")
         }
-        var project = try open(url)
+        let lock = dryRun ? nil : try await VideoProjectFileAccess.transaction(url)
+        defer { withExtendedLifetime(lock) {} }
+        let snapshot = try readProject(url)
+        var project = snapshot.project
         var aliases: [String: String] = [:]
         let directory = mediaDirectory ?? url.deletingLastPathComponent()
         for (index, operation) in plan.operations.enumerated() {
@@ -67,6 +70,7 @@ public enum VideoEditorService {
             }
         }
         try validateStructure(project)
+        let encoded = try encodedProject(project)
         try await validateMedia(project)
         let destination = output ?? url
         try require(
@@ -75,7 +79,8 @@ public enum VideoEditorService {
         try protectSources(project, destination: destination)
         try Task.checkCancellation()
         if !dryRun {
-            try save(project, to: destination, overwrite: overwrite)
+            try saveEncoded(
+                encoded, to: destination, overwrite: overwrite, expectedSource: snapshot.revision)
         }
         return result(project, url: destination, written: !dryRun, aliases: aliases)
     }
@@ -149,13 +154,39 @@ public enum VideoEditorService {
     }
 
     static func open(_ url: URL) throws -> VideoProject {
+        try readProject(url).project
+    }
+
+    struct Revision {
+        let url: URL
+        let fingerprint: VideoProjectFileAccess.Revision
+    }
+
+    static func readProject(_ url: URL) throws -> (project: VideoProject, revision: Revision) {
         try requireLocalFile(url)
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        try require(size <= 32 * 1024 * 1024, "Project exceeds 32 MiB.")
-        try validateValues(JSONSerialization.jsonObject(with: Data(contentsOf: url)))
-        let project = try VideoProject.open(url)
+        var metadata = stat()
+        guard stat(url.path, &metadata) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        try require(metadata.st_size <= 32 * 1024 * 1024, "Project exceeds 32 MiB.")
+        let data = try Data(contentsOf: url)
+        try require(data.count <= 32 * 1024 * 1024, "Project exceeds 32 MiB.")
+        guard let source = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw VideoProject.ProjectError.unsupportedFormat
+        }
+        try validateValues(source)
+        let root = try VideoProject.migratedDocument(source)
+        guard root["schemaVersion"] as? Int == 7, root["project"] is [String: Any],
+            root["timeline"] is [String: Any]
+        else {
+            throw VideoProject.ProjectError.unsupportedFormat
+        }
+        let project = VideoProject(
+            root: root, fileURL: source["schemaVersion"] as? Int == 7 ? url : nil,
+            fileRevision: source["schemaVersion"] as? Int == 7
+                ? VideoProjectFileAccess.RevisionState(data) : nil)
         try validateStructure(project)
-        return project
+        return (project, Revision(url: url, fingerprint: VideoProjectFileAccess.Revision(data)))
     }
 
     static func requireLocalFile(_ url: URL) throws {
@@ -298,7 +329,7 @@ public enum VideoEditorService {
     }
 
     static func protectSources(_ project: VideoProject, destination: URL) throws {
-        let target = destination.resolvingSymlinksInPath().standardizedFileURL
+        let target = VideoProjectFileAccess.identity(destination)
         var sources = project.assets.flatMap { asset -> [URL] in
             [asset.url]
                 + [
@@ -308,8 +339,20 @@ public enum VideoEditorService {
                 .compactMap { ($0 as? String).map { URL(fileURLWithPath: $0) } }
         }
         sources += sources.map { URL(fileURLWithPath: $0.path + ".cursor.json") }
+        if project.backgroundColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression)
+            == nil
+        {
+            sources.append(URL(fileURLWithPath: project.backgroundColor))
+        }
+        sources += project.annotations.filter { $0.type == "image" }.compactMap { annotation in
+            let path =
+                annotation.raw["imageContent"] as? String ?? annotation.raw["content"] as? String
+                ?? ""
+            guard !path.isEmpty, !path.hasPrefix("data:") else { return nil }
+            return URL(fileURLWithPath: path)
+        }
         try require(
-            !sources.contains { $0.resolvingSymlinksInPath().standardizedFileURL == target },
+            !sources.contains { VideoProjectFileAccess.identity($0) == target },
             "Output must not replace source media or sidecars.")
     }
 
@@ -319,8 +362,7 @@ public enum VideoEditorService {
         try require(
             output.pathExtension.lowercased() == suffix, "Output must have a .\(suffix) extension.")
         try require(
-            output.resolvingSymlinksInPath().standardizedFileURL
-                != source.resolvingSymlinksInPath().standardizedFileURL,
+            VideoProjectFileAccess.identity(output) != VideoProjectFileAccess.identity(source),
             "Output must not replace the project.")
         try protectSources(project, destination: output)
     }
@@ -346,14 +388,50 @@ public enum VideoEditorService {
     }
 
     static func save(_ project: VideoProject, to url: URL, overwrite: Bool) throws {
+        try saveEncoded(encodedProject(project), to: url, overwrite: overwrite)
+    }
+
+    static func saveEncoded(
+        _ data: Data, to url: URL, overwrite: Bool, expectedSource: Revision? = nil
+    ) throws {
         try require(
             url.pathExtension == "openscreen", "Project output must have an .openscreen extension.")
         try checkDestination(url, overwrite: overwrite)
         let temporary = temporaryOutput(url)
         defer { try? FileManager.default.removeItem(at: temporary) }
+        try data.write(to: temporary, options: .atomic)
+        if let expectedSource {
+            try VideoProjectFileAccess.publication(expectedSource.url) {
+                guard try expectedSource.fingerprint.matches(expectedSource.url) else {
+                    throw Failure(
+                        "project_changed",
+                        "The source project changed during this edit. Read it again and retry the plan."
+                    )
+                }
+                if VideoProjectFileAccess.identity(expectedSource.url)
+                    == VideoProjectFileAccess.identity(url)
+                {
+                    try publish(temporary, to: url, overwrite: overwrite)
+                } else {
+                    try VideoProjectFileAccess.publication(url) {
+                        try publish(temporary, to: url, overwrite: overwrite)
+                    }
+                }
+            }
+        } else {
+            try VideoProjectFileAccess.publication(url) {
+                try publish(temporary, to: url, overwrite: overwrite)
+            }
+        }
+    }
+
+    static func encodedProject(_ project: VideoProject) throws -> Data {
         var copy = project
-        try copy.save(to: temporary)
-        try publish(temporary, to: url, overwrite: overwrite)
+        let data = try copy.encodedForSaving()
+        guard data.count <= 32 * 1024 * 1024 else {
+            throw Failure("project_too_large", "Serialized project exceeds 32 MiB.")
+        }
+        return data
     }
 
     static func publish(_ temporary: URL, to url: URL, overwrite: Bool) throws {

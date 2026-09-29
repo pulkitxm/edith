@@ -23,11 +23,22 @@ needs `--overwrite`. Use `--output revised.openscreen` to save a separate projec
 Writes publish a complete temporary file atomically. Failed exports preserve the old
 output. Source media, associated audio, camera media, image sources and cursor sidecars
 cannot be output destinations. Destination symlinks and directories are rejected.
+Filesystem wallpapers and image annotations are protected too; inline image data is
+not treated as a path.
 
 `--dry-run` executes and validates all operations in memory, including probing added
 media, but writes no files. It does not require `--overwrite`. IDs generated during a dry
 run are previews; a subsequent apply creates fresh IDs. An invalid operation aborts the
 whole plan, and the input project remains byte-for-byte unchanged.
+
+Concurrent CLI applies serialize per source project. Before publication, the CLI checks
+that the source bytes still match the revision it read. Native UI saves share a short
+publication lock, so a UI save during validation produces a `project_changed` failure
+instead of being overwritten. Native saves also compare their loaded revision, so an
+older open UI project cannot silently replace a later CLI edit. Contended native saves
+return `project_busy` for retry. A private per-user temporary lock directory coordinates
+these writers by canonical project path, including read-only sources with separate output.
+Lock files remain in place to preserve identity. Dry-run does not create lock files.
 
 ## Version 1 plans
 
@@ -56,6 +67,8 @@ schema to construct plans; project JSON itself is not the edit interface. Each o
 is one object with one operation name and its required, typed fields. Unknown fields,
 unknown operations and unsupported versions are rejected. Plans are limited to 4 MiB
 and 1000 operations. Project files are limited to 32 MiB and 10000 clips or assets.
+The 32 MiB limit also applies to the final serialized output, including pretty-print
+formatting, during both apply and dry-run.
 
 Operations run in order. `addMedia.name` and `split.rightName` define plan-local aliases
 for newly created clips. Later operations can use either an alias or a persisted clip ID
@@ -101,3 +114,23 @@ Validate checks project structure, source availability and native composition. E
 projects validate successfully, but need video before rendering. Render exports MP4
 using the current native high-quality preset; frame exports a composited PNG. Rendering
 honors existing supported project effects, including effects configured in the UI.
+
+## MCP
+
+The running `ed mcp` server registers `edith_studio_edit_schema`,
+`edith_studio_edit_create`, `edith_studio_edit_show`, `edith_studio_edit_apply`,
+`edith_studio_edit_validate`, `edith_studio_edit_render` and `edith_studio_edit_frame`.
+Each takes the usual MCP `arguments` array, containing the same positional arguments and
+options as the corresponding CLI command. JSON output is enabled by the transport.
+Existing destinations still require an explicit `--overwrite` argument.
+
+```json
+{
+  "name": "edith_studio_edit_render",
+  "arguments": {"arguments": ["/demo/demo.openscreen", "--output", "/demo/demo.mp4"]}
+}
+```
+
+Native video rendering has a bounded six-hour MCP execution deadline. Other routes keep
+the standard 120-second deadline. Output capture stays capped at 4 MiB, and cancellation
+continues to terminate the child process group.

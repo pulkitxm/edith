@@ -123,6 +123,7 @@ struct VideoProject {
 
     var root: [String: Any]
     var fileURL: URL?
+    var fileRevision: VideoProjectFileAccess.RevisionState?
 
     var title: String { (root["project"] as? [String: Any])?["title"] as? String ?? "Untitled" }
     var id: String { (root["project"] as? [String: Any])?["id"] as? String ?? "" }
@@ -451,17 +452,32 @@ struct VideoProject {
             root["project"] is [String: Any], root["timeline"] is [String: Any]
         else { throw ProjectError.unsupportedFormat }
         let wasMigrated = source["schemaVersion"] as? Int != 7
-        return VideoProject(root: root, fileURL: wasMigrated ? nil : url)
+        return VideoProject(
+            root: root, fileURL: wasMigrated ? nil : url,
+            fileRevision: wasMigrated ? nil : VideoProjectFileAccess.RevisionState(data))
     }
 
     mutating func save(to url: URL) throws {
-        var project = root["project"] as? [String: Any] ?? [:]
-        project["updatedAt"] = ISO8601DateFormatter().string(from: Date())
-        root["project"] = project
-        let data = try JSONSerialization.data(
-            withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: url, options: .atomic)
+        let sameFile =
+            fileURL.map {
+                VideoProjectFileAccess.identity($0) == VideoProjectFileAccess.identity(url)
+            } == true
+        let expected = sameFile ? fileRevision?.value : nil
+        let data = try encodedForSaving()
+        try VideoProjectFileAccess.publication(url) {
+            if let expected, try !expected.matches(url) {
+                throw VideoEditorService.Failure(
+                    "project_changed",
+                    "This project changed on disk. Reopen it before saving your edits.")
+            }
+            try data.write(to: url, options: .atomic)
+        }
         fileURL = url
+        if sameFile, let fileRevision {
+            fileRevision.value = VideoProjectFileAccess.Revision(data)
+        } else {
+            fileRevision = VideoProjectFileAccess.RevisionState(data)
+        }
     }
 
     mutating func relinkMedia(assetID: String, to url: URL) {
