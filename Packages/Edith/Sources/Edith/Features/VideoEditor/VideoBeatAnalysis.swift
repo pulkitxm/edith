@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-enum VideoBeatAnalysis {
+public enum VideoBeatAnalysis {
     struct Settings: Sendable {
         var sensitivity: Double = 0.5
         var refractorySeconds: Double = 0.08
@@ -21,13 +21,13 @@ enum VideoBeatAnalysis {
         }
     }
 
-    struct WaveformBin: Codable, Equatable, Sendable {
-        let startSample: Int64
-        var sampleCount: Int64
-        var peak: Float
-        var meanSquare: Double
+    public struct WaveformBin: Codable, Equatable, Sendable {
+        public let startSample: Int64
+        public var sampleCount: Int64
+        public var peak: Float
+        public var meanSquare: Double
 
-        var rms: Double { sqrt(meanSquare) }
+        public var rms: Double { sqrt(meanSquare) }
 
         mutating func merge(_ other: Self) {
             let total = sampleCount + other.sampleCount
@@ -39,26 +39,26 @@ enum VideoBeatAnalysis {
         }
     }
 
-    struct Transient: Codable, Equatable, Sendable {
-        let sample: Int64
-        let strength: Float
+    public struct Transient: Codable, Equatable, Sendable {
+        public let sample: Int64
+        public let strength: Float
     }
 
-    struct TempoEstimate: Codable, Equatable, Sendable {
-        let beatsPerMinute: Double
-        let intervalAgreement: Double
-        let supportingIntervals: Int
+    public struct TempoEstimate: Codable, Equatable, Sendable {
+        public let beatsPerMinute: Double
+        public let intervalAgreement: Double
+        public let supportingIntervals: Int
     }
 
-    struct Result: Codable, Equatable, Sendable {
-        let sampleRate: Double
-        let sampleCount: Int64
-        let waveform: [WaveformBin]
-        let transients: [Transient]
-        let transientsTruncated: Bool
-        let tempoEstimate: TempoEstimate?
+    public struct Result: Codable, Equatable, Sendable {
+        public let sampleRate: Double
+        public let sampleCount: Int64
+        public let waveform: [WaveformBin]
+        public let transients: [Transient]
+        public let transientsTruncated: Bool
+        public let tempoEstimate: TempoEstimate?
 
-        var duration: Double { Double(sampleCount) / sampleRate }
+        public var duration: Double { Double(sampleCount) / sampleRate }
 
         func markers(
             frameRate: VideoMarkerFrameRate = .fps30, sourceRange: Range<Double>? = nil,
