@@ -78,6 +78,55 @@ import Testing
         #expect(try Data(contentsOf: fixture.project) == before)
     }
 
+    @Test func missingIndependentOriginalAndProcessedMusicCannotPassExpectations() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let video = try await VideoEditorServiceTests.movie(in: directory)
+        let url = directory.appendingPathComponent("music-review.openscreen")
+        var project = VideoProject.create(title: "Synthetic music review")
+        project.addAsset(video, duration: 1, width: 64, height: 64)
+        let music = ["original.wav", "processed.wav"].map { directory.appendingPathComponent($0) }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 48000))
+        buffer.frameLength = 48000
+        let samples = try #require(buffer.floatChannelData?[0])
+        for index in 0..<48000 { samples[index] = Float(sin(Double(index) * 0.1)) * 0.1 }
+        for source in music {
+            let audio = try AVAudioFile(forWriting: source, settings: format.settings)
+            try audio.write(from: buffer)
+        }
+        project.addAudio(music[0], duration: 1, at: 0)
+        let track = try #require(project.audioTracks.first)
+        var assets = project.assets.map(\.raw)
+        let index = try #require(assets.firstIndex { $0["id"] as? String == track.assetID })
+        assets[index]["edithAudioPath"] = music[1].path
+        project.root["assets"] = assets
+        try project.save(to: url)
+        let before = try Data(contentsOf: url)
+        var options = VideoEditorService.ReviewOptions()
+        options.expectedDuration = 1
+        options.expectedFrameCount = 60
+        options.expectedShotCount = 1
+        for source in music {
+            let bytes = try Data(contentsOf: source)
+            try FileManager.default.removeItem(at: source)
+            let report = try await VideoEditorService.reviewReport(
+                url, options: options)
+            #expect(report.status == .failed)
+            #expect(report.duration == nil && report.frameCount == nil && report.shotCount == nil)
+            #expect(report.checks.allSatisfy { $0.status == .notAssessed })
+            #expect(
+                report.diagnostics.contains {
+                    $0.code == "missing_or_unreadable_asset" && $0.path == source.path
+                })
+            #expect(try Data(contentsOf: url) == before)
+            try bytes.write(to: source)
+        }
+        let restored = try await VideoEditorService.reviewReport(
+            url, options: options)
+        #expect(restored.status == .passed && restored.checks.allSatisfy { $0.status == .passed })
+    }
+
     @Test func outputsProtectSidecarsHardlinksAndExistingReports() async throws {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
