@@ -87,15 +87,24 @@ extension VideoProject {
 }
 
 enum VideoImageContext {
-    static let shared: CIContext = {
-        let options: [CIContextOption: Any] = [
+    static let shared = make()
+    private static let rec709 = make(output: VideoSettings.ColorSpace.rec709.cgColorSpace)
+    private static let displayP3 = make(output: VideoSettings.ColorSpace.displayP3.cgColorSpace)
+
+    static func context(for colorSpace: VideoSettings.ColorSpace) -> CIContext {
+        colorSpace == .displayP3 ? displayP3 : rec709
+    }
+
+    private static func make(output: CGColorSpace? = nil) -> CIContext {
+        var options: [CIContextOption: Any] = [
             .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!,
             .cacheIntermediates: false,
         ]
+        if let output { options[.outputColorSpace] = output }
         if let device = MTLCreateSystemDefaultDevice() {
             return CIContext(mtlDevice: device, options: options)
         }
         return CIContext(
             options: options.merging([.useSoftwareRenderer: true]) { _, value in value })
-    }()
+    }
 }

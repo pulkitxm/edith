@@ -6,6 +6,59 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoVisualTests {
+    @Test func embeddedDisplayP3ColorSurvivesNativeRendering() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("wide-color.png")
+        let colorSpace = CGColorSpace(name: CGColorSpace.displayP3)!
+        let context = try #require(
+            CGContext(
+                data: nil, width: 64, height: 64,
+                bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(
+            try #require(CGColor(colorSpace: colorSpace, components: [0.9, 0.05, 0.02, 1])))
+        context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        let destination = try #require(
+            CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 64, height: 64, colorSpace: .displayP3)
+        try project.addStillAsset(url, duration: 1, metadata: VideoStillMedia.metadata(at: url))
+        let pipeline = try await VideoRenderPipeline.make(project: project)
+        #expect(pipeline.videoComposition.colorPrimaries == AVVideoColorPrimaries_P3_D65)
+        let frame = try renderedFrame(pipeline, at: 0)
+        var pixel = [UInt8](repeating: 0, count: 4)
+        VideoImageContext.shared.render(
+            CIImage(cgImage: frame), toBitmap: &pixel, rowBytes: 4,
+            bounds: CGRect(x: 32, y: 32, width: 1, height: 1), format: .RGBA8,
+            colorSpace: colorSpace)
+        #expect(abs(Int(pixel[0]) - 230) < 10)
+        #expect(abs(Int(pixel[1]) - 13) < 10)
+        #expect(abs(Int(pixel[2]) - 5) < 10)
+        let reader = try AVAssetReader(asset: pipeline.composition)
+        let output = AVAssetReaderVideoCompositionOutput(
+            videoTracks: try await pipeline.composition.loadTracks(withMediaType: .video),
+            videoSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                AVVideoAllowWideColorKey: true,
+            ])
+        output.videoComposition = pipeline.videoComposition
+        reader.add(output)
+        #expect(reader.startReading())
+        let sample = try #require(output.copyNextSampleBuffer())
+        let buffer = try #require(CMSampleBufferGetImageBuffer(sample))
+        VideoImageContext.shared.render(
+            CIImage(cvPixelBuffer: buffer), toBitmap: &pixel, rowBytes: 4,
+            bounds: CGRect(x: 32, y: 32, width: 1, height: 1), format: .RGBA8,
+            colorSpace: colorSpace)
+        #expect(abs(Int(pixel[0]) - 230) < 10)
+        #expect(abs(Int(pixel[1]) - 13) < 10)
+        #expect(abs(Int(pixel[2]) - 5) < 10)
+        reader.cancelReading()
+    }
+
     @Test func canvasAndFocalAnchorStayIndependentOfClipOrder() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -139,14 +192,16 @@ import Testing
             #expect(reader.startReading())
             var times: [Double] = []
             while let sample = samples.copyNextSampleBuffer() {
-                times.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds)
+                if CMSampleBufferGetNumSamples(sample) > 0 {
+                    times.append(CMSampleBufferGetPresentationTimeStamp(sample).seconds)
+                }
             }
             times.sort()
             #expect(times.count >= Int(project.videoSettings.frameRate * 0.5) - 1)
-            #expect(
-                zip(times, times.dropFirst()).allSatisfy {
-                    abs($1 - $0 - project.frameDuration.seconds) < 0.0001
-                })
+            let invalidGaps = zip(times, times.dropFirst()).map { $1 - $0 }.filter {
+                abs($0 - project.frameDuration.seconds) >= 0.0001
+            }
+            #expect(invalidGaps.isEmpty)
         }
     }
 

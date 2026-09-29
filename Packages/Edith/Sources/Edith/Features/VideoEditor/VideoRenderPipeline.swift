@@ -232,6 +232,9 @@ struct VideoRenderPipeline {
             let video = composition.addMutableTrack(
                 withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { throw RenderError.noVideo }
+        let numerator = project.videoSettings.frameRateNumerator
+        let timelineTimescale = Int32(numerator * max(1, 60000 / numerator))
+        video.naturalTimeScale = timelineTimescale
         var audio: AVMutableCompositionTrack?
 
         var segments: [Segment] = []
@@ -297,9 +300,10 @@ struct VideoRenderPipeline {
                     throw RenderError.exportFailed("The timeline exceeds the supported time range.")
                 }
                 let sourceRange = CMTimeRange(
-                    start: CMTime(seconds: slice.start, preferredTimescale: 600),
-                    duration: CMTime(seconds: slice.end - slice.start, preferredTimescale: 600))
-                let insertion = CMTime(seconds: cursor, preferredTimescale: 600)
+                    start: CMTime(seconds: slice.start, preferredTimescale: timelineTimescale),
+                    duration: CMTime(
+                        seconds: slice.end - slice.start, preferredTimescale: timelineTimescale))
+                let insertion = CMTime(seconds: cursor, preferredTimescale: timelineTimescale)
                 let visualRange = carrierRange ?? sourceRange
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
                 if source.isStill {
@@ -317,7 +321,8 @@ struct VideoRenderPipeline {
                 let outputDuration = (slice.end - slice.start) / slice.rate
                 if slice.rate != 1 {
                     let inserted = CMTimeRange(start: insertion, duration: sourceRange.duration)
-                    let scaled = CMTime(seconds: outputDuration, preferredTimescale: 600)
+                    let scaled = CMTime(
+                        seconds: outputDuration, preferredTimescale: timelineTimescale)
                     video.scaleTimeRange(inserted, toDuration: scaled)
                     audio?.scaleTimeRange(inserted, toDuration: scaled)
                 }
@@ -467,10 +472,11 @@ struct VideoRenderPipeline {
         let finalTransforms = sourceTransforms
         let size = canvas
         let cursorImage = pointerImage()
-        let baseComposition = AVVideoComposition(asset: composition) { request in
+        let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
+        let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
             guard let segment = finalSegments.last(where: { $0.outputStart <= time }) else {
-                request.finish(with: request.sourceImage, context: nil)
+                request.finish(with: request.sourceImage, context: imageContext)
                 return
             }
             var sourceImage = finalStills[segment.clip.assetID] ?? request.sourceImage
@@ -536,9 +542,8 @@ struct VideoRenderPipeline {
                 request.finish(with: RenderError.exportFailed("The rendered video frame is empty"))
                 return
             }
-            request.finish(with: image, context: VideoImageContext.shared)
+            request.finish(with: image, context: imageContext)
         }
-        let videoComposition = baseComposition.mutableCopy() as! AVMutableVideoComposition
         videoComposition.renderSize = canvas
         videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
         videoComposition.frameDuration = project.frameDuration

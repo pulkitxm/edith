@@ -63,6 +63,13 @@ enum VideoStillMedia {
     private static func createTimingCarrier() async throws -> URL {
         let media = VideoProject.libraryURL.appendingPathComponent("media", isDirectory: true)
         try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        let reusable = media.appendingPathComponent("still-timing.mov")
+        if FileManager.default.fileExists(atPath: reusable.path),
+            let duration = try? await AVURLAsset(url: reusable).load(.duration),
+            duration.isNumeric, duration.seconds >= 1
+        {
+            return reusable
+        }
         let url = media.appendingPathComponent("timing-\(UUID().uuidString).mov")
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(
@@ -107,7 +114,9 @@ enum VideoStillMedia {
             guard writer.status == .completed else {
                 throw writer.error ?? StillError.encodingFailed
             }
-            return url
+            try Data(contentsOf: url).write(to: reusable, options: .atomic)
+            try? FileManager.default.removeItem(at: url)
+            return reusable
         } catch {
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: url)
