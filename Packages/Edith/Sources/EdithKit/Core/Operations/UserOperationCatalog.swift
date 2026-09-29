@@ -167,6 +167,9 @@ public enum UserOperationCatalog {
         registrations += StudioDeliveryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += StudioEditMediaOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         return registrations
     }()
 
