@@ -5,6 +5,32 @@ import Testing
 @testable import EdithCLI
 
 @Suite struct VideoEditorMediaStorageTests {
+    @Test func packageEnforcesSerializedProjectSizeBeforePublishing() async throws {
+        let folder = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try VideoEditorMediaServiceTests.fixture(folder)
+        var project = try VideoProject.open(source)
+        project.root["formatting"] = Array(repeating: "x", count: 3000)
+        project.root["paddingData"] = ""
+        let base = try JSONSerialization.data(withJSONObject: project.root).count
+        project.root["paddingData"] = String(repeating: "x", count: 32 * 1024 * 1024 - base - 1024)
+        let original = try JSONSerialization.data(withJSONObject: project.root)
+        try original.write(to: source)
+        let target = folder.appendingPathComponent("too-large")
+        do {
+            _ = try await VideoEditorService.mediaPackage(source, to: target)
+            Issue.record("Oversized package project was accepted")
+        } catch let error as VideoEditorService.Failure {
+            #expect(error.code == "project_too_large")
+        }
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+        #expect(try Data(contentsOf: source) == original)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: folder.path).allSatisfy {
+                !$0.hasPrefix(".media-stage-")
+            })
+    }
+
     @Test func packageMoveOpenAndRelinkAreHeadlessAndPreserveSources() async throws {
         let folder = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: folder) }

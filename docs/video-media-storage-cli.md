@@ -47,3 +47,63 @@ can retry after it finishes. These operations are separate from edit-plan transa
 The MCP names are `edith_studio_edit_media_package`, `edith_studio_edit_media_open`,
 and `edith_studio_edit_media_relink`, all write operations. Each uses the standard
 MCP `arguments` array with the same CLI flags, a six-hour deadline, and 4 MiB output cap.
+
+## Shared original-source reservations
+
+```sh
+ed studio edit media reserve reel.openscreen --ledger shared-ledger.json \
+  --reel reel-one --json > receipt.json
+ed studio edit media reservations --ledger shared-ledger.json --limit 100 --json
+ed studio edit media release --ledger shared-ledger.json --receipt receipt.json --json
+```
+
+Use one shared ledger for every reel that must avoid original-source reuse.
+`reserve` hashes and verifies used original assets plus their cameras, original
+stills, and processed audio. It includes independent audio/music. It reserves whole
+sources, so disjoint excerpts still conflict. Byte-identical copies share a key;
+explicit alternate-export families share a family key. Repeating a reservation,
+even with the same reel ID, fails. The project is not modified.
+
+The successful `reserve` envelope is the release request. Keep its entire stdout in
+a file, including `version`, `operation`, `project`, `written`, and `result`. Example:
+
+```json
+{
+  "version": 1,
+  "operation": "reserve",
+  "project": "/media/reel.openscreen",
+  "written": true,
+  "result": {
+    "ledger": "/media/shared-ledger.json",
+    "receipt": {
+      "token": "12345678-1234-4234-8234-123456789012",
+      "reelID": "reel-one",
+      "keys": ["sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"]
+    }
+  }
+}
+```
+
+`written: true` here describes the ledger mutation, not a project save. A reservation
+response is validated before committing the ledger, so an oversized response cannot
+leave a reservation without its receipt. Receipts are capped at 1 MiB and ledger
+files at 32 MiB. Unknown receipt fields, unsupported versions, mismatched ledgers,
+modified tokens or keys, partial receipts, and repeated releases are rejected.
+The release result has `ledger`, `token`, and `released: true`.
+
+`reservations` accepts `--offset` and `--limit` (1 to 100). Its result has `ledger`,
+`total`, `offset`, `limit`, optional `nextOffset`, and `receipts` in UUID-token order.
+Counts cover the entire ledger. Listing may initialize the ledger directory and lock
+file but does not change reservations. Ledger transactions use canonical parent
+directory locks, reject ledger symlinks, and publish complete JSON atomically.
+
+These ledger transactions are independent of edit plans. A later project edit failure
+does not undo a reservation; release it explicitly with the saved receipt. Reservation
+success does not prove distinct shots within one reel: run the read-only `media usage`
+audit with its default visual scope for that acceptance check. Music reuse can be
+excluded from that audit, even though the reservation operation covers used audio.
+No undeclared re-encode relationship is inferred.
+
+The additional MCP tools are `edith_studio_edit_media_reserve` (write),
+`edith_studio_edit_media_reservations` (read), and `edith_studio_edit_media_release`
+(write). They have the same CLI flags and JSON envelopes as direct CLI invocation.

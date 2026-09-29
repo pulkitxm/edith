@@ -405,6 +405,15 @@ public enum CommandTree {
         "ed studio probe": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio edit schema": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio edit media reserve": Spec(
+            options: ["--json", "--ledger", "--reel", "-h", "--help", "--version"],
+            optionValues: ["--ledger": .localPath, "--reel": .free], arguments: [.localPath]),
+        "ed studio edit media reservations": Spec(
+            options: ["--json", "--ledger", "--offset", "--limit", "-h", "--help", "--version"],
+            optionValues: ["--ledger": .localPath, "--offset": .free, "--limit": .free]),
+        "ed studio edit media release": Spec(
+            options: ["--json", "--ledger", "--receipt", "-h", "--help", "--version"],
+            optionValues: ["--ledger": .localPath, "--receipt": .localPath]),
         "ed studio edit media package": Spec(
             options: ["--json", "--output", "-h", "--help", "--version"],
             optionValues: ["--output": .localPath], arguments: [.localPath]),

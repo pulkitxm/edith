@@ -11,6 +11,7 @@ struct StudioEditMediaCommand: AsyncParsableCommand {
             StudioMediaChronology.self, StudioMediaIndex.self, StudioMediaProvenance.self,
             StudioMediaUsage.self,
             StudioMediaPackage.self, StudioMediaOpen.self, StudioMediaRelink.self,
+            StudioMediaReserve.self, StudioMediaReservations.self, StudioMediaRelease.self,
         ], defaultSubcommand: StudioMediaIdentity.self)
 }
 

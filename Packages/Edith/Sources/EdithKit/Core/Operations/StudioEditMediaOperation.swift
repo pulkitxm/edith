@@ -3,6 +3,7 @@ import EdithCore
 public enum StudioEditMediaOperation: String, CaseIterable, Sendable {
     case identity, probe, duplicates, chronology, index, provenance, usage
     case package, open, relink
+    case reserve, reservations, release
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -16,8 +17,8 @@ public enum StudioEditMediaOperation: String, CaseIterable, Sendable {
 
     private var effect: UserOperationEffect {
         switch self {
-        case .identity, .probe, .duplicates, .chronology, .usage: .read
-        case .index, .provenance, .package, .open, .relink: .write
+        case .identity, .probe, .duplicates, .chronology, .usage, .reservations: .read
+        case .index, .provenance, .package, .open, .relink, .reserve, .release: .write
         }
     }
 
@@ -28,6 +29,9 @@ public enum StudioEditMediaOperation: String, CaseIterable, Sendable {
         case .duplicates: "Find exact copies across local media paths."
         case .chronology: "Sort media by known UTC capture time with deterministic ties."
         case .usage: "Audit every clip occurrence for exact or declared-family original reuse."
+        case .reserve: "Reserve used original sources atomically in a shared external ledger."
+        case .reservations: "List shared-ledger receipts in stable token order."
+        case .release: "Release an exact reservation receipt from its original ledger."
         case .package: "Atomically publish a portable copy of every original media dependency."
         case .open: "Verify and rebase a moved media package without opening a window."
         case .relink:

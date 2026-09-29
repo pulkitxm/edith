@@ -126,7 +126,7 @@ the files. No project, manifest, or ledger is written.
 
 ## MCP and command discovery
 
-All seven routes are registered in the operation catalog, help, and command tree as
+The seven inspection and audit routes are registered in the catalog, help, and command tree as
 `edith_studio_edit_media_identity`, `edith_studio_edit_media_probe`,
 `edith_studio_edit_media_duplicates`, `edith_studio_edit_media_chronology`,
 `edith_studio_edit_media_index`, `edith_studio_edit_media_provenance`, and

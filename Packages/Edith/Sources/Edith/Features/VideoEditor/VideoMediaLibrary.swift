@@ -543,6 +543,7 @@ enum VideoMediaLibrary {
 
         func reserve(
             _ sources: [Source], reelID: String,
+            validateReceipt: (Reservation) throws -> Void = { _ in },
             checkCancellation: () throws -> Void = { try Task.checkCancellation() }
         ) throws -> Reservation {
             guard !sources.isEmpty, !reelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -578,6 +579,7 @@ enum VideoMediaLibrary {
                     }
                 }
                 let receipt = Reservation(token: UUID(), reelID: reelID, keys: keys.sorted())
+                try validateReceipt(receipt)
                 for key in keys { state.reservations[key] = receipt }
                 return receipt
             }
@@ -633,7 +635,29 @@ enum VideoMediaLibrary {
                 try state.validate()
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                try encoder.encode(state).write(to: target, options: .atomic)
+                var estimatedSize = 128
+                for (hash, family) in state.families {
+                    estimatedSize +=
+                        try encoder.encode(hash).count + encoder.encode(family).count + 16
+                    guard estimatedSize <= 32 * 1024 * 1024 else { throw Failure.invalidLedger }
+                }
+                var receiptSizes: [UUID: (Reservation, Int)] = [:]
+                for (key, receipt) in state.reservations {
+                    if let cached = receiptSizes[receipt.token] {
+                        guard cached.0 == receipt else { throw Failure.invalidLedger }
+                    } else {
+                        receiptSizes[receipt.token] = (
+                            receipt,
+                            try encoder.encode(receipt).count + 4 * (receipt.keys.count + 8)
+                        )
+                    }
+                    estimatedSize +=
+                        try encoder.encode(key).count + receiptSizes[receipt.token]!.1 + 16
+                    guard estimatedSize <= 32 * 1024 * 1024 else { throw Failure.invalidLedger }
+                }
+                let data = try encoder.encode(state)
+                guard data.count <= 32 * 1024 * 1024 else { throw Failure.invalidLedger }
+                try data.write(to: target, options: .atomic)
             }
             return result
         }
@@ -650,8 +674,12 @@ enum VideoMediaLibrary {
             defer { try? handle.close() }
             var status = stat()
             guard fstat(descriptor, &status) == 0 else { throw posixError() }
-            guard status.st_mode & S_IFMT == S_IFREG else { throw Failure.invalidLedger }
-            return try JSONDecoder().decode(State.self, from: handle.readToEnd() ?? Data())
+            guard status.st_mode & S_IFMT == S_IFREG, status.st_size <= 32 * 1024 * 1024 else {
+                throw Failure.invalidLedger
+            }
+            let data = try handle.read(upToCount: 32 * 1024 * 1024 + 1) ?? Data()
+            guard data.count <= 32 * 1024 * 1024 else { throw Failure.invalidLedger }
+            return try JSONDecoder().decode(State.self, from: data)
         }
     }
 }
@@ -928,6 +956,7 @@ extension VideoProject {
 
     func reserveOriginalMedia(
         in ledger: VideoMediaLibrary.Ledger, reelID: String,
+        validateReceipt: (VideoMediaLibrary.Reservation) throws -> Void = { _ in },
         checkCancellation: () throws -> Void = { try Task.checkCancellation() }
     ) throws -> VideoMediaLibrary.Reservation {
         var candidate = self
@@ -942,7 +971,9 @@ extension VideoProject {
         let sources = manifest.entries.filter {
             sourceRoles.contains($0.reference.role) && usedAssetIDs.contains($0.reference.assetID)
         }.map(\.source)
-        return try ledger.reserve(sources, reelID: reelID, checkCancellation: checkCancellation)
+        return try ledger.reserve(
+            sources, reelID: reelID, validateReceipt: validateReceipt,
+            checkCancellation: checkCancellation)
     }
 
     func packageOriginalMedia(
