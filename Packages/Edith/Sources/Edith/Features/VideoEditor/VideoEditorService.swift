@@ -403,6 +403,38 @@ public enum VideoEditorService {
         }
     }
 
+    static func sourceURLs(_ project: VideoProject, includeSidecars: Bool) -> [URL] {
+        var sources = project.assets.flatMap { asset -> [URL] in
+            [asset.url]
+                + [
+                    asset.raw["edithAudioPath"], asset.raw["edithSourceImagePath"],
+                    asset.cameraTrack?["sourcePath"],
+                ]
+                .compactMap { ($0 as? String).map { URL(fileURLWithPath: $0) } }
+        }
+        if includeSidecars {
+            sources += sources.flatMap {
+                [
+                    URL(fileURLWithPath: $0.path + ".cursor.json"),
+                    URL(fileURLWithPath: $0.path + ".session.json"),
+                ]
+            }
+        }
+        if project.backgroundColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression)
+            == nil
+        {
+            sources.append(URL(fileURLWithPath: project.backgroundColor))
+        }
+        sources += project.annotations.filter { $0.type == "image" }.compactMap { annotation in
+            let path =
+                annotation.raw["imageContent"] as? String ?? annotation.raw["content"] as? String
+                ?? ""
+            guard !path.isEmpty, !path.hasPrefix("data:") else { return nil }
+            return URL(fileURLWithPath: path)
+        }
+        return sources
+    }
+
     static func requireOutput(
         _ output: URL, extension suffix: String, project: VideoProject, source: URL
     ) throws {
