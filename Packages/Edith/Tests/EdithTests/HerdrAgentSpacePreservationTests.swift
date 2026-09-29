@@ -44,7 +44,7 @@ private actor HerdrSpaceCommands {
     @Test func theLastPaneGetsAReplacementInItsLiveDirectoryAndSession() async throws {
         let commands = HerdrSpaceCommands(snapshot: snapshot(pane), creation: created)
 
-        try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+        try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
 
         #expect(
             await commands.arguments == [
@@ -60,7 +60,7 @@ private actor HerdrSpaceCommands {
         let shell = #"{"pane_id":"w1:p2","workspace_id":"w1"}"#
         let commands = HerdrSpaceCommands(snapshot: snapshot("\(pane),\(shell)"), creation: created)
 
-        try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+        try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
 
         #expect(await commands.arguments.count == 1)
     }
@@ -69,7 +69,7 @@ private actor HerdrSpaceCommands {
         let other = #"{"pane_id":"w2:p1","workspace_id":"w2"}"#
         let commands = HerdrSpaceCommands(snapshot: snapshot("\(pane),\(other)"), creation: created)
 
-        try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+        try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
 
         #expect(await commands.arguments.count == 2)
     }
@@ -77,7 +77,7 @@ private actor HerdrSpaceCommands {
     @Test func aMissingPaneDoesNotCreateATerminal() async throws {
         let commands = HerdrSpaceCommands(snapshot: snapshot(""), creation: created)
 
-        try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+        try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
 
         #expect(await commands.arguments.count == 1)
     }
@@ -86,7 +86,7 @@ private actor HerdrSpaceCommands {
         let commands = HerdrSpaceCommands(snapshot: "{}", creation: created)
 
         await #expect(throws: HerdrCommandError.self) {
-            try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+            try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
         }
         #expect(await commands.arguments.count == 1)
     }
@@ -95,7 +95,7 @@ private actor HerdrSpaceCommands {
         let commands = HerdrSpaceCommands(snapshot: snapshot(pane), creation: "{}")
 
         await #expect(throws: HerdrCommandError.self) {
-            try await HerdrAgentCloseExecution.preserveSpace(for: agent, run: commands.run)
+            try await HerdrAgentCloseExecution.preserveSpace(for: agent) { await commands.run($0) }
         }
     }
 
