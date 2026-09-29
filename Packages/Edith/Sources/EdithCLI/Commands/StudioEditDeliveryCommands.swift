@@ -9,10 +9,10 @@ extension VideoDeliverySettings.ColorSpace: ExpressibleByArgument {}
 extension VideoAudioDeliverySettings.Container: ExpressibleByArgument {}
 
 struct StudioEditDeliveryRange: ParsableArguments {
-    @Option(help: "First output frame to include, zero-based; requires --end-frame.")
+    @Option(help: "First output frame to include, zero-based. Supply both range bounds.")
     var startFrame: Int64?
     @Option(
-        help: "Exclusive output-frame end; requires --start-frame. Effects keep project timing.")
+        help: "Exclusive output-frame end. Supply both range bounds; effects keep project timing.")
     var endFrame: Int64?
 
     func validate() throws {
