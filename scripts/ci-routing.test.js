@@ -180,7 +180,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
   expect(build.run).toBe("./test.sh --build-only");
   expect(build["working-directory"]).toBe("Packages/Edith");
-  expect(build["timeout-minutes"]).toBe(20);
+  expect(build["timeout-minutes"]).toBe(30);
   expect(build.if).toBeUndefined();
   expect(run.run).toBe(
     `for batch in \${{ matrix.batches }}; do\n  ./test.sh --skip-build --batch "$batch"\ndone\n`,
