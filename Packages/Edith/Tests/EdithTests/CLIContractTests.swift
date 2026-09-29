@@ -187,6 +187,12 @@ enum JSONContract {
                 "/nonexistent/demo.mp4", "--json",
             ]),
         JSONCase(
+            "ed studio edit render-audio",
+            [
+                "studio", "edit", "render-audio", "/nonexistent/demo.openscreen", "--output",
+                "/nonexistent/mix.wav", "--json",
+            ]),
+        JSONCase(
             "ed studio edit frame",
             [
                 "studio", "edit", "frame", "/nonexistent/demo.openscreen", "--time", "0",
