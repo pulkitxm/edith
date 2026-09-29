@@ -201,6 +201,39 @@ enum JSONContract {
         JSONCase(
             "ed studio edit list", ["studio", "edit", "list", "/nonexistent", "--json"]),
         JSONCase(
+            "ed studio edit media reserve",
+            [
+                "studio", "edit", "media", "reserve", "/nonexistent/project.openscreen", "--ledger",
+                "/nonexistent/ledger.json", "--reel", "r", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit media reservations",
+            [
+                "studio", "edit", "media", "reservations", "--ledger",
+                "/nonexistent/ledger.invalid", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit media release",
+            [
+                "studio", "edit", "media", "release", "--ledger", "/nonexistent/ledger.json",
+                "--receipt", "/nonexistent/receipt.json", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit media package",
+            [
+                "studio", "edit", "media", "package", "/nonexistent/project.openscreen", "--output",
+                "/nonexistent/package", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit media open",
+            ["studio", "edit", "media", "open", "/nonexistent/package", "--json"]),
+        JSONCase(
+            "ed studio edit media relink",
+            [
+                "studio", "edit", "media", "relink", "/nonexistent/project.openscreen",
+                "--reference", "a", "--path", "/nonexistent/movie.mov", "--json",
+            ]),
+        JSONCase(
             "ed studio edit media usage",
             [
                 "studio", "edit", "media", "usage", "--project", "/nonexistent/project.openscreen",

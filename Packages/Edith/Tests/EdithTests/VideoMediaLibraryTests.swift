@@ -183,7 +183,8 @@ import Testing
         #expect(try String(contentsOf: url, encoding: .utf8) == "broken")
         try FileManager.default.removeItem(at: url)
         #expect(throws: CancellationError.self) {
-            try ledger.reserve([source], reelID: "reel") { throw CancellationError() }
+            try ledger.reserve(
+                [source], reelID: "reel", checkCancellation: { throw CancellationError() })
         }
         #expect(try ledger.reservations().isEmpty)
     }
@@ -346,24 +347,26 @@ import Testing
         let destination = folder.appendingPathComponent("package")
         var cancelledDuringCopy = false
         #expect(throws: CancellationError.self) {
-            try project.packageOriginalMedia(to: destination) {
-                let stages = try FileManager.default.contentsOfDirectory(
-                    at: folder, includingPropertiesForKeys: nil
-                )
-                .filter { $0.lastPathComponent.hasPrefix(".media-stage-") }
-                if let stage = stages.first {
-                    let files = try FileManager.default.contentsOfDirectory(
-                        at: stage.appendingPathComponent("originals"),
-                        includingPropertiesForKeys: nil)
-                    if let first = files.first,
-                        (try FileManager.default.attributesOfItem(atPath: first.path)[.size]
-                            as? NSNumber)?.intValue ?? 0 > 0
-                    {
-                        cancelledDuringCopy = true
-                        throw CancellationError()
+            try project.packageOriginalMedia(
+                to: destination,
+                checkCancellation: {
+                    let stages = try FileManager.default.contentsOfDirectory(
+                        at: folder, includingPropertiesForKeys: nil
+                    )
+                    .filter { $0.lastPathComponent.hasPrefix(".media-stage-") }
+                    if let stage = stages.first {
+                        let files = try FileManager.default.contentsOfDirectory(
+                            at: stage.appendingPathComponent("originals"),
+                            includingPropertiesForKeys: nil)
+                        if let first = files.first,
+                            (try FileManager.default.attributesOfItem(atPath: first.path)[.size]
+                                as? NSNumber)?.intValue ?? 0 > 0
+                        {
+                            cancelledDuringCopy = true
+                            throw CancellationError()
+                        }
                     }
-                }
-            }
+                })
         }
         #expect(cancelledDuringCopy)
         #expect(!FileManager.default.fileExists(atPath: destination.path))
@@ -454,21 +457,23 @@ import Testing
         let destination = folder.appendingPathComponent("package")
         var raced = false
         #expect(throws: VideoMediaLibrary.Failure.self) {
-            try project.packageOriginalMedia(to: destination) {
-                let stages = try FileManager.default.contentsOfDirectory(
-                    at: folder, includingPropertiesForKeys: nil
-                )
-                .filter { $0.lastPathComponent.hasPrefix(".media-stage-") }
-                if !raced, let stage = stages.first,
-                    FileManager.default.fileExists(
-                        atPath: stage.appendingPathComponent("project.openscreen").path)
-                {
-                    try FileManager.default.createDirectory(
-                        at: destination, withIntermediateDirectories: false)
-                    _ = try file(destination, "keep", "winner")
-                    raced = true
-                }
-            }
+            try project.packageOriginalMedia(
+                to: destination,
+                checkCancellation: {
+                    let stages = try FileManager.default.contentsOfDirectory(
+                        at: folder, includingPropertiesForKeys: nil
+                    )
+                    .filter { $0.lastPathComponent.hasPrefix(".media-stage-") }
+                    if !raced, let stage = stages.first,
+                        FileManager.default.fileExists(
+                            atPath: stage.appendingPathComponent("project.openscreen").path)
+                    {
+                        try FileManager.default.createDirectory(
+                            at: destination, withIntermediateDirectories: false)
+                        _ = try file(destination, "keep", "winner")
+                        raced = true
+                    }
+                })
         }
         #expect(raced)
         #expect(

@@ -5,6 +5,8 @@ version 1 typed JSON envelope. `--json` also makes runtime errors JSON on stderr
 No application window, permission dialog, or installed skill is needed.
 MCP media calls allow up to six hours for streaming large original collections.
 
+See [portable media and relinking](video-media-storage-cli.md) for package commands.
+
 ## Inspect and compare
 
 ```sh
@@ -124,7 +126,7 @@ the files. No project, manifest, or ledger is written.
 
 ## MCP and command discovery
 
-All seven routes are registered in the operation catalog, help, and command tree as
+The seven inspection and audit routes are registered in the catalog, help, and command tree as
 `edith_studio_edit_media_identity`, `edith_studio_edit_media_probe`,
 `edith_studio_edit_media_duplicates`, `edith_studio_edit_media_chronology`,
 `edith_studio_edit_media_index`, `edith_studio_edit_media_provenance`, and
