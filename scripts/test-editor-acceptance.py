@@ -20,8 +20,10 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
-def run(arguments):
+def run(arguments, report_path=None):
     result = subprocess.run([str(arg) for arg in arguments], capture_output=True, text=True, timeout=1800)
+    if report_path and result.stdout:
+        write_json(report_path, json.loads(result.stdout))
     require(result.returncode == 0, f"Command failed ({result.returncode}): {result.stderr}")
     return json.loads(result.stdout)
 
@@ -88,6 +90,7 @@ def main():
     parser.add_argument("--media-helper", type=pathlib.Path, help="Reuse the compiled native fixture helper")
     parser.add_argument("--fixture-only", action="store_true")
     parser.add_argument("--baseline", action="store_true", help="Exercise current rendering without exact delivery assertions")
+    parser.add_argument("--contact-sheet", action="store_true", help="Verify a 45-shot contact sheet through the public CLI")
     parser.add_argument("--delivery-plan", type=pathlib.Path, help="Public v1 plan containing integrated delivery operations")
     args = parser.parse_args()
     workspace = args.workspace.absolute()
@@ -162,11 +165,23 @@ def main():
     require(normalized(edit("show", saved, "--json")) == snapshots[0], "Project save round trip changed semantics")
     frame = workspace / "preview.png"
     render = workspace / "render.mp4"
+    if args.contact_sheet:
+        arguments = ["contact-sheet", saved, "--columns", "5", "--cell-width", "320",
+                     "--output", workspace / "contact-sheet.png", "--json"]
+        position = 0
+        for shot in manifest["shots"]:
+            arguments.extend(["--time", str((position + shot["frames"] / 2) / 60)])
+            position += shot["frames"]
+        sheet = edit(*arguments)
+        require(len(sheet["frames"]) == 45, "Contact sheet did not select every shot")
+        require(sheet["sha256"] == digest(workspace / "contact-sheet.png"), "Contact sheet checksum mismatch")
+        checked = run([helper, "verify-contact-sheet", workspace / "contact-sheet.png"])
+        write_json(workspace / "contact-sheet-result.json", checked)
     edit("frame", saved, "--time", "0.25", "--output", frame, "--json")
     edit("render", saved, "--output", render, "--json")
-    report = run([helper, "baseline" if args.baseline else "inspect", render, frame])
-    require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     check_sources(fixture, manifest)
+    report = run([helper, "baseline" if args.baseline else "inspect", render, frame], workspace / "result.json")
+    require(report["sha256"] == digest(render), "Independent output checksum mismatch")
     report.update({"planRoundTrip": True, "projectRoundTrip": True, "sourcesUnchanged": True, "previewVerified": True})
     write_json(workspace / "result.json", report)
     print(json.dumps(report, indent=2, sort_keys=True))

@@ -220,6 +220,7 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
     try require(abs(Double(samples.count) / 48_000 - 28.8) < 0.025, "Music does not span the full edit")
     var minimumRMS = Double.infinity
     var maximumFrequencyError = 0.0
+    var toneAnomalies: [[String: Any]] = []
     for start in stride(from: 0, to: min(samples.count, 1_382_400) - 480, by: 480) {
         let window = samples[start..<(start + 480)]
         let rms = sqrt(window.reduce(0.0) { $0 + Double($1 * $1) } / 480)
@@ -227,8 +228,10 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         try require(rms > 0.08 && rms < 0.22, "Music dropout or level error at sample \(start)")
         let crossings = zip(window, window.dropFirst()).filter { $0 <= 0 && $1 > 0 }.count
         maximumFrequencyError = max(maximumFrequencyError, abs(Double(crossings) * 100 - 440))
+        if abs(Double(crossings) * 100 - 440) > 160 {
+            toneAnomalies.append(["time": Double(start) / 48_000, "positiveCrossings": crossings, "rms": rms])
+        }
     }
-    try require(maximumFrequencyError <= 160, "Generated tone frequency changed")
     if let preview {
         guard let source = CGImageSourceCreateWithURL(preview as CFURL, nil),
             let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
@@ -259,8 +262,32 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         "width": Int(size.width), "height": Int(size.height), "fps": fps,
         "frames": frames, "duration": duration, "distinctShots": identities.count,
         "audioSamples": samples.count, "minimumMusicRMS": minimumRMS,
+        "toneAnomalies": toneAnomalies, "maximumToneFrequencyError": maximumFrequencyError,
+        "checksPassed": toneAnomalies.isEmpty, "previewVerified": preview != nil,
         "sha256": try checksum(url),
     ])
+    try require(toneAnomalies.isEmpty, "Generated tone has \(toneAnomalies.count) anomalous 10 ms windows")
+}
+
+func verifyContactSheet(_ url: URL) throws {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { throw AcceptanceError(description: "Contact sheet is not decodable") }
+    try require(image.width == 972 && image.height == 3252, "Unexpected contact sheet dimensions")
+    let context = CIContext()
+    let sheet = CIImage(cgImage: image)
+    for index in 0..<45 {
+        let x = 12 + (index % 5) * 192
+        let y = image.height - (index / 5 + 1) * 360 + 28
+        let tile = sheet.cropped(to: CGRect(x: x, y: y, width: 180, height: 320))
+            .transformed(by: CGAffineTransform(translationX: -CGFloat(x), y: -CGFloat(y)))
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 180, 320, kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+        context.render(tile, to: buffer!)
+        try require(identity(buffer!) == index + 1, "Contact sheet shot mismatch at tile \(index)")
+    }
+    try json(["contactSheetVerified": true, "distinctShots": 45, "sha256": try checksum(url)])
 }
 
 @main struct EditorAcceptanceMedia {
@@ -280,6 +307,7 @@ func inspect(_ url: URL, exact: Bool, preview: URL?) async throws {
         switch arguments[1] {
         case "generate": try await generate(url)
         case "verify-fixture": try await verifyFixture(url)
+        case "verify-contact-sheet": try verifyContactSheet(url)
         case "inspect", "baseline":
             let preview = arguments.count > 3 ? URL(fileURLWithPath: arguments[3]) : nil
             try await inspect(url, exact: arguments[1] == "inspect", preview: preview)
