@@ -44,7 +44,7 @@ def check_project(project, manifest, fixture, dimensions):
     return {"editableOriginals": 47, "originalPhotos": 42, "exactShotBoundaries": True, "continuousOutputClockTracks": 1}
 
 
-def check_captions(report, manifest):
+def check_captions(report, manifest, expected_styles):
     snapshot = caption_snapshot(report)
     require(len(snapshot) == 47, "Project must retain 47 distinct captions")
     captions = sorted(report["captions"], key=lambda value: value["startSeconds"])
@@ -52,7 +52,10 @@ def check_captions(report, manifest):
         require(snapshot[caption["id"]][:2] == (Fraction(shot["startFrame"], 60), Fraction(shot["endFrame"], 60)),
                 "Caption boundaries differ from exact half-open shot boundaries")
         require(caption["content"] == shot["caption"], "Unexpected caption text or ordering")
-    return {"captions": 47, "exactAnchors": True,
+        expected_style = expected_styles[shot["name"]]
+        require(expected_style["fontSize"] == shot["fontSize"], "Caption style does not use the fixture's exact font size")
+        require(caption.get("style") == expected_style, "Caption style did not round-trip exactly through the native project")
+    return {"captions": 47, "exactAnchors": True, "exactNativeStyles": True,
             "frameIntervals": [[shot["startFrame"], shot["endFrame"]] for shot in manifest["shots"]]}
 
 

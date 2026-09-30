@@ -103,7 +103,28 @@ caption bounds and contrast. Pixel tolerances are computed from an independent
 H.264 positive control and incorrect render controls. The threshold is their
 error midpoint, and controls must be separated by at least a factor of three.
 Reports retain both measured control errors and the computed threshold.
-Caption checks measure visible geometry and contrast, not font glyph equality.
+
+`editor_parity_glyphs.py` adds an independent Pango/Fontconfig reference using
+the exact installed font family, style, and font-file checksum. It compares
+explicit line counts, per-line ink bounds, and stable glyph interiors without
+rescaling. A one-pixel edge band handles rasterization edges; the measured
+codec control sets the interior tolerance, capped at one percent. Wrong font,
+wrong size, one-line versus two-line, and reordered glyph controls must fail.
+The caption report checker also requires an exact native style round trip for
+all 47 captions, including their fixture font sizes.
+
+Run the installed-font controls without opening a window:
+
+```sh
+python3 scripts/test-editor-parity-glyphs.py \
+  --workspace /absolute/new/glyph-controls
+```
+
+These are independent-reference controls, not proof of CoreText equivalence.
+Native frames must pass the same comparisons before caption parity can be
+reported. Native color grading must likewise pass the FFmpeg EQ comparison;
+a known native grading mismatch blocks acceptance rather than increasing the
+tolerance to hide it.
 
 The integrated runner still needs the finalized caption, background, mastering,
 packet-copy, and lifecycle contracts before it can execute all ten required
