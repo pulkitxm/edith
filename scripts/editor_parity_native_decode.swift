@@ -26,8 +26,8 @@ import Foundation
         reader.add(output)
         guard reader.startReading() else { throw reader.error ?? failure("Native decode failed") }
         defer { reader.cancelReading() }
-        let context = CIContext(options: [.cacheIntermediates: false])
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: space])
         let selected = Set(frames)
         var index = 0
         var emitted = 0
@@ -45,9 +45,10 @@ import Foundation
                     kCIInputScaleKey: scale,
                     kCIInputAspectRatioKey: Double(width) / image.extent.width / scale,
                 ])
-            guard let raster = context.createCGImage(
-                scaled, from: CGRect(x: 0, y: 0, width: width, height: height),
-                format: .RGBA8, colorSpace: space),
+            guard
+                let raster = context.createCGImage(
+                    scaled, from: CGRect(x: 0, y: 0, width: width, height: height),
+                    format: .RGBA8, colorSpace: space),
                 let bytes = raster.dataProvider?.data
             else { throw failure("Could not normalize decoded appearance to sRGB") }
             let source = CFDataGetBytePtr(bytes)!
@@ -70,6 +71,8 @@ import Foundation
     }
 
     private static func failure(_ message: String) -> NSError {
-        NSError(domain: "NativeAppearanceDecoder", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(
+            domain: "NativeAppearanceDecoder", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
