@@ -104,6 +104,19 @@ import Testing
         #expect(try VideoProject.open(url).backgroundColor == "#223344")
     }
 
+    @Test func undoHistoryIsBoundedAndRetainsTheLatestEdits() {
+        let model = VideoEditorModel()
+        defer { model.close() }
+        model.project = VideoProject.create()
+        for index in 0..<200 { model.mutate { $0.rename("Edit \(index)") } }
+        for _ in 0..<VideoEditorModel.maximumUndoSteps { model.undo() }
+        #expect(!model.canUndo)
+        #expect(model.project?.title == "Edit 71")
+        for _ in 0..<VideoEditorModel.maximumUndoSteps { model.redo() }
+        #expect(!model.canRedo)
+        #expect(model.project?.title == "Edit 199")
+    }
+
     @Test func projectCardsPreviewThePrimaryVisualAsset() {
         var project = VideoProject.create()
         #expect(project.previewAsset == nil)

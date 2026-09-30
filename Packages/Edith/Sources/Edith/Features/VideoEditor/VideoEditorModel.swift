@@ -88,6 +88,7 @@ final class VideoEditorModel {
     private var focusSeeker: VideoPreviewSeeker?
     private var undoHistory: [VideoProject] = []
     private var redoHistory: [VideoProject] = []
+    static let maximumUndoSteps = 128
 
     var duration: Double { pipeline?.duration ?? 0 }
     var canUndo: Bool { !undoHistory.isEmpty }
@@ -1170,6 +1171,9 @@ final class VideoEditorModel {
     func mutate(_ action: (inout VideoProject) -> Void) {
         guard var project else { return }
         undoHistory.append(project)
+        if undoHistory.count > Self.maximumUndoSteps {
+            undoHistory.removeFirst(undoHistory.count - Self.maximumUndoSteps)
+        }
         redoHistory.removeAll()
         action(&project)
         self.project = project
