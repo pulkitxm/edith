@@ -506,6 +506,7 @@ public enum CommandTree {
                 "--json", "--overwrite", "--output", "--codec", "--bit-rate",
                 "--key-frame-interval",
                 "--audio-codec", "--audio-bit-rate", "--audio-sample-rate", "--audio-channels",
+                "--audio-copy-track",
                 "--color-space", "--require-hardware", "--progress", "-h", "--help", "--version",
                 "--start-frame", "--end-frame",
             ],
@@ -513,6 +514,7 @@ public enum CommandTree {
                 "--output": .localPath, "--codec": .free, "--bit-rate": .free,
                 "--key-frame-interval": .free, "--audio-codec": .free, "--audio-bit-rate": .free,
                 "--audio-sample-rate": .free, "--audio-channels": .free, "--color-space": .free,
+                "--audio-copy-track": .free,
                 "--start-frame": .free, "--end-frame": .free,
             ], arguments: [.localPath]),
         "ed studio edit render-audio": Spec(
