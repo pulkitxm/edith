@@ -87,8 +87,9 @@ unknown plan fields are rejected. A keyframe requires only `time`; omitted
 transform fields use identity values and interpolation defaults to `linear`.
 
 The inspector exposes the same background fields and full-width foreground
-framing. Color controls use Core Image semantics, not FFmpeg `eq` semantics;
-equal numeric values across these filters do not establish pixel parity.
+framing. Color controls default to Core Image semantics. Select the explicit
+[`ffmpeg709` grading mode](./edit-grading.md) for encoded sRGB/BT.709 EQ semantics;
+equal numeric values between different modes do not establish pixel parity.
 
 ## Measured grading reference
 
@@ -115,5 +116,6 @@ guarantee for other images or FFmpeg conversion settings.
 Edith's native pipeline uses extended linear sRGB as its working space and
 `CIColorControls`. The reference `eq` adjusts encoded YUV luma/chroma, with
 different contrast pivots, clipping and quantization. Matching the numeric
-controls cannot match these processing domains. Native grading therefore has
-no FFmpeg-parity mode.
+controls cannot match these processing domains. The `native` grading mode
+preserves these semantics. Use the explicit `ffmpeg709` mode to select the
+encoded-YUV processing domain instead.

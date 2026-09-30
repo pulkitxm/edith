@@ -127,6 +127,21 @@ struct VideoVisualInspector: View {
             }
             value("Focal X", \.focalX)
             value("Focal Y", \.focalY)
+            Picker(
+                "Grading mode",
+                selection: Binding(
+                    get: { effects.gradingMode },
+                    set: { value in update { $0.gradingMode = value } })
+            ) {
+                Text("Native linear RGB").tag(VideoVisualEffects.GradingMode.native)
+                Text("FFmpeg EQ, sRGB / 709").tag(VideoVisualEffects.GradingMode.ffmpeg709)
+            }
+            if effects.gradingMode == .ffmpeg709 {
+                Text(
+                    "Grades the composed image before overlays. Uses 8-bit limited-range BT.709 YUV with sRGB transfer. Saturation is 0 through 3."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
             value("Exposure", \.exposure)
             value("Brightness", \.brightness)
             value("Contrast", \.contrast)
