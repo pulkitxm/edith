@@ -35,46 +35,59 @@ struct StudioProjectsView: View {
                             alignment: .leading, spacing: UIScale.pt(12)
                         ) {
                             ForEach(model.videoProjects) { project in
-                                Button {
-                                    model.openVideoProject(project.url)
-                                } label: {
-                                    HStack(spacing: UIScale.pt(10)) {
-                                        Image(systemName: "film.stack")
-                                            .font(.system(size: UIScale.pt(16)))
-                                            .foregroundStyle(StudioPalette.tint(for: .video))
-                                            .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                                            .background(
-                                                StudioPalette.tint(for: .video).opacity(0.12),
-                                                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(project.title)
-                                                .font(
-                                                    .system(
-                                                        size: UIScale.pt(12.5), weight: .semibold)
+                                VStack(alignment: .trailing, spacing: UIScale.pt(6)) {
+                                    Button {
+                                        model.openVideoProject(project.url)
+                                    } label: {
+                                        HStack(spacing: UIScale.pt(10)) {
+                                            Image(systemName: "film.stack")
+                                                .font(.system(size: UIScale.pt(16)))
+                                                .foregroundStyle(StudioPalette.tint(for: .video))
+                                                .frame(
+                                                    width: UIScale.pt(34), height: UIScale.pt(34)
                                                 )
-                                                .foregroundStyle(DashSkin.ink(scheme == .dark))
-                                                .lineLimit(1)
-                                            Text(
-                                                project.isOpenScreenLibrary
-                                                    ? "OpenScreen" : "Studio"
-                                            )
-                                            .font(.system(size: UIScale.pt(10.5)))
-                                            .foregroundStyle(.secondary)
+                                                .background(
+                                                    StudioPalette.tint(for: .video).opacity(0.12),
+                                                    in: RoundedRectangle(
+                                                        cornerRadius: UIScale.pt(8)))
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(project.title)
+                                                    .font(
+                                                        .system(
+                                                            size: UIScale.pt(12.5),
+                                                            weight: .semibold)
+                                                    )
+                                                    .foregroundStyle(DashSkin.ink(scheme == .dark))
+                                                    .lineLimit(1)
+                                                Text(
+                                                    project.isOpenScreenLibrary
+                                                        ? "OpenScreen" : "Studio"
+                                                )
+                                                .font(.system(size: UIScale.pt(10.5)))
+                                                .foregroundStyle(.secondary)
+                                            }
+                                            Spacer(minLength: 0)
                                         }
-                                        Spacer(minLength: 0)
+                                        .padding(UIScale.pt(10))
+                                        .background(
+                                            DashSkin.paper2(scheme == .dark),
+                                            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: UIScale.pt(10))
+                                                .strokeBorder(DashSkin.line(scheme == .dark))
+                                        )
+                                        .edithButtonTarget(.borderless)
                                     }
-                                    .padding(UIScale.pt(10))
-                                    .background(
-                                        DashSkin.paper2(scheme == .dark),
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: UIScale.pt(10))
-                                            .strokeBorder(DashSkin.line(scheme == .dark))
-                                    )
-                                    .edithButtonTarget(.borderless)
+                                    .buttonStyle(.edith(.borderless))
+                                    Button(role: .destructive) {
+                                        model.trashProject(project)
+                                    } label: {
+                                        Label("Move to Trash", systemImage: "trash")
+                                    }
+                                    .buttonStyle(.edith(.toolbar))
+                                    .padding(.trailing, UIScale.pt(8))
                                 }
-                                .buttonStyle(.edith(.borderless))
                             }
                         }
                     }

@@ -17,6 +17,7 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 | `ed studio edit list <directory>` | Lists native projects with their identities, titles and clip counts. |
 | `ed studio edit register <project> [--json]` | Registers an external reference without copying or changing the project. |
 | `ed studio edit unregister <project> [--json]` | Removes a registered reference while preserving the project and media. |
+| `ed studio edit trash <project> [--dry-run] [--json]` | Moves only the project document to Trash and removes its registered reference. |
 | `ed studio edit library [--json]` | Lists the app library and registered references, including stale-entry errors. |
 | `ed studio edit open <project> [--timeout <seconds>] [--json]` | Waits for the exact requested revision to be ready and mounted in the native editor. |
 | `ed studio edit clone <project> --output <copy.openscreen> --title <title>` | Copies an edit with a new project identity while preserving its original-media references. |
@@ -29,13 +30,25 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 
 All commands accept `--json` for structured runtime errors. Create, list, clone, apply,
 validate, render, render-audio, frame, contact-sheet, register, unregister, library
-and open also use it for structured results.
+open and trash also use it for structured results.
 Schema and show always print JSON.
 Project and render outputs require `--overwrite` to replace an existing destination. Apply without
 `--output` replaces its input, so it requires `--overwrite` except during dry-run.
 Create destination directories before running a command.
 
 ## Project library and native editor
+
+### Live updates and headless editing
+
+The running native editor watches its saved current project. Successful CLI apply,
+caption and marker edits refresh the timeline and native preview without an explicit
+`open` command. The same commands work when the app is quit; the next open loads the
+latest saved revision. Unsaved UI drafts are retained, with an inline **Reload saved
+edits** option rather than silently overwriting them. CLI writes do not wait for the app.
+
+Registration and unregistration refresh the project list. Directory changes also
+refresh native and registered projects. Media-list commands use the separate
+[`ed studio library`](./library.md) group and preserve saved projects.
 
 ### Register a project reference
 
@@ -75,6 +88,23 @@ works when it identifies the stored reference. An unknown path returns
 The result contains `path`, `projectID`, `title` and `registered: false`. A file
 physically inside the native library remains discoverable by the library scan
 after its explicit reference is removed.
+
+### Move a project to Trash
+
+`ed studio edit trash <project> [--dry-run] [--json]` moves the local `.openscreen`
+document to macOS Trash and removes matching registered references. `delete` is an
+alias. Native and legacy library files stop appearing because the document itself
+has moved. Studio's **Projects** cards expose the same **Move to Trash** action.
+Restore the document from Trash to recover it; external projects can then be registered again.
+
+Source media, exports and enclosing project folders are preserved. Missing source
+media does not prevent trashing a structurally valid project. Folders, symbolic
+links and invalid project documents are refused. The operation uses the existing
+project transaction and publication locks and checks the saved revision before moving.
+
+`--dry-run` validates without moving the document or changing its registration.
+The receipt contains `version`, `path`, `projectID`, `revision`, `trashedPath` and
+`written`; dry-run reports `written: false` with no trash path. No running app is required.
 
 ### Open an exact revision in the native editor
 

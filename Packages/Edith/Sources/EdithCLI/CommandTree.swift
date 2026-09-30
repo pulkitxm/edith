@@ -398,6 +398,18 @@ public enum CommandTree {
             optionValues: ["--kind": .studioKind]),
         "ed studio info": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.studioTool]),
+        "ed studio library list": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio library add": Spec(
+            options: ["--json", "-h", "--help", "--version"],
+            arguments: [.localPath], repeatingArgument: .localPath),
+        "ed studio library remove": Spec(
+            options: ["--json", "-h", "--help", "--version"],
+            arguments: [.localPath], repeatingArgument: .localPath),
+        "ed studio library clear": Spec(options: [
+            "--recent", "--json", "-h", "--help", "--version",
+        ]),
+        "ed studio edit trash": Spec(
+            options: ["--dry-run", "--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio run": Spec(
             options: ["--json", "-h", "--help", "--version", "--set", "--output-dir"],
             optionValues: ["--set": .free, "--output-dir": .localPath],

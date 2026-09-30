@@ -103,6 +103,13 @@ struct VideoProjectRegistry {
         try storedRecords().map(\.entry)
     }
 
+    func recordsForPath(_ source: URL) throws -> [URL] {
+        let identity = VideoProjectFileAccess.identity(source)
+        return try storedRecords().filter {
+            VideoProjectFileAccess.identity(URL(fileURLWithPath: $0.entry.path)) == identity
+        }.map(\.url)
+    }
+
     private func storedRecords() throws -> [(url: URL, entry: VideoEditorService.LibraryEntry)] {
         guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
         return try FileManager.default.contentsOfDirectory(
