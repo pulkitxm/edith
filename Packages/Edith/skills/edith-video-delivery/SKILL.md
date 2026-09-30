@@ -21,7 +21,8 @@ ed studio edit render --help
 
 Use the executable for the intended installation, including the worktree's own
 CLI when testing a development build. Read `show` and `validate` help, inspect
-the selected project, and validate source availability before rendering. If
+the selected project's `show --summary --json` for IDs, settings and revision,
+then use full `show` for style/effect details. Validate sources before rendering. If
 locating an existing edit or making a variant, discover `list` and `clone` first.
 Do not recreate a native project by writing its internal JSON.
 
@@ -50,9 +51,19 @@ installed help and schema actually expose. Do not assume the default export is
 the requested master, or silently reduce quality to make a render finish faster.
 Report an unsupported requirement before substituting a different delivery.
 
-If native settings must change, build a public plan, dry-run it, then apply it
-atomically to the intended version. Preserve the original cut when making a
-separate variant. The `edith-video-edit` skill covers authoring those plans.
+Record a requirement ledger with observed evidence and pass, fail or unverified
+status. Include reference-image matching, measured loudness, approved audio source,
+editable captions/effects and project registration when requested. Read the audio
+and passthrough guidance in the delivery blueprint before choosing those modes.
+Native mastering has a fixed -16 LUFS recipe and produces PCM. Approved AAC packet
+copy is a separate branch using an eligible audio source, never that PCM master.
+For another loudness target, use measured timeline gain on a guarded variant and
+verify the actual delivered mix and true peak as described in the blueprint.
+
+If native settings must change, build a public plan and use `--expect-revision`
+with the inspected revision on both dry-run and atomic apply. Preserve the original
+cut when making a separate variant. The `edith-video-edit` skill covers authoring
+those plans.
 
 ## 3. Render and sample
 
@@ -85,6 +96,8 @@ codec, pixel format, rational frame rate and audio streams. Decode and inspect
 representative frames from the exported movie, not just from the project preview.
 Check audio presence, timing and available loudness or peak measurements. State
 whether an audible review was possible; measurements alone do not prove the mix.
+Compare reference-critical appearance using decoded output frames under matched
+geometry and color handling. Equal numeric effect settings do not prove a match.
 
 A zero exit code, a `written` response or a valid project alone is not delivery
 verification. A mismatch between requested and measured properties is a failed
@@ -98,3 +111,7 @@ media dependencies, checksums where available, measured properties, sampled
 frame positions, and remaining unverified judgments. Keep a local ledger for
 repeatability. For shared evidence, use synthetic content and sanitized labels;
 do not upload real media or private paths merely to demonstrate a successful run.
+Report any requested registration or editor-open acknowledgement separately from
+file creation. Use `register` plus `library` for a requested library entry, and
+`open` only when the user requests the editor. Check the acknowledgement fields
+described in the handoff blueprint; a saved `.openscreen` file proves neither action.

@@ -8,10 +8,47 @@ retimed with the video. Independent music and voiceover should retain their
 intended output placement when shots are rearranged.
 
 Read `ed studio edit schema` and help before constructing audio operations.
-Discover whether independent audio, source offsets, fades, looping, detachment,
-beat analysis and markers exist in this installation. Never guess their names.
-If only anchored audio is supported, disclose that limitation for a request that
-requires independent music rather than silently binding the song to a shot.
+`addAudio` imports independent music or voiceover: `start` uses rendered output
+seconds and `offset` uses original audio-source seconds. Import video or stills
+first so the intended output start lies inside the rendered timeline. The imported
+track is clipped to that timeline's end. Video rearrangement does not bind it to
+a shot; recheck its intended end after shortening the cut.
+
+An approved audio reference may be inside a video container. Import it with
+`addAudio` as an audio asset only, not `addMedia` as a flattened visual replacement.
+Preserve the original music reference and editable visual sources when required.
+For unchanged AAC delivery, the selected source must already satisfy full-stream
+copy constraints; mastering to PCM and AAC packet copy are separate workflows.
+
+Use `moveAudio`, `splitAudio`, `trimAudio`, `audioFades`, `audioOptions` and
+`removeAudio` for independent tracks. Read their required fields and bounds from
+the schema. `detachAudio` snapshots a clip's audio placement, source offsets,
+speed slices and envelopes, then mutes its source. It requires source audio and
+can detach a clip only once. Check the resulting mix instead of adding a duplicate.
+
+`addAudio.name` and `detachAudio.name` define plan-local group aliases. Follow
+`audioAliases` and `audioIDs` in the apply result: split/trim can change a group's
+members, and removal can leave an empty array. Later plans use persisted track
+IDs from `show`, not an alias from an earlier apply or an ID from a dry-run.
+
+For a project with at least four rendered seconds and a synthetic audio file
+longer than four seconds, this public plan creates a quiet independent bed:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"addAudio": {"path": "synthetic-tone.wav", "start": 0, "offset": 0, "name": "bed"}},
+    {"trimAudio": {"trackID": "bed", "start": 0, "end": 4}},
+    {"audioFades": {"trackID": "bed", "fadeIn": 0.2, "fadeOut": 0.3}},
+    {"audioOptions": {"trackID": "bed", "gainDb": -6, "muted": false, "loop": false}}
+  ]
+}
+```
+
+The example's gain is a creative mix choice, not loudness normalization. For a
+specified loudness target, measure first and use the delivery skill's mastering
+guidance. Preserve approved-source provenance and remeasure the encoded output.
 
 Establish source range, output start, gain, mute, fades and looping intentionally.
 When detaching recorded audio, check whether the original clip remains audible
@@ -43,6 +80,12 @@ and intended frames in the ledger; a ledger entry is not a saved native marker.
 Arrange cuts at selected accents, preserving minimum legal clip durations and
 the required story. Recalculate downstream positions after each speed or trim
 change instead of repeatedly nudging rounded seconds.
+
+For waveform review, `contact-sheet` supports `--waveform-asset` with explicit
+`--source-in`, `--source-out`, `--output-start` and `--playback-rate`. These map
+source audio into output time; choosing a track does not infer offsets or loops.
+`--show-beat-markers` draws saved markers. Newly detected transients are not saved
+confirmed beats, and source linear waveform peaks do not measure the final mix.
 
 ## Verify sound as sound
 

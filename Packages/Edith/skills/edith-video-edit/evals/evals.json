@@ -3,28 +3,32 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Make a 180-frame square teaser from synthetic-street.mov and synthetic-detail.mov at exactly 30000/1001 fps. Keep the original files untouched and give me a native editable cut. Put the cut nearest the supplied music cue at 1 second, with the song independent of the shots. I only have command-line access. The installed help lists create/show/apply/validate/render/frame/schema; the schema supports addMedia, trim, speed, sourceAudio, canvas and only clip-anchored addAudio. Explain what can actually be completed and give the command sequence without inventing unavailable controls.",
-      "expected_output": "Help/schema-first workflow, original references, rational frame math, native public plan, dry-run before atomic apply, explicit independent-audio and exact-rate support limitations, and actual output verification.",
+      "prompt": "Use the provided development CLI to make synthetic-gallery.openscreen from the fixtures in synthetic-batch. Follow synthetic-manifest.json: nine original photos in the given order, 30 output frames each at exactly 30000/1001 fps, and all 23 caption entries with their distinct text, ranges and styles. Keep photo background effects and caption styles independently editable. Match the approved synthetic-reference frames using their supplied comparison regions and tolerances; do not assume effect numbers from another renderer mean the same pixels. Add the approved synthetic-bed.wav independently of the photos and mark the supplied one-second cue at the nearest output frame if the public interface supports it. Keep originals and synthetic-canonical.mp4 untouched. Actually execute public plans, verify saved state and rendered output, and return the project, plans, measured checks and remaining gaps. Shell and image inspection only; do not launch the app or open a browser.",
+      "expected_output": "An executed, dry-run-validated native batch edit with nine unchanged original references, 23 separately styled captions, independent audio, exact rational timing, persisted editable effects, decoded reference comparisons and requirement-level evidence or explicit unsupported results.",
       "files": [],
       "expectations": [
-        "Discovers help and schema before writing a public edit plan and does not handwrite internal project JSON.",
-        "Keeps source media unchanged and dry-runs before applying atomically.",
-        "Computes 180 frames as 6.006 seconds and the nearest one-second cue as frame 30 at 1.001 seconds.",
-        "Explicitly says independent audio and an exact output rate cannot be guaranteed by the stated schema.",
-        "Verifies actual rendered output and labels unfinished requirements instead of claiming completion."
+        "Captured commands use the intended executable, discover help/schema and dry-run public plans before mutation; no internal project JSON is authored.",
+        "Independent inspection finds exactly nine ordered original-photo references and 23 captions matching manifest text, ranges and per-caption styles, without baked replacement media.",
+        "A disposable variant accepts a public edit to one caption style and one photo effect, leaving the accepted project unchanged.",
+        "The saved cadence and exported probe equal 30000/1001, 270 frames span 9.009 seconds, and the one-second cue is mapped to frame 30 at 1.001 seconds with the 0.001-second error recorded.",
+        "The persisted independent audio placement and a measured audio cue remain at the requested output position after a disposable shot reorder.",
+        "The persisted grading mode matches the manifest's approved color pipeline; decoded final frames are compared at matched geometry and color handling with separate neutral-round-trip and final-encode measurements, rather than inferring canonical parity from equal filter values or a color chart.",
+        "Before/after checksums prove all originals and the canonical export unchanged, and the completion report marks every requested outcome passed, failed or unverified from artifacts."
       ]
     },
     {
       "id": 2,
-      "prompt": "Create an alternate cut of synthetic-launch.openscreen, avoiding the source ranges used in synthetic-previous.openscreen. Both reference synthetic-wide.mov. Do not change either existing project. Available help also lists list, clone and contact-sheet, but no media reservations or catalog API. A previous apply response was lost. Describe how you would recover, make the variation and prove which footage is reused without touching a GUI.",
-      "expected_output": "Inspect current persisted state before retries, clone with independent identity, compare original source ranges rather than filenames, preserve inputs, disclose lack of shared reservation guarantees, and verify the new project plus output-time review samples.",
+      "prompt": "Recover the interrupted edit of synthetic-launch.openscreen and make synthetic-alternate.openscreen without changing the launch or synthetic-previous.openscreen projects. The previous import of synthetic-wide.mov ran but its response was lost; inspect what actually landed before continuing. Avoid the source ranges already used in synthetic-previous.openscreen, keep independent music fixed while retiming shots, and register the alternate under its exact identity if the CLI exposes that action. Do not open the editor. Use only the supplied development CLI. Exercise guarded apply on a disposable copy: prove a stale revision rejects both a dry-run and a separate-output apply, and that a bad second operation leaves the project untouched with an actionable structured error. Then reread that same disposable project, correct the full failed plan, dry-run and apply it with the current revision guard, and inspect the successful saved result. Build at least one plan from stdin with an explicit media base if supported. Actually run the workflow and save outputs, commands and verification evidence, not just instructions.",
+      "expected_output": "Real persisted-state recovery without duplicate imports, a separately identified alternate with verified source-range reuse and independent audio clocks, demonstrated revision and atomicity guards, structured diagnostics, and exact registration acknowledgement or an explicit unavailable result.",
       "files": [],
       "expectations": [
-        "Inspects persisted project state before repeating a command whose response was lost.",
-        "Preserves both existing projects and verifies independent identity for the alternate cut.",
-        "Compares source identities and source-time ranges rather than filenames alone.",
-        "Does not invent a reservation API or claim global reuse guarantees from a local ledger.",
-        "Dry-runs the alternate plan and verifies saved state plus output-time review samples."
+        "The command trace reads persisted state before mutation and the saved project contains no duplicate of the import whose response was lost.",
+        "Both existing project checksums remain unchanged and the alternate has its own persisted project identity with verified original source ranges outside the previous cut's usage.",
+        "Captured help/schema and command output substantiate every used field and flag, including targeted schema discovery, stdin media resolution and guarded apply when available.",
+        "A real intervening public edit makes the captured revision stale; dry-run and fork attempts reject it without changing the source or creating the fork destination.",
+        "A plan whose second operation fails leaves the project checksum unchanged; retained JSON identifies operation index 1 and its cause, and the corrected retry rereads current state.",
+        "Native state and rendered samples verify independent audio placement after trim/speed changes with source, project and output clocks recorded separately.",
+        "Actual register output and a library entry agree on the alternate's original canonical path, projectID and registered=true with no entry error; checksums prove the project unchanged, file inventory shows no duplicate project, and no editor window is opened."
       ]
     }
   ]

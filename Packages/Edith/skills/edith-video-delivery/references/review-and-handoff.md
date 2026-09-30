@@ -19,6 +19,14 @@ frames or orientation changes appear. A contact sheet is a compact review aid,
 not proof that all frames are correct. Review extracted frames from the actual
 movie too: a native preview and a final encode are separate artifacts.
 
+Compare approved reference frames with decoded final frames using matching time,
+geometry and color handling. Record visible differences and any supplied pixel
+tolerance. Similar filter names or equal FFmpeg and Core Image parameter values do
+not prove equivalent appearance. Check all requested caption and photo-effect
+targets in saved state, then sample their distinctive rendered behavior. Keep
+native editability, visual matching and encoded delivery as separate acceptance
+checks so one successful screenshot cannot stand in for all three.
+
 ## Review the sound with explicit limits
 
 Verify exported audio streams, sample rate, channels and duration against the
@@ -26,6 +34,8 @@ brief. Inspect gain, peaks or loudness and expected silence intervals with
 available tools. Check voiceover and beat cues against output-frame positions.
 Do not claim an audible review if only metadata or waveforms were available.
 In a headless run, mark listening checks pending if no listening tool is present.
+Record measurement scope and units, approved-source identity and any normalization
+passes. Verify the final encoded mix, not only the input or an intermediate WAV.
 
 ## Make the handoff reproducible
 
@@ -38,6 +48,39 @@ package. Check dependencies before handoff. If a supported collection or relink
 operation exists, discover it and validate the collected copy. A project clone
 alone does not copy its media or necessarily preserve external usage reservations.
 
+## Verify library and editor handoff separately
+
+For requested registration, run `ed studio edit register PROJECT --json`, then
+`ed studio edit library --json` using the intended installation's CLI. Registration
+references the canonical original project path without copying or rewriting it.
+Match the returned `path`, `projectID` and `registered: true` in the library array;
+check each entry's optional `errorCode`/`error` for stale references or identity
+changes. A file in a directory is not proof of registration. Remove a reference
+only when requested with `ed studio edit unregister PROJECT --json`; this returns
+`registered: false` and preserves the project and originals.
+For stale-entry cleanup, pass the exact stored library `path` to `unregister`,
+without resolving a file or parent-directory symlink to its new target first.
+
+When the user specifically requests the editor, validate the intended saved edit
+and use `ed studio edit open PROJECT --timeout 30 --json` once. Timeout accepts
+1 through 120 seconds. The matching app must already be running: a development
+handoff uses that slot's `dist/Edith.app/Contents/MacOS/ed` and app, not a plain
+`.build` binary. This command is unnecessary for normal headless delivery.
+
+Require `ok: true` and `state: "opened"` with the correlated `requestID`, canonical
+`path`, `projectID` and SHA-256 `revision`. This acknowledges the exact revision
+mounted in Studio and a ready native player for nonempty projects. Registration
+does not acknowledge an open, and opening does not automatically register a file.
+Keep missing acknowledgements unverified. `app_not_running`, `editor_busy`,
+`missing_media`, `migration_required`, `project_changed` and `open_timeout` require
+resolving the named cause rather than repeatedly raising the editor. Do not replace
+an acknowledged-open check with file existence or an app window being visible.
+Pending inspector drafts also produce `editor_busy`. Require the user's explicit
+commit/discard decision for those drafts or unsaved edits; a CLI overwrite is not
+a way to resolve them.
+
+## Report the result
+
 A compact completion report can use these fields:
 
 | Field | Content |
@@ -47,6 +90,7 @@ A compact completion report can use these fields:
 | Review | Contact sheet or sampled images and exact output frames |
 | Dependencies | Original media required for further edits |
 | Acceptance | Passed checks, failed checks and unverified judgments |
+| Lifecycle | Requested registration/open action and exact project acknowledgement |
 
 Only include artifacts that actually exist. Keep local paths and real media out
 of public evidence. When sharing a demonstration, create fresh synthetic media,
