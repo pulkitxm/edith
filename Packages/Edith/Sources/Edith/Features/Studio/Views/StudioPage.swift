@@ -67,6 +67,18 @@ struct StudioPage: View {
                 guard automaticActionsEnabled else { return }
                 model.start()
             }
+            .onChange(of: VideoEditorOpenBridge.shared.pending?.request.requestID, initial: true) {
+                _, _ in
+                if let presentation = VideoEditorOpenBridge.shared.pending {
+                    model.openCommandProject(presentation)
+                }
+            }
+            .onReceive(
+                DistributedNotificationCenter.default().publisher(
+                    for: IPC.Name.videoProjectLibraryChanged)
+            ) { _ in
+                model.refreshProjects()
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -85,6 +97,14 @@ struct StudioPage: View {
             StudioPDFEditorView(model: model, url: url, mode: mode)
         case let .videoEditor(media, project):
             StudioVideoHost(model: model, media: media, project: project)
+        case let .commandVideoEditor(requestID):
+            if let presentation = model.commandEditor, presentation.request.requestID == requestID {
+                StudioVideoHost(
+                    model: model, media: [],
+                    project: URL(fileURLWithPath: presentation.request.path), command: presentation
+                )
+                .id(requestID)
+            }
         case let .compare(original, revised):
             StudioCompareView(model: model, original: original, revised: revised)
         }

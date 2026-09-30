@@ -26,6 +26,7 @@ enum StudioRoute: Equatable {
     case imageEditor(URL)
     case pdfEditor(URL, StudioPDFEditorMode)
     case videoEditor([URL], project: URL?)
+    case commandVideoEditor(String)
     case compare(URL, URL)
 }
 
@@ -48,6 +49,7 @@ final class StudioModel {
     var message: String?
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
+    var commandEditor: VideoEditorOpenBridge.Presentation?
     var workflows: [StudioWorkflow] = []
     var editingWorkflow: StudioWorkflowDraft?
     private var workflowsTask: Task<Void, Never>?
@@ -300,6 +302,11 @@ final class StudioModel {
 
     func openVideoProject(_ url: URL) {
         route = .videoEditor([], project: url)
+    }
+
+    func openCommandProject(_ presentation: VideoEditorOpenBridge.Presentation) {
+        commandEditor = presentation
+        route = .commandVideoEditor(presentation.request.requestID)
     }
 
     func newVideoProject() {

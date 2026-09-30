@@ -3,6 +3,7 @@ import EdithCore
 public enum StudioEditOperation: String, CaseIterable, Sendable {
     case schema, create, show, apply, validate, render, frame
     case list, clone
+    case register, unregister, library, open
     case contactSheet = "contact-sheet"
     case reviewReport = "review-report"
 
@@ -14,12 +15,16 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
 
     public var interfaceExposure: UserOperationExposure {
         .commandLineOnly(
-            reason: "Headless project-file operations share the native video editor pipeline.")
+            reason:
+                "Project-file operations and native editor handoff are available through the command line."
+        )
     }
 
     private var effect: UserOperationEffect {
         switch self {
-        case .schema, .show, .validate, .list: .read
+        case .schema, .show, .validate, .list, .library: .read
+        case .register, .unregister: .write
+        case .open: .interactive
         case .create, .apply, .render, .frame, .clone, .contactSheet, .reviewReport: .write
         }
     }
@@ -36,6 +41,11 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .frame: "Extract a composited PNG frame at a rendered output time."
         case .list: "List project identities and titles in a local directory."
         case .clone: "Copy a native edit with a fresh project identity."
+        case .register: "Register a canonical project reference without copying or modifying it."
+        case .unregister: "Remove a library reference without deleting its project or media."
+        case .library: "List native and registered projects, including stale reference errors."
+        case .open:
+            "Open an exact project revision in the running native editor and await its mounted acknowledgment."
         case .contactSheet:
             "Render up to 64 labeled output frames with optional saved-marker and explicitly mapped source-waveform strips."
         case .reviewReport:

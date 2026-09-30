@@ -22,6 +22,7 @@ enum CLIWindowBridge {
         QuinjetSessionBridge.shared.install()
         MachineTerminalBroadcastBridge.install()
         HerdrOpenBridge.install()
+        VideoEditorOpenBridge.shared.install()
     }
 
     private static func fail(_ message: String) {

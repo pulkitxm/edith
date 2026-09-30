@@ -28,15 +28,26 @@ struct VideoEditorPage: View {
 
     var media: [URL] = []
     var project: URL?
-    @State private var model = VideoEditorModel()
+    @State private var model: VideoEditorModel
+    private var commandMounted: (() -> Void)?
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
     @State private var showingInspector = true
     @State private var showingMedia = false
     @State private var showingRecorder = false
     @State private var showingBeats = false
-    @State private var titleDraft = ""
     @Environment(\.colorScheme) private var scheme
+
+    init(media: [URL] = [], project: URL? = nil) {
+        self.media = media
+        self.project = project
+        _model = State(initialValue: VideoEditorModel())
+    }
+
+    init(model: VideoEditorModel, mounted: @escaping () -> Void) {
+        _model = State(initialValue: model)
+        commandMounted = mounted
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,6 +92,11 @@ struct VideoEditorPage: View {
             }
         }
         .task {
+            VideoEditorOpenBridge.shared.activeEditor = model
+            if let commandMounted {
+                commandMounted()
+                return
+            }
             if let project {
                 model.openProject(at: project)
             } else if !media.isEmpty {
@@ -88,11 +104,11 @@ struct VideoEditorPage: View {
             }
         }
         .onDisappear {
+            if VideoEditorOpenBridge.shared.activeEditor === model {
+                VideoEditorOpenBridge.shared.activeEditor = nil
+            }
             model.player.pause()
             model.focusPlayer.pause()
-        }
-        .onChange(of: model.project?.title) { _, _ in
-            titleDraft = model.project?.title ?? ""
         }
         .onChange(of: model.editingZoomID) { _, id in
             if id != nil { editorTool = .zoom }
@@ -133,13 +149,21 @@ struct VideoEditorPage: View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "film.stack")
                 .foregroundStyle(.tint)
-            TextField("Video editor", text: $titleDraft)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: UIScale.pt(260))
-                .disabled(model.project == nil)
-                .onSubmit { model.renameProject(titleDraft) }
-                .help("Rename project")
+            TextField(
+                "Video editor",
+                text: Binding(
+                    get: { model.titleDraft ?? model.project?.title ?? "" },
+                    set: { model.titleDraft = $0 })
+            )
+            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .lineLimit(1)
+            .frame(maxWidth: UIScale.pt(260))
+            .disabled(model.project == nil)
+            .onSubmit {
+                model.renameProject(model.titleDraft ?? model.project?.title ?? "")
+                model.titleDraft = nil
+            }
+            .help("Rename project")
             Spacer()
             Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
             Button("Markers", systemImage: "waveform") { showingBeats = true }

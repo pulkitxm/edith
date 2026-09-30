@@ -29,25 +29,17 @@ struct VideoProject {
     }
 
     static func listProjects() -> [Listing] {
-        let isolated = ProcessInfo.processInfo.environment[DataRoot.devOverrideVariable] != nil
-        let folders =
-            isolated
-            ? [(libraryURL, false)]
-            : [
-                (libraryURL, false), (openScreenLibraryURL, true),
-            ]
-        return folders.flatMap { folder, external -> [Listing] in
-            let urls =
-                (try? FileManager.default.contentsOfDirectory(
-                    at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-            return urls.filter { $0.pathExtension == "openscreen" }.compactMap { url in
-                guard let project = try? open(url) else { return nil }
-                return Listing(
-                    url: url, title: project.title, isOpenScreenLibrary: external,
-                    previewURL: project.previewAsset?.url,
-                    modified: (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                        .contentModificationDate ?? .distantPast)
-            }
+        return ((try? VideoEditorService.library()) ?? []).compactMap { entry -> Listing? in
+            guard entry.errorCode == nil else { return nil }
+            let url = URL(fileURLWithPath: entry.path)
+            guard let project = try? open(url) else { return nil }
+            return Listing(
+                url: url, title: project.title,
+                isOpenScreenLibrary: !entry.registered
+                    && url.path.hasPrefix(openScreenLibraryURL.path + "/"),
+                previewURL: project.previewAsset?.url,
+                modified: (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast)
         }
         .sorted { $0.modified > $1.modified }
     }

@@ -60,6 +60,7 @@ public enum AppBridge {
 
     public static func awaitReply(
         _ name: Notification.Name, timeout: TimeInterval,
+        waitingMessage: String? = "waiting for Edith to answer...",
         matching: @escaping ([AnyHashable: Any]) -> Bool = { _ in true },
         trigger: @escaping @Sendable () -> Void
     ) async -> [AnyHashable: Any]? {
@@ -84,8 +85,8 @@ public enum AppBridge {
         }
         let noteTask = Task {
             try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, !waiter.isFinished else { return }
-            CLIOut.note("waiting for Edith to answer...")
+            guard !Task.isCancelled, !waiter.isFinished, let waitingMessage else { return }
+            CLIOut.note(waitingMessage)
         }
         let value = await waiter.wait()
         timeoutTask.cancel()

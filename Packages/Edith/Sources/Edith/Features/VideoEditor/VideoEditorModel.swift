@@ -38,6 +38,31 @@ final class VideoEditorModel {
     var errorMessage: String?
     var permissionSettingsURL: URL?
     var recentProjects: [VideoProject.Listing] = []
+    private(set) var hasUnsavedEdits = false
+    var titleDraft: String?
+    private(set) var pendingViewEditIDs: Set<String> = []
+    private var pendingLoads = 0
+    var blocksCommandOpen: Bool {
+        hasUnsavedEdits || isTranscribing || audioStatus != nil || pendingLoads > 0
+            || titleDraft.map { $0 != (project?.title ?? "") } == true
+            || !pendingViewEditIDs.isEmpty
+    }
+
+    func setPendingViewEdit(_ id: String, hasChanges: Bool) {
+        if hasChanges {
+            pendingViewEditIDs.insert(id)
+        } else {
+            pendingViewEditIDs.remove(id)
+        }
+    }
+
+    private func replaceProject(_ next: VideoProject) {
+        if project?.id != next.id {
+            titleDraft = nil
+            pendingViewEditIDs.removeAll()
+        }
+        project = next
+    }
 
     let player = AVPlayer()
     let focusPlayer = AVPlayer()
@@ -94,7 +119,7 @@ final class VideoEditorModel {
         selection = nil
         silentRanges = []
         player.pause()
-        project = .create()
+        replaceProject(.create())
         selectedClipID = nil
         editingZoomID = nil
         undoHistory.removeAll()
@@ -134,10 +159,16 @@ final class VideoEditorModel {
                     document.relinkMedia(assetID: asset.id, to: replacement)
                 }
             }
-            if url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
+            let registered = try VideoProjectRegistry().records().contains {
+                $0.projectID == document.id
+                    && VideoProjectFileAccess.identity(URL(fileURLWithPath: $0.path))
+                        == VideoProjectFileAccess.identity(url)
+            }
+            if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
                 document.fileURL = nil
             }
-            project = document
+            replaceProject(document)
+            hasUnsavedEdits = false
             selectedClipID = project?.clips.first?.id
             editingZoomID = nil
             undoHistory.removeAll()
@@ -147,7 +178,9 @@ final class VideoEditorModel {
             player.pause()
             player.replaceCurrentItem(with: nil)
             pipeline = nil
+            pendingLoads += 1
             Task {
+                defer { pendingLoads -= 1 }
                 let prepared = await document.probingMissingMedia()
                 guard version == generation, project?.id == prepared.id else { return }
                 project = prepared
@@ -159,6 +192,74 @@ final class VideoEditorModel {
 
     func refreshRecentProjects() {
         recentProjects = VideoProject.listProjects()
+    }
+
+    func loadCommandProject(_ request: VideoEditorService.OpenRequest) async throws {
+        let url = URL(fileURLWithPath: request.path)
+        let snapshot = try VideoEditorService.readProject(url)
+        let fingerprint = snapshot.revision.fingerprint.digest.map { String(format: "%02x", $0) }
+            .joined()
+        guard snapshot.project.id == request.projectID, fingerprint == request.revision else {
+            throw VideoEditorService.Failure(
+                "project_changed", "The requested project revision changed before loading.")
+        }
+        guard snapshot.project.fileURL != nil else {
+            throw VideoEditorService.Failure(
+                "migration_required",
+                "Convert this legacy project to the current format before opening it from the command line."
+            )
+        }
+        for url in VideoEditorService.sourceURLs(snapshot.project, includeSidecars: false) {
+            do { try VideoEditorService.requireLocalFile(url) } catch {
+                throw VideoEditorService.Failure(
+                    "missing_media", "Required media is unavailable: \(url.path)")
+            }
+        }
+        try await VideoEditorService.validateMedia(snapshot.project)
+        let prepared: VideoRenderPipeline?
+        if snapshot.project.clips.isEmpty {
+            prepared = nil
+        } else {
+            prepared = try await VideoRenderPipeline.make(
+                project: snapshot.project, previewOnly: true)
+        }
+        try Task.checkCancellation()
+        replaceProject(snapshot.project)
+        hasUnsavedEdits = false
+        selectedClipID = snapshot.project.clips.first?.id
+        pipeline = prepared
+        if let prepared {
+            let item = AVPlayerItem(asset: prepared.composition)
+            item.videoComposition = prepared.videoComposition
+            item.audioMix = prepared.audioMix
+            player.replaceCurrentItem(with: item)
+            while item.status != .readyToPlay {
+                try Task.checkCancellation()
+                if item.status == .failed {
+                    throw VideoEditorService.Failure(
+                        "open_failed",
+                        item.error?.localizedDescription
+                            ?? "The native player could not load this project.")
+                }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            try Task.checkCancellation()
+        }
+        try verifyCommandProject(request)
+    }
+
+    func verifyCommandProject(_ request: VideoEditorService.OpenRequest) throws {
+        guard let project, project.id == request.projectID,
+            project.fileURL?.path == request.path,
+            project.clips.isEmpty
+                || (pipeline != nil && player.currentItem?.status == .readyToPlay),
+            let revision = project.fileRevision?.value,
+            revision.digest.map({ String(format: "%02x", $0) }).joined() == request.revision,
+            try revision.matches(URL(fileURLWithPath: request.path))
+        else {
+            throw VideoEditorService.Failure(
+                "project_changed", "The requested project revision is no longer current.")
+        }
     }
 
     func importMedia() {
@@ -176,6 +277,8 @@ final class VideoEditorModel {
     }
 
     private func addMedia(_ urls: [URL]) async {
+        pendingLoads += 1
+        defer { pendingLoads -= 1 }
         do {
             for url in urls {
                 let type = UTType(filenameExtension: url.pathExtension)
@@ -340,21 +443,25 @@ final class VideoEditorModel {
 
     private func saveProject(to url: URL) {
         guard var project else { return }
+        hasUnsavedEdits = true
         do {
             try project.save(to: url)
             self.project = project
+            hasUnsavedEdits = false
             refreshRecentProjects()
         } catch { errorMessage = error.localizedDescription }
     }
 
     private func saveInLibrary() {
         guard var project else { return }
+        hasUnsavedEdits = true
         do {
             try FileManager.default.createDirectory(
                 at: VideoProject.libraryURL, withIntermediateDirectories: true)
             let url = VideoProject.libraryURL.appendingPathComponent("\(project.id).openscreen")
             try project.save(to: url)
             self.project = project
+            hasUnsavedEdits = false
             refreshRecentProjects()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -965,10 +1072,12 @@ final class VideoEditorModel {
     }
 
     private func persistCurrentProject() {
+        hasUnsavedEdits = true
         guard var project, let url = project.fileURL else { return }
         do {
             try project.save(to: url)
             self.project = project
+            hasUnsavedEdits = false
         } catch { errorMessage = error.localizedDescription }
     }
 
