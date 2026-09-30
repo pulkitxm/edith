@@ -17,6 +17,65 @@ const launcher = readFileSync(resolve("Resources/ed-launcher"), "utf8");
 
 describe("build install lifecycle", () => {
   test.skipIf(process.platform !== "darwin")(
+    "rejects prebuilt installation without explicit release install mode",
+    () => {
+      for (const options of [
+        [],
+        ["--release"],
+        ["--release", "--install", "--branch", "fixture"],
+      ]) {
+        const result = Bun.spawnSync(
+          ["bash", "build.sh", "--from-app", "/fixture/Edith.app", ...options],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5000,
+          },
+        );
+        expect(result.exitCode).toBe(1);
+        expect(new TextDecoder().decode(result.stderr)).toContain(
+          "--from-app requires --release --install",
+        );
+      }
+    },
+  );
+
+  test.skipIf(process.platform !== "darwin")(
+    "rejects untrusted prebuilt bundles before replacing the installed app",
+    () => {
+      const directory = mkdtempSync(
+        resolve(tmpdir(), "edith-prebuilt-fixture-"),
+      );
+      try {
+        const bundle = resolve(directory, "Edith.app");
+        mkdirSync(bundle);
+        const result = Bun.spawnSync(
+          [
+            "bash",
+            "build.sh",
+            "--release",
+            "--install",
+            "--from-app",
+            bundle,
+            "--no-open",
+          ],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5000,
+          },
+        );
+        expect(result.exitCode).not.toBe(0);
+        expect(new TextDecoder().decode(result.stderr)).toContain(
+          "bundle format",
+        );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test.skipIf(process.platform !== "darwin")(
     "rejects development installation before resolving a branch or pull request",
     () => {
       for (const selection of [
