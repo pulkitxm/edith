@@ -89,4 +89,33 @@ import EdithKit
         #expect(StudioEditOperation.open.descriptor.effect == .interactive)
         #expect(StudioEditOperation.library.descriptor.effect == .read)
     }
+
+    @Test(arguments: [false, true], ["offline", "quit", "timeout"])
+    func openSilenceDiagnosesTheMatchingMainApp(helperRunning: Bool, state: String) async throws {
+        try await CLIProbe.inWorld { world in
+            let url = world.sandbox.appendingPathComponent("silence.openscreen")
+            _ = try VideoEditorService.create(at: url, title: "Synthetic silence project")
+            CLIEnvironment.isHelperRunning = { helperRunning }
+            CLIEnvironment.isMainAppRunning = { state != "offline" }
+            CLIEnvironment.answer = { _ in
+                if state == "quit" { CLIEnvironment.isMainAppRunning = { false } }
+                return nil
+            }
+            let result = await CLIProbe.capture([
+                "studio", "edit", "open", url.path, "--timeout", "1", "--json",
+            ])
+            #expect(result.code == 1)
+            #expect(result.stdout.isEmpty)
+            let output = try #require(
+                try JSONSerialization.jsonObject(with: Data(result.stderr.utf8)) as? [String: Any])
+            let error = try #require(output["error"] as? [String: Any])
+            #expect(
+                error["code"] as? String
+                    == (state == "timeout" ? "open_timeout" : "app_not_running"))
+            let message = try #require(error["message"] as? String)
+            #expect(message.contains(state == "timeout" ? "acknowledgment" : "matching Edith app"))
+            #expect(!message.contains("menu bar"))
+            #expect(world.posted.isEmpty == (state == "offline"))
+        }
+    }
 }
