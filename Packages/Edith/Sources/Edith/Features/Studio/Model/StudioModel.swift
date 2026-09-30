@@ -140,23 +140,30 @@ final class StudioModel {
     func watchLibrary(paths: [URL]? = nil) {
         if let paths { libraryWatchPaths = paths }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let candidates =
+        var candidates =
             libraryWatchPaths
-            ?? ([
+            ?? [
                 home.appendingPathComponent("Library/Preferences", isDirectory: true),
                 DataRoot.support, VideoProject.openScreenLibraryURL.deletingLastPathComponent(),
-            ] + videoProjects.map { $0.url.deletingLastPathComponent() })
-        let watched = candidates.map { candidate in
+            ]
+        if libraryWatchPaths == nil {
+            for project in videoProjects {
+                candidates.append(project.url.deletingLastPathComponent())
+            }
+        }
+        var unique = Set<String>()
+        for candidate in candidates {
             var existing = candidate
             while !FileManager.default.fileExists(atPath: existing.path), existing.path != "/" {
                 existing.deleteLastPathComponent()
             }
-            return existing
+            unique.insert(existing.path)
         }
-        let unique = Set(watched.map(\.path)).sorted()
-        guard libraryWatcher?.watchedPaths.sorted() != unique else { return }
+        let current = Set(libraryWatcher?.watchedPaths ?? [])
+        guard current != unique else { return }
         libraryWatcher?.stop()
-        let directories = unique.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        var directories: [URL] = []
+        for path in unique { directories.append(URL(fileURLWithPath: path, isDirectory: true)) }
         libraryWatcher = FileSystemWatcher(paths: directories, debounce: 0.05, eventLatency: 0.05) {
             [weak self] in
             Task { @MainActor [weak self] in
@@ -276,8 +283,11 @@ final class StudioModel {
 
     func clearMissing() {
         let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
-        remove(
-            Set(current.filter { !FileManager.default.fileExists(atPath: $0.url.path) }.map(\.url)))
+        var missing = Set<URL>()
+        for item in current where !FileManager.default.fileExists(atPath: item.url.path) {
+            missing.insert(item.url)
+        }
+        remove(missing)
     }
 
     func toggleSelection(_ url: URL) {
