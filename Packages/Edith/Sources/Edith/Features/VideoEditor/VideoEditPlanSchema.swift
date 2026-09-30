@@ -86,7 +86,7 @@ extension VideoEditPlan {
             "gradingMode": choice(["native", "ffmpeg709"]),
             "framing": choice(["fit", "fill", "fullWidth"]), "focalX": fraction, "focalY": fraction,
             "exposure": number(-10, 10, "Exposure stops."),
-            "brightness": number(-1, 1, "Core Image brightness adjustment."),
+            "brightness": number(-1, 1, "Brightness adjustment in the selected grading mode."),
             "contrast": number(0, 4, "Core Image contrast multiplier; identity is 1."),
             "saturation": number(0, 4, "Core Image saturation multiplier; identity is 1."),
             "background": background,

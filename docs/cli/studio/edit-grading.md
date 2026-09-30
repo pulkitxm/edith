@@ -85,3 +85,43 @@ Even neutral EQ uses the RGB8/YUV444 round trip in this mode. It is intentionall
 not equivalent to bypassing color processing. EQ's integer parameter conversion
 also makes small brightness changes discontinuous. These details matter when
 matching an established reference.
+
+## Measured precision
+
+The independent reference was FFmpeg 9.0.2 on arm64 macOS. The kernel uses its
+fixed-point RGB/YUV matrix coefficients, intermediate rounding, float-converted
+EQ parameters, and output clipping behavior. This includes the reference's
+signed fixed-point overflow behavior at extreme chroma. These are deliberate
+version-specific semantics, rather than a promise to match every FFmpeg version,
+pixel format, scaler flag or hardware backend.
+
+The always-on test contains 24 RGB8 reference vectors captured independently
+from FFmpeg. When FFmpeg is available, an additional 65,536-color test invokes
+it directly. Neutral, target, stress, reduced controls, extremes and near-neutral
+controls all measured zero differing channel bytes. Tests allow at most one
+RGB8 level and mean absolute error 0.01 for platform arithmetic variation.
+
+Actual CLI frame extraction, with both output PNGs color-managed to sRGB before
+sampling the 24 patch centers, measured:
+
+| Controls: contrast / saturation / brightness | RGB8 maximum | Mean absolute error |
+| --- | ---: | ---: |
+| Neutral: 1 / 1 / 0 | 1 | 0.0972 |
+| Target: 1.02 / 1.035 / 0.002 | 1 | 0.0556 |
+| Stress: 1.1 / 1.2 / 0.03 | 1 | 0.0417 |
+
+Composed synthetic sRGB and P3 originals were also tested at 2160 × 3840 and
+540 × 960, with full-width foregrounds and radius-65 backgrounds. Here the
+independent reference receives an extracted, ungraded sRGB8 frame, introducing
+an extra raster quantization and color-conversion round trip relative to grading
+inside the floating-point graph. Neutral maximum error was 4 to 5 levels;
+target and stress maxima were 6 and 7. Across these cases mean absolute error
+was 0.279 to 0.711. These end-to-end bounds are separate from the kernel's
+RGB8-to-RGB8 comparison and were calibrated with the neutral round trip first.
+
+The reference input is the same composited raster, not separately graded layers.
+Sources retain their checksums. An additional HEVC10 delivery check covers a P3
+original and ungraded caption colors. Neutral and stress deliveries both differed
+from their native frames by at most one RGB8 level at the foreground, background
+and caption samples. The codec test allows four levels for encoder variation;
+this budget is separate from EQ precision.

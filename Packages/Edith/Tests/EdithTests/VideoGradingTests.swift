@@ -4,7 +4,7 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoGradingTests {
-    private static var ffmpeg: URL? {
+    static var ffmpeg: URL? {
         ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
             .map { URL(fileURLWithPath: $0) }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
@@ -45,7 +45,7 @@ import Testing
         #expect(mean <= 0.01)
     }
 
-    private func pixels(_ image: CIImage, width: Int, height: Int) -> [UInt8] {
+    func pixels(_ image: CIImage, width: Int, height: Int) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         VideoImageContext.shared.render(
             image, toBitmap: &bytes, rowBytes: width * 4,
@@ -54,7 +54,7 @@ import Testing
         return bytes
     }
 
-    private func reference(_ bytes: [UInt8], width: Int, height: Int, effects: VideoVisualEffects)
+    func reference(_ bytes: [UInt8], width: Int, height: Int, effects: VideoVisualEffects)
         throws -> [UInt8]
     {
         let directory = try VideoEditorServiceTests.folder()
