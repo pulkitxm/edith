@@ -3,15 +3,17 @@
   "evals": [
     {
       "id": 3,
-      "prompt": "Deliver synthetic-demo.openscreen as a 3840x2160 master at 30000/1001 fps with stereo audio, plus a review contact sheet. Render returned exit 0 and written=true. The independent probe of delivery.mp4 instead reports 1920x1080, 30/1 fps and no audio stream. I cannot open any windows. Decide whether it is done and explain the precise next checks and handoff, using installed help for settings rather than making up export flags.",
-      "expected_output": "Reject false success, discover supported delivery controls, preserve originals and prior good exports, correct supported settings through a dry-run plan, probe and decode the actual new export, review output-frame boundaries, label listening checks unverified and record media dependencies.",
+      "prompt": "Using only the provided development CLI and synthetic-delivery fixtures, deliver synthetic-demo.openscreen as a 1280x720 master at exactly 30000/1001 fps with stereo audio, plus a contact sheet. The approved synthetic-source manifest identifies the required audio by checksum. Target -18 LUFS integrated within 0.5 LU and true peak at or below -1.5 dBTP. Measure first; do not guess a gain. Preserve synthetic-canonical.mp4 and all originals. The previous synthetic-review.mp4 actually has the wrong dimensions, 30/1 fps and no audio, despite its successful render response. Make a separate final file and verify it. Also assess the two AAC packet-copy candidates from the fixture manifest: one is compatible, one has mismatched packet configuration despite sharing the codec name. Produce a passthrough variant only if the public contract and packet metadata prove it is valid; do not claim normalization and unchanged packets for the same audio. Run the real commands, keep provenance and measurement reports, decode final frames against synthetic-reference, and report unmet requirements. No app, browser or player windows.",
+      "expected_output": "A real verified final artifact or explicit unmet requirement, measured source-provenant audio correction with final loudness/peak checks, rejection of the bad review and incompatible packet-copy candidate, truthful passthrough mode reporting, preserved canonical artifacts and an evidence-backed headless handoff.",
       "files": [],
       "expectations": [
-        "Rejects delivery success despite exit zero because dimensions, rational rate and audio all fail acceptance.",
-        "Discovers supported render and project settings without inventing export flags.",
-        "Preserves original media and prior good outputs while applying supported corrections through a dry-run plan.",
-        "Probes and decodes the actual replacement export rather than relying only on native project previews.",
-        "Records output-frame review positions, media dependencies and unverified listening checks in the handoff."
+        "An independent probe of the bad review is retained and all three mismatches are rejected despite its successful render response.",
+        "The trace discovers supported render/mastering settings, uses only advertised controls and dry-runs any project correction before applying it.",
+        "Input audio identity matches the approved checksum and retained measurements precede correction; measured or two-pass normalization uses the measured source/mix rather than an arbitrary gain.",
+        "The actual final encode is remeasured at -18 LUFS within 0.5 LU and no more than -1.5 dBTP, or the corresponding requirements are explicitly failed/unverified without a false success claim.",
+        "Passthrough selection inspects packet configuration, layout and timing beyond codec name, rejects the incompatible candidate, and reports actual copy/fallback mode without claiming processed audio retained unchanged packets.",
+        "The final file is independently probed for 1280x720, 30000/1001 and stereo audio; decoded final frames and reference comparisons are saved, not just native preview images.",
+        "Original and canonical-export checksums remain unchanged; the handoff includes source provenance, measured properties, output-frame review positions, dependencies and explicitly unverified listening checks."
       ]
     }
   ]
