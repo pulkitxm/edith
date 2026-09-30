@@ -72,12 +72,18 @@ struct SkillPreviewSheet: View {
             }
             .padding(.horizontal, UIScale.pt(24))
             .padding(.bottom, UIScale.pt(16))
+            if document?.isCached == true {
+                Text(
+                    "Showing cached Markdown. Reopen to retry GitHub; installation downloads the complete skill separately."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+                .padding(.horizontal, UIScale.pt(24)).padding(.bottom, UIScale.pt(12))
+            }
             Divider()
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: UIScale.pt(740), height: UIScale.pt(650))
         .task(id: refreshID) {
-            guard document == nil else { return }
             error = nil
             copied = false
             do {

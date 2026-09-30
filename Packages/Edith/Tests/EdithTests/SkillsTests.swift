@@ -38,23 +38,32 @@ import Testing
         #expect(try await invalid.load(skill).markdown == Self.markdown)
     }
 
-    @MainActor @Test func reopeningUsesTheLoadedDocumentWithoutFetchingAgain() async throws {
-        actor FetchCount {
+    @MainActor @Test func reopeningRefreshesMarkdownAndMarksOfflineFallback() async throws {
+        actor Remote {
             var value = 0
-            func increment() { value += 1 }
+            func fetch() throws -> Data {
+                value += 1
+                if value == 3 { throw URLError(.notConnectedToInternet) }
+                return Data((SkillsTests.markdown + "\nRevision \(value)\n").utf8)
+            }
         }
-        let count = FetchCount()
+        let remote = Remote()
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: cache) }
         let store = SkillDocumentStore(cacheDirectory: cache) { _ in
-            await count.increment()
-            return Data(Self.markdown.utf8)
+            try await remote.fetch()
         }
         #expect(store.cachedDocument(for: skill) == nil)
         let first = try await store.load(skill)
-        #expect(store.cachedDocument(for: skill) == first)
-        #expect(try await store.load(skill) == first)
-        #expect(await count.value == 1)
+        #expect(store.cachedDocument(for: skill)?.isCached == true)
+        let second = try await store.load(skill)
+        #expect(second.markdown != first.markdown)
+        #expect(second.markdown.hasSuffix("Revision 2\n"))
+        #expect(!second.isCached)
+        let offline = try await store.load(skill)
+        #expect(offline.markdown == second.markdown)
+        #expect(offline.isCached)
+        #expect(await remote.value == 3)
     }
 
     @MainActor @Test func invalidRemoteContentCannotBecomeAnInstallableSkill() async throws {
@@ -184,28 +193,26 @@ import Testing
     }
 
     @Test func installerTargetsExactlyTheSelectedAgentsWithoutAShell() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-            UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try Data(Self.markdown.utf8).write(to: directory.appendingPathComponent("SKILL.md"))
         let arguments = try SkillInstaller.arguments(
-            skill: skill, directory: directory, agentIDs: ["cursor", "claude-code", "cursor"])
+            skill: skill, agentIDs: ["cursor", "claude-code", "cursor"])
         #expect(arguments.suffix(3) == ["--agent", "claude-code", "cursor"])
         #expect(arguments.contains("--global"))
         #expect(arguments.contains("--copy"))
-        #expect(arguments.contains(directory.path))
+        #expect(arguments.contains(skill.packageURL.absoluteString))
+        #expect(
+            skill.packageURL.path
+                == "/pulkitxm/edith/tree/main/Packages/Edith/skills/edith-remote-work")
         #expect(!arguments.contains("*"))
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: skill, directory: directory, agentIDs: [])
+            try SkillInstaller.arguments(skill: skill, agentIDs: [])
         }
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: skill, directory: directory, agentIDs: ["unknown"])
+            try SkillInstaller.arguments(skill: skill, agentIDs: ["unknown"])
         }
         let invalid = EdithSkill(
             id: "../other", name: "Other", summary: "", detail: "", symbol: "terminal")
         #expect(throws: SkillsError.self) {
-            try SkillInstaller.arguments(skill: invalid, directory: directory, agentIDs: ["cursor"])
+            try SkillInstaller.arguments(skill: invalid, agentIDs: ["cursor"])
         }
     }
 
@@ -329,12 +336,13 @@ import Testing
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         for status: Int32 in [1, 0] {
-            let installer = SkillInstaller(load: { _ in SkillDocument(markdown: Self.markdown) }) {
+            let installer = SkillInstaller(recordInstalled: { _, _ in }) {
                 request, _ in
                 #expect(request.executableURL.path == "/usr/bin/env")
                 #expect(request.arguments.first == "npx")
                 #expect(request.terminatesProcessGroup)
                 #expect(request.timeout == 300)
+                #expect(request.environment["HOME"] == home.path)
                 return CLICommandResult(terminationStatus: status, output: "installer output")
             }
             await #expect(throws: SkillsError.self) {
@@ -351,7 +359,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: home) }
         try Data("name: edith-remote-work".utf8).write(
             to: folder.appendingPathComponent("SKILL.md"))
-        let installer = SkillInstaller(load: { _ in SkillDocument(markdown: Self.markdown) }) {
+        let installer = SkillInstaller(recordInstalled: { _, _ in }) {
             _, _ in
             CLICommandResult(terminationStatus: 0, output: "done")
         }
@@ -362,6 +370,114 @@ import Testing
         try Data(Self.markdown.utf8).write(to: folder.appendingPathComponent("SKILL.md"))
         try await installer.install(
             skill: skill, agentIDs: ["cursor"], home: home, environment: [:])
+    }
+
+    @MainActor @Test func completeInstallRefreshesPreviewAndSharedTargets() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let store = SkillDocumentStore(cacheDirectory: home.appendingPathComponent("cache")) { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        try store.recordInstalled(SkillDocument(markdown: Self.markdown), for: skill)
+        let latest = Self.markdown + "\n[Blueprint](references/guide.md)\n"
+        let packageURL = skill.packageURL.absoluteString
+        let installer = SkillInstaller(recordInstalled: { skill, document in
+            try await store.recordInstalled(document, for: skill)
+        }) { request, _ in
+            #expect(request.arguments.contains("skills@1.5.24"))
+            #expect(request.arguments.contains(packageURL))
+            let folder = home.appendingPathComponent(".agents/skills/edith-remote-work")
+            try FileManager.default.createDirectory(
+                at: folder.appendingPathComponent("references/nested"),
+                withIntermediateDirectories: true)
+            try Data(latest.utf8).write(to: folder.appendingPathComponent("SKILL.md"))
+            try Data("[Details](nested/details.md)".utf8)
+                .write(to: folder.appendingPathComponent("references/guide.md"))
+            try Data("Synthetic details".utf8)
+                .write(to: folder.appendingPathComponent("references/nested/details.md"))
+            return CLICommandResult(terminationStatus: 0, output: "done")
+        }
+        try await installer.install(
+            skill: skill, agentIDs: ["cursor", "opencode"], home: home, environment: [:])
+        #expect(store.cachedDocument(for: skill)?.markdown == latest)
+        let preview = try await store.load(skill)
+        #expect(preview.markdown == latest)
+        #expect(preview.isCached)
+    }
+
+    @Test func missingNestedReferenceRejectsSuccessfulInstallerExit() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let installer = SkillInstaller(recordInstalled: { _, _ in
+            Issue.record("Incomplete packages must not refresh the preview.")
+        }) { _, _ in
+            let folder = home.appendingPathComponent(".agents/skills/edith-remote-work")
+            try FileManager.default.createDirectory(
+                at: folder.appendingPathComponent("references"),
+                withIntermediateDirectories: true)
+            try Data((Self.markdown + "\n[Blueprint](references/guide.md)").utf8)
+                .write(to: folder.appendingPathComponent("SKILL.md"))
+            try Data("[Missing](nested/missing.md)".utf8)
+                .write(to: folder.appendingPathComponent("references/guide.md"))
+            return CLICommandResult(terminationStatus: 0, output: "done")
+        }
+        await #expect(throws: SkillsError.self) {
+            try await installer.install(
+                skill: skill, agentIDs: ["opencode"], home: home, environment: [:])
+        }
+    }
+
+    @Test func differentAgentPackagesCannotReportInstallationSuccess() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let installer = SkillInstaller(recordInstalled: { _, _ in
+            Issue.record("Mismatched packages must not refresh the preview.")
+        }) { _, _ in
+            for (directory, content) in [
+                (".agents/skills", "Synthetic reference one"),
+                (".pi/agent/skills", "Synthetic reference two"),
+            ] {
+                let folder = home.appendingPathComponent(directory + "/edith-remote-work")
+                try FileManager.default.createDirectory(
+                    at: folder.appendingPathComponent("references"),
+                    withIntermediateDirectories: true)
+                try Data((Self.markdown + "\n[Guide](references/guide.md)").utf8)
+                    .write(to: folder.appendingPathComponent("SKILL.md"))
+                try Data(content.utf8)
+                    .write(to: folder.appendingPathComponent("references/guide.md"))
+            }
+            return CLICommandResult(terminationStatus: 0, output: "done")
+        }
+        await #expect(throws: SkillsError.self) {
+            try await installer.install(
+                skill: skill, agentIDs: ["cursor", "pi"], home: home, environment: [:])
+        }
+    }
+
+    @Test func packageReferencesCannotEscapeTheirInstalledDirectory() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        for link in ["../outside.md", "references/outside.md"] {
+            let installer = SkillInstaller(recordInstalled: { _, _ in }) { _, _ in
+                let folder = home.appendingPathComponent(".agents/skills/edith-remote-work")
+                try FileManager.default.createDirectory(
+                    at: folder.appendingPathComponent("references"),
+                    withIntermediateDirectories: true)
+                try Data((Self.markdown + "\n[Outside](\(link))").utf8)
+                    .write(to: folder.appendingPathComponent("SKILL.md"))
+                let outside = home.appendingPathComponent(".agents/skills/outside.md")
+                try Data("Outside".utf8).write(to: outside)
+                if link.hasPrefix("references/") {
+                    try FileManager.default.createSymbolicLink(
+                        at: folder.appendingPathComponent(link), withDestinationURL: outside)
+                }
+                return CLICommandResult(terminationStatus: 0, output: "done")
+            }
+            await #expect(throws: SkillsError.self) {
+                try await installer.install(
+                    skill: skill, agentIDs: ["cursor"], home: home, environment: [:])
+            }
+        }
     }
 
     @MainActor @Test func pluginsBelongsOnlyToAgents() throws {

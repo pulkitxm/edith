@@ -52,18 +52,37 @@ public struct SkillDocument: Sendable, Equatable {
     }
 
     public func cachedDocument(for skill: EdithSkill) -> SkillDocument? {
-        documents[skill.id]
+        documents[skill.id].map { SkillDocument(markdown: $0.markdown, isCached: true) }
     }
 
     public func load(_ skill: EdithSkill) async throws -> SkillDocument {
         guard EdithSkillLibrary.skills.contains(skill) else {
             throw SkillsError.message("This skill is not in the Edith library.")
         }
-        if let document = documents[skill.id] { return document }
-        let document = try await Self.loadDocument(
-            skill, cacheDirectory: cacheDirectory, fetch: fetch)
+        let document: SkillDocument
+        do {
+            document = try await Self.loadDocument(
+                skill, cacheDirectory: cacheDirectory, fetch: fetch)
+        } catch {
+            try Task.checkCancellation()
+            guard let previous = documents[skill.id] else { throw error }
+            document = SkillDocument(markdown: previous.markdown, isCached: true)
+        }
         documents[skill.id] = document
         return document
+    }
+
+    public func recordInstalled(_ document: SkillDocument, for skill: EdithSkill) throws {
+        let data = Data(document.markdown.utf8)
+        let document = try Self.decode(data, skill: skill, cached: false)
+        guard EdithSkillLibrary.skills.contains(skill) else {
+            throw SkillsError.message("This skill is not in the Edith library.")
+        }
+        documents[skill.id] = document
+        try? FileManager.default.createDirectory(
+            at: cacheDirectory, withIntermediateDirectories: true)
+        try? data.write(
+            to: cacheDirectory.appendingPathComponent(skill.id + ".md"), options: .atomic)
     }
 
     nonisolated private static func loadDocument(
@@ -91,7 +110,7 @@ public struct SkillDocument: Sendable, Equatable {
         }
     }
 
-    nonisolated private static func decode(_ data: Data, skill: EdithSkill, cached: Bool) throws
+    nonisolated static func decode(_ data: Data, skill: EdithSkill, cached: Bool) throws
         -> SkillDocument
     {
         guard data.count < 400_000, let markdown = String(data: data, encoding: .utf8) else {
