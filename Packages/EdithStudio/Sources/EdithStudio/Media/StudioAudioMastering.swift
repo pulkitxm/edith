@@ -109,7 +109,7 @@ public enum StudioAudioMastering {
         try await localSource(source)
         let duration = request.durationSeconds
         guard duration.isFinite, duration >= 0.4, duration <= 86_400,
-            abs(duration * 48_000 - (duration * 48_000).rounded()) < 0.00001
+            abs(duration * 48_000 - (duration * 48_000).rounded()) < 0.001
         else {
             throw Failure(
                 "invalid_audio_duration",

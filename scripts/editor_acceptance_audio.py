@@ -37,7 +37,7 @@ def mastering(cli, root):
     track = applied["audioAliases"]["score"][0]
     project_hash = digest(project)
     command = [cli, "studio", "edit", "audio", "master", str(project), "--track", track,
-               "--duration", str(5588 / 60), "--output", str(bundle), "--json"]
+               "--duration", format(5588 / 60, ".9f"), "--output", str(bundle), "--json"]
     result = json.loads(run(*command).stdout)
     assert digest(source) == original_hash and digest(project) == project_hash
     assert result["report"]["verified"]

@@ -36,6 +36,9 @@ import Testing
             source, to: space.url("second.wav"),
             request: .init(durationSeconds: 6))
         #expect(repeated.artifactSHA256 == report.artifactSHA256)
+        let fractional = try await StudioAudioMastering.master(
+            source, to: space.url("fractional.wav"), request: .init(durationSeconds: 5.983333333))
+        #expect(fractional.recipe.sampleFrames == 287_200)
     }
 
     @Test func silentAndShortSourcesDoNotPublish() async throws {
