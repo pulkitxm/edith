@@ -77,12 +77,10 @@ public final class GhosttyRuntime {
             ghosttyInitialized = true
         }
 
-        guard let cfg = ghostty_config_new() else {
+        guard let cfg = configuration(for: nil) else {
             log.error("ghostty_config_new failed")
             return
         }
-        ghostty_config_load_default_files(cfg)
-        ghostty_config_finalize(cfg)
         var configuredAutoSecureInput = true
         let autoSecureInputKey = "macos-auto-secure-input"
         if !ghostty_config_get(
@@ -136,17 +134,25 @@ public final class GhosttyRuntime {
 
     var configHandle: ghostty_config_t? { config }
 
-    func configuration(for theme: GhosttyTheme) -> ghostty_config_t? {
+    static let selectionConfiguration = """
+        copy-on-select = false
+        clipboard-trim-trailing-spaces = true
+        selection-clear-on-copy = false
+
+        """
+
+    func configuration(for theme: GhosttyTheme?) -> ghostty_config_t? {
         guard let cfg = ghostty_config_new() else { return nil }
         ghostty_config_load_default_files(cfg)
+        let configuration = Self.selectionConfiguration + (theme?.configuration ?? "")
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-ghostty", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(
-            "\(Self.stableHash(theme.configuration)).conf")
+            "\(Self.stableHash(configuration)).conf")
         do {
-            try theme.configuration.write(to: file, atomically: true, encoding: .utf8)
+            try configuration.write(to: file, atomically: true, encoding: .utf8)
         } catch {
             log.error("could not write the terminal theme: \(error.localizedDescription)")
             ghostty_config_finalize(cfg)

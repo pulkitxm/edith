@@ -617,7 +617,8 @@ extension GhosttyTerminalView {
 
     @objc func copyTerminalSelection(_ sender: Any?) {
         guard surface != nil else { return }
-        if performBindingAction("copy_to_clipboard") { return }
+        guard hasSelection else { return }
+        if performBindingAction("copy_to_clipboard:plain") { return }
         guard let text = selectedText(), !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -634,6 +635,7 @@ extension GhosttyTerminalView {
 
     @objc func selectAllTerminalText(_ sender: Any?) {
         _ = performBindingAction("select_all")
+        copyTerminalSelection(nil)
     }
 
     @objc func clearTerminalScrollback(_ sender: Any?) {

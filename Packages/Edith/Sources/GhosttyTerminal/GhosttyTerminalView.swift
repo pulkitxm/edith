@@ -147,6 +147,8 @@ public final class GhosttyTerminalView: NSView {
     }
 
     public func shutdown() {
+        accessibilitySelectionTask?.cancel()
+        accessibilitySelectionTask = nil
         secureInputRequested = false
         GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
         closed = true
