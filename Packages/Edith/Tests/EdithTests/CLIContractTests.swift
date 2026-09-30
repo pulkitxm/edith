@@ -4,16 +4,22 @@ import Testing
 
 @testable import EdithCLI
 @testable import EdithKit
+@testable import Edith
 
 struct JSONCase {
     let label: String
     let arguments: [String]
     let mutatesTheMachine: Bool
+    let fixtureArguments: ((CLIWorld) throws -> [String])?
 
-    init(_ label: String, _ arguments: [String], mutatesTheMachine: Bool = false) {
+    init(
+        _ label: String, _ arguments: [String], mutatesTheMachine: Bool = false,
+        fixtureArguments: ((CLIWorld) throws -> [String])? = nil
+    ) {
         self.label = label
         self.arguments = arguments
         self.mutatesTheMachine = mutatesTheMachine
+        self.fixtureArguments = fixtureArguments
     }
 }
 
@@ -164,6 +170,21 @@ enum JSONContract {
             "ed studio probe", ["studio", "probe", "/nonexistent/studio-probe.pdf", "--json"]),
         JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
         JSONCase("ed studio edit schema", ["studio", "edit", "schema", "--json"]),
+        JSONCase("ed studio edit library", ["studio", "edit", "library", "--json"]) { world in
+            _ = try lifecycleProject(in: world, registered: true)
+            return []
+        },
+        JSONCase("ed studio edit open", ["studio", "edit", "open", "--json"]) { world in
+            [try lifecycleProject(in: world).path]
+        },
+        JSONCase("ed studio edit register", ["studio", "edit", "register", "--json"]) { world in
+            let media = world.sandbox.appendingPathComponent("synthetic.mov")
+            try Data("synthetic media placeholder".utf8).write(to: media)
+            return [media.path]
+        },
+        JSONCase("ed studio edit unregister", ["studio", "edit", "unregister", "--json"]) { world in
+            [try lifecycleProject(in: world, registered: true).path]
+        },
         JSONCase(
             "ed studio edit publications create",
             [
@@ -1202,6 +1223,26 @@ enum JSONContract {
         JSONCase(
             "ed agent tasks exec", ["agent", "tasks", "exec", "--json", "--", "/usr/bin/true"]),
     ]
+
+    static func run(_ probe: JSONCase) async throws -> CLIRun {
+        var result = CLIRun(stdout: "", stderr: "", code: -1)
+        try await CLIProbe.inWorld { world in
+            if probe.fixtureArguments != nil {
+                setenv(DataRoot.devOverrideVariable, world.sandbox.path, 1)
+            }
+            let fixtureArguments = try probe.fixtureArguments?(world) ?? []
+            result = await CLIProbe.capture(probe.arguments + fixtureArguments)
+        }
+        return result
+    }
+
+    private static func lifecycleProject(in world: CLIWorld, registered: Bool = false) throws -> URL
+    {
+        let project = world.sandbox.appendingPathComponent("synthetic.openscreen")
+        _ = try VideoEditorService.create(at: project, title: "Synthetic contract project")
+        if registered { _ = try VideoEditorService.register(project) }
+        return project
+    }
 }
 
 @Suite struct CLIJSONContractTests {
@@ -1225,10 +1266,10 @@ enum JSONContract {
         #expect(uncovered.isEmpty, "no JSON contract case for: \(uncovered)")
     }
 
-    @Test func everyJSONCommandHonorsOutputAndExitCodeContracts() async {
+    @Test func everyJSONCommandHonorsOutputAndExitCodeContracts() async throws {
         let documented: Set<Int32> = [0, 1, 2, 3, 4]
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
-            let result = await CLIProbe.run(probe.arguments)
+            let result = try await JSONContract.run(probe)
             #expect(
                 !result.stdout.contains("error:"), "\(probe.label) put an error on stdout")
             #expect(!result.stdout.contains("hint:"), "\(probe.label) put a hint on stdout")
@@ -1244,12 +1285,50 @@ enum JSONContract {
             #expect(
                 (try? result.decoded()) != nil,
                 "\(probe.label) printed something that is not JSON: \(result.stdout)")
-            let trailing = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            #expect(!trailing.contains("\n\n"), "\(probe.label) printed more than one document")
             guard result.code != 0 else { continue }
             let failures = result.object?["failures"] as? [Any]
             #expect(result.object?["executed"] as? Bool == true)
             #expect(failures?.isEmpty == false)
+        }
+    }
+
+    @Test func jsonDecodingAcceptsPrettyEmptyArraysAndRejectsAdditionalDocuments() throws {
+        let pretty = CLIRun(stdout: "{\n  \"required\": [\n\n  ]\n}\n", stderr: "", code: 0)
+        let decoded = try #require(try pretty.decoded() as? [String: Any])
+        #expect((decoded["required"] as? [Any])?.isEmpty == true)
+        for output in ["{}\n\n{}", "{}\n{}", "[] {}", "true false", "{} trailing output"] {
+            let result = CLIRun(stdout: output, stderr: "", code: 0)
+            #expect(throws: (any Error).self) { try result.decoded() }
+        }
+    }
+
+    @Test func lifecycleContractFixturesExerciseSuccessAndStructuredErrors() async throws {
+        for command in ["library", "open", "register", "unregister"] {
+            let probe = try #require(
+                JSONContract.cases.first { $0.label == "ed studio edit \(command)" })
+            #expect(!probe.mutatesTheMachine)
+            let result = try await JSONContract.run(probe)
+            if command == "library" {
+                #expect(result.code == 0)
+                let entries = try #require(try result.decoded() as? [[String: Any]])
+                #expect(entries.count == 1)
+                #expect(entries.first?["registered"] as? Bool == true)
+                #expect(entries.first?["title"] as? String == "Synthetic contract project")
+                #expect(result.stderr.isEmpty)
+            } else if command == "unregister" {
+                #expect(result.code == 0)
+                #expect(result.object?["registered"] as? Bool == false)
+                #expect(result.stderr.isEmpty)
+            } else {
+                #expect(result.stdout.isEmpty)
+                #expect(result.code == (command == "open" ? 1 : 2))
+                let failure = try #require(
+                    try JSONSerialization.jsonObject(with: Data(result.stderr.utf8))
+                        as? [String: Any])
+                #expect(
+                    (failure["error"] as? [String: Any])?["code"] as? String
+                        == (command == "open" ? "app_not_running" : "invalid_value"))
+            }
         }
     }
 
@@ -1538,6 +1617,9 @@ enum JSONContract {
     }
 
     static let silenceIsNotAnError: Set<String> = ["UsageCommands.swift"]
+    static let protocolSilenceDiagnostics = [
+        "Commands/StudioEditLifecycleCommands.swift": "StudioEditOpen.silenceFailure()"
+    ]
 
     @Test func everyPlaceThatWaitsOnTheAppDiagnosesItsSilence() throws {
         let root = URL(fileURLWithPath: #filePath)
@@ -1555,6 +1637,9 @@ enum JSONContract {
             waiting.append(name)
             let leaf = (name as NSString).lastPathComponent
             guard !Self.silenceIsNotAnError.contains(leaf) else { continue }
+            if let diagnostic = Self.protocolSilenceDiagnostics[name], text.contains(diagnostic) {
+                continue
+            }
             if !text.contains("AppBridge.silence") { offenders.append(name) }
         }
         #expect(!waiting.isEmpty, "nothing waits on the app, so this test proves nothing")

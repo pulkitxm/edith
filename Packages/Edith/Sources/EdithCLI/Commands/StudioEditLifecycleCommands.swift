@@ -71,8 +71,7 @@ struct StudioEditOpen: AsyncParsableCommand {
             }
             let request = try VideoEditorService.prepareOpen(StudioEditBridge.url(project))
             guard AppBridge.mainAppIsRunning else {
-                throw VideoEditorService.Failure(
-                    "app_not_running", "Open this CLI's matching Edith app, then retry.")
+                throw StudioEditOpen.silenceFailure()
             }
             let deadline = Date().addingTimeInterval(timeout).timeIntervalSince1970
             guard
@@ -87,9 +86,7 @@ struct StudioEditOpen: AsyncParsableCommand {
                         AppBridge.post(IPC.Name.requestVideoEditorOpen, userInfo: payload)
                     })
             else {
-                throw VideoEditorService.Failure(
-                    "open_timeout",
-                    "No matching native editor acknowledgment arrived before the deadline.")
+                throw StudioEditOpen.silenceFailure()
             }
             guard reply["ok"] as? Bool == true, reply["state"] as? String == "opened" else {
                 throw VideoEditorService.Failure(
@@ -109,6 +106,17 @@ struct StudioEditOpen: AsyncParsableCommand {
                 CLIOut.out("opened: \(request.path) (\(request.revision))")
             }
         }
+    }
+
+    static func silenceFailure() -> VideoEditorService.Failure {
+        guard AppBridge.mainAppIsRunning else {
+            return VideoEditorService.Failure(
+                "app_not_running", "Open this CLI's matching Edith app, then retry.")
+        }
+        return VideoEditorService.Failure(
+            "open_timeout",
+            "No matching native editor acknowledgment arrived before the deadline. The matching Edith app is running; retry or reopen it."
+        )
     }
 }
 
