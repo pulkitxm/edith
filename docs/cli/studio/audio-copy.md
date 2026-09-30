@@ -31,7 +31,12 @@ Preflight runs before creating delivery files. Copy requires:
 The full AAC stream need not have a duration divisible by 1024 samples. Encoder
 priming, final partial packet durations, skip-sample records, and trailing
 padding are supported and preserved. Full-stream copy is distinct from cutting
-a partial AAC packet. Ambiguous timestamps, gaps, overlapping packets, missing
+a partial AAC packet. Native AAC may retain a full final encoded packet whose
+discard padding brings its presented end to the stream duration; sources whose
+final packet duration already expresses the trim are also supported. Padding
+must be nonnegative, smaller than the last packet, and confined to the stream
+end. Encoder-delay skips are confined to the first packet and must match preroll.
+Ambiguous timestamps, gaps, overlapping packets, missing
 codec configuration, multiple audio streams and unaccounted preroll are rejected.
 
 Video is rendered through the existing native pipeline into temporary video-only

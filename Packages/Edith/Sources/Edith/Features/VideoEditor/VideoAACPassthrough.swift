@@ -127,29 +127,49 @@ enum VideoAACPassthrough {
                 "Soundtrack and video must cover exactly the complete AAC stream. Trims, partial packets and source offsets are unsupported."
             )
         }
-        guard let first = probe.packets.first, let last = probe.packets.last,
-            first.pts <= 0, last.pts + last.duration == stream.duration_ts,
-            probe.packets.allSatisfy({
+        try validatePacketTiming(probe.packets, duration: stream.duration_ts)
+        return Prepared(
+            source: source.audioURL, sourceHash: try StudioAudioMastering.sha256(source.audioURL),
+            probe: probe, environment: environment, movieTimescale: movieTimescale)
+    }
+
+    static func validatePacketTiming(_ packets: [Packet], duration: Int64) throws {
+        guard let first = packets.first, let last = packets.last,
+            first.pts <= 0,
+            packets.allSatisfy({
                 $0.pts == $0.dts && $0.duration > 0 && $0.data_hash.hasPrefix("SHA256:")
             }),
-            zip(probe.packets, probe.packets.dropFirst()).allSatisfy({
+            zip(packets, packets.dropFirst()).allSatisfy({
                 $0.pts + $0.duration == $1.pts
             })
         else {
             throw reject("AAC packet timing contains a gap, overlap or ambiguous stream boundary.")
         }
-        if first.pts < 0 {
-            guard
-                first.side_data_list?.contains(where: {
-                    $0.side_data_type == "Skip Samples" && Int64($0.skip_samples ?? 0) == -first.pts
-                }) == true
-            else {
-                throw reject("AAC preroll has no matching encoder-delay metadata.")
+        var trailingPadding: Int64 = 0
+        for (index, packet) in packets.enumerated() {
+            let records = (packet.side_data_list ?? []).filter {
+                $0.side_data_type == "Skip Samples"
             }
+            guard records.count <= 1 else {
+                throw reject("AAC delay/padding metadata is ambiguous.")
+            }
+            let skip = Int64(records.first?.skip_samples ?? 0)
+            let padding = Int64(records.first?.discard_padding ?? 0)
+            guard skip >= 0, padding >= 0, padding < packet.duration,
+                skip == (index == 0 ? -first.pts : 0),
+                padding == 0 || index == packets.count - 1,
+                (records.first?.skip_reason ?? 0) == 0,
+                (records.first?.discard_reason ?? 0) == 0
+            else {
+                throw reject("AAC delay/padding is invalid or appears inside the stream.")
+            }
+            if index == packets.count - 1 { trailingPadding = padding }
         }
-        return Prepared(
-            source: source.audioURL, sourceHash: try StudioAudioMastering.sha256(source.audioURL),
-            probe: probe, environment: environment, movieTimescale: movieTimescale)
+        let encodedEnd = last.pts + last.duration
+        let presentedEnd = encodedEnd - trailingPadding
+        guard encodedEnd == duration || presentedEnd == duration else {
+            throw reject("AAC final packet and trailing padding do not match presentation bounds.")
+        }
     }
 
     static func export(
