@@ -63,7 +63,8 @@ import Testing
         let url = try await Self.project(in: directory)
         var project = try VideoEditorService.open(url)
         let first = project.clips[0].id
-        let second = try #require(project.duplicate(clipID: first))
+        let duplicated = project.duplicate(clipID: first)
+        let second = try #require(duplicated)
         for id in [first, second] {
             try project.setFrameSampling(.nearest, clipID: id)
             project.trim(clipID: id, start: 4, end: 5)
