@@ -36,7 +36,6 @@ struct VideoEditorPage: View {
     @State private var showingMedia = false
     @State private var showingRecorder = false
     @State private var showingBeats = false
-    @State private var titleDraft = ""
     @Environment(\.colorScheme) private var scheme
 
     init(media: [URL] = [], project: URL? = nil) {
@@ -94,7 +93,7 @@ struct VideoEditorPage: View {
         }
         .task {
             VideoEditorOpenBridge.shared.activeEditor = model
-            titleDraft = model.project?.title ?? ""
+            model.titleDraft = nil
             if let commandMounted {
                 commandMounted()
                 return
@@ -113,7 +112,7 @@ struct VideoEditorPage: View {
             model.focusPlayer.pause()
         }
         .onChange(of: model.project?.title) { _, _ in
-            titleDraft = model.project?.title ?? ""
+            model.titleDraft = nil
         }
         .onChange(of: model.editingZoomID) { _, id in
             if id != nil { editorTool = .zoom }
@@ -154,13 +153,21 @@ struct VideoEditorPage: View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "film.stack")
                 .foregroundStyle(.tint)
-            TextField("Video editor", text: $titleDraft)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: UIScale.pt(260))
-                .disabled(model.project == nil)
-                .onSubmit { model.renameProject(titleDraft) }
-                .help("Rename project")
+            TextField(
+                "Video editor",
+                text: Binding(
+                    get: { model.titleDraft ?? model.project?.title ?? "" },
+                    set: { model.titleDraft = $0 })
+            )
+            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .lineLimit(1)
+            .frame(maxWidth: UIScale.pt(260))
+            .disabled(model.project == nil)
+            .onSubmit {
+                model.renameProject(model.titleDraft ?? model.project?.title ?? "")
+                model.titleDraft = nil
+            }
+            .help("Rename project")
             Spacer()
             Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
             Button("Markers", systemImage: "waveform") { showingBeats = true }

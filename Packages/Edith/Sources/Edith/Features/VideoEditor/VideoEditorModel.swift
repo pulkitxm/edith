@@ -39,9 +39,21 @@ final class VideoEditorModel {
     var permissionSettingsURL: URL?
     var recentProjects: [VideoProject.Listing] = []
     private(set) var hasUnsavedEdits = false
+    var titleDraft: String?
+    private(set) var pendingViewEditIDs: Set<String> = []
     private var pendingLoads = 0
     var blocksCommandOpen: Bool {
         hasUnsavedEdits || isTranscribing || audioStatus != nil || pendingLoads > 0
+            || titleDraft.map { $0 != (project?.title ?? "") } == true
+            || !pendingViewEditIDs.isEmpty
+    }
+
+    func setPendingViewEdit(_ id: String, hasChanges: Bool) {
+        if hasChanges {
+            pendingViewEditIDs.insert(id)
+        } else {
+            pendingViewEditIDs.remove(id)
+        }
     }
 
     let player = AVPlayer()
