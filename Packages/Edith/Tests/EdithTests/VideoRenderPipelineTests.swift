@@ -67,7 +67,8 @@ import Testing
         #expect(corner.redComponent + corner.blueComponent > 0.5)
     }
 
-    @Test func transitionFadesAtClipBoundaryInPreviewAndExport() async throws {
+    @Test(arguments: ["fade", "blur", "zoom"])
+    func transitionFadesAtClipBoundaryInPreviewAndExport(_ kind: String) async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-transition-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -80,7 +81,7 @@ import Testing
         let firstID = try #require(project.clips.first?.id)
         let secondID = project.duplicate(clipID: firstID)
         let second = try #require(secondID)
-        project.setTransition(before: second, kind: "fade", duration: 0.6)
+        project.setTransition(before: second, kind: kind, duration: 0.6)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         #expect(abs(pipeline.duration - 2) < 0.02)
         let generator = AVAssetImageGenerator(asset: pipeline.composition)

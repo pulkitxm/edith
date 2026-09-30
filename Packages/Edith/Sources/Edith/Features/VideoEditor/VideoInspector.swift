@@ -145,6 +145,8 @@ struct VideoInspector: View {
                 Text("Cut").tag("none")
                 Text("Fade through black").tag("fade")
                 Text("Flash").tag("flash")
+                Text("Blur fade").tag("blur")
+                Text("Zoom fade").tag("zoom")
             }
             if let transition {
                 number("Transition length", value: transition.duration, range: 0.2...2) {

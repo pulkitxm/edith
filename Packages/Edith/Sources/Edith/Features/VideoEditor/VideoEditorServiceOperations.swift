@@ -178,7 +178,7 @@ extension VideoEditorService {
             try require(
                 project.clips.first?.id != selected.id, "A transition needs a preceding clip.")
             try require(
-                ["none", "fade", "flash"].contains(kind) && duration.isFinite
+                (["none"] + VideoTransitionImage.kinds).contains(kind) && duration.isFinite
                     && (0.2...2).contains(duration),
                 "Transition must be none, fade or flash with duration 0.2 to 2 seconds.")
             project.setTransition(before: selected.id, kind: kind, duration: duration)

@@ -458,16 +458,7 @@ struct VideoRenderPipeline {
                 abs(time - $0.time) < $0.halfDuration
             }) {
                 let opacity = 1 - abs(time - edge.time) / edge.halfDuration
-                let color = CIColor(
-                    red: edge.kind == "flash" ? 1 : 0,
-                    green: edge.kind == "flash" ? 1 : 0,
-                    blue: edge.kind == "flash" ? 1 : 0)
-                let overlay = CIImage(color: color).cropped(to: image.extent)
-                image = image.applyingFilter(
-                    "CIDissolveTransition",
-                    parameters: [
-                        kCIInputTargetImageKey: overlay, kCIInputTimeKey: opacity,
-                    ])
+                image = VideoTransitionImage.apply(image, kind: edge.kind, intensity: opacity)
             }
             guard !image.extent.isEmpty, !image.extent.isNull else {
                 request.finish(with: RenderError.exportFailed("The rendered video frame is empty"))

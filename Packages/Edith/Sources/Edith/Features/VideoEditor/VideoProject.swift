@@ -185,7 +185,7 @@ struct VideoProject {
         (root["edithTransitions"] as? [[String: Any]] ?? []).compactMap { item in
             guard let clipID = item["clipId"] as? String,
                 let kind = item["kind"] as? String,
-                ["fade", "flash"].contains(kind),
+                VideoTransitionImage.kinds.contains(kind),
                 let duration = (item["durationSec"] as? NSNumber)?.doubleValue,
                 duration.isFinite, duration > 0
             else { return nil }
@@ -199,7 +199,7 @@ struct VideoProject {
         }
         var entries = root["edithTransitions"] as? [[String: Any]] ?? []
         entries.removeAll { $0["clipId"] as? String == clipID }
-        if ["fade", "flash"].contains(kind), duration.isFinite {
+        if VideoTransitionImage.kinds.contains(kind), duration.isFinite {
             entries.append([
                 "clipId": clipID, "kind": kind,
                 "durationSec": min(2, max(0.2, duration)),
