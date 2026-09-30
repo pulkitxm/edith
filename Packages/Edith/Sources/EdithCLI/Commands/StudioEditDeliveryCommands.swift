@@ -170,6 +170,13 @@ enum StudioEditExecution {
         progress: Bool, json: Bool,
         operation: @escaping @Sendable (@escaping @Sendable (Double) -> Void) async throws -> T
     ) async throws -> T {
+        let diagnostics = try CLINativeDiagnostics.forCommand(json: json)
+        let previousErrorHandle = CLIOut.stderrHandle
+        if let diagnostics { CLIOut.stderrHandle = diagnostics.protocolHandle }
+        defer {
+            CLIOut.stderrHandle = previousErrorHandle
+            withExtendedLifetime(diagnostics) {}
+        }
         let state = StudioEditProgress { percent in
             guard progress else { return }
             if json {

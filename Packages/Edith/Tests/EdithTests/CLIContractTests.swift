@@ -170,6 +170,22 @@ enum JSONContract {
             "ed studio probe", ["studio", "probe", "/nonexistent/studio-probe.pdf", "--json"]),
         JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
         JSONCase("ed studio edit schema", ["studio", "edit", "schema", "--json"]),
+        JSONCase("ed studio library list", ["studio", "library", "list", "--json"]),
+        JSONCase("ed studio library add", ["studio", "library", "add", "--json"]) { world in
+            let source = world.sandbox.appendingPathComponent("synthetic.png")
+            try Data("synthetic media placeholder".utf8).write(to: source)
+            return [source.path]
+        },
+        JSONCase("ed studio library remove", ["studio", "library", "remove", "--json"]) { world in
+            let source = world.sandbox.appendingPathComponent("missing.png")
+            _ = try StudioMediaLibrary.add([source], defaults: world.shared)
+            return [source.path]
+        },
+        JSONCase("ed studio library clear", ["studio", "library", "clear", "--recent", "--json"]),
+        JSONCase("ed studio edit trash", ["studio", "edit", "trash", "--dry-run", "--json"]) {
+            world in
+            [try lifecycleProject(in: world, registered: true).path]
+        },
         JSONCase("ed studio edit library", ["studio", "edit", "library", "--json"]) { world in
             _ = try lifecycleProject(in: world, registered: true)
             return []

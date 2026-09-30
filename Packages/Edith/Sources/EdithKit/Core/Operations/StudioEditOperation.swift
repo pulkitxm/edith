@@ -3,7 +3,7 @@ import EdithCore
 public enum StudioEditOperation: String, CaseIterable, Sendable {
     case schema, create, show, apply, validate, render, frame
     case list, clone
-    case register, unregister, library, open
+    case register, unregister, library, open, trash
     case contactSheet = "contact-sheet"
     case reviewReport = "review-report"
 
@@ -23,7 +23,7 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
     private var effect: UserOperationEffect {
         switch self {
         case .schema, .show, .validate, .list, .library: .read
-        case .register, .unregister: .write
+        case .register, .unregister, .trash: .write
         case .open: .interactive
         case .create, .apply, .render, .frame, .clone, .contactSheet, .reviewReport: .write
         }
@@ -43,6 +43,7 @@ public enum StudioEditOperation: String, CaseIterable, Sendable {
         case .clone: "Copy a native edit with a fresh project identity."
         case .register: "Register a canonical project reference without copying or modifying it."
         case .unregister: "Remove a library reference without deleting its project or media."
+        case .trash: "Move a project document to Trash while preserving its original media."
         case .library: "List native and registered projects, including stale reference errors."
         case .open:
             "Open an exact project revision in the running native editor and await its mounted acknowledgment."
