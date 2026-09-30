@@ -143,12 +143,36 @@ extension VideoEditorService {
         case let .resetCrop(reference):
             let selected = try clip(reference)
             project.resetCrop(clipID: selected.id)
-        case let .text(content, start, end):
+        case let .text(content, start, end, style):
             try range(start, end)
             try require(
                 !content.isEmpty && content.count <= 10000,
                 "Text must contain 1 to 10000 characters.")
             project.addText(content, startMs: start * 1000, endMs: end * 1000)
+            if let style, let id = project.annotations.last?.id {
+                try project.setCaptionStyle(id, style: style)
+            }
+        case let .outputCaption(id, content, anchor, style):
+            try requireCaptionText(content)
+            let duration =
+                VideoRenderPipeline.timingSegments(project: project).last?.outputRange.end ?? .zero
+            try require(
+                CMTimeCompare(anchor.end.time, duration) <= 0,
+                "Caption range must be within the output composition.")
+            if let id {
+                let caption = try requireCaption(id, project: project)
+                var raw = caption.raw
+                raw["content"] = content
+                raw["textContent"] = content
+                raw["captionWords"] = nil
+                try anchor.store(in: &raw)
+                try style?.store(in: &raw)
+                project.editRegion("annotations", id: id) { $0 = raw }
+            } else {
+                try project.addOutputCaption(content, anchor: anchor, style: style)
+            }
+        case let .captionStyle(id, style):
+            try project.setCaptionStyle(id, style: style)
         case let .transition(reference, kind, duration):
             let selected = try clip(reference)
             try require(

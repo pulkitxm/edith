@@ -26,8 +26,6 @@ extension VideoEditPlan {
         let path = string(4096)
         let boolean: [String: Any] = ["type": "boolean"]
         let sourceTime = number(0, nil, "Source seconds, before speed changes and removed ranges.")
-        let rulerTime = number(
-            0, nil, "Source-time timeline seconds, before speed changes and removed ranges.")
         let outputTime = number(
             0, nil, "Rendered output seconds, after video speed changes and cuts.")
         let gain = number(-60, 12, "Decibels.")
@@ -144,7 +142,6 @@ extension VideoEditPlan {
                 "height": cropSize,
             ],
             "resetCrop": ["clipID": reference],
-            "text": ["content": string(10000), "start": rulerTime, "end": rulerTime],
             "transition": [
                 "clipID": reference, "kind": choice(["none", "fade", "flash"]),
                 "duration": number(0.2, 2, "Rendered output seconds."),
@@ -163,6 +160,7 @@ extension VideoEditPlan {
         ]
         let variants =
             operations.keys.sorted().map { object([$0: object(operations[$0]!)]) }
+            + captionEditingSchemas.keys.sorted().map { object([$0: captionEditingSchemas[$0]!]) }
             + audioEditingSchemas.keys.sorted().map { object([$0: audioEditingSchemas[$0]!]) }
         return object([
             "version": ["type": "integer", "const": 1],

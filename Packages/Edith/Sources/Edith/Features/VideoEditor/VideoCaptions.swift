@@ -238,22 +238,24 @@ private struct VideoCaptionRow: View {
                     "annotations", id: caption.id,
                     range: .init(start: max(0, start), end: min(model.duration, end)), edge: "move")
             }
-            Toggle(
-                "Highlight words",
-                isOn: Binding(
-                    get: {
-                        (caption.raw["style"] as? [String: Any])?["highlightWords"] as? Bool
-                            ?? false
-                    },
-                    set: { value in
-                        model.mutate {
-                            $0.editRegion("annotations", id: caption.id) { region in
-                                var style = region["style"] as? [String: Any] ?? [:]
-                                style["highlightWords"] = value; region["style"] = style
+            if caption.captionStyle == nil {
+                Toggle(
+                    "Highlight words",
+                    isOn: Binding(
+                        get: {
+                            (caption.raw["style"] as? [String: Any])?["highlightWords"] as? Bool
+                                ?? false
+                        },
+                        set: { value in
+                            model.mutate {
+                                $0.editRegion("annotations", id: caption.id) { region in
+                                    var style = region["style"] as? [String: Any] ?? [:]
+                                    style["highlightWords"] = value; region["style"] = style
+                                }
                             }
-                        }
-                        model.rebuild()
-                    }))
+                            model.rebuild()
+                        }))
+            }
             HStack {
                 Button("Split") {
                     model.mutate {
@@ -269,7 +271,7 @@ private struct VideoCaptionRow: View {
                 }
             }
             DisclosureGroup("Style & position") {
-                EditorAnnotationRow(annotation: caption, model: model)
+                VideoCaptionStyleEditor(caption: caption, model: model)
             }
         }
         .onAppear(perform: refresh)

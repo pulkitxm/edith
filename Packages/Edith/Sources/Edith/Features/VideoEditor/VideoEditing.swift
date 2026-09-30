@@ -141,6 +141,15 @@ extension VideoEditorModel {
     }
 
     func placeAnnotation(_ id: String, rect: CGRect) {
+        if project?.annotations.first(where: { $0.id == id })?.captionStyle != nil {
+            do {
+                guard var updated = project else { return }
+                try updated.placeStyledCaption(id, rect: rect)
+                mutate { $0 = updated }
+                rebuild()
+            } catch { errorMessage = error.localizedDescription }
+            return
+        }
         mutate {
             $0.editRegion("annotations", id: id) { region in
                 let original = region["size"] as? [String: Double] ?? [:]

@@ -854,7 +854,11 @@ struct VideoRenderPipeline {
                 height: size.height * (proportions["height"] ?? 20) / 100)
             switch annotation.type {
             case "text":
-                if let text = VideoCaptionImage.make(
+                if let style = annotation.captionStyle {
+                    if let text = VideoStyledCaptionImage.make(annotation, style: style, size: size) {
+                        output = text.composited(over: output).cropped(to: bounds)
+                    }
+                } else if let text = VideoCaptionImage.make(
                     annotation,
                     time: annotation.outputCaption == nil ? timeMs : outputTime.seconds * 1000,
                     size: size)

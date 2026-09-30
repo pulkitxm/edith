@@ -13,10 +13,12 @@ extension VideoEditorService {
     }
 
     public enum CaptionChange: Sendable {
-        case add(content: String, start: CaptionBoundary, end: CaptionBoundary, rate: CaptionRate)
+        case add(
+            content: String, start: CaptionBoundary, end: CaptionBoundary, rate: CaptionRate,
+            style: VideoCaptionStyle? = nil)
         case update(
             id: String, content: String?, start: CaptionBoundary?, end: CaptionBoundary?,
-            rate: CaptionRate?)
+            rate: CaptionRate?, style: VideoCaptionStyle? = nil)
         case remove(id: String)
     }
 
@@ -27,6 +29,7 @@ extension VideoEditorService {
         public let anchor: VideoCaptionAnchor?
         public let startSeconds: Double
         public let endSeconds: Double
+        public let style: VideoCaptionStyle?
     }
 
     public struct CaptionReport: Codable, Sendable {
@@ -50,20 +53,21 @@ extension VideoEditorService {
         var project = snapshot.project
         let id: String
         switch change {
-        case let .add(content, start, end, rate):
+        case let .add(content, start, end, rate, style):
             try requireCaptionText(content)
             try require(
                 project.annotations.count < 10000, "At most 10000 annotations are supported.")
             let anchor = try await captionAnchor(
                 start: start, end: end, rate: rate, project: project)
-            id = try project.addOutputCaption(content, anchor: anchor)
-        case let .update(reference, content, start, end, rate):
+            id = try project.addOutputCaption(content, anchor: anchor, style: style)
+        case let .update(reference, content, start, end, rate, style):
             let caption = try requireCaption(reference, project: project)
             try require(
-                content != nil || start != nil || end != nil,
-                "Specify caption text or a timing boundary.")
+                content != nil || start != nil || end != nil || style != nil,
+                "Specify caption text, style or a timing boundary.")
             try require(rate == nil || start != nil || end != nil, "FPS requires a timing update.")
             var raw = caption.raw
+            try style?.store(in: &raw)
             if let content {
                 try requireCaptionText(content)
                 raw["content"] = content
@@ -95,14 +99,14 @@ extension VideoEditorService {
         return report
     }
 
-    private static func requireCaptionText(_ text: String) throws {
+    static func requireCaptionText(_ text: String) throws {
         try require(
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && text.utf8.count <= 10000,
             "Caption text must contain 1 to 10000 UTF-8 bytes.")
     }
 
-    private static func requireCaption(_ id: String, project: VideoProject) throws
+    static func requireCaption(_ id: String, project: VideoProject) throws
         -> VideoProject.Annotation
     {
         try require(!id.isEmpty && id.utf8.count <= 200, "Invalid caption ID.")
@@ -188,7 +192,7 @@ extension VideoEditorService {
                     id: $0.id, content: $0.text,
                     clock: $0.outputCaption == nil ? "source_ruler" : "output",
                     anchor: $0.outputCaption, startSeconds: $0.startMs / 1000,
-                    endSeconds: $0.endMs / 1000)
+                    endSeconds: $0.endMs / 1000, style: $0.captionStyle)
             })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

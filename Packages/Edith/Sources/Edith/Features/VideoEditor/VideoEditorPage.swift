@@ -583,7 +583,9 @@ struct EditorAnnotationRow: View {
                     Image(systemName: "xmark")
                 }
             }
-            if annotation.type == "text" {
+            if annotation.captionStyle != nil {
+                VideoCaptionStyleEditor(caption: annotation, model: model)
+            } else if annotation.type == "text" {
                 let style = annotation.raw["style"] as? [String: Any] ?? [:]
                 Picker(
                     "Color",
@@ -639,7 +641,10 @@ struct EditorAnnotationRow: View {
                 }
             }
             let position = annotation.raw["position"] as? [String: Double] ?? [:]
-            ForEach([("x", "Horizontal"), ("y", "Vertical")], id: \.0) { axis, title in
+            ForEach(
+                annotation.captionStyle == nil ? [("x", "Horizontal"), ("y", "Vertical")] : [],
+                id: \.0
+            ) { axis, title in
                 HStack {
                     Text(title)
                     Slider(

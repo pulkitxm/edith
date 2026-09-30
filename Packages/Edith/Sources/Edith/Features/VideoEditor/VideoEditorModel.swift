@@ -854,6 +854,11 @@ final class VideoEditorModel {
     }
 
     func updateCaption(_ id: String, text: String) {
+        if let style = project?.annotations.first(where: { $0.id == id })?.captionStyle {
+            do { _ = try VideoStyledCaptionImage.layout(text, style: style) } catch {
+                errorMessage = error.localizedDescription; return
+            }
+        }
         mutate { document in
             var annotations = document.root["annotations"] as? [[String: Any]] ?? []
             guard let index = annotations.firstIndex(where: { $0["id"] as? String == id })
