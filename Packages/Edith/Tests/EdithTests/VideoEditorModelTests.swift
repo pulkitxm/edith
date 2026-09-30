@@ -4,6 +4,52 @@ import Testing
 @testable import Edith
 
 @Suite @MainActor struct VideoEditorModelTests {
+    @Test func editBurstsBuildOnlyLatestPreviewAndCancelSupersededWork() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let movie = try await VideoEditorServiceTests.movie(in: directory)
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 64, height: 64)
+        project.addAsset(movie, duration: 0.6, width: 64, height: 64)
+        var started: [String] = []
+        var cancelled: [String] = []
+        let model = VideoEditorModel { snapshot in
+            started.append(snapshot.backgroundColor)
+            do {
+                try await Task.sleep(for: .milliseconds(150))
+                return try await VideoRenderPipeline.make(project: snapshot, previewOnly: true)
+            } catch is CancellationError {
+                cancelled.append(snapshot.backgroundColor)
+                throw CancellationError()
+            }
+        }
+        defer { model.close() }
+        model.project = project
+        for index in 0..<100 {
+            model.project?.backgroundColor = String(format: "#%06x", index)
+            model.rebuild()
+        }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while started.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(started == ["#000063"])
+        model.project?.backgroundColor = "#abcdef"
+        model.rebuild()
+        while model.pipeline == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(model.pipeline != nil)
+        #expect(started == ["#000063", "#abcdef"])
+        #expect(cancelled == ["#000063"])
+        #expect(model.errorMessage == nil)
+        model.rebuild()
+        model.close()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(started.count == 2)
+        #expect(model.player.currentItem == nil)
+    }
+
     @Test func undoAndRedoPersistToProjectLibrary() throws {
         let model = VideoEditorModel()
         defer { model.close() }
