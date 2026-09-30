@@ -93,7 +93,7 @@ import Testing
             bytes[$0] > 200 && bytes[$0 + 1] < 10 && bytes[$0 + 2] < 10
         }
         let green = stride(from: 0, to: bytes.count, by: 4).filter {
-            bytes[$0] < 10 && bytes[$0 + 1] > 100 && bytes[$0 + 2] < 10
+            bytes[$0] == 0 && bytes[$0 + 1] > 100 && bytes[$0 + 2] == 0
         }
         let blue = stride(from: 0, to: bytes.count, by: 4).filter {
             bytes[$0] < 10 && bytes[$0 + 1] < 10 && bytes[$0 + 2] > 80
@@ -106,7 +106,7 @@ import Testing
         let redY = try #require(red.map { $0 / 4 / 400 }.max())
         let blueY = try #require(blue.map { $0 / 4 / 400 }.max())
         #expect(abs(blueX - redX - 70) <= 1)
-        #expect(abs(redY - blueY - 60) <= 1)
+        #expect(abs(blueY - redY - 60) <= 1)
     }
 
     @Test func rasterHasScaledTextAndExactGradientExtent() throws {
@@ -122,14 +122,14 @@ import Testing
                 VideoStyledCaptionImage.make(caption, style: Self.styled, size: size))
             let pixels = Self.pixels(image)
             func alpha(_ y: Double) -> Int {
-                Int(pixels[(Int((3840 - y) * scale) * Int(size.width) + 1) * 4 + 3])
+                Int(pixels[(Int(y * scale) * Int(size.width) + 1) * 4 + 3])
             }
             #expect(alpha(2000) == 0)
             #expect(abs(alpha(2850) - 50) <= 1)
             #expect(abs(alpha(3700) - 100) <= 1)
             let bright = stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0] > 200 }
             #expect(bright.count > Int(2000 * scale * scale))
-            let top = bright.map { 3840 - Double($0 / 4 / Int(size.width)) / scale }.min()!
+            let top = bright.map { Double($0 / 4 / Int(size.width)) / scale }.min()!
             #expect((2780...2810).contains(top))
         }
     }
@@ -163,17 +163,29 @@ import Testing
     }
 
     @Test func nativePreviewAndExportRenderTheSameStyledOutputFrames() async throws {
-        let (directory, _, initial) = try await VideoOutputCaptionTests.fixture()
+        let (directory, url, initial) = try await VideoOutputCaptionTests.fixture()
         defer { try? FileManager.default.removeItem(at: directory) }
         var project = initial
         var settings = project.videoSettings
         settings.width = 2160
         settings.height = 3840
         project.videoSettings = settings
+        var framing = VideoVisualEffects()
+        framing.framing = .fill
+        for clip in project.clips { try project.setVisualEffects(framing, clipID: clip.id) }
         let rate = try VideoCaptionFrameRate(numerator: 60)
         let anchor = try VideoCaptionAnchor(
             start: .init(frame: 12, frameRate: rate), end: .init(frame: 24, frameRate: rate))
         try project.addOutputCaption("SYNTHETIC\nCAPTION", anchor: anchor, style: Self.styled)
+        try project.save(to: url)
+        let frameFile = directory.appendingPathComponent("full-resolution.png")
+        let frameReport = try await VideoEditorService.frame(url, frameIndex: 12, to: frameFile)
+        #expect(frameReport.frame == 12)
+        let fullFrame = try #require(CIImage(contentsOf: frameFile))
+        #expect(fullFrame.extent.size == CGSize(width: 2160, height: 3840))
+        if let path = ProcessInfo.processInfo.environment["EDITH_STYLED_CAPTION_EVIDENCE"] {
+            try Data(contentsOf: frameFile).write(to: URL(fileURLWithPath: path))
+        }
         let preview = try await VideoRenderPipeline.make(
             project: project, maxDimension: 960, previewOnly: true)
         let delivery = try await VideoRenderPipeline.make(project: project, maxDimension: 960)
@@ -204,13 +216,6 @@ import Testing
                         CGRect(
                             x: x.min()!, y: y.min()!, width: x.max()! - x.min()!,
                             height: y.max()! - y.min()!))
-                }
-                if frame == 12, generator === native,
-                    let path = ProcessInfo.processInfo.environment["EDITH_STYLED_CAPTION_EVIDENCE"]
-                {
-                    try CIContext().writePNGRepresentation(
-                        of: image, to: URL(fileURLWithPath: path),
-                        format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
                 }
             }
             if bounds.count == 2 {

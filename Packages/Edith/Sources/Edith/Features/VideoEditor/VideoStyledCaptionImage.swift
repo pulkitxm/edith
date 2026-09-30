@@ -110,8 +110,7 @@ enum VideoStyledCaptionImage {
             context.saveGState()
             context.setAlpha(shadow.color.alpha)
             context.beginTransparencyLayer(auxiliaryInfo: nil)
-            let color = CGColor(
-                red: shadow.color.red, green: shadow.color.green, blue: shadow.color.blue, alpha: 1)
+            let color = shadow.color.cgColor.copy(alpha: 1)!
             draw(lines, context: context, stroke: shadow.strokeWidth, color: color)
             draw(lines, context: context, stroke: 0, color: color)
             context.endTransparencyLayer()

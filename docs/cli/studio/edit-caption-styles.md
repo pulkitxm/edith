@@ -46,7 +46,7 @@ them to its output canvas. There are no implicit 1280-pixel font-size units.
   and also determines which horizontal edge or center of that box `x` anchors.
 - `y` increases downwards from the top of the canvas. `anchor` is `top`, `center`
   or `bottom` of the typographic block, including the font's ascent and descent.
-- RGB channels and alpha are fractions in `[0, 1]`. Thus black alpha 70/255 is
+- sRGB channels and alpha are fractions in `[0, 1]`. Thus black alpha 70/255 is
   `0.27450980392156865`, and black alpha 100/255 is `0.39215686274509803`.
 - `outline.width` is the outward stroke width in pixels.
 - Shadow `x` and `y` are offsets, with positive Y downwards. `blur` and

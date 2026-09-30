@@ -16,7 +16,11 @@ public struct VideoCaptionStyle: Codable, Equatable, Sendable {
             self.alpha = alpha
         }
 
-        var cgColor: CGColor { CGColor(red: red, green: green, blue: blue, alpha: alpha) }
+        var cgColor: CGColor {
+            CGColor(
+                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                components: [red, green, blue, alpha].map { CGFloat($0) })!
+        }
 
         func validate() throws {
             try VideoCaptionStyle.require(
