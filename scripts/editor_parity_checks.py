@@ -45,9 +45,13 @@ def check_project(project, manifest, fixture, dimensions, audio_asset_count=1):
             "Soundtrack must start at zero on the output clock")
     require(abs(track["endMs"] - FRAME_COUNT * 1000 / FRAME_RATE) < 1e-7 and not track.get("muted", False),
             "Soundtrack must cover the complete project")
+    output_range = track["outputRange"]
+    require(Fraction(output_range["startValue"], output_range["startScale"]) == 0
+            and Fraction(output_range["durationValue"], output_range["durationScale"]) == Fraction(FRAME_COUNT, FRAME_RATE),
+            "Soundtrack rational endpoint must equal exactly 5588000/60000")
     require(pathlib.Path(assets[track["assetId"]]["originalPath"]).resolve(strict=True) == fixture_path(fixture, manifest["music"]["path"]),
             "Soundtrack must reference its original synthetic waveform")
-    return {**visual, "continuousOutputClockTracks": 1}
+    return {**visual, "continuousOutputClockTracks": 1, "exactSoundtrackEndpoint": {"value": 5588000, "timescale": 60000}}
 
 
 def check_captions(report, manifest, expected_styles):

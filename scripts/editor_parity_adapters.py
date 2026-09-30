@@ -5,7 +5,7 @@ import subprocess
 import uuid
 
 from editor_acceptance_contracts import require
-from editor_parity_checks import check_aac_passthrough, check_mastered_audio, check_project
+from editor_parity_checks import check_aac_passthrough, check_mastered_audio, check_project, measure_loudness
 from editor_parity_fixtures import checksum, ffmpeg, fixture_path, write_json
 
 
@@ -37,18 +37,12 @@ def caption_operations(manifest, schemas):
 
 def independent_master(original, workspace, manifest):
     count = manifest["audioSamples"]
-    preparation = f"atrim=end_sample={count},afade=t=out:ss={count - 12000}:ns=12000"
-    target = "loudnorm=I=-16:TP=-1.5:LRA=11"
-    first = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(original), "-vn", "-af",
-                            preparation + "," + target + ":print_format=json", "-f", "null", "-"],
-                           capture_output=True, text=True, timeout=1800)
-    require(first.returncode == 0, "Independent first-pass loudness analysis failed: " + first.stderr)
-    measured, _ = json.JSONDecoder().raw_decode(first.stderr[first.stderr.rfind("{\n"):])
-    mapping = {"measured_I": "input_i", "measured_TP": "input_tp", "measured_LRA": "input_lra",
-               "measured_thresh": "input_thresh", "offset": "target_offset"}
-    normalization = target + "".join(f":{name}={measured[value]}" for name, value in mapping.items()) + ":linear=true"
+    measured = measure_loudness(original)
+    gain = -16 - measured["integratedLUFS"]
+    require(measured["truePeakDBTP"] + gain < -1.5 and measured["loudnessRangeLU"] <= 11,
+            "Synthetic waveform reference requires a linear gain without peak limiting or dynamic compression")
     master, codec = workspace / "reference-master.wav", workspace / "reference-master.m4a"
-    ffmpeg("-i", original, "-af", preparation + "," + normalization + f",aresample=48000,atrim=end_sample={count}",
+    ffmpeg("-i", original, "-af", f"atrim=end_sample={count},volume={gain}dB,afade=t=out:ss={count - 12000}:ns=12000",
            "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", master)
     ffmpeg("-i", master, "-c:a", "aac", "-b:a", "320k", codec)
     return master, codec

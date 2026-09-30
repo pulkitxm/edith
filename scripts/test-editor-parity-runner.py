@@ -7,9 +7,10 @@ import sys
 import uuid
 
 from editor_acceptance_contracts import require
-from editor_parity_adapters import caption_operations, lifecycle
-from editor_parity_checks import check_project, protected_snapshot
-from editor_parity_cli import base_operations, discover, exercise_transactions, invoke
+from editor_parity_adapters import aac_passthrough, caption_operations, lifecycle, master_project
+from editor_parity_checks import check_captions, check_project, protected_snapshot
+from editor_parity_cli import REQUIRED_GROUPS, base_operations, discover, exercise_transactions, invoke, publish_result
+from editor_parity_finish import caption_review, delivery
 from editor_parity_fixtures import checksum, verify, write_json
 from editor_parity_motion import check_motion_plan, visual_operations
 from editor_parity_review import stress_grading, visual_review
@@ -36,7 +37,8 @@ def main():
     if args.mode == "full":
         require(args.quick_result and args.runtime_env, "Full acceptance requires --quick-result and the matching app's --runtime-env")
         quick = json.loads(args.quick_result.read_text())
-        require(quick["mode"] == "quick" and quick["groups"]["protectedSources"]["binarySHA256"] == binary
+        require(quick["mode"] == "quick" and quick["syntheticAcceptance"] is True and set(quick["groups"]) == REQUIRED_GROUPS
+                and quick["groups"]["protectedSources"]["binarySHA256"] == binary
                 and quick["groups"]["protectedSources"]["fixtureManifestSHA256"] == protected["parity-manifest.json"],
                 "Full acceptance requires a completed quick run of this exact binary and fixture")
     workspace.mkdir(parents=True)
@@ -60,6 +62,9 @@ def main():
     effects = schemas["visualEffects"]["properties"]["visualEffects"]["properties"]["effects"]["properties"]
     require("ffmpeg709" in effects["gradingMode"]["enum"], "grading_mode_required: integrated FFmpeg-compatible grading is unavailable")
     captions, styles = ([], {}) if args.visual_only else caption_operations(manifest, schemas)
+    if not args.visual_only:
+        health = edit("audio", "health", "--json")
+        require(health["available"] is True, "audio_mastering_required: integrated FFmpeg loudnorm is unavailable")
     project = workspace / "visual.openscreen"
     groups = {"cliTransactions": exercise_transactions(ed, project, {"version": 1, "operations": operations}, fixture, workspace, environment)}
     shown = edit("show", project, "--json")
@@ -71,6 +76,8 @@ def main():
     if args.visual_only:
         groups["nativeLifecycle"] = lifecycle(edit, ed, project, environment, False)
         require(protected_snapshot(fixture, manifest) == protected and checksum(ed) == binary, "Protected originals or binary changed during preflight")
+        groups["protectedSources"] = {"binarySHA256": binary, "fixtureManifestSHA256": protected["parity-manifest.json"],
+                                      "originalsAndBaselinesUnchanged": True, "protectedFiles": len(protected)}
         result = {"productAcceptance": False, "fullDeliveryAcceptance": False, "groups": groups,
                   "pendingGroups": ["styledCaptions", "masteredAudio", "aacPacketPassthrough", "matchingNativeAppOpen", "fullDelivery"]}
         write_json(workspace / "visual-preflight.json", result)
@@ -78,7 +85,23 @@ def main():
                           "nonzeroTrimVideos": 5, "gradingPhotos": 18, "headlessRegistration": True,
                           "pendingGroups": result["pendingGroups"]}, indent=2))
         return
-    raise AssertionError("full_runner_pending: caption, mastering, packet-copy and delivery adapters are awaiting integrated verification")
+    styled = workspace / "styled.openscreen"
+    edit("apply", project, "--plan", "-", "--output", styled, "--json", stdin=json.dumps({"version": 1, "operations": captions}))
+    groups["captions"] = caption_review(edit, project, styled, workspace, manifest, styles, dimensions)
+    mastered, groups["masteredAudio"], groups["editableProject"], reference, codec = master_project(
+        edit, styled, workspace, manifest, fixture, dimensions)
+    check_captions(edit("captions", "list", mastered, "--json"), manifest, styles)
+    check_motion_plan(edit("show", mastered, "--json"), manifest)
+    groups["aacPacketPassthrough"] = aac_passthrough(edit, workspace, fixture, manifest)
+    groups["nativeLifecycle"] = lifecycle(edit, ed, mastered, environment, args.mode == "full")
+    output = workspace / "delivery.mp4"
+    groups["delivery"] = delivery(edit, mastered, project, output, workspace, fixture, manifest, dimensions, reference, codec)
+    require(protected_snapshot(fixture, manifest) == protected and checksum(ed) == binary, "Protected originals or CLI binary changed during acceptance")
+    groups["protectedSources"] = {"binarySHA256": binary, "fixtureManifestSHA256": protected["parity-manifest.json"],
+                                  "originalsAndBaselinesUnchanged": True, "protectedFiles": len(protected)}
+    result = publish_result(workspace, groups, args.mode)
+    print(json.dumps({"mode": args.mode, "fullDeliveryAcceptance": result["fullDeliveryAcceptance"],
+                      "completedGroups": sorted(groups), "delivery": str(output)}, indent=2))
 
 
 if __name__ == "__main__":

@@ -61,3 +61,46 @@ library, and unregister commands. It records `visual-preflight.json` with
 `productAcceptance: false` and explicit pending groups. Registration paths are
 compared after filesystem resolution because macOS may report `/var` for a
 project Python resolves through `/private/var`.
+
+## Complete quick and full runs
+
+```sh
+python3 scripts/test-editor-parity-runner.py \
+  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v3 \
+  --workspace /absolute/new/quick --mode quick
+python3 scripts/test-editor-parity-runner.py \
+  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v3 \
+  --workspace /absolute/new/full --mode full \
+  --quick-result /absolute/quick/quick-result.json \
+  --runtime-env /absolute/quick/runtime-environment.json
+```
+
+Before the full command, the coordinator must launch the matching development
+app once with the variables in `runtime-environment.json`. The runner never
+launches an app. Quick acceptance performs headless lifecycle checks and records
+the actual-open step as pending. Full acceptance requires a development bundle,
+a genuine opened receipt matching the request's identity and digest, and no
+remaining open step. A build change invalidates the earlier quick result.
+
+Caption review compares all 47 texts against independently rendered installed
+Arial Bold Italic glyphs at the actual output scale, with no fitted rescaling.
+The soundtrack adapter verifies native provenance, exact rational timing,
+immutable original references, independently measured loudness, every stereo
+sample window, and the native PCM mix. Its reference uses measured linear gain
+and a sample-exact fade, independently of native two-pass mastering. This is
+valid for the synthetic soundtrack because its peak and range need no limiting
+or dynamic compression; the native provenance must still report two passes.
+AAC copy is a separate small-canvas project with the original compressed
+soundtrack. It compares stream durations, delay metadata, every compressed
+payload, and exact rational packet times.
+
+Only after these checks does the runner render the main delivery. It decodes
+all 5,588 frame timestamps, 30 video picture signatures, first/middle/last photo
+samples, all 47 caption pictures, and the final stereo waveform. Full-resolution
+caption samples stream through one decoder pass rather than accumulating all
+47 uncompressed 4K frames in memory. The full export is attempted once per run.
+Failures leave diagnostic artifacts and never publish a full result.
+
+The complete adapters require integrated native verification. Passing the
+visual preflight or independent adapter controls alone does not establish
+caption, native mastering, compressed-copy, actual-open, or final-export parity.
