@@ -12,6 +12,10 @@
   "formatter": { "indentStyle": "space" },
   "overrides": [
     {
+      "includes": ["scripts/fixtures/background-blur-reference.json"],
+      "formatter": { "enabled": false }
+    },
+    {
       "includes": ["apps/site/styles.css"],
       "linter": {
         "rules": {
