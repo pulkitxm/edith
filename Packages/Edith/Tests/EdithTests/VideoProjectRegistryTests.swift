@@ -102,4 +102,51 @@ import Testing
         #expect(try registry.library().first?.projectID == targetEntry.projectID)
         #expect(try registry.library().first?.errorCode == nil)
     }
+
+    @Test func unregisterKeepsStoredPathsDistinctAfterParentDirectoryBecomesSymlink() throws {
+        let root = VideoProjectRegistry.canonical(
+            FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let firstDirectory = root.appendingPathComponent("A")
+        let secondDirectory = root.appendingPathComponent("B")
+        let preservedDirectory = root.appendingPathComponent("original-A")
+        try FileManager.default.createDirectory(
+            at: firstDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: secondDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = firstDirectory.appendingPathComponent("edit.openscreen")
+        let second = secondDirectory.appendingPathComponent("edit.openscreen")
+        _ = try VideoEditorService.create(at: first, title: "First synthetic project")
+        _ = try VideoEditorService.create(at: second, title: "Second synthetic project")
+        let firstBytes = try Data(contentsOf: first)
+        let secondBytes = try Data(contentsOf: second)
+        let registry = VideoProjectRegistry(libraryURL: root.appendingPathComponent("library"))
+        let firstEntry = try registry.register(first)
+        let secondEntry = try registry.register(second)
+        let retained = try #require(registry.records().first)
+        let stale = retained.projectID == firstEntry.projectID ? secondEntry : firstEntry
+        let source = URL(fileURLWithPath: stale.path)
+        let target = URL(fileURLWithPath: retained.path)
+        let sourceDirectory = source.deletingLastPathComponent()
+        let targetDirectory = target.deletingLastPathComponent()
+        let sourceBytes = stale.projectID == firstEntry.projectID ? firstBytes : secondBytes
+        let targetBytes = retained.projectID == firstEntry.projectID ? firstBytes : secondBytes
+        try FileManager.default.moveItem(at: sourceDirectory, to: preservedDirectory)
+        try FileManager.default.createSymbolicLink(
+            at: sourceDirectory, withDestinationURL: targetDirectory)
+        let removed = try registry.unregister(source)
+        #expect(removed.path == stale.path)
+        #expect(removed.projectID == stale.projectID)
+        let remaining = try registry.records()
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.path == retained.path)
+        #expect(remaining.first?.projectID == retained.projectID)
+        #expect(
+            try Data(contentsOf: preservedDirectory.appendingPathComponent("edit.openscreen"))
+                == sourceBytes)
+        #expect(try Data(contentsOf: target) == targetBytes)
+        #expect(
+            try FileManager.default.destinationOfSymbolicLink(atPath: sourceDirectory.path)
+                == targetDirectory.path)
+    }
 }

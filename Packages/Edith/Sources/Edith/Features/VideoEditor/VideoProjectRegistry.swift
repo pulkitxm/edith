@@ -119,12 +119,7 @@ struct VideoProjectRegistry {
     }
 
     private func storedPath(_ url: URL) -> String {
-        let parent = Self.canonical(url.deletingLastPathComponent())
-        let path = parent.appendingPathComponent(url.lastPathComponent).path
-            .precomposedStringWithCanonicalMapping
-        let sensitive = try? parent.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
-            .volumeSupportsCaseSensitiveNames
-        return sensitive == false ? path.lowercased() : path
+        url.standardizedFileURL.path
     }
 
     func checkIdentity(_ project: VideoProject, at url: URL) throws {
