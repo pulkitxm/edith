@@ -408,7 +408,7 @@ struct VideoRenderPipeline {
             var image = render(
                 sourceImage, clip: segment.clip,
                 effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
-                size: size,
+                size: size, nativeCanvas: nativeCanvas,
                 zooms: zooms, annotations: annotations, outputTime: request.compositionTime,
                 backdrop: backdrop,
                 padding: padding, presentation: presentation,
@@ -646,7 +646,7 @@ struct VideoRenderPipeline {
 
     private static func render(
         _ input: CIImage, clip: VideoProject.Clip, effects: VideoVisualEffects, at timeMs: Double,
-        size: CGSize,
+        size: CGSize, nativeCanvas: CGSize,
         zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation], outputTime: CMTime,
         backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
@@ -669,11 +669,16 @@ struct VideoRenderPipeline {
             by: CGAffineTransform(
                 translationX: -source.minX, y: -source.minY)
         ).transformed(by: transform)
-        var output = image.composited(over: backdrop).cropped(to: bounds)
+        let clipBackdrop =
+            effects.background.map {
+                $0.render(original: effects.graded(input), canvas: size, nativeCanvas: nativeCanvas)
+                    .composited(over: backdrop).cropped(to: bounds)
+            } ?? backdrop
+        var output = image.composited(over: clipBackdrop).cropped(to: bounds)
         if presentation.cornerRadius > 0 || presentation.shadow > 0 {
             output = VideoPresentation.framed(
                 image, rect: image.extent.intersection(bounds),
-                radius: presentation.cornerRadius, shadow: presentation.shadow, over: backdrop)
+                radius: presentation.cornerRadius, shadow: presentation.shadow, over: clipBackdrop)
         }
         if presentation.cursorVisible, let cursor = renderedCursor, cursor.visible,
             let cursorImage
