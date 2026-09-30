@@ -2,7 +2,8 @@
 
 [Back to `ed studio`](./README.md)
 
-Edit native `.openscreen` video projects and render them without opening a window.
+Edit and render native `.openscreen` video projects, manage library references,
+and explicitly open an edit in the running native window.
 Media stays local. The commands use the same project format and render pipeline as
 the native timeline editor. Running `ed studio edit` prints the edit-plan schema.
 
@@ -14,6 +15,10 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 | `ed studio edit create <project> [--title <title>]` | Creates an empty project. |
 | `ed studio edit show <project> [--summary]` | Prints project JSON, or compact IDs, settings and its SHA-256 revision. |
 | `ed studio edit list <directory>` | Lists native projects with their identities, titles and clip counts. |
+| `ed studio edit register <project> [--json]` | Registers an external reference without copying or changing the project. |
+| `ed studio edit unregister <project> [--json]` | Removes a registered reference while preserving the project and media. |
+| `ed studio edit library [--json]` | Lists the app library and registered references, including stale-entry errors. |
+| `ed studio edit open <project> [--timeout <seconds>] [--json]` | Waits for the exact requested revision to be ready and mounted in the native editor. |
 | `ed studio edit clone <project> --output <copy.openscreen> --title <title>` | Copies an edit with a new project identity while preserving its original-media references. |
 | `ed studio edit apply <project> --plan <file\|-> [--output <project>] [--dry-run]` | Validates and atomically applies every operation in a plan; `-` reads stdin. |
 | `ed studio edit validate <project>` | Checks structure, source availability and native composition. |
@@ -23,11 +28,96 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 | `ed studio edit contact-sheet <project> --time <seconds> --output <file.png>` | Creates a labeled sheet of composited output frames. Repeat `--time` for each frame. |
 
 All commands accept `--json` for structured runtime errors. Create, list, clone, apply,
-validate, render, render-audio, frame and contact-sheet also use it for structured results.
+validate, render, render-audio, frame, contact-sheet, register, unregister, library
+and open also use it for structured results.
 Schema and show always print JSON.
-Write commands require `--overwrite` to replace an existing destination. Apply without
+Project and render outputs require `--overwrite` to replace an existing destination. Apply without
 `--output` replaces its input, so it requires `--overwrite` except during dry-run.
 Create destination directories before running a command.
+
+## Project library and native editor
+
+### Register a project reference
+
+`ed studio edit register <project> [--json]` validates the project's structure and
+stores a reference to its canonical local `.openscreen` path. It preserves the
+original project's bytes, identity and media paths; it does not clone, relocate,
+rewrite or package media. Media availability is checked when opening or validating.
+Registering the same path or a symlink alias again is idempotent. The same project
+identity registered at a different path returns `project_id_conflict`.
+
+The reference index lives in the app's scoped support directory under
+`video-projects/.registry`. Development builds use their own data root and IPC
+namespace. Registration also refreshes the running Studio library.
+
+### Inspect the library
+
+`ed studio edit library [--json]` takes no directory argument. It lists native
+library files and external registered references, deduplicating canonical paths.
+The production app also includes its legacy OpenScreen library; development and
+isolated runs do not. Use `ed studio edit list <directory>` to scan a specific
+directory instead.
+
+JSON results are an array with `path`, `projectID`, `title` and `registered` for
+each entry. Stale entries remain visible with `errorCode` and `error`: missing or
+unreadable projects report `project_unavailable`, while a path containing a
+different project identity reports `project_identity_changed`.
+
+### Remove a reference
+
+`ed studio edit unregister <project> [--json]` removes only the stored reference.
+It never deletes or changes the project, its media, or a replacement symlink's
+target. A stored path takes precedence over its current symlink target, so a stale
+reference can be removed even after that path is replaced. A canonical alias also
+works when it identifies the stored reference. An unknown path returns
+`not_registered`.
+
+The result contains `path`, `projectID`, `title` and `registered: false`. A file
+physically inside the native library remains discoverable by the library scan
+after its explicit reference is removed.
+
+### Open an exact revision in the native editor
+
+`ed studio edit open <project> [--timeout <seconds>] [--json]` requires this CLI's
+matching Edith app to already be running. It does not launch the app or register
+the project. Use the development app's bundled `ed` for a development slot.
+Registration, library inspection and removal work without an open window.
+
+`--timeout` defaults to **30 seconds** and accepts finite values from **1 through
+120 seconds**, inclusive. Invalid values return `invalid_timeout`; a matching app
+that is not running returns `app_not_running`.
+
+The CLI snapshots the canonical path, project ID and byte-level SHA-256 revision,
+then sends a unique `requestID`. Success requires a reply matching all four values
+and `state: "opened"`. The native handler validates required media, prepares the
+composition, waits for a nonempty project's player to be ready, and acknowledges
+only after that exact prepared editor model mounts in Studio. Empty projects can
+open without a player item. Each invocation gets a new request ID, including
+repeated opens of the same project.
+
+Successful JSON contains `version: 1`, `ok: true`, `state: "opened"`, `requestID`,
+`path`, `projectID` and `revision`. Unrelated, stale or merely queued replies never
+count as success. If no matching acknowledgment arrives before the deadline, the
+command returns `open_timeout`. Runtime errors go to stderr as JSON with `--json`,
+and the command exits nonzero.
+
+An in-progress open, active editing task, unsaved changes, or an unsubmitted title
+draft returns `editor_busy`. Reverting a title draft to its unchanged title does
+not block opening. A changed source revision returns `project_changed`; unavailable
+required media returns `missing_media` without a file-picker dialog. Legacy files
+requiring conversion return `migration_required`.
+
+```sh
+ed studio edit register demo.openscreen --json
+ed studio edit library --json
+ed studio edit open demo.openscreen --timeout 60 --json
+ed studio edit unregister demo.openscreen --json
+```
+
+MCP exposes `edith_studio_edit_register`, `edith_studio_edit_unregister`,
+`edith_studio_edit_library` and `edith_studio_edit_open` with the same positional
+arguments and flags in `arguments`. Opening has an interactive effect; registration
+and removal write library metadata, and library inspection is read-only.
 
 ## Example
 
