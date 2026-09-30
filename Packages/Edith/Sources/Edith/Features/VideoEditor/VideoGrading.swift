@@ -1,6 +1,14 @@
 import CoreImage
+import CoreVideo
 
 enum VideoGrading {
+    private static let video709 = CVImageBufferCreateColorSpaceFromAttachments(
+        [
+            kCVImageBufferColorPrimariesKey: kCVImageBufferColorPrimaries_ITU_R_709_2,
+            kCVImageBufferTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_709_2,
+            kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+        ] as CFDictionary)!.takeRetainedValue()
+
     private static let eq709 = CIColorKernel(
         source: """
             kernel vec4 eq709(__sample pixel, vec4 coefficients) {
@@ -34,14 +42,26 @@ enum VideoGrading {
             ? 0
             : Int(100 * brightness + 100) * 511 / 200 - 128 - lumaScale / 32
         let chromaOffset = saturation == 1 ? 0 : 127 - chromaScale / 32
-        let encoded = image.applyingFilter("CILinearToSRGBToneCurve")
-        return eq709?.apply(
-            extent: image.extent,
-            arguments: [
-                encoded,
-                CIVector(
-                    x: CGFloat(lumaScale), y: CGFloat(lumaOffset),
-                    z: CGFloat(chromaScale), w: CGFloat(chromaOffset)),
-            ])?.applyingFilter("CISRGBToneCurveToLinear")
+        let encoded: CIImage
+        if effects.gradingDomain == .srgb {
+            encoded = image.applyingFilter("CILinearToSRGBToneCurve")
+        } else {
+            guard let matched = image.matchedFromWorkingSpace(to: video709) else { return nil }
+            encoded = matched
+        }
+        guard
+            let graded = eq709?.apply(
+                extent: image.extent,
+                arguments: [
+                    encoded,
+                    CIVector(
+                        x: CGFloat(lumaScale), y: CGFloat(lumaOffset),
+                        z: CGFloat(chromaScale), w: CGFloat(chromaOffset)),
+                ])
+        else { return nil }
+        if effects.gradingDomain == .bt709 {
+            return graded.matchedToWorkingSpace(from: video709)
+        }
+        return graded.applyingFilter("CISRGBToneCurveToLinear")
     }
 }

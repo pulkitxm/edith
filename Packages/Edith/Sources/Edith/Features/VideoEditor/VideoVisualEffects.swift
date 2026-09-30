@@ -5,6 +5,9 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
     public enum Framing: String, Codable, CaseIterable, Sendable { case fit, fill, fullWidth }
     public enum Interpolation: String, Codable, CaseIterable, Sendable { case linear, smooth }
     public enum GradingMode: String, Codable, CaseIterable, Sendable { case native, ffmpeg709 }
+    public enum GradingDomain: String, Codable, CaseIterable, Sendable {
+        case srgb, bt709, bt709ToSRGB
+    }
 
     public struct Keyframe: Codable, Equatable, Sendable {
         public var time: Double
@@ -60,12 +63,13 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
     public var keyframes: [Keyframe]
     public var background: VideoBackground?
     public var gradingMode: GradingMode
+    public var gradingDomain: GradingDomain
 
     public init(
         framing: Framing = .fit, focalX: Double = 0.5, focalY: Double = 0.5,
         exposure: Double = 0, brightness: Double = 0, contrast: Double = 1,
         saturation: Double = 1, keyframes: [Keyframe] = [], background: VideoBackground? = nil,
-        gradingMode: GradingMode = .native
+        gradingMode: GradingMode = .native, gradingDomain: GradingDomain = .srgb
     ) {
         self.framing = framing
         self.focalX = focalX
@@ -77,11 +81,12 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
         self.keyframes = keyframes
         self.background = background
         self.gradingMode = gradingMode
+        self.gradingDomain = gradingDomain
     }
 
     private enum CodingKeys: String, CodingKey {
         case framing, focalX, focalY, exposure, brightness, contrast, saturation, keyframes,
-            background, gradingMode
+            background, gradingMode, gradingDomain
     }
 
     public init(from decoder: Decoder) throws {
@@ -97,7 +102,9 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
             keyframes: try values.decodeIfPresent([Keyframe].self, forKey: .keyframes) ?? [],
             background: try values.decodeIfPresent(VideoBackground.self, forKey: .background),
             gradingMode: try values.decodeIfPresent(GradingMode.self, forKey: .gradingMode)
-                ?? .native)
+                ?? .native,
+            gradingDomain: try values.decodeIfPresent(GradingDomain.self, forKey: .gradingDomain)
+                ?? .srgb)
     }
 
     var isValid: Bool {
@@ -108,6 +115,7 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
             && keyframes.count <= 10000 && keyframes.allSatisfy(\.isValid)
             && (background?.isValid ?? true)
             && (gradingMode == .native || saturation <= 3)
+            && (gradingMode == .ffmpeg709 || gradingDomain == .srgb)
             && zip(keyframes, keyframes.dropFirst()).allSatisfy { $0.time < $1.time }
     }
 

@@ -84,6 +84,10 @@ extension VideoEditPlan {
         ]) { _, new in new }
         let effects = object([
             "gradingMode": choice(["native", "ffmpeg709"]),
+            "gradingDomain": choice(["srgb", "bt709", "bt709ToSRGB"]).merging([
+                "description":
+                    "Defaults to srgb. srgb grades sRGB photo codes; bt709 grades BT.709 video codes and retains their video transfer; bt709ToSRGB grades BT.709 video codes and interprets the resulting codes as sRGB for mixed code-value reference pipelines. Non-srgb domains require gradingMode ffmpeg709."
+            ]) { _, new in new },
             "framing": choice(["fit", "fill", "fullWidth"]), "focalX": fraction, "focalY": fraction,
             "exposure": number(-10, 10, "Exposure stops."),
             "brightness": number(-1, 1, "Brightness adjustment in the selected grading mode."),
@@ -104,10 +108,20 @@ extension VideoEditPlan {
                         "properties": ["gradingMode": ["const": "ffmpeg709"]],
                     ],
                     "then": ["properties": ["saturation": ["maximum": 3]]],
-                ]
+                ],
+                [
+                    "if": [
+                        "required": ["gradingDomain"],
+                        "properties": ["gradingDomain": ["enum": ["bt709", "bt709ToSRGB"]]],
+                    ],
+                    "then": [
+                        "required": ["gradingMode"],
+                        "properties": ["gradingMode": ["const": "ffmpeg709"]],
+                    ],
+                ],
             ],
             "description":
-                "Replace visual settings; omitted fields reset to fit, centered, neutral native grade, no keyframes and no background. ffmpeg709 grades the composed photo layers before overlays using sRGB-encoded RGB8 and limited-range BT.709 YUV444 EQ; saturation is at most 3. fullWidth scales the selected source crop to canvas width before padding and animation; taller content may extend beyond canvas. Use fit to retain an entire tall image.",
+                "Replace visual settings; omitted fields reset to fit, centered, neutral native grade, srgb grading domain, no keyframes and no background. ffmpeg709 grades the composed image before overlays using RGB8 in the selected gradingDomain and limited-range BT.709 YUV444 EQ; saturation is at most 3. fullWidth scales the selected source crop to canvas width before padding and animation; taller content may extend beyond canvas. Use fit to retain an entire tall image.",
         ]) { _, new in new }
         let operations: [String: [String: Any]] = [
             "addMedia": ["path": path, "name": alias],
