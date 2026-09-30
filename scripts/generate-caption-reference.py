@@ -18,6 +18,7 @@ for size in [104, 112]:
     for name, text in [("one", "fj"), ("two", "SYNTHETIC\nCAPTION"), ("pairs", "AVATAR fj"),
                        ("long", "firm little rivers drift far"),
                        ("mixed", "minimum rhythm from afar"),
+                       ("prefix", "little firm rivers drift far from terrain"),
                        ("long-two", "fifty little letters form\ntrim rivers from firm terrain")]:
         image = Image.new("L", (2160, 3840))
         draw = ImageDraw.Draw(image)

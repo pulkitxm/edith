@@ -48,6 +48,34 @@ import Testing
         #expect(throws: (any Error).self) { try style.validate() }
     }
 
+    @Test func integerGlyphPositionsPreventAccumulatedFractionalAdvance() throws {
+        var style = Self.styled
+        style.metrics = .fontBounds
+        let line = try #require(
+            VideoStyledCaptionImage.layout(
+                "little firm rivers drift far from terrain", style: style
+            ).first)
+        let font = try #require(line.font)
+        let glyphs = try #require(line.integerGlyphs)
+        var advances = [CGSize](repeating: .zero, count: glyphs.count)
+        CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
+        var integer: CGFloat = 0
+        var fractional: CGFloat = 0
+        var maximumDrift: CGFloat = 0
+        for index in glyphs.indices {
+            #expect(line.integerPositions[index].x == integer)
+            maximumDrift = max(maximumDrift, abs(integer - fractional))
+            integer += advances[index].width.rounded()
+            fractional += advances[index].width
+        }
+        #expect(maximumDrift > 2)
+        style.metrics = .typographic
+        #expect(
+            try VideoStyledCaptionImage.layout(
+                "little firm rivers drift far from terrain", style: style
+            ).first?.integerGlyphs == nil)
+    }
+
     @Test func rejectsInvalidColorsGeometryAndNestedFields() throws {
         for value in [Double.nan, .infinity, -1, 1.1] {
             var style = Self.styled

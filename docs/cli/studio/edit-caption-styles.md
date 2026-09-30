@@ -47,7 +47,9 @@ them to its output canvas. There are no implicit 1280-pixel font-size units.
 - `y` increases downwards from the top of the canvas. `anchor` is `top`, `center`
   or `bottom` of the typographic block, including the font's ascent and descent.
 - Optional `metrics: "fontBounds"` uses integer ascent/descent and integer font
-  bounding-box width, with automatic kerning and ligatures disabled. Centered
+  bounding-box width, with each glyph advance rounded separately and automatic
+  kerning and ligatures disabled. Glyph positions accumulate those integer
+  advances, preventing fractional spacing drift on long lines. Centered
   pen X is `x - (box.right - box.left) / 2`; negative left bearings contribute
   to that width. This supports Pillow BASIC-style reference placement.
   Omit `metrics`, or use `"typographic"`, for native typographic positioning.

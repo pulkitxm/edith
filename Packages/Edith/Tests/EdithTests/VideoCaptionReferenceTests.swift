@@ -59,6 +59,7 @@ import Testing
                 ("one", "fj"), ("two", "SYNTHETIC\nCAPTION"), ("pairs", "AVATAR fj"),
                 ("long", "firm little rivers drift far"),
                 ("mixed", "minimum rhythm from afar"),
+                ("prefix", "little firm rivers drift far from terrain"),
                 ("long-two", "fifty little letters form\ntrim rivers from firm terrain"),
             ] {
                 var project = VideoProject.create(title: "Synthetic font reference")
