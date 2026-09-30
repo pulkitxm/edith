@@ -27,6 +27,10 @@ import Testing
                 framing: .fullWidth, keyframes: [.init(time: 0), .init(time: 1, scale: 0.5)],
                 background: VideoBackground(focalX: 0, blurRadius: 6.5)), clipID: id)
         let pipeline = try await VideoRenderPipeline.make(project: project)
+        let borders = try await VideoEditorService.reviewBorders(
+            project: project, pipeline: pipeline, limit: 100)
+        #expect(borders.segments[0].intentionalPresentation.contains("original_background_fill"))
+        #expect(borders.segments[0].intentionalPresentation.contains("original_background_blur"))
         for time in [0.0, 0.9] {
             let image = CIImage(cgImage: try frame(pipeline, at: time))
             #expect(pixel(image, x: 108, y: 12)[0] > 240)

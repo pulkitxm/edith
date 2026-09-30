@@ -59,6 +59,10 @@ extension VideoEditorService {
                 "background_\(project.backgroundColor.hasPrefix("#") ? "color" : "image")",
             ]
             if project.padding > 0 { flags.append("padding") }
+            if let background = effects.background {
+                flags.append("original_background_\(background.framing.rawValue)")
+                if background.blurRadius > 0 { flags.append("original_background_blur") }
+            }
             if project.presentation.cornerRadius > 0 { flags.append("rounded_corners") }
             if project.presentation.shadow > 0 { flags.append("shadow") }
             var reason: String?

@@ -46,8 +46,11 @@ import Testing
             operations[1] = ["visualEffects": ["clipID": "clip", "effects": effects]]
             var mutated = root
             mutated["operations"] = operations
-            #expect(throws: VideoEditorService.Failure.self) {
-                try VideoEditPlan.decode(JSONSerialization.data(withJSONObject: mutated))
+            let data = try JSONSerialization.data(withJSONObject: mutated)
+            if key == "time" || key == "typo" {
+                #expect(throws: VideoEditorService.Failure.self) { try VideoEditPlan.decode(data) }
+            } else {
+                #expect(try VideoEditPlan.decode(data).operations.count == 4)
             }
         }
         var unknownRoot = root
@@ -81,7 +84,8 @@ import Testing
         let effectFields = effects["properties"] as! [String: [String: Any]]
         let keyframe = effectFields["keyframes"]!["items"] as! [String: Any]
         #expect(keyframe["additionalProperties"] as? Bool == false)
-        #expect((keyframe["required"] as? [String])?.count == 6)
+        #expect(keyframe["required"] as? [String] == ["time"])
+        #expect(effects["required"] as? [String] == [])
     }
 
     @Test func appliesNativeStillSettingsAndAnimationWithoutChangingOriginal() async throws {
