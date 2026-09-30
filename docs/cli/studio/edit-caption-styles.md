@@ -60,6 +60,12 @@ them to its output canvas. There are no implicit 1280-pixel font-size units.
   Stroke and fill alpha are assigned separately before Gaussian blur and offset;
   the interior does not accumulate both opacities. A zero stroke width uses only
   the filled glyph shape. Both colors are editable in the native JSON inspector.
+- Styled RGBA colors and source-over blending use encoded sRGB, matching Pillow
+  alpha compositing. The gradient, shadow and outlined text are combined in that
+  order, then composited over the video in encoded sRGB before returning to the
+  linear rendering pipeline. This also applies to partially covered glyph edges
+  and is independent of `metrics`. A black gradient at alpha `100/255` over white
+  produces sRGB `155`, not the lighter result of linear-light blending.
 - `gradient.startY` and `endY` are top-origin pixel coordinates. Stop `location`
   values are strictly increasing fractions over that extent, starting at 0 and
   ending at 1. The first and last colors extend flat outside the extent.
@@ -169,6 +175,13 @@ This allows the measured FreeType/Core Text edge-hinting difference, rather than
 claiming byte-identical antialiasing. A typographic-placement negative control
 must fail the position tolerance. Fonts with unavailable glyphs fail with
 `unsupported_caption_glyph` instead of substituting another font.
+
+Independent Pillow source-over fixtures cover every 8-bit alpha value over
+opaque and translucent backgrounds, with a one-level channel tolerance. Full
+styled frames cover white, midgray and colored backgrounds, including a colored
+gradient. Samples outside glyphs agree within one sRGB level for native frames;
+H.264 exports allow two levels for colored/midgray samples after ICC normalization,
+and one level for white. Font-edge rasterization retains the mask tolerance above.
 
 Static styled caption rasters are cached per composition and output size through
 a thread-safe cache limited to two images and 64 MiB. Rebuilding

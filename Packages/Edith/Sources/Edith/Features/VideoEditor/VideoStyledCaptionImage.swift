@@ -3,6 +3,12 @@ import CoreImage
 import CoreText
 
 enum VideoStyledCaptionImage {
+    static func composite(_ foreground: CIImage, over background: CIImage) -> CIImage {
+        foreground.applyingFilter("CILinearToSRGBToneCurve")
+            .composited(over: background.applyingFilter("CILinearToSRGBToneCurve"))
+            .applyingFilter("CISRGBToneCurveToLinear")
+    }
+
     struct Line {
         let text: CTLine
         let baseline: CGPoint
@@ -155,7 +161,7 @@ enum VideoStyledCaptionImage {
                     .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: shadow.blur])
                     .transformed(by: CGAffineTransform(translationX: shadow.x, y: -shadow.y))
                     .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-                backdrop = shade.composited(over: backdrop).cropped(to: bounds)
+                backdrop = composite(shade, over: backdrop).cropped(to: bounds)
             }
             context.clear(referenceBounds)
         }
@@ -164,7 +170,7 @@ enum VideoStyledCaptionImage {
         }
         draw(lines, context: context, stroke: 0, color: style.fill.cgColor)
         return context.makeImage().map {
-            CIImage(cgImage: $0).composited(over: backdrop).cropped(to: bounds)
+            composite(CIImage(cgImage: $0), over: backdrop).cropped(to: bounds)
         }
     }
 

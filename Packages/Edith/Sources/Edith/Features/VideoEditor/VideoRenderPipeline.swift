@@ -860,7 +860,8 @@ struct VideoRenderPipeline {
             case "text":
                 if annotation.raw["edithCaptionStyle"] != nil {
                     if let text = captionRasters.image(for: annotation.id, size: size) {
-                        output = text.composited(over: output).cropped(to: bounds)
+                        output = VideoStyledCaptionImage.composite(text, over: output).cropped(
+                            to: bounds)
                     }
                 } else if let text = VideoCaptionImage.make(
                     annotation,
