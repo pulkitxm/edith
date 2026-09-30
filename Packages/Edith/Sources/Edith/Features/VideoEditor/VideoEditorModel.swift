@@ -84,6 +84,8 @@ final class VideoEditorModel {
     private var rebuildTask: Task<Void, Never>?
     private var focusPreviewTask: Task<Void, Never>?
     private let previewBuilder: (VideoProject) async throws -> VideoRenderPipeline
+    private var playerSeeker: VideoPreviewSeeker?
+    private var focusSeeker: VideoPreviewSeeker?
     private var undoHistory: [VideoProject] = []
     private var redoHistory: [VideoProject] = []
 
@@ -111,6 +113,8 @@ final class VideoEditorModel {
         }
     ) {
         self.previewBuilder = previewBuilder
+        playerSeeker = VideoPreviewSeeker(player: player)
+        focusSeeker = VideoPreviewSeeker(player: focusPlayer)
         liveSync = VideoEditorLiveSync(model: self)
         refreshRecentProjects()
         observePlaybackTime()
@@ -121,7 +125,9 @@ final class VideoEditorModel {
             forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, time.seconds.isFinite else { return }
+                guard let self, time.seconds.isFinite, self.playerSeeker?.isSeeking != true else {
+                    return
+                }
                 self.playhead = time.seconds
             }
         }
@@ -133,6 +139,7 @@ final class VideoEditorModel {
         focusPreviewGeneration += 1
         rebuildTask?.cancel()
         focusPreviewTask?.cancel()
+        resetPreviewSeeks()
         liveSync?.stop()
         audioTask?.cancel()
         player.pause()
@@ -208,6 +215,7 @@ final class VideoEditorModel {
             rebuildTask?.cancel()
             let version = generation
             player.pause()
+            resetPreviewSeeks()
             player.replaceCurrentItem(with: nil)
             pipeline = nil
             pendingLoads += 1
@@ -246,10 +254,12 @@ final class VideoEditorModel {
         undoHistory.removeAll()
         redoHistory.removeAll()
         pipeline = prepared
+        resetPreviewSeeks()
         player.pause()
         if let observer { player.removeTimeObserver(observer) }
         player.replaceCurrentItem(with: nil)
         player = playbackPlayer ?? AVPlayer()
+        playerSeeker = VideoPreviewSeeker(player: player)
         observePlaybackTime()
         seek(to: min(time, prepared?.duration ?? 0))
         if rate != 0, player.currentItem != nil { player.rate = rate }
@@ -272,6 +282,7 @@ final class VideoEditorModel {
         generation += 1
         rebuildTask?.cancel()
         focusPreviewTask?.cancel()
+        resetPreviewSeeks()
         let version = generation
         let url = URL(fileURLWithPath: request.path)
         let snapshot = try VideoEditorService.readProject(url)
@@ -595,21 +606,28 @@ final class VideoEditorModel {
             player.play()
         } else {
             player.pause()
-            focusPlayer.seek(to: CMTime(seconds: playhead, preferredTimescale: 600))
+            if focusPreviewReady {
+                focusSeeker?.request(CMTime(seconds: playhead, preferredTimescale: 60000))
+            }
         }
     }
 
     func seek(to seconds: Double) {
+        guard seconds.isFinite else { return }
         let clamped = max(0, min(duration, seconds))
         playhead = clamped
-        player.seek(
-            to: CMTime(seconds: clamped, preferredTimescale: 600),
-            toleranceBefore: .zero, toleranceAfter: .zero)
+        let time = CMTime(seconds: clamped, preferredTimescale: 60000)
+        if player.currentItem != nil { playerSeeker?.request(time) }
         if focusPreviewReady {
-            focusPlayer.seek(
-                to: CMTime(seconds: clamped, preferredTimescale: 600),
-                toleranceBefore: .zero, toleranceAfter: .zero)
+            focusSeeker?.request(time)
         }
+    }
+
+    private func resetPreviewSeeks() {
+        playerSeeker?.reset()
+        player.currentItem?.cancelPendingSeeks()
+        focusSeeker?.reset()
+        focusPlayer.currentItem?.cancelPendingSeeks()
     }
 
     func splitAtPlayhead() {
@@ -1170,6 +1188,8 @@ final class VideoEditorModel {
 
     private func updateFocusPreview() {
         focusPreviewTask?.cancel()
+        focusSeeker?.reset()
+        focusPlayer.currentItem?.cancelPendingSeeks()
         focusPreviewGeneration += 1
         let version = focusPreviewGeneration
         focusPlayer.pause()
@@ -1196,6 +1216,7 @@ final class VideoEditorModel {
                     toleranceBefore: .zero, toleranceAfter: .zero)
                 guard version == focusPreviewGeneration else { return }
                 focusPreviewReady = true
+                focusSeeker?.request(CMTime(seconds: playhead, preferredTimescale: 60000))
             } catch is CancellationError {
             } catch {
                 guard version == focusPreviewGeneration else { return }
@@ -1217,6 +1238,7 @@ final class VideoEditorModel {
         }
         if refreshFocusPreview { updateFocusPreview() }
         guard let project, !project.clips.isEmpty else {
+            resetPreviewSeeks()
             pipeline = nil
             player.replaceCurrentItem(with: nil)
             playhead = 0
@@ -1232,6 +1254,7 @@ final class VideoEditorModel {
                 let item = AVPlayerItem(asset: next.composition)
                 item.videoComposition = next.videoComposition
                 item.audioMix = next.audioMix
+                resetPreviewSeeks()
                 player.replaceCurrentItem(with: item)
                 seek(to: min(playhead, next.duration))
             } catch is CancellationError {

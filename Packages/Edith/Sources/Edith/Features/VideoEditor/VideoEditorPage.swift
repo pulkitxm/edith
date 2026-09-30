@@ -363,46 +363,7 @@ struct VideoEditorPage: View {
     }
 
     private var transport: some View {
-        HStack(spacing: UIScale.pt(14)) {
-            Button {
-                model.seek(to: model.playhead - 1.0 / 30)
-            } label: {
-                Image(systemName: "backward.frame")
-            }
-            Button(action: model.togglePlayback) {
-                Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill")
-                    .frame(width: UIScale.pt(30))
-            }
-            .help("Play or pause (Space)")
-            Button {
-                model.seek(to: model.playhead + 1.0 / 30)
-            } label: {
-                Image(systemName: "forward.frame")
-            }
-            Button {
-                model.loopPlayback.toggle()
-            } label: {
-                Image(systemName: model.loopPlayback ? "repeat.circle.fill" : "repeat")
-            }
-            .disabled(model.pipeline == nil)
-            .help("Loop playback")
-            Text(timestamp(model.playhead))
-                .font(.system(.caption, design: .monospaced))
-                .frame(width: UIScale.pt(65), alignment: .trailing)
-            Slider(
-                value: Binding(
-                    get: { min(model.playhead, model.duration) },
-                    set: { model.seek(to: $0) }
-                ), in: 0...max(0.001, model.duration)
-            )
-            .disabled(model.duration <= 0)
-            Text(timestamp(model.duration))
-                .font(.system(.caption, design: .monospaced))
-                .frame(width: UIScale.pt(65), alignment: .leading)
-        }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, UIScale.pt(22))
-        .frame(height: UIScale.pt(42))
+        VideoEditorTransport(model: model)
     }
 
     private var mediaRail: some View {
@@ -572,7 +533,6 @@ struct VideoEditorPage: View {
         let value = max(0, seconds.isFinite ? seconds : 0)
         return String(format: "%02d:%02d", Int(value) / 60, Int(value) % 60)
     }
-
 }
 
 struct EditorAnnotationRow: View {
