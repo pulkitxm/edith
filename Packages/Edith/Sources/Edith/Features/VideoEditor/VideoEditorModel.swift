@@ -12,7 +12,8 @@ final class VideoEditorModel {
         let microphonePath: String?
         let microphoneOffset: Int
     }
-    var project: VideoProject?
+    var project: VideoProject? { didSet { reconcileCaptionDrafts() } }
+    var captionDrafts: [String: VideoCaptionDraft] = [:]
     var selectedClipID: String?
     var selection: VideoSelection?
     var canvasEditing = true
@@ -60,6 +61,7 @@ final class VideoEditorModel {
         if project?.id != next.id {
             titleDraft = nil
             pendingViewEditIDs.removeAll()
+            captionDrafts.removeAll()
         }
         project = next
     }
@@ -854,6 +856,11 @@ final class VideoEditorModel {
     }
 
     func updateCaption(_ id: String, text: String) {
+        if let style = project?.annotations.first(where: { $0.id == id })?.captionStyle {
+            do { _ = try VideoStyledCaptionImage.layout(text, style: style) } catch {
+                errorMessage = error.localizedDescription; return
+            }
+        }
         mutate { document in
             var annotations = document.root["annotations"] as? [[String: Any]] ?? []
             guard let index = annotations.firstIndex(where: { $0["id"] as? String == id })

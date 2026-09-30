@@ -216,44 +216,44 @@ struct VideoCaptionEditor: View {
 private struct VideoCaptionRow: View {
     let caption: VideoProject.Annotation
     let model: VideoEditorModel
-    @State private var text = ""
-    @State private var start = 0.0
-    @State private var end = 0.0
+    private var draft: VideoCaptionDraft { model.captionDraft(caption) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button("Select at \(start.formatted(.number.precision(.fractionLength(2))))s") {
+            Button(
+                "Select at \(model.captionOutputRange(caption).start.formatted(.number.precision(.fractionLength(2))))s"
+            ) {
                 model.select(.annotation(caption.id))
             }
-            TextField("Caption text", text: $text, axis: .vertical)
-                .lineLimit(1...5).onSubmit { model.updateCaption(caption.id, text: text) }
+            TextField("Caption text", text: field("text"), axis: .vertical)
+                .lineLimit(1...5).onSubmit { draft.apply("text") }
             HStack {
-                TextField("Start", value: $start, format: .number.precision(.fractionLength(2)))
+                TextField("Start", text: field("start"))
                     .accessibilityLabel("Caption start")
                 Text("to")
-                TextField("End", value: $end, format: .number.precision(.fractionLength(2)))
+                TextField("End", text: field("end"))
                     .accessibilityLabel("Caption end")
-            }.onSubmit {
-                model.retime(
-                    "annotations", id: caption.id,
-                    range: .init(start: max(0, start), end: min(model.duration, end)), edge: "move")
-            }
-            Toggle(
-                "Highlight words",
-                isOn: Binding(
-                    get: {
-                        (caption.raw["style"] as? [String: Any])?["highlightWords"] as? Bool
-                            ?? false
-                    },
-                    set: { value in
-                        model.mutate {
-                            $0.editRegion("annotations", id: caption.id) { region in
-                                var style = region["style"] as? [String: Any] ?? [:]
-                                style["highlightWords"] = value; region["style"] = style
+            }.onSubmit { draft.apply("time") }
+            Button("Discard caption drafts") { draft.refresh(discard: true) }
+            if let failure = draft.failure { Text(failure).font(.caption).foregroundStyle(.red) }
+            if caption.captionStyle == nil {
+                Toggle(
+                    "Highlight words",
+                    isOn: Binding(
+                        get: {
+                            (caption.raw["style"] as? [String: Any])?["highlightWords"] as? Bool
+                                ?? false
+                        },
+                        set: { value in
+                            model.mutate {
+                                $0.editRegion("annotations", id: caption.id) { region in
+                                    var style = region["style"] as? [String: Any] ?? [:]
+                                    style["highlightWords"] = value; region["style"] = style
+                                }
                             }
-                        }
-                        model.rebuild()
-                    }))
+                            model.rebuild()
+                        }))
+            }
             HStack {
                 Button("Split") {
                     model.mutate {
@@ -269,19 +269,17 @@ private struct VideoCaptionRow: View {
                 }
             }
             DisclosureGroup("Style & position") {
-                EditorAnnotationRow(annotation: caption, model: model)
+                VideoCaptionStyleEditor(caption: caption, model: model)
             }
         }
-        .onAppear(perform: refresh)
-        .onChange(of: caption.text) { _, _ in text = caption.text }
-        .onChange(of: caption.startMs) { _, _ in refresh() }
-        .onChange(of: caption.endMs) { _, _ in refresh() }
+        .onAppear { draft.refresh() }
+        .onChange(of: caption.text) { _, _ in draft.refresh() }
+        .onChange(of: model.captionOutputRange(caption).start) { _, _ in draft.refresh() }
+        .onChange(of: model.captionOutputRange(caption).end) { _, _ in draft.refresh() }
     }
 
-    private func refresh() {
-        text = caption.text
-        start = model.captionOutputRange(caption).start
-        end = model.captionOutputRange(caption).end
+    private func field(_ key: String) -> Binding<String> {
+        Binding(get: { draft.values[key] ?? "" }, set: { draft.values[key] = $0 })
     }
 }
 

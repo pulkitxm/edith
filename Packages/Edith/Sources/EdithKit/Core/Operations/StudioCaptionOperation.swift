@@ -16,9 +16,9 @@ public enum StudioCaptionOperation: String, CaseIterable, Sendable {
 
     private var summary: String {
         switch self {
-        case .list: "List captions with stable IDs and explicit source/output clocks."
-        case .add: "Add a caption using output frames or snapshotted marker positions."
-        case .update: "Update a caption by ID without changing its output anchor implicitly."
+        case .list: "List captions with saved styles, stable IDs and explicit source/output clocks."
+        case .add: "Add a styled caption using output frames or snapshotted marker positions."
+        case .update: "Update caption text, style or timing by ID while preserving omitted fields."
         case .remove: "Remove an existing caption by stable ID."
         }
     }

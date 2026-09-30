@@ -124,6 +124,11 @@ extension VideoProject {
     func validateOutputCaptions() throws {
         var ids = Set<String>()
         for annotation in annotations {
+            if let raw = annotation.raw["edithCaptionStyle"] {
+                let style = try VideoCaptionStyle.decode(
+                    JSONSerialization.data(withJSONObject: raw))
+                _ = try VideoStyledCaptionImage.layout(annotation.text, style: style)
+            }
             guard ids.insert(annotation.id).inserted else {
                 throw VideoEditorService.Failure(
                     "invalid_caption", "Annotation IDs must be unique.")
@@ -139,10 +144,14 @@ extension VideoProject {
     }
 
     @discardableResult
-    mutating func addOutputCaption(_ content: String, anchor: VideoCaptionAnchor) throws -> String {
+    mutating func addOutputCaption(
+        _ content: String, anchor: VideoCaptionAnchor, style: VideoCaptionStyle? = nil
+    ) throws -> String {
+        if let style { _ = try VideoStyledCaptionImage.layout(content, style: style) }
         addText(content, startMs: anchor.start.seconds * 1000, endMs: anchor.end.seconds * 1000)
         var entries = annotations.map(\.raw)
         try anchor.store(in: &entries[entries.count - 1])
+        try style?.store(in: &entries[entries.count - 1])
         root["annotations"] = entries
         return entries.last!["id"] as! String
     }

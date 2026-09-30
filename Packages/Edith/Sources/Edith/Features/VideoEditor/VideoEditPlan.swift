@@ -24,7 +24,11 @@ public struct VideoEditPlan: Codable, Sendable {
         case sourceAudio(clipID: String, gainDb: Double, muted: Bool)
         case crop(clipID: String, x: Double, y: Double, width: Double, height: Double)
         case resetCrop(clipID: String)
-        case text(content: String, start: Double, end: Double)
+        case text(content: String, start: Double, end: Double, style: VideoCaptionStyle? = nil)
+        case outputCaption(
+            id: String? = nil, content: String, anchor: VideoCaptionAnchor,
+            style: VideoCaptionStyle? = nil)
+        case captionStyle(id: String, style: VideoCaptionStyle)
         case transition(clipID: String, kind: String, duration: Double)
         case addAudio(path: String, start: Double, offset: Double, name: String)
         case audioOptions(trackID: String, gainDb: Double, muted: Bool, loop: Bool)
@@ -101,7 +105,7 @@ public struct VideoEditPlan: Codable, Sendable {
             withJSONObject: selected, options: [.prettyPrinted, .sortedKeys])
     }
 
-    private static func validateFields(_ value: Any, schema: [String: Any], path: String) throws {
+    static func validateFields(_ value: Any, schema: [String: Any], path: String) throws {
         guard !(value is NSNull) else {
             throw VideoEditorService.Failure(
                 "invalid_plan", "\(path): null is not a valid field value.")

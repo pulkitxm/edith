@@ -613,21 +613,23 @@ public enum CommandTree {
         "ed studio edit captions add": Spec(
             options: [
                 "--json", "--dry-run", "--text", "--start-frame", "--end-frame", "--start-marker",
-                "--end-marker", "--fps", "-h", "--help", "--version",
+                "--end-marker", "--fps", "--style", "-h", "--help", "--version",
             ],
             optionValues: [
                 "--text": .free, "--start-frame": .free, "--end-frame": .free,
                 "--start-marker": .free, "--end-marker": .free, "--fps": .free,
+                "--style": .localPath,
             ],
             arguments: [.localPath]),
         "ed studio edit captions update": Spec(
             options: [
                 "--json", "--dry-run", "--text", "--start-frame", "--end-frame", "--start-marker",
-                "--end-marker", "--fps", "-h", "--help", "--version",
+                "--end-marker", "--fps", "--style", "-h", "--help", "--version",
             ],
             optionValues: [
                 "--text": .free, "--start-frame": .free, "--end-frame": .free,
                 "--start-marker": .free, "--end-marker": .free, "--fps": .free,
+                "--style": .localPath,
             ],
             arguments: [.localPath, .free]),
         "ed studio edit captions remove": Spec(

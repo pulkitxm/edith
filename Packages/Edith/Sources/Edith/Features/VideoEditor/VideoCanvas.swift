@@ -34,9 +34,10 @@ struct VideoCanvas: View {
                     } ?? []
                 ) { annotation in
                     VideoCanvasHandle(
-                        rect: VideoCanvasGeometry.rect(
-                            position: annotation.raw["position"] as? [String: Double] ?? [:],
-                            size: annotation.raw["size"] as? [String: Double] ?? [:]),
+                        rect: annotation.captionCanvasRect
+                            ?? VideoCanvasGeometry.rect(
+                                position: annotation.raw["position"] as? [String: Double] ?? [:],
+                                size: annotation.raw["size"] as? [String: Double] ?? [:]),
                         display: display,
                         title: annotation.type == "text"
                             ? annotation.text : annotation.type.capitalized,

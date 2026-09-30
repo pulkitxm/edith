@@ -1,0 +1,92 @@
+{
+  "pillow": "11.3.0",
+  "freetype": "2.13.3",
+  "layout": "BASIC",
+  "fontSHA256": "374b0190a9844343110d8f8ed1818117a4591803d022bbb2bd189d63a681e731",
+  "cases": [
+    {
+      "file": "one-104.png",
+      "text": "fj",
+      "size": 104,
+      "bounds": [1051, 2799, 1114, 2897]
+    },
+    {
+      "file": "two-104.png",
+      "text": "SYNTHETIC\nCAPTION",
+      "size": 104,
+      "bounds": [791, 2799, 1375, 3026]
+    },
+    {
+      "file": "pairs-104.png",
+      "text": "AVATAR fj",
+      "size": 104,
+      "bounds": [812, 2799, 1344, 2897]
+    },
+    {
+      "file": "long-104.png",
+      "text": "firm little rivers drift far",
+      "size": 104,
+      "bounds": [508, 2799, 1657, 2876]
+    },
+    {
+      "file": "mixed-104.png",
+      "text": "minimum rhythm from afar",
+      "size": 104,
+      "bounds": [417, 2799, 1746, 2897]
+    },
+    {
+      "file": "prefix-104.png",
+      "text": "little firm rivers drift far from terrain",
+      "size": 104,
+      "bounds": [205, 2799, 1957, 2876]
+    },
+    {
+      "file": "long-two-104.png",
+      "text": "fifty little letters form\ntrim rivers from firm terrain",
+      "size": 104,
+      "bounds": [415, 2799, 1750, 3026]
+    },
+    {
+      "file": "one-112.png",
+      "text": "fj",
+      "size": 112,
+      "bounds": [1049, 2801, 1117, 2905]
+    },
+    {
+      "file": "two-112.png",
+      "text": "SYNTHETIC\nCAPTION",
+      "size": 112,
+      "bounds": [768, 2801, 1398, 3033]
+    },
+    {
+      "file": "pairs-112.png",
+      "text": "AVATAR fj",
+      "size": 112,
+      "bounds": [792, 2801, 1364, 2905]
+    },
+    {
+      "file": "long-112.png",
+      "text": "firm little rivers drift far",
+      "size": 112,
+      "bounds": [466, 2801, 1699, 2883]
+    },
+    {
+      "file": "mixed-112.png",
+      "text": "minimum rhythm from afar",
+      "size": 112,
+      "bounds": [367, 2801, 1796, 2905]
+    },
+    {
+      "file": "prefix-112.png",
+      "text": "little firm rivers drift far from terrain",
+      "size": 112,
+      "bounds": [140, 2801, 2023, 2883]
+    },
+    {
+      "file": "long-two-112.png",
+      "text": "fifty little letters form\ntrim rivers from firm terrain",
+      "size": 112,
+      "bounds": [364, 2801, 1803, 3033]
+    }
+  ]
+}
