@@ -36,6 +36,9 @@ import Testing
         IPC.Name.requestLidAwakeAction,
         IPC.Name.lidAwakeActionResult,
         IPC.Name.lidAwakeChanged,
+        IPC.Name.requestVideoEditorOpen,
+        IPC.Name.videoEditorOpenResult,
+        IPC.Name.videoProjectLibraryChanged,
     ]
 
     @Test func runtimeNamespacesSeparateInternalEvents() {

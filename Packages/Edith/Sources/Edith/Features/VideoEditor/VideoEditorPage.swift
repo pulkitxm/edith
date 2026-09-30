@@ -28,7 +28,8 @@ struct VideoEditorPage: View {
 
     var media: [URL] = []
     var project: URL?
-    @State private var model = VideoEditorModel()
+    @State private var model: VideoEditorModel
+    private var commandMounted: (() -> Void)?
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
     @State private var showingInspector = true
@@ -37,6 +38,17 @@ struct VideoEditorPage: View {
     @State private var showingBeats = false
     @State private var titleDraft = ""
     @Environment(\.colorScheme) private var scheme
+
+    init(media: [URL] = [], project: URL? = nil) {
+        self.media = media
+        self.project = project
+        _model = State(initialValue: VideoEditorModel())
+    }
+
+    init(model: VideoEditorModel, mounted: @escaping () -> Void) {
+        _model = State(initialValue: model)
+        commandMounted = mounted
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,6 +93,12 @@ struct VideoEditorPage: View {
             }
         }
         .task {
+            VideoEditorOpenBridge.shared.activeEditor = model
+            titleDraft = model.project?.title ?? ""
+            if let commandMounted {
+                commandMounted()
+                return
+            }
             if let project {
                 model.openProject(at: project)
             } else if !media.isEmpty {
@@ -88,6 +106,9 @@ struct VideoEditorPage: View {
             }
         }
         .onDisappear {
+            if VideoEditorOpenBridge.shared.activeEditor === model {
+                VideoEditorOpenBridge.shared.activeEditor = nil
+            }
             model.player.pause()
             model.focusPlayer.pause()
         }

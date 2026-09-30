@@ -6,6 +6,7 @@ struct StudioVideoHost: View {
     let model: StudioModel
     let media: [URL]
     let project: URL?
+    var command: VideoEditorOpenBridge.Presentation?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -30,7 +31,13 @@ struct StudioVideoHost: View {
                 }
             }
             Divider()
-            VideoEditorPage(media: media, project: project)
+            if let command {
+                VideoEditorPage(model: command.model) {
+                    VideoEditorOpenBridge.shared.mounted(command)
+                }
+            } else {
+                VideoEditorPage(media: media, project: project)
+            }
         }
         .background(DashSkin.paper(scheme == .dark))
     }
