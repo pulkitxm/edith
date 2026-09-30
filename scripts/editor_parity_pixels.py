@@ -10,7 +10,9 @@ from editor_parity_fixtures import command
 
 def reference_pixels(source, width, height, framing="contain", blur=8, brightness=0, contrast=1, saturation=1,
                      background="blur", vertical_offset=0, source_crop=None, focal_x=0.5, focal_y=0.5):
-    color = f"format=yuv444p,eq=brightness={brightness}:contrast={contrast}:saturation={saturation},format=rgb24"
+    color = ("scale=in_range=full:out_range=limited:out_color_matrix=bt709,format=yuv444p,"
+             f"eq=brightness={brightness}:contrast={contrast}:saturation={saturation},"
+             "scale=in_range=limited:out_range=full:in_color_matrix=bt709,format=rgb24")
     fill = (f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
             f"crop={width}:{height}:x=(iw-ow)*{focal_x}:y=(ih-oh)*{focal_y}")
     crop = ""

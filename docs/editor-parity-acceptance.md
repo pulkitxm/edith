@@ -109,6 +109,11 @@ Reports retain both measured control errors and the computed threshold.
 Grade checks sample the visible center and flat red, green, blue, and yellow
 edge patches, excluding patches removed by a foreground crop. A single nearly
 unchanged center color cannot establish grading equivalence.
+The reference explicitly converts encoded sRGB to limited-range BT.709 YUV444,
+runs FFmpeg EQ, and converts back to full-range RGB. This matches the published
+`gradingMode: "ffmpeg709"` contract rather than relying on FFmpeg's default
+matrix selection. Final graded plans must discover and explicitly select that
+mode; the neutral-geometry preflight does not substitute for this check.
 PNG review frames with embedded ICC profiles are converted to the common sRGB
 comparison space with the installed ColorSync utility before downsampling.
 This only normalizes the actual frame's declared color encoding; it does not
