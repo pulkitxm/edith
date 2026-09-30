@@ -3,10 +3,18 @@
 Plugins lives in the Agents suite. Enable it from Extensions or run
 `ed extensions enable plugins`.
 
-The library contains Edith's own skills. It currently includes one:
-**Edith Remote Work**, which teaches a harness on your laptop to discover remote
-projects and perform their work through the `ed` CLI. It does not browse or
-list the public skills.sh catalogue.
+The library contains three Edith skills:
+
+- **Edith Remote Work** discovers remote projects and performs their work through
+  the `ed` CLI.
+- **Edith Video Edit** assembles original media into editable native projects,
+  with exact-frame cuts, captions, effects, animation and independent audio.
+- **Edith Video Delivery** reviews native edits and verifies rendered frames,
+  mastered audio, encoded delivery properties and source preservation.
+
+The video skills document both public CLI plans and registered MCP tools. Their
+instruction packages include linked reference blueprints and synthetic workflow
+evaluations. The library does not list the public skills.sh catalogue.
 
 Click the plugin card to inspect its instructions before installing. Preview
 renders the instructions with spacious headings, paragraphs and code blocks,
@@ -16,8 +24,8 @@ selected. Copy copies the complete original Markdown, including metadata,
 from either tab. A loaded skill stays in memory for the app session, so reopening
 the preview displays it immediately without another download.
 
-Skill content is fetched from the Edith repository on GitHub, on the main
-branch. A valid download is cached locally. When GitHub cannot be reached,
+Complete skill packages are fetched from the Edith repository on GitHub, on the
+main branch. A valid download is cached locally. When GitHub cannot be reached,
 the cached copy remains available and the installer records that fallback
 in its output. The first preview or install requires a connection. Malformed
 responses never replace the last valid cached skill.
@@ -48,10 +56,9 @@ environment settings such as `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and
 the shared `~/.agents/skills` directory for universal agents. Open a newly
 installed agent once so its configuration folder exists, then reopen the sheet.
 
-The skill's source is
-[`Packages/Edith/skills/edith-remote-work/SKILL.md`](../Packages/Edith/skills/edith-remote-work/SKILL.md).
-It is fetched at runtime rather than packaged into the app, so skill updates
-do not require a new app build or a clone of the repository. The same folder uses the standard SKILL.md format
+Skill sources live in [`Packages/Edith/skills`](../Packages/Edith/skills).
+They are fetched at runtime, so skill updates do not require a new app build or
+a clone of the repository. Each folder uses the standard SKILL.md format
 accepted by the [Skills installer](https://github.com/vercel-labs/skills).
 
 Agent marks reuse the bundled provider artwork. Additional official artwork comes
