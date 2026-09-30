@@ -26,8 +26,8 @@ def check_visual_project(project, manifest, fixture, dimensions):
     for clip, shot in zip(clips, manifest["shots"]):
         actual = pathlib.Path(assets[clip["assetId"]]["originalPath"]).resolve(strict=True)
         require(actual == fixture_path(fixture, shot["path"]), "Editable clip does not reference its exact original source")
-        require(abs(clip["sourceStartSec"]) < 1e-10, "Unexpected source trim start")
-        require(abs(clip["sourceEndSec"] * FRAME_RATE - shot["frames"]) < 1e-7, "Incorrect source trim endpoint")
+        require(abs(clip["sourceStartSec"] * FRAME_RATE - shot["sourceStartFrame"]) < 1e-7, "Unexpected source trim start")
+        require(abs(clip["sourceEndSec"] * FRAME_RATE - shot["sourceStartFrame"] - shot["frames"]) < 1e-7, "Incorrect source trim endpoint")
         require(abs(clip["timelineStartSec"] * FRAME_RATE - shot["startFrame"]) < 1e-7, "Incorrect shot boundary")
     settings = project["edithVideoSettings"]
     require((settings["width"], settings["height"]) == dimensions, "Project canvas dimensions changed")
@@ -77,7 +77,7 @@ def decoded_frames(path, width, height, frame_numbers):
 
 
 def picture_sample_frames(manifest):
-    return {shot["startFrame"] + offset: (shot, offset) for shot in manifest["shots"] if shot["kind"] == "video"
+    return {shot["startFrame"] + offset: (shot, shot["sourceStartFrame"] + offset) for shot in manifest["shots"] if shot["kind"] == "video"
             for offset in (0, 1, shot["frames"] // 2 - 1, shot["frames"] // 2, shot["frames"] - 2, shot["frames"] - 1)}
 
 

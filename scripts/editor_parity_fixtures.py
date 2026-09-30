@@ -16,6 +16,7 @@ VIDEO_INDICES = {6, 16, 26, 36, 46}
 PHOTO_INDICES = [index for index in range(47) if index not in VIDEO_INDICES]
 CONTAIN_INDICES = {PHOTO_INDICES[index * 42 // 18] for index in range(18)}
 FOCAL_INDICES = [index for index in PHOTO_INDICES if index not in CONTAIN_INDICES][:2]
+PHOTO_SIZE = (1024, 576)
 
 
 def shot_specifications():
@@ -35,11 +36,16 @@ def shot_specifications():
         if index in {8, 19, 30, 41}:
             caption += "\n" + " ".join(generator.sample(words, 2))
         shot = {"frames": frames, "caption": caption, "fontSize": 112 if index in {45, 46} else 104,
-                "framing": "contain" if index in CONTAIN_INDICES else "fill", "focalX": 0.5, "focalY": 0.5}
+                "framing": "contain" if index in CONTAIN_INDICES else "fill", "focalX": 0.5, "focalY": 0.5,
+                "sourceStartFrame": (sorted(VIDEO_INDICES).index(index) + 1) * 12 if index in VIDEO_INDICES else 0,
+                "zoom": 0 if index in CONTAIN_INDICES or index in VIDEO_INDICES else (0.012 if index == FOCAL_INDICES[0] else 0.025)}
         if index in FOCAL_INDICES:
             shot.update({"focalX": 0.3 if index == FOCAL_INDICES[0] else 0.7, "focalY": 0.35 if index == FOCAL_INDICES[0] else 0.65})
         if index == min(CONTAIN_INDICES):
-            shot["sourceCrop"] = {"x": 0.1, "y": 0.15, "width": 0.8, "height": 0.7}
+            shot["sourceCrop"] = {"x": 0.125, "y": 0.125, "width": 0.75, "height": 0.625}
+        if index in PHOTO_INDICES and shot["framing"] == "fill":
+            selected_width = PHOTO_SIZE[1] * 9 / 16 / PHOTO_SIZE[0]
+            shot["framingCrop"] = {"x": (1 - selected_width) * shot["focalX"], "y": 0, "width": selected_width, "height": 1}
         specifications.append(shot)
     return specifications
 
@@ -87,6 +93,7 @@ def pixels(index, width, height):
                 value = color
             else:
                 level = 24 if (x // 24 + y // 24) % 2 else -24
+                level += (((x // 24) * 73856093) ^ ((y // 24) * 19349663) ^ (index * 83492791)) % 33 - 16
                 value = tuple(channel + level for channel in color)
             data.extend(value)
     return bytes(data), color
@@ -119,14 +126,14 @@ def generate(directory):
     start = 0
     for index, specification in enumerate(shot_specifications()):
         photo = index in PHOTO_INDICES
-        width, height = (960, 540) if photo else (320, 180)
+        width, height = PHOTO_SIZE if photo else (320, 180)
         raw, color = pixels(index, width, height)
         path = originals / f"source-{index + 1:02d}{'.png' if photo else '.mp4'}"
         source = ["-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", f"{width}x{height}", "-framerate", "60", "-i", "pipe:0"]
         if photo:
             ffmpeg(*source, "-frames:v", "1", "-update", "1", path, data=raw)
         else:
-            source_frames = specification["frames"] + 2
+            source_frames = specification["sourceStartFrame"] + specification["frames"] + 2
             data = b"".join(video_pixels(raw, width, height, frame) for frame in range(source_frames))
             ffmpeg(*source, "-frames:v", str(source_frames), "-c:v", "libx264", "-preset", "ultrafast",
                    "-crf", "12", "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", path, data=data)
@@ -134,7 +141,7 @@ def generate(directory):
         shots.append({"name": f"synthetic-{index + 1:02d}", "path": str(path.relative_to(directory)), "sha256": checksum(path),
                       "kind": "photo" if photo else "video", "width": width, "height": height, "centerRGB": color,
                       "startFrame": start, "endFrame": start + frames, "frames": frames,
-                      "sourceStartFrame": 0, **specification})
+                      **specification})
         start += frames
     music = originals / "synthetic-music.wav"
     left = "(0.08+0.025*sin(2*PI*t/7))*(sin(2*PI*220*t)+0.5*sin(2*PI*330*t)+0.25*sin(2*PI*550*t))"
@@ -149,7 +156,7 @@ def generate(directory):
         ffmpeg("-f", "lavfi", "-i", f"color=c=0x{index + 2:02x}5070:s=90x160:r=60", "-frames:v", str(12 + index),
                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", path)
         baseline.append({"path": str(path.relative_to(directory)), "sha256": checksum(path)})
-    manifest = {"version": 2, "synthetic": True, "videoSignatures": "nine-bit-source-frame-plus-one", "distinctStereoChannels": True,
+    manifest = {"version": 3, "synthetic": True, "videoSignatures": "nine-bit-source-frame-plus-one", "distinctStereoChannels": True,
                 "frameCount": FRAME_COUNT, "frameRate": FRAME_RATE,
                 "width": 2160, "height": 3840, "audioSampleRate": SAMPLE_RATE, "audioSamples": FRAME_COUNT * 800,
                 "shots": shots, "music": {"path": str(music.relative_to(directory)), "sha256": checksum(music)},
@@ -172,7 +179,7 @@ def inventory(directory, manifest):
 def verify(directory, media=True):
     directory = directory.resolve(strict=True)
     manifest = json.loads((directory / "parity-manifest.json").read_text())
-    require(manifest["version"] == 2 and manifest["synthetic"] is True and manifest["distinctStereoChannels"] is True
+    require(manifest["version"] == 3 and manifest["synthetic"] is True and manifest["distinctStereoChannels"] is True
             and manifest["videoSignatures"] == "nine-bit-source-frame-plus-one", "Unsupported synthetic fixture manifest")
     require((manifest["frameCount"], manifest["frameRate"], manifest["width"], manifest["height"]) == (5588, 60, 2160, 3840),
             "Fixture delivery target changed")
@@ -185,6 +192,9 @@ def verify(directory, media=True):
             "Expected 18 contained and 24 fill photos")
     require(sum("sourceCrop" in shot for shot in shots) == 1 and sum(shot["focalX"] != 0.5 for shot in shots) == 2,
             "Expected one source crop and two noncenter focal points")
+    require(sum(shot["zoom"] == 0.025 for shot in shots) == 23 and sum(shot["zoom"] == 0.012 for shot in shots) == 1
+            and all(shot["zoom"] == 0 for shot in shots if shot["framing"] == "contain"), "Incorrect photo motion distribution")
+    require(sum(shot["sourceStartFrame"] > 0 for shot in shots) == 5, "Every video must exercise a nonzero original trim")
     require(sum("\n" in shot["caption"] for shot in shots) == 4 and sum(shot["fontSize"] == 104 for shot in shots) == 45
             and sum(shot["fontSize"] == 112 for shot in shots) == 2, "Caption line or font-size distribution changed")
     require(min(shot["frames"] for shot in shots) == 43 and max(shot["frames"] for shot in shots) == 442,
@@ -199,14 +209,15 @@ def verify(directory, media=True):
     for index, shot in enumerate(shots):
         require(shot["startFrame"] == position and shot["frames"] == shot["endFrame"] - position,
                 "Shot boundaries contain a gap, overlap, or incorrect duration")
-        require(shot["sourceStartFrame"] == 0 and all(shot[key] == value for key, value in shot_specifications()[index].items()),
+        require(all(shot[key] == value for key, value in shot_specifications()[index].items()),
                 "Unexpected synthetic shot identity")
         position = shot["endFrame"]
         if media:
             stream = probe(fixture_path(directory, shot["path"]))["streams"][0]
             require((stream["width"], stream["height"]) == (shot["width"], shot["height"]), "Source dimensions changed")
             if shot["kind"] == "video":
-                require(stream["r_frame_rate"] == "60/1" and int(stream["nb_frames"]) == shot["frames"] + 2, "Incorrect synthetic video cadence")
+                require(stream["r_frame_rate"] == "60/1" and int(stream["nb_frames"]) == shot["sourceStartFrame"] + shot["frames"] + 2,
+                        "Incorrect synthetic video cadence or source trim coverage")
     require(position == FRAME_COUNT and manifest["audioSamples"] == FRAME_COUNT * 800, "Incorrect fixture frame or sample grid")
     if media:
         stream = probe(fixture_path(directory, manifest["music"]["path"]))["streams"][0]

@@ -44,11 +44,13 @@ def main():
     bad = reference_pixels(source, width, height, framing="fill", source_crop=crop, **color)
     rejects(lambda: check_photo_pixels(bad, source, (shot["width"], shot["height"]), width, height, blur, bounds, color, crop),
             "Native pixels differ")
-    full_source = fixture_path(fixture, manifest["shots"][8]["path"])
+    full_shot = manifest["shots"][8]
+    full_size = (full_shot["width"], full_shot["height"])
+    full_source = fixture_path(fixture, full_shot["path"])
     full_reference = reference_pixels(full_source, width, height, blur=blur, **color)
-    flat_patches = check_photo_pixels(codec_control(full_reference, width, height), full_source, (960, 540), width, height, blur, bounds, color)
+    flat_patches = check_photo_pixels(codec_control(full_reference, width, height), full_source, full_size, width, height, blur, bounds, color)
     ungraded = reference_pixels(full_source, width, height, blur=blur)
-    rejects(lambda: check_photo_pixels(ungraded, full_source, (960, 540), width, height, blur, bounds, color), "Native pixels differ")
+    rejects(lambda: check_photo_pixels(ungraded, full_source, full_size, width, height, blur, bounds, color), "Native pixels differ")
     fill_shot = next(shot for shot in manifest["shots"] if shot["focalX"] != 0.5)
     fill_source = fixture_path(fixture, fill_shot["path"])
     fill_reference = reference_pixels(fill_source, width, height, framing="fill", focal_x=fill_shot["focalX"], focal_y=fill_shot["focalY"], **color)
@@ -58,9 +60,9 @@ def main():
     for video in (shot for shot in manifest["shots"] if shot["kind"] == "video"):
         output = workspace / f"{video['name']}-signature-control.mp4"
         ffmpeg("-i", fixture_path(fixture, video["path"]), "-vf",
-               f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}",
+               f"trim=start_frame={video['sourceStartFrame']},setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}",
                "-frames:v", str(video["frames"]), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", output)
-        selected = [source_frame for shot, source_frame in picture_sample_frames(manifest).values() if shot["name"] == video["name"]]
+        selected = [source_frame - video["sourceStartFrame"] for shot, source_frame in picture_sample_frames(manifest).values() if shot["name"] == video["name"]]
         pictures.update({video["startFrame"] + frame: pixels for frame, pixels in decoded_frames(output, width, height, selected).items()})
     picture_result = check_picture_samples(pictures, manifest, width, height)
     video = next(shot for shot in manifest["shots"] if shot["kind"] == "video")
