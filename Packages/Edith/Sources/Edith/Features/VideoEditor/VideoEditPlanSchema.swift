@@ -61,19 +61,44 @@ extension VideoEditPlan {
             "positionY": number(-100, 100, "Canvas-height fractions; positive moves down."),
             "rotation": number(-36000, 36000, "Degrees; positive rotates counterclockwise."),
             "interpolation": choice(["linear", "smooth"]),
-        ])
+        ]).merging(["required": ["time"]]) { _, new in new }
+        let background = object([
+            "framing": choice(["fit", "fill", "fullWidth"]),
+            "focalX": fraction, "focalY": fraction,
+            "blurRadius": number(
+                0, 1000,
+                "Gaussian radius in project canvas pixels; default 65. Scales with preview resolution."
+            ),
+            "sourceCrop": object([
+                "x": number(0, 0.95, "Normalized left coordinate of the oriented original."),
+                "y": number(0, 0.95, "Normalized top coordinate of the oriented original."),
+                "width": cropSize, "height": cropSize,
+            ]).merging([
+                "description":
+                    "Independent background crop. x + width and y + height must not exceed 1. Omission uses the entire original."
+            ]) { _, new in new },
+        ]).merging([
+            "required": [String](),
+            "description":
+                "Background from the same oriented original, independent of foreground crop and motion. Defaults to fill, centered, radius 65. Color grading applies to both layers. Omit background to disable.",
+        ]) { _, new in new }
         let effects = object([
-            "framing": choice(["fit", "fill"]), "focalX": fraction, "focalY": fraction,
+            "framing": choice(["fit", "fill", "fullWidth"]), "focalX": fraction, "focalY": fraction,
             "exposure": number(-10, 10, "Exposure stops."),
             "brightness": number(-1, 1, "Core Image brightness adjustment."),
             "contrast": number(0, 4, "Core Image contrast multiplier; identity is 1."),
             "saturation": number(0, 4, "Core Image saturation multiplier; identity is 1."),
+            "background": background,
             "keyframes": [
                 "type": "array", "maxItems": 10000, "items": keyframe,
                 "description":
                     "Strictly increasing source times. Interpolation applies to the following interval. An empty array resets animation.",
             ],
-        ])
+        ]).merging([
+            "required": [String](),
+            "description":
+                "Replace visual settings; omitted fields reset to fit, centered, neutral grade, no keyframes and no background. fullWidth scales the selected source crop to canvas width before padding and animation; taller content may extend beyond canvas. Use fit to retain an entire tall image.",
+        ]) { _, new in new }
         let operations: [String: [String: Any]] = [
             "addMedia": ["path": path, "name": alias],
             "addStill": ["path": path, "name": alias, "duration": stillDuration],

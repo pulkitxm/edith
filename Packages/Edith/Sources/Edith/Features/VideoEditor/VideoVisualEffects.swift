@@ -2,7 +2,7 @@ import CoreImage
 import Foundation
 
 public struct VideoVisualEffects: Codable, Equatable, Sendable {
-    public enum Framing: String, Codable, CaseIterable, Sendable { case fit, fill }
+    public enum Framing: String, Codable, CaseIterable, Sendable { case fit, fill, fullWidth }
     public enum Interpolation: String, Codable, CaseIterable, Sendable { case linear, smooth }
 
     public struct Keyframe: Codable, Equatable, Sendable {
@@ -25,6 +25,23 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
             self.interpolation = interpolation
         }
 
+        private enum CodingKeys: String, CodingKey {
+            case time, scale, positionX, positionY, rotation, interpolation
+        }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                time: try values.decode(Double.self, forKey: .time),
+                scale: try values.decodeIfPresent(Double.self, forKey: .scale) ?? 1,
+                positionX: try values.decodeIfPresent(Double.self, forKey: .positionX) ?? 0,
+                positionY: try values.decodeIfPresent(Double.self, forKey: .positionY) ?? 0,
+                rotation: try values.decodeIfPresent(Double.self, forKey: .rotation) ?? 0,
+                interpolation: try values.decodeIfPresent(
+                    Interpolation.self, forKey: .interpolation)
+                    ?? .linear)
+        }
+
         var isValid: Bool {
             [time, scale, positionX, positionY, rotation].allSatisfy(\.isFinite)
                 && time >= 0 && scale > 0 && scale <= 100
@@ -40,11 +57,12 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
     public var contrast: Double
     public var saturation: Double
     public var keyframes: [Keyframe]
+    public var background: VideoBackground?
 
     public init(
         framing: Framing = .fit, focalX: Double = 0.5, focalY: Double = 0.5,
         exposure: Double = 0, brightness: Double = 0, contrast: Double = 1,
-        saturation: Double = 1, keyframes: [Keyframe] = []
+        saturation: Double = 1, keyframes: [Keyframe] = [], background: VideoBackground? = nil
     ) {
         self.framing = framing
         self.focalX = focalX
@@ -54,6 +72,26 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
         self.contrast = contrast
         self.saturation = saturation
         self.keyframes = keyframes
+        self.background = background
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case framing, focalX, focalY, exposure, brightness, contrast, saturation, keyframes,
+            background
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            framing: try values.decodeIfPresent(Framing.self, forKey: .framing) ?? .fit,
+            focalX: try values.decodeIfPresent(Double.self, forKey: .focalX) ?? 0.5,
+            focalY: try values.decodeIfPresent(Double.self, forKey: .focalY) ?? 0.5,
+            exposure: try values.decodeIfPresent(Double.self, forKey: .exposure) ?? 0,
+            brightness: try values.decodeIfPresent(Double.self, forKey: .brightness) ?? 0,
+            contrast: try values.decodeIfPresent(Double.self, forKey: .contrast) ?? 1,
+            saturation: try values.decodeIfPresent(Double.self, forKey: .saturation) ?? 1,
+            keyframes: try values.decodeIfPresent([Keyframe].self, forKey: .keyframes) ?? [],
+            background: try values.decodeIfPresent(VideoBackground.self, forKey: .background))
     }
 
     var isValid: Bool {
@@ -61,7 +99,8 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
             && (0...1).contains(focalX) && (0...1).contains(focalY)
             && (-10...10).contains(exposure) && (-1...1).contains(brightness)
             && (0...4).contains(contrast) && (0...4).contains(saturation)
-            && keyframes.allSatisfy(\.isValid)
+            && keyframes.count <= 10000 && keyframes.allSatisfy(\.isValid)
+            && (background?.isValid ?? true)
             && zip(keyframes, keyframes.dropFirst()).allSatisfy { $0.time < $1.time }
     }
 
@@ -122,7 +161,13 @@ public struct VideoVisualEffects: Codable, Equatable, Sendable {
     ) -> CGAffineTransform {
         let x = canvas.width / source.width
         let y = canvas.height / source.height
-        let fit = (framing == .fill ? max(x, y) : min(x, y)) * (1 - 2 * padding)
+        let base: CGFloat
+        switch framing {
+        case .fit: base = min(x, y)
+        case .fill: base = max(x, y)
+        case .fullWidth: base = x
+        }
+        let fit = base * (1 - 2 * padding)
         let key = sample(at: sourceTime)
         let scale = fit * key.scale * zoom.scale
         let offsetX = (canvas.width - source.width * fit) * focalX
