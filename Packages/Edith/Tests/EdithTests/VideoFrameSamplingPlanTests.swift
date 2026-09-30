@@ -63,7 +63,24 @@ import Testing
         let delivered = try await VideoEditorService.render(
             projectURL, to: directory.appendingPathComponent("delivery.mp4"))
         #expect(delivered.videoReport?.frameCount == 60)
+        #expect(
+            try VideoFrameSamplingTests.read(
+                AVURLAsset(url: directory.appendingPathComponent("delivery.mp4")))
+                == Array(120..<180))
         #expect(try Data(contentsOf: video) == original)
+        _ = try await VideoEditorService.apply(
+            .init(operations: [
+                .split(clipID: id, sourceTime: 2.5, rightName: "right"),
+                .frameSampling(clipID: id, mode: .hold),
+            ]), to: projectURL, overwrite: true)
+        let mixed = try VideoEditorService.open(projectURL)
+        #expect(try mixed.clips[0].frameSampling == .hold)
+        #expect(try mixed.clips[1].frameSampling == .nearest)
+        let mixedPipeline = try await VideoRenderPipeline.make(project: mixed)
+        #expect(
+            try VideoFrameSamplingTests.read(
+                mixedPipeline.composition, videoComposition: mixedPipeline.videoComposition)
+                == Array(119..<149) + Array(150..<180))
     }
 
     @Test func invalidModesAndUnavailablePhasesDoNotPublish() async throws {

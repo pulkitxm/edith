@@ -66,17 +66,18 @@ import Testing
         case "thirty", "thirtyLate": 135000
         case "thirtyPhase": 162000
         case "oneTwenty": 36000
+        case "vfrSix": 540000
         default: 180000
         }
     }
 
-    static func timestamps(_ name: String) -> [Int64] {
-        let count = name == "oneTwenty" ? 600 : name.hasPrefix("thirty") ? 150 : 300
+    static func timestamps(_ name: String, seconds: Int = 5) -> [Int64] {
+        let count = seconds * (name == "oneTwenty" ? 120 : name.hasPrefix("thirty") ? 30 : 60)
         return (0..<count).map { index in
             let n = Int64(index)
             guard n > 0 else { return 0 }
             switch name {
-            case "vfr": return n * 1501 - 84
+            case "vfr", "vfrSix": return n * 1501 - 84
             case "jitter": return n * 1500 + (n % 7 == 0 ? -500 : 600)
             case "thirty": return n * 3000
             case "thirtyLate": return n * 2999 + 40
@@ -86,7 +87,7 @@ import Testing
         }
     }
 
-    static func fixture(_ url: URL, times: [Int64]) async throws {
+    static func fixture(_ url: URL, times: [Int64], seconds: Int = 5) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(
             mediaType: .video,
@@ -127,7 +128,7 @@ import Testing
                 adaptor.append(buffer, withPresentationTime: CMTime(value: time, timescale: 90000)))
         }
         input.markAsFinished()
-        writer.endSession(atSourceTime: CMTime(value: 5, timescale: 1))
+        writer.endSession(atSourceTime: CMTime(value: Int64(seconds), timescale: 1))
         await writer.finishWriting()
         #expect(writer.status == .completed)
     }
@@ -148,16 +149,22 @@ import Testing
         return try read(composition, videoComposition: filter)
     }
 
-    static func read(_ composition: AVComposition, videoComposition: AVVideoComposition) throws
+    static func read(_ composition: AVAsset, videoComposition: AVVideoComposition? = nil) throws
         -> [Int]
     {
         let reader = try AVAssetReader(asset: composition)
-        let output = AVAssetReaderVideoCompositionOutput(
-            videoTracks: composition.tracks(withMediaType: .video),
-            videoSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ])
-        output.videoComposition = videoComposition
+        let settings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        let output: AVAssetReaderOutput
+        if let videoComposition {
+            let composed = AVAssetReaderVideoCompositionOutput(
+                videoTracks: composition.tracks(withMediaType: .video), videoSettings: settings)
+            composed.videoComposition = videoComposition
+            output = composed
+        } else {
+            output = AVAssetReaderTrackOutput(
+                track: try #require(composition.tracks(withMediaType: .video).first),
+                outputSettings: settings)
+        }
         reader.add(output)
         #expect(reader.startReading())
         var ids: [Int] = []
