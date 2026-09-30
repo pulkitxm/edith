@@ -8,11 +8,19 @@ enum VideoStyledCaptionImage {
         let baseline: CGPoint
     }
 
+    private static func ascent(_ font: CTFont, style: VideoCaptionStyle) -> CGFloat {
+        style.metrics == .fontBounds ? ceil(CTFontGetAscent(font)) : CTFontGetAscent(font)
+    }
+
+    private static func descent(_ font: CTFont, style: VideoCaptionStyle) -> CGFloat {
+        style.metrics == .fontBounds ? ceil(CTFontGetDescent(font)) : CTFontGetDescent(font)
+    }
+
     static func rect(_ text: String, style: VideoCaptionStyle) throws -> CGRect {
         let lines = try layout(text, style: style)
         let font = try style.font()
         let height =
-            CTFontGetAscent(font) + CTFontGetDescent(font)
+            ascent(font, style: style) + descent(font, style: style)
             + Double(max(0, lines.count - 1)) * style.lineAdvance
         return CGRect(
             x: (style.x
@@ -28,10 +36,14 @@ enum VideoStyledCaptionImage {
     static func layout(_ text: String, style: VideoCaptionStyle) throws -> [Line] {
         try style.validate()
         let font = try style.font()
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
         ]
+        if style.metrics == .fontBounds {
+            attributes[NSAttributedString.Key(kCTKernAttributeName as String)] = 0
+            attributes[NSAttributedString.Key(kCTLigatureAttributeName as String)] = 0
+        }
         var lines: [CTLine] = []
         for paragraph in text.components(separatedBy: "\n") {
             let attributed = NSAttributedString(string: paragraph, attributes: attributes)
@@ -46,9 +58,10 @@ enum VideoStyledCaptionImage {
                 offset += length
             }
         }
-        let ascent = CTFontGetAscent(font)
+        let ascent = ascent(font, style: style)
         let height =
-            ascent + CTFontGetDescent(font) + Double(max(0, lines.count - 1)) * style.lineAdvance
+            ascent + descent(font, style: style) + Double(max(0, lines.count - 1))
+            * style.lineAdvance
         let left =
             style.x
             - (style.alignment == .center
@@ -61,9 +74,27 @@ enum VideoStyledCaptionImage {
             "Caption layout exceeds the reference canvas; adjust position, width, size or line advance."
         )
         return try lines.enumerated().map { index, line in
-            let width =
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                let runFont = attributes[kCTFontAttributeName] as! CTFont
+                var glyphs = [CGGlyph](repeating: 0, count: CTRunGetGlyphCount(run))
+                CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &glyphs)
+                guard CTFontCopyPostScriptName(runFont) == CTFontCopyPostScriptName(font),
+                    !glyphs.contains(0)
+                else {
+                    throw VideoEditorService.Failure(
+                        "unsupported_caption_glyph",
+                        "Caption contains glyphs unavailable in \(style.fontFamily) \(style.fontStyle)."
+                    )
+                }
+            }
+            let advance =
                 CTLineGetTypographicBounds(line, nil, nil, nil)
                 - CTLineGetTrailingWhitespaceWidth(line)
+            let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+            let width =
+                style.metrics == .fontBounds && !ink.isNull
+                ? ceil(max(advance, ink.maxX)) - floor(min(0, ink.minX)) : advance
             try VideoCaptionStyle.require(
                 width <= style.width + 0.01, "Caption width cannot fit a glyph.")
             let x =
@@ -108,12 +139,13 @@ enum VideoStyledCaptionImage {
         context.clear(referenceBounds)
         if let shadow = style.shadow {
             context.saveGState()
-            context.setAlpha(shadow.color.alpha)
-            context.beginTransparencyLayer(auxiliaryInfo: nil)
-            let color = shadow.color.cgColor.copy(alpha: 1)!
-            draw(lines, context: context, stroke: shadow.strokeWidth, color: color)
-            draw(lines, context: context, stroke: 0, color: color)
-            context.endTransparencyLayer()
+            context.setBlendMode(.copy)
+            if shadow.strokeWidth > 0 {
+                draw(
+                    lines, context: context, stroke: shadow.strokeWidth,
+                    color: (shadow.strokeColor ?? shadow.color).cgColor)
+            }
+            draw(lines, context: context, stroke: 0, color: shadow.color.cgColor)
             context.restoreGState()
             if let raster = context.makeImage() {
                 let scaleX = size.width / style.canvasWidth

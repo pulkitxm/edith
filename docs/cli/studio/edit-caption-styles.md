@@ -46,11 +46,20 @@ them to its output canvas. There are no implicit 1280-pixel font-size units.
   and also determines which horizontal edge or center of that box `x` anchors.
 - `y` increases downwards from the top of the canvas. `anchor` is `top`, `center`
   or `bottom` of the typographic block, including the font's ascent and descent.
+- Optional `metrics: "fontBounds"` uses integer ascent/descent and integer font
+  bounding-box width, with automatic kerning and ligatures disabled. Centered
+  pen X is `x - (box.right - box.left) / 2`; negative left bearings contribute
+  to that width. This supports Pillow BASIC-style reference placement.
+  Omit `metrics`, or use `"typographic"`, for native typographic positioning.
 - sRGB channels and alpha are fractions in `[0, 1]`. Thus black alpha 70/255 is
   `0.27450980392156865`, and black alpha 100/255 is `0.39215686274509803`.
 - `outline.width` is the outward stroke width in pixels.
 - Shadow `x` and `y` are offsets, with positive Y downwards. `blur` and
-  `strokeWidth` are pixels. A zero stroke width uses the filled glyph shape.
+  `strokeWidth` are pixels. `color` controls glyph fill and optional `strokeColor`
+  independently controls the stroke. Omit `strokeColor` to use the fill color.
+  Stroke and fill alpha are assigned separately before Gaussian blur and offset;
+  the interior does not accumulate both opacities. A zero stroke width uses only
+  the filled glyph shape. Both colors are editable in the native JSON inspector.
 - `gradient.startY` and `endY` are top-origin pixel coordinates. Stop `location`
   values are strictly increasing fractions over that extent, starting at 0 and
   ending at 1. The first and last colors extend flat outside the extent.
@@ -74,6 +83,7 @@ Changing `fontSize` to 112 retains the exact line advance and position.
   "lineAdvance": 150,
   "alignment": "center",
   "anchor": "top",
+  "metrics": "fontBounds",
   "x": 1080,
   "y": 2780,
   "width": 2000,
@@ -87,7 +97,8 @@ Changing `fontSize` to 112 retains the exact line advance and position.
     "y": 7,
     "blur": 9,
     "strokeWidth": 7,
-    "color": { "red": 0, "green": 0, "blue": 0, "alpha": 1 }
+    "color": { "red": 0, "green": 0, "blue": 0, "alpha": 0.9019607843137255 },
+    "strokeColor": { "red": 0, "green": 0, "blue": 0, "alpha": 0.5882352941176471 }
   },
   "gradient": {
     "startY": 2100,
@@ -143,3 +154,24 @@ MCP uses the same CLI arguments through `edith_studio_edit_captions_add`,
 `edith_studio_edit_captions_update`, `edith_studio_edit_captions_list` and
 `edith_studio_edit_apply`. Frame and marker snapshot timing remains unchanged
 through later speed changes, clip reordering and marker edits.
+
+## Reference verification
+
+Synthetic one-line, two-line and kerning-sensitive masks at 104 and 112 pixels
+are generated independently by `scripts/generate-caption-reference.py`, using
+Pillow BASIC and the installed Arial Bold Italic font. The fixture manifest
+records the Pillow/FreeType versions and font digest. Native comparisons require
+each thresholded ink bound to agree within one reference-canvas pixel and at
+least 99.99% of foreground pixels in both masks to have a counterpart within two
+pixels. Every foreground pixel must have a counterpart within three pixels;
+the extra pixel allows isolated rasterized curve-corner differences.
+This allows the measured FreeType/Core Text edge-hinting difference, rather than
+claiming byte-identical antialiasing. A typographic-placement negative control
+must fail the position tolerance. Fonts with unavailable glyphs fail with
+`unsupported_caption_glyph` instead of substituting another font.
+
+Static styled caption rasters are cached per composition and output size through
+a thread-safe cache limited to two images and 64 MiB. Rebuilding
+the preview after text, style or canvas edits creates a fresh cache. Legacy
+time-dependent word highlighting remains uncached. Cached images and project
+content remain in memory only.

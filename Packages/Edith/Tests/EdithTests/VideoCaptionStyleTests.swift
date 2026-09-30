@@ -9,7 +9,9 @@ import Testing
     static var styled: VideoCaptionStyle {
         var style = VideoCaptionStyle()
         style.outline = .init()
-        style.shadow = .init(strokeWidth: 7)
+        style.shadow = .init(
+            strokeWidth: 7, color: .init(alpha: 230.0 / 255),
+            strokeColor: .init(alpha: 150.0 / 255))
         style.gradient = .init(
             startY: 2100, endY: 3600,
             stops: [
@@ -176,7 +178,9 @@ import Testing
         let rate = try VideoCaptionFrameRate(numerator: 60)
         let anchor = try VideoCaptionAnchor(
             start: .init(frame: 12, frameRate: rate), end: .init(frame: 24, frameRate: rate))
-        try project.addOutputCaption("SYNTHETIC\nCAPTION", anchor: anchor, style: Self.styled)
+        var renderStyle = Self.styled
+        renderStyle.metrics = .fontBounds
+        try project.addOutputCaption("SYNTHETIC\nCAPTION", anchor: anchor, style: renderStyle)
         try project.save(to: url)
         let frameFile = directory.appendingPathComponent("full-resolution.png")
         let frameReport = try await VideoEditorService.frame(url, frameIndex: 12, to: frameFile)

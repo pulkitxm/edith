@@ -24,13 +24,15 @@ extension VideoCaptionStyle {
                 "fontFamily": name, "fontStyle": name, "fontSize": number(1, 2048),
                 "lineAdvance": number(1, 4096), "alignment": choice(["left", "center", "right"]),
                 "anchor": choice(["top", "center", "bottom"]),
+                "metrics": choice(["typographic", "fontBounds"]),
                 "x": number(0, 16384), "y": number(0, 16384), "width": number(1, 16384),
                 "fill": color,
                 "outline": object(["width": number(0, 128), "color": color]),
-                "shadow": object([
-                    "x": number(-2048, 2048), "y": number(-2048, 2048), "blur": number(0, 256),
-                    "strokeWidth": number(0, 128), "color": color,
-                ]),
+                "shadow": object(
+                    [
+                        "x": number(-2048, 2048), "y": number(-2048, 2048), "blur": number(0, 256),
+                        "strokeWidth": number(0, 128), "color": color, "strokeColor": color,
+                    ], optional: ["strokeColor"]),
                 "gradient": object([
                     "startY": number(0, 16384), "endY": number(0, 16384),
                     "stops": [
@@ -38,7 +40,7 @@ extension VideoCaptionStyle {
                         "items": object(["location": fraction, "color": color]),
                     ],
                 ]),
-            ], optional: ["outline", "shadow", "gradient"]
+            ], optional: ["outline", "shadow", "gradient", "metrics"]
         ).merging([
             "description":
                 "All dimensions use reference-canvas pixels. X anchors left/center/right by alignment; Y anchors the top/center/bottom of the text block. Y and shadow Y increase downwards. Gradient locations are fractions between startY and endY, extended flat outside that interval."

@@ -217,6 +217,7 @@ struct VideoRenderPipeline {
     var audioRateSources: [VideoAudioRateSource] = []
     let segments: [Segment]
     let canvas: CGSize
+    var captionRasterCache: VideoCaptionRasterCache? = nil
 
     var duration: Double { segments.last?.outputEnd ?? 0 }
 
@@ -377,6 +378,7 @@ struct VideoRenderPipeline {
         let size = canvas
         let cursorImage = pointerImage()
         let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
+        let captionRasters = VideoCaptionRasterCache(annotations: annotations)
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
             guard
@@ -430,6 +432,7 @@ struct VideoRenderPipeline {
                     effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
                     size: size, nativeCanvas: nativeCanvas,
                     zooms: zooms, annotations: annotations, outputTime: request.compositionTime,
+                    captionRasters: captionRasters,
                     backdrop: backdrop,
                     padding: padding, presentation: presentation,
                     webcam: webcam, webcamLayout: project.webcamLayout,
@@ -482,7 +485,7 @@ struct VideoRenderPipeline {
             composition: composition, videoComposition: videoComposition,
             audioMix: mix.inputParameters.isEmpty ? nil : mix,
             audioRateSources: rateSources,
-            segments: segments, canvas: canvas)
+            segments: segments, canvas: canvas, captionRasterCache: captionRasters)
     }
 
     static func audioTransitions(
@@ -676,6 +679,7 @@ struct VideoRenderPipeline {
         _ input: CIImage, clip: VideoProject.Clip, effects: VideoVisualEffects, at timeMs: Double,
         size: CGSize, nativeCanvas: CGSize,
         zooms: [VideoProject.Zoom], annotations: [VideoProject.Annotation], outputTime: CMTime,
+        captionRasters: VideoCaptionRasterCache,
         backdrop: CIImage, padding: CGFloat, presentation: VideoPresentation,
         webcam: CIImage?, webcamLayout: String, webcamSize: Double,
         webcamPosition: [String: Double], webcamMask: String, webcamMirrored: Bool,
@@ -854,8 +858,8 @@ struct VideoRenderPipeline {
                 height: size.height * (proportions["height"] ?? 20) / 100)
             switch annotation.type {
             case "text":
-                if let style = annotation.captionStyle {
-                    if let text = VideoStyledCaptionImage.make(annotation, style: style, size: size) {
+                if annotation.raw["edithCaptionStyle"] != nil {
+                    if let text = captionRasters.image(for: annotation.id, size: size) {
                         output = text.composited(over: output).cropped(to: bounds)
                     }
                 } else if let text = VideoCaptionImage.make(

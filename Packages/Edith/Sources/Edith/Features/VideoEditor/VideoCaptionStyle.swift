@@ -45,16 +45,18 @@ public struct VideoCaptionStyle: Codable, Equatable, Sendable {
         public var blur: Double
         public var strokeWidth: Double
         public var color: Color
+        public var strokeColor: Color?
 
         public init(
             x: Double = 3, y: Double = 7, blur: Double = 9, strokeWidth: Double = 0,
-            color: Color = .init()
+            color: Color = .init(), strokeColor: Color? = nil
         ) {
             self.x = x
             self.y = y
             self.blur = blur
             self.strokeWidth = strokeWidth
             self.color = color
+            self.strokeColor = strokeColor
         }
     }
 
@@ -82,6 +84,7 @@ public struct VideoCaptionStyle: Codable, Equatable, Sendable {
 
     public enum Alignment: String, Codable, Sendable { case left, center, right }
     public enum Anchor: String, Codable, Sendable { case top, center, bottom }
+    public enum Metrics: String, Codable, Sendable { case typographic, fontBounds }
 
     public var canvasWidth: Double = 2160
     public var canvasHeight: Double = 3840
@@ -91,6 +94,7 @@ public struct VideoCaptionStyle: Codable, Equatable, Sendable {
     public var lineAdvance: Double = 150
     public var alignment: Alignment = .center
     public var anchor: Anchor = .top
+    public var metrics: Metrics?
     public var x: Double = 1080
     public var y: Double = 2780
     public var width: Double = 2000
@@ -139,6 +143,7 @@ public struct VideoCaptionStyle: Codable, Equatable, Sendable {
                     && shadow.strokeWidth.isFinite && (0...128).contains(shadow.strokeWidth),
                 "Invalid shadow offset, blur or stroke width.")
             try shadow.color.validate()
+            try shadow.strokeColor?.validate()
         }
         if let gradient {
             try Self.require(

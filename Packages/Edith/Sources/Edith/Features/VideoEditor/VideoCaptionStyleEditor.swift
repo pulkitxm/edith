@@ -16,6 +16,14 @@ struct VideoCaptionStyleEditor: View {
             number("Canvas height", value: $style.canvasHeight)
             number("Font size", value: $style.fontSize)
             number("Line advance", value: $style.lineAdvance)
+            Picker(
+                "Font metrics",
+                selection: Binding(
+                    get: { style.metrics ?? .typographic }, set: { style.metrics = $0 })
+            ) {
+                Text("Typographic").tag(VideoCaptionStyle.Metrics.typographic)
+                Text("Integer font bounds").tag(VideoCaptionStyle.Metrics.fontBounds)
+            }
             Picker("Alignment", selection: $style.alignment) {
                 Text("Left").tag(VideoCaptionStyle.Alignment.left)
                 Text("Center").tag(VideoCaptionStyle.Alignment.center)

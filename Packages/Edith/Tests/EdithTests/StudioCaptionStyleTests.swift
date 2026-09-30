@@ -11,7 +11,9 @@ import Testing
         let (directory, url, _) = try await VideoOutputCaptionTests.fixture()
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("style.json")
-        try JSONEncoder().encode(VideoCaptionStyleTests.styled).write(to: file)
+        var requested = VideoCaptionStyleTests.styled
+        requested.metrics = .fontBounds
+        try JSONEncoder().encode(requested).write(to: file)
         let parsed = try #require(
             EdRoot.parseAsRoot([
                 "studio", "edit", "captions", "add", url.path, "--text", "SYNTHETIC",
@@ -34,6 +36,7 @@ import Testing
                 "--start-frame", "12", "--end-frame", "24", "--style", file.path,
             ])
         let id = try #require(created["captionID"] as? String)
+        #expect(try VideoEditorService.listCaptions(url).captions[0].style == requested)
         let before = try Data(contentsOf: url)
         var changed = VideoCaptionStyleTests.styled
         changed.fontSize = 112
