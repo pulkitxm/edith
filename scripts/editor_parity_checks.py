@@ -2,13 +2,14 @@ import array
 import json
 import math
 import pathlib
+import statistics
 import subprocess
 import sys
 from fractions import Fraction
 
 from editor_acceptance_captions import caption_snapshot
 from editor_acceptance_contracts import require
-from editor_parity_fixtures import FRAME_COUNT, FRAME_RATE, SAMPLE_RATE, checksum, command, fixture_path, inventory, probe
+from editor_parity_fixtures import FRAME_COUNT, FRAME_RATE, SAMPLE_RATE, checksum, command, fixture_path, inventory, probe, signature_cells
 
 
 def protected_snapshot(directory, manifest):
@@ -66,7 +67,40 @@ def decoded_frames(path, width, height, frame_numbers):
     return {frame: data[index * size:(index + 1) * size] for index, frame in enumerate(sorted(frame_numbers))}
 
 
-def check_video(path, dimensions):
+def picture_sample_frames(manifest):
+    return {shot["startFrame"] + offset: (shot, offset) for shot in manifest["shots"] if shot["kind"] == "video"
+            for offset in (0, 1, shot["frames"] // 2 - 1, shot["frames"] // 2, shot["frames"] - 2, shot["frames"] - 1)}
+
+
+def check_frame_signature(pixels, width, height, shot, expected_frame):
+    scale = max(width / shot["width"], height / shot["height"])
+    origin_x, origin_y = (width - shot["width"] * scale) / 2, (height - shot["height"] * scale) / 2
+    decoded = 0
+    levels = []
+    require(len(pixels) == width * height * 3, "Invalid picture signature dimensions")
+    for bit, (x, y) in enumerate(signature_cells()):
+        center_x, center_y = round(origin_x + x * shot["width"] * scale), round(origin_y + y * shot["height"] * scale)
+        require(1 <= center_x < width - 1 and 1 <= center_y < height - 1, "Frame signature falls outside the decoded picture")
+        level = statistics.median(pixels[(row * width + column) * 3 + channel]
+                                  for row in range(center_y - 1, center_y + 2)
+                                  for column in range(center_x - 1, center_x + 2) for channel in range(3))
+        require(level < 80 or level > 176, "Frame signature cell lost its independently specified black/white contrast")
+        decoded |= int(level > 128) << bit
+        levels.append(level)
+    require(decoded - 1 == expected_frame,
+            f"Decoded picture repeats, skips, or freezes a source frame: expected {expected_frame}, found {decoded - 1}")
+    return {"sourceFrame": decoded - 1, "cellLevels": levels}
+
+
+def check_picture_samples(frames, manifest, width, height):
+    selections = picture_sample_frames(manifest)
+    require(len(selections) == 30 and set(frames) == set(selections), "Missing required start, middle, or end picture samples")
+    for frame, (shot, source_frame) in selections.items():
+        check_frame_signature(frames[frame], width, height, shot, source_frame)
+    return {"sampledPictures": len(frames), "videoSources": 5, "startMiddleEndAndAdjacentPicturesVerified": True}
+
+
+def check_video(path, dimensions, manifest):
     metadata = probe(path)
     videos = [stream for stream in metadata["streams"] if stream["codec_type"] == "video"]
     audios = [stream for stream in metadata["streams"] if stream["codec_type"] == "audio"]
@@ -86,19 +120,25 @@ def check_video(path, dimensions):
     require(abs(float(audio["start_time"])) < 1 / SAMPLE_RATE, "Soundtrack starts after frame zero")
     require(abs(float(audio["duration"]) - FRAME_COUNT / FRAME_RATE) <= 1024 / SAMPLE_RATE,
             "Encoded soundtrack does not cover the timeline within one AAC packet")
+    pictures = decoded_frames(path, 180, 320, list(picture_sample_frames(manifest)))
+    picture_report = check_picture_samples(pictures, manifest, 180, 320)
     return {"width": video["width"], "height": video["height"], "decodedFrames": len(frames), "fps": FRAME_RATE,
-            "durationSeconds": float(video["duration"]), "sha256": checksum(path), "exactTimestamps": True}
+            "durationSeconds": float(video["duration"]), "sha256": checksum(path), "exactTimestamps": True, "pictureSignatures": picture_report}
 
 
 def audio_samples(path):
+    streams = [stream for stream in probe(path)["streams"] if stream["codec_type"] == "audio"]
+    require(len(streams) == 1 and streams[0]["channels"] == 2 and int(streams[0]["sample_rate"]) == SAMPLE_RATE,
+            "Audio verification requires original 48 kHz stereo samples without channel conversion")
     data = command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-i", path,
-                    "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "f32le", "pipe:1"])
+                    "-map", "0:a:0", "-vn", "-f", "f32le", "pipe:1"])
     samples = array.array("f")
     samples.frombytes(data)
     if sys.byteorder != "little":
         samples.byteswap()
     require(all(math.isfinite(value) for value in samples), "Audio contains nonfinite samples")
-    return samples
+    require(len(samples) % 2 == 0, "Incomplete interleaved stereo sample")
+    return samples[0::2], samples[1::2]
 
 
 def measure_loudness(path):
@@ -115,42 +155,75 @@ def measure_loudness(path):
     return values
 
 
-def check_mastered_audio(path, original, manifest, exact_samples=True):
+def waveform_fit(expected, actual):
+    energy_expected = sum(value * value for value in expected)
+    energy_actual = sum(value * value for value in actual)
+    require(energy_expected > 0 and energy_actual > 0, "Soundtrack contains an unexpected silent channel or interior dropout")
+    product = sum(left * right for left, right in zip(expected, actual))
+    return product / energy_expected, product / math.sqrt(energy_expected * energy_actual)
+
+
+def check_mastered_audio(path, original, manifest, reference_master, reference_codec, exact_samples=True):
     loudness = measure_loudness(path)
     require(abs(loudness["integratedLUFS"] + 16) <= 0.3, "Mastered soundtrack misses -16 LUFS by more than 0.3 LU")
     require(loudness["truePeakDBTP"] <= -1.5 + 0.1, "Mastered soundtrack exceeds -1.5 dBTP with 0.1 dB measurement tolerance")
     require(loudness["loudnessRangeLU"] <= 11 + 0.3, "Mastered soundtrack exceeds the 11 LU range target")
     source, actual = audio_samples(original), audio_samples(path)
+    reference, control = audio_samples(reference_master), audio_samples(reference_codec)
     count = FRAME_COUNT * 800
-    require(len(source) == count and (len(actual) == count if exact_samples else abs(len(actual) - count) < 1024),
+    require(all(len(channel) == count for channel in (*source, *reference))
+            and all(len(channel) == count if exact_samples else abs(len(channel) - count) < 1024 for channel in actual),
             "Mastered audio sample count mismatch")
-    require(len(actual) >= count, "Mastered audio truncates the final fade")
-    correlations = []
-    for boundary in [shot["startFrame"] * 800 for shot in manifest["shots"]]:
-        start, end = max(0, boundary - 240), min(count - 12000, boundary + 240)
-        a, b = source[start:end], actual[start:end]
-        energy_a, energy_b = sum(value * value for value in a), sum(value * value for value in b)
-        require(energy_a > 0 and energy_b > 0, "Soundtrack contains an unexpected gap at a shot boundary")
-        correlation = sum(left * right for left, right in zip(a, b)) / math.sqrt(energy_a * energy_b)
-        require(correlation > 0.985, "Soundtrack source position or waveform changes at a shot boundary")
+    require(all(len(channel) >= count for channel in (*actual, *control)), "Mastered audio truncates the final fade")
+    windows = [(start, min(start + 480, count)) for start in range(0, count, 480)]
+    windows += [(max(0, shot["startFrame"] * 800 - 240), min(count, shot["startFrame"] * 800 + 240)) for shot in manifest["shots"]]
+    fits, calibration, source_fits = [], [], []
+    for channel in range(2):
+        for start, end in windows:
+            expected = reference[channel][start:end]
+            source_fit = waveform_fit(source[channel][start:end], expected)
+            if end <= count - 12000:
+                require(source_fit[0] > 0 and source_fit[1] > 0.98, "Independent master reference lost its original channel waveform")
+                source_fits.append(source_fit[1])
+            calibration.append(waveform_fit(expected, control[channel][start:end]))
+            fits.append(waveform_fit(expected, actual[channel][start:end]))
+    require(all(gain > 0 and correlation > 0.98 for gain, correlation in calibration),
+            "Independent codec calibration cannot resolve the reference waveform")
+    gain = statistics.median(value[0] for value in fits)
+    codec_gain = statistics.median(value[0] for value in calibration)
+    require(gain > 0, "Soundtrack polarity or stereo content changed")
+    correlations, limits, level_errors = [], [], []
+    for (local_gain, correlation), (control_gain, control_correlation) in zip(fits, calibration):
+        correlation_limit = 1 - max(0.0005, 4 * max(0, 1 - control_correlation))
+        level_limit = max(0.15, 4 * abs(20 * math.log10(control_gain / codec_gain)))
+        require(correlation_limit >= 0.98 and level_limit <= 1,
+                "Independent codec calibration is too uncertain for this audio window")
+        require(local_gain > 0 and correlation >= correlation_limit,
+                "Soundtrack channel waveform or source position differs inside the timeline")
+        level_error = abs(20 * math.log10(local_gain / gain))
+        require(level_error <= level_limit, "Soundtrack channel level differs inside the timeline")
         correlations.append(correlation)
+        limits.append(correlation_limit)
+        level_errors.append(level_error)
     fade_start = count - 12000
-
-    def gain(start, end):
-        a, b = source[start:end], actual[start:end]
-        return sum(left * right for left, right in zip(a, b)) / sum(value * value for value in a)
-
-    reference_gain = gain(fade_start - 4800, fade_start)
-    require(reference_gain > 0, "Invalid pre-fade soundtrack gain")
     fade = []
-    for index in range(25):
-        start = fade_start + index * 480
-        measured = gain(start, start + 480) / reference_gain
-        expected = 1 - (index + 0.5) / 25
-        require(abs(measured - expected) <= 0.06, "Final soundtrack fade differs from the requested linear 0.25 seconds")
-        fade.append(measured)
-    return {**loudness, "samples": len(actual), "minimumBoundaryCorrelation": min(correlations),
-            "boundaryChecks": len(correlations), "fadeOutSeconds": 0.25, "fadeWindowGains": fade}
+    for channel in range(2):
+        baseline_gain, _ = waveform_fit(source[channel][fade_start - 4800:fade_start], actual[channel][fade_start - 4800:fade_start])
+        channel_fade = []
+        for index in range(25):
+            start = fade_start + index * 480
+            measured, _ = waveform_fit(source[channel][start:start + 480], actual[channel][start:start + 480])
+            measured /= baseline_gain
+            expected = 1 - (index + 0.5) / 25
+            require(abs(measured - expected) <= 0.06, "Final soundtrack fade differs from the requested linear 0.25 seconds")
+            channel_fade.append(measured)
+        fade.append(channel_fade)
+    return {**loudness, "samplesPerChannel": len(actual[0]), "channelsCheckedIndependently": 2,
+            "fullCoverageWindowsPerChannel": math.ceil(count / 480), "boundaryWindowsPerChannel": len(manifest["shots"]),
+            "minimumWindowCorrelation": min(correlations), "minimumCalibratedCorrelation": min(limits),
+            "minimumReferenceSourceCorrelation": min(source_fits),
+            "maximumLocalLevelErrorDB": max(level_errors), "referenceMasterSHA256": checksum(reference_master),
+            "referenceCodecSHA256": checksum(reference_codec), "fadeOutSeconds": 0.25, "fadeWindowGainsByChannel": fade}
 
 
 def aac_packets(path):

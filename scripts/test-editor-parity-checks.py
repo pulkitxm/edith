@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 from editor_acceptance_contracts import require
-from editor_parity_checks import check_aac_passthrough, check_mastered_audio, measure_loudness, protected_snapshot
+from editor_parity_checks import check_aac_passthrough, check_mastered_audio, check_picture_samples, decoded_frames, measure_loudness, picture_sample_frames, protected_snapshot
 from editor_parity_cli import publish_result
 from editor_parity_fixtures import ffmpeg, fixture_path, verify, write_json
 from editor_parity_pixels import check_caption_pixels, check_fill_pixels, check_photo_pixels, codec_control, reference_pixels
@@ -49,6 +49,21 @@ def main():
     fill_reference = reference_pixels(fill_source, width, height, framing="fill", focal_x=fill_shot["focalX"], focal_y=fill_shot["focalY"], **color)
     fill = check_fill_pixels(codec_control(fill_reference, width, height), fill_source, width, height, bounds,
                              color, fill_shot["focalX"], fill_shot["focalY"])
+    pictures = {}
+    for video in (shot for shot in manifest["shots"] if shot["kind"] == "video"):
+        output = workspace / f"{video['name']}-signature-control.mp4"
+        ffmpeg("-i", fixture_path(fixture, video["path"]), "-vf",
+               f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}",
+               "-frames:v", str(video["frames"]), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", output)
+        selected = [source_frame for shot, source_frame in picture_sample_frames(manifest).values() if shot["name"] == video["name"]]
+        pictures.update({video["startFrame"] + frame: pixels for frame, pixels in decoded_frames(output, width, height, selected).items()})
+    picture_result = check_picture_samples(pictures, manifest, width, height)
+    video = next(shot for shot in manifest["shots"] if shot["kind"] == "video")
+    middle = video["startFrame"] + video["frames"] // 2
+    repeated = {**pictures, middle: pictures[middle - 1]}
+    rejects(lambda: check_picture_samples(repeated, manifest, width, height), "repeats, skips, or freezes")
+    frozen = {frame: pictures[shot["startFrame"]] for frame, (shot, _) in picture_sample_frames(manifest).items()}
+    rejects(lambda: check_picture_samples(frozen, manifest, width, height), "repeats, skips, or freezes")
     caption = bytearray(reference)
     for y in range(32, 80):
         for x in range(18, 162):
@@ -68,8 +83,22 @@ def main():
     gain = -16 - measured["integratedLUFS"]
     fade_start = manifest["frameCount"] / manifest["frameRate"] - 0.25
     ffmpeg("-i", original, "-af", f"volume={gain}dB,afade=t=out:st={fade_start}:d=0.25", "-c:a", "pcm_s24le", master)
-    audio = check_mastered_audio(master, original, manifest)
-    rejects(lambda: check_mastered_audio(original, original, manifest), "misses -16 LUFS")
+    codec_reference = workspace / "independent-reference-master.m4a"
+    ffmpeg("-i", master, "-c:a", "aac", "-b:a", "320k", codec_reference)
+    audio = check_mastered_audio(master, original, manifest, master, codec_reference)
+    codec_audio = check_mastered_audio(codec_reference, original, manifest, master, codec_reference, exact_samples=False)
+    rejects(lambda: check_mastered_audio(original, original, manifest, master, codec_reference), "misses -16 LUFS")
+    defects = [
+        ("interior-dropout", "volume=0:enable='between(t,2,2.5)'", "interior dropout"),
+        ("silent-right-channel", "pan=stereo|c0=c0|c1=0*c1", "silent channel"),
+        ("wrong-right-channel", "pan=stereo|c0=c0|c1=c0", "channel waveform"),
+    ]
+    for name, operation, message in defects:
+        draft, corrupt = workspace / f"{name}-draft.wav", workspace / f"{name}.wav"
+        ffmpeg("-i", master, "-af", operation, "-c:a", "pcm_s24le", draft)
+        compensate = -16 - measure_loudness(draft)["integratedLUFS"]
+        ffmpeg("-i", draft, "-af", f"volume={compensate}dB", "-c:a", "pcm_s24le", corrupt)
+        rejects(lambda: check_mastered_audio(corrupt, original, manifest, master, codec_reference), message)
     aac = fixture_path(fixture, manifest["passthrough"]["path"])
     copied = workspace / "packet-copy.m4a"
     ffmpeg("-i", aac, "-c:a", "copy", copied)
@@ -79,7 +108,8 @@ def main():
     rejects(lambda: check_aac_passthrough(aac, reencoded), "packet payloads")
     require(protected_snapshot(fixture, manifest) == before, "Independent controls changed protected fixture assets")
     result = {"independentCheckerControls": True, "productAcceptance": False, "containedPhoto": photo, "focalFill": fill,
-              "captionGeometry": caption_result, "masteredAudio": audio, "aacPackets": packets, "negativeControlsRejected": 6,
+              "captionGeometry": caption_result, "pictureSignatures": picture_result,
+              "masteredAudio": audio, "encodedMasteredAudio": codec_audio, "aacPackets": packets, "negativeControlsRejected": 11,
               "sourceAndBaselineChecksumsUnchanged": True}
     write_json(workspace / "checker-controls.json", result)
     print(json.dumps(result, indent=2, sort_keys=True))

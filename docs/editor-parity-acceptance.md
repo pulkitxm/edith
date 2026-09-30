@@ -31,6 +31,12 @@ Video frames and photos have colored edge
 strips, a unique flat center patch, and surrounding checkerboard detail for
 independent framing, blur, color, and source-identity checks.
 
+Version 2 fixtures have different left and right soundtrack waveforms. Each
+video frame also contains a nine-bit source-frame signature, rather than a
+repeated still. Acceptance decodes 30 picture samples across the five videos:
+start, middle, end, and adjacent frames. Correct timestamps cannot conceal a
+frozen picture or a repeated sampled source frame.
+
 ## Integration contracts
 
 The acceptance runner must discover public edit capabilities and operation
@@ -80,6 +86,16 @@ checks exact project originals, caption frame anchors, decoded video frame
 timestamps, audio waveform continuity, the final fade, independent FFmpeg
 loudness, and AAC compressed packet identity.
 
+Audio checks retain both original stereo channels. Each channel is checked in
+contiguous 10-millisecond windows covering every sample, plus windows around
+all 47 shot boundaries. Comparison uses an independently generated master and
+its AAC encoding to calibrate per-window waveform and level tolerances. A
+common overall gain is allowed; interior gaps, wrong channels, channel gain
+changes, and incorrect fades are rejected. The reference carries the intended
+mastering dynamics and fade. Controls include an interior dropout in the long
+second shot and silent or duplicated right channels, all compensated back to
+approximately -16 LUFS so aggregate loudness cannot mask their defects.
+
 `editor_parity_pixels.py` produces reference pixels with FFmpeg, independently
 of the native renderer. It checks contain geometry, full-width centering,
 original-image blur, foreground-only crop, focal fill, FFmpeg EQ, and visible
@@ -95,3 +111,11 @@ groups. The shared result publisher rejects an incomplete group set. Quick
 results use `quick-result.json`; only a complete full-resolution run may write
 `result.json`. Both explicitly distinguish synthetic acceptance from real
 project parity.
+
+Publication uses an exclusively created unique temporary regular file and an
+atomic no-clobber hard link. Existing files, dangling symlinks, and concurrently
+created results are preserved. Run these filesystem controls separately:
+
+```sh
+python3 scripts/test-editor-parity-publication.py
+```

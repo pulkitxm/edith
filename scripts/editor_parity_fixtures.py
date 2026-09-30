@@ -92,6 +92,22 @@ def pixels(index, width, height):
     return bytes(data), color
 
 
+def signature_cells():
+    return [(0.45 + column * 0.05, 0.4 + row * 0.1) for row in range(3) for column in range(3)]
+
+
+def video_pixels(raw, width, height, frame):
+    require(0 <= frame < 511, "Synthetic frame signature exceeds nine bits")
+    data = bytearray(raw)
+    for bit, (center_x, center_y) in enumerate(signature_cells()):
+        level = 224 if (frame + 1) & (1 << bit) else 32
+        for y in range(round((center_y - 0.02) * height), round((center_y + 0.02) * height)):
+            start = (y * width + round((center_x - 0.02) * width)) * 3
+            end = (y * width + round((center_x + 0.02) * width)) * 3
+            data[start:end] = bytes([level] * (end - start))
+    return bytes(data)
+
+
 def generate(directory):
     require(not directory.exists(), "Fixture directory must not already exist")
     directory.mkdir(parents=True)
@@ -111,8 +127,9 @@ def generate(directory):
             ffmpeg(*source, "-frames:v", "1", "-update", "1", path, data=raw)
         else:
             source_frames = specification["frames"] + 2
-            ffmpeg(*source, "-vf", f"loop=loop={source_frames - 1}:size=1:start=0", "-frames:v", str(source_frames), "-c:v", "libx264", "-preset", "ultrafast",
-                   "-crf", "12", "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", path, data=raw)
+            data = b"".join(video_pixels(raw, width, height, frame) for frame in range(source_frames))
+            ffmpeg(*source, "-frames:v", str(source_frames), "-c:v", "libx264", "-preset", "ultrafast",
+                   "-crf", "12", "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", path, data=data)
         frames = specification["frames"]
         shots.append({"name": f"synthetic-{index + 1:02d}", "path": str(path.relative_to(directory)), "sha256": checksum(path),
                       "kind": "photo" if photo else "video", "width": width, "height": height, "centerRGB": color,
@@ -120,8 +137,9 @@ def generate(directory):
                       "sourceStartFrame": 0, **specification})
         start += frames
     music = originals / "synthetic-music.wav"
-    expression = "(0.08+0.025*sin(2*PI*t/7))*(sin(2*PI*220*t)+0.5*sin(2*PI*330*t)+0.25*sin(2*PI*550*t))"
-    ffmpeg("-f", "lavfi", "-i", f"aevalsrc={expression}|{expression}:s=48000", "-af", f"atrim=end_sample={FRAME_COUNT * 800}",
+    left = "(0.08+0.025*sin(2*PI*t/7))*(sin(2*PI*220*t)+0.5*sin(2*PI*330*t)+0.25*sin(2*PI*550*t))"
+    right = "(0.08+0.025*sin(2*PI*t/9))*(sin(2*PI*277*t)+0.5*sin(2*PI*415*t)+0.25*sin(2*PI*691*t))"
+    ffmpeg("-f", "lavfi", "-i", f"aevalsrc={left}|{right}:s=48000", "-af", f"atrim=end_sample={FRAME_COUNT * 800}",
            "-c:a", "pcm_s24le", music)
     aac = originals / "synthetic-passthrough.m4a"
     ffmpeg("-i", music, "-c:a", "aac", "-b:a", "192k", aac)
@@ -131,7 +149,8 @@ def generate(directory):
         ffmpeg("-f", "lavfi", "-i", f"color=c=0x{index + 2:02x}5070:s=90x160:r=60", "-frames:v", str(12 + index),
                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", path)
         baseline.append({"path": str(path.relative_to(directory)), "sha256": checksum(path)})
-    manifest = {"version": 1, "synthetic": True, "frameCount": FRAME_COUNT, "frameRate": FRAME_RATE,
+    manifest = {"version": 2, "synthetic": True, "videoSignatures": "nine-bit-source-frame-plus-one", "distinctStereoChannels": True,
+                "frameCount": FRAME_COUNT, "frameRate": FRAME_RATE,
                 "width": 2160, "height": 3840, "audioSampleRate": SAMPLE_RATE, "audioSamples": FRAME_COUNT * 800,
                 "shots": shots, "music": {"path": str(music.relative_to(directory)), "sha256": checksum(music)},
                 "passthrough": {"path": str(aac.relative_to(directory)), "sha256": checksum(aac)}, "baselineExports": baseline,
@@ -153,7 +172,8 @@ def inventory(directory, manifest):
 def verify(directory, media=True):
     directory = directory.resolve(strict=True)
     manifest = json.loads((directory / "parity-manifest.json").read_text())
-    require(manifest["version"] == 1 and manifest["synthetic"] is True, "Unsupported synthetic fixture manifest")
+    require(manifest["version"] == 2 and manifest["synthetic"] is True and manifest["distinctStereoChannels"] is True
+            and manifest["videoSignatures"] == "nine-bit-source-frame-plus-one", "Unsupported synthetic fixture manifest")
     require((manifest["frameCount"], manifest["frameRate"], manifest["width"], manifest["height"]) == (5588, 60, 2160, 3840),
             "Fixture delivery target changed")
     shots = manifest["shots"]
