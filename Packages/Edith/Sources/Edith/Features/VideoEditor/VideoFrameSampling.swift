@@ -40,18 +40,20 @@ public enum VideoFrameSampling: String, Codable, CaseIterable, Sendable {
             throw Failure(reason: "the clip must start on an output frame boundary.")
         }
         let firstTicks = CMTimeConvertScale(
-            first - source.start, timescale: scale, method: .default).value
+            first - source.start, timescale: scale, method: .default
+        ).value
         let firstFrame = (firstTicks + frameTicks / 2) / frameTicks
         let phase = CMTime(value: firstFrame * frameTicks + frameTicks / 2 - 1, timescale: scale)
         let result = CMTimeRange(start: source.start + phase, duration: source.duration)
         let available = try await track.load(.timeRange)
         guard available.containsTimeRange(result) else {
-            throw Failure(reason: "the visual sampling phase extends beyond available source media.")
+            throw Failure(
+                reason: "the visual sampling phase extends beyond available source media.")
         }
         return result
     }
 
-    private static func timescale(_ values: [CMTimeScale], doubled: Bool = false) throws
+    static func timescale(_ values: [CMTimeScale], doubled: Bool = false) throws
         -> CMTimeScale
     {
         var result: Int64 = 1

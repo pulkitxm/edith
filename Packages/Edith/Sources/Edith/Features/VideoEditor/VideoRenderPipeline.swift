@@ -251,6 +251,7 @@ struct VideoRenderPipeline {
         var stillImages: [String: CIImage] = [:]
         var sourceTransforms: [String: CGAffineTransform] = [:]
         for clip in project.clips where clip.duration > 0 {
+            let sampling = try clip.frameSampling
             if let raw = clip.raw["edithVisualEffects"] {
                 visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
             } else {
@@ -258,6 +259,9 @@ struct VideoRenderPipeline {
             }
             guard let source = project.assets.first(where: { $0.id == clip.assetID }) else {
                 throw RenderError.missingAsset(clip.assetID)
+            }
+            guard sampling == .hold || !source.isStill else {
+                throw VideoFrameSampling.Failure(reason: "a video clip is required.")
             }
             guard FileManager.default.fileExists(atPath: source.url.path) else {
                 throw RenderError.missingAsset(source.url.path)
@@ -313,7 +317,19 @@ struct VideoRenderPipeline {
                     throw RenderError.exportFailed(
                         "A clip is shorter than the timeline time resolution.")
                 }
-                let visualRange = carrierRange ?? sourceRange
+                let visualRange: CMTimeRange
+                if let carrierRange {
+                    visualRange = carrierRange
+                } else {
+                    visualRange = try await sampling.visualRange(
+                        track: sourceVideo, source: sourceRange, output: segment.outputRange,
+                        frameDuration: project.frameDuration)
+                    if sampling == .nearest {
+                        video.naturalTimeScale = try VideoFrameSampling.timescale([
+                            video.naturalTimeScale, visualRange.start.timescale,
+                        ])
+                    }
+                }
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
                 if visualRange.duration != outputDuration {
                     video.scaleTimeRange(
@@ -378,6 +394,12 @@ struct VideoRenderPipeline {
             if sourceImage.extent.isInfinite || sourceImage.extent.isEmpty
                 || sourceImage.extent.isNull
             {
+                guard (try? segment.clip.frameSampling) != .nearest else {
+                    request.finish(
+                        with: RenderError.exportFailed(
+                            "Could not decode the exact nearest-sampled source frame at \(time)s."))
+                    return
+                }
                 guard let generator = finalGenerators[segment.clip.assetID] else {
                     request.finish(with: RenderError.noVideo)
                     return
