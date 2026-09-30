@@ -81,6 +81,11 @@ final class VideoEditorModel {
     private var observer: Any?
     private var generation = 0
     private var focusPreviewGeneration = 0
+    private var rebuildTask: Task<Void, Never>?
+    private var focusPreviewTask: Task<Void, Never>?
+    private let previewBuilder: (VideoProject) async throws -> VideoRenderPipeline
+    private var playerSeeker: VideoPreviewSeeker?
+    private var focusSeeker: VideoPreviewSeeker?
     private var undoHistory: [VideoProject] = []
     private var redoHistory: [VideoProject] = []
 
@@ -102,7 +107,14 @@ final class VideoEditorModel {
         return max(0.1, (upper - zoom.startMs) / 1000)
     }
 
-    init() {
+    init(
+        previewBuilder: @escaping (VideoProject) async throws -> VideoRenderPipeline = {
+            try await VideoRenderPipeline.make(project: $0, previewOnly: true)
+        }
+    ) {
+        self.previewBuilder = previewBuilder
+        playerSeeker = VideoPreviewSeeker(player: player)
+        focusSeeker = VideoPreviewSeeker(player: focusPlayer)
         liveSync = VideoEditorLiveSync(model: self)
         refreshRecentProjects()
         observePlaybackTime()
@@ -113,7 +125,9 @@ final class VideoEditorModel {
             forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, time.seconds.isFinite else { return }
+                guard let self, time.seconds.isFinite, self.playerSeeker?.isSeeking != true else {
+                    return
+                }
                 self.playhead = time.seconds
             }
         }
@@ -123,6 +137,9 @@ final class VideoEditorModel {
         isClosed = true
         generation += 1
         focusPreviewGeneration += 1
+        rebuildTask?.cancel()
+        focusPreviewTask?.cancel()
+        resetPreviewSeeks()
         liveSync?.stop()
         audioTask?.cancel()
         player.pause()
@@ -195,8 +212,10 @@ final class VideoEditorModel {
             undoHistory.removeAll()
             redoHistory.removeAll()
             generation += 1
+            rebuildTask?.cancel()
             let version = generation
             player.pause()
+            resetPreviewSeeks()
             player.replaceCurrentItem(with: nil)
             pipeline = nil
             pendingLoads += 1
@@ -221,6 +240,7 @@ final class VideoEditorModel {
         let time = playhead
         let rate = player.rate
         generation += 1
+        rebuildTask?.cancel()
         titleDraft = nil
         replaceProject(next)
         hasUnsavedEdits = false
@@ -234,10 +254,12 @@ final class VideoEditorModel {
         undoHistory.removeAll()
         redoHistory.removeAll()
         pipeline = prepared
+        resetPreviewSeeks()
         player.pause()
         if let observer { player.removeTimeObserver(observer) }
         player.replaceCurrentItem(with: nil)
         player = playbackPlayer ?? AVPlayer()
+        playerSeeker = VideoPreviewSeeker(player: player)
         observePlaybackTime()
         seek(to: min(time, prepared?.duration ?? 0))
         if rate != 0, player.currentItem != nil { player.rate = rate }
@@ -258,6 +280,9 @@ final class VideoEditorModel {
     func loadCommandProject(_ request: VideoEditorService.OpenRequest) async throws {
         isClosed = false
         generation += 1
+        rebuildTask?.cancel()
+        focusPreviewTask?.cancel()
+        resetPreviewSeeks()
         let version = generation
         let url = URL(fileURLWithPath: request.path)
         let snapshot = try VideoEditorService.readProject(url)
@@ -537,7 +562,7 @@ final class VideoEditorModel {
         gif: Bool, quality: VideoExportQuality = .source,
         delivery: VideoDeliverySettings = .init()
     ) {
-        guard let pipeline, let project else { return }
+        guard pipeline != nil, let project else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [
             gif ? .gif : delivery.codec.isMaster ? .quickTimeMovie : .mpeg4Movie
@@ -556,7 +581,8 @@ final class VideoEditorModel {
             }
             VideoExporter.shared.start(to: url) { progress in
                 if gif {
-                    try await pipeline.exportGIF(
+                    let render = try await VideoRenderPipeline.make(project: project)
+                    try await render.exportGIF(
                         to: url, fps: fps, maxWidth: width, loop: loop, progress: progress)
                     return
                 }
@@ -580,21 +606,28 @@ final class VideoEditorModel {
             player.play()
         } else {
             player.pause()
-            focusPlayer.seek(to: CMTime(seconds: playhead, preferredTimescale: 600))
+            if focusPreviewReady {
+                focusSeeker?.request(CMTime(seconds: playhead, preferredTimescale: 60000))
+            }
         }
     }
 
     func seek(to seconds: Double) {
+        guard seconds.isFinite else { return }
         let clamped = max(0, min(duration, seconds))
         playhead = clamped
-        player.seek(
-            to: CMTime(seconds: clamped, preferredTimescale: 600),
-            toleranceBefore: .zero, toleranceAfter: .zero)
+        let time = CMTime(seconds: clamped, preferredTimescale: 60000)
+        if player.currentItem != nil { playerSeeker?.request(time) }
         if focusPreviewReady {
-            focusPlayer.seek(
-                to: CMTime(seconds: clamped, preferredTimescale: 600),
-                toleranceBefore: .zero, toleranceAfter: .zero)
+            focusSeeker?.request(time)
         }
+    }
+
+    private func resetPreviewSeeks() {
+        playerSeeker?.reset()
+        player.currentItem?.cancelPendingSeeks()
+        focusSeeker?.reset()
+        focusPlayer.currentItem?.cancelPendingSeeks()
     }
 
     func splitAtPlayhead() {
@@ -1154,6 +1187,9 @@ final class VideoEditorModel {
     }
 
     private func updateFocusPreview() {
+        focusPreviewTask?.cancel()
+        focusSeeker?.reset()
+        focusPlayer.currentItem?.cancelPendingSeeks()
         focusPreviewGeneration += 1
         let version = focusPreviewGeneration
         focusPlayer.pause()
@@ -1166,10 +1202,11 @@ final class VideoEditorModel {
             return
         }
         source.root["zoomRanges"] = []
-        Task {
+        focusPreviewTask = Task {
             do {
-                let preview = try await VideoRenderPipeline.make(
-                    project: source, previewOnly: true)
+                try await Task.sleep(for: .milliseconds(40))
+                let preview = try await previewBuilder(source)
+                try Task.checkCancellation()
                 guard version == focusPreviewGeneration else { return }
                 let item = AVPlayerItem(asset: preview.composition)
                 item.videoComposition = preview.videoComposition
@@ -1179,6 +1216,8 @@ final class VideoEditorModel {
                     toleranceBefore: .zero, toleranceAfter: .zero)
                 guard version == focusPreviewGeneration else { return }
                 focusPreviewReady = true
+                focusSeeker?.request(CMTime(seconds: playhead, preferredTimescale: 60000))
+            } catch is CancellationError {
             } catch {
                 guard version == focusPreviewGeneration else { return }
                 self.editingZoomID = nil
@@ -1188,9 +1227,9 @@ final class VideoEditorModel {
     }
 
     func rebuild(refreshFocusPreview: Bool = true) {
+        rebuildTask?.cancel()
         generation += 1
         let version = generation
-        let oldTime = playhead
         player.pause()
         if let editingZoomID,
             project?.zooms.contains(where: { $0.id == editingZoomID }) != true
@@ -1199,22 +1238,26 @@ final class VideoEditorModel {
         }
         if refreshFocusPreview { updateFocusPreview() }
         guard let project, !project.clips.isEmpty else {
+            resetPreviewSeeks()
             pipeline = nil
             player.replaceCurrentItem(with: nil)
             playhead = 0
             return
         }
-        Task {
+        rebuildTask = Task {
             do {
-                let next = try await VideoRenderPipeline.make(
-                    project: project, previewOnly: true)
+                try await Task.sleep(for: .milliseconds(40))
+                let next = try await previewBuilder(project)
+                try Task.checkCancellation()
                 guard version == generation else { return }
                 pipeline = next
                 let item = AVPlayerItem(asset: next.composition)
                 item.videoComposition = next.videoComposition
                 item.audioMix = next.audioMix
+                resetPreviewSeeks()
                 player.replaceCurrentItem(with: item)
-                seek(to: min(oldTime, next.duration))
+                seek(to: min(playhead, next.duration))
+            } catch is CancellationError {
             } catch {
                 guard version == generation else { return }
                 errorMessage = error.localizedDescription

@@ -224,6 +224,8 @@ struct VideoRenderPipeline {
     static func make(
         project: VideoProject, maxDimension: Int? = nil, previewOnly: Bool = false
     ) async throws -> VideoRenderPipeline {
+        try Task.checkCancellation()
+        let maxDimension = maxDimension ?? (previewOnly ? 1280 : nil)
         try project.validateVideoSettings()
         try project.validateOutputCaptions()
         let clipIDs = project.clips.map(\.id)
@@ -252,6 +254,7 @@ struct VideoRenderPipeline {
         var stillImages: [String: CIImage] = [:]
         var sourceTransforms: [String: CGAffineTransform] = [:]
         for clip in project.clips where clip.duration > 0 {
+            try Task.checkCancellation()
             let sampling = try clip.frameSampling
             if let raw = clip.raw["edithVisualEffects"] {
                 visualEffects[clip.id] = try VideoVisualEffects.decode(raw)
@@ -305,6 +308,7 @@ struct VideoRenderPipeline {
                 size: naturalSize, preferred: preferredTransform)
             let carrierRange = source.isStill ? try await sourceVideo.load(.timeRange) : nil
             for segment in segments where segment.clip.id == clip.id {
+                try Task.checkCancellation()
                 guard
                     segment.outputEnd < Double(Int64.max)
                         / 600
@@ -481,6 +485,7 @@ struct VideoRenderPipeline {
             project.videoSettings.colorSpace == .displayP3
             ? kCVImageBufferTransferFunction_sRGB as String : AVVideoTransferFunction_ITU_R_709_2
         videoComposition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        try Task.checkCancellation()
         return VideoRenderPipeline(
             composition: composition, videoComposition: videoComposition,
             audioMix: mix.inputParameters.isEmpty ? nil : mix,

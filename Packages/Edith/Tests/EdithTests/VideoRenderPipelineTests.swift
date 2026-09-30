@@ -7,6 +7,31 @@ import Testing
 @testable import Edith
 
 @Suite struct VideoRenderPipelineTests {
+    @Test func interactivePreviewBoundsRenderingWithoutChangingExportOrTiming() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = try await VideoEditorServiceTests.movie(in: directory)
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 2160, height: 3840)
+        project.addAsset(source, duration: 0.6, width: 64, height: 64)
+        project.addText("SYNTHETIC PREVIEW", startMs: 0, endMs: 600)
+        project.addZoom(startMs: 100, endMs: 400, depth: 2, x: 0.4, y: 0.6)
+        let preview = try await VideoRenderPipeline.make(project: project, previewOnly: true)
+        let export = try await VideoRenderPipeline.make(project: project)
+        #expect(preview.canvas == CGSize(width: 720, height: 1280))
+        #expect(export.canvas == CGSize(width: 2160, height: 3840))
+        #expect(preview.videoComposition.renderSize == preview.canvas)
+        #expect(preview.videoComposition.frameDuration == export.videoComposition.frameDuration)
+        #expect(preview.duration == export.duration)
+        #expect(preview.segments.map(\.outputRange) == export.segments.map(\.outputRange))
+        let generator = AVAssetImageGenerator(asset: preview.composition)
+        generator.videoComposition = preview.videoComposition
+        let rendered = try await generator.image(at: CMTime(seconds: 0.2, preferredTimescale: 600))
+        #expect(rendered.image.width == 720)
+        #expect(rendered.image.height == 1280)
+        #expect(project.videoSettings.size == export.canvas)
+    }
+
     @Test func styledFramesPersistAndExportWithExistingZooms() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-presentation-test-\(UUID().uuidString)")

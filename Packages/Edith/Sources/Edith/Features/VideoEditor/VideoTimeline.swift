@@ -32,24 +32,34 @@ struct VideoTimeline: View {
             Divider()
             ScrollView([.horizontal, .vertical]) {
                 let width = max(900, model.duration * scale + 80)
+                let clips = clipItems
+                let annotations = annotationItems
+                let snaps: [Double] =
+                    snapping
+                    ? [0, model.duration]
+                        + (clips + annotations + audioItems).flatMap { [$0.start, $0.end] }
+                    : []
                 ZStack(alignment: .topLeading) {
                     VStack(alignment: .leading, spacing: 6) {
                         ruler(width: width)
-                        lane("VIDEO", color: .blue, items: clipItems, width: width)
+                        lane("VIDEO", color: .blue, items: clips, width: width, snaps: snaps)
                         zoomLane(width: width)
-                        ForEach(packed(annotationItems), id: \.first?.id) { items in
-                            lane("OVERLAYS", color: .orange, items: items, width: width)
+                        ForEach(packed(annotations), id: \.first?.id) { items in
+                            lane(
+                                "OVERLAYS", color: .orange, items: items, width: width, snaps: snaps
+                            )
                         }
                         ForEach(audioLanes, id: \.first?.id) { items in
-                            lane("AUDIO", color: .green, items: items, width: width)
+                            lane("AUDIO", color: .green, items: items, width: width, snaps: snaps)
                         }
-                        lane("SPEED", color: .purple, items: regions("speedRegions"), width: width)
+                        lane(
+                            "SPEED", color: .purple, items: regions("speedRegions"), width: width,
+                            snaps: snaps)
                         lane(
                             "CAMERA", color: .pink, items: regions("cameraFullscreenRegions"),
-                            width: width)
+                            width: width, snaps: snaps)
                     }
-                    Rectangle().fill(.red).frame(width: 1.5)
-                        .offset(x: 90 + model.playhead * scale).allowsHitTesting(false)
+                    VideoTimelinePlayhead(model: model, scale: scale)
                 }
                 .frame(width: width + 90).padding(.vertical, 8)
             }
@@ -77,7 +87,9 @@ struct VideoTimeline: View {
         }
     }
 
-    private func lane(_ title: String, color: Color, items: [Item], width: Double) -> some View {
+    private func lane(
+        _ title: String, color: Color, items: [Item], width: Double, snaps: [Double]
+    ) -> some View {
         HStack(spacing: 0) {
             Text(title).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
                 .frame(width: 90)
@@ -88,7 +100,8 @@ struct VideoTimeline: View {
                         title: item.label, start: item.start, end: item.end,
                         scale: scale, duration: model.duration, color: color,
                         selected: model.selection == item.selection,
-                        snaps: snapping ? snapPoints : [], select: { model.select(item.selection) }
+                        snaps: snaps, playhead: snapping ? { model.playhead } : nil,
+                        select: { model.select(item.selection) }
                     ) { range, edge in
                         if item.key == "clips" {
                             model.editClip(item.id, range: range, edge: edge)
@@ -165,12 +178,15 @@ struct VideoTimeline: View {
     }
 
     private var clipItems: [Item] {
-        (model.project?.clips ?? []).compactMap { clip in
-            let segments = model.pipeline?.segments.filter { $0.clip.id == clip.id } ?? []
+        let grouped = Dictionary(grouping: model.pipeline?.segments ?? [], by: { $0.clip.id })
+        let labels = Dictionary(
+            uniqueKeysWithValues: (model.project?.assets ?? []).map { ($0.id, $0.label) })
+        return (model.project?.clips ?? []).compactMap { clip in
+            let segments = grouped[clip.id] ?? []
             guard let start = segments.first?.outputStart, let end = segments.last?.outputEnd else {
                 return nil
             }
-            let label = model.project?.assets.first { $0.id == clip.assetID }?.label ?? "Video"
+            let label = labels[clip.assetID] ?? "Video"
             return Item(
                 id: clip.id, label: label, start: start, end: end, selection: .clip(clip.id),
                 key: "clips")
@@ -225,11 +241,6 @@ struct VideoTimeline: View {
         }
     }
 
-    private var snapPoints: [Double] {
-        [0, model.playhead, model.duration]
-            + (clipItems + annotationItems + audioItems).flatMap { [$0.start, $0.end] }
-    }
-
     private func packed(_ items: [Item]) -> [[Item]] {
         var lanes: [[Item]] = [[]]
         for item in items.sorted(by: { $0.start < $1.start }) {
@@ -247,6 +258,16 @@ struct VideoTimeline: View {
     }
 }
 
+private struct VideoTimelinePlayhead: View {
+    let model: VideoEditorModel
+    let scale: Double
+
+    var body: some View {
+        Rectangle().fill(.red).frame(width: 1.5)
+            .offset(x: 90 + model.playhead * scale).allowsHitTesting(false)
+    }
+}
+
 struct VideoTimelineRegion: View {
     let title: String
     let start: Double
@@ -256,6 +277,7 @@ struct VideoTimelineRegion: View {
     let color: Color
     let selected: Bool
     let snaps: [Double]
+    let playhead: (() -> Double)?
     let select: () -> Void
     let commit: (ZoomTimelineTiming.Range, String) -> Void
     @State private var preview: ZoomTimelineTiming.Range?
@@ -303,7 +325,8 @@ struct VideoTimelineRegion: View {
             lower: 0, upper: max(end, duration), snapDistance: 0)
         let moving = edge == "end" ? range.end : range.start
         guard
-            let target = snaps.filter({ abs($0 - start) > 0.001 && abs($0 - end) > 0.001 })
+            let target = (snaps + (playhead.map { [$0()] } ?? []))
+                .filter({ abs($0 - start) > 0.001 && abs($0 - end) > 0.001 })
                 .min(by: { abs($0 - moving) < abs($1 - moving) }), abs(target - moving) < 8 / scale
         else { return range }
         return ZoomTimelineTiming.adjust(
