@@ -2,7 +2,7 @@
 
 enum VideoAudioMix {
     static func time(_ seconds: Double) -> CMTime {
-        CMTime(seconds: seconds, preferredTimescale: 48000)
+        VideoTimelineTime.nearest(seconds, timescale: 48000)
     }
 
     static func level(_ decibels: Double) -> Float {
@@ -25,11 +25,19 @@ enum VideoAudioMix {
             let lower = max(start, segment.sourceStart)
             let upper = min(end, segment.sourceEnd)
             guard upper > lower else { return nil }
+            let timescale = segment.sourceRange.duration.timescale
+            let sourceLower = max(
+                segment.sourceRange.start,
+                VideoTimelineTime.nearest(lower, timescale: timescale))
+            let sourceUpper = min(
+                segment.sourceRange.end,
+                VideoTimelineTime.nearest(upper, timescale: timescale))
+            guard sourceUpper > sourceLower else { return nil }
             let outputLower = CMTimeMapTimeFromRangeToRange(
-                CMTime(seconds: lower, preferredTimescale: segment.sourceRange.duration.timescale),
+                sourceLower,
                 fromRange: segment.sourceRange, toRange: segment.outputRange)
             let outputUpper = CMTimeMapTimeFromRangeToRange(
-                CMTime(seconds: upper, preferredTimescale: segment.sourceRange.duration.timescale),
+                sourceUpper,
                 fromRange: segment.sourceRange, toRange: segment.outputRange)
             return outputLower...outputUpper
         }
@@ -79,8 +87,8 @@ enum VideoAudioMix {
                 track.loop
                 ? (track.offsetMs / 1000).truncatingRemainder(dividingBy: sourceEnd)
                 : track.offsetMs / 1000
-            var offset = CMTime(
-                seconds: offsetSeconds, preferredTimescale: max(48000, available.end.timescale))
+            var offset = VideoTimelineTime.nearest(
+                offsetSeconds, timescale: max(48000, available.end.timescale))
             var insertedAudio = false
             while cursor < limit && offset < available.end {
                 try Task.checkCancellation()

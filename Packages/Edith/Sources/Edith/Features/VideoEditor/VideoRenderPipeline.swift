@@ -505,11 +505,13 @@ struct VideoRenderPipeline {
             speedSlices(for: clip, regions: project.speedRegions, trims: project.trimRanges).map {
                 slice in
                 let sourceRange = CMTimeRange(
-                    start: CMTime(seconds: slice.start, preferredTimescale: timescale),
-                    end: CMTime(seconds: slice.end, preferredTimescale: timescale))
-                let duration = CMTime(
-                    seconds: sourceRange.duration.seconds / slice.rate,
-                    preferredTimescale: timescale)
+                    start: VideoTimelineTime.nearest(slice.start, timescale: timescale),
+                    end: VideoTimelineTime.nearest(slice.end, timescale: timescale))
+                let duration =
+                    slice.rate == 1
+                    ? sourceRange.duration
+                    : VideoTimelineTime.nearest(
+                        sourceRange.duration.seconds / slice.rate, timescale: timescale)
                 defer { cursor = cursor + duration }
                 return Segment(
                     clip: clip, sourceRange: sourceRange, rate: slice.rate,
