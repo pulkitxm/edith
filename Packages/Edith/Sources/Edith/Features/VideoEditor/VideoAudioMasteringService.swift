@@ -11,7 +11,6 @@ extension VideoEditorService {
                 StudioAudioMastering.Report.self,
                 from: JSONSerialization.data(withJSONObject: provenance))
             guard report.version == 1, report.verified,
-                report.originalPath == asset.url.path,
                 try StudioAudioMastering.sha256(asset.url) == report.originalSHA256,
                 try StudioAudioMastering.sha256(asset.audioURL) == report.artifactSHA256
             else {
@@ -110,7 +109,8 @@ extension VideoEditorService {
             project.assets.map(\.raw) + [
                 [
                     "id": id, "kind": "audio", "label": "Mastered soundtrack",
-                    "originalPath": asset.url.path, "edithAudioPath": audioPath.path,
+                    "originalPath": asset.url.path,
+                    "edithAudioPath": temporary.appendingPathComponent("soundtrack.wav").path,
                     "durationSec": request.durationSeconds,
                     "audio": ["codec": "pcm_s24le", "sampleRate": 48000, "channels": 2],
                     "edithAudioMastering": try JSONSerialization.jsonObject(with: reportData),
@@ -135,7 +135,11 @@ extension VideoEditorService {
         var metadata = project.root["project"] as? [String: Any] ?? [:]
         metadata["id"] = UUID().uuidString.lowercased()
         project.root["project"] = metadata
+        removeUnreferencedMasteredAudio(asset, from: &project)
         try validateStructure(project)
+        try await validateMedia(project)
+        if !project.clips.isEmpty { _ = try await VideoRenderPipeline.make(project: project) }
+        project.editRegion("assets", id: id) { $0["edithAudioPath"] = audioPath.path }
         try encodedProject(project).write(
             to: temporary.appendingPathComponent("project.openscreen"))
         try reportData.write(to: temporary.appendingPathComponent("report.json"))
@@ -149,5 +153,27 @@ extension VideoEditorService {
         return AudioMasteringResult(
             version: 1, path: destination.path, projectPath: projectPath.path,
             audioPath: audioPath.path, assetID: id, trackID: trackID, report: report)
+    }
+
+    private static func removeUnreferencedMasteredAudio(
+        _ superseded: VideoProject.Asset, from project: inout VideoProject
+    ) {
+        guard superseded.raw["edithAudioMastering"] != nil else { return }
+        let references = Set(
+            [superseded.id] + [superseded.raw["edithAudioPath"] as? String].compactMap { $0 })
+        func containsReference(_ value: Any) -> Bool {
+            if let value = value as? String { return references.contains(value) }
+            if let values = value as? [String: Any] {
+                return values.contains {
+                    references.contains($0.key) || containsReference($0.value)
+                }
+            }
+            if let values = value as? [Any] { return values.contains(where: containsReference) }
+            return false
+        }
+        var remaining = project.root
+        remaining["assets"] = project.assets.filter { $0.id != superseded.id }.map(\.raw)
+        guard !containsReference(remaining) else { return }
+        project.root = remaining
     }
 }

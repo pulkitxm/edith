@@ -47,6 +47,14 @@ The new directory is published as one bundle only after verification:
 Existing directories are always refused, including on rerun. The original
 project and media are never overwritten. Short sources, missing engines,
 processing failures, cancellation, and failed verification publish no bundle.
+Remastering replaces the selected track's previous derived asset when no other
+project reference needs its asset ID or processed path. Original assets remain
+registered. This recovers a missing or damaged prior soundtrack from its intact
+original source. Shared tracks, clips and provenance references retain the old
+asset; invalid retained media blocks publication. All resulting media and
+provenance, plus the staged native composition, are validated before publishing.
+Relocated original and processed files are verified by their content hashes;
+the report's original path remains a historical processing reference.
 Changing the derived track gain or mixing other tracks can change final export
 loudness; the measurement claim applies to the registered soundtrack artifact.
 
