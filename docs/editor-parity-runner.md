@@ -82,6 +82,22 @@ launches an app. Quick acceptance performs headless lifecycle checks and records
 the actual-open step as pending. Full acceptance requires a development bundle,
 a genuine opened receipt matching the request's identity and digest, and no
 remaining open step. A build change invalidates the earlier quick result.
+For a packaged CLI, invoke `Contents/MacOS/ed` without resolving its symlink.
+The runner verifies the fixed `../Resources/ed-launcher` delegation contract
+and `CFBundleExecutable: Edith`, then records a `runtimeIdentity.runtimeHashMap`
+for the launcher, actual `Contents/MacOS/Edith` executable, and `Contents/Info.plist`.
+`binarySHA256` identifies the actual runtime executable, not the shell launcher.
+Quick/full matching requires the complete identity map; launcher-only older
+results cannot qualify. Standalone CLIs protect their resolved executable.
+Identity is rechecked after each logical phase and immediately before publication.
+The same runtime files join the protected mastering/lifecycle artifact snapshot.
+Freeze all three packaged paths from quick start through full completion and keep
+the launched app on that same frozen build. No shell commands are inferred or
+evaluated to discover an arbitrary launcher target.
+
+```sh
+python3 scripts/test-editor-parity-identity.py
+```
 
 Caption review compares all 47 texts against independently rendered installed
 Arial Bold Italic glyphs at the actual output scale, with no fitted rescaling.
