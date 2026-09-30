@@ -299,6 +299,19 @@ enum JSONContract {
                 "studio", "edit", "media", "provenance", "/nonexistent/project.openscreen",
                 "--asset", "a", "--family", "f", "--declaration", "original", "--json",
             ]),
+        JSONCase("ed studio edit audio health", ["studio", "edit", "audio", "health", "--json"]),
+        JSONCase(
+            "ed studio edit audio measure",
+            [
+                "studio", "edit", "audio", "measure", "/nonexistent/demo.openscreen", "--asset",
+                "missing", "--json",
+            ]),
+        JSONCase(
+            "ed studio edit audio master",
+            [
+                "studio", "edit", "audio", "master", "/nonexistent/demo.openscreen", "--track",
+                "missing", "--duration", "1", "--output", "/nonexistent/mastered", "--json",
+            ]),
         JSONCase(
             "ed studio edit audio analyze",
             [
