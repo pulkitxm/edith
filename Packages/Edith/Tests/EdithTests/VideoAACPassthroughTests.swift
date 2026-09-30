@@ -94,9 +94,9 @@ struct VideoAACPassthroughTests {
         settings.audioCodec = .copy
         settings.audioCopyTrackID = id
         let changes: [[String: Any]] = [
-            ["gainDb": 1], ["offsetMs": 1], ["startMs": 1], ["fadeInMs": 1],
+            ["gainDb": 1], ["offsetMs": 1], ["startMs": 1.0], ["fadeInMs": 1],
             ["fadeOutMs": 1], ["loop": true], ["rate": 1.01],
-            ["gainEnvelope": []], ["muted": true], ["endMs": 1900],
+            ["gainEnvelope": []], ["muted": true], ["endMs": 1900.0],
         ]
         for change in changes {
             var invalid = project
@@ -106,8 +106,11 @@ struct VideoAACPassthroughTests {
                     $0.removeValue(forKey: "outputRange")
                 }
             }
-            await #expect(throws: VideoEditorService.Failure.self) {
-                try await VideoAACPassthrough.prepare(invalid, settings: settings, range: nil)
+            do {
+                _ = try await VideoAACPassthrough.prepare(invalid, settings: settings, range: nil)
+                Issue.record("Invalid audio options accepted: \(change)")
+            } catch let error as VideoEditorService.Failure {
+                #expect(error.code == "invalid_audio_copy")
             }
         }
         var mix = project
@@ -130,5 +133,32 @@ struct VideoAACPassthroughTests {
                 range: .init(startFrame: 0, endFrame: 118))
         }
         #expect(!FileManager.default.fileExists(atPath: destination.path))
+        var attached = project
+        var clips = attached.clips
+        clips[0].raw["assetId"] = project.audioTracks[0].assetID
+        attached.setClips(clips)
+        await #expect(throws: VideoEditorService.Failure.self) {
+            try await VideoAACPassthrough.prepare(attached, settings: settings, range: nil)
+        }
+        let ambiguous = directory.appendingPathComponent("ambiguous.mp4")
+        let executable = try #require(StudioEnvironment.detect().ffmpeg)
+        let approved = try #require(
+            project.assets.first { $0.id == project.audioTracks[0].assetID })
+        let mux = try await StudioProcess.run(
+            executable,
+            [
+                "-v", "error", "-i", approved.audioURL.path,
+                "-map", "0:v:0", "-map", "0:a:0", "-map", "0:a:0", "-c", "copy", ambiguous.path,
+            ])
+        #expect(mux.status == 0)
+        var multipleStreams = project
+        multipleStreams.root["assets"] = project.assets.map {
+            var raw = $0.raw
+            if $0.id == approved.id { raw["originalPath"] = ambiguous.path }
+            return raw
+        }
+        await #expect(throws: VideoEditorService.Failure.self) {
+            try await VideoAACPassthrough.prepare(multipleStreams, settings: settings, range: nil)
+        }
     }
 }

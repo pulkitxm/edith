@@ -57,7 +57,7 @@ struct StudioEditRender: AsyncParsableCommand {
     var audioCopyTrack: String?
     @Option(help: "AAC bits per second, 32000...320000; mono maximum 256000.")
     var audioBitRate = 320_000
-    @Option(help: "Audio samples per second: 44100, 48000, or 96000 (PCM only).")
+    @Option(help: "Audio samples per second: 44100, 48000, or 96000 (PCM or matching AAC copy).")
     var audioSampleRate = 48_000
     @Option(help: "Audio channel count: 1 or 2.") var audioChannels = 2
     @Option(help: "Output color space; defaults to the project/composition, or rec709.")

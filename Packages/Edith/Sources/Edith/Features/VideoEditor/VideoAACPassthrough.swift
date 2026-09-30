@@ -46,6 +46,7 @@ enum VideoAACPassthrough {
         let sourceHash: String
         let probe: Probe
         let environment: StudioEnvironment
+        let movieTimescale: Int32
     }
 
     static func reject(_ message: String) -> VideoEditorService.Failure {
@@ -69,6 +70,7 @@ enum VideoAACPassthrough {
             throw reject("Supply --audio-copy-track for the single audible independent soundtrack.")
         }
         guard track.timebase == "output", track.outputRange.start == .zero,
+            (track.raw["startMs"] as? NSNumber)?.doubleValue == 0,
             track.offsetMs == 0, track.gainDb == 0, track.rate == 1,
             !track.loop, track.fadeInMs == 0, track.fadeOutMs == 0,
             track.raw["gainEnvelope"] == nil
@@ -107,8 +109,20 @@ enum VideoAACPassthrough {
             )
         }
         let duration = CMTime(value: stream.duration_ts, timescale: Int32(rate))
+        let sample = CMTime(value: 1, timescale: Int32(rate))
+        let movieTimescale = CMTimeAdd(project.frameDuration, sample).timescale
+        guard movieTimescale > 0,
+            CMTimeConvertScale(project.frameDuration, timescale: movieTimescale, method: .default)
+                == project.frameDuration,
+            CMTimeConvertScale(sample, timescale: movieTimescale, method: .default) == sample
+        else {
+            throw reject("Video cadence and AAC samples cannot share an exact movie clock.")
+        }
         let end = VideoRenderPipeline.timingSegments(project: project).last?.outputRange.end
-        guard track.outputRange.duration == duration, end == duration else {
+        guard track.outputRange.duration == duration, end == duration,
+            let legacyEnd = (track.raw["endMs"] as? NSNumber)?.doubleValue,
+            abs(legacyEnd - duration.seconds * 1000) < 0.000001
+        else {
             throw reject(
                 "Soundtrack and video must cover exactly the complete AAC stream. Trims, partial packets and source offsets are unsupported."
             )
@@ -135,7 +149,7 @@ enum VideoAACPassthrough {
         }
         return Prepared(
             source: source.audioURL, sourceHash: try StudioAudioMastering.sha256(source.audioURL),
-            probe: probe, environment: environment)
+            probe: probe, environment: environment, movieTimescale: movieTimescale)
     }
 
     static func export(
@@ -152,13 +166,8 @@ enum VideoAACPassthrough {
         let native = try await pipeline.export(to: video, settings: encoding, includeAudio: false) {
             progress(min(0.9, $0 * 0.9))
         }
-        let rate = Int32(prepared.probe.streams[0].sample_rate)!
-        let timescale = CMTimeAdd(
-            pipeline.videoComposition.frameDuration,
-            CMTime(value: 1, timescale: rate)
-        ).timescale
         let copied = try await mux(
-            prepared, video: video, output: output, movieTimescale: timescale)
+            prepared, video: video, output: output, movieTimescale: prepared.movieTimescale)
         var report = try await VideoDeliveryReport.inspect(output)
         guard report.frameCount == native.frameCount, report.width == native.width,
             report.height == native.height, report.audioCodec == "aac "
