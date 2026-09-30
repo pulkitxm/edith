@@ -58,6 +58,8 @@ check each entry's optional `errorCode`/`error` for stale references or identity
 changes. A file in a directory is not proof of registration. Remove a reference
 only when requested with `ed studio edit unregister PROJECT --json`; this returns
 `registered: false` and preserves the project and originals.
+For stale-entry cleanup, pass the exact stored library `path` to `unregister`,
+without resolving a file or parent-directory symlink to its new target first.
 
 When the user specifically requests the editor, validate the intended saved edit
 and use `ed studio edit open PROJECT --timeout 30 --json` once. Timeout accepts
@@ -73,6 +75,9 @@ Keep missing acknowledgements unverified. `app_not_running`, `editor_busy`,
 `missing_media`, `migration_required`, `project_changed` and `open_timeout` require
 resolving the named cause rather than repeatedly raising the editor. Do not replace
 an acknowledged-open check with file existence or an app window being visible.
+Pending inspector drafts also produce `editor_busy`. Require the user's explicit
+commit/discard decision for those drafts or unsaved edits; a CLI overwrite is not
+a way to resolve them.
 
 ## Report the result
 

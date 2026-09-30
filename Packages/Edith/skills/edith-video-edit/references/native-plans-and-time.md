@@ -94,6 +94,13 @@ project cadence using `videoSettings` fields from the schema. For review, prefer
 For a seconds-based trim, calculate once, record the rounding convention, and
 verify which frames were selected. A decimal `29.97` is not an exact replacement
 for `30000/1001`.
+Keep integer frame indices for frame-anchored operations. When a field requires
+seconds, serialize the calculated value at full JSON numeric precision; do not
+round it through a display string such as three-decimal seconds. Compute audio
+endpoints from the same rational output duration, then verify saved ranges and
+delivered boundaries. Review-time frame selection is distinct from edit-time
+conversion, so use `--frame` for exact samples rather than assuming a seconds
+request uses the same rounding rule as a trim.
 Source frame rate and delivery frame rate may differ. Record both rather than
 using an output frame number as a source frame number.
 

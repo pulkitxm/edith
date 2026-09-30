@@ -102,6 +102,9 @@ ed studio edit unregister synthetic-cut.openscreen --json
 
 Its returned entry has `registered: false`. Check the library again. A native
 project can remain listed independently of its removed registration.
+For a stale reference, pass the exact stored `path` from `library` to `unregister`.
+That pathname takes priority even if the file or a parent directory has since
+become a symlink; resolving it to a new target first could select another reference.
 
 ## Open only for a requested editor handoff
 
@@ -133,11 +136,12 @@ Handle structured failures according to their cause:
 | Code | Next step |
 | --- | --- |
 | `app_not_running` | Use the matching running app, only for a requested editor handoff. |
-| `editor_busy` | Let the existing open/task finish or resolve unsaved edits before retrying. |
+| `editor_busy` | Let the existing open/task finish. Unsaved edits or pending inspector drafts require the user's explicit commit/discard decision before retrying. |
 | `missing_media` | Restore or relink the required originals through supported operations; no file dialog is opened. |
 | `migration_required` | Use an explicit supported conversion for the legacy document before retrying; do not handwrite its serialization. |
 | `project_changed` | Inspect the new saved revision and confirm the intended project before another request. |
 | `open_timeout` | Report the missing acknowledgement; do not claim success or repeatedly issue opens. |
 
+Do not use a CLI overwrite to bypass an editor draft or unsaved-change block.
 Leave opening unrequested in a headless-only task. Report registration and editor
 readiness as separate outcomes with their own returned evidence.
