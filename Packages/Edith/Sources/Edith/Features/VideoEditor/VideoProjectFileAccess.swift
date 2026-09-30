@@ -13,6 +13,8 @@ enum VideoProjectFileAccess {
         let byteCount: Int
         let digest: SHA256.Digest
 
+        var hexDigest: String { digest.map { String(format: "%02x", $0) }.joined() }
+
         init(_ data: Data) {
             byteCount = data.count
             digest = SHA256.hash(data: data)

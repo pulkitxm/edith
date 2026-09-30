@@ -10,12 +10,12 @@ the native timeline editor. Running `ed studio edit` prints the edit-plan schema
 
 | Command | What it does |
 | --- | --- |
-| `ed studio edit schema` | Prints the versioned edit-plan JSON Schema. |
+| `ed studio edit schema [--operation <name>]` | Prints the full plan schema or one operation's schema. |
 | `ed studio edit create <project> [--title <title>]` | Creates an empty project. |
-| `ed studio edit show <project>` | Prints project JSON, including IDs for later edits. |
+| `ed studio edit show <project> [--summary]` | Prints project JSON, or compact IDs, settings and its SHA-256 revision. |
 | `ed studio edit list <directory>` | Lists native projects with their identities, titles and clip counts. |
 | `ed studio edit clone <project> --output <copy.openscreen> --title <title>` | Copies an edit with a new project identity while preserving its original-media references. |
-| `ed studio edit apply <project> --plan <file> [--output <project>] [--dry-run]` | Validates and atomically applies every operation in a plan. |
+| `ed studio edit apply <project> --plan <file\|-> [--output <project>] [--dry-run]` | Validates and atomically applies every operation in a plan; `-` reads stdin. |
 | `ed studio edit validate <project>` | Checks structure, source availability and native composition. |
 | `ed studio edit render <project> --output <file> [--codec <codec>]` | Delivers H.264/HEVC MP4 or a ProRes MOV master, with a measured report. |
 | `ed studio edit render-audio <project> --output <file> [--container wav\|aiff\|m4a]` | Delivers the native audio mix with a measured sample-frame count. |
@@ -59,6 +59,36 @@ Save this plan as `edit.json` beside a local video named `synthetic.mov`:
 Relative media paths resolve beside the plan file. Use `ed studio edit schema` for
 supported operations and their required fields. Plans are limited to 4 MiB and 1000
 operations; input and serialized output projects are limited to 32 MiB.
+
+### Agent plan workflow
+
+Use `show --summary` to obtain persisted IDs, project settings and a byte-level
+SHA-256 `revision` without printing the whole project. Read only the operation
+schema needed for a change, for example `ed studio edit schema --operation trim`.
+Its output describes a single entry in the plan's `operations` array.
+
+```sh
+revision=$(ed studio edit show demo.openscreen --summary --json | jq -r .revision)
+ed studio edit schema --operation rename
+printf '%s\n' '{"version":1,"operations":[{"rename":{"title":"Revised demo"}}]}' |
+  ed studio edit apply demo.openscreen --plan - --media-directory . --expect-revision "$revision" --overwrite --json
+```
+
+`--expect-revision` rejects a stale plan with `project_changed` before applying
+any operations. It also applies during `--dry-run` and when writing a separate
+`--output`. A successful apply returns `sourceRevision` and the saved `revision`;
+a dry-run returns the unchanged source revision. Use the saved revision for the
+next guarded edit. On a conflict, read the current project and revise the plan
+instead of blindly repeating it.
+
+For stdin plans, relative media paths default to the working directory.
+`--media-directory <directory>` explicitly sets the base for either stdin or file
+plans. MCP callers use a plan file and pass these same flags in `arguments`.
+
+A failed operation returns zero-based `error.operationIndex` and `error.cause`
+alongside `error.code` and `error.message`. Plan-schema errors name unknown and
+missing fields with their JSON path. Neither failure commits earlier operations.
+Stdout contains only the successful JSON result; runtime error JSON goes to stderr.
 
 Dry-run validates the whole plan without writing files. Failed operations preserve
 the input. Concurrent applies serialize, and CLI and native saves reject stale

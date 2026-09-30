@@ -404,7 +404,9 @@ public enum CommandTree {
             arguments: [.studioTool, .localPath], repeatingArgument: .localPath),
         "ed studio probe": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
-        "ed studio edit schema": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio edit schema": Spec(
+            options: ["--json", "--operation", "-h", "--help", "--version"],
+            optionValues: ["--operation": .free]),
         "ed studio edit media reserve": Spec(
             options: ["--json", "--ledger", "--reel", "-h", "--help", "--version"],
             optionValues: ["--ledger": .localPath, "--reel": .free], arguments: [.localPath]),
@@ -479,15 +481,18 @@ public enum CommandTree {
             options: ["--json", "--overwrite", "--title", "-h", "--help", "--version"],
             optionValues: ["--title": .free], arguments: [.localPath]),
         "ed studio edit show": Spec(
-            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+            options: ["--json", "--summary", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio edit validate": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
         "ed studio edit apply": Spec(
             options: [
                 "--json", "--overwrite", "--dry-run", "--plan", "--output", "-h", "--help",
-                "--version",
+                "--version", "--media-directory", "--expect-revision",
             ],
-            optionValues: ["--plan": .localPath, "--output": .localPath], arguments: [.localPath]),
+            optionValues: [
+                "--plan": .localPath, "--output": .localPath, "--media-directory": .localPath,
+                "--expect-revision": .free,
+            ], arguments: [.localPath]),
         "ed studio edit render": Spec(
             options: [
                 "--json", "--overwrite", "--output", "--codec", "--bit-rate",
