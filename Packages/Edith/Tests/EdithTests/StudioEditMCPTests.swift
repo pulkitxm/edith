@@ -34,6 +34,8 @@ import Testing
             .union([
                 StudioEditOperation.render.descriptor.cli,
                 StudioDeliveryOperation.renderAudio.descriptor.cli,
+                StudioEditAudioOperation.measure.descriptor.cli,
+                StudioEditAudioOperation.master.descriptor.cli,
             ])
         for tool in OperationMCPCatalog.tools {
             let expected: TimeInterval =

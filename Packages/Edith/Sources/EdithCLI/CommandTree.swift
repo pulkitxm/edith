@@ -535,6 +535,14 @@ public enum CommandTree {
             arguments: [.localPath]),
         "ed studio edit list": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio edit audio health": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio edit audio measure": Spec(
+            options: ["--json", "--asset", "-h", "--help", "--version"],
+            optionValues: ["--asset": .free], arguments: [.localPath]),
+        "ed studio edit audio master": Spec(
+            options: ["--json", "--track", "--duration", "--output", "-h", "--help", "--version"],
+            optionValues: ["--track": .free, "--duration": .free, "--output": .localPath],
+            arguments: [.localPath]),
         "ed studio edit audio analyze": Spec(
             options: [
                 "--json", "--asset", "--fps", "--project-fps", "--sensitivity",

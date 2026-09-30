@@ -92,7 +92,7 @@ public enum StudioAudioMastering {
     public static func measure(_ source: URL, environment: StudioEnvironment = .detect())
         async throws -> Measurement
     {
-        try localSource(source)
+        try await localSource(source)
         let backend = await health(environment: environment)
         guard backend.available, let path = backend.executable else {
             throw Failure("audio_backend_unavailable", backend.reason ?? "FFmpeg is unavailable.")
@@ -105,7 +105,7 @@ public enum StudioAudioMastering {
         _ source: URL, to output: URL, request: Request,
         environment: StudioEnvironment = .detect()
     ) async throws -> Report {
-        try localSource(source)
+        try await localSource(source)
         let duration = request.durationSeconds
         guard duration.isFinite, duration >= 0.4, duration <= 86_400,
             abs(duration * 48_000 - (duration * 48_000).rounded()) < 0.00001
@@ -207,11 +207,16 @@ public enum StudioAudioMastering {
         return digest.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func localSource(_ source: URL) throws {
+    private static func localSource(_ source: URL) async throws {
         guard source.isFileURL,
             try source.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
         else {
             throw Failure("invalid_audio_source", "Expected a regular local audio source.")
+        }
+        guard try await AVURLAsset(url: source).loadTracks(withMediaType: .audio).count == 1 else {
+            throw Failure(
+                "invalid_audio_source",
+                "Choose a source containing exactly one unambiguous audio stream.")
         }
     }
 
