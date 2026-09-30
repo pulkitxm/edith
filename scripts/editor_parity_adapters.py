@@ -29,11 +29,11 @@ def caption_operations(manifest, schemas):
     require("fontBounds" in fields["metrics"]["enum"] and "strokeColor" in fields["shadow"]["properties"],
             "caption_style_schema_incomplete: fontBounds metrics and independent shadow strokeColor are required")
     operations, styles = [], {}
-    for index, shot in enumerate(manifest["shots"]):
+    for shot in manifest["shots"]:
         style = caption_style(shot["fontSize"])
         styles[shot["name"]] = style
         anchor = {edge: {"frame": shot[edge + "Frame"], "frameRate": {"numerator": 60, "denominator": 1}} for edge in ("start", "end")}
-        operations.append({"outputCaption": {"id": f"synthetic-caption-{index + 1:02d}", "content": shot["caption"], "anchor": anchor, "style": style}})
+        operations.append({"outputCaption": {"content": shot["caption"], "anchor": anchor, "style": style}})
     return operations, styles
 
 
