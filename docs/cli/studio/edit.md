@@ -210,8 +210,13 @@ opt into `nearest` through the same editable plan used by CLI and MCP:
 
 Run `ed studio edit schema --operation frameSampling` for the strict schema. The
 setting is saved as the clip's `edithFrameSampling` field, survives reopening,
-and is used by native preview, frame extraction and delivery. Set `mode` to `hold`
-to restore the default. Omitting the operation leaves an existing setting alone.
+and is used by native preview, frame extraction and delivery. The native Clip
+inspector also offers a video-only **Frame sampling** picker. Nearest is validated
+before the model changes or saves; a failed selection preserves the previous mode.
+Changes are immediate and undoable. Hold remains available to recover after an
+unsupported trim or speed edit, including when other clips need recovery too.
+Set `mode` to `hold` to restore the default through a plan. Omitting the operation
+leaves an existing setting alone.
 Unknown modes, extra fields and null values in plans are rejected.
 
 Nearest sampling first finds the source sample at or after the stored trim start.
