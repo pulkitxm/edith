@@ -172,6 +172,26 @@ outline, and antialiased white-edge controls verify the same encoded law.
 The native styled-probe group must also pass these three scalar regions with
 the actual caption renderer before it can contribute to an acceptance result.
 
+## Actual public caption creation
+
+`outputCaption` without `id` creates a caption and assigns its native identity.
+An explicit `id` updates an existing caption; a nonexistent ID is rejected.
+The runner's creation adapter omits IDs and checks the returned captions by
+exact anchors, text, and style. It never fabricates native caption identities.
+
+```sh
+python3 scripts/test-editor-parity-caption-creation.py \
+  --ed /absolute/frozen/ed --workspace /absolute/new/caption-semantics \
+  --styled-probe
+```
+
+This actual CLI check creates three styled captions, verifies unique assigned
+`annotation_<UUID>` identities, updates one through its returned ID, and rejects
+an unknown ID after a preceding rename with byte-exact transaction rollback.
+The optional styled probe runs the existing three 4K native-frame/export cases
+and the scalar encoded-sRGB blend cases with their unchanged tolerances. Scoped
+reports declare `productAcceptance: false`; they cannot publish full acceptance.
+
 ## Tagged video and background stress
 
 Version 4 explicitly converts synthetic RGB into limited-range BT.709 and sets
