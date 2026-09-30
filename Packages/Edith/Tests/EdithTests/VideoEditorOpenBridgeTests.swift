@@ -190,4 +190,45 @@ import Testing
         active.setPendingViewEdit("caption.synthetic.style", hasChanges: false)
         #expect(!active.blocksCommandOpen)
     }
+
+    @Test(arguments: ["new", "open"])
+    func acceptedProjectIdentityChangesClearDraftsEvenWithTheSameTitle(operation: String)
+        async throws
+    {
+        let active = VideoEditorModel()
+        var files: [URL] = []
+        defer {
+            active.close()
+            for url in files { try? FileManager.default.removeItem(at: url) }
+        }
+        active.newProject()
+        files.append(try #require(active.project?.fileURL))
+        let originalID = try #require(active.project?.id)
+        let title = try #require(active.project?.title)
+        active.titleDraft = "Unsubmitted synthetic title"
+        active.setPendingViewEdit("caption.synthetic", hasChanges: true)
+        #expect(active.blocksCommandOpen)
+        if operation == "new" {
+            active.newProject()
+            files.append(try #require(active.project?.fileURL))
+        } else {
+            let next = files[0].deletingLastPathComponent().appendingPathComponent(
+                "\(UUID().uuidString).openscreen")
+            _ = try VideoEditorService.create(at: next, title: title)
+            files.append(next)
+            active.openProject(at: next)
+        }
+        #expect(active.project?.id != originalID)
+        #expect(active.project?.title == title)
+        #expect(active.titleDraft == nil)
+        #expect(active.pendingViewEditIDs.isEmpty)
+        try await waitUntil { !active.blocksCommandOpen }
+        active.titleDraft = "Keep this new draft"
+        active.setPendingViewEdit("caption.current", hasChanges: true)
+        active.openProject(
+            at: files[0].deletingLastPathComponent().appendingPathComponent("missing.openscreen"))
+        #expect(active.titleDraft == "Keep this new draft")
+        #expect(active.pendingViewEditIDs == ["caption.current"])
+        #expect(active.blocksCommandOpen)
+    }
 }

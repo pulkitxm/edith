@@ -93,7 +93,6 @@ struct VideoEditorPage: View {
         }
         .task {
             VideoEditorOpenBridge.shared.activeEditor = model
-            model.titleDraft = nil
             if let commandMounted {
                 commandMounted()
                 return
@@ -110,9 +109,6 @@ struct VideoEditorPage: View {
             }
             model.player.pause()
             model.focusPlayer.pause()
-        }
-        .onChange(of: model.project?.title) { _, _ in
-            model.titleDraft = nil
         }
         .onChange(of: model.editingZoomID) { _, id in
             if id != nil { editorTool = .zoom }

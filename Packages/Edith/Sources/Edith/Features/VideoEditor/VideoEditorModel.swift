@@ -56,6 +56,14 @@ final class VideoEditorModel {
         }
     }
 
+    private func replaceProject(_ next: VideoProject) {
+        if project?.id != next.id {
+            titleDraft = nil
+            pendingViewEditIDs.removeAll()
+        }
+        project = next
+    }
+
     let player = AVPlayer()
     let focusPlayer = AVPlayer()
     private(set) var focusPreviewReady = false
@@ -111,7 +119,7 @@ final class VideoEditorModel {
         selection = nil
         silentRanges = []
         player.pause()
-        project = .create()
+        replaceProject(.create())
         selectedClipID = nil
         editingZoomID = nil
         undoHistory.removeAll()
@@ -159,7 +167,7 @@ final class VideoEditorModel {
             if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
                 document.fileURL = nil
             }
-            project = document
+            replaceProject(document)
             hasUnsavedEdits = false
             selectedClipID = project?.clips.first?.id
             editingZoomID = nil
@@ -216,7 +224,7 @@ final class VideoEditorModel {
                 project: snapshot.project, previewOnly: true)
         }
         try Task.checkCancellation()
-        project = snapshot.project
+        replaceProject(snapshot.project)
         hasUnsavedEdits = false
         selectedClipID = snapshot.project.clips.first?.id
         pipeline = prepared
