@@ -3,6 +3,7 @@ import hashlib
 import json
 import pathlib
 import random
+import platform
 import subprocess
 import sys
 
@@ -63,6 +64,11 @@ def write_json(path, value):
 
 
 def command(arguments, data=None):
+    if pathlib.Path(arguments[0]).name in {"swift", "swiftc"} and "-sdk" not in arguments:
+        sdk = subprocess.run(["xcrun", "--sdk", "macosx", "--show-sdk-path"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        arguments = [arguments[0], "-sdk", sdk, "-target",
+                     f"{platform.machine()}-apple-macosx14.0", *arguments[1:]]
     result = subprocess.run([str(value) for value in arguments], input=data, capture_output=True, timeout=1800)
     require(result.returncode == 0, f"Command failed ({result.returncode}): {result.stderr.decode(errors='replace')}")
     return result.stdout

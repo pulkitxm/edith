@@ -143,7 +143,7 @@ extension VideoEditPlan {
             ],
             "resetCrop": ["clipID": reference],
             "transition": [
-                "clipID": reference, "kind": choice(["none", "fade", "flash"]),
+                "clipID": reference, "kind": choice(["none"] + VideoTransitionImage.kinds),
                 "duration": number(0.2, 2, "Rendered output seconds."),
             ],
             "addAudio": ["path": path, "start": outputTime, "offset": sourceTime, "name": alias],
