@@ -182,7 +182,10 @@ Independent Pillow source-over fixtures cover every 8-bit alpha value over
 opaque and translucent backgrounds, with a one-level channel tolerance. Full
 styled frames cover white, midgray and colored backgrounds, including a colored
 gradient. Samples outside glyphs agree within one sRGB level for native frames;
-H.264 exports allow two levels for colored/midgray samples after ICC normalization,
+H.264 exports are compared against a caption-free export of the independent
+Pillow reference PNG through identical codec settings. This controls lossy codec
+quantization without deriving expected pixels from native caption output.
+After ICC normalization, export samples allow two levels for colored/midgray
 and one level for white. Font-edge rasterization retains the mask tolerance above.
 
 Static styled caption rasters are cached per composition and output size through

@@ -79,9 +79,28 @@ import Testing
         _ = try await pipeline.export(to: output)
         let decoded = AVAssetImageGenerator(asset: AVURLAsset(url: output))
         let exported = CIImage(cgImage: try await decoded.image(at: .zero).image)
-        let reference = VideoCaptionStyleTests.pixels(try image("composite-\(background)"))
-        for (name, frame) in [
-            ("frame", try #require(CIImage(contentsOf: preview))), ("export", exported),
+        let referenceURL = fixtures.appendingPathComponent("composite-\(background).png")
+        var control = VideoProject.create(title: "Independent Pillow codec control")
+        control.videoSettings = project.videoSettings
+        try control.addStillAsset(
+            referenceURL, duration: 0.05,
+            metadata: VideoStillMedia.metadata(at: referenceURL))
+        #expect(control.annotations.isEmpty)
+        let controlPipeline = try await VideoRenderPipeline.make(project: control)
+        let controlOutput = directory.appendingPathComponent("pillow-control.mp4")
+        let controlReport = try await controlPipeline.export(to: controlOutput)
+        #expect(controlReport.frameCount == 3)
+        let controlDecoder = AVAssetImageGenerator(asset: AVURLAsset(url: controlOutput))
+        let controlFrame = CIImage(cgImage: try await controlDecoder.image(at: .zero).image)
+        let referencePNG = VideoCaptionStyleTests.pixels(try image("composite-\(background)"))
+        let referenceExport = VideoCaptionStyleTests.pixels(controlFrame)
+        let plateauOffset = (3700 * 2160 + 100) * 4
+        print(
+            "caption Pillow codec control \(background): plateau=\(Array(referenceExport[plateauOffset..<(plateauOffset + 3)])), PNG=\(Array(referencePNG[plateauOffset..<(plateauOffset + 3)]))"
+        )
+        for (name, frame, reference) in [
+            ("frame", try #require(CIImage(contentsOf: preview)), referencePNG),
+            ("export", exported, referenceExport),
         ] {
             let actual = VideoCaptionStyleTests.pixels(frame)
             var total = 0
