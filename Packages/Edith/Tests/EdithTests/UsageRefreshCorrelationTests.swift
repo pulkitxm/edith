@@ -20,10 +20,15 @@ import Testing
                 pollInterval: .milliseconds(10))
         }
         try await Task.sleep(for: .milliseconds(50))
+        let lock = try #require(
+            UsageRefreshLock.acquire(at: UsageRefreshRunner.lockURL(dataDir: directory)))
+        defer { lock.release() }
         let requested = UsageRefreshSink(dataDir: directory, startedAt: Date(), runID: runID)
         requested.begin()
+        try await Task.sleep(for: .milliseconds(600))
         requested.write(.finished(seconds: 7))
         requested.finish()
+        lock.release()
         let next = UsageRefreshSink(dataDir: directory, startedAt: Date())
         next.begin()
         next.write(.finished(seconds: 9))
