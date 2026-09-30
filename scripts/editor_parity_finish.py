@@ -1,45 +1,14 @@
-import contextlib
-import subprocess
-import tempfile
-
 from editor_acceptance_contracts import require
 from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION, caption_style
-from editor_parity_checks import check_captions, check_mastered_audio, check_video, decoded_frames, picture_sample_frames
+from editor_parity_checks import check_captions, check_mastered_audio, check_video, picture_sample_frames
 from editor_parity_fixtures import checksum, fixture_path
 from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
 from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
+from editor_parity_native import srgb_frame_stream, srgb_frames
 from editor_parity_pixels import check_caption_pixels, check_photo_pixels, codec_control
 from editor_parity_review import frame_pixels
 from editor_parity_style import check_caption_placement, check_styled_caption
-
-
-@contextlib.contextmanager
-def delivery_caption_frames(path, dimensions, selections):
-    width, height = dimensions
-    selected = sorted(selections)
-    expression = "+".join(f"eq(n\\,{frame})" for frame in selected)
-    with tempfile.TemporaryFile() as errors:
-        process = subprocess.Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-i", str(path),
-                                    "-vf", f"select={expression},scale={width}:{height}:flags=lanczos", "-fps_mode", "passthrough",
-                                    "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"], stdout=subprocess.PIPE, stderr=errors)
-        size = width * height * 3
-
-        def frames():
-            for frame in selected:
-                pixels = process.stdout.read(size)
-                require(len(pixels) == size, "Final delivery is missing a caption sample frame")
-                yield frame, pixels
-
-        try:
-            yield frames()
-            require(process.stdout.read(1) == b"", "Unexpected extra decoded caption frame")
-            require(process.wait(timeout=60) == 0, "Final delivery caption decoding failed")
-        finally:
-            process.stdout.close()
-            if process.poll() is None:
-                process.kill()
-            process.wait()
 
 
 def caption_frame_checks(actual, background, shot, dimensions, directory):
@@ -80,14 +49,14 @@ def delivery(edit, project, visual, output, workspace, fixture, manifest, dimens
                   "--audio-channels", "2", "--progress", "--json")
     video = check_video(output, dimensions, manifest)
     video_samples = picture_sample_frames(manifest)
-    video_frames = decoded_frames(output, 270, 480, list(video_samples))
+    video_frames = srgb_frames(output, 270, 480, list(video_samples))
     video["targetGrades"] = [{"outputFrame": frame, "sourceFrame": source_frame,
                               "check": check_target_grade(video_frames[frame], fixture_path(fixture, shot["path"]), shot, 270, 480,
                                                           CAPTION_EXCLUSION, source_frame)}
                              for frame, (shot, source_frame) in video_samples.items()]
     audio = check_mastered_audio(output, fixture_path(fixture, manifest["music"]["path"]), manifest, reference, codec, exact_samples=False)
     selected = photo_sample_frames(manifest)
-    frames = decoded_frames(output, 270, 480, list(selected))
+    frames = srgb_frames(output, 270, 480, list(selected))
     photos = []
     for shot in (value for value in manifest["shots"] if value["kind"] == "photo"):
         actual = {offset: frames[shot["startFrame"] + offset] for offset in (0, shot["frames"] // 2, shot["frames"] - 1)}
@@ -104,7 +73,7 @@ def delivery(edit, project, visual, output, workspace, fixture, manifest, dimens
     directory.mkdir()
     captions = []
     selections = {shot["startFrame"] + shot["frames"] // 2: shot for shot in manifest["shots"]}
-    with delivery_caption_frames(output, dimensions, selections) as samples:
+    with srgb_frame_stream(output, dimensions, selections) as samples:
         for frame, actual in samples:
             shot = selections[frame]
             background = frame_pixels(edit, visual, frame, directory / f"background-{shot['name']}.png", dimensions)
@@ -112,4 +81,5 @@ def delivery(edit, project, visual, output, workspace, fixture, manifest, dimens
                              "checks": caption_frame_checks(actual, background, shot, dimensions, directory / f"glyph-{shot['name']}")})
     require(checksum(project) == before, "Final export changed its editable project")
     return {"nativeReport": report, "independentVideo": video, "independentAudio": audio,
+            "appearanceComparisonDomain": "ColorSync sRGB from native decoded buffer color attachments",
             "photoFrames": photos, "captionFrames": captions, "projectPreserved": True}

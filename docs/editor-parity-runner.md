@@ -3,6 +3,12 @@
 The runner uses only generated fixtures and the explicitly supplied development
 CLI. It must finish all required groups before publishing full acceptance.
 
+The runner requires macOS and an available Swift compiler (`swiftc` on `PATH`,
+provided by Xcode or the Command Line Tools). Native delivery appearance checks
+compile a helper at runtime that uses AVFoundation and Core Image to normalize
+decoded frames to sRGB. Confirm compiler availability with `swiftc --version`
+before starting a run.
+
 ## Version 4 fixtures
 
 ```sh
