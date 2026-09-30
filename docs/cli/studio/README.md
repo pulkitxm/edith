@@ -24,6 +24,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [Native project delivery](./delivery.md) | Renders native video, audio mixes and exact output frames. |
 | [Original-derived backgrounds](./edit-backgrounds.md) | Places full-width photos over independently cropped and blurred originals. |
 | [Grading modes](./edit-grading.md) | Selects native linear grading or explicit FFmpeg-compatible sRGB/BT.709 EQ. |
+| [Video grading domains](./edit-video-grading.md) | Matches encoded BT.709 video grades with explicit input and output color interpretation. |
 | [`ed studio edit media`](./edit-media.md) | Inspects original identity and capture dates, indexes provenance, and audits clip reuse across projects. |
 | [Media packages and reservations](./edit-media-storage.md) | Packages and relinks originals, verifies moved packages, and manages shared source reservations. |
 | [`ed studio edit audio`](./edit-audio.md) | Measures native source audio and maps transients to output frames. |

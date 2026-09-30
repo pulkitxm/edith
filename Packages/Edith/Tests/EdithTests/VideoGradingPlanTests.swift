@@ -24,8 +24,10 @@ import Testing
                 ]))
         }
         #expect(try VideoVisualEffects.decode([:]).gradingMode == .native)
+        #expect(try VideoVisualEffects.decode([:]).gradingDomain == .srgb)
         let edit = try plan([
-            "gradingMode": "ffmpeg709", "contrast": 1.02, "saturation": 1.035, "brightness": 0.002,
+            "gradingMode": "ffmpeg709", "gradingDomain": "bt709ToSRGB",
+            "contrast": 1.02, "saturation": 1.035, "brightness": 0.002,
         ])
         let original = try Data(contentsOf: url)
         _ = try await VideoEditorService.apply(edit, to: url, dryRun: true, overwrite: true)
@@ -33,11 +35,17 @@ import Testing
         _ = try await VideoEditorService.apply(edit, to: url, overwrite: true)
         let saved = try Data(contentsOf: url)
         #expect(try VideoProject.open(url).clips[0].visualEffects.gradingMode == .ffmpeg709)
+        #expect(try VideoProject.open(url).clips[0].visualEffects.gradingDomain == .bt709ToSRGB)
         for effects: [String: Any] in [
             ["gradingMode": "ffmpeg"], ["gradingMode": NSNull()], ["gradingMode": 1],
             ["gradingMode": "ffmpeg709", "saturation": 3.001],
             ["gradingMode": "ffmpeg709", "contrast": 4.001],
             ["gradingMode": "ffmpeg709", "brightness": -1.001],
+            ["gradingMode": "ffmpeg709", "gradingDomain": "auto"],
+            ["gradingMode": "ffmpeg709", "gradingDomain": NSNull()],
+            ["gradingMode": "ffmpeg709", "gradingDomain": 709],
+            ["gradingDomain": "bt709"],
+            ["gradingMode": "native", "gradingDomain": "bt709ToSRGB"],
         ] {
             await #expect(throws: (any Error).self) {
                 try await VideoEditorService.apply(try plan(effects), to: url, overwrite: true)
@@ -55,5 +63,6 @@ import Testing
         _ = try await VideoEditorService.apply(
             try plan(["saturation": 4]), to: url, overwrite: true)
         #expect(try VideoProject.open(url).clips[0].visualEffects.gradingMode == .native)
+        #expect(try VideoProject.open(url).clips[0].visualEffects.gradingDomain == .srgb)
     }
 }

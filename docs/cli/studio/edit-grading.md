@@ -6,6 +6,11 @@
 clip. Omission uses `native`, which applies Core Image color controls to each
 source layer in extended linear sRGB.
 
+The examples and original measurements below use the default `srgb` grading
+domain. For tagged BT.709 video, select the explicit
+[video grading domain](./edit-video-grading.md) that matches the reference's
+input and output interpretation.
+
 Use `ffmpeg709` when importing brightness, contrast and saturation from an
 FFmpeg `eq` workflow using sRGB-encoded RGB8 and limited-range BT.709 YUV444:
 

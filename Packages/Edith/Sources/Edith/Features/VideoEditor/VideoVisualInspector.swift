@@ -131,14 +131,29 @@ struct VideoVisualInspector: View {
                 "Grading mode",
                 selection: Binding(
                     get: { effects.gradingMode },
-                    set: { value in update { $0.gradingMode = value } })
+                    set: { value in
+                        update {
+                            $0.gradingMode = value
+                            if value == .native { $0.gradingDomain = .srgb }
+                        }
+                    })
             ) {
                 Text("Native linear RGB").tag(VideoVisualEffects.GradingMode.native)
                 Text("FFmpeg EQ, sRGB / 709").tag(VideoVisualEffects.GradingMode.ffmpeg709)
             }
             if effects.gradingMode == .ffmpeg709 {
+                Picker(
+                    "Grading domain",
+                    selection: Binding(
+                        get: { effects.gradingDomain },
+                        set: { value in update { $0.gradingDomain = value } })
+                ) {
+                    Text("sRGB photos").tag(VideoVisualEffects.GradingDomain.srgb)
+                    Text("BT.709 video").tag(VideoVisualEffects.GradingDomain.bt709)
+                    Text("BT.709 codes to sRGB").tag(VideoVisualEffects.GradingDomain.bt709ToSRGB)
+                }
                 Text(
-                    "Grades the composed image before overlays. Uses 8-bit limited-range BT.709 YUV with sRGB transfer. Saturation is 0 through 3."
+                    "Grades the composed image before overlays in limited-range BT.709 YUV. The domain selects the encoded input and output interpretation. Saturation is 0 through 3."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
