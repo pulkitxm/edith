@@ -26,7 +26,8 @@ import Testing
         let model = VideoEditorModel()
         defer { model.close() }
         try await model.loadCommandProject(VideoEditorService.prepareOpen(url))
-        model.playhead = 0.1
+        model.seek(to: 0.1)
+        try await waitUntil { abs(model.player.currentTime().seconds - 0.1) < 0.02 }
         model.selectedClipID = clipID
         model.titleDraft = model.project?.title
         let first = try await VideoEditorService.apply(
@@ -37,6 +38,7 @@ import Testing
             ]), to: url, overwrite: true)
         try await waitUntil {
             model.project?.fileRevision?.value.hexDigest == first.revision
+                && abs(model.player.currentTime().seconds - 0.1) < 0.02
         }
         #expect(model.project?.title == "First agent edit")
         #expect(model.project?.annotations.first?.text == "LIVE SYNTHETIC CAPTION")

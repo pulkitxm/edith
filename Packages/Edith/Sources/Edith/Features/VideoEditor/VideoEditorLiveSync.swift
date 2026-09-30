@@ -85,14 +85,18 @@ final class VideoEditorLiveSync {
                 snapshot.project.clips.isEmpty
                 ? nil
                 : try await VideoRenderPipeline.make(project: snapshot.project, previewOnly: true)
-            let item = prepared.map {
-                let item = AVPlayerItem(asset: $0.composition)
-                item.videoComposition = $0.videoComposition
-                item.audioMix = $0.audioMix
-                return item
+            let item: AVPlayerItem?
+            let loadingPlayer: AVPlayer?
+            if let prepared {
+                let next = AVPlayerItem(asset: prepared.composition)
+                next.videoComposition = prepared.videoComposition
+                next.audioMix = prepared.audioMix
+                item = next
+                loadingPlayer = AVPlayer(playerItem: next)
+            } else {
+                item = nil
+                loadingPlayer = nil
             }
-            let loadingPlayer = item.map { AVPlayer(playerItem: $0) }
-            defer { loadingPlayer?.replaceCurrentItem(with: nil) }
             let deadline = ContinuousClock.now + .seconds(30)
             while let item, item.status != .readyToPlay {
                 try Task.checkCancellation()
@@ -110,8 +114,8 @@ final class VideoEditorLiveSync {
             guard !model.blocksCommandOpen,
                 try snapshot.revision.fingerprint.matches(url)
             else { return true }
-            loadingPlayer?.replaceCurrentItem(with: nil)
-            model.acceptExternalProject(snapshot.project, prepared: prepared, item: item)
+            model.acceptExternalProject(
+                snapshot.project, prepared: prepared, playbackPlayer: loadingPlayer)
             return false
         } catch is CancellationError {
             return false

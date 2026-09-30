@@ -74,7 +74,7 @@ final class VideoEditorModel {
         project = next
     }
 
-    let player = AVPlayer()
+    private(set) var player = AVPlayer()
     let focusPlayer = AVPlayer()
     private(set) var focusPreviewReady = false
     private(set) var pipeline: VideoRenderPipeline?
@@ -105,6 +105,10 @@ final class VideoEditorModel {
     init() {
         liveSync = VideoEditorLiveSync(model: self)
         refreshRecentProjects()
+        observePlaybackTime()
+    }
+
+    private func observePlaybackTime() {
         observer = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
@@ -212,7 +216,7 @@ final class VideoEditorModel {
     }
 
     func acceptExternalProject(
-        _ next: VideoProject, prepared: VideoRenderPipeline?, item: AVPlayerItem?
+        _ next: VideoProject, prepared: VideoRenderPipeline?, playbackPlayer: AVPlayer?
     ) {
         let time = playhead
         let rate = player.rate
@@ -230,9 +234,13 @@ final class VideoEditorModel {
         undoHistory.removeAll()
         redoHistory.removeAll()
         pipeline = prepared
-        player.replaceCurrentItem(with: item)
+        player.pause()
+        if let observer { player.removeTimeObserver(observer) }
+        player.replaceCurrentItem(with: nil)
+        player = playbackPlayer ?? AVPlayer()
+        observePlaybackTime()
         seek(to: min(time, prepared?.duration ?? 0))
-        if rate != 0, item != nil { player.rate = rate }
+        if rate != 0, player.currentItem != nil { player.rate = rate }
         updateFocusPreview()
         externalSyncMessage = nil
         refreshRecentProjects()
