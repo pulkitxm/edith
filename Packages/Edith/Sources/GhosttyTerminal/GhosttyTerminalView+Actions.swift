@@ -386,10 +386,12 @@ extension GhosttyTerminalView {
     }
 
     func selectionChanged() {
+        selectionCopyPending = true
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled, let self else { return }
+            if selectionCopyPending, !selectionMouseActive { copyTerminalSelection(nil) }
             NSAccessibility.post(element: self, notification: .selectedTextChanged)
             accessibilitySelectionTask = nil
         }

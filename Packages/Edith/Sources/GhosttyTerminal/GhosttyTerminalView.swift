@@ -40,6 +40,11 @@ public final class GhosttyTerminalView: NSView {
     var keyTextAccumulator: [String]?
     var localEventMonitor: Any?
     var suppressNextLeftMouseUp = false
+    var focusMouseDown: NSEvent?
+    var selectionMouseActive = false
+    var selectionCopyPending = false
+    var selectionMouseReportingSuspended = false
+    private(set) var configuredMouseReporting = true
     private var windowObservers: [NSObjectProtocol] = []
     var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
 
@@ -147,6 +152,11 @@ public final class GhosttyTerminalView: NSView {
     }
 
     public func shutdown() {
+        accessibilitySelectionTask?.cancel()
+        accessibilitySelectionTask = nil
+        focusMouseDown = nil
+        selectionMouseActive = false
+        selectionCopyPending = false
         secureInputRequested = false
         GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
         closed = true
@@ -209,6 +219,7 @@ public final class GhosttyTerminalView: NSView {
         }
 
         guard let surface else { return }
+        updateConfiguredMouseReporting(GhosttyRuntime.shared.configHandle)
         applyTheme()
         ghostty_surface_set_content_scale(
             surface, config.scale_factor, config.scale_factor)
@@ -228,9 +239,19 @@ public final class GhosttyTerminalView: NSView {
         guard let surface, let theme else { return }
         guard let config = GhosttyRuntime.shared.configuration(for: theme) else { return }
         ghostty_surface_update_config(surface, config)
+        updateConfiguredMouseReporting(config)
+        if selectionMouseReportingSuspended, configuredMouseReporting {
+            _ = performBindingAction("toggle_mouse_reporting")
+        }
         if let themeConfig { ghostty_config_free(themeConfig) }
         themeConfig = config
         scheduleDraw()
+    }
+
+    private func updateConfiguredMouseReporting(_ config: ghostty_config_t?) {
+        guard let config else { return }
+        let key = "mouse-reporting"
+        _ = ghostty_config_get(config, &configuredMouseReporting, key, UInt(key.utf8.count))
     }
 
     func scheduleDraw() {
