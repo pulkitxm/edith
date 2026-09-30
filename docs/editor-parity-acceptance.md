@@ -59,3 +59,39 @@ acceptance. Full acceptance must render the integrated 2,160 by 3,840 project
 once and independently measure the final output before publishing a result.
 An acceptance result is written atomically only after every required group
 passes. Fixture verification alone is not product acceptance.
+
+## Independent checker controls
+
+```sh
+python3 scripts/test-editor-parity-checks.py \
+  --fixture /absolute/synthetic-fixture \
+  --workspace /absolute/new/checker-controls
+```
+
+These controls exercise the verification code with independently generated
+positive and negative examples. They do not run Edith and cannot establish
+product acceptance. The output is named `checker-controls.json`, explicitly
+sets `productAcceptance` to false, and never writes a full acceptance result.
+
+`editor_parity_cli.py` supplies the common public-plan construction, schema
+discovery, stdin and media-directory handling, revision guards, transaction
+rollback checks, and atomic result publication. `editor_parity_checks.py`
+checks exact project originals, caption frame anchors, decoded video frame
+timestamps, audio waveform continuity, the final fade, independent FFmpeg
+loudness, and AAC compressed packet identity.
+
+`editor_parity_pixels.py` produces reference pixels with FFmpeg, independently
+of the native renderer. It checks contain geometry, full-width centering,
+original-image blur, foreground-only crop, focal fill, FFmpeg EQ, and visible
+caption bounds and contrast. Pixel tolerances are computed from an independent
+H.264 positive control and incorrect render controls. The threshold is their
+error midpoint, and controls must be separated by at least a factor of three.
+Reports retain both measured control errors and the computed threshold.
+Caption checks measure visible geometry and contrast, not font glyph equality.
+
+The integrated runner still needs the finalized caption, background, mastering,
+packet-copy, and lifecycle contracts before it can execute all ten required
+groups. The shared result publisher rejects an incomplete group set. Quick
+results use `quick-result.json`; only a complete full-resolution run may write
+`result.json`. Both explicitly distinguish synthetic acceptance from real
+project parity.
