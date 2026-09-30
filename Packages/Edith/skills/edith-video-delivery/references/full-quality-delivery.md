@@ -37,6 +37,33 @@ installed native pipeline supports the needed behavior. If it does not, identify
 the unmet requirement. An accepted fallback should be clearly labeled, with its
 quality and editability tradeoffs, rather than silently substituted.
 
+## Measure audio before choosing a correction
+
+Identify the approved audio source by content identity, source range and channel
+layout. Record provenance locally before routing or replacement. A matching name
+or a previous export is not proof that the source is approved. Preserve the source
+and canonical export; use separate destinations for measurements and new masters.
+
+For a loudness target, measure the intended full mix or approved source first.
+Record integrated loudness, true peak, range, channel layout and measurement scope
+with units. Use the supported measured or two-pass normalization workflow, carrying
+the first pass's measurements into the correction pass as its contract requires.
+Do not guess a gain from the requested target or treat source waveform amplitude
+as delivered-mix loudness. Remeasure the final encoded artifact against both the
+loudness target and peak ceiling; a gain adjustment can meet one and miss the other.
+If the measurement or mastering control is absent, report that exact unmet need
+instead of silently substituting an arbitrary gain or unrelated audio source.
+
+## Treat passthrough as a compatibility claim
+
+Use passthrough only when the public delivery contract and source packet metadata
+establish compatibility. A shared codec name is insufficient: verify container
+support, codec configuration, sample rate, channels/layout, packet timing and
+boundaries, plus the absence of requested processing that would require decoding
+and re-encoding. Inspect the actual delivery mode and any fallback reason. Do not
+label a re-encode lossless or passthrough because it uses the same codec. When
+passthrough was required, a fallback encode is a failed requirement unless approved.
+
 ## Render predictably
 
 Choose a new destination for a new delivery. Use an explicit overwrite only when

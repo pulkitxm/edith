@@ -1,6 +1,6 @@
 ---
 name: edith-video-edit
-description: Edit videos headlessly in Edith with the ed studio edit CLI and native .openscreen projects. Use for assembling footage, exact-frame cuts, reframing, effects, music or voiceover placement, beat-aligned edits, alternate cuts, and organizing or reusing original media. Discover the installed plan schema, apply edits atomically, and verify rendered results without mouse interaction.
+description: Edit videos headlessly in Edith with the ed studio edit CLI and native .openscreen projects. Use for assembling footage, exact-frame cuts, batch captions and styles, photo backgrounds and effects, independent music or voiceover, beat-aligned edits, alternate cuts, and organizing original media. Discover the public plan schema, apply edits atomically, and verify editable state and rendered results without mouse interaction.
 ---
 
 # Edith Video Edit
@@ -42,6 +42,11 @@ Use supplied constraints; ask only about decisions that would materially change
 the result. Inspect existing projects with `show`, and discover `list` or `clone`
 through help when finding projects or creating an alternate cut.
 
+Make a requirement ledger before editing: requested outcome, public operation,
+persisted-state check, rendered check and status. Include batch counts, editable
+styles/effects, reference appearance, audio targets and project registration when
+requested. A successful apply does not satisfy requirements left out of the plan.
+
 Read [originals and reuse](references/originals-and-reuse.md) before importing,
 sorting by capture date, reserving or relinking assets. Read local `references/`
 files when the full skill folder is available. The Plugins preview and copy contain
@@ -71,6 +76,8 @@ plan-local aliases for new clips where supported. Reference persisted IDs from
 Prefer native crop, transform, effects, captions and audio operations when the
 schema supports them. If a requested operation is absent, name the limitation
 instead of silently substituting a materially different effect or timing model.
+Keep captions, per-caption styles and photo effects independently editable when
+requested. A flattened replacement movie is not equivalent to a native edit.
 
 ## 4. Dry-run, then apply
 
@@ -104,3 +111,4 @@ rational frame rate and audio quality. A review proxy is not a full-quality
 delivery. The separate `edith-video-delivery` skill covers delivery and review.
 Return project and output paths, the media ledger, checks actually performed,
 and any remaining unsupported operations or unverified audio/visual judgments.
+Mark every requirement passed, failed or unverified using the recorded evidence.

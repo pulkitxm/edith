@@ -50,6 +50,11 @@ installed help and schema actually expose. Do not assume the default export is
 the requested master, or silently reduce quality to make a render finish faster.
 Report an unsupported requirement before substituting a different delivery.
 
+Record a requirement ledger with observed evidence and pass, fail or unverified
+status. Include reference-image matching, measured loudness, approved audio source,
+editable captions/effects and project registration when requested. Read the audio
+and passthrough guidance in the delivery blueprint before choosing those modes.
+
 If native settings must change, build a public plan, dry-run it, then apply it
 atomically to the intended version. Preserve the original cut when making a
 separate variant. The `edith-video-edit` skill covers authoring those plans.
@@ -85,6 +90,8 @@ codec, pixel format, rational frame rate and audio streams. Decode and inspect
 representative frames from the exported movie, not just from the project preview.
 Check audio presence, timing and available loudness or peak measurements. State
 whether an audible review was possible; measurements alone do not prove the mix.
+Compare reference-critical appearance using decoded output frames under matched
+geometry and color handling. Equal numeric effect settings do not prove a match.
 
 A zero exit code, a `written` response or a valid project alone is not delivery
 verification. A mismatch between requested and measured properties is a failed
@@ -98,3 +105,5 @@ media dependencies, checksums where available, measured properties, sampled
 frame positions, and remaining unverified judgments. Keep a local ledger for
 repeatability. For shared evidence, use synthetic content and sanitized labels;
 do not upload real media or private paths merely to demonstrate a successful run.
+Report any requested registration or editor-open acknowledgement separately from
+file creation. A saved `.openscreen` file alone does not prove either action.

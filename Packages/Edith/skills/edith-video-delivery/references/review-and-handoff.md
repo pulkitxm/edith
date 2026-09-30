@@ -19,6 +19,14 @@ frames or orientation changes appear. A contact sheet is a compact review aid,
 not proof that all frames are correct. Review extracted frames from the actual
 movie too: a native preview and a final encode are separate artifacts.
 
+Compare approved reference frames with decoded final frames using matching time,
+geometry and color handling. Record visible differences and any supplied pixel
+tolerance. Similar filter names or equal FFmpeg and Core Image parameter values do
+not prove equivalent appearance. Check all requested caption and photo-effect
+targets in saved state, then sample their distinctive rendered behavior. Keep
+native editability, visual matching and encoded delivery as separate acceptance
+checks so one successful screenshot cannot stand in for all three.
+
 ## Review the sound with explicit limits
 
 Verify exported audio streams, sample rate, channels and duration against the
@@ -26,6 +34,8 @@ brief. Inspect gain, peaks or loudness and expected silence intervals with
 available tools. Check voiceover and beat cues against output-frame positions.
 Do not claim an audible review if only metadata or waveforms were available.
 In a headless run, mark listening checks pending if no listening tool is present.
+Record measurement scope and units, approved-source identity and any normalization
+passes. Verify the final encoded mix, not only the input or an intermediate WAV.
 
 ## Make the handoff reproducible
 
@@ -47,6 +57,7 @@ A compact completion report can use these fields:
 | Review | Contact sheet or sampled images and exact output frames |
 | Dependencies | Original media required for further edits |
 | Acceptance | Passed checks, failed checks and unverified judgments |
+| Lifecycle | Requested registration/open action and exact project acknowledgement |
 
 Only include artifacts that actually exist. Keep local paths and real media out
 of public evidence. When sharing a demonstration, create fresh synthetic media,
