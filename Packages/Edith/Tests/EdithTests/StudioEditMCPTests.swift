@@ -17,10 +17,7 @@ import Testing
             #expect(names.contains(name))
             let tool = try #require(OperationMCPCatalog.tool(named: name))
             #expect(tool.route == descriptor.cli)
-            #expect(
-                tool.effect
-                    == (["schema", "show", "validate", "list"].contains(operation.rawValue)
-                        ? .read : .write))
+            #expect(tool.effect == operation.descriptor.effect)
             #expect(!tool.arguments([], confirm: true).contains("--yes"))
         }
         for operation in StudioDeliveryOperation.allCases {

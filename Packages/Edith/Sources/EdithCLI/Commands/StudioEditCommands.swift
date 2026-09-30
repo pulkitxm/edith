@@ -5,7 +5,7 @@ import Foundation
 struct StudioEditCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "edit",
-        abstract: "Edit and render native video projects without opening a window.",
+        abstract: "Edit, render, and open native video projects.",
         discussion:
             "Use schema for the versioned edit-plan format. Apply validates the entire plan before saving. Media stays local.",
         subcommands: [
@@ -17,6 +17,8 @@ struct StudioEditCommand: AsyncParsableCommand {
             StudioMarkerCommand.self, StudioEditAudio.self, StudioCaptionCommand.self,
             StudioEditPublications.self,
             StudioEditReviewReport.self,
+            StudioEditRegister.self, StudioEditUnregister.self, StudioEditLibrary.self,
+            StudioEditOpen.self,
         ], defaultSubcommand: StudioEditSchema.self)
 }
 
