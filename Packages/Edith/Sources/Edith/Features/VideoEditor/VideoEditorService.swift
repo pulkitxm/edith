@@ -339,6 +339,7 @@ public enum VideoEditorService {
             if let effects = clip.raw["edithVisualEffects"] {
                 _ = try VideoVisualEffects.decode(effects)
             }
+            _ = try clip.frameSampling
             try require((-60...12).contains(gain), "Invalid clip audio gain.")
             if let crop = clip.crop {
                 guard let x = crop["x"], let y = crop["y"], let width = crop["width"],
@@ -385,6 +386,7 @@ public enum VideoEditorService {
     }
 
     static func validateMedia(_ project: VideoProject) async throws {
+        try await project.validateFrameSampling()
         for asset in project.assets {
             try Task.checkCancellation()
             try requireLocalFile(asset.url)

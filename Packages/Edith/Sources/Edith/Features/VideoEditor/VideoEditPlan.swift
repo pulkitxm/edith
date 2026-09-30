@@ -15,6 +15,7 @@ public struct VideoEditPlan: Codable, Sendable {
         case stillDuration(clipID: String, duration: Double)
         case videoSettings(settings: VideoSettings)
         case visualEffects(clipID: String, effects: VideoVisualEffects)
+        case frameSampling(clipID: String, mode: VideoFrameSampling)
         case split(clipID: String, sourceTime: Double, rightName: String)
         case trim(clipID: String, start: Double, end: Double)
         case reorder(clipIDs: [String])

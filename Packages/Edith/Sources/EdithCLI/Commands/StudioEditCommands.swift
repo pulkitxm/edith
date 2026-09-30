@@ -57,7 +57,8 @@ enum StudioEditBridge {
                 CLIOut.note("error: " + error.localizedDescription)
             }
             throw ExitCode(
-                interrupted.map { 128 + $0.signal } ?? (code.hasPrefix("invalid_") ? 2 : 1))
+                interrupted.map { 128 + $0.signal }
+                    ?? (code.hasPrefix("invalid_") && code != "invalid_frame_sampling" ? 2 : 1))
         }
     }
 

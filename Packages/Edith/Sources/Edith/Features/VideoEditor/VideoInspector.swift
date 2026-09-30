@@ -80,6 +80,9 @@ struct VideoInspector: View {
                 model.trimSelected(start: $0, end: clip.end)
             }
             let asset = model.project?.assets.first { $0.id == clip.assetID }
+            if asset?.isStill == false {
+                VideoFrameSamplingPicker(model: model, clip: clip).id(clip.id)
+            }
             number(
                 "Trim end", value: clip.end,
                 range: (clip.start + 0.1)...max(

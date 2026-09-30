@@ -57,6 +57,8 @@ extension VideoEditorService {
         case let .visualEffects(reference, effects):
             let selected = try clip(reference)
             try project.setVisualEffects(effects, clipID: selected.id)
+        case let .frameSampling(reference, mode):
+            try project.setFrameSampling(mode, clipID: clip(reference).id)
         case let .addMedia(path, name):
             try newName(name)
             let url = try mediaURL(path, directory: directory)

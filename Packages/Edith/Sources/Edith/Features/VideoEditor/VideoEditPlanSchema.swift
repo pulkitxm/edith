@@ -129,6 +129,7 @@ extension VideoEditPlan {
             "stillDuration": ["clipID": reference, "duration": stillDuration],
             "videoSettings": ["settings": settings],
             "visualEffects": ["clipID": reference, "effects": effects],
+            "frameSampling": ["clipID": reference, "mode": choice(["hold", "nearest"])],
             "split": ["clipID": reference, "sourceTime": sourceTime, "rightName": alias],
             "trim": ["clipID": reference, "start": sourceTime, "end": sourceTime],
             "reorder": ["clipIDs": ["type": "array", "items": reference, "uniqueItems": true]],

@@ -192,6 +192,61 @@ Each tile reports its selected frame index and timestamp. Use 1 to 64 times,
 1 to 8 columns, and a cell width from 64 to 1920 pixels. The completed PNG report
 includes its dimensions and SHA-256 checksum.
 
+### Explicit video frame sampling
+
+Clips default to `hold`: AVFoundation displays the source sample covering each
+output timestamp. For a seek followed by FFmpeg-style `fps` timestamp rounding,
+opt into `nearest` through the same editable plan used by CLI and MCP:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"trim": {"clipID": "clip_id", "start": 2, "end": 17}},
+    {"frameSampling": {"clipID": "clip_id", "mode": "nearest"}}
+  ]
+}
+```
+
+Run `ed studio edit schema --operation frameSampling` for the strict schema. The
+setting is saved as the clip's `edithFrameSampling` field, survives reopening,
+and is used by native preview, frame extraction and delivery. The native Clip
+inspector also offers a video-only **Frame sampling** picker. Nearest is validated
+before the model changes or saves; a failed selection preserves the previous mode.
+Changes are immediate and undoable. Hold remains available to recover after an
+unsupported trim or speed edit, including when other clips need recovery too.
+Set `mode` to `hold` to restore the default through a plan. Omitting the operation
+leaves an existing setting alone.
+Unknown modes, extra fields and null values in plans are rejected.
+
+Nearest sampling first finds the source sample at or after the stored trim start.
+It rounds retained sample timestamps relative to that seek onto the output frame
+grid, with half-frame ties rounded upward, and chooses the last eligible sample
+for each output frame. The first rounded post-seek timestamp becomes output frame
+zero. This matches the frame sequence of `ffmpeg -ss START -i SOURCE -vf fps=FPS`
+with default `round=near`; it is not a search for the closest source timestamp.
+In particular, a 120 fps sample exactly halfway between two 60 fps output frames
+belongs to the later output frame.
+
+The implementation uses an exact visual-only composition phase, derived from
+sample metadata. It does not rewrite `sourceStartSec` or `sourceEndSec`, alter
+output duration, retime attached or independent audio, modify the original media,
+or create a processed source. This phase can read video samples slightly beyond
+the nominal trim end. The entire phased interval must fit the source video track:
+an end-of-file trim with insufficient margin fails instead of silently clamping.
+Speed changes, still images, unavailable sample timestamps, clocks that cannot
+represent the phase exactly, and surviving segments starting between output frame
+boundaries are rejected. The combined video composition must also have a supported
+exact clock, even when each source clock is individually supported. These runtime
+failures return `error.code: "invalid_frame_sampling"`, a specific reason and exit
+status 1 with `--json`. Failed apply and dry-run leave the project and existing
+destination unchanged.
+
+Synthetic acceptance compares 900 decoded frame identities per source against
+FFmpeg for drifting and irregular VFR, aligned and offset 30 fps, and 120 fps
+sources. Trim metadata and original bytes remain unchanged. This verifies temporal
+sampling independently of color grading.
+
 ### Contact-sheet waveform and saved beat markers
 
 Append `--show-beat-markers` to show saved project markers on an output-time strip
