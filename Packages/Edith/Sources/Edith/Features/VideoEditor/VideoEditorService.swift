@@ -389,6 +389,7 @@ public enum VideoEditorService {
         try await project.validateFrameSampling()
         for asset in project.assets {
             try Task.checkCancellation()
+            try validateMasteredAudio(asset)
             try requireLocalFile(asset.url)
             if asset.isStill {
                 let metadata = try VideoStillMedia.metadata(at: asset.url)

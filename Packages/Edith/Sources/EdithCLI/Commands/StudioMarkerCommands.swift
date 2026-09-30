@@ -193,8 +193,12 @@ struct StudioMarkerSnap: AsyncParsableCommand {
 
 struct StudioEditAudio: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "audio", abstract: "Analyze native audio sources headlessly.",
-        subcommands: [StudioAudioAnalyze.self], defaultSubcommand: StudioAudioAnalyze.self)
+        commandName: "audio",
+        abstract: "Analyze, measure and master soundtrack sources headlessly.",
+        subcommands: [
+            StudioAudioAnalyze.self, StudioAudioHealth.self, StudioAudioMeasure.self,
+            StudioAudioMaster.self,
+        ], defaultSubcommand: StudioAudioAnalyze.self)
 }
 
 struct StudioAudioAnalyze: AsyncParsableCommand {
