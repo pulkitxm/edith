@@ -1,5 +1,6 @@
 import AVFoundation
 import CryptoKit
+import Darwin
 import Foundation
 
 public enum StudioAudioMastering {
@@ -192,7 +193,9 @@ public enum StudioAudioMastering {
         try Task.checkCancellation()
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o444], ofItemAtPath: temporary.path)
-        try FileManager.default.moveItem(at: temporary, to: output)
+        guard renamex_np(temporary.path, output.path, UInt32(RENAME_EXCL)) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         return report
     }
 

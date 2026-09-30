@@ -1,5 +1,7 @@
 # Soundtrack measurement and mastering
 
+[Back to Studio](./README.md) · [All CLI commands](../README.md)
+
 `ed studio edit audio health --json` reports whether Studio's detected FFmpeg
 provides `loudnorm`, including the executable and engine version. FFmpeg is an
 explicit dependency; these commands do not install it. Measurement uses the

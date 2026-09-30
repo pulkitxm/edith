@@ -1,4 +1,5 @@
 import CoreMedia
+import Darwin
 import EdithStudio
 import Foundation
 
@@ -142,7 +143,9 @@ extension VideoEditorService {
             [.posixPermissions: 0o444],
             ofItemAtPath: temporary.appendingPathComponent("report.json").path)
         try Task.checkCancellation()
-        try FileManager.default.moveItem(at: temporary, to: destination)
+        guard renamex_np(temporary.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         return AudioMasteringResult(
             version: 1, path: destination.path, projectPath: projectPath.path,
             audioPath: audioPath.path, assetID: id, trackID: trackID, report: report)

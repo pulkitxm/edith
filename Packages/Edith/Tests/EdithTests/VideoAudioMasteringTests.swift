@@ -47,5 +47,17 @@ struct VideoAudioMasteringTests {
         for name in ["health", "measure", "master"] {
             #expect(OperationMCPCatalog.tool(named: "edith_studio_edit_audio_\(name)") != nil)
         }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644], ofItemAtPath: result.audioPath)
+        let file = try FileHandle(forWritingTo: URL(fileURLWithPath: result.audioPath))
+        try file.seekToEnd()
+        try file.write(contentsOf: Data([0]))
+        try file.close()
+        do {
+            _ = try await VideoEditorService.validate(URL(fileURLWithPath: result.projectPath))
+            Issue.record("Changed derived media unexpectedly validated")
+        } catch let error as VideoEditorService.Failure {
+            #expect(error.code == "invalid_audio_provenance")
+        }
     }
 }
