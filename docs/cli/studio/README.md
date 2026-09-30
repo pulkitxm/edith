@@ -29,6 +29,7 @@ need the app to be running: every tool runs inside `ed` itself.
 | [Media packages and reservations](./edit-media-storage.md) | Packages and relinks originals, verifies moved packages, and manages shared source reservations. |
 | [`ed studio edit audio`](./edit-audio.md) | Measures native source audio and maps transients to output frames. |
 | [Soundtrack mastering](./audio-mastering.md) | Measures EBU loudness and creates verified immutable soundtrack references. |
+| [AAC packet-copy delivery](./audio-copy.md) | Preserves approved AAC packets, priming and trailing trim with native rendered video. |
 | [`ed studio edit markers`](./edit-markers.md) | Lists, edits, imports, exports and snaps output-frame markers. |
 | [`ed studio edit captions`](./captions.md) | Adds, lists, updates and removes output-frame or marker-timed native captions. |
 | [`ed studio edit publications`](./publications.md) | Create, validate and reorder upload manifests without changing projects. |

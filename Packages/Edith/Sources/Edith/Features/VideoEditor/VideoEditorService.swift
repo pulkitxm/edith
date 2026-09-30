@@ -140,11 +140,21 @@ public enum VideoEditorService {
         try requireOutput(
             output, extension: settings.codec.fileExtension, project: project, source: url)
         try checkDestination(output, overwrite: overwrite)
+        let copiedAudio =
+            settings.audioCodec == .copy
+            ? try await VideoAACPassthrough.prepare(project, settings: settings, range: range) : nil
         let pipeline = try await VideoRenderPipeline.make(project: project)
         let temporary = temporaryOutput(output)
         defer { try? FileManager.default.removeItem(at: temporary) }
-        let report = try await pipeline.export(to: temporary, settings: settings, range: range) {
-            progress(min(0.99, $0))
+        let report: VideoDeliveryReport
+        if let copiedAudio {
+            report = try await VideoAACPassthrough.export(
+                copiedAudio, pipeline: pipeline,
+                to: temporary, settings: settings, progress: progress)
+        } else {
+            report = try await pipeline.export(to: temporary, settings: settings, range: range) {
+                progress(min(0.99, $0))
+            }
         }
         try Task.checkCancellation()
         try publish(temporary, to: output, overwrite: overwrite)

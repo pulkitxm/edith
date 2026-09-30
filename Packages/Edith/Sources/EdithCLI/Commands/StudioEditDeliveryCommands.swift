@@ -45,11 +45,19 @@ struct StudioEditRender: AsyncParsableCommand {
     var bitRate = 40_000_000
     @Option(help: "Maximum frames between keyframes, 1...10000; unused for ProRes.")
     var keyFrameInterval = 120
-    @Option(help: "Audio codec; defaults to pcm for ProRes, aac otherwise.")
+    @Option(
+        help:
+            "Audio codec; defaults to pcm for ProRes, aac otherwise. copy preserves validated full-stream AAC packets."
+    )
     var audioCodec: VideoDeliverySettings.AudioCodec?
+    @Option(
+        help:
+            "Required with --audio-codec copy: the single unedited independent soundtrack track ID."
+    )
+    var audioCopyTrack: String?
     @Option(help: "AAC bits per second, 32000...320000; mono maximum 256000.")
     var audioBitRate = 320_000
-    @Option(help: "Audio samples per second: 44100, 48000, or 96000 (PCM only).")
+    @Option(help: "Audio samples per second: 44100, 48000, or 96000 (PCM or matching AAC copy).")
     var audioSampleRate = 48_000
     @Option(help: "Audio channel count: 1 or 2.") var audioChannels = 2
     @Option(help: "Output color space; defaults to the project/composition, or rec709.")
@@ -71,6 +79,7 @@ struct StudioEditRender: AsyncParsableCommand {
             settings.audioBitRate = audioBitRate
             settings.audioSampleRate = audioSampleRate
             settings.audioChannels = audioChannels
+            settings.audioCopyTrackID = audioCopyTrack
             settings.colorSpace = colorSpace
             settings.requireHardware = requireHardware
             let delivery = settings

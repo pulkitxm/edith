@@ -53,7 +53,7 @@ public struct VideoDeliverySettings: Codable, Equatable, Sendable {
     }
 
     public enum AudioCodec: String, Codable, CaseIterable, Sendable {
-        case aac, pcm
+        case aac, pcm, copy
     }
 
     public enum ColorSpace: String, Codable, CaseIterable, Sendable {
@@ -77,6 +77,7 @@ public struct VideoDeliverySettings: Codable, Equatable, Sendable {
     public var audioBitRate: Int = 320_000
     public var audioSampleRate: Int = 48_000
     public var audioChannels: Int = 2
+    public var audioCopyTrackID: String?
     public var requireHardware = false
     public var colorSpace: ColorSpace?
 
@@ -98,7 +99,7 @@ public struct VideoDeliverySettings: Codable, Equatable, Sendable {
         else {
             throw VideoDeliveryError.invalidSettings("Invalid video or audio encoding settings.")
         }
-        guard codec.isMaster || audioCodec == .aac else {
+        guard codec.isMaster || audioCodec != .pcm else {
             throw VideoDeliveryError.invalidSettings(
                 "PCM audio requires a QuickTime ProRes master.")
         }
@@ -111,6 +112,11 @@ public struct VideoDeliverySettings: Codable, Equatable, Sendable {
         guard !requireHardware || !codec.isMaster else {
             throw VideoDeliveryError.invalidSettings(
                 "Required hardware encoding is available for H.264 and HEVC delivery.")
+        }
+        guard (audioCodec == .copy) == (audioCopyTrackID != nil) else {
+            throw VideoDeliveryError.invalidSettings(
+                "AAC copy requires an explicit audioCopyTrackID; it is valid only with audio codec copy."
+            )
         }
     }
 
@@ -195,6 +201,7 @@ public struct VideoDeliveryReport: Codable, Sendable {
     public let bytes: Int64
     public let sha256: String
     public var range: VideoDeliveryRangeReport? = nil
+    public var audioPassthrough: VideoAACPassthroughReport? = nil
 
     static func inspect(_ url: URL) async throws -> Self {
         let asset = AVURLAsset(url: url)
@@ -281,6 +288,7 @@ extension VideoRenderPipeline {
     func export(
         to destination: URL, settings: VideoDeliverySettings = .init(), overwrite: Bool = false,
         range: VideoDeliveryFrameRange? = nil,
+        includeAudio: Bool = true,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> VideoDeliveryReport {
         var settings = settings
@@ -290,6 +298,11 @@ extension VideoRenderPipeline {
                 ? VideoDeliverySettings.ColorSpace.displayP3 : .rec709)
         settings.colorSpace = color
         try settings.validate()
+        guard settings.audioCodec != .copy else {
+            throw VideoDeliveryError.invalidSettings(
+                "AAC copy requires VideoEditorService.render with a validated project and explicit soundtrack track."
+            )
+        }
         guard destination.isFileURL,
             destination.pathExtension.lowercased() == settings.codec.fileExtension
         else {
@@ -358,7 +371,7 @@ extension VideoRenderPipeline {
         let audioTracks = try await composition.loadTracks(withMediaType: .audio)
         var audioOutput: AVAssetReaderAudioMixOutput?
         var audioInput: AVAssetWriterInput?
-        if !audioTracks.isEmpty {
+        if includeAudio && !audioTracks.isEmpty {
             let output = AVAssetReaderAudioMixOutput(
                 audioTracks: audioTracks,
                 audioSettings: [

@@ -23,9 +23,10 @@ speed and trim edits. Choose these encoding settings:
 | `--codec` | `h264` (default), `hevc`, `hevc10`, `proRes422`, `proRes422HQ`, `proRes4444` |
 | `--bit-rate` | Video bits/second, 100000 to 1000000000; default 40000000; unused for ProRes |
 | `--key-frame-interval` | Maximum frames between keyframes, 1 to 10000; default 120; unused for ProRes |
-| `--audio-codec` | `aac` or `pcm`; default PCM for ProRes, AAC otherwise; PCM requires ProRes |
+| `--audio-codec` | `aac`, `pcm`, or validated AAC `copy`; default PCM for ProRes, AAC otherwise; PCM requires ProRes |
+| `--audio-copy-track` | Required track ID for `copy`; see [AAC copy validation](./audio-copy.md) |
 | `--audio-bit-rate` | AAC bits/second, 32000 to 320000; default 320000; mono maximum 256000 |
-| `--audio-sample-rate` | 44100, 48000 (default), or 96000; 96000 requires PCM |
+| `--audio-sample-rate` | 44100, 48000 (default), or 96000; 96000 requires PCM or a matching AAC copy source |
 | `--audio-channels` | 1 or 2 (default) |
 | `--color-space` | `rec709` or `displayP3`; default project/composition color, then Rec.709 |
 | `--require-hardware` | Require hardware encoding; supported for H.264 and HEVC |
@@ -33,6 +34,10 @@ speed and trim edits. Choose these encoding settings:
 H.264 and HEVC require a `.mp4` destination. ProRes requires `.mov`.
 HEVC Main 10 and ProRes retain high-precision rendering buffers. The selected
 color space controls both the reader composition and writer color tags.
+
+AAC copy preserves a complete unedited soundtrack, including encoder priming
+and trailing trim. It requires FFmpeg and ffprobe and rejects frame ranges,
+audio effects, mixes and resampling before delivery files are created.
 
 ## `ed studio edit render-audio`
 
