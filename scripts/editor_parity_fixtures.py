@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import random
 import subprocess
 import sys
 
@@ -11,7 +12,36 @@ from editor_acceptance_contracts import require
 FRAME_COUNT = 5588
 FRAME_RATE = 60
 SAMPLE_RATE = 48000
-PHOTO_INDICES = {index * 47 // 18 for index in range(18)}
+VIDEO_INDICES = {6, 16, 26, 36, 46}
+PHOTO_INDICES = [index for index in range(47) if index not in VIDEO_INDICES]
+CONTAIN_INDICES = {PHOTO_INDICES[index * 42 // 18] for index in range(18)}
+FOCAL_INDICES = [index for index in PHOTO_INDICES if index not in CONTAIN_INDICES][:2]
+
+
+def shot_specifications():
+    generator = random.Random(5588)
+    durations = [43, 442, *(generator.randint(65, 155) for _ in range(45))]
+    adjustment = FRAME_COUNT - sum(durations)
+    while adjustment:
+        index = generator.randrange(2, 47)
+        change = 1 if adjustment > 0 else -1
+        if 44 <= durations[index] + change <= 441:
+            durations[index] += change
+            adjustment -= change
+    words = ["Amber", "Meadow", "Orbit", "Pebble", "Lantern", "Willow", "Coral", "Harbor", "Cobalt", "Garden", "Silver", "Valley"]
+    specifications = []
+    for index, frames in enumerate(durations):
+        caption = " ".join(generator.sample(words, 2)) + f" {index + 1:02d}"
+        if index in {8, 19, 30, 41}:
+            caption += "\n" + " ".join(generator.sample(words, 2))
+        shot = {"frames": frames, "caption": caption, "fontSize": 112 if index in {45, 46} else 104,
+                "framing": "contain" if index in CONTAIN_INDICES else "fill", "focalX": 0.5, "focalY": 0.5}
+        if index in FOCAL_INDICES:
+            shot.update({"focalX": 0.3 if index == FOCAL_INDICES[0] else 0.7, "focalY": 0.35 if index == FOCAL_INDICES[0] else 0.65})
+        if index == min(CONTAIN_INDICES):
+            shot["sourceCrop"] = {"x": 0.1, "y": 0.15, "width": 0.8, "height": 0.7}
+        specifications.append(shot)
+    return specifications
 
 
 def checksum(path):
@@ -71,7 +101,7 @@ def generate(directory):
     baselines.mkdir()
     shots = []
     start = 0
-    for index in range(47):
+    for index, specification in enumerate(shot_specifications()):
         photo = index in PHOTO_INDICES
         width, height = (960, 540) if photo else (320, 180)
         raw, color = pixels(index, width, height)
@@ -80,13 +110,14 @@ def generate(directory):
         if photo:
             ffmpeg(*source, "-frames:v", "1", "-update", "1", path, data=raw)
         else:
-            ffmpeg(*source, "-vf", "loop=loop=119:size=1:start=0", "-frames:v", "120", "-c:v", "libx264", "-preset", "ultrafast",
+            source_frames = specification["frames"] + 2
+            ffmpeg(*source, "-vf", f"loop=loop={source_frames - 1}:size=1:start=0", "-frames:v", str(source_frames), "-c:v", "libx264", "-preset", "ultrafast",
                    "-crf", "12", "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", path, data=raw)
-        frames = 119 if index < 42 else 118
+        frames = specification["frames"]
         shots.append({"name": f"synthetic-{index + 1:02d}", "path": str(path.relative_to(directory)), "sha256": checksum(path),
                       "kind": "photo" if photo else "video", "width": width, "height": height, "centerRGB": color,
                       "startFrame": start, "endFrame": start + frames, "frames": frames,
-                      "caption": f"Synthetic scene {index + 1:02d}", "sourceStartFrame": 0})
+                      "sourceStartFrame": 0, **specification})
         start += frames
     music = originals / "synthetic-music.wav"
     expression = "(0.08+0.025*sin(2*PI*t/7))*(sin(2*PI*220*t)+0.5*sin(2*PI*330*t)+0.25*sin(2*PI*550*t))"
@@ -127,8 +158,17 @@ def verify(directory, media=True):
             "Fixture delivery target changed")
     shots = manifest["shots"]
     require(len(shots) == 47 and len({shot["sha256"] for shot in shots}) == 47, "Expected 47 distinct original sources")
-    require(sum(shot["kind"] == "photo" for shot in shots) == 18 and sum(shot["kind"] == "video" for shot in shots) == 29,
-            "Expected 29 video and 18 photo originals")
+    require(sum(shot["kind"] == "photo" for shot in shots) == 42 and sum(shot["kind"] == "video" for shot in shots) == 5,
+            "Expected five video and 42 photo originals")
+    require(sum(shot["framing"] == "contain" for shot in shots) == 18
+            and sum(shot["kind"] == "photo" and shot["framing"] == "fill" for shot in shots) == 24,
+            "Expected 18 contained and 24 fill photos")
+    require(sum("sourceCrop" in shot for shot in shots) == 1 and sum(shot["focalX"] != 0.5 for shot in shots) == 2,
+            "Expected one source crop and two noncenter focal points")
+    require(sum("\n" in shot["caption"] for shot in shots) == 4 and sum(shot["fontSize"] == 104 for shot in shots) == 45
+            and sum(shot["fontSize"] == 112 for shot in shots) == 2, "Caption line or font-size distribution changed")
+    require(min(shot["frames"] for shot in shots) == 43 and max(shot["frames"] for shot in shots) == 442,
+            "Expected independently generated shot durations spanning 43 through 442 frames")
     require(len(manifest["baselineExports"]) == 6, "Expected six canonical synthetic baseline exports")
     entries = inventory(directory, manifest)
     require(len({entry["path"] for entry in entries}) == len(entries), "Duplicate fixture paths")
@@ -139,19 +179,20 @@ def verify(directory, media=True):
     for index, shot in enumerate(shots):
         require(shot["startFrame"] == position and shot["frames"] == shot["endFrame"] - position,
                 "Shot boundaries contain a gap, overlap, or incorrect duration")
-        require(shot["sourceStartFrame"] == 0 and shot["caption"] == f"Synthetic scene {index + 1:02d}", "Unexpected synthetic shot identity")
+        require(shot["sourceStartFrame"] == 0 and all(shot[key] == value for key, value in shot_specifications()[index].items()),
+                "Unexpected synthetic shot identity")
         position = shot["endFrame"]
         if media:
             stream = probe(fixture_path(directory, shot["path"]))["streams"][0]
             require((stream["width"], stream["height"]) == (shot["width"], shot["height"]), "Source dimensions changed")
             if shot["kind"] == "video":
-                require(stream["r_frame_rate"] == "60/1" and int(stream["nb_frames"]) == 120, "Incorrect synthetic video cadence")
+                require(stream["r_frame_rate"] == "60/1" and int(stream["nb_frames"]) == shot["frames"] + 2, "Incorrect synthetic video cadence")
     require(position == FRAME_COUNT and manifest["audioSamples"] == FRAME_COUNT * 800, "Incorrect fixture frame or sample grid")
     if media:
         stream = probe(fixture_path(directory, manifest["music"]["path"]))["streams"][0]
         require(int(stream["sample_rate"]) == SAMPLE_RATE and stream["channels"] == 2
                 and int(stream["duration_ts"]) == manifest["audioSamples"], "Synthetic music must cover every output sample")
-    return {"fixtureVerified": True, "originals": 47, "videos": 29, "photos": 18, "frames": FRAME_COUNT,
+    return {"fixtureVerified": True, "originals": 47, "videos": 5, "photos": 42, "containedPhotos": 18, "fillPhotos": 24, "frames": FRAME_COUNT,
             "durationSeconds": FRAME_COUNT / FRAME_RATE, "baselineExports": 6, "protectedFiles": len(entries)}
 
 

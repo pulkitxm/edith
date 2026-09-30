@@ -1,7 +1,7 @@
 # Editor parity acceptance
 
 The parity fixture is an isolated synthetic project specification: 47 distinct
-original assets, 29 videos and 18 photos, 47 captions, and 5,588 frames at 60 fps.
+original assets, five videos and 42 photos, 47 captions, and 5,588 frames at 60 fps.
 The delivery canvas is 2,160 by 3,840. Audio starts at zero and covers exactly
 4,470,400 samples at 48 kHz. The requested master is -16 LUFS, at most -1.5 dBTP,
 an 11 LU loudness-range target, and a final 0.25-second fade.
@@ -19,10 +19,15 @@ baseline exports. Their hashes and every original asset hash are protected.
 They are generated once, then verified before and after acceptance operations.
 No real projects, exports, screenshots, or recordings belong in this fixture.
 
-The manifest records half-open frame intervals. The first 42 shots have 119
-frames and the remaining five have 118 frames. Every video contains 120 source
-frames, allowing the public trim operation to set each exact shot duration.
-Photos stay as original PNG assets. Video frames and photos have colored edge
+The manifest records half-open frame intervals with independently generated
+durations between 43 and 442 frames, totaling exactly 5,588. Each video has two
+extra source frames, allowing the public trim operation to set its exact shot
+duration. Photos stay as original PNG assets. Eighteen photos use contained
+framing with a blurred original background, and 24 use fill framing. One
+contained photo has a custom foreground source crop, and two fill photos use
+off-center focal points. Captions contain independent synthetic text: 43 have
+one line, four have two lines, 45 use size 104, and two use size 112.
+Video frames and photos have colored edge
 strips, a unique flat center patch, and surrounding checkerboard detail for
 independent framing, blur, color, and source-identity checks.
 
