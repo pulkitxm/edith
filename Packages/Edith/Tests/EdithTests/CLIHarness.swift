@@ -86,7 +86,7 @@ enum CLIProcessProbe {
     static func run(
         _ arguments: [String], executable: URL? = nil, currentDirectory: URL? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        timeout: TimeInterval = defaultTimeout
+        timeout: TimeInterval = defaultTimeout, input: Data? = nil
     ) throws -> CLIRun {
         let target = executable ?? binary
         let captureDirectory = FileManager.default.temporaryDirectory
@@ -96,6 +96,15 @@ enum CLIProcessProbe {
         defer { try? FileManager.default.removeItem(at: captureDirectory) }
         let stdoutURL = captureDirectory.appendingPathComponent("stdout")
         let stderrURL = captureDirectory.appendingPathComponent("stderr")
+        let stdin: FileHandle
+        if let input {
+            let url = captureDirectory.appendingPathComponent("stdin")
+            try input.write(to: url)
+            stdin = try FileHandle(forReadingFrom: url)
+        } else {
+            stdin = .nullDevice
+        }
+        defer { if input != nil { try? stdin.close() } }
         try Data().write(to: stdoutURL)
         try Data().write(to: stderrURL)
         let stdout = try FileHandle(forWritingTo: stdoutURL)
@@ -110,7 +119,7 @@ enum CLIProcessProbe {
             request: CLICommandRequest(
                 executableURL: target, arguments: arguments, environment: environment,
                 currentDirectoryURL: currentDirectory, terminatesProcessGroup: true),
-            input: FileHandle.nullDevice.fileDescriptor, output: stdout.fileDescriptor,
+            input: stdin.fileDescriptor, output: stdout.fileDescriptor,
             error: stderr.fileDescriptor, onExit: { finished.signal() })
         let deadline = ProcessInfo.processInfo.systemUptime + max(0, timeout)
         guard finished.wait(timeout: .now() + max(0, timeout)) == .success else {

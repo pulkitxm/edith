@@ -8,11 +8,17 @@ public enum VideoEditorService {
     public struct Failure: LocalizedError, Sendable {
         public let code: String
         public let message: String
+        public let operationIndex: Int?
+        public let cause: String?
         public var errorDescription: String? { message }
 
-        public init(_ code: String, _ message: String) {
+        public init(
+            _ code: String, _ message: String, operationIndex: Int? = nil, cause: String? = nil
+        ) {
             self.code = code
             self.message = message
+            self.operationIndex = operationIndex
+            self.cause = cause
         }
     }
 
@@ -26,6 +32,8 @@ public enum VideoEditorService {
         public var audioReport: VideoAudioDeliveryReport? = nil
         public var frame: Int64? = nil
         public var time: Double? = nil
+        public var revision: String? = nil
+        public var sourceRevision: String? = nil
         public let audioIDs: [String]
         public let audioAliases: [String: [String]]
     }
@@ -53,7 +61,8 @@ public enum VideoEditorService {
 
     public static func apply(
         _ plan: VideoEditPlan, to url: URL, output: URL? = nil,
-        dryRun: Bool = false, overwrite: Bool = false, mediaDirectory: URL? = nil
+        dryRun: Bool = false, overwrite: Bool = false, mediaDirectory: URL? = nil,
+        expectedRevision: String? = nil
     ) async throws -> Result {
         guard plan.version == 1, plan.operations.count <= 1000 else {
             throw Failure(
@@ -62,6 +71,18 @@ public enum VideoEditorService {
         let lock = dryRun ? nil : try await VideoProjectFileAccess.transaction(url)
         defer { withExtendedLifetime(lock) {} }
         let snapshot = try readProject(url)
+        let sourceRevision = snapshot.revision.fingerprint.hexDigest
+        if let expectedRevision {
+            try require(
+                expectedRevision.count == 64 && expectedRevision.allSatisfy(\.isHexDigit),
+                "Expected revision must be a SHA-256 hex digest from show --summary.")
+            guard expectedRevision.lowercased() == sourceRevision else {
+                throw Failure(
+                    "project_changed",
+                    "The project differs from the expected revision. Read show --summary and rebuild the plan."
+                )
+            }
+        }
         var project = snapshot.project
         var aliases: [String: String] = [:]
         var audioAliases: [String: [String]] = [:]
@@ -74,7 +95,8 @@ public enum VideoEditorService {
                     audioAliases: &audioAliases, directory: directory)
             } catch {
                 throw Failure(
-                    "invalid_operation", "Operation \(index): \(error.localizedDescription)")
+                    "invalid_operation", "Operation \(index): \(error.localizedDescription)",
+                    operationIndex: index, cause: (error as? Failure)?.code ?? "edit_failed")
             }
         }
         try validateStructure(project)
@@ -90,9 +112,13 @@ public enum VideoEditorService {
             try saveEncoded(
                 encoded, to: destination, overwrite: overwrite, expectedSource: snapshot.revision)
         }
-        return result(
+        var response = result(
             project, url: destination, written: !dryRun, aliases: aliases,
             audioAliases: audioAliases)
+        response.sourceRevision = sourceRevision
+        response.revision =
+            dryRun ? sourceRevision : VideoProjectFileAccess.Revision(encoded).hexDigest
+        return response
     }
 
     public static func render(

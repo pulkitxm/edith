@@ -76,9 +76,28 @@ public struct VideoEditPlan: Codable, Sendable {
         return try JSONDecoder().decode(Self.self, from: data)
     }
 
-    public static func schema() throws -> Data {
+    public static func schema(operation: String? = nil) throws -> Data {
+        var selected = documentSchema
+        if let operation {
+            let properties = selected["properties"] as? [String: Any]
+            let operations = properties?["operations"] as? [String: Any]
+            let items = operations?["items"] as? [String: Any]
+            let variants = items?["oneOf"] as? [[String: Any]] ?? []
+            guard
+                let variant = variants.first(where: {
+                    ($0["properties"] as? [String: Any])?[operation] != nil
+                })
+            else {
+                throw VideoEditorService.Failure(
+                    "invalid_operation",
+                    "Unknown plan operation '\(operation)'. Use schema to list operations.")
+            }
+            selected = variant
+            selected["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+            selected["title"] = "Edith edit-plan operation: \(operation)"
+        }
         return try JSONSerialization.data(
-            withJSONObject: documentSchema, options: [.prettyPrinted, .sortedKeys])
+            withJSONObject: selected, options: [.prettyPrinted, .sortedKeys])
     }
 
     private static func validateFields(_ value: Any, schema: [String: Any], path: String) throws {
@@ -112,8 +131,13 @@ public struct VideoEditPlan: Codable, Sendable {
             guard Set(object.keys).isSubset(of: Set(fields.keys)),
                 required.isSubset(of: Set(object.keys))
             else {
-                throw VideoEditorService.Failure(
-                    "invalid_plan", "\(path): unknown or missing fields.")
+                let unknown = Set(object.keys).subtracting(fields.keys).sorted()
+                let missing = required.subtracting(object.keys).sorted()
+                let details = [
+                    unknown.isEmpty ? nil : "unknown fields: \(unknown.joined(separator: ", "))",
+                    missing.isEmpty ? nil : "missing fields: \(missing.joined(separator: ", "))",
+                ].compactMap { $0 }.joined(separator: "; ")
+                throw VideoEditorService.Failure("invalid_plan", "\(path): \(details).")
             }
             for (name, child) in object {
                 try validateFields(child, schema: fields[name]!, path: "\(path).\(name)")

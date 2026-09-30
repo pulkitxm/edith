@@ -40,10 +40,15 @@ enum StudioEditBridge {
                 ? "cancelled"
                 : (error as? VideoEditorService.Failure)?.code ?? "edit_failed"
             if json {
+                var detail: [String: Any] = ["code": code, "message": error.localizedDescription]
+                if let failure = error as? VideoEditorService.Failure {
+                    if let index = failure.operationIndex { detail["operationIndex"] = index }
+                    if let cause = failure.cause { detail["cause"] = cause }
+                }
                 let data = try JSONSerialization.data(
                     withJSONObject: [
                         "version": 1,
-                        "error": ["code": code, "message": error.localizedDescription],
+                        "error": detail,
                     ], options: [.sortedKeys])
                 CLIOut.note(String(decoding: data, as: UTF8.self))
             } else {
@@ -75,10 +80,12 @@ struct StudioEditSchema: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "schema", abstract: "Print the edit-plan JSON Schema.")
     @Flag(help: "Emit JSON runtime errors. The schema is always JSON.") var json = false
+    @Option(help: "Print only this edit-plan operation's schema.") var operation: String?
 
     func run() async throws {
         try await StudioEditBridge.run(json: json) {
-            CLIOut.out(String(decoding: try VideoEditPlan.schema(), as: UTF8.self))
+            CLIOut.out(
+                String(decoding: try VideoEditPlan.schema(operation: operation), as: UTF8.self))
         }
     }
 }
@@ -105,9 +112,16 @@ struct StudioEditShow: AsyncParsableCommand {
         commandName: "show", abstract: "Print project JSON, including IDs for subsequent edits.")
     @Argument var project: String
     @Flag(help: "Emit JSON runtime errors. The project is always JSON.") var json = false
+    @Flag(help: "Return compact project IDs, settings and a revision for guarded edits.")
+    var summary = false
 
     func run() async throws {
         try await StudioEditBridge.run(json: json) {
+            if summary {
+                try StudioEditBridge.printJSON(
+                    VideoEditorService.describe(StudioEditBridge.url(project)))
+                return
+            }
             CLIOut.out(
                 String(
                     decoding: try VideoEditorService.show(StudioEditBridge.url(project)),
@@ -120,26 +134,24 @@ struct StudioEditApply: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "apply", abstract: "Validate and atomically apply a version 1 edit plan.")
     @Argument var project: String
-    @Option(help: "JSON edit-plan file. Relative media paths resolve beside this file.") var plan:
-        String
+    @Option(help: "JSON plan file, or - for stdin. Relative media paths resolve beside the file.")
+    var plan: String
+    @Option(help: "Base for relative media paths; stdin defaults to the current directory.")
+    var mediaDirectory: String?
+    @Option(help: "Apply only if the project still matches the SHA-256 from show --summary.")
+    var expectRevision: String?
     @Option(help: "Save a new project instead of replacing the input.") var output: String?
     @Flag(help: "Validate every operation and source without writing any files.") var dryRun = false
     @OptionGroup var options: StudioEditOutput
 
     func run() async throws {
         try await StudioEditBridge.run(json: options.json) {
-            let planURL = StudioEditBridge.url(plan)
-            let size = try planURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            guard size.isRegularFile == true, let bytes = size.fileSize, bytes <= 4 * 1024 * 1024
-            else {
-                throw VideoEditorService.Failure(
-                    "invalid_plan", "Expected a regular edit-plan file of at most 4 MiB.")
-            }
-            let edit = try VideoEditPlan.decode(Data(contentsOf: planURL))
+            let input = try StudioEditPlanInput.read(plan, mediaDirectory: mediaDirectory)
+            let edit = try VideoEditPlan.decode(input.data)
             let result = try await VideoEditorService.apply(
                 edit, to: StudioEditBridge.url(project), output: output.map(StudioEditBridge.url),
                 dryRun: dryRun, overwrite: options.overwrite,
-                mediaDirectory: planURL.deletingLastPathComponent())
+                mediaDirectory: input.directory, expectedRevision: expectRevision)
             try StudioEditBridge.printResult(result, json: options.json)
         }
     }
