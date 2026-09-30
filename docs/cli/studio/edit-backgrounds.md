@@ -62,20 +62,47 @@ to validate the complete plan without changing the project.
 | --- | --- | --- |
 | `framing` | `fill` | `fit`, `fill`, or `fullWidth`, independent of foreground |
 | `focalX`, `focalY` | `0.5` | Fractions from left/top, each from 0 through 1 |
-| `blurRadius` | `65` | Core Image Gaussian radius in project-canvas pixels, 0 through 1000 |
+| `blurRadius` | `65` | Encoded-sRGB Gaussian radius in project-canvas pixels, 0 through 1000 |
 | `sourceCrop` | entire original | `{ "x", "y", "width", "height" }`, normalized oriented-original coordinates |
 
 Crop dimensions are each 0.05 through 1. Origins are each 0 through 0.95;
 `x + width` and `y + height` must not exceed 1. All values must be finite.
 Background crop is applied directly to the original, before its independent
-framing. Both layers receive the clip's exposure and color controls. Background
-edges are clamped before Gaussian blur, avoiding transparent or dark edge halos.
+framing. The placed background is cropped to its visible canvas rectangle before
+its edges are clamped and blurred. Pixels outside the viewport cannot bleed into
+the blur. Both layers receive the clip's exposure and color controls.
 Fit and full-width backgrounds may intentionally leave the project backdrop
 visible outside their placed rectangle.
+
+Positive-radius background blur operates on encoded sRGB channel values, matching
+the processing domain of Pillow's `ImageOps.fit(...).filter(ImageFilter.GaussianBlur(...))`.
+Embedded profiles, including Display P3, are honored before background colors are
+clipped to the sRGB gamut and encoded for blur. The result returns to the pipeline's
+linear working space for composition and conversion to the project output profile.
+This avoids the brighter mixed edges produced by averaging linear-light values.
+A zero radius bypasses this conversion and preserves the original gamut.
+Foreground colors and the selected grading mode are independent of this blur rule.
 
 Radius is expressed at the project's native canvas size. A 540 × 960 preview
 of a 2160 × 3840 canvas uses radius 16.25 for a stored radius of 65. Export and
 full-resolution frame extraction decode the original at full resolution.
+
+The mandatory reference tests use pinned Pillow 11.3.0 sample grids for a
+black/white step, off-viewport white borders, saturated fine texture, and a
+Display P3 color texture, at 2160 × 3840 and 540 × 960. They require mean
+absolute RGB8 error at most 2 and P95 at most 5 on a uniform cell-center grid.
+Additional samples cover all four viewport edges and corners, with maximum error
+capped at 36 levels. Core Image's Gaussian kernel, Pillow's extended-box
+approximation, and preview thumbnail resampling differ most at textured corners.
+Native preview
+and HEVC10 export have separate background-region checks (mean 3, P95 7), alongside
+unchanged foreground pixels and source/project checksums. Python is needed only
+to regenerate the reference, not to run these tests:
+
+```sh
+python scripts/generate-background-blur-reference.py \
+  --output scripts/fixtures/background-blur-reference.json
+```
 
 ## Defaults and replacement
 

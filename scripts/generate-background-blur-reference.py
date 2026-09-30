@@ -7,6 +7,8 @@ from PIL import Image, ImageCms, ImageFilter, ImageOps, __version__
 
 def source(name):
     colors = [(255, 0, 0), (0, 255, 255), (0, 0, 255), (255, 255, 0)]
+    if name == "p3":
+        colors = [(230, 64, 32), (32, 192, 224), (64, 32, 224), (224, 208, 64)]
     rows = []
     for row in range(4):
         data = bytearray()
@@ -45,10 +47,13 @@ def main():
         for divisor in [1, 4]:
             width, height = 2160 // divisor, 3840 // divisor
             reference = ImageOps.fit(converted, (width, height)).filter(ImageFilter.GaussianBlur(65 / divisor))
-            xs = list(range(0, width, 90 // divisor)) + [width - 1]
-            ys = list(range(0, height, 120 // divisor)) + [height - 1]
+            xs = [x // divisor for x in range(45, 2160, 90)]
+            ys = [y // divisor for y in range(60, 3840, 120)]
             rows = [[channel for x in xs for channel in reference.getpixel((x, y))] for y in ys]
-            cases.append(dict(name=name, divisor=divisor, xs=xs, ys=ys, rows=rows))
+            edge_points = [(x, y) for x in [0, width - 1] for y in [0, *ys, height - 1]]
+            edge_points += [(x, y) for y in [0, height - 1] for x in xs]
+            edges = [[x, y, *reference.getpixel((x, y))] for x, y in edge_points]
+            cases.append(dict(name=name, divisor=divisor, xs=xs, ys=ys, edges=edges, rows=rows))
             if args.images:
                 reference.save(args.images / f"{name}-{divisor}-reference.png", icc_profile=srgb.tobytes())
     lines = ['{"pillow": "11.3.0", "radius": 65, "cases": [']
