@@ -108,4 +108,6 @@ frame positions, and remaining unverified judgments. Keep a local ledger for
 repeatability. For shared evidence, use synthetic content and sanitized labels;
 do not upload real media or private paths merely to demonstrate a successful run.
 Report any requested registration or editor-open acknowledgement separately from
-file creation. A saved `.openscreen` file alone does not prove either action.
+file creation. Use `register` plus `library` for a requested library entry, and
+`open` only when the user requests the editor. Check the acknowledgement fields
+described in the handoff blueprint; a saved `.openscreen` file proves neither action.

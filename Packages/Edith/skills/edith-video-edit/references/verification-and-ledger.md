@@ -72,8 +72,72 @@ location. State what was measured or inspected and what remains unverified.
 Distinguish a review proxy from a final deliverable, structural validation from
 visual inspection, and measured audio properties from a listening review.
 
-If asked to register a project or open that exact project in the editor, discover
-the lifecycle command contract and verify its acknowledgement names the intended
-project identity and path. File existence and presence in a directory listing are
-not registration or open acknowledgements. Request an open only when authorized;
-a headless task can finish with registration checked and opening left unrequested.
+## Register the exact editable project
+
+Registration adds a reference to the canonical original project path. It does not
+clone the project, copy its media, rewrite its identity or open the editor. For a
+requested library handoff, use the intended installation's CLI:
+
+```sh
+ed studio edit register synthetic-cut.openscreen --json
+ed studio edit library --json
+```
+
+The register result contains `path`, `projectID`, `title` and `registered: true`.
+Compare its canonical `path` and `projectID` with the intended project. `library`
+returns an array containing native and registered entries. Match the same path
+and identity with `registered: true` and no `errorCode`/`error`. A missing or invalid
+registered file remains visible with an error; `project_identity_changed` means
+the registered path now contains another project. Do not treat the listing's
+mere presence as proof that the reference is usable.
+
+`project_id_conflict` rejects an identity already registered at another path.
+Inspect both references before deciding whether a deliberate clone or reference
+replacement is intended. Do not rewrite project IDs internally to bypass it.
+When removal is requested, use `unregister`; it preserves project and media bytes:
+
+```sh
+ed studio edit unregister synthetic-cut.openscreen --json
+```
+
+Its returned entry has `registered: false`. Check the library again. A native
+project can remain listed independently of its removed registration.
+
+## Open only for a requested editor handoff
+
+Normal editing, rendering, review and registration stay headless. When the user
+requests the native editor, inspect and validate the chosen project, then issue
+one open request for that exact path:
+
+```sh
+ed studio edit open synthetic-cut.openscreen --timeout 30 --json
+```
+
+`--timeout` accepts 1 through 120 seconds and defaults to 30. The command requires
+the CLI's matching app to be running; it does not launch an app. For a development
+slot, use `dist/Edith.app/Contents/MacOS/ed` from that slot with its matching app,
+not an unbundled `.build` executable or the installed production CLI. If app startup
+is needed for the requested handoff, start the matching app once, then retry once
+ready instead of repeatedly raising windows.
+
+Success contains `version: 1`, `ok: true`, `state: "opened"`, `requestID`, canonical
+`path`, `projectID` and SHA-256 `revision`. The CLI correlates all four request
+identity fields. The acknowledgement follows native Studio model mounting and,
+for a nonempty project, player readiness. Match path, project ID and revision to
+the intended saved edit and retain the request ID. Registration, an existing file
+or an already visible window is not this acknowledgement. Opening does not itself
+register the project.
+
+Handle structured failures according to their cause:
+
+| Code | Next step |
+| --- | --- |
+| `app_not_running` | Use the matching running app, only for a requested editor handoff. |
+| `editor_busy` | Let the existing open/task finish or resolve unsaved edits before retrying. |
+| `missing_media` | Restore or relink the required originals through supported operations; no file dialog is opened. |
+| `migration_required` | Use an explicit supported conversion for the legacy document before retrying; do not handwrite its serialization. |
+| `project_changed` | Inspect the new saved revision and confirm the intended project before another request. |
+| `open_timeout` | Report the missing acknowledgement; do not claim success or repeatedly issue opens. |
+
+Leave opening unrequested in a headless-only task. Report registration and editor
+readiness as separate outcomes with their own returned evidence.

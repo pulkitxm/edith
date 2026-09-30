@@ -118,6 +118,11 @@ first and last usable frames, overlays, sound and sync. Use `frame` and, when
 listed in help, `contact-sheet` for focused review. Sample output time after trim
 and speed changes. Process exit zero alone does not establish a correct edit.
 
+For requested library handoff, use `register` and verify the exact entry in
+`library`. Use `open` only for a requested editor handoff, with the matching app
+running, and require its exact-project acknowledgement. The verification blueprint
+covers result fields and recovery. Routine editing and review stay headless.
+
 For a final export, discover render settings and preserve requested resolution,
 rational frame rate and audio quality. A review proxy is not a full-quality
 delivery. The separate `edith-video-delivery` skill covers delivery and review.

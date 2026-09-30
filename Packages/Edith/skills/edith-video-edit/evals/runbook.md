@@ -44,10 +44,14 @@ and retain these artifacts in its own output directory:
 - Audio measurements, approved-source provenance and delivery-mode reports.
 - A requirement ledger linking every claimed outcome to an artifact.
 
-Do not open an app, player or browser. A registration check may use an isolated
-development service if already available, but it must not start the GUI. Otherwise
-record that check as unverified. Registration and editor-open acknowledgement are
-distinct; this suite intentionally leaves editor opening unrequested.
+Do not open an app, player or browser. Registration and library inspection are
+headless CLI operations; use the isolated development identity and require actual
+register output plus the matching usable library entry. Compare canonical path,
+projectID and registered state, and check project hashes before/after registration.
+Clean up fixture registrations with `unregister` after retaining the evidence.
+Registration and editor-open acknowledgement are distinct; this suite intentionally
+leaves editor opening unrequested. A separate authorized integration check may
+verify open acknowledgement after one matching isolated app launch.
 
 Case 2's stale-revision exercise must create a real intervening public edit on a
 disposable copy. Preserve the stale token, then attempt guarded dry-run and fork

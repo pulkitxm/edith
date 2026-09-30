@@ -28,7 +28,7 @@
         "A real intervening public edit makes the captured revision stale; dry-run and fork attempts reject it without changing the source or creating the fork destination.",
         "A plan whose second operation fails leaves the project checksum unchanged; retained JSON identifies operation index 1 and its cause, and the corrected retry rereads current state.",
         "Native state and rendered samples verify independent audio placement after trim/speed changes with source, project and output clocks recorded separately.",
-        "Registration is supported by an acknowledgement of the alternate's exact identity and path, or explicitly unverified; file existence is not counted as registration and no editor window is opened."
+        "Actual register output and a library entry agree on the alternate's original canonical path, projectID and registered=true with no entry error; checksums prove the project unchanged, file inventory shows no duplicate project, and no editor window is opened."
       ]
     }
   ]

@@ -48,6 +48,34 @@ package. Check dependencies before handoff. If a supported collection or relink
 operation exists, discover it and validate the collected copy. A project clone
 alone does not copy its media or necessarily preserve external usage reservations.
 
+## Verify library and editor handoff separately
+
+For requested registration, run `ed studio edit register PROJECT --json`, then
+`ed studio edit library --json` using the intended installation's CLI. Registration
+references the canonical original project path without copying or rewriting it.
+Match the returned `path`, `projectID` and `registered: true` in the library array;
+check each entry's optional `errorCode`/`error` for stale references or identity
+changes. A file in a directory is not proof of registration. Remove a reference
+only when requested with `ed studio edit unregister PROJECT --json`; this returns
+`registered: false` and preserves the project and originals.
+
+When the user specifically requests the editor, validate the intended saved edit
+and use `ed studio edit open PROJECT --timeout 30 --json` once. Timeout accepts
+1 through 120 seconds. The matching app must already be running: a development
+handoff uses that slot's `dist/Edith.app/Contents/MacOS/ed` and app, not a plain
+`.build` binary. This command is unnecessary for normal headless delivery.
+
+Require `ok: true` and `state: "opened"` with the correlated `requestID`, canonical
+`path`, `projectID` and SHA-256 `revision`. This acknowledges the exact revision
+mounted in Studio and a ready native player for nonempty projects. Registration
+does not acknowledge an open, and opening does not automatically register a file.
+Keep missing acknowledgements unverified. `app_not_running`, `editor_busy`,
+`missing_media`, `migration_required`, `project_changed` and `open_timeout` require
+resolving the named cause rather than repeatedly raising the editor. Do not replace
+an acknowledged-open check with file existence or an app window being visible.
+
+## Report the result
+
 A compact completion report can use these fields:
 
 | Field | Content |
