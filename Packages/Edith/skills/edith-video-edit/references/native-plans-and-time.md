@@ -133,3 +133,12 @@ If the project changed during validation, load the new revision and compare its
 IDs and ordering with the planned input. Resolve the conflict before another
 apply. If a response was lost, inspect the current project before repeating an
 import or append operation.
+
+Complete a requested failure-and-recovery exercise on the same disposable project.
+After the intentional rejection, retain its diagnostics and unchanged project hash,
+then reread the summary and any affected details. Correct the full plan, dry-run
+against that current revision, and perform the corrected guarded apply. Inspect
+the resulting saved state and validate it. Record the successful repair separately
+from the rejected attempt; a failed operation followed only by `show` proves the
+failure preserved state, not that the correction works. If repair cannot finish,
+leave recovery failed or unverified rather than counting rejection as completion.

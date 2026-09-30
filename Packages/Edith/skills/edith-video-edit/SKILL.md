@@ -111,6 +111,9 @@ automatically replay imports after a lost response: inspect whether they landed.
 Keep the apply result's saved `revision` for the next guarded edit. On an operation
 failure, inspect zero-based `error.operationIndex` and `error.cause` before revising
 the whole plan. Read the plan blueprint for stdin and explicit media-base examples.
+For a requested recovery check, finish with a corrected plan on the same disposable
+project: reread state, dry-run and apply with its current revision, then inspect the
+saved result. Proving rejection alone does not prove successful recovery.
 
 ## 5. Verify and hand off
 

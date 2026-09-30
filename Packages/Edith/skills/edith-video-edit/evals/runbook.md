@@ -65,6 +65,11 @@ operations and inspect both source and destination afterward. For the bad second
 operation, use a schema-valid operation targeting a nonexistent persisted ID after
 a valid first operation, so execution diagnostics and atomic rollback are tested.
 Never fake an error result or count a schema parse failure as operation rollback.
+Close that exercise with a corrected full plan on the same disposable project:
+reread its current state, dry-run and apply with its current revision guard, then
+inspect the saved result. Retain the rejection, unchanged hash and successful
+repair as separate observations. An error followed only by inspection does not
+satisfy the corrected-retry expectation.
 
 ## Grade artifacts, then compare
 
