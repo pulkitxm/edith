@@ -37,6 +37,13 @@ import Testing
         let reloaded = VideoCaptionRasterCache(annotations: project.annotations)
         let green = try #require(reloaded.image(for: id, size: CGSize(width: 540, height: 960)))
         #expect(VideoCaptionStyleTests.pixels(small) != VideoCaptionStyleTests.pixels(green))
+        project.editRegion("annotations", id: id) {
+            $0["content"] = "CHANGED"; $0["textContent"] = "CHANGED"
+        }
+        let edited = VideoCaptionRasterCache(annotations: project.annotations)
+        let text = try #require(edited.image(for: id, size: CGSize(width: 540, height: 960)))
+        #expect(VideoCaptionStyleTests.pixels(text) != VideoCaptionStyleTests.pixels(green))
+        #expect(cache.image(for: id, size: CGSize(width: 540, height: 960)) === small)
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_CAPTION_BENCHMARK"] == "1"))

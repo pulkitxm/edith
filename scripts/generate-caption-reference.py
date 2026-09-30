@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, features, __version__
@@ -29,3 +30,4 @@ manifest = {"pillow": __version__, "freetype": features.version("freetype2"),
             "layout": "BASIC", "fontSHA256": hashlib.sha256(Path(args.font).read_bytes()).hexdigest(),
             "cases": cases}
 (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+subprocess.run(["bun", "x", "biome", "format", "--write", str(output / "manifest.json")], check=True)

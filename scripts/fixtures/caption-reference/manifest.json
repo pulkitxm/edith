@@ -8,67 +8,37 @@
       "file": "one-104.png",
       "text": "fj",
       "size": 104,
-      "bounds": [
-        1051,
-        2799,
-        1114,
-        2897
-      ]
+      "bounds": [1051, 2799, 1114, 2897]
     },
     {
       "file": "two-104.png",
       "text": "SYNTHETIC\nCAPTION",
       "size": 104,
-      "bounds": [
-        791,
-        2799,
-        1375,
-        3026
-      ]
+      "bounds": [791, 2799, 1375, 3026]
     },
     {
       "file": "pairs-104.png",
       "text": "AVATAR fj",
       "size": 104,
-      "bounds": [
-        812,
-        2799,
-        1344,
-        2897
-      ]
+      "bounds": [812, 2799, 1344, 2897]
     },
     {
       "file": "one-112.png",
       "text": "fj",
       "size": 112,
-      "bounds": [
-        1049,
-        2801,
-        1117,
-        2905
-      ]
+      "bounds": [1049, 2801, 1117, 2905]
     },
     {
       "file": "two-112.png",
       "text": "SYNTHETIC\nCAPTION",
       "size": 112,
-      "bounds": [
-        768,
-        2801,
-        1398,
-        3033
-      ]
+      "bounds": [768, 2801, 1398, 3033]
     },
     {
       "file": "pairs-112.png",
       "text": "AVATAR fj",
       "size": 112,
-      "bounds": [
-        792,
-        2801,
-        1364,
-        2905
-      ]
+      "bounds": [792, 2801, 1364, 2905]
     }
   ]
 }
