@@ -25,6 +25,8 @@ canvas and font size, then rendered at the requested output scale. Re-typesettin
 at the reduced preview font size changes glyph metrics and is not a valid
 reference for a scaled native canvas. Font-file hashes, glyph interior budgets,
 placement tolerances and wrong-font/text/size controls remain unchanged.
+The `fontBounds` reference rounds glyph advances at the reference font size,
+matching its declared integer metrics, before applying the output scale.
 
 ## Version 4 fixtures
 
