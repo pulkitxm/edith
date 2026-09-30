@@ -33,7 +33,10 @@ priming, final partial packet durations, skip-sample records, and trailing
 padding are supported and preserved. Full-stream copy is distinct from cutting
 a partial AAC packet. Native AAC may retain a full final encoded packet whose
 discard padding brings its presented end to the stream duration; sources whose
-final packet duration already expresses the trim are also supported. Padding
+final packet duration already expresses the trim are also supported only when
+that duration plus discard padding equals the full sample duration established
+by the preceding packets. A full final packet must end at the declared stream
+duration after subtracting padding. Ambiguous packet geometry is rejected. Padding
 must be nonnegative, smaller than the last packet, and confined to the stream
 end. Encoder-delay skips are confined to the first packet and must match preroll.
 Ambiguous timestamps, gaps, overlapping packets, missing

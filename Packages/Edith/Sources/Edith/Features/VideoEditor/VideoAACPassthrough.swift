@@ -167,7 +167,22 @@ enum VideoAACPassthrough {
         }
         let encodedEnd = last.pts + last.duration
         let presentedEnd = encodedEnd - trailingPadding
-        guard encodedEnd == duration || presentedEnd == duration else {
+        if trailingPadding > 0 {
+            let fullPacketDurations = Set(packets.dropLast().map(\.duration))
+            guard fullPacketDurations.count == 1, let fullDuration = fullPacketDurations.first
+            else {
+                throw reject(
+                    "AAC trailing padding requires unambiguous full-packet sample geometry.")
+            }
+            let fullPacketTail = last.duration == fullDuration && presentedEnd == duration
+            let trimmedPacketTail =
+                last.duration < fullDuration
+                && last.duration + trailingPadding == fullDuration && encodedEnd == duration
+            guard fullPacketTail || trimmedPacketTail else {
+                throw reject(
+                    "AAC final packet duration and padding contradict its presentation bounds.")
+            }
+        } else if encodedEnd != duration {
             throw reject("AAC final packet and trailing padding do not match presentation bounds.")
         }
     }

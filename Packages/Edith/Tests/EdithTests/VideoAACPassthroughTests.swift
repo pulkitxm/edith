@@ -164,6 +164,17 @@ struct VideoAACPassthroughTests {
         }
         let valid = [packet(-1024, [side(1024, 0)]), packet(0, []), packet(1024, [side(0, 352)])]
         try VideoAACPassthrough.validatePacketTiming(valid, duration: 1696)
+        #expect(throws: VideoEditorService.Failure.self) {
+            try VideoAACPassthrough.validatePacketTiming(valid, duration: 2048)
+        }
+        let trimmedTail = VideoAACPassthrough.Packet(
+            pts: 1024, dts: 1024, duration: 672, data_hash: "SHA256:synthetic",
+            side_data_list: [side(0, 352)])
+        let trimmed = Array(valid.dropLast()) + [trimmedTail]
+        try VideoAACPassthrough.validatePacketTiming(trimmed, duration: 1696)
+        #expect(throws: VideoEditorService.Failure.self) {
+            try VideoAACPassthrough.validatePacketTiming(trimmed, duration: 1344)
+        }
         for invalid in [
             [packet(-1024, [side(1023, 0)])] + Array(valid.dropFirst()),
             [valid[0], packet(0, [side(1, 0)]), valid[2]],
