@@ -50,7 +50,8 @@ def base_operations(manifest, dimensions):
         else:
             operations.extend([
                 {"addMedia": {"path": shot["path"], "name": shot["name"]}},
-                {"trim": {"clipID": shot["name"], "start": 0, "end": shot["frames"] / FRAME_RATE}},
+                {"trim": {"clipID": shot["name"], "start": shot["sourceStartFrame"] / FRAME_RATE,
+                          "end": (shot["sourceStartFrame"] + shot["frames"]) / FRAME_RATE}},
                 {"sourceAudio": {"clipID": shot["name"], "gainDb": 0, "muted": True}},
             ])
     operations.append({"addAudio": {"path": manifest["music"]["path"], "start": 0, "offset": 0, "name": "synthetic-score"}})

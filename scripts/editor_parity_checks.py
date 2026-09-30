@@ -17,17 +17,23 @@ def protected_snapshot(directory, manifest):
         "parity-manifest.json": checksum(directory / "parity-manifest.json")}
 
 
-def check_visual_project(project, manifest, fixture, dimensions):
+def verify_artifacts(snapshot, stage):
+    for path, expected in snapshot.items():
+        require(path.is_file() and checksum(path) == expected, f"Protected artifact changed {stage}: {path.name}")
+    return {"stage": stage, "sha256": {str(path): digest for path, digest in snapshot.items()}}
+
+
+def check_visual_project(project, manifest, fixture, dimensions, audio_asset_count=1):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
     require(len(clips) == len({clip["id"] for clip in clips}) == len({clip["assetId"] for clip in clips}) == 47,
             "Project must retain 47 distinct editable clips and original asset identities")
-    require(len(assets) == 48, "Project must contain exactly 47 visual originals and one soundtrack, with no baked replacements")
+    require(len(assets) == 47 + audio_asset_count, "Project contains unexpected assets or baked visual replacements")
     for clip, shot in zip(clips, manifest["shots"]):
         actual = pathlib.Path(assets[clip["assetId"]]["originalPath"]).resolve(strict=True)
         require(actual == fixture_path(fixture, shot["path"]), "Editable clip does not reference its exact original source")
-        require(abs(clip["sourceStartSec"]) < 1e-10, "Unexpected source trim start")
-        require(abs(clip["sourceEndSec"] * FRAME_RATE - shot["frames"]) < 1e-7, "Incorrect source trim endpoint")
+        require(abs(clip["sourceStartSec"] * FRAME_RATE - shot["sourceStartFrame"]) < 1e-7, "Unexpected source trim start")
+        require(abs(clip["sourceEndSec"] * FRAME_RATE - shot["sourceStartFrame"] - shot["frames"]) < 1e-7, "Incorrect source trim endpoint")
         require(abs(clip["timelineStartSec"] * FRAME_RATE - shot["startFrame"]) < 1e-7, "Incorrect shot boundary")
     settings = project["edithVideoSettings"]
     require((settings["width"], settings["height"]) == dimensions, "Project canvas dimensions changed")
@@ -35,8 +41,8 @@ def check_visual_project(project, manifest, fixture, dimensions):
     return {"editableOriginals": 47, "originalPhotos": 42, "exactShotBoundaries": True}
 
 
-def check_project(project, manifest, fixture, dimensions):
-    visual = check_visual_project(project, manifest, fixture, dimensions)
+def check_project(project, manifest, fixture, dimensions, audio_asset_count=1):
+    visual = check_visual_project(project, manifest, fixture, dimensions, audio_asset_count)
     assets = {asset["id"]: asset for asset in project["assets"]}
     tracks = project["audioTracks"]
     require(len(tracks) == 1, "Soundtrack must remain one continuous editable track")
@@ -45,9 +51,13 @@ def check_project(project, manifest, fixture, dimensions):
             "Soundtrack must start at zero on the output clock")
     require(abs(track["endMs"] - FRAME_COUNT * 1000 / FRAME_RATE) < 1e-7 and not track.get("muted", False),
             "Soundtrack must cover the complete project")
+    output_range = track["outputRange"]
+    require(Fraction(output_range["startValue"], output_range["startScale"]) == 0
+            and Fraction(output_range["durationValue"], output_range["durationScale"]) == Fraction(FRAME_COUNT, FRAME_RATE),
+            "Soundtrack rational endpoint must equal exactly 5588000/60000")
     require(pathlib.Path(assets[track["assetId"]]["originalPath"]).resolve(strict=True) == fixture_path(fixture, manifest["music"]["path"]),
             "Soundtrack must reference its original synthetic waveform")
-    return {**visual, "continuousOutputClockTracks": 1}
+    return {**visual, "continuousOutputClockTracks": 1, "exactSoundtrackEndpoint": {"value": 5588000, "timescale": 60000}}
 
 
 def check_captions(report, manifest, expected_styles):
@@ -77,7 +87,7 @@ def decoded_frames(path, width, height, frame_numbers):
 
 
 def picture_sample_frames(manifest):
-    return {shot["startFrame"] + offset: (shot, offset) for shot in manifest["shots"] if shot["kind"] == "video"
+    return {shot["startFrame"] + offset: (shot, shot["sourceStartFrame"] + offset) for shot in manifest["shots"] if shot["kind"] == "video"
             for offset in (0, 1, shot["frames"] // 2 - 1, shot["frames"] // 2, shot["frames"] - 2, shot["frames"] - 1)}
 
 
@@ -253,8 +263,11 @@ def check_aac_passthrough(original, delivery):
     require([packet["data_hash"] for packet in source_packets] == [packet["data_hash"] for packet in target_packets],
             "AAC compressed packet payloads were changed, dropped, or duplicated")
     source_base, target_base = Fraction(source["time_base"]), Fraction(target["time_base"])
+    for field in ("start_pts", "duration_ts"):
+        require(int(source[field]) * source_base == int(target[field]) * target_base, f"AAC passthrough changed stream {field}")
     for left, right in zip(source_packets, target_packets):
         for field in ("pts", "dts", "duration"):
             require(int(left[field]) * source_base == int(right[field]) * target_base, f"AAC passthrough changed {field}")
+        require(left.get("side_data_list", []) == right.get("side_data_list", []), "AAC passthrough changed encoder delay or discard padding")
     return {"packets": len(source_packets), "compressedPayloadsIdentical": True, "packetTimingIdentical": True,
             "codecConfigurationIdentical": True}

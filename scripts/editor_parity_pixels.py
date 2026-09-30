@@ -120,7 +120,7 @@ def color_patch_offsets(width, height, source_dimensions, crop, exclusion):
     return sorted(set(indices))
 
 
-def check_photo_pixels(actual, source, source_dimensions, width, height, blur, caption_bounds, color, source_crop=None):
+def check_photo_pixels(actual, source, source_dimensions, width, height, blur, caption_bounds, color, source_crop=None, check_grade=True):
     options = {"blur": blur, "source_crop": source_crop, **color}
     expected = reference_pixels(source, width, height, **options)
     positive = codec_control(expected, width, height)
@@ -140,7 +140,7 @@ def check_photo_pixels(actual, source, source_dimensions, width, height, blur, c
         "originalBlurBackground": calibrated_comparison(actual, expected, positive,
                                                          {"blackBackground": wrong_black, "missingBlur": unblurred}, background),
     }
-    if color != {"brightness": 0, "contrast": 1, "saturation": 1}:
+    if check_grade and color != {"brightness": 0, "contrast": 1, "saturation": 1}:
         identity = reference_pixels(source, width, height, blur=blur, source_crop=source_crop)
         patches = color_patch_offsets(width, height, source_dimensions, source_crop, caption_bounds)
         result["ffmpegEQ"] = calibrated_comparison(actual, expected, positive, {"missingColorEffect": identity}, patches)

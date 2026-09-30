@@ -20,9 +20,10 @@ They are generated once, then verified before and after acceptance operations.
 No real projects, exports, screenshots, or recordings belong in this fixture.
 
 The manifest records half-open frame intervals with independently generated
-durations between 43 and 442 frames, totaling exactly 5,588. Each video has two
-extra source frames, allowing the public trim operation to set its exact shot
-duration. Photos stay as original PNG assets. Eighteen photos use contained
+durations between 43 and 442 frames, totaling exactly 5,588. Each video includes
+its nonzero trim offset, the selected duration, and two extra source frames,
+allowing the public trim operation to select the exact original range.
+Photos stay as original PNG assets. Eighteen photos use contained
 framing with a blurred original background, and 24 use fill framing. One
 contained photo has a custom foreground source crop, and two fill photos use
 off-center focal points. Captions contain independent synthetic text: 43 have
@@ -31,7 +32,7 @@ Video frames and photos have colored edge
 strips, a unique flat center patch, and surrounding checkerboard detail for
 independent framing, blur, color, and source-identity checks.
 
-Version 2 fixtures have different left and right soundtrack waveforms. Each
+Version 4 fixtures have different left and right soundtrack waveforms. Each
 video frame also contains a nine-bit source-frame signature, rather than a
 repeated still. Acceptance decodes 30 picture samples across the five videos:
 start, middle, end, and adjacent frames. Correct timestamps cannot conceal a
@@ -141,9 +142,10 @@ reported. Native color grading must likewise pass the FFmpeg EQ comparison;
 a known native grading mismatch blocks acceptance rather than increasing the
 tolerance to hide it.
 
-The integrated runner still needs the finalized caption, mastering,
-packet-copy, and lifecycle contracts before it can execute all eleven required
-groups. The shared result publisher rejects an incomplete group set. Quick
+The integrated runner discovers the finalized caption, mastering,
+packet-copy, and lifecycle capabilities before completing all eleven required
+groups. Missing capabilities stop the run. See [runner commands](editor-parity-runner.md).
+The shared result publisher rejects an incomplete group set. Quick
 results use `quick-result.json`; only a complete full-resolution run may write
 `result.json`. Both explicitly distinguish synthetic acceptance from real
 project parity.
@@ -180,10 +182,10 @@ any explicit defaults-suite override as the running development app. A missing
 matching app must remain a `matching_app_required` failure, not a mocked open
 acknowledgement or a fallback to the installed CLI.
 
-The next fixture layer must exercise nonzero video source trims and fill-photo
+Version 4 exercises nonzero video source trims and fill-photo
 motion: 23 linear zooms from 1 to 1.025, one from 1 to 1.012, and static contained
-photos. Motion uses the shot's exact duration, so the final visible frame is
-at fraction `(frames - 1) / frames`. Focal framing must select the original
+photos. Motion uses `frame / (frames - 1)`, so the final visible frame reaches
+the full zoom with the endpoint keyframe at `(frames - 1) / 60` seconds. Focal framing must select the original
 crop before centered zoom. First, middle, last, and frozen-motion negative
-controls belong to the required `sourceTimingAndMotion` group. Version 2
-fixtures do not yet satisfy that group, so they cannot produce full acceptance.
+controls belong to the required `sourceTimingAndMotion` group. Older fixture
+versions cannot satisfy that group and are rejected by the current runner.
