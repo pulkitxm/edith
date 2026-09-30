@@ -12,7 +12,15 @@ final class VideoEditorModel {
         let microphonePath: String?
         let microphoneOffset: Int
     }
-    var project: VideoProject? { didSet { reconcileCaptionDrafts() } }
+    var project: VideoProject? {
+        didSet {
+            reconcileCaptionDrafts()
+            if !isClosed { liveSync?.watch(project?.fileURL) }
+        }
+    }
+    var externalSyncMessage: String?
+    private var liveSync: VideoEditorLiveSync?
+    private var isClosed = false
     var captionDrafts: [String: VideoCaptionDraft] = [:]
     var selectedClipID: String?
     var selection: VideoSelection?
@@ -95,6 +103,7 @@ final class VideoEditorModel {
     }
 
     init() {
+        liveSync = VideoEditorLiveSync(model: self)
         refreshRecentProjects()
         observer = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
@@ -107,6 +116,10 @@ final class VideoEditorModel {
     }
 
     func close() {
+        isClosed = true
+        generation += 1
+        focusPreviewGeneration += 1
+        liveSync?.stop()
         audioTask?.cancel()
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -117,6 +130,7 @@ final class VideoEditorModel {
     }
 
     func newProject() {
+        isClosed = false
         audioTask?.cancel()
         selection = nil
         silentRanges = []
@@ -169,6 +183,7 @@ final class VideoEditorModel {
             if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
                 document.fileURL = nil
             }
+            isClosed = false
             replaceProject(document)
             hasUnsavedEdits = false
             selectedClipID = project?.clips.first?.id
@@ -196,7 +211,46 @@ final class VideoEditorModel {
         recentProjects = VideoProject.listProjects()
     }
 
+    func acceptExternalProject(
+        _ next: VideoProject, prepared: VideoRenderPipeline?, item: AVPlayerItem?
+    ) {
+        let time = playhead
+        let rate = player.rate
+        generation += 1
+        titleDraft = nil
+        replaceProject(next)
+        hasUnsavedEdits = false
+        if !next.clips.contains(where: { $0.id == selectedClipID }) {
+            selectedClipID = next.clips.first?.id
+        }
+        selection = nil
+        if !next.zooms.contains(where: { $0.id == editingZoomID }) {
+            editingZoomID = nil
+        }
+        undoHistory.removeAll()
+        redoHistory.removeAll()
+        pipeline = prepared
+        player.replaceCurrentItem(with: item)
+        seek(to: min(time, prepared?.duration ?? 0))
+        if rate != 0, item != nil { player.rate = rate }
+        updateFocusPreview()
+        externalSyncMessage = nil
+        refreshRecentProjects()
+    }
+
+    func discardLocalEditsAndRefresh() {
+        guard !isTranscribing, audioStatus == nil, pendingLoads == 0 else { return }
+        titleDraft = nil
+        pendingViewEditIDs.removeAll()
+        captionDrafts.removeAll()
+        hasUnsavedEdits = false
+        liveSync?.refresh()
+    }
+
     func loadCommandProject(_ request: VideoEditorService.OpenRequest) async throws {
+        isClosed = false
+        generation += 1
+        let version = generation
         let url = URL(fileURLWithPath: request.path)
         let snapshot = try VideoEditorService.readProject(url)
         let fingerprint = snapshot.revision.fingerprint.digest.map { String(format: "%02x", $0) }
@@ -226,6 +280,7 @@ final class VideoEditorModel {
                 project: snapshot.project, previewOnly: true)
         }
         try Task.checkCancellation()
+        guard !isClosed, version == generation else { throw CancellationError() }
         replaceProject(snapshot.project)
         hasUnsavedEdits = false
         selectedClipID = snapshot.project.clips.first?.id
@@ -237,6 +292,7 @@ final class VideoEditorModel {
             player.replaceCurrentItem(with: item)
             while item.status != .readyToPlay {
                 try Task.checkCancellation()
+                guard !isClosed, version == generation else { throw CancellationError() }
                 if item.status == .failed {
                     throw VideoEditorService.Failure(
                         "open_failed",
@@ -247,6 +303,7 @@ final class VideoEditorModel {
             }
             try Task.checkCancellation()
         }
+        guard !isClosed, version == generation else { throw CancellationError() }
         try verifyCommandProject(request)
     }
 

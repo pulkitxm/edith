@@ -1,0 +1,125 @@
+import AVFoundation
+import EdithKit
+import Foundation
+
+@MainActor
+final class VideoEditorLiveSync {
+    private weak var model: VideoEditorModel?
+    private var url: URL?
+    private var watcher: FileSystemWatcher?
+    private var task: Task<Void, Never>?
+    private var generation = 0
+
+    init(model: VideoEditorModel) {
+        self.model = model
+    }
+
+    func watch(_ next: URL?) {
+        let next = next?.resolvingSymlinksInPath().standardizedFileURL
+        guard next != url else { return }
+        stop()
+        url = next
+        model?.externalSyncMessage = nil
+        guard let next else { return }
+        watcher = FileSystemWatcher(
+            paths: [next.deletingLastPathComponent()], debounce: 0.05, eventLatency: 0.05
+        ) { [weak self] in
+            Task { @MainActor [weak self] in self?.schedule() }
+        }
+        watcher?.start()
+        schedule()
+    }
+
+    func stop() {
+        generation += 1
+        task?.cancel()
+        task = nil
+        watcher?.stop()
+        watcher = nil
+        url = nil
+    }
+
+    func refresh() {
+        schedule()
+    }
+
+    private func schedule() {
+        task?.cancel()
+        generation += 1
+        let version = generation
+        task = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(75))
+                while let self, version == self.generation {
+                    guard await self.reload(version: version) else { return }
+                    try await Task.sleep(for: .milliseconds(250))
+                }
+            } catch {}
+        }
+    }
+
+    private func reload(version: Int) async -> Bool {
+        guard let model, let url, let current = model.project,
+            let fileURL = current.fileURL,
+            VideoProjectFileAccess.identity(fileURL) == VideoProjectFileAccess.identity(url),
+            let baseline = current.fileRevision?.value
+        else { return false }
+        do {
+            if try baseline.matches(url) {
+                model.externalSyncMessage = nil
+                return false
+            }
+            guard !model.blocksCommandOpen else {
+                model.externalSyncMessage =
+                    "External edits are saved. Finish or discard your current edits to refresh."
+                return true
+            }
+            let snapshot = try VideoEditorService.readProject(url)
+            guard snapshot.project.id == current.id else {
+                model.externalSyncMessage =
+                    "This file now contains a different project. Reopen it to continue."
+                return false
+            }
+            try await VideoEditorService.validateMedia(snapshot.project)
+            let prepared =
+                snapshot.project.clips.isEmpty
+                ? nil
+                : try await VideoRenderPipeline.make(project: snapshot.project, previewOnly: true)
+            let item = prepared.map {
+                let item = AVPlayerItem(asset: $0.composition)
+                item.videoComposition = $0.videoComposition
+                item.audioMix = $0.audioMix
+                return item
+            }
+            let loadingPlayer = item.map { AVPlayer(playerItem: $0) }
+            defer { loadingPlayer?.replaceCurrentItem(with: nil) }
+            let deadline = ContinuousClock.now + .seconds(30)
+            while let item, item.status != .readyToPlay {
+                try Task.checkCancellation()
+                guard item.status != .failed, ContinuousClock.now < deadline else {
+                    throw VideoEditorService.Failure(
+                        "reload_failed",
+                        item.error?.localizedDescription ?? "The updated preview could not load.")
+                }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            try Task.checkCancellation()
+            guard version == generation,
+                model.project?.fileRevision?.value.hexDigest == baseline.hexDigest
+            else { return false }
+            guard !model.blocksCommandOpen,
+                try snapshot.revision.fingerprint.matches(url)
+            else { return true }
+            loadingPlayer?.replaceCurrentItem(with: nil)
+            model.acceptExternalProject(snapshot.project, prepared: prepared, item: item)
+            return false
+        } catch is CancellationError {
+            return false
+        } catch {
+            guard version == generation else { return false }
+            model.externalSyncMessage =
+                "Could not refresh external edits: \(error.localizedDescription)"
+            return false
+        }
+    }
+}
