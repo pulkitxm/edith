@@ -12,7 +12,7 @@ Resolve the target before encoding:
 | Audio | Required tracks, channels, sample rate, gain or loudness intent |
 | Handoff | Master, review copy, editable project and media dependencies |
 
-Use original media, not a previous review encode, as the source for the master.
+Use original visual media, not a previous review encode, as the source for the master.
 Native project operations preserve the ability to revise an edit without another
 generation of lossy intermediates. A full-quality delivery means meeting the
 agreed output properties; it does not mean a lossy export is mathematically
@@ -79,6 +79,50 @@ loudness target and peak ceiling; a gain adjustment can meet one and miss the ot
 If the measurement or mastering control is absent, report that exact unmet need
 instead of silently substituting an arbitrary gain or unrelated audio source.
 
+### Native measurement and fixed mastering recipe
+
+Discover `audio health --help`, `audio measure --help` and `audio master --help`
+before using these commands. Health reports the detected FFmpeg executable,
+engine version and `loudnorm` availability; it does not install a missing engine.
+
+```sh
+ed studio edit audio health --json
+ed studio edit audio measure synthetic.openscreen --asset TRACK_ID --json
+ed studio edit audio master synthetic.openscreen --track TRACK_ID --duration 10.01 --output ./synthetic-master-bundle --json
+```
+
+Replace `TRACK_ID` with the inspected independent track ID. Measurement follows
+the processed audio reference when present and returns source SHA-256, integrated
+LUFS, LRA in LU and true peak in dBTP. Silence has `silent: true` and absent
+integrated/peak values; gated-out quiet audio may lack integrated LUFS without
+being silent. Neither proves an integrated target was achieved.
+
+Mastering reads the original source from sample zero, never looping or joining
+it. Duration must fit the video, be at least 0.4 seconds and align to 48 kHz samples.
+It resamples to stereo 48 kHz, trims exactly, applies a final 0.25-second linear
+fade and runs measured two-pass loudnorm at fixed -16 LUFS, -1.5 dBTP and LRA 11.
+There is no arbitrary target option: a requested -18 LUFS target is a different
+requirement, not satisfied by calling this recipe successful.
+
+The 24-bit PCM WAV is independently remeasured before publication. Recipe checks
+allow 0.3 LU integrated error, at most -1.4 dBTP and LRA 11.5 LU; these tolerances
+do not override a stricter delivery ceiling. The new bundle contains read-only
+`soundtrack.wav` and `report.json`, plus editable `project.openscreen` with a fresh
+identity. Result `projectPath`, `audioPath` and `report` identify the actual output.
+Retain prepared-source and post-master measurements, recipe, engine and hashes.
+
+The selected track uses a derived asset at output/source zero, unity gain and no
+timeline loops/fades; its fade is baked in. Original assets remain registered and
+other tracks retain their settings. Remeasure the delivered mix after encoding:
+the verified soundtrack alone does not certify other audible tracks or later gain.
+Use normal AAC encoding for this PCM master; it cannot preserve AAC packets.
+
+Existing bundle destinations are refused. Failed verification publishes no bundle
+and leaves the input intact. A missing/damaged previous master can be recovered
+from its intact original into a new bundle. Unshared obsolete derived references
+are replaced; shared invalid media still blocks publication. Validate returned
+provenance and composition instead of manually editing paths or overwriting a WAV.
+
 ## Treat passthrough as a compatibility claim
 
 Use passthrough only when the public delivery contract and source packet metadata
@@ -88,6 +132,40 @@ boundaries, plus the absence of requested processing that would require decoding
 and re-encoding. Inspect the actual delivery mode and any fallback reason. Do not
 label a re-encode lossless or passthrough because it uses the same codec. When
 passthrough was required, a fallback encode is a failed requirement unless approved.
+
+### Approved AAC source branch
+
+An approved canonical soundtrack can be sourced from an audio file or a video
+container containing exactly one AAC stream. Use `addAudio` to import only its
+audio. Keep original visual clips editable and preserve original music assets
+when required. This is separate from mastering the original music to PCM.
+
+After discovering render support, a compatible 48 kHz stereo example is:
+
+```sh
+ed studio edit render synthetic-copy.openscreen --output synthetic-copy.mp4 --audio-codec copy --audio-copy-track TRACK_ID --audio-sample-rate 48000 --audio-channels 2 --json
+```
+
+Copy selects the track's processed reference before its original. A mastered WAV
+therefore fails AAC eligibility even if its original was AAC. Use the approved AAC
+track, not the PCM master, when unchanged packets are the requirement.
+
+Preflight requires exactly one audible independent track, no audible clip audio,
+source/output zero, unity rate/gain, no loops, fades, envelopes or joins, and the
+complete source duration matching both track and video. Sample rate/channels must
+match without resampling. Partial `--start-frame`/`--end-frame` delivery is rejected.
+MP4 supports H.264/HEVC, MOV supports ProRes; detected FFmpeg and ffprobe are required.
+
+Full-stream priming, final partial packets, skip records and padding are supported;
+duration need not divide evenly into 1024-sample packets. Ambiguous timing, gaps,
+overlaps, missing codec configuration or unaccounted preroll reject. Native video
+is rendered and remuxed with copied audio, then packet SHA-256, PTS/DTS, durations,
+skip/padding, configuration, timebase and presentation bounds are verified before
+publication. Retain `audioPassthrough` source hash, packet count, timebase and
+`packetDataAndTimingVerified: true`, and independently inspect the final artifact.
+Unsupported requests return `invalid_audio_copy`; backend/verification failures
+have distinct errors. There is no silent encoding fallback. Do not claim the
+installed app supports this until its own help and actual result confirm it.
 
 ## Render predictably
 

@@ -107,6 +107,35 @@ using an output frame number as a source frame number.
 After a trim, speed or frame-rate change, recompute dependent output positions and
 resample boundaries. Do not reuse stale timing calculations from the old cut.
 
+## Match video sampling without changing trims
+
+Discover `schema --operation frameSampling`. Default `hold` displays the source
+sample covering each output timestamp. For an approved seek-then-FFmpeg-`fps`
+reference, use this public operation with a persisted ID or same-plan alias:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"frameSampling": {"clipID": "opening", "mode": "nearest"}}
+  ]
+}
+```
+
+`nearest` rounds post-seek sample timestamps to the output grid, with half-frame
+ties upward and the last eligible sample per output frame. It matches default
+`fps` `round=near`, not a closest-timestamp search. Set `hold` to restore default
+behavior; omitting the operation leaves an existing choice intact.
+
+The choice remains editable and affects preview, frame extraction and delivery.
+It preserves source trims, duration, attached audio and the independent bed.
+Never shift an approved source start to conceal a one-frame phase mismatch.
+Nearest needs source coverage for its visual phase, including possible samples
+beyond the nominal trim end. Speed changes, stills, unavailable timestamps,
+unrepresentable clocks, off-grid surviving segment starts and insufficient end
+coverage reject with `invalid_frame_sampling`. Inspect the failed operation and
+retain the requested trim; do not silently clamp or relabel a different range.
+
 ## Recover without duplicating edits
 
 A dry-run validates and probes in memory; it does not reserve IDs or write the

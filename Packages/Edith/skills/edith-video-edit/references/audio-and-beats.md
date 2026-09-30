@@ -14,6 +14,12 @@ first so the intended output start lies inside the rendered timeline. The import
 track is clipped to that timeline's end. Video rearrangement does not bind it to
 a shot; recheck its intended end after shortening the cut.
 
+An approved audio reference may be inside a video container. Import it with
+`addAudio` as an audio asset only, not `addMedia` as a flattened visual replacement.
+Preserve the original music reference and editable visual sources when required.
+For unchanged AAC delivery, the selected source must already satisfy full-stream
+copy constraints; mastering to PCM and AAC packet copy are separate workflows.
+
 Use `moveAudio`, `splitAudio`, `trimAudio`, `audioFades`, `audioOptions` and
 `removeAudio` for independent tracks. Read their required fields and bounds from
 the schema. `detachAudio` snapshots a clip's audio placement, source offsets,

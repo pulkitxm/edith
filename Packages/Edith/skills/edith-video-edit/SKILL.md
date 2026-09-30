@@ -78,6 +78,8 @@ Read [photo backgrounds and effects](references/photo-backgrounds-and-effects.md
 for independent foreground/background geometry, replacement semantics and explicit
 `native` versus `ffmpeg709` grading. Inspect source/reference color metadata and
 select the compatible `gradingDomain`, then verify representative rendered frames.
+Read [caption styles](references/caption-styles.md) for exact output-frame batches,
+reference-canvas typography, font metrics and encoded-sRGB caption compositing.
 
 Use the schema's public plan format. Never handwrite internal `.openscreen` JSON.
 Batch related operations in a single plan in dependency order, with stable

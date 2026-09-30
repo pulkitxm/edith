@@ -55,6 +55,8 @@ Record a requirement ledger with observed evidence and pass, fail or unverified
 status. Include reference-image matching, measured loudness, approved audio source,
 editable captions/effects and project registration when requested. Read the audio
 and passthrough guidance in the delivery blueprint before choosing those modes.
+Native mastering has a fixed -16 LUFS recipe and produces PCM. Approved AAC packet
+copy is a separate branch using an eligible audio source, never that PCM master.
 
 If native settings must change, build a public plan and use `--expect-revision`
 with the inspected revision on both dry-run and atomic apply. Preserve the original

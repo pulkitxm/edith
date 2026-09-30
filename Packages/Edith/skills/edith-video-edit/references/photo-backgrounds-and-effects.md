@@ -42,7 +42,7 @@ the foreground crop or motion. Its settings are:
 | --- | --- | --- |
 | `framing` | `fill` | Independent `fit`, `fill` or `fullWidth` |
 | `focalX`, `focalY` | `0.5` | Normalized fractions from left/top, 0 through 1 |
-| `blurRadius` | `65` | Gaussian radius in project-canvas pixels, 0 through 1000 |
+| `blurRadius` | `65` | Encoded-sRGB Gaussian radius in project-canvas pixels, 0 through 1000 |
 | `sourceCrop` | Entire original | Normalized oriented-original `x`, `y`, `width`, `height` |
 
 For `sourceCrop`, width and height are 0.05 through 1, x and y are 0 through 0.95,
@@ -52,9 +52,17 @@ central background region while preserving foreground crop settings.
 
 Radius is stored at native canvas resolution. A 540 by 960 preview of a 2160 by
 3840 project scales radius 65 to 16.25. Do not multiply the stored radius to
-compensate for a smaller preview. Background edges are clamped before blur;
+compensate for a smaller preview. The placed background is cropped to its visible
+canvas rectangle, then edges are clamped before blur, preventing off-canvas bleed;
 `fit` and `fullWidth` backgrounds can still reveal the project backdrop outside
 their placed rectangle. Inspect the native-resolution output as well as previews.
+
+Positive blur honors the embedded profile, clips to the sRGB gamut and blurs
+encoded sRGB channels, then returns to the linear composition pipeline. This
+matches the crop-first encoded-domain reference, not linear-light averaging.
+Zero radius bypasses that conversion and retains the original gamut. Keep the
+requested radius; validate crop, edge handling and domain instead of guessing a
+compensation radius. Foreground grading remains a separate setting.
 
 ## Replace settings deliberately
 
