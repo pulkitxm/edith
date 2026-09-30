@@ -19,6 +19,7 @@ public enum FileSystemWatchPolicy {
 public final class FileSystemWatcher: @unchecked Sendable {
     private let paths: [String]
     private let debounce: TimeInterval
+    private let eventLatency: TimeInterval
     private let queue: DispatchQueue
     private let handler: @Sendable () -> Void
     private var stream: FSEventStreamRef?
@@ -26,12 +27,13 @@ public final class FileSystemWatcher: @unchecked Sendable {
     private var burstDeadline: DispatchTime?
 
     public init(
-        paths: [URL], debounce: TimeInterval = 30,
+        paths: [URL], debounce: TimeInterval = 30, eventLatency: TimeInterval = 5,
         queue: DispatchQueue = DispatchQueue(label: "com.pulkit.edith.agent.fsevents"),
         handler: @escaping @Sendable () -> Void
     ) {
         self.paths = FileSystemWatchPolicy.existingPaths(paths)
         self.debounce = debounce
+        self.eventLatency = eventLatency
         self.queue = queue
         self.handler = handler
     }
@@ -53,7 +55,7 @@ public final class FileSystemWatcher: @unchecked Sendable {
         guard
             let created = FSEventStreamCreate(
                 kCFAllocatorDefault, callback, &context, paths as CFArray,
-                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 5.0,
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), eventLatency,
                 FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes))
         else { return }
         FSEventStreamSetDispatchQueue(created, queue)

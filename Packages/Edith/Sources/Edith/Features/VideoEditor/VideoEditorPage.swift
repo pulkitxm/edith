@@ -53,6 +53,19 @@ struct VideoEditorPage: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
+            if let message = model.externalSyncMessage {
+                HStack(spacing: UIScale.pt(8)) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text(message)
+                    Spacer()
+                    Button("Reload saved edits") { model.discardLocalEditsAndRefresh() }
+                        .buttonStyle(.edith(.secondary))
+                }
+                .font(.system(size: UIScale.pt(12)))
+                .padding(UIScale.pt(10))
+                .background(DashSkin.paper2(scheme == .dark))
+                Divider()
+            }
             if model.project == nil {
                 emptyState
             } else {
