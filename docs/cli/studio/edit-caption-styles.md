@@ -175,3 +175,9 @@ a thread-safe cache limited to two images and 64 MiB. Rebuilding
 the preview after text, style or canvas edits creates a fresh cache. Legacy
 time-dependent word highlighting remains uncached. Cached images and project
 content remain in memory only.
+
+Native caption text, timing, typography and JSON drafts survive closing the
+inspector and block CLI project handoff while changed. Invalid text and numeric
+input stays editable after a failed apply. Enter submits text or timing; Apply
+style and Apply JSON submit their respective fields. Discard caption drafts
+explicitly restores saved values. Deleting a caption clears its pending drafts.

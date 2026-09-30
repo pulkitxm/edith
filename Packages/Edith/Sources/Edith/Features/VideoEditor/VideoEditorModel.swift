@@ -12,7 +12,8 @@ final class VideoEditorModel {
         let microphonePath: String?
         let microphoneOffset: Int
     }
-    var project: VideoProject?
+    var project: VideoProject? { didSet { reconcileCaptionDrafts() } }
+    var captionDrafts: [String: VideoCaptionDraft] = [:]
     var selectedClipID: String?
     var selection: VideoSelection?
     var canvasEditing = true
@@ -60,6 +61,7 @@ final class VideoEditorModel {
         if project?.id != next.id {
             titleDraft = nil
             pendingViewEditIDs.removeAll()
+            captionDrafts.removeAll()
         }
         project = next
     }
