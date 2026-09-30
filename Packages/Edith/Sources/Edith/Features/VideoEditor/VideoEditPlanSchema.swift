@@ -83,6 +83,7 @@ extension VideoEditPlan {
                 "Background from the same oriented original, independent of foreground crop and motion. Defaults to fill, centered, radius 65. Color grading applies to both layers. Omit background to disable.",
         ]) { _, new in new }
         let effects = object([
+            "gradingMode": choice(["native", "ffmpeg709"]),
             "framing": choice(["fit", "fill", "fullWidth"]), "focalX": fraction, "focalY": fraction,
             "exposure": number(-10, 10, "Exposure stops."),
             "brightness": number(-1, 1, "Core Image brightness adjustment."),
@@ -96,8 +97,17 @@ extension VideoEditPlan {
             ],
         ]).merging([
             "required": [String](),
+            "allOf": [
+                [
+                    "if": [
+                        "required": ["gradingMode"],
+                        "properties": ["gradingMode": ["const": "ffmpeg709"]],
+                    ],
+                    "then": ["properties": ["saturation": ["maximum": 3]]],
+                ]
+            ],
             "description":
-                "Replace visual settings; omitted fields reset to fit, centered, neutral grade, no keyframes and no background. fullWidth scales the selected source crop to canvas width before padding and animation; taller content may extend beyond canvas. Use fit to retain an entire tall image.",
+                "Replace visual settings; omitted fields reset to fit, centered, neutral native grade, no keyframes and no background. ffmpeg709 grades the composed photo layers before overlays using sRGB-encoded RGB8 and limited-range BT.709 YUV444 EQ; saturation is at most 3. fullWidth scales the selected source crop to canvas width before padding and animation; taller content may extend beyond canvas. Use fit to retain an entire tall image.",
         ]) { _, new in new }
         let operations: [String: [String: Any]] = [
             "addMedia": ["path": path, "name": alias],

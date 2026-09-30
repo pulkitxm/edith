@@ -405,22 +405,29 @@ struct VideoRenderPipeline {
                 smooth: presentation.cursorSmoothing)
             let webcam = finalCameras[segment.clip.assetID]?.frame(
                 at: segment.sourceTime(at: time))
-            var image = render(
-                sourceImage, clip: segment.clip,
-                effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
-                size: size, nativeCanvas: nativeCanvas,
-                zooms: zooms, annotations: annotations, outputTime: request.compositionTime,
-                backdrop: backdrop,
-                padding: padding, presentation: presentation,
-                webcam: webcam, webcamLayout: project.webcamLayout,
-                webcamSize: project.webcamSize,
-                webcamPosition: project.webcamPosition,
-                webcamMask: project.webcamMaskShape,
-                webcamMirrored: project.webcamMirrored,
-                cameraFullscreenRegions: cameraFullscreenRegions,
-                cursor: cursor.current,
-                renderedCursor: renderedCursor.current, cursorImage: cursorImage,
-                cursorClicked: project.cursorHighlight && cursor.clicked)
+            guard
+                var image = render(
+                    sourceImage, clip: segment.clip,
+                    effects: finalEffects[segment.clip.id] ?? VideoVisualEffects(), at: rulerMs,
+                    size: size, nativeCanvas: nativeCanvas,
+                    zooms: zooms, annotations: annotations, outputTime: request.compositionTime,
+                    backdrop: backdrop,
+                    padding: padding, presentation: presentation,
+                    webcam: webcam, webcamLayout: project.webcamLayout,
+                    webcamSize: project.webcamSize,
+                    webcamPosition: project.webcamPosition,
+                    webcamMask: project.webcamMaskShape,
+                    webcamMirrored: project.webcamMirrored,
+                    cameraFullscreenRegions: cameraFullscreenRegions,
+                    cursor: cursor.current,
+                    renderedCursor: renderedCursor.current, cursorImage: cursorImage,
+                    cursorClicked: project.cursorHighlight && cursor.clicked)
+            else {
+                request.finish(
+                    with: RenderError.exportFailed(
+                        "The selected grading kernel could not render this frame."))
+                return
+            }
             if let edge = transitions.first(where: {
                 abs(time - $0.time) < $0.halfDuration
             }) {
@@ -654,7 +661,7 @@ struct VideoRenderPipeline {
         cameraFullscreenRegions: [[String: Any]],
         cursor: CursorSample?, renderedCursor: CursorSample?, cursorImage: CIImage?,
         cursorClicked: Bool
-    ) -> CIImage {
+    ) -> CIImage? {
         let bounds = CGRect(origin: .zero, size: size)
         let full = input.extent
         let geometry = VideoSourceGeometry(
@@ -679,6 +686,10 @@ struct VideoRenderPipeline {
             output = VideoPresentation.framed(
                 image, rect: image.extent.intersection(bounds),
                 radius: presentation.cornerRadius, shadow: presentation.shadow, over: clipBackdrop)
+        }
+        if effects.gradingMode == .ffmpeg709 {
+            guard let graded = VideoGrading.apply(output, effects: effects) else { return nil }
+            output = graded
         }
         if presentation.cursorVisible, let cursor = renderedCursor, cursor.visible,
             let cursorImage
