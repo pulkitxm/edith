@@ -96,13 +96,18 @@ the processed audio reference when present and returns source SHA-256, integrate
 LUFS, LRA in LU and true peak in dBTP. Silence has `silent: true` and absent
 integrated/peak values; gated-out quiet audio may lack integrated LUFS without
 being silent. Neither proves an integrated target was achieved.
+`audio measure --asset TRACK_ID` measures referenced media, not the timeline mix
+after track gain, fades or other audible tracks. For mix measurements, discover
+`render-audio --help`, render a temporary PCM WAV, and measure that actual output
+with the FFmpeg executable reported by Studio's `audio health`. Retain the measured
+file's hash, command, engine and integrated/true-peak results.
 
 Mastering reads the original source from sample zero, never looping or joining
 it. Duration must fit the video, be at least 0.4 seconds and align to 48 kHz samples.
 It resamples to stereo 48 kHz, trims exactly, applies a final 0.25-second linear
 fade and runs measured two-pass loudnorm at fixed -16 LUFS, -1.5 dBTP and LRA 11.
-There is no arbitrary target option: a requested -18 LUFS target is a different
-requirement, not satisfied by calling this recipe successful.
+There is no arbitrary mastering target option. A requested -18 LUFS target needs
+a measured mix correction and final verification, not merely this recipe's success.
 
 The 24-bit PCM WAV is independently remeasured before publication. Recipe checks
 allow 0.3 LU integrated error, at most -1.4 dBTP and LRA 11.5 LU; these tolerances
@@ -122,6 +127,66 @@ and leaves the input intact. A missing/damaged previous master can be recovered
 from its intact original into a new bundle. Unshared obsolete derived references
 are replaced; shared invalid media still blocks publication. Validate returned
 provenance and composition instead of manually editing paths or overwriting a WAV.
+
+### Meet a different target with measured timeline gain
+
+For a single audible mastered track at unity gain, derive the correction from its
+actual post-master measurement: `gainDb = targetLUFS - measuredLUFS`. For example,
+-18 minus measured -16.02 LUFS gives -1.98 dB, not an assumed -2 dB. First inspect
+the returned project's saved track ID, current gain, mute/loop and all audible
+sources. With multiple tracks or existing processing, render and measure the actual
+mix; do not extrapolate its loudness from one referenced asset's measurement.
+
+Use `schema --operation audioOptions`. It requires gain, mute and loop values;
+carry forward the inspected mute/loop choices. It updates these controls without
+replacing timing or fades. This example assumes the inspected mastered track is
+the only audible source, unmuted and unlooped; replace `TRACK_ID` with its saved ID
+and -1.98 with the calculated correction:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"audioOptions": {"trackID": "TRACK_ID", "gainDb": -1.98, "muted": false, "loop": false}}
+  ]
+}
+```
+
+Save that public plan as `measured-gain.json`. Preserve the master WAV, report,
+recipe and input project by applying to a new project variant:
+
+```sh
+revision=$(ed studio edit show synthetic-master-bundle/project.openscreen --summary --json | jq -er .revision)
+ed studio edit apply synthetic-master-bundle/project.openscreen --plan measured-gain.json --output synthetic-target.openscreen --expect-revision "$revision" --dry-run --json
+ed studio edit apply synthetic-master-bundle/project.openscreen --plan measured-gain.json --output synthetic-target.openscreen --expect-revision "$revision" --json
+ed studio edit show synthetic-target.openscreen --json
+ed studio edit validate synthetic-target.openscreen --json
+ed studio edit render-audio synthetic-target.openscreen --output synthetic-target-mix.wav --container wav --sample-rate 48000 --channels 2 --json
+```
+
+Proceed only after the guarded dry-run passes. The master remains source/output
+zero with its fade baked in; add no duplicate fade. Gain is an absolute saved
+setting, finite from -60 through 12 dB. For a uniform mix correction with existing
+gains, add the measured delta to each participating track's inspected gain only
+when all audible sources can be adjusted coherently, then remeasure the mix.
+
+Use the detected Studio FFmpeg executable, represented here by `$FFMPEG`, to
+measure the rendered mix and the final encoded delivery separately:
+
+```sh
+"$FFMPEG" -hide_banner -i synthetic-target-mix.wav -af loudnorm=I=-18:TP=-1.5:LRA=11:print_format=json -f null -
+ed studio edit render synthetic-target.openscreen --output synthetic-target.mp4 --audio-codec aac --json
+"$FFMPEG" -hide_banner -i synthetic-target.mp4 -map 0:a:0 -af loudnorm=I=-18:TP=-1.5:LRA=11:print_format=json -f null -
+```
+
+These null-output commands retain loudnorm's `input_i` and `input_tp` as actual
+input measurements, not its proposed normalized-output values. Recheck final
+integrated loudness and true peak against the requested tolerances. Negative gain
+reduces peaks; positive gain can exceed the ceiling. Iterate from actual mix and
+delivery measurements when appropriate. If gain alone cannot meet both loudness
+and peak requirements, report the remaining failure rather than claiming an
+unsupported custom peak-limiting recipe. Gain-adjusted delivery requires encoding
+and is ineligible for AAC packet copy, even if its source originally contained AAC.
 
 ## Treat passthrough as a compatibility claim
 
