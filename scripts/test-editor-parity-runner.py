@@ -8,7 +8,7 @@ import uuid
 
 from editor_acceptance_contracts import require
 from editor_parity_adapters import aac_passthrough, caption_operations, lifecycle, master_project
-from editor_parity_checks import check_captions, check_project, protected_snapshot
+from editor_parity_checks import check_captions, check_project, protected_snapshot, verify_artifacts
 from editor_parity_cli import REQUIRED_GROUPS, base_operations, discover, exercise_transactions, invoke, publish_result
 from editor_parity_finish import caption_review, delivery
 from editor_parity_fixtures import checksum, verify, write_json
@@ -88,17 +88,23 @@ def main():
     styled = workspace / "styled.openscreen"
     edit("apply", project, "--plan", "-", "--output", styled, "--json", stdin=json.dumps({"version": 1, "operations": captions}))
     groups["captions"] = caption_review(edit, project, styled, workspace, manifest, styles, dimensions)
-    mastered, groups["masteredAudio"], groups["editableProject"], reference, codec = master_project(
+    mastered, groups["masteredAudio"], groups["editableProject"], reference, codec, artifacts = master_project(
         edit, styled, workspace, manifest, fixture, dimensions)
+    artifacts.update({project: checksum(project), ed: binary, **{fixture / path: digest for path, digest in protected.items()}})
     check_captions(edit("captions", "list", mastered, "--json"), manifest, styles)
     check_motion_plan(edit("show", mastered, "--json"), manifest)
     groups["aacPacketPassthrough"] = aac_passthrough(edit, workspace, fixture, manifest)
-    groups["nativeLifecycle"] = lifecycle(edit, ed, mastered, environment, args.mode == "full")
+    try:
+        groups["nativeLifecycle"] = lifecycle(edit, ed, mastered, environment, args.mode == "full")
+    finally:
+        groups["masteredAudio"]["artifactStability"].append(verify_artifacts(artifacts, "after lifecycle calls"))
     output = workspace / "delivery.mp4"
     groups["delivery"] = delivery(edit, mastered, project, output, workspace, fixture, manifest, dimensions, reference, codec)
     require(protected_snapshot(fixture, manifest) == protected and checksum(ed) == binary, "Protected originals or CLI binary changed during acceptance")
     groups["protectedSources"] = {"binarySHA256": binary, "fixtureManifestSHA256": protected["parity-manifest.json"],
                                   "originalsAndBaselinesUnchanged": True, "protectedFiles": len(protected)}
+    groups["masteredAudio"]["artifactStability"].append(verify_artifacts(artifacts, "immediately before publication"))
+    groups["masteredAudio"]["provenanceVerified"] = True
     result = publish_result(workspace, groups, args.mode)
     print(json.dumps({"mode": args.mode, "fullDeliveryAcceptance": result["fullDeliveryAcceptance"],
                       "completedGroups": sorted(groups), "delivery": str(output)}, indent=2))

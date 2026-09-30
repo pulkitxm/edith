@@ -5,7 +5,7 @@ import subprocess
 import uuid
 
 from editor_acceptance_contracts import require
-from editor_parity_checks import check_aac_passthrough, check_mastered_audio, check_project, measure_loudness
+from editor_parity_checks import check_aac_passthrough, check_mastered_audio, check_project, measure_loudness, verify_artifacts
 from editor_parity_fixtures import checksum, ffmpeg, fixture_path, write_json
 
 
@@ -61,6 +61,9 @@ def master_project(edit, source, workspace, manifest, fixture, dimensions):
     report = result["report"]
     require(report["verified"] is True and report["originalSHA256"] == manifest["music"]["sha256"]
             and report["artifactSHA256"] == checksum(audio), "Mastering provenance does not match independently hashed source and artifact")
+    protected = {source: source_checksum, project: checksum(project), audio: report["artifactSHA256"],
+                 project.parent / "report.json": checksum(project.parent / "report.json"),
+                 fixture_path(fixture, manifest["music"]["path"]): report["originalSHA256"]}
     for field, expected in {"sourceStartSeconds": 0, "sampleFrames": manifest["audioSamples"], "sampleRate": 48000,
                             "channels": 2, "fadeOutSeconds": 0.25, "integratedLUFS": -16, "truePeakDBTP": -1.5,
                             "loudnessRangeLU": 11, "passes": 2}.items():
@@ -76,8 +79,9 @@ def master_project(edit, source, workspace, manifest, fixture, dimensions):
     checks = check_mastered_audio(audio, original, manifest, reference, codec)
     rendered = workspace / "native-master-mix.wav"
     edit("render-audio", project, "--output", rendered, "--container", "wav", "--sample-rate", "48000", "--channels", "2", "--progress", "--json")
+    stable = verify_artifacts(protected, "after native PCM render")
     native_mix = check_mastered_audio(rendered, original, manifest, reference, codec)
-    return project, {"artifact": checks, "nativeMix": native_mix, "provenanceVerified": True}, project_checks, reference, codec
+    return project, {"artifact": checks, "nativeMix": native_mix, "artifactStability": [stable]}, project_checks, reference, codec, protected
 
 
 def aac_passthrough(edit, workspace, fixture, manifest):

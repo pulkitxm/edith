@@ -17,6 +17,12 @@ def protected_snapshot(directory, manifest):
         "parity-manifest.json": checksum(directory / "parity-manifest.json")}
 
 
+def verify_artifacts(snapshot, stage):
+    for path, expected in snapshot.items():
+        require(path.is_file() and checksum(path) == expected, f"Protected artifact changed {stage}: {path.name}")
+    return {"stage": stage, "sha256": {str(path): digest for path, digest in snapshot.items()}}
+
+
 def check_visual_project(project, manifest, fixture, dimensions, audio_asset_count=1):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
