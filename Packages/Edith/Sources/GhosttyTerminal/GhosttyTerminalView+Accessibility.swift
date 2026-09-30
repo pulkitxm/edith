@@ -31,7 +31,9 @@ extension GhosttyTerminalView {
 
     public override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
 
-    public override func accessibilityHelp() -> String? { "Terminal content area" }
+    public override func accessibilityHelp() -> String? {
+        "Select text to copy it automatically. Hold Option to send clicks to terminal applications."
+    }
 
     public override func accessibilityValue() -> Any? { accessibilitySnapshot().value }
 

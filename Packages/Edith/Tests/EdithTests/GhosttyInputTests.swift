@@ -5,6 +5,83 @@ import GhosttyKit
 import Testing
 
 @Suite struct GhosttyInputTests {
+    @Test(arguments: [false, true]) @MainActor
+    func plainDragSelectsAndCopiesInsideAMouseReportingChild(focusClick: Bool) async throws {
+        _ = TestWindowHost.application
+        let board = NSPasteboard.general
+        let previous = (board.types ?? []).compactMap { type in
+            board.data(forType: type).map { (type, $0) }
+        }
+        defer {
+            board.declareTypes(previous.map(\.0), owner: nil)
+            for (type, data) in previous { board.setData(data, forType: type) }
+        }
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty-select-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let command =
+            "stty raw -echo; printf '\\033[2J\\033[3J\\033[Halpha beta gamma\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(
+                executable: "/bin/sh", arguments: ["-c", command], environment: []),
+            theme: GhosttyTheme(
+                background: "#111111", foreground: "#eeeeee", cursor: "#eeeeee", fontSize: 13))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = TestWindowHost.window(contentRect: view.frame)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+        let surface = try #require(view.surface)
+        for _ in 0..<100 {
+            if ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(ghostty_surface_mouse_captured(surface))
+        let size = ghostty_surface_size(surface)
+        let cellWidth = CGFloat(size.cell_width_px) / window.backingScaleFactor
+        let cellHeight = CGFloat(size.cell_height_px) / window.backingScaleFactor
+        let start = NSPoint(x: 6 + cellWidth * 0.1, y: 600 - 4 - cellHeight * 0.5)
+        let end = NSPoint(x: start.x + cellWidth * 5, y: start.y)
+        func event(_ type: NSEvent.EventType, at point: NSPoint, number: Int) throws -> NSEvent {
+            try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [], timestamp: Double(number),
+                    windowNumber: window.windowNumber, context: nil, eventNumber: number,
+                    clickCount: 1, pressure: 0))
+        }
+        board.clearContents()
+        board.setString("previous clipboard", forType: .string)
+        let down = try event(.leftMouseDown, at: start, number: 1)
+        if focusClick {
+            view.suppressNextLeftMouseUp = true
+            view.focusMouseDown = down
+        } else {
+            view.mouseDown(with: down)
+        }
+        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 2))
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(board.string(forType: .string) == "previous clipboard")
+        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 3))
+
+        #expect(view.selectedText() == "alpha")
+        #expect(board.string(forType: .string) == "alpha")
+        #expect(!view.selectionMouseReportingSuspended)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect((try? Data(contentsOf: output))?.isEmpty == true)
+
+        let hover = NSPoint(x: 200, y: 300)
+        view.mouseMoved(with: try event(.mouseMoved, at: hover, number: 4))
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: output), !data.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
+        #expect(reports.contains("\u{1B}[<35;"))
+        #expect(!reports.contains("\u{1B}[<0;"))
+    }
+
     @Test func onlyConfiguredInterruptsRequestTerminalReset() {
         #expect(
             GhosttyTerminalView.shouldResetTerminalAfterInterrupt(
@@ -99,7 +176,7 @@ import Testing
         #expect(bytes == Data([0x1B]))
     }
 
-    @Test @MainActor func mouseButtonsReachAChildThatEnablesMouseReporting() async throws {
+    @Test @MainActor func optionClicksAndRightClicksReachAMouseReportingChild() async throws {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-ghostty-buttons-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: output) }
@@ -127,7 +204,8 @@ import Testing
         func event(_ type: NSEvent.EventType, number: Int) throws -> NSEvent {
             try #require(
                 NSEvent.mouseEvent(
-                    with: type, location: NSPoint(x: 80, y: 500), modifierFlags: [],
+                    with: type, location: NSPoint(x: 80, y: 500),
+                    modifierFlags: type == .leftMouseDown || type == .leftMouseUp ? .option : [],
                     timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
                     eventNumber: number, clickCount: 1, pressure: 0))
         }
@@ -149,8 +227,8 @@ import Testing
         }
 
         #expect(reports.contains { $0.hasPrefix("[<35;") && $0.hasSuffix("M") })
-        #expect(reports.contains { $0.hasPrefix("[<0;") && $0.hasSuffix("M") })
-        #expect(reports.contains { $0.hasPrefix("[<0;") && $0.hasSuffix("m") })
+        #expect(reports.contains { $0.hasPrefix("[<8;") && $0.hasSuffix("M") })
+        #expect(reports.contains { $0.hasPrefix("[<8;") && $0.hasSuffix("m") })
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
     }
@@ -716,7 +794,8 @@ import Testing
         func event(_ type: NSEvent.EventType, y: CGFloat, number: Int) throws -> NSEvent {
             try #require(
                 NSEvent.mouseEvent(
-                    with: type, location: NSPoint(x: 80, y: y), modifierFlags: [],
+                    with: type, location: NSPoint(x: 80, y: y),
+                    modifierFlags: type == .leftMouseDown || type == .leftMouseUp ? .option : [],
                     timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
                     eventNumber: number, clickCount: type == .mouseMoved ? 0 : 1, pressure: 0))
         }
@@ -727,7 +806,7 @@ import Testing
         view.mouseMoved(with: try event(.mouseMoved, y: 300, number: 3))
 
         func isRelease(_ report: String) -> Bool {
-            report.hasPrefix("[<0;") && report.hasSuffix("m")
+            report.hasPrefix("[<8;") && report.hasSuffix("m")
         }
         var reports: [String] = []
         for _ in 0..<100 {

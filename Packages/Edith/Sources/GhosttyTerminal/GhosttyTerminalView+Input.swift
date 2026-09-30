@@ -113,6 +113,7 @@ extension GhosttyTerminalView {
             window.contentView?.superview?.hitTest(event.locationInWindow) === self
         else { return event }
         suppressNextLeftMouseUp = false
+        focusMouseDown = nil
         let focused = window.firstResponder === self
         guard !focused else { return event }
         let activatesTerminalLink =
@@ -126,6 +127,7 @@ extension GhosttyTerminalView {
                 activatesTerminalLink: activatesTerminalLink)
         else { return event }
         suppressNextLeftMouseUp = true
+        focusMouseDown = event
         return nil
     }
 
@@ -391,7 +393,9 @@ extension GhosttyTerminalView {
         _ flags: NSEvent.ModifierFlags, surface: ghostty_surface_t, escapeCapture: Bool
     ) -> ghostty_input_mods_e {
         let flags = Self.pointerFlags(
-            flags, mouseCaptured: ghostty_surface_mouse_captured(surface),
+            flags,
+            mouseCaptured: ghostty_surface_mouse_captured(surface)
+                && !selectionMouseReportingSuspended,
             escapeCapture: escapeCapture)
         var value = GHOSTTY_MODS_NONE.rawValue
         if flags.contains(.shift) { value |= GHOSTTY_MODS_SHIFT.rawValue }
@@ -448,12 +452,20 @@ extension GhosttyTerminalView {
 
     public override func mouseDown(with event: NSEvent) {
         suppressNextLeftMouseUp = false
+        focusMouseDown = nil
+        resumeSelectionMouseReporting()
+        selectionMouseActive = true
         window?.makeFirstResponder(self)
         let local = convert(event.locationInWindow, from: nil)
         let commandClick = event.clickCount == 1 && event.modifierFlags.contains(.command)
         commandClickGesture.begin(
             active: commandClick, at: local,
             candidate: commandClick ? commandClickTarget(for: event) : nil)
+        if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface),
+            !event.modifierFlags.contains(.option) || event.modifierFlags.contains(.shift)
+        {
+            selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
+        }
         if event.clickCount == 1 {
             button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
         } else if let surface {
@@ -466,12 +478,16 @@ extension GhosttyTerminalView {
     public override func mouseUp(with event: NSEvent) {
         if suppressNextLeftMouseUp {
             suppressNextLeftMouseUp = false
+            focusMouseDown = nil
             return
         }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         let target = hoveredLink ?? terminalTargetAtPointer()
         commandClickOpenedTarget = false
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+        selectionMouseActive = false
+        copyTerminalSelection(nil)
+        resumeSelectionMouseReporting()
         if let target = commandClickGesture.finish(
             active: event.modifierFlags.contains(.command), opened: commandClickOpenedTarget,
             candidate: target)
@@ -513,9 +529,16 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseDragged(with event: NSEvent) {
+        if let focusMouseDown { mouseDown(with: focusMouseDown) }
         guard !suppressNextLeftMouseUp else { return }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
+    }
+
+    private func resumeSelectionMouseReporting() {
+        guard selectionMouseReportingSuspended else { return }
+        selectionMouseReportingSuspended = false
+        if configuredMouseReporting { _ = performBindingAction("toggle_mouse_reporting") }
     }
 
     public override func rightMouseDragged(with event: NSEvent) {
@@ -616,6 +639,7 @@ extension GhosttyTerminalView {
     }
 
     @objc func copyTerminalSelection(_ sender: Any?) {
+        selectionCopyPending = false
         guard surface != nil else { return }
         guard hasSelection else { return }
         if performBindingAction("copy_to_clipboard:plain") { return }
