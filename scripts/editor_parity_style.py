@@ -62,7 +62,7 @@ class PangoCanvas:
             self.cairo_font_options_set_antialias(options, 2)
             context = self.pango_layout_get_context(layout)
             self.pango_cairo_context_set_font_options(context, options)
-            self.pango_context_set_round_glyph_positions(context, 0)
+            self.pango_context_set_round_glyph_positions(context, int(style.get("metrics") == "fontBounds"))
             self.pango_font_description_set_absolute_size(font, style["fontSize"] * 1024)
             self.pango_layout_set_font_description(layout, font)
             markup = f'<span font_features="kern=0,liga=0">{html.escape(text)}</span>'.encode()
