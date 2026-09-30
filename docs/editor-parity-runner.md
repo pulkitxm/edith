@@ -20,6 +20,12 @@ comparison. `test-editor-parity-native-color.py` exercises this contract with
 fixed two-code-value budgets and a negative control that rejects unnormalized
 BT.709 bytes. No pixel-derived gamma correction or fitted grade is applied.
 
+Caption glyph references are laid out by Pango at the style's declared reference
+canvas and font size, then rendered at the requested output scale. Re-typesetting
+at the reduced preview font size changes glyph metrics and is not a valid
+reference for a scaled native canvas. Font-file hashes, glyph interior budgets,
+placement tolerances and wrong-font/text/size controls remain unchanged.
+
 ## Version 4 fixtures
 
 ```sh

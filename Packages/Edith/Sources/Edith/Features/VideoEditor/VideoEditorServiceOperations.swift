@@ -180,7 +180,7 @@ extension VideoEditorService {
             try require(
                 (["none"] + VideoTransitionImage.kinds).contains(kind) && duration.isFinite
                     && (0.2...2).contains(duration),
-                "Transition must be none, fade or flash with duration 0.2 to 2 seconds.")
+                "Transition must be none, fade, flash, blur or zoom with duration 0.2 to 2 seconds.")
             project.setTransition(before: selected.id, kind: kind, duration: duration)
         case .addAudio, .audioOptions, .removeAudio, .detachAudio, .moveAudio, .splitAudio,
             .trimAudio, .audioFades:

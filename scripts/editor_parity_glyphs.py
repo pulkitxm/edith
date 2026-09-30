@@ -51,7 +51,27 @@ def reference_glyphs(text, family, style, size, directory):
         data = image_pixels(image, width, height)
         lines.append(cropped_mask(ink_mask(data, width, height, (0, 0, 1, 1))))
     return {"fontFamily": family, "fontStyle": style, "fontSize": size,
-            "fontFileSHA256": checksum(pathlib.Path(match[2])), "text": text, "lines": lines}
+             "fontFileSHA256": checksum(pathlib.Path(match[2])), "text": text, "lines": lines}
+
+
+def reference_caption_glyphs(text, style, dimensions, directory):
+    from editor_parity_style import PangoCanvas
+    width, height = dimensions
+    reference = reference_glyphs(text, style["fontFamily"], style["fontStyle"], style["fontSize"], directory)
+    plain = {key: value for key, value in style.items() if key not in {"outline", "shadow", "gradient"}}
+    plain["fill"] = {"red": 1, "green": 1, "blue": 1, "alpha": 1}
+    canvas = PangoCanvas(width, height)
+    try:
+        layer = canvas.glyph_layer(text, plain)
+    finally:
+        canvas.close()
+    pixels = bytes(value for offset in range(0, len(layer), 4)
+                   for value in (layer[offset + 2], layer[offset + 1], layer[offset]))
+    scale = width / style["canvasWidth"]
+    reference.update(fontSize=style["fontSize"] * scale,
+                     lines=split_lines(ink_mask(pixels, width, height, (0, 0, 1, 1)), style["fontSize"] * scale),
+                     referenceFontSize=style["fontSize"], referenceCanvas=[style["canvasWidth"], style["canvasHeight"]])
+    return reference
 
 
 def glyph_distance(actual, expected):

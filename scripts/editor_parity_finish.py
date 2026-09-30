@@ -2,7 +2,7 @@ from editor_acceptance_contracts import require
 from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION, caption_style
 from editor_parity_checks import check_captions, check_mastered_audio, check_video, picture_sample_frames
 from editor_parity_fixtures import checksum, fixture_path
-from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
+from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_caption_glyphs
 from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
 from editor_parity_native import srgb_frame_stream, srgb_frames
@@ -14,7 +14,7 @@ from editor_parity_style import check_caption_placement, check_styled_caption
 def caption_frame_checks(actual, background, shot, dimensions, directory):
     width, height = dimensions
     scale = width / 2160
-    reference = reference_glyphs(shot["caption"], "Arial", "Bold Italic", shot["fontSize"] * scale, directory)
+    reference = reference_caption_glyphs(shot["caption"], caption_style(shot["fontSize"]), dimensions, directory)
     control = glyph_control_canvas(reference, width, height, round(2780 * scale), round(150 * scale))
     positive = codec_control(control, width, height)
     glyphs = check_caption_identity(actual, positive, bytes(width * height * 3), width, height, CAPTION_BOUNDS, reference)

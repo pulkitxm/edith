@@ -6,7 +6,8 @@ import sys
 
 from editor_acceptance_contracts import require
 from editor_parity_fixtures import write_json
-from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
+from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_caption_glyphs, reference_glyphs
+from editor_parity_adapters import caption_style, CAPTION_BOUNDS
 from editor_parity_pixels import codec_control
 
 
@@ -41,8 +42,18 @@ def main():
     for control, message in [(single, "line count"), (wrong_font, "font bounds"), (wrong_text, "glyph identity"), (wrong_size, "font bounds")]:
         image = glyph_control_canvas(control, width, height, top, advance)
         rejects(lambda: check_caption_identity(image, positive, background, width, height, bounds, reference), message)
+    scaled = reference_caption_glyphs("Amber Lantern 01", caption_style(104), (540, 960), workspace / "scaled-reference")
+    require(scaled["fontSize"] == 26 and scaled["referenceFontSize"] == 104
+            and scaled["referenceCanvas"] == [2160, 3840], "Caption reference lost its declared canvas metrics")
+    scaled_control = glyph_control_canvas(scaled, 540, 960, 700, 38)
+    encoded = codec_control(scaled_control, 540, 960)
+    scaled_report = check_caption_identity(encoded, encoded, bytes(540 * 960 * 3), 540, 960, CAPTION_BOUNDS, scaled)
+    wrong = reference_caption_glyphs("Amber Lantner 01", caption_style(104), (540, 960), workspace / "scaled-wrong-text")
+    rejects(lambda: check_caption_identity(glyph_control_canvas(wrong, 540, 960, 700, 38), encoded,
+                                          bytes(540 * 960 * 3), 540, 960, CAPTION_BOUNDS, scaled), "glyph identity")
     result = {"productAcceptance": False, "independentGlyphControls": reports, "negativeControlsRejected": 4,
-              "explicitLineCountVerified": True, "wrongFontRejected": True, "wrongGlyphOrderRejected": True, "wrongSizeRejected": True}
+               "explicitLineCountVerified": True, "wrongFontRejected": True, "wrongGlyphOrderRejected": True, "wrongSizeRejected": True,
+               "declaredCanvasScaling": scaled_report, "scaledWrongGlyphOrderRejected": True}
     write_json(workspace / "glyph-controls.json", result)
     print(json.dumps(result, indent=2, sort_keys=True))
 
