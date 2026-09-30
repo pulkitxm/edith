@@ -324,11 +324,8 @@ struct VideoRenderPipeline {
                     visualRange = try await sampling.visualRange(
                         track: sourceVideo, source: sourceRange, output: segment.outputRange,
                         frameDuration: project.frameDuration)
-                    if sampling == .nearest {
-                        video.naturalTimeScale = try VideoFrameSampling.timescale([
-                            video.naturalTimeScale, visualRange.start.timescale,
-                        ])
-                    }
+                    video.naturalTimeScale = try sampling.compositionTimescale(
+                        video.naturalTimeScale, including: visualRange)
                 }
                 try video.insertTimeRange(visualRange, of: sourceVideo, at: insertion)
                 if visualRange.duration != outputDuration {

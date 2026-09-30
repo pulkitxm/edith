@@ -31,9 +31,18 @@ extension VideoProject {
     }
 
     func validateFrameSampling() async throws {
+        do {
+            try await validateCompositionSamplingClock()
+        } catch let error as VideoFrameSampling.Failure {
+            throw VideoEditorService.Failure("invalid_frame_sampling", error.localizedDescription)
+        }
+    }
+
+    private func validateCompositionSamplingClock() async throws {
         let nearest = try clips.filter { try $0.frameSampling == .nearest }
         guard !nearest.isEmpty else { return }
         let segments = VideoRenderPipeline.timingSegments(project: self)
+        var compositionTimescale = VideoRenderPipeline.timingTimescale(project: self)
         for clip in nearest {
             try Task.checkCancellation()
             guard let source = assets.first(where: { $0.id == clip.assetID }), !source.isStill
@@ -47,9 +56,11 @@ extension VideoProject {
                     "unsupported_media", "Clip media has no video track.")
             }
             for segment in segments where segment.clip.id == clip.id {
-                _ = try await VideoFrameSampling.nearest.visualRange(
+                let range = try await VideoFrameSampling.nearest.visualRange(
                     track: track, source: segment.sourceRange, output: segment.outputRange,
                     frameDuration: frameDuration)
+                compositionTimescale = try VideoFrameSampling.nearest.compositionTimescale(
+                    compositionTimescale, including: range)
             }
         }
     }

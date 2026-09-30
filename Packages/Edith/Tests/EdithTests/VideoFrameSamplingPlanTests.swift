@@ -106,11 +106,14 @@ import Testing
             VideoEditPlan.Operation.trim(clipID: id, start: 4, end: 5),
             .speed(clipID: id, rate: 2),
         ] {
-            await #expect(throws: (any Error).self) {
-                try await VideoEditorService.apply(
+            do {
+                _ = try await VideoEditorService.apply(
                     .init(operations: [
                         .frameSampling(clipID: id, mode: .nearest), mutation,
                     ]), to: url, overwrite: true)
+                Issue.record("An unsupported sampling phase was published.")
+            } catch let error as VideoEditorService.Failure {
+                #expect(error.code == "invalid_frame_sampling")
             }
             #expect(try Data(contentsOf: url) == bytes)
         }
@@ -120,6 +123,60 @@ import Testing
         invalid.setClips(clips)
         #expect(throws: (any Error).self) { try VideoEditorService.validateStructure(invalid) }
         #expect(try VideoEditorService.open(url).clips[0].frameSampling == .hold)
+    }
+
+    @Test func combinedSourceClocksFailBeforeApplyOrDryRunPublishes() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try await Self.clockProject(in: directory)
+        let ids = try VideoEditorService.open(url).clips.map(\.id)
+        for selected in ids {
+            _ = try await VideoEditorService.apply(
+                .init(
+                    operations: ids.map {
+                        .frameSampling(clipID: $0, mode: $0 == selected ? .nearest : .hold)
+                    }), to: url, overwrite: true)
+            _ = try await VideoEditorService.validate(url)
+        }
+        let original = try Data(contentsOf: url)
+        let destination = directory.appendingPathComponent("existing.openscreen")
+        let existing = Data("existing destination".utf8)
+        try existing.write(to: destination)
+        for dryRun in [false, true] {
+            do {
+                _ = try await VideoEditorService.apply(
+                    .init(
+                        operations: ids.map {
+                            .frameSampling(clipID: $0, mode: .nearest)
+                        }), to: url, output: destination, dryRun: dryRun, overwrite: true)
+                Issue.record("Incompatible composition clocks were accepted.")
+            } catch let error as VideoEditorService.Failure {
+                #expect(error.code == "invalid_frame_sampling")
+                #expect(error.message.contains("clocks cannot share an exact phase"))
+            }
+            #expect(try Data(contentsOf: url) == original)
+            #expect(try Data(contentsOf: destination) == existing)
+        }
+    }
+
+    static func clockProject(in directory: URL) async throws -> URL {
+        let url = directory.appendingPathComponent("clocks.openscreen")
+        _ = try VideoEditorService.create(at: url, title: "Synthetic source clocks")
+        for clock in [CMTimeScale(30011), 30013] {
+            let source = directory.appendingPathComponent("source-\(clock).mov")
+            try await VideoFrameSamplingTests.fixture(
+                source, times: (0..<120).map { Int64($0) * 1000 }, timescale: clock)
+            let asset = AVURLAsset(url: source)
+            let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+            #expect(try await track.load(.naturalTimeScale) == clock)
+            _ = try await VideoEditorService.apply(
+                .init(operations: [
+                    .addMedia(path: source.path, name: "shot"),
+                    .videoSettings(settings: .init(width: 32, height: 32)),
+                    .trim(clipID: "shot", start: 0, end: 1),
+                ]), to: url, overwrite: true)
+        }
+        return url
     }
 
     private static func music(_ url: URL) throws {

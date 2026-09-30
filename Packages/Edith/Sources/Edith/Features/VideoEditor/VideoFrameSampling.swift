@@ -73,4 +73,10 @@ public enum VideoFrameSampling: String, Codable, CaseIterable, Sendable {
         }
         return CMTimeScale(result)
     }
+
+    func compositionTimescale(_ current: CMTimeScale, including range: CMTimeRange) throws
+        -> CMTimeScale
+    {
+        self == .nearest ? try Self.timescale([current, range.start.timescale]) : current
+    }
 }

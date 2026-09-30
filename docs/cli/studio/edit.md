@@ -231,7 +231,11 @@ the nominal trim end. The entire phased interval must fit the source video track
 an end-of-file trim with insufficient margin fails instead of silently clamping.
 Speed changes, still images, unavailable sample timestamps, clocks that cannot
 represent the phase exactly, and surviving segments starting between output frame
-boundaries are rejected. Failed apply and dry-run leave the project unchanged.
+boundaries are rejected. The combined video composition must also have a supported
+exact clock, even when each source clock is individually supported. These runtime
+failures return `error.code: "invalid_frame_sampling"`, a specific reason and exit
+status 1 with `--json`. Failed apply and dry-run leave the project and existing
+destination unchanged.
 
 Synthetic acceptance compares 900 decoded frame identities per source against
 FFmpeg for drifting and irregular VFR, aligned and offset 30 fps, and 120 fps

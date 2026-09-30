@@ -87,7 +87,9 @@ import Testing
         }
     }
 
-    static func fixture(_ url: URL, times: [Int64], seconds: Int = 5) async throws {
+    static func fixture(
+        _ url: URL, times: [Int64], seconds: Int = 5, timescale: CMTimeScale = 90000
+    ) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(
             mediaType: .video,
@@ -95,7 +97,7 @@ import Testing
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 32, AVVideoHeightKey: 32,
                 AVVideoCompressionPropertiesKey: [AVVideoAllowFrameReorderingKey: false],
             ])
-        input.mediaTimeScale = 90000
+        input.mediaTimeScale = timescale
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: input,
             sourcePixelBufferAttributes: [
@@ -125,7 +127,8 @@ import Testing
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
             #expect(
-                adaptor.append(buffer, withPresentationTime: CMTime(value: time, timescale: 90000)))
+                adaptor.append(
+                    buffer, withPresentationTime: CMTime(value: time, timescale: timescale)))
         }
         input.markAsFinished()
         writer.endSession(atSourceTime: CMTime(value: Int64(seconds), timescale: 1))
