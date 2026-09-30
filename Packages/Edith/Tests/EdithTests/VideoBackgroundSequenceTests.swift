@@ -130,9 +130,11 @@ import Testing
         defer { reader.cancelReading() }
         let sample = try #require(decoded.copyNextSampleBuffer())
         let buffer = try #require(CMSampleBufferGetImageBuffer(sample))
+        let srgbClippedBackgroundInP3 = [230, 50, 35]
         for (index, frame) in [native, CIImage(cvPixelBuffer: buffer)].enumerated() {
             for (x, y, expected) in [
-                (16, 128, [230, 13, 5]), (112, 128, [5, 13, 230]), (16, 16, [230, 13, 5]),
+                (16, 128, [230, 13, 5]), (112, 128, [5, 13, 230]),
+                (16, 16, srgbClippedBackgroundInP3),
             ] {
                 var pixel = [UInt8](repeating: 0, count: 4)
                 VideoImageContext.shared.render(

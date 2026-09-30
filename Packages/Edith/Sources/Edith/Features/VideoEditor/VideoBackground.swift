@@ -81,8 +81,13 @@ public struct VideoBackground: Codable, Equatable, Sendable {
             blurRadius
             * min(
                 canvas.width / nativeCanvas.width, canvas.height / nativeCanvas.height)
-        return placed.clampedToExtent().applyingFilter(
-            "CIGaussianBlur", parameters: [kCIInputRadiusKey: radius]
-        ).cropped(to: visible)
+        let viewport = placed.cropped(to: visible)
+        guard radius > 0 else { return viewport }
+        return viewport.clampedToExtent()
+            .applyingFilter("CIColorClamp")
+            .applyingFilter("CILinearToSRGBToneCurve")
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
+            .applyingFilter("CISRGBToneCurveToLinear")
+            .cropped(to: visible)
     }
 }
