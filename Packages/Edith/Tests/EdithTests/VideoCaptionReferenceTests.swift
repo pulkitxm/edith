@@ -57,6 +57,9 @@ import Testing
         for size in [104.0, 112.0] {
             for (name, text) in [
                 ("one", "fj"), ("two", "SYNTHETIC\nCAPTION"), ("pairs", "AVATAR fj"),
+                ("long", "firm little rivers drift far"),
+                ("mixed", "minimum rhythm from afar"),
+                ("long-two", "fifty little letters form\ntrim rivers from firm terrain"),
             ] {
                 var project = VideoProject.create(title: "Synthetic font reference")
                 project.addText(text, startMs: 0, endMs: 1000)

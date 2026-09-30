@@ -12,6 +12,9 @@ enum VideoStyledCaptionImage {
     struct Line {
         let text: CTLine
         let baseline: CGPoint
+        var integerGlyphs: [CGGlyph]? = nil
+        var integerPositions: [CGPoint] = []
+        var font: CTFont? = nil
     }
 
     private static func ascent(_ font: CTFont, style: VideoCaptionStyle) -> CGFloat {
@@ -80,6 +83,10 @@ enum VideoStyledCaptionImage {
             "Caption layout exceeds the reference canvas; adjust position, width, size or line advance."
         )
         return try lines.enumerated().map { index, line in
+            var integerGlyphs: [CGGlyph] = []
+            var integerPositions: [CGPoint] = []
+            var integerAdvance: CGFloat = 0
+            var integerInk = CGRect.null
             for run in CTLineGetGlyphRuns(line) as! [CTRun] {
                 let attributes = CTRunGetAttributes(run) as NSDictionary
                 let runFont = attributes[kCTFontAttributeName] as! CTFont
@@ -93,14 +100,29 @@ enum VideoStyledCaptionImage {
                         "Caption contains glyphs unavailable in \(style.fontFamily) \(style.fontStyle)."
                     )
                 }
+                if style.metrics == .fontBounds {
+                    var advances = [CGSize](repeating: .zero, count: glyphs.count)
+                    var boxes = [CGRect](repeating: .zero, count: glyphs.count)
+                    CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
+                    CTFontGetBoundingRectsForGlyphs(font, .horizontal, glyphs, &boxes, glyphs.count)
+                    for glyphIndex in glyphs.indices {
+                        integerPositions.append(CGPoint(x: integerAdvance, y: 0))
+                        if !boxes[glyphIndex].isEmpty {
+                            integerInk = integerInk.union(
+                                boxes[glyphIndex].offsetBy(dx: integerAdvance, dy: 0))
+                        }
+                        integerAdvance += advances[glyphIndex].width.rounded()
+                    }
+                    integerGlyphs.append(contentsOf: glyphs)
+                }
             }
             let advance =
                 CTLineGetTypographicBounds(line, nil, nil, nil)
                 - CTLineGetTrailingWhitespaceWidth(line)
-            let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
             let width =
-                style.metrics == .fontBounds && !ink.isNull
-                ? ceil(max(advance, ink.maxX)) - floor(min(0, ink.minX)) : advance
+                style.metrics == .fontBounds
+                ? ceil(max(integerAdvance, integerInk.isNull ? 0 : integerInk.maxX))
+                    - floor(min(0, integerInk.isNull ? 0 : integerInk.minX)) : advance
             try VideoCaptionStyle.require(
                 width <= style.width + 0.01, "Caption width cannot fit a glyph.")
             let x =
@@ -111,7 +133,9 @@ enum VideoStyledCaptionImage {
             return Line(
                 text: line,
                 baseline: CGPoint(
-                    x: x, y: style.canvasHeight - top - ascent - Double(index) * style.lineAdvance))
+                    x: x, y: style.canvasHeight - top - ascent - Double(index) * style.lineAdvance),
+                integerGlyphs: style.metrics == .fontBounds ? integerGlyphs : nil,
+                integerPositions: integerPositions, font: style.metrics == .fontBounds ? font : nil)
         }
     }
 
@@ -181,8 +205,15 @@ enum VideoStyledCaptionImage {
         context.setStrokeColor(color)
         context.setFillColor(color)
         for line in lines {
-            context.textPosition = line.baseline
-            CTLineDraw(line.text, context)
+            if let glyphs = line.integerGlyphs, let font = line.font {
+                let positions = line.integerPositions.map {
+                    CGPoint(x: $0.x + line.baseline.x, y: $0.y + line.baseline.y)
+                }
+                CTFontDrawGlyphs(font, glyphs, positions, glyphs.count, context)
+            } else {
+                context.textPosition = line.baseline
+                CTLineDraw(line.text, context)
+            }
         }
     }
 }

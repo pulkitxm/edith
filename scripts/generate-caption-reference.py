@@ -15,7 +15,10 @@ output.mkdir(parents=True, exist_ok=True)
 cases = []
 for size in [104, 112]:
     font = ImageFont.truetype(args.font, size, layout_engine=ImageFont.Layout.BASIC)
-    for name, text in [("one", "fj"), ("two", "SYNTHETIC\nCAPTION"), ("pairs", "AVATAR fj")]:
+    for name, text in [("one", "fj"), ("two", "SYNTHETIC\nCAPTION"), ("pairs", "AVATAR fj"),
+                       ("long", "firm little rivers drift far"),
+                       ("mixed", "minimum rhythm from afar"),
+                       ("long-two", "fifty little letters form\ntrim rivers from firm terrain")]:
         image = Image.new("L", (2160, 3840))
         draw = ImageDraw.Draw(image)
         for index, line in enumerate(text.split("\n")):
