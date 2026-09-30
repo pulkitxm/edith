@@ -37,6 +37,23 @@ installed native pipeline supports the needed behavior. If it does not, identify
 the unmet requirement. An accepted fallback should be clearly labeled, with its
 quality and editability tradeoffs, rather than silently substituted.
 
+## Preserve the agreed grading domain
+
+Inspect persisted `visualEffects.gradingMode` when matching an approved reference.
+Omission means `native` Core Image source-layer grading. Explicit `ffmpeg709`
+grades the composited foreground, background and backdrop through sRGB-encoded
+RGB8 and limited-range BT.709 YUV444 EQ before captions/overlays. Its RGB transfer
+is sRGB, not Rec.709; choosing a Rec.709 export tag does not select this edit mode.
+Use it for a compatible reference pipeline, carrying the mode forward when a
+public operation replaces the complete effects settings.
+
+Measure representative decoded final frames against the approved reference under
+matched geometry and color handling. Neutral `ffmpeg709` still performs a quantized
+RGB/YUV round trip. Separate that baseline from grade differences, ICC conversion,
+chroma subsampling and codec error. A precise color-chart match is not evidence of
+whole-export or byte-for-byte canonical parity. Confirm actual foreground,
+background and ungraded caption samples before reporting visual acceptance.
+
 ## Measure audio before choosing a correction
 
 Identify the approved audio source by content identity, source range and channel

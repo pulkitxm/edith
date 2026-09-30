@@ -25,6 +25,12 @@ version, help and schema rather than substituting simulated responses.
 
 Generate references independently of the candidate result. Do not approve the
 runner's first render as its own reference or adjust tolerances after seeing it.
+For grading, specify the approved processing domain in the manifest. A `ffmpeg709`
+reference uses the same color-managed composited RGB8 raster with sRGB transfer,
+limited-range BT.709 YUV444 and gamma 1. Establish a neutral round-trip baseline;
+keep grading precision, compositional differences and final codec error separate.
+Include ungraded overlay samples, and do not use chart results as a substitute for
+the task's actual representative-frame comparison.
 For audio, use enough duration for the chosen loudness meter and include a changing
 envelope so a guessed gain is distinguishable from measured correction. Keep the
 clips short and the render dimensions modest; these are workflow checks, not

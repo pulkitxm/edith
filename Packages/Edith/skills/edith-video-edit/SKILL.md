@@ -75,7 +75,9 @@ for source versus output time, frame arithmetic, aliases and atomic changes.
 Read [audio and beats](references/audio-and-beats.md)
 when the edit includes music, voiceover, detached audio or rhythm-driven cuts.
 Read [photo backgrounds and effects](references/photo-backgrounds-and-effects.md)
-for independent foreground/background geometry and replacing per-clip settings.
+for independent foreground/background geometry, replacement semantics and explicit
+`native` versus `ffmpeg709` grading. Choose a mode compatible with the approved
+reference's color pipeline, then verify representative rendered frames.
 
 Use the schema's public plan format. Never handwrite internal `.openscreen` JSON.
 Batch related operations in a single plan in dependency order, with stable

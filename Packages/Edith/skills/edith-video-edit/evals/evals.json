@@ -12,7 +12,7 @@
         "A disposable variant accepts a public edit to one caption style and one photo effect, leaving the accepted project unchanged.",
         "The saved cadence and exported probe equal 30000/1001, 270 frames span 9.009 seconds, and the one-second cue is mapped to frame 30 at 1.001 seconds with the 0.001-second error recorded.",
         "The persisted independent audio placement and a measured audio cue remain at the requested output position after a disposable shot reorder.",
-        "Decoded final frames are compared to the supplied references at matched geometry and color handling; measured differences and pass/fail results are retained rather than inferred from equal filter values.",
+        "The persisted grading mode matches the manifest's approved color pipeline; decoded final frames are compared at matched geometry and color handling with separate neutral-round-trip and final-encode measurements, rather than inferring canonical parity from equal filter values or a color chart.",
         "Before/after checksums prove all originals and the canonical export unchanged, and the completion report marks every requested outcome passed, failed or unverified from artifacts."
       ]
     },
