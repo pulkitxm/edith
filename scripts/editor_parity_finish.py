@@ -7,6 +7,7 @@ from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION
 from editor_parity_checks import check_captions, check_mastered_audio, check_video, decoded_frames
 from editor_parity_fixtures import checksum, fixture_path
 from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
+from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
 from editor_parity_pixels import check_caption_pixels, check_photo_pixels, codec_control
 from editor_parity_review import frame_pixels
@@ -86,7 +87,8 @@ def delivery(edit, project, visual, output, workspace, fixture, manifest, dimens
             check = {str(frame): check_photo_pixels(pixels, source, (shot["width"], shot["height"]), 270, 480, 65 / 8,
                                                     CAPTION_EXCLUSION, TARGET_GRADE, shot.get("sourceCrop"), check_grade=False)
                      for frame, pixels in actual.items()}
-        photos.append({"source": shot["name"], "checks": check})
+        photos.append({"source": shot["name"], "checks": check,
+                       "targetGrade": check_target_grade(actual[0], source, shot, 270, 480, CAPTION_EXCLUSION)})
     directory = workspace / "delivery-caption-checks"
     directory.mkdir()
     captions = []

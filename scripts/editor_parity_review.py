@@ -3,6 +3,7 @@ import json
 from editor_acceptance_contracts import require
 from editor_parity_checks import check_picture_samples, picture_sample_frames
 from editor_parity_fixtures import checksum, fixture_path
+from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
 from editor_parity_pixels import check_photo_pixels, image_pixels
 
@@ -24,7 +25,8 @@ def visual_review(edit, project, workspace, fixture, manifest):
         frames = (0, shot["frames"] // 2, shot["frames"] - 1)
         actual = {offset: frame_pixels(edit, project, shot["startFrame"] + offset, review / f"{shot['name']}-{offset}.png", (width, height))
                   for offset in frames}
-        photos.append({"source": shot["name"], "result": check_photo_motion(actual, source, shot, width, height)})
+        photos.append({"source": shot["name"], "result": check_photo_motion(actual, source, shot, width, height),
+                       "targetGrade": check_target_grade(actual[0], source, shot, width, height)})
         if shot["framing"] == "contain":
             comparison = check_photo_pixels(actual[0], source, (shot["width"], shot["height"]), width, height, 65 * width / 2160,
                                             (0, 0, 0, 0), TARGET_GRADE, shot.get("sourceCrop"), check_grade=False)

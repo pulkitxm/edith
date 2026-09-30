@@ -32,6 +32,8 @@ def check_motion_plan(project, manifest):
     for clip, shot in zip(project["timeline"]["clips"], manifest["shots"]):
         effects = clip["edithVisualEffects"]
         require(effects["gradingMode"] == "ffmpeg709", "Project lost its explicit grading semantics")
+        require(all(effects[field] == value for field, value in TARGET_GRADE.items()),
+                "Project changed the exact target brightness, contrast, or saturation")
         require(effects["focalX"] == effects["focalY"] == 0.5, "Zoom must use the center of the selected crop")
         crop = shot.get("sourceCrop", shot.get("framingCrop"))
         if crop:
