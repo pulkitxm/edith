@@ -1,5 +1,8 @@
 import json
+import os
+import pathlib
 import subprocess
+import tempfile
 
 from editor_acceptance_contracts import require
 from editor_acceptance_delivery import checked_progress
@@ -87,11 +90,17 @@ def publish_result(workspace, groups, mode):
     result = {"version": 1, "syntheticAcceptance": True, "realProjectParityVerified": False,
               "fullDeliveryAcceptance": mode == "full", "mode": mode, "groups": groups}
     destination = workspace / ("result.json" if mode == "full" else "quick-result.json")
-    temporary = workspace / ".result.json.tmp"
-    require(not destination.exists() and not temporary.exists(), "Acceptance result destination must not already exist")
+    descriptor, name = tempfile.mkstemp(prefix=".result-", suffix=".tmp", dir=workspace)
+    temporary = pathlib.Path(name)
     try:
-        write_json(temporary, result)
-        temporary.replace(destination)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, destination, follow_symlinks=False)
+        except FileExistsError as error:
+            raise AssertionError("Acceptance result destination must not already exist") from error
     finally:
         temporary.unlink(missing_ok=True)
     return result
