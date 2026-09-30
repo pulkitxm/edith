@@ -115,20 +115,8 @@ class PangoCanvas:
                 self.g_object_unref(layout)
 
 
-def linear(value):
-    return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
-
-
-def encoded(value):
-    return round(255 * (value * 12.92 if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055))
-
-
-def styled_reference(background, text, style, width, height):
-    canvas = PangoCanvas(width, height)
-    try:
-        layer = canvas.glyph_layer(text, style)
-    finally:
-        canvas.close()
+def compose_encoded_style(background, layer, style, width, height):
+    require(len(background) == width * height * 3 and len(layer) == width * height * 4, "Invalid styled composition rasters")
     data = bytearray(background)
     if gradient := style.get("gradient"):
         tables = {}
@@ -143,15 +131,35 @@ def styled_reference(background, text, style, width, height):
             for channel, name in enumerate(("red", "green", "blue")):
                 key = (color[name], color["alpha"])
                 if key not in tables:
-                    tables[key] = bytes(encoded(linear(value / 255) * (1 - color["alpha"]) + linear(color[name]) * color["alpha"]) for value in range(256))
+                    tables[key] = bytes(round(value * (1 - color["alpha"]) + 255 * color[name] * color["alpha"]) for value in range(256))
                 start, end = y * width * 3 + channel, (y + 1) * width * 3
                 data[start:end:3] = data[start:end:3].translate(tables[key])
     for index, alpha in enumerate(layer[3::4]):
         if alpha:
             for channel in range(3):
-                source = layer[index * 4 + 2 - channel] / alpha
-                data[index * 3 + channel] = encoded(linear(source) * alpha / 255 + linear(data[index * 3 + channel] / 255) * (1 - alpha / 255))
-    return bytes(data), layer
+                premultiplied = layer[index * 4 + 2 - channel]
+                data[index * 3 + channel] = round(premultiplied + data[index * 3 + channel] * (255 - alpha) / 255)
+    return bytes(data)
+
+
+def styled_reference(background, text, style, width, height):
+    canvas = PangoCanvas(width, height)
+    try:
+        layer = canvas.glyph_layer(text, style)
+    finally:
+        canvas.close()
+    return compose_encoded_style(background, layer, style, width, height), layer
+
+
+def check_encoded_blend_region(actual, width, height, background_rgb):
+    require(len(actual) == width * height * 3, "Invalid encoded blend probe raster")
+    expected = tuple((value * 155 + 127) // 255 for value in background_rgb)
+    indices = offsets(width, height, (0.05, 0.9, 0.1, 0.05))
+    require(indices, "Encoded blend probe region is empty")
+    error = max(abs(actual[index + channel] - expected[channel]) for index in indices for channel in range(3))
+    require(error <= 1, f"Encoded-sRGB source-over differs: maximum code error {error}, expected {expected} within 1")
+    return {"backgroundRGB": background_rgb, "blackAlpha": "100/255", "expectedRGB": expected,
+            "maximumCodeError": error, "codeTolerance": 1, "region": [0.05, 0.9, 0.1, 0.05], "outsideGlyphAndShadow": True}
 
 
 def style_negatives(style):

@@ -112,6 +112,7 @@ caption, native mastering, compressed-copy, actual-open, or final-export parity.
 python3 scripts/test-editor-parity-artifacts.py
 python3 scripts/test-editor-parity-grade.py --fixture /absolute/parity-v4
 python3 scripts/test-editor-parity-style.py
+python3 scripts/test-editor-parity-blending.py
 ```
 
 Mastered provenance captures exact artifact, project, source, and report bytes.
@@ -131,7 +132,11 @@ Caption identity is accompanied by absolute per-line ink boxes, with a two-pixel
 edge allowance and no fitted shift. Three full-resolution synthetic blue-card
 probes independently exercise 104-point single/two-line and 112-point styles.
 Pango/Cairo constructs paths, outlines and the independently colored shadow;
-the gradient is composited in linear sRGB over the known background. It becomes
+the gradient and glyph layer are composited directly in encoded sRGB code values,
+matching the approved Pillow alpha-composite reference. Pango/Cairo generates
+the font masks independently; font metrics do not select the blending law.
+Gradient, outline, shadow fill/stroke, and antialiased white edges all use
+encoded source-over, without decoding a transfer function. The gradient becomes
 opaque only below the text, leaving the outline and shadow distinguishable.
 Thirteen wrong-style controls cover missing/narrow/wide outlines, missing shadow,
 wrong shadow fill/stroke/offset, shifted text, alignment, anchor, line advance,
@@ -140,6 +145,16 @@ addition to all 47 original glyph, placement, geometry and contrast checks.
 The probes check both native frames and a six-frame encoded sample. Full
 acceptance additionally checks styled pixels on all 47 captions in the actual
 final 5,588-frame export; the small probes do not substitute for those frames.
+
+`test-editor-parity-blending.py` isolates blending from font geometry. A black
+gradient with constant end opacity `100/255` over white must yield RGB 155, over
+gray 128 it must yield 78, and over RGB (51, 153, 204) it must yield (31, 93, 124),
+each within one code value. The sampled bottom-left region is outside every
+glyph and shadow. Linear-light negatives, including the observed old-native
+white result 204 (49 levels too bright), must fail. Premultiplied colored-shadow,
+outline, and antialiased white-edge controls verify the same encoded law.
+The native styled-probe group must also pass these three scalar regions with
+the actual caption renderer before it can contribute to an acceptance result.
 
 ## Tagged video and background stress
 

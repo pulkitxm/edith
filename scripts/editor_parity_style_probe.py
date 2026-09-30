@@ -5,7 +5,41 @@ from editor_parity_adapters import CAPTION_BOUNDS, caption_operations
 from editor_parity_checks import decoded_frames
 from editor_parity_fixtures import checksum, ffmpeg
 from editor_parity_review import frame_pixels
-from editor_parity_style import check_caption_placement, check_styled_caption
+from editor_parity_style import check_caption_placement, check_encoded_blend_region, check_styled_caption
+
+
+def encoded_blend_probe(edit, directory, schemas):
+    base, styled = directory / "blend-backgrounds.openscreen", directory / "encoded-blend.openscreen"
+    backgrounds = [(255, 255, 255), (128, 128, 128), (51, 153, 204)]
+    sources = {}
+    shots = []
+    operations = [
+        {"videoSettings": {"settings": {"width": 2160, "height": 3840, "frameRateNumerator": 60, "frameRateDenominator": 1, "colorSpace": "rec709"}}},
+        {"canvas": {"aspectRatio": "9:16", "padding": 0, "backgroundColor": "#000000"}},
+    ]
+    for index, rgb in enumerate(backgrounds):
+        source = directory / f"blend-background-{index}.png"
+        ffmpeg("-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", "36x64", "-i", "pipe:0",
+               "-frames:v", "1", "-update", "1", source, data=bytes(rgb) * (36 * 64))
+        sources[source] = checksum(source)
+        shots.append({"name": f"blend-{index}", "caption": "Synthetic blend", "fontSize": 104,
+                      "startFrame": index * 2, "endFrame": index * 2 + 2})
+        operations.append({"addStill": {"path": str(source), "name": shots[-1]["name"], "duration": 2 / 60}})
+    edit("create", base, "--title", "Synthetic encoded-sRGB source-over", "--json")
+    edit("apply", base, "--plan", "-", "--overwrite", "--json", stdin=json.dumps({"version": 1, "operations": operations}))
+    captions, _ = caption_operations({"shots": shots}, schemas)
+    for caption in captions:
+        gradient = caption["outputCaption"]["style"]["gradient"]
+        gradient.update(startY=500, endY=1000)
+        gradient["stops"][-1]["color"]["alpha"] = 100 / 255
+    edit("apply", base, "--plan", "-", "--output", styled, "--json", stdin=json.dumps({"version": 1, "operations": captions}))
+    protected = {**sources, base: checksum(base), styled: checksum(styled)}
+    checks = []
+    for shot, rgb in zip(shots, backgrounds):
+        actual = frame_pixels(edit, styled, shot["startFrame"], directory / f"{shot['name']}.png", (2160, 3840))
+        checks.append(check_encoded_blend_region(actual, 2160, 3840, rgb))
+    require(all(checksum(path) == digest for path, digest in protected.items()), "Encoded blend probe modified its inputs")
+    return {"blendSpace": "encodedSRGB", "constantGradientRegions": checks}
 
 
 def styled_pixel_probe(edit, workspace, schemas):
@@ -38,4 +72,5 @@ def styled_pixel_probe(edit, workspace, schemas):
                        "encodedStyle": check_styled_caption(encoded, background, shot["caption"], style, 2160, 3840),
                        "encodedPlacement": check_caption_placement(encoded, background, shot["caption"], style, 2160, 3840, CAPTION_BOUNDS)})
     require(checksum(source) == source_digest and all(checksum(path) == digest for path, digest in before.items()), "Styled probe changed protected inputs")
-    return {"independentStyledCases": checks, "backgroundRGB": [120, 160, 200], "sourceSHA256": source_digest}
+    return {"independentStyledCases": checks, "backgroundRGB": [120, 160, 200], "sourceSHA256": source_digest,
+            "encodedSourceOver": encoded_blend_probe(edit, directory, schemas)}
