@@ -1,5 +1,25 @@
 # Background agent architecture and verification
 
+## Installing a published release
+
+When the Developer ID signing certificate is available only in CI, download the
+published `Edith.dmg`, verify its SHA-256 against the release asset digest and
+mount it read-only. Install its existing signed bundle through the normal atomic
+installer:
+
+```sh
+./build.sh --release --install --from-app /Volumes/Edith/Edith.app
+```
+
+This verifies the production bundle identity and signing certificate for
+team `HDYBQ2SLGT` before replacement. It preserves the published signature and
+uses the same quit, atomic exchange and process retirement behavior as a local
+Release install. `--no-open` installs without launching. Development bundle
+identifiers, ad-hoc signatures and other-team signatures cannot use this path.
+The default requires Developer ID. For releases published with the repository's
+existing Apple Development signing configuration, explicitly set
+`EDITH_RELEASE_ALLOW_DEV_SIGNING=1`, as for a local Release build.
+
 Edith uses `edithd` as the single owner for scheduled work, durable tasks, shared
 state collection, and operations that must outlive a window. The main application and
 menu bar helper are presentation processes. They request work over XPC and subscribe to

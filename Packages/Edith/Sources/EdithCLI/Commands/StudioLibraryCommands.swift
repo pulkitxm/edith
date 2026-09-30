@@ -38,7 +38,8 @@ struct StudioLibraryListCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     func run() async throws {
         try await execute {
-            StudioLibraryOutput.print(try StudioMediaLibrary.list(), json: json)
+            StudioLibraryOutput.print(
+                try StudioMediaLibrary.list(defaults: CLIEnvironment.sharedDefaults), json: json)
         }
     }
 }
@@ -53,7 +54,8 @@ struct StudioLibraryAddCommand: AsyncParsableCommand {
         try await execute {
             guard !paths.isEmpty else { throw CLIFailure.usage("provide at least one path") }
             StudioLibraryOutput.print(
-                try StudioMediaLibrary.add(StudioBridge.files(paths)), json: json)
+                try StudioMediaLibrary.add(
+                    StudioBridge.files(paths), defaults: CLIEnvironment.sharedDefaults), json: json)
         }
     }
 }
@@ -71,7 +73,9 @@ struct StudioLibraryRemoveCommand: AsyncParsableCommand {
                 paths.map {
                     URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath).standardizedFileURL
                 })
-            StudioLibraryOutput.print(try StudioMediaLibrary.remove(urls), json: json)
+            StudioLibraryOutput.print(
+                try StudioMediaLibrary.remove(urls, defaults: CLIEnvironment.sharedDefaults),
+                json: json)
         }
     }
 }
@@ -84,7 +88,7 @@ struct StudioLibraryClearCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit the empty list as JSON.") var json = false
     func run() async throws {
         try await execute {
-            try StudioMediaLibrary.clear(recent: recent)
+            try StudioMediaLibrary.clear(defaults: CLIEnvironment.sharedDefaults, recent: recent)
             StudioLibraryOutput.print([], json: json)
         }
     }

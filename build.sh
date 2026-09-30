@@ -5,11 +5,13 @@ cd "$(dirname "$0")"
 usage() {
   cat >&2 <<'USAGE'
 usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
+       ./build.sh --release --install --from-app PATH [--no-open]
        ./build.sh --teardown | --gc
 
   --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
   --release      Release configuration, Developer ID signing required
+  --from-app     install an existing production-signed bundle without rebuilding
   --pr N         build PR N's branch from its worktree, creating one if needed
   --branch NAME  same, for a branch named directly
   --teardown     stop this worktree's development build and delete its data
@@ -54,11 +56,13 @@ team_id_for() {
 }
 
 INSTALL=0 NO_OPEN=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
+PREBUILT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) INSTALL=1 ;;
     --no-open) NO_OPEN=1 ;;
     --release) RELEASE=1 ;;
+    --from-app) PREBUILT="${2:?--from-app needs an application path}"; shift ;;
     --pr) PR="${2:?--pr needs a PR number}"; shift ;;
     --branch) BRANCH="${2:?--branch needs a branch name}"; shift ;;
     --teardown) exec scripts/dev-slots.sh teardown ;;
@@ -74,6 +78,21 @@ if [ "$INSTALL" = 1 ] && [ "$RELEASE" != 1 ]; then
 fi
 
 SIGN_FLAGS=""
+if [ -n "$PREBUILT" ]; then
+  if [ "$INSTALL" != 1 ] || [ "$RELEASE" != 1 ] || [ -n "$PR$BRANCH" ]; then
+    echo "--from-app requires --release --install without --pr or --branch." >&2
+    exit 1
+  fi
+  REQUIREMENT='anchor apple generic and identifier "com.pulkit.edith" and certificate leaf[subject.OU] = "HDYBQ2SLGT"'
+  if [ "${EDITH_RELEASE_ALLOW_DEV_SIGNING:-0}" != 1 ]; then
+    REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
+  fi
+  codesign --verify --deep --strict --test-requirement "=$REQUIREMENT" "$PREBUILT"
+  python3 scripts/install_app.py "$PREBUILT" "/Applications/Edith.app"
+  if [ "$NO_OPEN" != 1 ]; then open -n "/Applications/Edith.app"; fi
+  exit 0
+fi
+
 if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
   case "$SIGN_IDENTITY" in
