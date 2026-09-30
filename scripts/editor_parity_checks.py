@@ -17,7 +17,7 @@ def protected_snapshot(directory, manifest):
         "parity-manifest.json": checksum(directory / "parity-manifest.json")}
 
 
-def check_project(project, manifest, fixture, dimensions):
+def check_visual_project(project, manifest, fixture, dimensions):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
     require(len(clips) == len({clip["id"] for clip in clips}) == len({clip["assetId"] for clip in clips}) == 47,
@@ -32,6 +32,12 @@ def check_project(project, manifest, fixture, dimensions):
     settings = project["edithVideoSettings"]
     require((settings["width"], settings["height"]) == dimensions, "Project canvas dimensions changed")
     require(Fraction(settings["frameRateNumerator"], settings["frameRateDenominator"]) == FRAME_RATE, "Project cadence changed")
+    return {"editableOriginals": 47, "originalPhotos": 42, "exactShotBoundaries": True}
+
+
+def check_project(project, manifest, fixture, dimensions):
+    visual = check_visual_project(project, manifest, fixture, dimensions)
+    assets = {asset["id"]: asset for asset in project["assets"]}
     tracks = project["audioTracks"]
     require(len(tracks) == 1, "Soundtrack must remain one continuous editable track")
     track = tracks[0]
@@ -41,7 +47,7 @@ def check_project(project, manifest, fixture, dimensions):
             "Soundtrack must cover the complete project")
     require(pathlib.Path(assets[track["assetId"]]["originalPath"]).resolve(strict=True) == fixture_path(fixture, manifest["music"]["path"]),
             "Soundtrack must reference its original synthetic waveform")
-    return {"editableOriginals": 47, "originalPhotos": 42, "exactShotBoundaries": True, "continuousOutputClockTracks": 1}
+    return {**visual, "continuousOutputClockTracks": 1}
 
 
 def check_captions(report, manifest, expected_styles):

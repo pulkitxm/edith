@@ -1,5 +1,8 @@
 import math
+import pathlib
 import statistics
+import struct
+import tempfile
 
 from editor_acceptance_contracts import require
 from editor_parity_fixtures import command
@@ -30,11 +33,37 @@ def reference_pixels(source, width, height, framing="contain", blur=8, brightnes
     return data
 
 
-def image_pixels(path, width, height):
+def has_png_profile(path):
+    with path.open("rb") as stream:
+        if stream.read(8) != b"\x89PNG\r\n\x1a\n":
+            return False
+        while header := stream.read(8):
+            require(len(header) == 8, "Truncated PNG chunk header")
+            length, kind = struct.unpack(">I4s", header)
+            if kind == b"iCCP":
+                return True
+            if kind in {b"IDAT", b"IEND"}:
+                return False
+            stream.seek(length + 4, 1)
+    return False
+
+
+def decoded_image_pixels(path, width, height):
     data = command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-i", path, "-vf",
                     f"scale={width}:{height}:flags=lanczos", "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"])
     require(len(data) == width * height * 3, "Review image has unexpected dimensions")
     return data
+
+
+def image_pixels(path, width, height):
+    if not has_png_profile(path):
+        return decoded_image_pixels(path, width, height)
+    root = pathlib.Path(tempfile.gettempdir()) / "opencode"
+    root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="parity-icc-", dir=root) as temporary:
+        normalized = pathlib.Path(temporary) / "srgb.png"
+        command(["sips", "--matchTo", "/System/Library/ColorSync/Profiles/sRGB Profile.icc", path, "--out", normalized])
+        return decoded_image_pixels(normalized, width, height)
 
 
 def codec_control(pixels, width, height):
