@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import EdithKit
 import EdithStudio
 import Foundation
@@ -59,11 +60,15 @@ final class StudioModel {
     private var installTask: Task<Void, Never>?
     private var projectsTask: Task<Void, Never>?
     private var recentTask: Task<Void, Never>?
+    private var librarySubscriptions: Set<AnyCancellable> = []
+    private var libraryWatcher: FileSystemWatcher?
+    private var libraryWatchPaths: [URL]?
 
     init(defaults: UserDefaults = SharedDefaults.store, loadsState: Bool = true) {
         self.defaults = defaults
         guard loadsState else { return }
         files = StudioLibraryStore.loadFiles(from: defaults)
+        observeLibrary()
     }
 
     var visibleFiles: [StudioFileItem] { StudioLibraryQuery.visible(files, kind: kindFilter) }
@@ -98,10 +103,69 @@ final class StudioModel {
     }
 
     func start() {
+        refreshLibrary()
+        watchLibrary()
         refreshEngines()
         refreshProjects()
         loadRecent()
         loadWorkflows()
+    }
+
+    func refreshLibrary() {
+        files = StudioLibraryStore.loadFiles(from: defaults)
+        let known = StudioLibraryQuery.urls(files)
+        selection.formIntersection(known)
+        facts = facts.filter { known.contains($0.key) }
+    }
+
+    func observeLibrary() {
+        guard librarySubscriptions.isEmpty else { return }
+        DistributedNotificationCenter.default().publisher(for: IPC.Name.studioMediaLibraryChanged)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshLibrary()
+                    self?.loadRecent()
+                }
+            }.store(in: &librarySubscriptions)
+        DistributedNotificationCenter.default().publisher(for: IPC.Name.videoProjectLibraryChanged)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.refreshProjects() }
+            }.store(in: &librarySubscriptions)
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.refreshLibrary() }
+            }.store(in: &librarySubscriptions)
+    }
+
+    func watchLibrary(paths: [URL]? = nil) {
+        if let paths { libraryWatchPaths = paths }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let candidates =
+            libraryWatchPaths
+            ?? ([
+                home.appendingPathComponent("Library/Preferences", isDirectory: true),
+                DataRoot.support, VideoProject.openScreenLibraryURL.deletingLastPathComponent(),
+            ] + videoProjects.map { $0.url.deletingLastPathComponent() })
+        let watched = candidates.map { candidate in
+            var existing = candidate
+            while !FileManager.default.fileExists(atPath: existing.path), existing.path != "/" {
+                existing.deleteLastPathComponent()
+            }
+            return existing
+        }
+        let unique = Set(watched.map(\.path)).sorted()
+        guard libraryWatcher?.watchedPaths.sorted() != unique else { return }
+        libraryWatcher?.stop()
+        let directories = unique.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        libraryWatcher = FileSystemWatcher(paths: directories, debounce: 0.05, eventLatency: 0.05) {
+            [weak self] in
+            Task { @MainActor [weak self] in
+                self?.refreshLibrary()
+                self?.refreshProjects()
+                self?.loadRecent()
+            }
+        }
+        libraryWatcher?.start()
     }
 
     func loadWorkflows() {
@@ -169,6 +233,7 @@ final class StudioModel {
             }.value
             guard let self, !Task.isCancelled else { return }
             self.videoProjects = listings
+            if self.libraryWatcher != nil { self.watchLibrary() }
         }
     }
 
@@ -184,10 +249,15 @@ final class StudioModel {
     }
 
     func add(_ urls: [URL]) {
-        let added = StudioLibraryQuery.newItems(StudioLibraryStore.expand(urls), existing: files)
-        guard !added.isEmpty else { return }
-        files.insert(contentsOf: added, at: 0)
-        persistFiles()
+        let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
+        let added = StudioLibraryQuery.newItems(StudioLibraryStore.expand(urls), existing: current)
+        do {
+            try StudioMediaLibrary.add(urls, defaults: defaults)
+            refreshLibrary()
+        } catch {
+            message = error.localizedDescription
+            return
+        }
         if added.count == 1, let only = added.first {
             notice = "Added \(only.name)"
         } else if added.count > 1 {
@@ -196,14 +266,18 @@ final class StudioModel {
     }
 
     func remove(_ urls: Set<URL>) {
-        files.removeAll { urls.contains($0.url) }
-        selection.subtract(urls)
-        persistFiles()
+        do {
+            try StudioMediaLibrary.remove(urls, defaults: defaults)
+            refreshLibrary()
+        } catch {
+            message = error.localizedDescription
+        }
     }
 
     func clearMissing() {
-        files.removeAll { facts[$0.url]?.exists == false }
-        persistFiles()
+        let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
+        remove(
+            Set(current.filter { !FileManager.default.fileExists(atPath: $0.url.path) }.map(\.url)))
     }
 
     func toggleSelection(_ url: URL) {
@@ -313,6 +387,20 @@ final class StudioModel {
         route = .videoEditor([], project: nil)
     }
 
+    func trashProject(_ project: VideoProject.Listing) {
+        Task { [weak self] in
+            do {
+                _ = try await VideoEditorService.trashProject(project.url)
+                guard let self else { return }
+                self.videoProjects.removeAll { $0.url == project.url }
+                self.notice = "Moved \(project.title) to Trash"
+                self.refreshProjects()
+            } catch {
+                self?.message = error.localizedDescription
+            }
+        }
+    }
+
     func record(_ job: StudioJob) {
         guard let result = job.result else { return }
         let outputs = StudioLibraryQuery.outputURLs(result)
@@ -377,10 +465,6 @@ final class StudioModel {
                 self?.add(panel.urls)
             }
         }
-    }
-
-    private func persistFiles() {
-        StudioLibraryStore.saveFiles(files, to: defaults)
     }
 
     private func trimJobs() {

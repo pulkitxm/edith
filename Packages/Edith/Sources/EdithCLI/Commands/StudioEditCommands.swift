@@ -18,7 +18,7 @@ struct StudioEditCommand: AsyncParsableCommand {
             StudioEditPublications.self,
             StudioEditReviewReport.self,
             StudioEditRegister.self, StudioEditUnregister.self, StudioEditLibrary.self,
-            StudioEditOpen.self,
+            StudioEditOpen.self, StudioEditTrash.self,
         ], defaultSubcommand: StudioEditSchema.self)
 }
 

@@ -126,6 +126,8 @@ public enum IPC {
             "com.pulkit.edith.videoEditorOpenResult")
         public static let videoProjectLibraryChanged = IPC.scopedName(
             "com.pulkit.edith.videoProjectLibraryChanged")
+        public static let studioMediaLibraryChanged = IPC.scopedName(
+            "com.pulkit.edith.studioMediaLibraryChanged")
         public static let requestWindowSnapshot = IPC.scopedName(
             "com.pulkit.edith.requestWindowSnapshot")
         public static let windowSnapshotResult = IPC.scopedName(

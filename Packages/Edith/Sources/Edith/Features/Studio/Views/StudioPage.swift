@@ -73,12 +73,6 @@ struct StudioPage: View {
                     model.openCommandProject(presentation)
                 }
             }
-            .onReceive(
-                DistributedNotificationCenter.default().publisher(
-                    for: IPC.Name.videoProjectLibraryChanged)
-            ) { _ in
-                model.refreshProjects()
-            }
     }
 
     @ViewBuilder private var content: some View {

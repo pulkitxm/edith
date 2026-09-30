@@ -120,6 +120,27 @@ struct StudioEditOpen: AsyncParsableCommand {
     }
 }
 
+struct StudioEditTrash: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "trash",
+        abstract: "Move a project document to Trash, preserving all source media and exports.",
+        aliases: ["delete"])
+    @Argument var project: String
+    @Flag(help: "Validate without moving the project or changing its registration.") var dryRun =
+        false
+    @Flag(help: "Emit JSON results and runtime errors.") var json = false
+
+    func run() async throws {
+        try await StudioEditBridge.run(json: json) {
+            let receipt = try await VideoEditorService.trashProject(
+                StudioEditBridge.url(project), dryRun: dryRun)
+            try StudioEditLifecycleOutput.printValue(
+                receipt, json: json,
+                text: receipt.written ? "trashed: \(receipt.path)" : "validated: \(receipt.path)")
+        }
+    }
+}
+
 private enum StudioEditLifecycleOutput {
     static func printValue<T: Encodable>(_ value: T, json: Bool, text: String) throws {
         if json {

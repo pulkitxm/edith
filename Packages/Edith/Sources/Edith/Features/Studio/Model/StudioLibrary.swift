@@ -6,13 +6,10 @@ import Foundation
 import PDFKit
 import QuickLookThumbnailing
 
-struct StudioFileItem: Identifiable, Hashable, Codable, Sendable {
-    let url: URL
-    var addedAt: Date
+typealias StudioFileItem = StudioMediaItem
 
-    var id: URL { url }
+extension StudioMediaItem {
     var kind: StudioKind { url.studioKind }
-    var name: String { url.lastPathComponent }
 }
 
 struct StudioFileFacts: Equatable, Sendable {
@@ -49,15 +46,12 @@ enum StudioLibraryStore {
     static let recentLimit = 40
 
     static func loadFiles(from defaults: UserDefaults) -> [StudioFileItem] {
-        guard let data = defaults.data(forKey: AppStorageKeys.Studio.library),
-            let items = try? JSONDecoder().decode([StudioFileItem].self, from: data)
-        else { return [] }
+        let items = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
         return items.filter { FileManager.default.fileExists(atPath: $0.url.path) }
     }
 
     static func saveFiles(_ items: [StudioFileItem], to defaults: UserDefaults) {
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        defaults.set(data, forKey: AppStorageKeys.Studio.library)
+        try? StudioMediaLibrary.save(items, defaults: defaults)
     }
 
     static var recentURL: URL { DataRoot.studio.appendingPathComponent("recent.json") }
@@ -83,24 +77,7 @@ enum StudioLibraryStore {
     }
 
     static func expand(_ urls: [URL]) -> [URL] {
-        var result: [URL] = []
-        let manager = FileManager.default
-        for url in urls {
-            var isDirectory: ObjCBool = false
-            guard manager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
-            guard isDirectory.boolValue else {
-                result.append(url.standardizedFileURL)
-                continue
-            }
-            let enumerator = manager.enumerator(
-                at: url, includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants])
-            while let item = enumerator?.nextObject() as? URL, result.count < 500 {
-                let values = try? item.resourceValues(forKeys: [.isRegularFileKey])
-                if values?.isRegularFile == true { result.append(item.standardizedFileURL) }
-            }
-        }
-        return result
+        StudioMediaLibrary.expand(urls)
     }
 
     static func saveToInbox(_ data: Data, name: String) throws -> URL {
