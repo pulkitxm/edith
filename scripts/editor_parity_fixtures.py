@@ -136,6 +136,7 @@ def generate(directory):
             source_frames = specification["sourceStartFrame"] + specification["frames"] + 2
             data = b"".join(video_pixels(raw, width, height, frame) for frame in range(source_frames))
             ffmpeg(*source, "-frames:v", str(source_frames), "-c:v", "libx264", "-preset", "ultrafast",
+                   "-vf", "scale=in_range=full:out_range=limited:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709",
                    "-crf", "12", "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", path, data=data)
         frames = specification["frames"]
         shots.append({"name": f"synthetic-{index + 1:02d}", "path": str(path.relative_to(directory)), "sha256": checksum(path),
@@ -156,7 +157,8 @@ def generate(directory):
         ffmpeg("-f", "lavfi", "-i", f"color=c=0x{index + 2:02x}5070:s=90x160:r=60", "-frames:v", str(12 + index),
                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", path)
         baseline.append({"path": str(path.relative_to(directory)), "sha256": checksum(path)})
-    manifest = {"version": 3, "synthetic": True, "videoSignatures": "nine-bit-source-frame-plus-one", "distinctStereoChannels": True,
+    manifest = {"version": 4, "synthetic": True, "videoSignatures": "nine-bit-source-frame-plus-one", "distinctStereoChannels": True,
+                 "videoColor": {"color_transfer": "bt709", "color_primaries": "bt709", "color_space": "bt709", "color_range": "tv"},
                 "frameCount": FRAME_COUNT, "frameRate": FRAME_RATE,
                 "width": 2160, "height": 3840, "audioSampleRate": SAMPLE_RATE, "audioSamples": FRAME_COUNT * 800,
                 "shots": shots, "music": {"path": str(music.relative_to(directory)), "sha256": checksum(music)},
@@ -179,7 +181,7 @@ def inventory(directory, manifest):
 def verify(directory, media=True):
     directory = directory.resolve(strict=True)
     manifest = json.loads((directory / "parity-manifest.json").read_text())
-    require(manifest["version"] == 3 and manifest["synthetic"] is True and manifest["distinctStereoChannels"] is True
+    require(manifest["version"] == 4 and manifest["synthetic"] is True and manifest["distinctStereoChannels"] is True
             and manifest["videoSignatures"] == "nine-bit-source-frame-plus-one", "Unsupported synthetic fixture manifest")
     require((manifest["frameCount"], manifest["frameRate"], manifest["width"], manifest["height"]) == (5588, 60, 2160, 3840),
             "Fixture delivery target changed")
@@ -218,6 +220,9 @@ def verify(directory, media=True):
             if shot["kind"] == "video":
                 require(stream["r_frame_rate"] == "60/1" and int(stream["nb_frames"]) == shot["sourceStartFrame"] + shot["frames"] + 2,
                         "Incorrect synthetic video cadence or source trim coverage")
+                require(all(stream.get(key) == value for key, value in manifest["videoColor"].items())
+                        and manifest["videoColor"] == {"color_transfer": "bt709", "color_primaries": "bt709", "color_space": "bt709", "color_range": "tv"},
+                        "Synthetic video's actual decoded metadata does not match its declared transfer, primaries, matrix, and range")
     require(position == FRAME_COUNT and manifest["audioSamples"] == FRAME_COUNT * 800, "Incorrect fixture frame or sample grid")
     if media:
         stream = probe(fixture_path(directory, manifest["music"]["path"]))["streams"][0]

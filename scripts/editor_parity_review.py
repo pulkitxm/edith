@@ -33,8 +33,11 @@ def visual_review(edit, project, workspace, fixture, manifest):
             geometry.append({"source": shot["name"], "comparison": comparison})
     pictures = {frame: frame_pixels(edit, project, frame, review / f"video-{frame}.png", (width, height)) for frame in picture_sample_frames(manifest)}
     picture_report = check_picture_samples(pictures, manifest, width, height)
+    video_grades = [{"outputFrame": frame, "sourceFrame": source_frame,
+                     "targetGrade": check_target_grade(pictures[frame], fixture_path(fixture, shot["path"]), shot, width, height, source_frame=source_frame)}
+                    for frame, (shot, source_frame) in picture_sample_frames(manifest).items()]
     require(checksum(project) == before, "Immediate review changed its editable project")
-    return {"photoGeometry": geometry, "motion": photos}, {"pictureSignatures": picture_report, "motionPhotos": 24,
+    return {"photoGeometry": geometry, "motion": photos, "videoTargetGrades": video_grades}, {"pictureSignatures": picture_report, "motionPhotos": 24,
             "staticPhotos": 18, "nonzeroSourceTrims": 5}, {"frames": len(photo_sample_frames(manifest)) + len(pictures), "projectPreserved": True}
 
 

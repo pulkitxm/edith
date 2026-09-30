@@ -3,15 +3,15 @@
 The runner uses only generated fixtures and the explicitly supplied development
 CLI. It must finish all required groups before publishing full acceptance.
 
-## Version 3 fixtures
+## Version 4 fixtures
 
 ```sh
-python3 scripts/editor_parity_fixtures.py generate /absolute/new/parity-v3
+python3 scripts/editor_parity_fixtures.py generate /absolute/new/parity-v4
 python3 scripts/test-editor-parity-motion.py \
-  --fixture /absolute/parity-v3 --workspace /absolute/new/motion-controls
+  --fixture /absolute/parity-v4 --workspace /absolute/new/motion-controls
 ```
 
-Version 3 retains 47 originals, 42 photos, five videos, 47 captions, and 5,588
+Version 4 retains 47 originals, 42 photos, five videos, 47 captions, and 5,588
 frames at 60 fps. Every video has an independently chosen nonzero source trim,
 with enough original frames before and after the selected range. Its visible
 frame signatures prove the exact source position, not just output timestamps.
@@ -20,8 +20,9 @@ Eighteen contained photos remain static. Twenty-three fill photos zoom linearly
 from 1 to 1.025 and one from 1 to 1.012. The focal fill region is selected first,
 then zoomed about that selected crop's center. This preserves both off-center
 focal selections without anchoring motion to the uncropped original center.
-The final visible frame samples fraction `(frames - 1) / frames`; the endpoint
-keyframe is at the exact shot duration. No replacement image is generated for
+The final visible frame reaches the full target zoom. Samples use fraction
+`frame / (frames - 1)`; the endpoint keyframe is at `(frames - 1) / 60` seconds.
+No replacement image is generated for
 the project. Reference rasters are independent FFmpeg verification artifacts.
 
 Photo originals use an aperiodic checker pattern so a wrong focal offset cannot
@@ -50,7 +51,7 @@ published while an API, matching app, or required comparison is unavailable.
 
 ```sh
 python3 scripts/test-editor-parity-runner.py \
-  --ed /absolute/development/ed --fixture /absolute/parity-v3 \
+  --ed /absolute/development/ed --fixture /absolute/parity-v4 \
   --workspace /absolute/new/visual-preflight --visual-only
 ```
 
@@ -66,10 +67,10 @@ project Python resolves through `/private/var`.
 
 ```sh
 python3 scripts/test-editor-parity-runner.py \
-  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v3 \
+  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v4 \
   --workspace /absolute/new/quick --mode quick
 python3 scripts/test-editor-parity-runner.py \
-  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v3 \
+  --ed /absolute/Edith.app/Contents/MacOS/ed --fixture /absolute/parity-v4 \
   --workspace /absolute/new/full --mode full \
   --quick-result /absolute/quick/quick-result.json \
   --runtime-env /absolute/quick/runtime-environment.json
@@ -109,7 +110,7 @@ caption, native mastering, compressed-copy, actual-open, or final-export parity.
 
 ```sh
 python3 scripts/test-editor-parity-artifacts.py
-python3 scripts/test-editor-parity-grade.py --fixture /absolute/parity-v3
+python3 scripts/test-editor-parity-grade.py --fixture /absolute/parity-v4
 python3 scripts/test-editor-parity-style.py
 ```
 
@@ -136,3 +137,33 @@ Thirteen wrong-style controls cover missing/narrow/wide outlines, missing shadow
 wrong shadow fill/stroke/offset, shifted text, alignment, anchor, line advance,
 gradient start and gradient profile. These probes gate complete acceptance in
 addition to all 47 original glyph, placement, geometry and contrast checks.
+The probes check both native frames and a six-frame encoded sample. Full
+acceptance additionally checks styled pixels on all 47 captions in the actual
+final 5,588-frame export; the small probes do not substitute for those frames.
+
+## Tagged video and background stress
+
+Version 4 explicitly converts synthetic RGB into limited-range BT.709 and sets
+frame-level transfer, primaries, matrix and range before encoding. Verification
+requires those actual `ffprobe` fields. Earlier v3 videos lost their transfer
+and primaries tags despite encoder flags, so v3 is kept immutable and excluded
+from this domain check. The runner selects `srgb` for photos and `bt709ToSRGB`
+for these tagged videos, whose independent reference interprets the graded RGB
+codes as sRGB. It checks all 30 sampled video pictures for target grading as
+well as their exact source-frame signatures. Missing domain capability fails
+discovery before project creation.
+
+An additional generated background card places a bright stripe just outside
+the centered fill crop, a dark crop edge, and high-contrast red/cyan tiles within
+the blur support. The independent positive reference crops to the canvas before
+blurring encoded sRGB. Separate off-canvas-bleed and linear-blur negatives must
+fail. The native background regions must pass both calibrated comparisons and
+absolute MAE 8 / p95 24 limits. Existing fixture originals and baselines are not
+modified. The probe writes its own diagnostic report on failure and gates both
+quick and full acceptance. Visual preflight also records the failed group and
+returns a nonzero exit status rather than reporting a complete pass.
+
+```sh
+python3 scripts/test-editor-parity-background.py \
+  --ed /absolute/development/ed --workspace /absolute/new/background-probe
+```

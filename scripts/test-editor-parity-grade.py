@@ -16,8 +16,6 @@ def main():
     manifest = json.loads((args.fixture / "parity-manifest.json").read_text())
     count = 0
     for shot in manifest["shots"]:
-        if shot["kind"] != "photo":
-            continue
         expected, negatives = target_references(fixture_path(args.fixture, shot["path"]), shot, 270, 480)
         positive = codec_control(expected, 270, 480)
         def check(actual):
@@ -34,7 +32,7 @@ def main():
                 count += 1
             else:
                 raise AssertionError("Incorrect target grade escaped independent measurement")
-    print(json.dumps({"productAcceptance": False, "targetGradePhotos": 42, "negativeControlsRejected": count}))
+    print(json.dumps({"productAcceptance": False, "targetGradePhotos": 42, "targetGradeVideos": 5, "negativeControlsRejected": count}))
 
 
 if __name__ == "__main__":

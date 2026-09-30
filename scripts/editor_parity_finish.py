@@ -4,14 +4,14 @@ import tempfile
 
 from editor_acceptance_contracts import require
 from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION, caption_style
-from editor_parity_checks import check_captions, check_mastered_audio, check_video, decoded_frames
+from editor_parity_checks import check_captions, check_mastered_audio, check_video, decoded_frames, picture_sample_frames
 from editor_parity_fixtures import checksum, fixture_path
 from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
 from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
 from editor_parity_pixels import check_caption_pixels, check_photo_pixels, codec_control
 from editor_parity_review import frame_pixels
-from editor_parity_style import check_caption_placement
+from editor_parity_style import check_caption_placement, check_styled_caption
 
 
 @contextlib.contextmanager
@@ -51,7 +51,10 @@ def caption_frame_checks(actual, background, shot, dimensions, directory):
     glyphs = check_caption_identity(actual, positive, bytes(width * height * 3), width, height, CAPTION_BOUNDS, reference)
     geometry = check_caption_pixels(actual, background, width, height, CAPTION_BOUNDS)
     placement = check_caption_placement(actual, background, shot["caption"], caption_style(shot["fontSize"]), width, height, CAPTION_BOUNDS)
-    return {"glyphs": glyphs, "geometry": geometry, "absolutePlacement": placement}
+    report = {"glyphs": glyphs, "geometry": geometry, "absolutePlacement": placement}
+    if width == 2160 and height == 3840:
+        report["styledPixels"] = check_styled_caption(actual, background, shot["caption"], caption_style(shot["fontSize"]), width, height)
+    return report
 
 
 def caption_review(edit, visual, styled, workspace, manifest, styles, dimensions):
@@ -76,6 +79,12 @@ def delivery(edit, project, visual, output, workspace, fixture, manifest, dimens
                   "--audio-codec", "aac", "--audio-bit-rate", "320000", "--audio-sample-rate", "48000",
                   "--audio-channels", "2", "--progress", "--json")
     video = check_video(output, dimensions, manifest)
+    video_samples = picture_sample_frames(manifest)
+    video_frames = decoded_frames(output, 270, 480, list(video_samples))
+    video["targetGrades"] = [{"outputFrame": frame, "sourceFrame": source_frame,
+                              "check": check_target_grade(video_frames[frame], fixture_path(fixture, shot["path"]), shot, 270, 480,
+                                                          CAPTION_EXCLUSION, source_frame)}
+                             for frame, (shot, source_frame) in video_samples.items()]
     audio = check_mastered_audio(output, fixture_path(fixture, manifest["music"]["path"]), manifest, reference, codec, exact_samples=False)
     selected = photo_sample_frames(manifest)
     frames = decoded_frames(output, 270, 480, list(selected))

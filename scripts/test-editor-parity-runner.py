@@ -8,6 +8,7 @@ import uuid
 
 from editor_acceptance_contracts import require
 from editor_parity_adapters import aac_passthrough, caption_operations, lifecycle, master_project
+from editor_parity_background import background_probe
 from editor_parity_checks import check_captions, check_project, protected_snapshot, verify_artifacts
 from editor_parity_cli import REQUIRED_GROUPS, base_operations, discover, exercise_transactions, invoke, publish_result
 from editor_parity_finish import caption_review, delivery
@@ -62,6 +63,8 @@ def main():
     schemas = discover(ed, workspace, required, environment)
     effects = schemas["visualEffects"]["properties"]["visualEffects"]["properties"]["effects"]["properties"]
     require("ffmpeg709" in effects["gradingMode"]["enum"], "grading_mode_required: integrated FFmpeg-compatible grading is unavailable")
+    require({"srgb", "bt709ToSRGB"} <= set(effects.get("gradingDomain", {}).get("enum", [])),
+            "grading_domain_required: tagged video references require the explicit bt709ToSRGB domain")
     captions, styles = ([], {}) if args.visual_only else caption_operations(manifest, schemas)
     if not args.visual_only:
         health = edit("audio", "health", "--json")
@@ -73,6 +76,7 @@ def main():
     motion_plan = check_motion_plan(shown, manifest)
     pixels, motion, review = visual_review(edit, project, workspace, fixture, manifest)
     pixels["grading"] = stress_grading(edit, project, workspace, fixture, manifest, dimensions)
+    pixels["backgroundStress"] = background_probe(edit, workspace)
     groups.update(independentPixels=pixels, sourceTimingAndMotion={**motion_plan, **motion}, immediateReview=review)
     if args.visual_only:
         groups["nativeLifecycle"] = lifecycle(edit, ed, project, environment, False)
@@ -84,8 +88,11 @@ def main():
         write_json(workspace / "visual-preflight.json", result)
         print(json.dumps({"productAcceptance": False, "cliTransactions": 5, "originals": 47, "photoMotionCases": 42,
                           "nonzeroTrimVideos": 5, "gradingPhotos": 18, "headlessRegistration": True,
+                          "backgroundStressPassed": pixels["backgroundStress"]["passed"],
                           "pendingGroups": result["pendingGroups"]}, indent=2))
+        require(pixels["backgroundStress"]["passed"], "Native background fails the independent crop-before-blur encoded-sRGB reference")
         return
+    require(pixels["backgroundStress"]["passed"], "Native background fails the independent crop-before-blur encoded-sRGB reference")
     styled = workspace / "styled.openscreen"
     edit("apply", project, "--plan", "-", "--output", styled, "--json", stdin=json.dumps({"version": 1, "operations": captions}))
     groups["captions"] = caption_review(edit, project, styled, workspace, manifest, styles, dimensions)

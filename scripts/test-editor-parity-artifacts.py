@@ -9,7 +9,9 @@ from editor_parity_fixtures import checksum, command, ffmpeg
 
 class ProtectedArtifactTests(unittest.TestCase):
     def test_equivalent_pcm_rewrite_invalidates_provenance(self):
-        with tempfile.TemporaryDirectory(dir=pathlib.Path(os.environ["TMPDIR"]) / "opencode") as directory:
+        parent = pathlib.Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "opencode"
+        parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
             root = pathlib.Path(directory)
             original, rewritten = root / "master.wav", root / "rewritten.wav"
             ffmpeg("-f", "lavfi", "-i", "sine=frequency=317:sample_rate=48000:duration=0.1", "-ac", "2", "-c:a", "pcm_s24le", original)

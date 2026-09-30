@@ -32,7 +32,7 @@ Video frames and photos have colored edge
 strips, a unique flat center patch, and surrounding checkerboard detail for
 independent framing, blur, color, and source-identity checks.
 
-Version 3 fixtures have different left and right soundtrack waveforms. Each
+Version 4 fixtures have different left and right soundtrack waveforms. Each
 video frame also contains a nine-bit source-frame signature, rather than a
 repeated still. Acceptance decodes 30 picture samples across the five videos:
 start, middle, end, and adjacent frames. Correct timestamps cannot conceal a
@@ -182,10 +182,10 @@ any explicit defaults-suite override as the running development app. A missing
 matching app must remain a `matching_app_required` failure, not a mocked open
 acknowledgement or a fallback to the installed CLI.
 
-Version 3 exercises nonzero video source trims and fill-photo
+Version 4 exercises nonzero video source trims and fill-photo
 motion: 23 linear zooms from 1 to 1.025, one from 1 to 1.012, and static contained
-photos. Motion uses the shot's exact duration, so the final visible frame is
-at fraction `(frames - 1) / frames`. Focal framing must select the original
+photos. Motion uses `frame / (frames - 1)`, so the final visible frame reaches
+the full zoom with the endpoint keyframe at `(frames - 1) / 60` seconds. Focal framing must select the original
 crop before centered zoom. First, middle, last, and frozen-motion negative
 controls belong to the required `sourceTimingAndMotion` group. Older fixture
 versions cannot satisfy that group and are rejected by the current runner.
