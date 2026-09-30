@@ -151,9 +151,17 @@ import Testing
         let signal = DatabaseAdapterCancellationSignal()
         let context = Self.context(deadline: Date().addingTimeInterval(0.05), cancellation: signal)
         let task = DatabaseOperationSupport.deadlineTask(context: context)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        await task?.value
         let reason = await signal.reason()
-        task?.cancel()
         #expect(reason == .deadlineExceeded)
+    }
+
+    @Test func cancelledDeadlineTaskDoesNotCancelTheOperation() async {
+        let signal = DatabaseAdapterCancellationSignal()
+        let context = Self.context(deadline: Date().addingTimeInterval(60), cancellation: signal)
+        let task = DatabaseOperationSupport.deadlineTask(context: context)
+        task?.cancel()
+        await task?.value
+        #expect(await signal.reason() == nil)
     }
 }
