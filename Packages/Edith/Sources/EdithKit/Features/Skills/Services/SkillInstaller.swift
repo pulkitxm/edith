@@ -72,10 +72,13 @@ public struct SkillInstaller: Sendable {
                 files = try Self.packageFiles(at: directory, skill: skill)
             } catch {
                 throw SkillsError.message(
-                    "The installer did not provide a complete skill for \(agent.name): \(error.localizedDescription)")
+                    "The installer did not provide a complete skill for \(agent.name): \(error.localizedDescription)"
+                )
             }
             guard installed == nil || installed == files else {
-                throw SkillsError.message("Selected agents received different skill packages. Check the output before retrying.")
+                throw SkillsError.message(
+                    "Selected agents received different skill packages. Check the output before retrying."
+                )
             }
             installed = files
             document = try SkillDocumentStore.decode(
@@ -83,13 +86,14 @@ public struct SkillInstaller: Sendable {
         }
         guard let document else {
             throw SkillsError.message(
-                "The installer finished, but some selected agents are missing the complete skill. Check the output before retrying."
+                "The installer finished without a verified skill. Check the output before retrying."
             )
         }
         try await recordInstalled(skill, document)
     }
 
-    private static func packageFiles(at directory: URL, skill: EdithSkill) throws -> [String: Data] {
+    private static func packageFiles(at directory: URL, skill: EdithSkill) throws -> [String: Data]
+    {
         let root = directory.standardizedFileURL.resolvingSymlinksInPath()
         var files: [String: Data] = [:]
         var directories = [root]
@@ -98,14 +102,16 @@ public struct SkillInstaller: Sendable {
                 at: folder, includingPropertiesForKeys: [.isDirectoryKey])
             {
                 let resolved = file.standardizedFileURL.resolvingSymlinksInPath()
-                guard resolved.path.hasPrefix(root.path + "/"), resolved == file.standardizedFileURL
+                guard resolved.path.hasPrefix(root.path + "/"),
+                    resolved == file.standardizedFileURL
                 else {
                     throw SkillsError.message("The installed skill contains an invalid file path.")
                 }
                 if try file.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
                     directories.append(resolved)
                 } else {
-                    files[String(resolved.path.dropFirst(root.path.count + 1))] = try Data(contentsOf: resolved)
+                    files[String(resolved.path.dropFirst(root.path.count + 1))] =
+                        try Data(contentsOf: resolved)
                 }
             }
         }
@@ -116,16 +122,20 @@ public struct SkillInstaller: Sendable {
                 throw SkillsError.message("The installed skill contains invalid Markdown.")
             }
             let text = markdown as NSString
-            for match in links.matches(in: markdown, range: NSRange(location: 0, length: text.length)) {
+            let range = NSRange(location: 0, length: text.length)
+            for match in links.matches(in: markdown, range: range) {
                 let link = text.substring(with: match.range(at: 1))
                 if link.hasPrefix("#") || URL(string: link)?.scheme != nil { continue }
                 let path = link.split(separator: "#", maxSplits: 1).first.map(String.init) ?? ""
                 let target = root.appendingPathComponent(name).deletingLastPathComponent()
-                    .appendingPathComponent(path.removingPercentEncoding ?? path).standardizedFileURL
+                    .appendingPathComponent(path.removingPercentEncoding ?? path)
+                    .standardizedFileURL
                 guard target.path.hasPrefix(root.path + "/"),
                     files[String(target.path.dropFirst(root.path.count + 1))] != nil
                 else {
-                    throw SkillsError.message("The installed skill is missing a local reference: \(link). Check the output before retrying.")
+                    throw SkillsError.message(
+                        "The installed skill is missing a local reference: \(link). Check the output before retrying."
+                    )
                 }
             }
         }
