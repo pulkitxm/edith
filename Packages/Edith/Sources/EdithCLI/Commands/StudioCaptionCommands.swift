@@ -55,6 +55,14 @@ struct StudioCaptionTiming: ParsableArguments {
 }
 
 enum StudioCaptionBridge {
+    static func style(_ path: String?) throws -> VideoCaptionStyle? {
+        guard let path else { return nil }
+        let url = StudioEditBridge.url(path)
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        return try VideoCaptionStyle.decode(handle.read(upToCount: 65537) ?? Data())
+    }
+
     static func printReport(_ report: VideoEditorService.CaptionReport) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -81,6 +89,8 @@ struct StudioCaptionAdd: AsyncParsableCommand {
         commandName: "add", abstract: "Add an output-anchored caption and return its stable ID.")
     @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Caption content, 1 to 10000 UTF-8 bytes.") var text: String
+    @Option(help: "Strict caption-style JSON file in reference-canvas pixels; see edit schema.")
+    var style: String?
     @OptionGroup var timing: StudioCaptionTiming
     @OptionGroup var options: StudioCaptionOptions
 
@@ -96,7 +106,8 @@ struct StudioCaptionAdd: AsyncParsableCommand {
             }
             let report = try await VideoEditorService.changeCaption(
                 .add(
-                    content: text, start: start, end: end, rate: timing.rate(defaultProject: true)!),
+                    content: text, start: start, end: end, rate: timing.rate(defaultProject: true)!,
+                    style: StudioCaptionBridge.style(style)),
                 in: StudioEditBridge.url(project), dryRun: options.dryRun)
             try StudioCaptionBridge.printReport(report)
         }
@@ -105,10 +116,13 @@ struct StudioCaptionAdd: AsyncParsableCommand {
 
 struct StudioCaptionUpdate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "update", abstract: "Update caption text or output boundaries by stable ID.")
+        commandName: "update",
+        abstract: "Update caption text, style or output boundaries by stable ID.")
     @Argument(help: "Local .openscreen project.") var project: String
     @Argument(help: "Existing caption ID.") var id: String
     @Option(help: "Replacement caption content.") var text: String?
+    @Option(help: "Replace the saved caption style using a strict JSON file; timing is preserved.")
+    var style: String?
     @OptionGroup var timing: StudioCaptionTiming
     @OptionGroup var options: StudioCaptionOptions
 
@@ -119,7 +133,7 @@ struct StudioCaptionUpdate: AsyncParsableCommand {
                     id: id, content: text,
                     start: timing.boundary(frame: timing.startFrame, marker: timing.startMarker),
                     end: timing.boundary(frame: timing.endFrame, marker: timing.endMarker),
-                    rate: timing.rate()),
+                    rate: timing.rate(), style: StudioCaptionBridge.style(style)),
                 in: StudioEditBridge.url(project), dryRun: options.dryRun)
             try StudioCaptionBridge.printReport(report)
         }
