@@ -102,6 +102,22 @@ def calibrated_comparison(actual, expected, positive, negatives, indices):
             "computedTolerance": threshold, "toleranceRule": "midpoint between independent codec error and closest invalid control"}
 
 
+def color_patch_offsets(width, height, source_dimensions, crop, exclusion):
+    crop = crop or {"x": 0, "y": 0, "width": 1, "height": 1}
+    foreground_height = width * source_dimensions[1] * crop["height"] / (source_dimensions[0] * crop["width"])
+    top = (height - foreground_height) / (2 * height)
+    patches = [(0.35, 0.475, 0.3, 0.05), (0.25, 0.025, 0.5, 0.025), (0.25, 0.95, 0.5, 0.025),
+               (0.015, 0.2, 0.03, 0.6), (0.955, 0.2, 0.03, 0.6)]
+    indices = []
+    for x, y, w, h in patches:
+        if crop["x"] <= x and x + w <= crop["x"] + crop["width"] and crop["y"] <= y and y + h <= crop["y"] + crop["height"]:
+            rectangle = ((x - crop["x"]) / crop["width"], top + (y - crop["y"]) * foreground_height / (crop["height"] * height),
+                         w / crop["width"], h * foreground_height / (crop["height"] * height))
+            indices.extend(offsets(width, height, rectangle, [exclusion]))
+    require(indices, "No independent flat color patches remain visible")
+    return sorted(set(indices))
+
+
 def check_photo_pixels(actual, source, source_dimensions, width, height, blur, caption_bounds, color, source_crop=None):
     options = {"blur": blur, "source_crop": source_crop, **color}
     expected = reference_pixels(source, width, height, **options)
@@ -124,8 +140,8 @@ def check_photo_pixels(actual, source, source_dimensions, width, height, blur, c
     }
     if color != {"brightness": 0, "contrast": 1, "saturation": 1}:
         identity = reference_pixels(source, width, height, blur=blur, source_crop=source_crop)
-        center = offsets(width, height, (0.35, 0.475, 0.3, 0.05), [caption_bounds])
-        result["ffmpegEQ"] = calibrated_comparison(actual, expected, positive, {"missingColorEffect": identity}, center)
+        patches = color_patch_offsets(width, height, source_dimensions, source_crop, caption_bounds)
+        result["ffmpegEQ"] = calibrated_comparison(actual, expected, positive, {"missingColorEffect": identity}, patches)
     return result
 
 

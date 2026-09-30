@@ -44,6 +44,11 @@ def main():
     bad = reference_pixels(source, width, height, framing="fill", source_crop=crop, **color)
     rejects(lambda: check_photo_pixels(bad, source, (shot["width"], shot["height"]), width, height, blur, bounds, color, crop),
             "Native pixels differ")
+    full_source = fixture_path(fixture, manifest["shots"][8]["path"])
+    full_reference = reference_pixels(full_source, width, height, blur=blur, **color)
+    flat_patches = check_photo_pixels(codec_control(full_reference, width, height), full_source, (960, 540), width, height, blur, bounds, color)
+    ungraded = reference_pixels(full_source, width, height, blur=blur)
+    rejects(lambda: check_photo_pixels(ungraded, full_source, (960, 540), width, height, blur, bounds, color), "Native pixels differ")
     fill_shot = next(shot for shot in manifest["shots"] if shot["focalX"] != 0.5)
     fill_source = fixture_path(fixture, fill_shot["path"])
     fill_reference = reference_pixels(fill_source, width, height, framing="fill", focal_x=fill_shot["focalX"], focal_y=fill_shot["focalY"], **color)
@@ -109,7 +114,8 @@ def main():
     require(protected_snapshot(fixture, manifest) == before, "Independent controls changed protected fixture assets")
     result = {"independentCheckerControls": True, "productAcceptance": False, "containedPhoto": photo, "focalFill": fill,
               "captionGeometry": caption_result, "pictureSignatures": picture_result,
-              "masteredAudio": audio, "encodedMasteredAudio": codec_audio, "aacPackets": packets, "negativeControlsRejected": 11,
+              "flatColorPatches": flat_patches, "masteredAudio": audio, "encodedMasteredAudio": codec_audio,
+              "aacPackets": packets, "negativeControlsRejected": 12,
               "sourceAndBaselineChecksumsUnchanged": True}
     write_json(workspace / "checker-controls.json", result)
     print(json.dumps(result, indent=2, sort_keys=True))

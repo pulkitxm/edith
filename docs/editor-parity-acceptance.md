@@ -106,6 +106,9 @@ caption bounds and contrast. Pixel tolerances are computed from an independent
 H.264 positive control and incorrect render controls. The threshold is their
 error midpoint, and controls must be separated by at least a factor of three.
 Reports retain both measured control errors and the computed threshold.
+Grade checks sample the visible center and flat red, green, blue, and yellow
+edge patches, excluding patches removed by a foreground crop. A single nearly
+unchanged center color cannot establish grading equivalence.
 PNG review frames with embedded ICC profiles are converted to the common sRGB
 comparison space with the installed ColorSync utility before downsampling.
 This only normalizes the actual frame's declared color encoding; it does not
