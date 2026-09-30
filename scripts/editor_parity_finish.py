@@ -3,7 +3,7 @@ import subprocess
 import tempfile
 
 from editor_acceptance_contracts import require
-from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION
+from editor_parity_adapters import CAPTION_BOUNDS, CAPTION_EXCLUSION, caption_style
 from editor_parity_checks import check_captions, check_mastered_audio, check_video, decoded_frames
 from editor_parity_fixtures import checksum, fixture_path
 from editor_parity_glyphs import check_caption_identity, glyph_control_canvas, reference_glyphs
@@ -11,6 +11,7 @@ from editor_parity_grade import check_target_grade
 from editor_parity_motion import TARGET_GRADE, check_photo_motion, photo_sample_frames
 from editor_parity_pixels import check_caption_pixels, check_photo_pixels, codec_control
 from editor_parity_review import frame_pixels
+from editor_parity_style import check_caption_placement
 
 
 @contextlib.contextmanager
@@ -49,7 +50,8 @@ def caption_frame_checks(actual, background, shot, dimensions, directory):
     positive = codec_control(control, width, height)
     glyphs = check_caption_identity(actual, positive, bytes(width * height * 3), width, height, CAPTION_BOUNDS, reference)
     geometry = check_caption_pixels(actual, background, width, height, CAPTION_BOUNDS)
-    return {"glyphs": glyphs, "geometry": geometry}
+    placement = check_caption_placement(actual, background, shot["caption"], caption_style(shot["fontSize"]), width, height, CAPTION_BOUNDS)
+    return {"glyphs": glyphs, "geometry": geometry, "absolutePlacement": placement}
 
 
 def caption_review(edit, visual, styled, workspace, manifest, styles, dimensions):

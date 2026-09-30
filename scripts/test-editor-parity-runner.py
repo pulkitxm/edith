@@ -14,6 +14,7 @@ from editor_parity_finish import caption_review, delivery
 from editor_parity_fixtures import checksum, verify, write_json
 from editor_parity_motion import check_motion_plan, visual_operations
 from editor_parity_review import stress_grading, visual_review
+from editor_parity_style_probe import styled_pixel_probe
 
 
 def main():
@@ -88,6 +89,7 @@ def main():
     styled = workspace / "styled.openscreen"
     edit("apply", project, "--plan", "-", "--output", styled, "--json", stdin=json.dumps({"version": 1, "operations": captions}))
     groups["captions"] = caption_review(edit, project, styled, workspace, manifest, styles, dimensions)
+    groups["captions"]["styledPixels"] = styled_pixel_probe(edit, workspace, schemas)
     mastered, groups["masteredAudio"], groups["editableProject"], reference, codec, artifacts = master_project(
         edit, styled, workspace, manifest, fixture, dimensions)
     artifacts.update({project: checksum(project), ed: binary, **{fixture / path: digest for path, digest in protected.items()}})

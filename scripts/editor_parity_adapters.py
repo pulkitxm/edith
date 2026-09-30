@@ -13,22 +13,24 @@ CAPTION_BOUNDS = (80 / 2160, 2700 / 3840, 2000 / 2160, 650 / 3840)
 CAPTION_EXCLUSION = (0, 2600 / 3840, 1, 1 - 2600 / 3840)
 
 
+def caption_style(size):
+    def rgba(red, green, blue, alpha=1):
+        return {"red": red, "green": green, "blue": blue, "alpha": alpha}
+    return {"canvasWidth": 2160, "canvasHeight": 3840, "fontFamily": "Arial", "fontStyle": "Bold Italic",
+                 "fontSize": size, "lineAdvance": 150, "alignment": "center", "anchor": "top", "metrics": "fontBounds",
+                 "x": 1080, "y": 2780, "width": 2000, "fill": rgba(1, 1, 1), "outline": {"width": 6, "color": rgba(0, 0, 0)},
+                 "shadow": {"x": 8, "y": 10, "blur": 0, "strokeWidth": 8, "color": rgba(0.1, 0.1, 0.1), "strokeColor": rgba(0.1, 0.3, 0.5)},
+                 "gradient": {"startY": 2600, "endY": 3200, "stops": [{"location": 0, "color": rgba(0, 0, 0, 0)},
+                                                                        {"location": 1, "color": rgba(0, 0, 0)}]}}
+
+
 def caption_operations(manifest, schemas):
     fields = schemas["outputCaption"]["properties"]["outputCaption"]["properties"]["style"]["properties"]
     require("fontBounds" in fields["metrics"]["enum"] and "strokeColor" in fields["shadow"]["properties"],
             "caption_style_schema_incomplete: fontBounds metrics and independent shadow strokeColor are required")
-
-    def rgba(red, green, blue, alpha=1):
-        return {"red": red, "green": green, "blue": blue, "alpha": alpha}
-
     operations, styles = [], {}
     for index, shot in enumerate(manifest["shots"]):
-        style = {"canvasWidth": 2160, "canvasHeight": 3840, "fontFamily": "Arial", "fontStyle": "Bold Italic",
-                 "fontSize": shot["fontSize"], "lineAdvance": 150, "alignment": "center", "anchor": "top", "metrics": "fontBounds",
-                 "x": 1080, "y": 2780, "width": 2000, "fill": rgba(1, 1, 1), "outline": {"width": 6, "color": rgba(0, 0, 0)},
-                 "shadow": {"x": 8, "y": 10, "blur": 0, "strokeWidth": 8, "color": rgba(0.1, 0.1, 0.1), "strokeColor": rgba(0.1, 0.3, 0.5)},
-                 "gradient": {"startY": 2600, "endY": 2760, "stops": [{"location": 0, "color": rgba(0, 0, 0, 0)},
-                                                                        {"location": 1, "color": rgba(0, 0, 0)}]}}
+        style = caption_style(shot["fontSize"])
         styles[shot["name"]] = style
         anchor = {edge: {"frame": shot[edge + "Frame"], "frameRate": {"numerator": 60, "denominator": 1}} for edge in ("start", "end")}
         operations.append({"outputCaption": {"id": f"synthetic-caption-{index + 1:02d}", "content": shot["caption"], "anchor": anchor, "style": style}})

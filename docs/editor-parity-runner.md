@@ -104,3 +104,35 @@ Failures leave diagnostic artifacts and never publish a full result.
 The complete adapters require integrated native verification. Passing the
 visual preflight or independent adapter controls alone does not establish
 caption, native mastering, compressed-copy, actual-open, or final-export parity.
+
+## Review regression controls
+
+```sh
+python3 scripts/test-editor-parity-artifacts.py
+python3 scripts/test-editor-parity-grade.py --fixture /absolute/parity-v3
+python3 scripts/test-editor-parity-style.py
+```
+
+Mastered provenance captures exact artifact, project, source, and report bytes.
+It is rechecked after native PCM rendering, after lifecycle calls, and immediately
+before publication. A metadata-only WAV rewrite with identical decoded PCM is a
+failure. `provenanceVerified` is set only after the last protected-artifact check.
+
+The prepared and mastered projects must preserve the literal target controls
+`0.002`, `1.02`, and `1.035`. Every photo's first visible frame also has a
+target-grade measurement in native review and final delivery. Independent flat
+channel samples must distinguish the target from both neutral and stress grades.
+Sample selection uses only independent references and codec controls. The
+measurement includes a half-code-value rounding budget and refuses insufficient
+signal. Existing geometry and glyph tolerances are unchanged.
+
+Caption identity is accompanied by absolute per-line ink boxes, with a two-pixel
+edge allowance and no fitted shift. Three full-resolution synthetic blue-card
+probes independently exercise 104-point single/two-line and 112-point styles.
+Pango/Cairo constructs paths, outlines and the independently colored shadow;
+the gradient is composited in linear sRGB over the known background. It becomes
+opaque only below the text, leaving the outline and shadow distinguishable.
+Thirteen wrong-style controls cover missing/narrow/wide outlines, missing shadow,
+wrong shadow fill/stroke/offset, shifted text, alignment, anchor, line advance,
+gradient start and gradient profile. These probes gate complete acceptance in
+addition to all 47 original glyph, placement, geometry and contrast checks.
