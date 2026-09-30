@@ -9,6 +9,14 @@ source provenance, and multi-project clip-occurrence reuse audits.
 
 ## Commands
 
+JSON deliveries keep the stderr progress stream machine-readable. Native GPU
+diagnostics are retained separately as `native-render-*.log` in the matching
+application's Logs directory. They do not replace structured command errors or
+alter delivery results.
+
+See [native editor performance](./video-editor-performance.md) for measured
+MacBook resource usage, preview limits and the opt-in benchmark.
+
 Transitions support `none`, `fade`, `flash`, `blur` and `zoom` through the public
 `transition` operation. Blur fade and zoom fade ease a native Core Image blur or
 centered magnification through black at the existing cut. Their duration uses
