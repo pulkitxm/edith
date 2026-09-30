@@ -45,3 +45,19 @@ an untrimmed original for each of the five videos.
 
 Checker-control reports are not product acceptance. No full result may be
 published while an API, matching app, or required comparison is unavailable.
+
+## Native visual preflight
+
+```sh
+python3 scripts/test-editor-parity-runner.py \
+  --ed /absolute/development/ed --fixture /absolute/parity-v3 \
+  --workspace /absolute/new/visual-preflight --visual-only
+```
+
+This scope executes five transaction checks, exact original trim and soundtrack
+timing, 126 photo review frames, 30 video signature frames, 18 graded contained
+photo references, a wrong-grading-mode negative control, and native register,
+library, and unregister commands. It records `visual-preflight.json` with
+`productAcceptance: false` and explicit pending groups. Registration paths are
+compared after filesystem resolution because macOS may report `/var` for a
+project Python resolves through `/private/var`.

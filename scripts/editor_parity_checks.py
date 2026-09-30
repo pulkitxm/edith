@@ -17,12 +17,12 @@ def protected_snapshot(directory, manifest):
         "parity-manifest.json": checksum(directory / "parity-manifest.json")}
 
 
-def check_visual_project(project, manifest, fixture, dimensions):
+def check_visual_project(project, manifest, fixture, dimensions, audio_asset_count=1):
     clips = project["timeline"]["clips"]
     assets = {asset["id"]: asset for asset in project["assets"]}
     require(len(clips) == len({clip["id"] for clip in clips}) == len({clip["assetId"] for clip in clips}) == 47,
             "Project must retain 47 distinct editable clips and original asset identities")
-    require(len(assets) == 48, "Project must contain exactly 47 visual originals and one soundtrack, with no baked replacements")
+    require(len(assets) == 47 + audio_asset_count, "Project contains unexpected assets or baked visual replacements")
     for clip, shot in zip(clips, manifest["shots"]):
         actual = pathlib.Path(assets[clip["assetId"]]["originalPath"]).resolve(strict=True)
         require(actual == fixture_path(fixture, shot["path"]), "Editable clip does not reference its exact original source")
@@ -35,8 +35,8 @@ def check_visual_project(project, manifest, fixture, dimensions):
     return {"editableOriginals": 47, "originalPhotos": 42, "exactShotBoundaries": True}
 
 
-def check_project(project, manifest, fixture, dimensions):
-    visual = check_visual_project(project, manifest, fixture, dimensions)
+def check_project(project, manifest, fixture, dimensions, audio_asset_count=1):
+    visual = check_visual_project(project, manifest, fixture, dimensions, audio_asset_count)
     assets = {asset["id"]: asset for asset in project["assets"]}
     tracks = project["audioTracks"]
     require(len(tracks) == 1, "Soundtrack must remain one continuous editable track")
@@ -253,8 +253,11 @@ def check_aac_passthrough(original, delivery):
     require([packet["data_hash"] for packet in source_packets] == [packet["data_hash"] for packet in target_packets],
             "AAC compressed packet payloads were changed, dropped, or duplicated")
     source_base, target_base = Fraction(source["time_base"]), Fraction(target["time_base"])
+    for field in ("start_pts", "duration_ts"):
+        require(int(source[field]) * source_base == int(target[field]) * target_base, f"AAC passthrough changed stream {field}")
     for left, right in zip(source_packets, target_packets):
         for field in ("pts", "dts", "duration"):
             require(int(left[field]) * source_base == int(right[field]) * target_base, f"AAC passthrough changed {field}")
+        require(left.get("side_data_list", []) == right.get("side_data_list", []), "AAC passthrough changed encoder delay or discard padding")
     return {"packets": len(source_packets), "compressedPayloadsIdentical": True, "packetTimingIdentical": True,
             "codecConfigurationIdentical": True}
