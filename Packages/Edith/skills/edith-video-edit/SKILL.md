@@ -16,6 +16,7 @@ Start with:
 ```sh
 ed studio edit --help
 ed studio edit schema
+ed studio edit schema --operation visualEffects
 ```
 
 Use the CLI executable for the intended Edith installation. For a development
@@ -24,6 +25,7 @@ Read command-specific `--help` for every command whose options you need. Treat
 the installed schema and help as authoritative: operation names, field types,
 time units, enum values and delivery settings can differ between installations.
 Do not invent flags or send fields merely because the native editor has a feature.
+Use `schema --operation NAME` for the exact schema of one operations-array entry.
 
 When using an existing Edith MCP connection, discover its registered tools first.
 Edit tools are generated under `edith_studio_edit_<route>`; use the exact advertised
@@ -34,13 +36,17 @@ arguments and options as the CLI subcommand, without the `ed studio edit` prefix
 The transport enables JSON output. Inspect the MCP `isError` result and payload:
 runtime failures include JSON `error.code` and `error.message`; parser or transport
 failures can differ. Discover supported arguments instead of inventing flags.
+For MCP apply calls, pass a saved plan file in `arguments`; CLI stdin is not an
+MCP plan transport.
 
 ## 2. Establish the edit and its media
 
 Extract the requested aspect ratio, duration, pace, audio intent and deliverables.
 Use supplied constraints; ask only about decisions that would materially change
-the result. Inspect existing projects with `show`, and discover `list` or `clone`
-through help when finding projects or creating an alternate cut.
+the result. Inspect existing projects with `show --summary --json` for their
+identity, persisted IDs, settings and SHA-256 revision. Use full `show --json` for
+effect/style details. Discover `list` or `clone` through help when finding projects
+or creating an alternate cut.
 
 Make a requirement ledger before editing: requested outcome, public operation,
 persisted-state check, rendered check and status. Include batch counts, editable
@@ -68,6 +74,8 @@ Read [native plans and time](references/native-plans-and-time.md)
 for source versus output time, frame arithmetic, aliases and atomic changes.
 Read [audio and beats](references/audio-and-beats.md)
 when the edit includes music, voiceover, detached audio or rhythm-driven cuts.
+Read [photo backgrounds and effects](references/photo-backgrounds-and-effects.md)
+for independent foreground/background geometry and replacing per-clip settings.
 
 Use the schema's public plan format. Never handwrite internal `.openscreen` JSON.
 Batch related operations in a single plan in dependency order, with stable
@@ -81,14 +89,15 @@ requested. A flattened replacement movie is not equivalent to a native edit.
 
 ## 4. Dry-run, then apply
 
-Create the destination directory first. This baseline sequence uses commands
-whose details must be confirmed against the installed help:
+Create the destination directory first. For a new project and a saved public plan,
+capture the revision and use it for both dry-run and apply. This example uses `jq`:
 
 ```sh
 ed studio edit create cut.openscreen --title "Synthetic cut" --json
-ed studio edit apply cut.openscreen --plan edit.json --dry-run --json
-ed studio edit apply cut.openscreen --plan edit.json --overwrite --json
-ed studio edit show cut.openscreen --json
+revision=$(ed studio edit show cut.openscreen --summary --json | jq -er .revision)
+ed studio edit apply cut.openscreen --plan edit.json --expect-revision "$revision" --dry-run --json
+ed studio edit apply cut.openscreen --plan edit.json --expect-revision "$revision" --overwrite --json
+ed studio edit show cut.openscreen --summary --json
 ed studio edit validate cut.openscreen --json
 ```
 
@@ -97,6 +106,9 @@ clone or separate output destination and preserve the original edit. A dry-run
 must pass before writing. Apply once as an atomic transaction. On a stale-project
 or busy error, reread the project and reconcile the plan before retrying. Do not
 automatically replay imports after a lost response: inspect whether they landed.
+Keep the apply result's saved `revision` for the next guarded edit. On an operation
+failure, inspect zero-based `error.operationIndex` and `error.cause` before revising
+the whole plan. Read the plan blueprint for stdin and explicit media-base examples.
 
 ## 5. Verify and hand off
 

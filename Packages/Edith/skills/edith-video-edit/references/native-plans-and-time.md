@@ -3,14 +3,28 @@
 ## Work in the public edit interface
 
 Save a small public plan beside its inputs. Run `ed studio edit schema` before
-writing it and check operation-specific fields instead of copying internal
-project serialization. Apply plans in dependency order: import, establish source
-ranges, arrange shots, then place dependent regions and adjust presentation.
+writing it, then use `schema --operation NAME` for the operation-specific entry
+instead of copying internal project serialization. For example:
+
+```sh
+ed studio edit schema --operation visualEffects
+ed studio edit show cut.openscreen --summary --json
+```
+
+The summary includes `projectID`, `path`, `title`, `revision`, `settings`,
+`clipIDs`, `audioIDs`, `captionIDs` and `assetCount`. Its `revision` is the saved
+project bytes' SHA-256. Use full `show` when planning changes to details the summary
+omits. Apply plans in dependency order: import, establish source ranges, arrange
+shots, then place dependent regions and adjust presentation.
 Batch a coherent change so validation can reject the whole edit without leaving
 half an arrangement behind.
 
-A plan looks like this when `synthetic.mov` contains
-at least two seconds of native-decodable video:
+Plans have at most 1000 operations and 4 MiB of JSON. A batch within those limits
+can use one transaction; larger batches need coherent checkpoints and fresh IDs
+and revisions between them.
+
+A plan looks like this when `synthetic.mov` contains at least two seconds of
+native-decodable video:
 
 ```json
 {
@@ -22,11 +36,27 @@ at least two seconds of native-decodable video:
 }
 ```
 
-Relative media paths resolve beside the plan, not beside the project or shell
-working directory. Quote shell paths. Persisted projects reference source files;
-keep those files available after the planning session ends. Plan-local aliases
+For file plans, relative media paths default to the plan's directory. For stdin
+plans (`--plan -`), they default to the shell working directory. Use
+`--media-directory BASE` to explicitly set the media base for either input form;
+it must be an existing local directory. Quote shell paths. Persisted projects
+reference source files; keep them available after the planning session ends. Plan-local aliases
 are convenient inside one apply. Read returned aliases and `show` after the real
 apply before creating a follow-up plan.
+
+For example, keep the plan at `plans/edit.json` and its original media under
+`synthetic-media`. With `jq` available, use stdin with the same explicit base and
+expected revision for both runs:
+
+```sh
+revision=$(ed studio edit show cut.openscreen --summary --json | jq -er .revision)
+ed studio edit apply cut.openscreen --plan - --media-directory synthetic-media --expect-revision "$revision" --dry-run --json < plans/edit.json
+ed studio edit apply cut.openscreen --plan - --media-directory synthetic-media --expect-revision "$revision" --overwrite --json < plans/edit.json
+```
+
+Proceed to the write only if the dry-run succeeded. Preserve the plan file for
+repeatability even when using stdin. MCP callers pass that file with `--plan`
+through the tool's `arguments` array; do not use `--plan -` for MCP.
 
 ## Keep the clocks separate
 
@@ -76,6 +106,21 @@ A dry-run validates and probes in memory; it does not reserve IDs or write the
 project. Use its diagnostics to revise the entire plan, then apply that plan
 once. An in-place apply needs explicit overwrite permission. A separate output
 preserves the source project. Never use an original media path as an output.
+
+Pass `--expect-revision SHA` from the project snapshot used to construct the plan.
+A mismatch returns `project_changed` before any operations run, including during
+`--dry-run` or a fork using `--output`. Apply results include `sourceRevision` and
+the resulting `revision`. During dry-run both identify the unchanged source, not
+a future saved revision. After a real apply, retain the saved revision and actual
+IDs for the next transaction. A dry-run succeeding does not lock the project until
+the write; keep the guard on both calls.
+
+With `--json`, successful result JSON goes to stdout and runtime error JSON goes
+to stderr. A failed operation includes zero-based `error.operationIndex` and
+`error.cause`, the underlying error code, alongside `error.code` and
+`error.message`. Index 1 identifies the second operation. Schema errors instead
+identify unknown/missing fields with their JSON path. Neither failure commits
+earlier operations. Correct the plan as a unit, not by replaying only its tail.
 
 If the project changed during validation, load the new revision and compare its
 IDs and ordering with the planned input. Resolve the conflict before another

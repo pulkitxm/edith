@@ -21,7 +21,8 @@ ed studio edit render --help
 
 Use the executable for the intended installation, including the worktree's own
 CLI when testing a development build. Read `show` and `validate` help, inspect
-the selected project, and validate source availability before rendering. If
+the selected project's `show --summary --json` for IDs, settings and revision,
+then use full `show` for style/effect details. Validate sources before rendering. If
 locating an existing edit or making a variant, discover `list` and `clone` first.
 Do not recreate a native project by writing its internal JSON.
 
@@ -55,9 +56,10 @@ status. Include reference-image matching, measured loudness, approved audio sour
 editable captions/effects and project registration when requested. Read the audio
 and passthrough guidance in the delivery blueprint before choosing those modes.
 
-If native settings must change, build a public plan, dry-run it, then apply it
-atomically to the intended version. Preserve the original cut when making a
-separate variant. The `edith-video-edit` skill covers authoring those plans.
+If native settings must change, build a public plan and use `--expect-revision`
+with the inspected revision on both dry-run and atomic apply. Preserve the original
+cut when making a separate variant. The `edith-video-edit` skill covers authoring
+those plans.
 
 ## 3. Render and sample
 
