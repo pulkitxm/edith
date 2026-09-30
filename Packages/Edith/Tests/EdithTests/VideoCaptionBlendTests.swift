@@ -8,6 +8,28 @@ import Testing
     private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appendingPathComponent("../../../../scripts/fixtures/caption-reference")
 
+    @Test func encodedBlackGradientHasExactCodeValuePlateaus() throws {
+        let bounds = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let foreground = CIImage(
+            color: CIColor(red: 0, green: 0, blue: 0, alpha: 100.0 / 255, colorSpace: space)!
+        ).cropped(to: bounds)
+        for (source, expected) in [
+            ([255, 255, 255], [155, 155, 155]), ([128, 128, 128], [78, 78, 78]),
+            ([51, 153, 204], [31, 93, 124]),
+        ] {
+            let background = CIImage(
+                color: CIColor(
+                    red: Double(source[0]) / 255, green: Double(source[1]) / 255,
+                    blue: Double(source[2]) / 255, colorSpace: space)!
+            ).cropped(to: bounds)
+            let actual = VideoCaptionStyleTests.pixels(
+                VideoStyledCaptionImage.composite(foreground, over: background))
+            #expect(Array(actual.prefix(3)).map(Int.init) == expected)
+            #expect(actual[3] == 255)
+        }
+    }
+
     @Test func encodedSourceOverMatchesPillowAtEveryAlpha() throws {
         let foreground = try image("blend-foreground")
         let background = try image("blend-background")
