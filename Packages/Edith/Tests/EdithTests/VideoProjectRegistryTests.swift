@@ -67,4 +67,39 @@ import Testing
         #expect(throws: (any Error).self) { try registry.register(invalid) }
         #expect(try registry.records().isEmpty)
     }
+
+    @Test(arguments: [false, true])
+    func unregisterUsesStoredPathWhenReplacedBySymlink(targetRegistered: Bool) throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = VideoProjectRegistry(libraryURL: root.appendingPathComponent("library"))
+        let source = root.appendingPathComponent("first.openscreen")
+        let target = root.appendingPathComponent("second.openscreen")
+        let original = root.appendingPathComponent("original.openscreen")
+        _ = try VideoEditorService.create(at: source, title: "Original synthetic project")
+        _ = try VideoEditorService.create(at: target, title: "Target synthetic project")
+        let sourceBytes = try Data(contentsOf: source)
+        let targetBytes = try Data(contentsOf: target)
+        let registered = try registry.register(source)
+        if targetRegistered { _ = try registry.register(target) }
+        try FileManager.default.moveItem(at: source, to: original)
+        try FileManager.default.createSymbolicLink(at: source, withDestinationURL: target)
+        #expect(
+            try registry.library().contains {
+                $0.projectID == registered.projectID && $0.errorCode == "project_identity_changed"
+            })
+        let removed = try registry.unregister(source)
+        #expect(removed.projectID == registered.projectID)
+        #expect(removed.path == registered.path)
+        #expect(!removed.registered)
+        #expect(try registry.records().count == (targetRegistered ? 1 : 0))
+        #expect(try Data(contentsOf: source) == targetBytes)
+        #expect(try Data(contentsOf: target) == targetBytes)
+        #expect(try Data(contentsOf: original) == sourceBytes)
+        let targetEntry = try registry.register(target)
+        try registry.checkIdentity(VideoEditorService.open(target), at: target)
+        #expect(try registry.library().first?.projectID == targetEntry.projectID)
+        #expect(try registry.library().first?.errorCode == nil)
+    }
 }

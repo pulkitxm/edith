@@ -100,15 +100,31 @@ struct VideoProjectRegistry {
     }
 
     func records() throws -> [VideoEditorService.LibraryEntry] {
+        try storedRecords().map(\.entry)
+    }
+
+    private func storedRecords() throws -> [(url: URL, entry: VideoEditorService.LibraryEntry)] {
         guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
         return try FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )
         .filter { $0.pathExtension == "json" }
         .map {
-            try JSONDecoder().decode(
-                VideoEditorService.LibraryEntry.self, from: Data(contentsOf: $0))
+            (
+                url: $0,
+                entry: try JSONDecoder().decode(
+                    VideoEditorService.LibraryEntry.self, from: Data(contentsOf: $0))
+            )
         }
+    }
+
+    private func storedPath(_ url: URL) -> String {
+        let parent = Self.canonical(url.deletingLastPathComponent())
+        let path = parent.appendingPathComponent(url.lastPathComponent).path
+            .precomposedStringWithCanonicalMapping
+        let sensitive = try? parent.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+            .volumeSupportsCaseSensitiveNames
+        return sensitive == false ? path.lowercased() : path
     }
 
     func checkIdentity(_ project: VideoProject, at url: URL) throws {
@@ -149,16 +165,23 @@ struct VideoProjectRegistry {
     }
 
     func unregister(_ source: URL) throws -> VideoEditorService.LibraryEntry {
-        let url = Self.canonical(source)
         return try VideoProjectFileAccess.publication(directory) {
-            let record = recordURL(url)
-            guard FileManager.default.fileExists(atPath: record.path) else {
+            let records = try storedRecords()
+            let direct = storedPath(source.standardizedFileURL)
+            let canonical = storedPath(Self.canonical(source))
+            guard
+                let record = records.first(where: {
+                    storedPath(URL(fileURLWithPath: $0.entry.path)) == direct
+                })
+                    ?? records.first(where: {
+                        storedPath(URL(fileURLWithPath: $0.entry.path)) == canonical
+                    })
+            else {
                 throw VideoEditorService.Failure(
                     "not_registered", "No registered reference exists for this path.")
             }
-            let entry = try JSONDecoder().decode(
-                VideoEditorService.LibraryEntry.self, from: Data(contentsOf: record))
-            try FileManager.default.removeItem(at: record)
+            let entry = record.entry
+            try FileManager.default.removeItem(at: record.url)
             return .init(
                 path: entry.path, projectID: entry.projectID, title: entry.title, registered: false)
         }
@@ -183,7 +206,8 @@ struct VideoProjectRegistry {
         }
         return entries.map { entry in
             do {
-                let project = try VideoEditorService.open(URL(fileURLWithPath: entry.path))
+                let project = try VideoEditorService.open(
+                    Self.canonical(URL(fileURLWithPath: entry.path)))
                 if entry.registered, project.id != entry.projectID {
                     throw VideoEditorService.Failure(
                         "project_identity_changed",
