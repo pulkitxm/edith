@@ -123,6 +123,7 @@ struct VideoVisualInspector: View {
             ) {
                 Text("Fit").tag(VideoVisualEffects.Framing.fit)
                 Text("Fill").tag(VideoVisualEffects.Framing.fill)
+                Text("Full width").tag(VideoVisualEffects.Framing.fullWidth)
             }
             value("Focal X", \.focalX)
             value("Focal Y", \.focalY)
@@ -130,6 +131,9 @@ struct VideoVisualInspector: View {
             value("Brightness", \.brightness)
             value("Contrast", \.contrast)
             value("Saturation", \.saturation)
+            VideoBackgroundInspector(
+                background: effects.background,
+                update: { background in update { $0.background = background } })
             Divider()
             Text("Transform keyframes").font(.headline)
             Text(
