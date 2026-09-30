@@ -39,13 +39,19 @@ quality and editability tradeoffs, rather than silently substituted.
 
 ## Preserve the agreed grading domain
 
-Inspect persisted `visualEffects.gradingMode` when matching an approved reference.
-Omission means `native` Core Image source-layer grading. Explicit `ffmpeg709`
-grades the composited foreground, background and backdrop through sRGB-encoded
-RGB8 and limited-range BT.709 YUV444 EQ before captions/overlays. Its RGB transfer
-is sRGB, not Rec.709; choosing a Rec.709 export tag does not select this edit mode.
-Use it for a compatible reference pipeline, carrying the mode forward when a
-public operation replaces the complete effects settings.
+Inspect persisted `visualEffects.gradingMode` and `gradingDomain` when matching an
+approved reference. Defaults are `native` Core Image source-layer grading and
+`srgb`. Explicit `ffmpeg709` grades the composited image through RGB8 and
+limited-range BT.709 YUV444 EQ before captions/overlays. Its domain is `srgb` for
+sRGB input/output codes, `bt709` for BT.709 video codes retaining that interpretation,
+or `bt709ToSRGB` for BT.709 codes deliberately interpreted as sRGB after EQ. The
+two video domains require `ffmpeg709`.
+
+Probe actual source and reference primaries, transfer, matrix and range with
+`ffprobe`, and record the reference's intended output interpretation. Codec names,
+extensions and a BT.709 matrix do not select the transfer function. A Rec.709
+delivery tag does not select the grade's domain. Carry mode, domain and all intended
+background, framing and animation settings forward in full effects replacements.
 
 Measure representative decoded final frames against the approved reference under
 matched geometry and color handling. Neutral `ffmpeg709` still performs a quantized
@@ -53,6 +59,8 @@ RGB/YUV round trip. Separate that baseline from grade differences, ICC conversio
 chroma subsampling and codec error. A precise color-chart match is not evidence of
 whole-export or byte-for-byte canonical parity. Confirm actual foreground,
 background and ungraded caption samples before reporting visual acceptance.
+Keep approved source ranges unchanged when diagnosing motion-frame differences;
+a different sampling policy is not corrected by silently shifting a requested trim.
 
 ## Measure audio before choosing a correction
 

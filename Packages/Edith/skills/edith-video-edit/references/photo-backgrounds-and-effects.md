@@ -60,7 +60,7 @@ their placed rectangle. Inspect the native-resolution output as well as previews
 
 `visualEffects` replaces the complete settings object; it is not a partial patch.
 Its effect fields are optional, but omitted values reset to defaults: fit framing,
-centered focal point, native grading mode, zero exposure/brightness,
+centered focal point, native grading mode, srgb grading domain, zero exposure/brightness,
 contrast/saturation 1, no keyframes and no clip background. An empty `background`
 object enables the defaults above.
 Omitting `background` disables it. Null and unknown fields are rejected.
@@ -76,10 +76,32 @@ omitted transform fields are identity values and interpolation defaults to linea
 color controls to individual source layers in extended linear sRGB. Copying FFmpeg
 `eq` numbers into native mode does not select FFmpeg's processing domain.
 
-Select `ffmpeg709` explicitly only when the approved reference uses the compatible
-sRGB-encoded RGB8, limited-range BT.709 YUV444 EQ pipeline with gamma 1. The
-implemented reference is FFmpeg 9.0.2. The values below are example parameters,
-not a named preset or a universal matching grade.
+Select `ffmpeg709` explicitly for a compatible limited-range BT.709 YUV444 EQ
+reference with gamma 1. Its per-clip `gradingDomain` selects the RGB code values
+fed to EQ and the interpretation of its result:
+
+| Domain | EQ input codes | Interpretation after EQ |
+| --- | --- | --- |
+| `srgb` | sRGB | sRGB; default for the existing photo behavior |
+| `bt709` | Core Video BT.709 | Core Video BT.709 |
+| `bt709ToSRGB` | Core Video BT.709 | sRGB, for an approved mixed code-value reference |
+
+The two video domains require `gradingMode: "ffmpeg709"`. Inspect both source
+metadata and the reference's color pipeline; a filename, codec or BT.709 matrix
+alone does not identify its transfer function. For video inputs and references:
+
+```sh
+ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt,color_range,color_space,color_transfer,color_primaries -of json synthetic-video.mov
+```
+
+Use `bt709` when the reference preserves BT.709 video interpretation after EQ,
+and `bt709ToSRGB` only when it deliberately interprets graded BT.709 codes as sRGB.
+A video tagged with sRGB transfer can still use `srgb`. Record the interpretation
+explicitly for raw or untagged reference pixels instead of guessing. Output color
+tags are separate from this per-clip choice.
+
+The implemented EQ reference is FFmpeg 9.0.2. This photo example explicitly retains
+the `srgb` domain. Its values are parameters, not a universal matching preset.
 Replace `photo` with a persisted clip ID or use it after that alias's import in
 the same plan:
 
@@ -92,6 +114,7 @@ the same plan:
         "clipID": "photo",
         "effects": {
           "gradingMode": "ffmpeg709",
+          "gradingDomain": "srgb",
           "framing": "fullWidth",
           "background": {"blurRadius": 65},
           "brightness": 0.002,
@@ -106,19 +129,22 @@ the same plan:
 
 Brightness accepts -1 through 1 and contrast 0 through 4. Saturation accepts
 0 through 3 in `ffmpeg709`, versus 0 through 4 in `native`. Invalid modes and
-out-of-range values reject the transaction. Preserve `gradingMode` along with
-other intended settings in subsequent replacements; omitting it resets to native.
+out-of-range values reject the transaction. Preserve `gradingMode`, `gradingDomain`,
+background, framing and keyframes in subsequent replacements. Omitted mode/domain
+reset to `native`/`srgb`. Keep the existing independent foreground/background crops;
+do not replace their geometry while making a color-only correction.
 
 In `ffmpeg709`, exposure applies to sources in linear light first. Foreground,
 independently cropped/blurred background and project backdrop are composited before
-conversion to encoded sRGB, gamut clipping and RGB8 quantization. The combined
+conversion into the selected domain, gamut clipping and RGB8 quantization. The combined
 raster then receives limited-range 8-bit BT.709 YUV444 EQ and returns to linear
 working color. Captions, gradients and other overlays are composited afterward
 and remain ungraded. Do not compare this with a reference that grades each layer
 separately before blur/compositing.
 
-The mode name specifies a YUV matrix and range, not the Rec.709 transfer curve;
-the RGB transfer is sRGB. Even neutral EQ performs the quantized RGB/YUV round trip
+The mode name specifies a YUV matrix and range; `gradingDomain` controls the RGB
+interpretation. The default domain uses sRGB, while the video domains recover
+BT.709 codes using Core Video's interpretation. Even neutral EQ performs the quantized RGB/YUV round trip
 and is not a bypass. Small parameter changes can be discontinuous because of EQ
 quantization. Embedded ICC normalization and gamut clipping also matter, especially
 for P3 originals. A different ICC conversion engine can produce different inputs.
@@ -131,6 +157,8 @@ color-managed input raster for an independent EQ comparison and establish a neut
 round-trip baseline before judging the grade. Include foreground, blur edges and
 ungraded caption samples. Record maximum and mean differences with the agreed
 tolerance, keeping native-frame and encoded-movie measurements distinct.
+For blur differences, inspect processing domain, crop order and edge handling;
+do not assume an adjusted radius is equivalent to the requested effect.
 
 Color-chart or kernel precision does not prove a whole canonical export matches.
 Other FFmpeg versions, pixel formats, scaler settings, ICC engines, chroma
