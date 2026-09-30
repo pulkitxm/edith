@@ -23,7 +23,8 @@ import Testing
     ]
 
     @Test(.enabled(if: VideoGradingTests.ffmpeg != nil), arguments: [false, true], [false, true])
-    func taggedVideoMatchesEncodedAndColorManagedReferences(_ full: Bool, _ hevc: Bool) async throws {
+    func taggedVideoMatchesEncodedAndColorManagedReferences(_ full: Bool, _ hevc: Bool) async throws
+    {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = try await fixture(directory, full: full, hevc: hevc)
