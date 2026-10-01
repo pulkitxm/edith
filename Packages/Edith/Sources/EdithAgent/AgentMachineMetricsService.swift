@@ -70,8 +70,11 @@ public final class AgentMachineMetricsService {
         return count
     }
 
-    public func snapshotData() throws -> Data {
-        try AgentPayload.encode(snapshots())
+    public func snapshotData() async throws -> Data {
+        let snapshots = snapshots()
+        return try await Task.detached(priority: .utility) {
+            try AgentPayload.encode(snapshots)
+        }.value
     }
 
     public func snapshots() -> [AgentMachineMetricsSnapshot] {

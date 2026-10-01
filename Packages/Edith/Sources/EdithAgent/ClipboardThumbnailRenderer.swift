@@ -5,6 +5,28 @@ import ImageIO
 import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
+private actor QuickLookLimiter {
+    static let shared = QuickLookLimiter()
+    private var active = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        if active < 2 {
+            active += 1
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func release() {
+        if waiting.isEmpty {
+            active = max(0, active - 1)
+        } else {
+            waiting.removeFirst().resume()
+        }
+    }
+}
+
 private final class ClipboardQuickLookRequest: @unchecked Sendable {
     let request: QLThumbnailGenerator.Request
 
@@ -22,21 +44,34 @@ public enum ClipboardThumbnailRenderer {
         try Task.checkCancellation()
         switch payload.entry.kind {
         case .image:
-            return image(payload.data)
+            let data = payload.data
+            return await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(returning: image(data))
+                }
+            }
         case .file:
             guard payload.data.count <= 16_384,
                 let text = String(data: payload.data, encoding: .utf8),
                 let url = URL(string: text), url.isFileURL
             else { return nil }
             let request = ClipboardQuickLookRequest(url)
-            return try await withTaskCancellationHandler {
-                try Task.checkCancellation()
-                let representation = try? await QLThumbnailGenerator.shared
-                    .generateBestRepresentation(for: request.request)
-                try Task.checkCancellation()
-                return representation.flatMap { png($0.cgImage) }
-            } onCancel: {
-                request.cancel()
+            await QuickLookLimiter.shared.acquire()
+            do {
+                let value = try await withTaskCancellationHandler {
+                    try Task.checkCancellation()
+                    let representation = try? await QLThumbnailGenerator.shared
+                        .generateBestRepresentation(for: request.request)
+                    try Task.checkCancellation()
+                    return representation.flatMap { png($0.cgImage) }
+                } onCancel: {
+                    request.cancel()
+                }
+                await QuickLookLimiter.shared.release()
+                return value
+            } catch {
+                await QuickLookLimiter.shared.release()
+                throw error
             }
         default: return nil
         }
