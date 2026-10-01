@@ -11,6 +11,20 @@ enum HomebrewPageMode: String, CaseIterable, Identifiable {
 }
 
 @MainActor
+enum HomebrewCancellation {
+    private static var handler: (() -> Bool)?
+
+    static func register(_ handler: @escaping () -> Bool) {
+        self.handler = handler
+    }
+
+    @discardableResult
+    static func cancel() -> Bool {
+        handler?() ?? false
+    }
+}
+
+@MainActor
 @Observable
 final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
@@ -37,6 +51,7 @@ final class HomebrewPageModel {
     ) {
         self.client = client
         self.store = store
+        HomebrewCancellation.register { [weak self] in self?.cancel() ?? false }
     }
 
     var updateCount: Int { packages.count(where: \.outdated) }
@@ -121,11 +136,13 @@ final class HomebrewPageModel {
         }
     }
 
-    func cancel() {
-        guard task != nil else { return }
+    @discardableResult
+    func cancel() -> Bool {
+        guard task != nil else { return false }
         isCancelling = true
         operationTitle = "Cancelling Homebrew"
         task?.cancel()
+        return true
     }
 
     func clearNotice() {

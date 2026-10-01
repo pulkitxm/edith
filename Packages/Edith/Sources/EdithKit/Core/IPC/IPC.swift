@@ -140,6 +140,14 @@ public enum IPC {
             "com.pulkit.edith.studioMediaLibraryChanged")
         public static let studioWorkflowsChanged = IPC.scopedName(
             "com.pulkit.edith.studioWorkflowsChanged")
+        public static let requestHomebrewCancel = IPC.scopedName(
+            "com.pulkit.edith.requestHomebrewCancel")
+        public static let homebrewCancelResult = IPC.scopedName(
+            "com.pulkit.edith.homebrewCancelResult")
+        public static let requestCompanionStop = IPC.scopedName(
+            "com.pulkit.edith.requestCompanionStop")
+        public static let companionStopResult = IPC.scopedName(
+            "com.pulkit.edith.companionStopResult")
         public static let requestStudioCancel = IPC.scopedName(
             "com.pulkit.edith.requestStudioCancel")
         public static let studioJobResult = IPC.scopedName(
@@ -166,6 +174,10 @@ public enum IPC {
             "com.pulkit.edith.requestNotchBrowserAction")
         public static let notchBrowserActionResult = IPC.scopedName(
             "com.pulkit.edith.notchBrowserActionResult")
+        public static let requestHerdrSpaceAction = IPC.scopedName(
+            "com.pulkit.edith.requestHerdrSpaceAction")
+        public static let herdrSpaceActionResult = IPC.scopedName(
+            "com.pulkit.edith.herdrSpaceActionResult")
         public static let requestHerdrLayoutAction = IPC.scopedName(
             "com.pulkit.edith.requestHerdrLayoutAction")
         public static let herdrLayoutActionResult = IPC.scopedName(

@@ -19,6 +19,7 @@ public enum CompanionChatLibraryOperation: String, CaseIterable, Sendable {
     case search
     case episode
     case index
+    case stop
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -67,6 +68,12 @@ public enum CompanionChatLibraryOperation: String, CaseIterable, Sendable {
                     surface: "Companion library", action: "index pending episodes",
                     exampleArguments: [])
             ]
+        case .stop:
+            [
+                CompanionChatLibraryPlacement(
+                    surface: "Companion chat", action: "stop generating",
+                    exampleArguments: [])
+            ]
         }
     }
 
@@ -82,6 +89,7 @@ public enum CompanionChatLibraryOperation: String, CaseIterable, Sendable {
         case .search: "companion.library.search"
         case .episode: "companion.library.episode"
         case .index: "companion.library.index"
+        case .stop: "companion.chat.stop"
         }
     }
 
@@ -97,12 +105,13 @@ public enum CompanionChatLibraryOperation: String, CaseIterable, Sendable {
         case .search: "Search indexed companion memory."
         case .episode: "Read a companion episode in full."
         case .index: "Index pending companion episodes."
+        case .stop: "Stop companion generation that is in progress."
         }
     }
 
     private var effect: UserOperationEffect {
         switch self {
-        case .chat, .index: .write
+        case .chat, .index, .stop: .write
         case .forget: .destructive
         case .conversations, .search, .episode: .read
         }

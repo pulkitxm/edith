@@ -1,0 +1,138 @@
+import ArgumentParser
+import AppKit
+import EdithKit
+import Foundation
+
+enum AttentionExtensionCLI {
+    static var repository: () -> AttentionRepository = { AttentionRepository() }
+    static var copyToken: (String) -> Void = { token in
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(token, forType: .string)
+    }
+
+    static func payload(
+        action: String, path: String? = nil, opened: Bool? = nil, token: String? = nil
+    ) -> JSONValue {
+        .object([
+            "action": .string(action),
+            "opened": opened.map { .bool($0) } ?? .null,
+            "path": .optional(path),
+            "token": .optional(token),
+        ])
+    }
+}
+
+struct AttentionExtensionCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "extension",
+        abstract: "Install, reveal, and open the attention browser extension.",
+        discussion: """
+            The same folder and browser page as the Attention setup card.
+            Reads the bundled extension. install writes the folder. Does not change history by itself.
+
+            ed attention extension install
+            """,
+        subcommands: [
+            AttentionExtensionInstallCommand.self, AttentionExtensionOpenCommand.self,
+            AttentionExtensionTokenCommand.self,
+        ],
+        defaultSubcommand: AttentionExtensionInstallCommand.self)
+}
+
+struct AttentionExtensionInstallCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "install",
+        abstract: "Install and reveal the attention browser extension.",
+        discussion: """
+            Copies the packaged extension into place and shows that folder in Finder.
+            This is the Install extension button, which reveals the folder again when it is already there.
+            Reads the bundle. Writes the installed folder. Changes which file Finder selects.
+
+            ed attention extension install
+            ed attention extension install --json
+            """, aliases: ["reveal"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let directory: URL
+            do {
+                directory = try AttentionExtensionInstaller.install()
+                AttentionExtensionInstaller.revealDirectory(directory)
+            } catch {
+                throw CLIFailure.unavailable(error.localizedDescription)
+            }
+            guard !json else {
+                CLIOut.json(
+                    AttentionExtensionCLI.payload(action: "install", path: directory.path))
+                return
+            }
+            CLIOut.out(directory.path)
+        }
+    }
+}
+
+struct AttentionExtensionOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open",
+        abstract: "Open the browser extensions page.",
+        discussion: """
+            Opens chrome://extensions, the same way Open extensions does on the setup card.
+            Reads nothing stored. Changes which page the browser shows. Does not change attention data.
+
+            ed attention extension open
+            ed attention extension open --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let opened = AttentionExtensionInstaller.openExtensionsPage()
+            guard opened else {
+                throw CLIFailure.unavailable("could not open chrome://extensions")
+            }
+            guard !json else {
+                CLIOut.json(
+                    AttentionExtensionCLI.payload(
+                        action: "open", opened: true))
+                return
+            }
+            CLIOut.out("opened chrome://extensions")
+        }
+    }
+}
+
+struct AttentionExtensionTokenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "token",
+        abstract: "Print the attention browser setup token.",
+        discussion: """
+            Prints the private token the setup card copies into the extension.
+            Reads the saved attention settings. With --copy, writes that token to the pasteboard. Does not change the token.
+
+            ed attention extension token
+            ed attention extension token --copy --json
+            """)
+
+    @Flag(name: .long, help: "Also put the token on the pasteboard.")
+    var copy = false
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let token = AttentionExtensionCLI.repository().loadSettings().serverToken
+            if copy { AttentionExtensionCLI.copyToken(token) }
+            guard !json else {
+                CLIOut.json(AttentionExtensionCLI.payload(action: "token", token: token))
+                return
+            }
+            CLIOut.out(token)
+        }
+    }
+}

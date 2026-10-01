@@ -21,7 +21,7 @@ struct HerdrCommand: AsyncParsableCommand {
             HerdrCloseTabCommand.self, HerdrCloseOthersCommand.self, HerdrCloseRightCommand.self,
             HerdrCloseAllCommand.self, HerdrGatherCommand.self, HerdrSeparateCommand.self,
             HerdrSplitCommand.self, HerdrMoveCommand.self, HerdrSwapCommand.self,
-            HerdrTerminalCommand.self,
+            HerdrTerminalCommand.self, HerdrSpaceCommand.self,
         ],
         defaultSubcommand: HerdrListCommand.self)
 }

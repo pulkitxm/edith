@@ -166,6 +166,67 @@ enum HerdrSpaceWindow {
         entries[spaceID]?.window.performClose(nil)
     }
 
+    struct Info: Equatable {
+        var id: String
+        var title: String
+        var tabs: Int
+        var panes: Int
+    }
+
+    static func listed() -> [Info] {
+        entries.map { id, entry in
+            Info(
+                id: id, title: entry.model.spaceTitle, tabs: entry.model.tabs.count,
+                panes: entry.model.tabs.reduce(0) { $0 + $1.paneCount })
+        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    @discardableResult
+    static func openTerminal(_ token: String?) -> Info? {
+        guard let entry = resolve(token) else { return nil }
+        entry.model.addTerminal()
+        return info(for: entry)
+    }
+
+    @discardableResult
+    static func split(_ token: String?, side: InsertSide) -> Info? {
+        guard let entry = resolve(token) else { return nil }
+        entry.model.split(side)
+        return info(for: entry)
+    }
+
+    static func missing(_ token: String?) -> String {
+        let open = listed()
+        if open.isEmpty { return "no space window is open" }
+        if let token, !token.isEmpty {
+            return "no space window matches \(token)"
+        }
+        return "more than one space window is open"
+    }
+
+    private static func resolve(_ token: String?) -> Entry? {
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            if let exact = entries[trimmed] { return exact }
+            let titled = entries.values.filter {
+                $0.model.spaceTitle.caseInsensitiveCompare(trimmed) == .orderedSame
+            }
+            return titled.count == 1 ? titled[0] : nil
+        }
+        if entries.count == 1 { return entries.values.first }
+        if let window = NSApp.keyWindow {
+            return entries.values.first { $0.window === window }
+        }
+        return nil
+    }
+
+    private static func info(for entry: Entry) -> Info {
+        Info(
+            id: entries.first { $0.value.window === entry.window }?.key ?? entry.model.spaceID,
+            title: entry.model.spaceTitle, tabs: entry.model.tabs.count,
+            panes: entry.model.tabs.reduce(0) { $0 + $1.paneCount })
+    }
+
     static func forget(_ window: NSWindow) {
         guard let match = entries.first(where: { $0.value.window === window }) else { return }
         match.value.model.stopAll()

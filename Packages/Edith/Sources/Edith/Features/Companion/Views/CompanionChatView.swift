@@ -3,6 +3,29 @@ import Observation
 import SwiftUI
 
 @MainActor
+enum CompanionGeneration {
+    private static var stops: [UUID: () -> Void] = [:]
+
+    static func track(_ stop: @escaping () -> Void) -> UUID {
+        let id = UUID()
+        stops[id] = stop
+        return id
+    }
+
+    static func forget(_ id: UUID) {
+        stops[id] = nil
+    }
+
+    @discardableResult
+    static func stopAll() -> Int {
+        let current = stops
+        stops = [:]
+        for stop in current.values { stop() }
+        return current.count
+    }
+}
+
+@MainActor
 @Observable
 final class CompanionChatModel {
     struct DisplayMessage: Identifiable, Equatable {
@@ -26,6 +49,7 @@ final class CompanionChatModel {
     private(set) var activeConversationId: String?
     var draft = ""
     private(set) var streaming = false
+    private var generation: UUID?
     private(set) var model: String?
     private(set) var failure: ChatFailure?
     private(set) var loaded = false
@@ -154,6 +178,7 @@ final class CompanionChatModel {
             DisplayMessage(
                 id: replyId, role: "assistant", content: "", citations: [], streaming: true,
                 model: model))
+        generation = CompanionGeneration.track { [weak self] in self?.stop() }
         streamTask = Task {
             await stream(text: text, userId: userId, replyId: replyId)
         }
@@ -168,6 +193,10 @@ final class CompanionChatModel {
 
     func stop() {
         streamTask?.cancel()
+        if let generation {
+            CompanionGeneration.forget(generation)
+            self.generation = nil
+        }
     }
 
     private func stream(text: String, userId: String, replyId: String) async {
@@ -217,6 +246,10 @@ final class CompanionChatModel {
         let cancelled = Task.isCancelled
         streaming = false
         streamTask = nil
+        if let generation {
+            CompanionGeneration.forget(generation)
+            self.generation = nil
+        }
         update(replyId) {
             $0.streaming = false
             $0.stopped = cancelled
