@@ -188,8 +188,10 @@ test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exi
 
 PRIVILEGED_HELPER_BUILD="$DERIVED/Build/Products/$CONFIG/EdithLidAwakeHelper"
 AGENT_BUILD="$DERIVED/Build/Products/$CONFIG/edithd"
+PACK_BUILD="$DERIVED/Build/Products/$CONFIG/edith-database"
 test -f "$PRIVILEGED_HELPER_BUILD" || { echo "build did not produce $PRIVILEGED_HELPER_BUILD" >&2; exit 1; }
 test -f "$AGENT_BUILD" || { echo "build did not produce $AGENT_BUILD" >&2; exit 1; }
+test -f "$PACK_BUILD" || { echo "build did not produce $PACK_BUILD" >&2; exit 1; }
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
@@ -346,6 +348,27 @@ if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then
   python3 scripts/camera_extension.py app-entitlements "$APP_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
 fi
 sign "$APP" "$APP_ENTITLEMENTS"
+
+PACK_IDENTIFIER="$APP_IDENTIFIER.database"
+PACK_DEST="dist/edith-database"
+cp "$PACK_BUILD" "$PACK_DEST"
+chmod 755 "$PACK_DEST"
+if [ -n "$TEAM_ID" ]; then
+  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+    --identifier "$PACK_IDENTIFIER" \
+    --requirements \
+    "=designated => identifier \"$PACK_IDENTIFIER\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
+    "$PACK_DEST"
+else
+  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+    --identifier "$PACK_IDENTIFIER" "$PACK_DEST"
+fi
+if [ "$CONFIG" = Debug ]; then
+  PACK_DIR="$HOME/Library/Application Support/Edith Dev/$SLOT/Database/pack"
+  mkdir -p "$PACK_DIR"
+  cp "$PACK_DEST" "$PACK_DIR/edith-database"
+  chmod 755 "$PACK_DIR/edith-database"
+fi
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 if [ "$RELEASE" = 1 ]; then

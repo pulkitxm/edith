@@ -15,9 +15,8 @@ enum DatabaseBrokerPeerAuthenticationError: Error, Equatable, Sendable {
     case currentDesignatedRequirementUnavailable
     case currentCodeInvalid
     case peerCodeInvalid
-    case currentUniqueIdentifierUnavailable
-    case peerUniqueIdentifierUnavailable
-    case uniqueIdentifierMismatch
+    case currentSigningIdentifierUnavailable
+    case codeRequirementMismatch
 }
 
 protocol DatabaseBrokerPeerAuthenticationSystem: Sendable {
@@ -33,7 +32,9 @@ protocol DatabaseBrokerPeerAuthenticationSystem: Sendable {
     func staticCode(for code: Code) throws -> StaticCode
     func designatedRequirement(for code: StaticCode) throws -> Requirement
     func validate(code: Code, requirement: Requirement) throws
-    func uniqueIdentifier(for code: StaticCode) throws -> Data
+    func signingIdentifier(for code: StaticCode) throws -> String
+    func teamIdentifier(for code: StaticCode) throws -> String?
+    func requirement(_ expression: String) throws -> Requirement
 }
 
 struct DatabaseBrokerPeerAuthenticator: Sendable {
@@ -59,8 +60,9 @@ struct DatabaseBrokerPeerAuthenticator: Sendable {
 }
 
 private struct DatabaseBrokerCurrentCodeIdentity<Requirement: Sendable>: Sendable {
-    let designatedRequirement: Requirement
-    let uniqueIdentifier: Data
+    let signingIdentifier: String
+    let teamIdentifier: String?
+    let peerRequirement: Requirement
 }
 
 private struct DatabaseBrokerPeerAuthenticationAlgorithm<
@@ -96,19 +98,39 @@ private struct DatabaseBrokerPeerAuthenticationAlgorithm<
             throw DatabaseBrokerPeerAuthenticationError.currentCodeInvalid
         }
 
-        let uniqueIdentifier: Data
+        let signingIdentifier: String
         do {
-            uniqueIdentifier = try system.uniqueIdentifier(for: currentStaticCode)
+            signingIdentifier = try system.signingIdentifier(for: currentStaticCode)
         } catch {
-            throw DatabaseBrokerPeerAuthenticationError.currentUniqueIdentifierUnavailable
+            throw DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
         }
-        guard !uniqueIdentifier.isEmpty else {
-            throw DatabaseBrokerPeerAuthenticationError.currentUniqueIdentifierUnavailable
+        guard !signingIdentifier.isEmpty else {
+            throw DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
+        }
+        let teamIdentifier: String?
+        do {
+            teamIdentifier = try system.teamIdentifier(for: currentStaticCode)
+        } catch {
+            throw DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
+        }
+        guard
+            let expression = DatabasePackIdentity.acceptedPeerRequirement(
+                signingIdentifier: signingIdentifier,
+                teamIdentifier: teamIdentifier)
+        else {
+            throw DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
+        }
+        let peerRequirement: System.Requirement
+        do {
+            peerRequirement = try system.requirement(expression)
+        } catch {
+            throw DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
         }
 
         return DatabaseBrokerCurrentCodeIdentity(
-            designatedRequirement: designatedRequirement,
-            uniqueIdentifier: uniqueIdentifier)
+            signingIdentifier: signingIdentifier,
+            teamIdentifier: teamIdentifier,
+            peerRequirement: peerRequirement)
     }
 
     func authenticatePeer(
@@ -150,32 +172,12 @@ private struct DatabaseBrokerPeerAuthenticationAlgorithm<
             throw DatabaseBrokerPeerAuthenticationError.peerCodeUnavailable
         }
 
-        let peerStaticCode: System.StaticCode
-        do {
-            peerStaticCode = try system.staticCode(for: peerCode)
-        } catch {
-            throw DatabaseBrokerPeerAuthenticationError.peerStaticCodeUnavailable
-        }
-
         do {
             try system.validate(
                 code: peerCode,
-                requirement: currentIdentity.designatedRequirement)
+                requirement: currentIdentity.peerRequirement)
         } catch {
-            throw DatabaseBrokerPeerAuthenticationError.peerCodeInvalid
-        }
-
-        let peerUniqueIdentifier: Data
-        do {
-            peerUniqueIdentifier = try system.uniqueIdentifier(for: peerStaticCode)
-        } catch {
-            throw DatabaseBrokerPeerAuthenticationError.peerUniqueIdentifierUnavailable
-        }
-        guard !peerUniqueIdentifier.isEmpty else {
-            throw DatabaseBrokerPeerAuthenticationError.peerUniqueIdentifierUnavailable
-        }
-        guard peerUniqueIdentifier == currentIdentity.uniqueIdentifier else {
-            throw DatabaseBrokerPeerAuthenticationError.uniqueIdentifierMismatch
+            throw DatabaseBrokerPeerAuthenticationError.codeRequirementMismatch
         }
     }
 }
@@ -313,19 +315,53 @@ private struct MacOSDatabaseBrokerPeerAuthenticationSystem:
         }
     }
 
-    func uniqueIdentifier(for code: MacOSDatabaseBrokerStaticCode) throws -> Data {
+    func signingIdentifier(for code: MacOSDatabaseBrokerStaticCode) throws -> String {
+        let information = try signingInformation(for: code)
+        guard
+            let identifier = information[kSecCodeInfoIdentifier as String] as? String,
+            !identifier.isEmpty
+        else {
+            throw MacOSDatabaseBrokerPeerAuthenticationSystemError.systemCallFailed
+        }
+        return identifier
+    }
+
+    func teamIdentifier(for code: MacOSDatabaseBrokerStaticCode) throws -> String? {
+        let information = try signingInformation(for: code)
+        let team = information[kSecCodeInfoTeamIdentifier as String] as? String
+        guard let team, !team.isEmpty else { return nil }
+        return team
+    }
+
+    func requirement(
+        _ expression: String
+    ) throws -> MacOSDatabaseBrokerCodeRequirement {
+        var requirement: SecRequirement?
+        guard
+            SecRequirementCreateWithString(
+                expression as CFString,
+                Self.defaultFlags,
+                &requirement) == errSecSuccess,
+            let requirement
+        else {
+            throw MacOSDatabaseBrokerPeerAuthenticationSystemError.systemCallFailed
+        }
+        return MacOSDatabaseBrokerCodeRequirement(value: requirement)
+    }
+
+    private func signingInformation(
+        for code: MacOSDatabaseBrokerStaticCode
+    ) throws -> [String: Any] {
         var information: CFDictionary?
         guard
             SecCodeCopySigningInformation(
                 code.value,
                 Self.signingInformationFlags,
                 &information) == errSecSuccess,
-            let signingInformation = information as? [String: Any],
-            let uniqueIdentifier = signingInformation[kSecCodeInfoUnique as String] as? Data,
-            !uniqueIdentifier.isEmpty
+            let signingInformation = information as? [String: Any]
         else {
             throw MacOSDatabaseBrokerPeerAuthenticationSystemError.systemCallFailed
         }
-        return uniqueIdentifier
+        return signingInformation
     }
 }

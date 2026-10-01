@@ -783,7 +783,7 @@ extension DatabaseBrokerClientProbeOutcome {
     static func classify(
         _ error: DatabaseBrokerHealthTransportError
     ) -> DatabaseBrokerClientProbeOutcome {
-        if error.failure == .authenticationFailed(.uniqueIdentifierMismatch) {
+        if error.failure == .authenticationFailed(.codeRequirementMismatch) {
             return .trustedVersionMismatch
         }
         if case .authenticationFailed = error.failure {

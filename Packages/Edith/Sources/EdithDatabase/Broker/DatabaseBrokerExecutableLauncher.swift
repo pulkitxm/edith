@@ -16,11 +16,10 @@ enum DatabaseBrokerExecutableLauncherError: Error, Equatable, Sendable {
     case currentStaticCodeUnavailable
     case currentDesignatedRequirementUnavailable
     case currentCodeInvalid
-    case currentUniqueIdentifierUnavailable
+    case currentSigningIdentifierUnavailable
     case candidateStaticCodeUnavailable
     case candidateCodeInvalid
-    case candidateUniqueIdentifierUnavailable
-    case candidateUniqueIdentifierMismatch
+    case candidateCodeRequirementMismatch
     case spawnConfigurationFailed
     case spawnFailed
 }
@@ -155,7 +154,9 @@ protocol DatabaseBrokerExecutableCodeSigningSystem: Sendable {
         requirement: Requirement,
         options: DatabaseBrokerExecutableCodeValidationOptions
     ) throws
-    func uniqueIdentifier(for code: StaticCode) throws -> Data
+    func signingIdentifier(for code: StaticCode) throws -> String
+    func teamIdentifier(for code: StaticCode) throws -> String?
+    func requirement(_ expression: String) throws -> Requirement
 }
 
 final class DatabaseBrokerValidatedExecutable: @unchecked Sendable {
@@ -375,7 +376,8 @@ private struct DatabaseBrokerCurrentExecutableCodeIdentity<Requirement: Sendable
     Sendable
 {
     let designatedRequirement: Requirement
-    let uniqueIdentifier: Data
+    let signingIdentifier: String
+    let teamIdentifier: String?
 }
 
 private final class DatabaseBrokerExecutableDescriptorLease<
@@ -518,19 +520,21 @@ private struct DatabaseBrokerExecutableResolutionAlgorithm<
             throw DatabaseBrokerExecutableLauncherError.currentCodeInvalid
         }
 
-        let uniqueIdentifier: Data
+        let signingIdentifier: String
         do {
-            uniqueIdentifier = try codeSigningSystem.uniqueIdentifier(for: currentStaticCode)
+            signingIdentifier = try codeSigningSystem.signingIdentifier(for: currentStaticCode)
         } catch {
-            throw DatabaseBrokerExecutableLauncherError.currentUniqueIdentifierUnavailable
+            throw DatabaseBrokerExecutableLauncherError.currentSigningIdentifierUnavailable
         }
-        guard !uniqueIdentifier.isEmpty else {
-            throw DatabaseBrokerExecutableLauncherError.currentUniqueIdentifierUnavailable
+        guard !signingIdentifier.isEmpty else {
+            throw DatabaseBrokerExecutableLauncherError.currentSigningIdentifierUnavailable
         }
+        let teamIdentifier = try codeSigningSystem.teamIdentifier(for: currentStaticCode)
 
         return DatabaseBrokerCurrentExecutableCodeIdentity(
             designatedRequirement: designatedRequirement,
-            uniqueIdentifier: uniqueIdentifier)
+            signingIdentifier: signingIdentifier,
+            teamIdentifier: teamIdentifier)
     }
 
     private func validateCandidate(
@@ -546,27 +550,28 @@ private struct DatabaseBrokerExecutableResolutionAlgorithm<
             throw DatabaseBrokerExecutableLauncherError.candidateStaticCodeUnavailable
         }
 
+        guard
+            let expectedIdentifier = DatabasePackIdentity.counterpartIdentifier(
+                for: currentIdentity.signingIdentifier)
+        else {
+            throw DatabaseBrokerExecutableLauncherError.candidateCodeRequirementMismatch
+        }
+        let requirement: CodeSigningSystem.Requirement
+        do {
+            requirement = try codeSigningSystem.requirement(
+                DatabasePackIdentity.requirement(
+                    identifier: expectedIdentifier,
+                    teamIdentifier: currentIdentity.teamIdentifier))
+        } catch {
+            throw DatabaseBrokerExecutableLauncherError.candidateCodeRequirementMismatch
+        }
         do {
             try codeSigningSystem.validateCandidate(
                 code: candidateCode,
-                requirement: currentIdentity.designatedRequirement,
+                requirement: requirement,
                 options: [.offline, .strict, .allArchitectures, .restrictSymlinks])
         } catch {
             throw DatabaseBrokerExecutableLauncherError.candidateCodeInvalid
-        }
-
-        let candidateUniqueIdentifier: Data
-        do {
-            candidateUniqueIdentifier = try codeSigningSystem.uniqueIdentifier(
-                for: candidateCode)
-        } catch {
-            throw DatabaseBrokerExecutableLauncherError.candidateUniqueIdentifierUnavailable
-        }
-        guard !candidateUniqueIdentifier.isEmpty else {
-            throw DatabaseBrokerExecutableLauncherError.candidateUniqueIdentifierUnavailable
-        }
-        guard candidateUniqueIdentifier == currentIdentity.uniqueIdentifier else {
-            throw DatabaseBrokerExecutableLauncherError.candidateUniqueIdentifierMismatch
         }
     }
 
@@ -634,7 +639,16 @@ private struct MacOSDatabaseBrokerExecutableFileSystem:
     func copyExecutablePath(
         into buffer: UnsafeMutablePointer<CChar>, size: inout UInt32
     ) -> Int32 {
-        _NSGetExecutablePath(buffer, &size)
+        let path = DatabasePackIdentity.executableURL().path
+        let needed = UInt32(path.utf8.count + 1)
+        guard size >= needed else {
+            size = needed
+            return -1
+        }
+        let copied = path.withCString { source in
+            strlcpy(buffer, source, Int(size))
+        }
+        return copied < Int(size) ? 0 : -1
     }
 
     func canonicalPath(for path: String) throws -> String {
@@ -805,20 +819,54 @@ private struct MacOSDatabaseBrokerExecutableCodeSigningSystem:
         }
     }
 
-    func uniqueIdentifier(for code: MacOSDatabaseBrokerExecutableStaticCode) throws -> Data {
+    func signingIdentifier(for code: MacOSDatabaseBrokerExecutableStaticCode) throws -> String {
+        let information = try signingInformation(for: code)
+        guard
+            let identifier = information[kSecCodeInfoIdentifier as String] as? String,
+            !identifier.isEmpty
+        else {
+            throw MacOSDatabaseBrokerExecutableSystemError.systemCallFailed
+        }
+        return identifier
+    }
+
+    func teamIdentifier(for code: MacOSDatabaseBrokerExecutableStaticCode) throws -> String? {
+        let information = try signingInformation(for: code)
+        let team = information[kSecCodeInfoTeamIdentifier as String] as? String
+        guard let team, !team.isEmpty else { return nil }
+        return team
+    }
+
+    func requirement(
+        _ expression: String
+    ) throws -> MacOSDatabaseBrokerExecutableRequirement {
+        var requirement: SecRequirement?
+        guard
+            SecRequirementCreateWithString(
+                expression as CFString,
+                Self.defaultFlags,
+                &requirement) == errSecSuccess,
+            let requirement
+        else {
+            throw MacOSDatabaseBrokerExecutableSystemError.systemCallFailed
+        }
+        return MacOSDatabaseBrokerExecutableRequirement(value: requirement)
+    }
+
+    private func signingInformation(
+        for code: MacOSDatabaseBrokerExecutableStaticCode
+    ) throws -> [String: Any] {
         var information: CFDictionary?
         guard
             SecCodeCopySigningInformation(
                 code.value,
                 Self.signingInformationFlags,
                 &information) == errSecSuccess,
-            let signingInformation = information as? [String: Any],
-            let uniqueIdentifier = signingInformation[kSecCodeInfoUnique as String] as? Data,
-            !uniqueIdentifier.isEmpty
+            let signingInformation = information as? [String: Any]
         else {
             throw MacOSDatabaseBrokerExecutableSystemError.systemCallFailed
         }
-        return uniqueIdentifier
+        return signingInformation
     }
 
     private func validationFlags(

@@ -648,7 +648,7 @@ struct DatabaseBrokerRuntimeTests {
     }
 
     @Test
-    func uniqueIdentifierMismatchRequestsShutdownOnce() async throws {
+    func codeRequirementMismatchRequestsShutdownOnce() async throws {
         let eventLog = DatabaseBrokerRuntimeTestEventLog()
         let connections = (0..<2).map { _ in
             DatabaseBrokerRuntimeTestConnection(eventLog: eventLog)
@@ -658,7 +658,7 @@ struct DatabaseBrokerRuntimeTests {
             eventLog: eventLog)
         let source = DatabaseBrokerRuntimeTestAcceptSource(eventLog: eventLog)
         let transport = DatabaseBrokerRuntimeTransport { _, _ in
-            databaseBrokerRuntimeAuthenticationFailure(.uniqueIdentifierMismatch)
+            databaseBrokerRuntimeAuthenticationFailure(.codeRequirementMismatch)
         }
         let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
         let runtime = DatabaseBrokerRuntime(

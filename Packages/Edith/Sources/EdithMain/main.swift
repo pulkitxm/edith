@@ -2,7 +2,6 @@ import Darwin
 import Edith
 import EdithCLI
 import EdithDatabase
-import EdithDatabaseDrivers
 import Foundation
 
 DatabaseExtensionReadiness.install()
@@ -13,5 +12,5 @@ case .application:
 case .commandLine:
     await EdithCLIMain.run()
 case .databaseBroker:
-    Darwin.exit(await DatabaseBrokerProcess.run())
+    exit(1)
 }
