@@ -22,7 +22,9 @@ struct AppCommand: AsyncParsableCommand {
             AppActionsCommand.self, AppCleanKeysCommand.self, AppTestNotificationCommand.self,
             AppOpenCommand.self, AppQuitCommand.self, AppCheckUpdatesCommand.self,
             AppUpdatesCommand.self, AppRelaunchCommand.self,
-            AppClearUpdateHistoryCommand.self, AppRevealCommand.self, AppSnapshotCommand.self,
+            AppClearUpdateHistoryCommand.self, AppRevealCommand.self, AppRouteCommand.self,
+            AppNavigateCommand.self, AppBackCommand.self, AppForwardCommand.self,
+            AppSnapshotCommand.self,
         ],
         defaultSubcommand: AppActionsCommand.self)
 }
@@ -775,16 +777,17 @@ struct AppRevealCommand: AsyncParsableCommand {
         abstract: "Show a section of the main window, and optionally a tab inside it.",
         discussion: """
             Bring a main-window section forward, and a tab inside it when you pass --tab.
-            Reads the section id. Changes which window and tab are visible. --list reads the sidebar names and does not change the window.
+            Reads the section id or a full route such as companion/chat. Changes which window and tab are visible. --list reads the sidebar names and does not change the window.
             Section ids: home, machines, docs, agents, dashboard, herdr, quinjet, companion, plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, extensions, settings, about.
 
             ed app reveal companion --tab chat
+            ed app reveal companion/chat
             ed app reveal --list --json
             """)
 
     @Argument(
         help: ArgumentHelp(
-            "The section to show; without it the window comes up where it was.",
+            "The section to show, or a full route such as companion/chat.",
             discussion:
                 "One of home, machines, docs, agents, dashboard, herdr, quinjet, companion, "
                 + "plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, "
@@ -866,15 +869,21 @@ struct AppRevealCommand: AsyncParsableCommand {
             }
             let shown = reply["section"] as? String ?? section ?? "the window"
             let shownTab = reply["tab"] as? String
+            let route = reply["route"] as? String
             guard !json else {
-                CLIOut.json(
-                    .object([
-                        "action": .string("reveal"), "section": .string(shown),
-                        "tab": .optional(shownTab),
-                    ]))
+                var fields: [String: JSONValue] = [
+                    "action": .string("reveal"), "section": .string(shown),
+                    "tab": .optional(shownTab),
+                ]
+                if let route { fields["route"] = .string(route) }
+                CLIOut.json(.object(fields))
                 return
             }
-            CLIOut.out(shownTab.map { "showing \(shown) · \($0)" } ?? "showing \(shown)")
+            if let route {
+                CLIOut.out("showing \(route)")
+            } else {
+                CLIOut.out(shownTab.map { "showing \(shown) · \($0)" } ?? "showing \(shown)")
+            }
         }
     }
 
@@ -883,6 +892,153 @@ struct AppRevealCommand: AsyncParsableCommand {
             let value = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { return [] }
         return value
+    }
+}
+
+struct AppRouteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "route",
+        abstract: "Print the window's current route.",
+        discussion: """
+            Print the route of the window that owns navigation history.
+            Reads the current selection. Does not change it, and does not activate Edith or order a window forward.
+
+            ed app route
+            ed app route --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await AppNavigation.ask(action: "route", route: nil)
+            try AppNavigation.emit(reply, json: json)
+        }
+    }
+}
+
+struct AppNavigateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "navigate",
+        abstract: "Move the window selection to a route.",
+        discussion: """
+            Move the current window selection to a route without bringing Edith forward.
+            Reads the route you pass. Changes the selection in place. Does not activate Edith or order a window forward.
+
+            ed app navigate companion/chat
+            ed app navigate docs --json
+            """)
+
+    @Argument(help: "The route to show, such as companion/chat or machines/<id>/docker.")
+    var route: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let trimmed = route.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+            guard !trimmed.isEmpty, parts.allSatisfy({ !$0.isEmpty }) else {
+                throw CLIFailure.usage(
+                    "route is empty or malformed",
+                    hint: "ed app navigate companion/chat")
+            }
+            let reply = try await AppNavigation.ask(action: "navigate", route: route)
+            try AppNavigation.emit(reply, json: json)
+        }
+    }
+}
+
+struct AppBackCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "back",
+        abstract: "Return the window to its previous route.",
+        discussion: """
+            Return to the previous route in this window's history.
+            Reads the history stack. Changes the selection in place. Does not activate Edith or order a window forward.
+
+            ed app back
+            ed app back --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await AppNavigation.ask(action: "back", route: nil)
+            try AppNavigation.emit(reply, json: json)
+        }
+    }
+}
+
+struct AppForwardCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "forward",
+        abstract: "Move the window on to its next route.",
+        discussion: """
+            Move forward to the next route in this window's history.
+            Reads the history stack. Changes the selection in place. Does not activate Edith or order a window forward.
+
+            ed app forward
+            ed app forward --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await AppNavigation.ask(action: "forward", route: nil)
+            try AppNavigation.emit(reply, json: json)
+        }
+    }
+}
+
+enum AppNavigation {
+    static func ask(action: String, route: String?) async throws -> [AnyHashable: Any] {
+        try AppBridge.requireMainApp(action)
+        let payload: [String: Any]
+        if let route {
+            payload = ["action": action, "route": route]
+        } else {
+            payload = ["action": action]
+        }
+        let reply = await AppBridge.awaitReply(IPC.Name.navigationResult, timeout: 10) {
+            AppBridge.post(IPC.Name.requestNavigation, userInfo: payload)
+        }
+        guard let reply else { throw AppBridge.silence("the route") }
+        return reply
+    }
+
+    static func emit(_ reply: [AnyHashable: Any], json: Bool) throws {
+        let ok = reply["ok"] as? Bool ?? false
+        guard ok else {
+            throw CLIFailure(
+                reply["error"] as? String ?? "the app refused the route change",
+                hint: "run `ed app route` to see where the window is")
+        }
+        let route = reply["route"] as? String ?? ""
+        let canGoBack = flag(reply["canGoBack"])
+        let canGoForward = flag(reply["canGoForward"])
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "route": .string(route),
+                    "canGoBack": .bool(canGoBack),
+                    "canGoForward": .bool(canGoForward),
+                ]))
+            return
+        }
+        CLIOut.out(route)
+    }
+
+    private static func flag(_ value: Any?) -> Bool {
+        if let value = value as? Bool { return value }
+        if let value = value as? NSNumber { return value.boolValue }
+        return false
     }
 }
 

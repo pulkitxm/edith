@@ -8,7 +8,7 @@ Edith is two processes with two bundle ids: the menu bar helper,
 `com.pulkit.edith.helper.v2`, and the main window, `com.pulkit.edith`. Live
 process actions use distributed notifications addressed to the process that
 owns the work. `clean-keys`, `test-notification`, `open`, and `diagnostics` need
-the helper. `quit`, `check-updates`, `reveal`, and `snapshot` need the main
+the helper. `quit`, `check-updates`, `reveal`, `route`, `navigate`, `back`, `forward`, and `snapshot` need the main
 window. Identity, paths, links, recorded updates, opening destinations, and
 relaunching work with Edith closed.
 
@@ -39,6 +39,10 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 | `ed app relaunch` | Preview restarting Edith, or apply it with `--yes`. |
 | `ed app clear-updates` | Preview deleting update history, or apply it with `--yes`. |
 | `ed app reveal` | Show a section of the main window, and optionally a tab inside it. |
+| `ed app route` | Print the window's current route. |
+| `ed app navigate` | Move the window selection to a route without bringing Edith forward. |
+| `ed app back` | Return the window to its previous route. |
+| `ed app forward` | Move the window on to its next route. |
 | `ed app snapshot` | Capture the app's open windows as PNG files, no screen recording involved. |
 
 ## Commands
@@ -59,6 +63,10 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 - [`ed app relaunch`](./relaunch.md)
 - [`ed app clear-updates`](./clear-updates.md)
 - [`ed app reveal`](./reveal.md)
+- [`ed app route`](./route.md)
+- [`ed app navigate`](./navigate.md)
+- [`ed app back`](./back.md)
+- [`ed app forward`](./forward.md)
 - [`ed app snapshot`](./snapshot.md)
 
 ## Exit codes
@@ -66,13 +74,13 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 | Code | What produces it here |
 | --- | --- |
 | 0 | The command did what it says, including a request that was sent but never confirmed, `check-updates --no-wait` with no answer, `updates` with an empty log, and `actions` when nothing is running. |
-| 1 | `relaunch` could not finish the work: Edith was still running after the force quit, or the launch itself threw. Also `snapshot` when no visible window rendered. |
-| 2 | The command line was wrong: an unknown flag, an unknown subcommand, or `--limit` at zero or below on `ed app updates`. |
+| 1 | `relaunch` could not finish the work: Edith was still running after the force quit, or the launch itself threw. Also `snapshot` when no visible window rendered, and `navigate`, `back`, or `forward` when the window refuses the move. |
+| 2 | The command line was wrong: an unknown flag, an unknown subcommand, `--limit` at zero or below on `ed app updates`, or a malformed `ed app navigate` route. |
 | 3 | `reveal` named a section or tab the window does not have, or `open-link` named no listed link. |
 | 4 | A required process is not running, a reply did not arrive, `relaunch --yes` found no app, or macOS refused an exact path or link open action. |
 
-3 comes only from `reveal` and `open-link`, and 1 only from `relaunch` and
-`snapshot`. The action names are fixed rather than typed, so there is no name
+3 comes only from `reveal` and `open-link`, and 1 comes from `relaunch`,
+`snapshot`, and a refused `navigate`, `back`, or `forward`. The action names are fixed rather than typed, so there is no name
 for you to get wrong: `ed app frobnicate` is parsed as a stray argument to the
 default `actions` subcommand and exits 2 rather than 3.
 
