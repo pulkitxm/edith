@@ -48,14 +48,30 @@ public enum StudioFinderReveal {
     @MainActor
     public static func revealInFinder(_ urls: [URL]) async {
         guard !urls.isEmpty else { return }
-        let source = script(for: urls)
-        let revealed = await Task.detached(priority: .userInitiated) {
-            guard let script = NSAppleScript(source: source) else { return false }
-            var error: NSDictionary?
-            script.executeAndReturnError(&error)
-            return error == nil
+        let revealed = await runScript(script(for: urls), timeout: 4)
+        guard revealed else {
+            for folder in folders(of: urls) { NSWorkspace.shared.open(folder) }
+            return
+        }
+    }
+
+    public static func runScript(_ source: String, timeout: TimeInterval) async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", source]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            do { try process.run() } catch { return false }
+            let deadline = Date().addingTimeInterval(timeout)
+            while process.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning {
+                process.terminate()
+                return false
+            }
+            return process.terminationStatus == 0
         }.value
-        guard !revealed else { return }
-        for folder in folders(of: urls) { NSWorkspace.shared.open(folder) }
     }
 }

@@ -21,6 +21,13 @@ import Testing
         #expect(error == nil)
     }
 
+    @Test func aScriptThatDoesNotReturnGivesUp() async {
+        let started = ContinuousClock.now
+        let finished = await StudioFinderReveal.runScript("delay 30", timeout: 0.3)
+        #expect(!finished)
+        #expect(started.duration(to: .now) < .seconds(3))
+    }
+
     @Test func fallbackFoldersAreUnique() {
         let urls = [
             URL(fileURLWithPath: "/tmp/a/one.pdf"), URL(fileURLWithPath: "/tmp/a/two.pdf"),
