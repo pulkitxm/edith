@@ -444,7 +444,10 @@ public final class GhosttyRuntime {
         let entries = TerminalClipboard.entries(from: content, count: count)
         guard !entries.isEmpty else { return }
         guard confirm else {
-            TerminalClipboard.write(entries, to: .general)
+            if TerminalClipboard.write(entries, to: .general) {
+                let view = GhosttySurfaceRegistry.shared.view(userdata)
+                DispatchQueue.main.async { [weak view] in view?.showCopyConfirmation() }
+            }
             return
         }
         let detail = confirmationDetail(
@@ -460,7 +463,7 @@ public final class GhosttyRuntime {
             alert.addButton(withTitle: "Cancel")
             let finish: (NSApplication.ModalResponse) -> Void = { response in
                 guard response == .alertFirstButtonReturn else { return }
-                TerminalClipboard.write(entries, to: .general)
+                if TerminalClipboard.write(entries, to: .general) { view.showCopyConfirmation() }
             }
             if let window = view.window {
                 alert.beginSheetModal(for: window, completionHandler: finish)

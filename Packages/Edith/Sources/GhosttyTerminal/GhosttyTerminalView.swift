@@ -33,6 +33,8 @@ public final class GhosttyTerminalView: NSView {
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)
     let progressStrip = TerminalProgressStrip(frame: .zero)
+    let copyConfirmation = TerminalCopyConfirmationView(frame: .zero)
+    var copyConfirmationTask: Task<Void, Never>?
     var searchTotal: Int?
     var searchSelected: Int?
     var accessibilitySelectionTask: Task<Void, Never>?
@@ -115,8 +117,10 @@ public final class GhosttyTerminalView: NSView {
         addSubview(linkHoverView)
         searchBar.translatesAutoresizingMaskIntoConstraints = false
         progressStrip.translatesAutoresizingMaskIntoConstraints = false
+        copyConfirmation.translatesAutoresizingMaskIntoConstraints = false
         addSubview(searchBar)
         addSubview(progressStrip)
+        addSubview(copyConfirmation)
         NSLayoutConstraint.activate([
             searchBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             searchBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -124,6 +128,12 @@ public final class GhosttyTerminalView: NSView {
             progressStrip.leadingAnchor.constraint(equalTo: leadingAnchor),
             progressStrip.trailingAnchor.constraint(equalTo: trailingAnchor),
             progressStrip.heightAnchor.constraint(equalToConstant: 3),
+            copyConfirmation.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            copyConfirmation.centerXAnchor.constraint(equalTo: centerXAnchor),
+            copyConfirmation.leadingAnchor.constraint(
+                greaterThanOrEqualTo: leadingAnchor, constant: 8),
+            copyConfirmation.trailingAnchor.constraint(
+                lessThanOrEqualTo: trailingAnchor, constant: -8),
         ])
         searchBar.onQuery = { [weak self] query in
             _ = self?.performBindingAction("search:\(query)")
@@ -146,6 +156,7 @@ public final class GhosttyTerminalView: NSView {
 
     deinit {
         accessibilitySelectionTask?.cancel()
+        copyConfirmationTask?.cancel()
         if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
         removeWindowObservers()
         shutdown()
@@ -153,6 +164,9 @@ public final class GhosttyTerminalView: NSView {
     }
 
     public func shutdown() {
+        copyConfirmationTask?.cancel()
+        copyConfirmationTask = nil
+        copyConfirmation.isHidden = true
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = nil
         focusMouseDown = nil

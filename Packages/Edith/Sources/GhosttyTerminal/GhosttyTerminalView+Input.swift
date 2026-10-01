@@ -678,7 +678,7 @@ extension GhosttyTerminalView {
         if performBindingAction("copy_to_clipboard:plain") { return }
         guard let text = selectedText(), !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        if NSPasteboard.general.setString(text, forType: .string) { showCopyConfirmation() }
     }
 
     @objc func pasteTerminalClipboard(_ sender: Any?) {
