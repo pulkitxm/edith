@@ -176,7 +176,7 @@ let targets: [Target] = [
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "EdithStudio", package: "EdithStudio"),
         ],
-        swiftSettings: shippedSwiftSettings
+        swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(
         name: "ed",
