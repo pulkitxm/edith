@@ -105,6 +105,9 @@ public enum UserOperationCatalog {
         + VirtualCameraOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AudioMixerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] = {
         var registrations = UsageProjectOperation.allCases.map {
@@ -1053,6 +1056,21 @@ private extension VirtualCameraOperation {
         case .extensionRemove:
             userInterface(
                 "Virtual Camera inspector", "remove Edith Camera", ["--yes"])
+        }
+    }
+}
+
+private extension AudioMixerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Audio mixer", "list playing apps")
+        case .volume:
+            userInterface("Audio mixer", "set an app's volume", ["Music", "40"])
+        case .mute:
+            userInterface("Audio mixer", "mute an app", ["Music"])
+        case .unmute:
+            userInterface("Audio mixer", "restore an app's volume", ["Music"])
         }
     }
 }
