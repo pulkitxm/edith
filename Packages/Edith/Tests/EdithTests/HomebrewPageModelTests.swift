@@ -22,7 +22,7 @@ private func waitForHomebrewModel(
         let model = HomebrewPageModel(client: Self.client())
 
         model.activate(kind: .formula)
-        #expect(await waitForHomebrewModel { model.loaded })
+        #expect(await waitForHomebrewModel { model.loaded && !model.isBusy })
 
         #expect(model.status?.available == true)
         #expect(model.packages.map(\.name) == ["ripgrep"])
@@ -69,6 +69,68 @@ private func waitForHomebrewModel(
         #expect(!model.isCancelling)
     }
 
+    @Test func cachedListingShowsBeforeRefreshFinishes() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("listing.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = HomebrewListingStore(fileURL: url)
+        let package = HomebrewPackage(
+            kind: .formula, name: "ripgrep", displayName: "ripgrep",
+            installedVersions: ["14.1.0"])
+        try await store.save(
+            HomebrewListingSnapshot(
+                status: HomebrewStatus(available: true, executable: "/brew", version: "5.0.0"),
+                packages: [.formula: [package]]))
+        let gate = HomebrewSuspendGate()
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { _, _ in
+                await gate.wait()
+                return CLICommandResult(terminationStatus: 0, output: "")
+            }, store: store)
+
+        model.activate(kind: .formula)
+        #expect(
+            await waitForHomebrewModel { model.loaded && model.packages.map(\.name) == ["ripgrep"] }
+        )
+        #expect(model.isBusy)
+        gate.open()
+    }
+
+    @Test func secondRefreshKeepsTheInstalledListVisible() async {
+        let gate = HomebrewSuspendGate()
+        let calls = HomebrewCallCount()
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { request, _ in
+                if request.arguments.contains("--installed"), calls.next() > 1 {
+                    await gate.wait()
+                }
+                switch request.arguments.first {
+                case "--version":
+                    return CLICommandResult(terminationStatus: 0, output: "Homebrew 5.0.0\n")
+                case "outdated":
+                    return CLICommandResult(terminationStatus: 0, output: Self.outdatedJSON)
+                case "info":
+                    return CLICommandResult(terminationStatus: 0, output: Self.infoJSON)
+                default:
+                    return CLICommandResult(terminationStatus: 0, output: "")
+                }
+            })
+
+        model.activate(kind: .formula)
+        #expect(await waitForHomebrewModel { model.loaded && !model.isBusy })
+        let names = model.packages.map(\.name)
+        model.loadInstalled(kind: .formula)
+
+        #expect(model.loaded)
+        #expect(model.packages.map(\.name) == names)
+        try? await Task.sleep(for: .milliseconds(60))
+        #expect(model.loaded)
+        #expect(model.isBusy)
+        #expect(model.packages.map(\.name) == names)
+        gate.open()
+    }
+
     private static func client(
         recorder: CLIHomebrewModelRecorder? = nil
     ) -> HomebrewClient {
@@ -100,6 +162,47 @@ private func waitForHomebrewModel(
     nonisolated private static let caskJSON = """
         {"formulae":[],"casks":[{"token":"firefox","name":["Firefox"],"desc":"Browser","version":"140.0","installed":null}]}
         """
+}
+
+private final class HomebrewSuspendGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if opened {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func open() {
+        lock.lock()
+        opened = true
+        let pending = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in pending { waiter.resume() }
+    }
+}
+
+private final class HomebrewCallCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        value += 1
+        let current = value
+        lock.unlock()
+        return current
+    }
 }
 
 private final class CLIHomebrewModelRecorder: @unchecked Sendable {

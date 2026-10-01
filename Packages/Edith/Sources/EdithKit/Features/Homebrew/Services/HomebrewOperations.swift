@@ -64,19 +64,23 @@ public struct HomebrewClient: Sendable {
             version: version)
     }
 
-    public func installed(kind: HomebrewPackageKind? = nil, outdatedOnly: Bool = false) async throws
-        -> [HomebrewPackage]
-    {
+    public func installed(
+        kind: HomebrewPackageKind? = nil, outdatedOnly: Bool = false,
+        onInventory: (@Sendable ([HomebrewPackage]) async -> Void)? = nil
+    ) async throws -> [HomebrewPackage] {
         let installed = try await packages(arguments: ["info", "--json=v2", "--installed"])
+        let listed = installed.filter { kind == nil || $0.kind == kind }
+        if let onInventory, !outdatedOnly {
+            await onInventory(listed.sorted(by: HomebrewPackageOrdering.areInIncreasingOrder))
+        }
         let outdatedResult = try await run(
             arguments: ["outdated", "--json=v2"], timeout: 60,
             maximumOutputBytes: 2_000_000, acceptsStatus: [0, 1])
         let updates = try HomebrewParser.packages(from: outdatedResult.output, outdated: true)
         let updatesByID = Dictionary(uniqueKeysWithValues: updates.map { ($0.id, $0) })
         return
-            installed
+            listed
             .map { updatesByID[$0.id].map($0.merging) ?? $0 }
-            .filter { kind == nil || $0.kind == kind }
             .filter { !outdatedOnly || $0.outdated }
             .sorted(by: HomebrewPackageOrdering.areInIncreasingOrder)
     }
@@ -296,5 +300,82 @@ public enum HomebrewParser {
             installedVersions: installed,
             currentVersion: item["current_version"] as? String ?? item["version"] as? String,
             outdated: outdated)
+    }
+}
+
+public enum HomebrewPackageListing {
+    public static func preservingOutdatedFlags(
+        _ inventory: [HomebrewPackage], from existing: [HomebrewPackage]
+    ) -> [HomebrewPackage] {
+        var previous: [String: HomebrewPackage] = [:]
+        previous.reserveCapacity(existing.count)
+        for package in existing {
+            previous[package.id] = package
+        }
+        return inventory.map { package in
+            guard let prior = previous[package.id], prior.outdated else { return package }
+            return package.merging(update: prior)
+        }
+    }
+}
+
+public struct HomebrewListingSnapshot: Codable, Equatable, Sendable {
+    public var status: HomebrewStatus
+    public var packages: [HomebrewPackageKind: [HomebrewPackage]]
+
+    public init(
+        status: HomebrewStatus, packages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
+    ) {
+        self.status = status
+        self.packages = packages
+    }
+}
+
+public actor HomebrewListingStore {
+    public let fileURL: URL
+    private var token = UUID()
+
+    public init(fileURL: URL = defaultURL) {
+        self.fileURL = fileURL.standardizedFileURL
+    }
+
+    public static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Edith", isDirectory: true)
+            .appendingPathComponent("homebrew-listing.json")
+    }
+
+    public func load() -> HomebrewListingSnapshot? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(HomebrewListingSnapshot.self, from: data)
+    }
+
+    public func claim() -> UUID {
+        let next = UUID()
+        token = next
+        return next
+    }
+
+    public func save(_ snapshot: HomebrewListingSnapshot) throws {
+        token = UUID()
+        try write(snapshot)
+    }
+
+    public func save(_ snapshot: HomebrewListingSnapshot, replacing token: UUID) throws {
+        guard token == self.token else { return }
+        try write(snapshot)
+    }
+
+    private func write(_ snapshot: HomebrewListingSnapshot) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(snapshot).write(to: fileURL, options: [.atomic])
     }
 }

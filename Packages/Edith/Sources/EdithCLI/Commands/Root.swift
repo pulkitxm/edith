@@ -33,10 +33,15 @@ func execute(_ body: () async throws -> Void) async throws {
 public struct EdRoot: AsyncParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "ed",
-        abstract: "The command line for Edith.",
+        abstract: "Drive Edith, its settings, and its machines from the terminal.",
         discussion: """
-            `ed <machine> <command...>` runs a command on a configured machine.
-            `ed guide` prints the full manual, written for agents and humans alike.
+            Dispatch a subcommand, or run a shell on a configured machine with
+            `ed <machine> <command...>`. Reads nothing until that subcommand runs.
+            Does not change anything by itself.
+
+            ed guide
+            ed --help
+            ed config ls --json
             """,
         version: edithCLIVersion,
         subcommands: [
@@ -158,7 +163,15 @@ public enum EdithCLIMain {
 struct GuideCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "guide",
-        abstract: "Print the built-in manual, written for agents and humans alike.")
+        abstract: "Print the built-in manual, written for agents and humans alike.",
+        discussion: """
+            Print the manual, the agent snippet, or the parser catalog.
+            Reads the built-in guide text. Does not change settings or machines.
+
+            ed guide
+            ed guide agent
+            ed guide --json
+            """)
 
     @Flag(name: .long, help: "Emit the complete command and argument catalog as JSON.")
     var json = false

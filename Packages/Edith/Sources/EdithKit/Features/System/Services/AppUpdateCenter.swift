@@ -225,6 +225,88 @@ public struct AppUpdatePersistence: Sendable {
     }
 }
 
+public enum AppUpdateDiscoveryChannel: String, Sendable, Equatable {
+    case homebrew
+    case appStore
+    case feeds
+}
+
+public struct AppUpdateDiscoveryBatch: Sendable, Equatable {
+    public let channel: AppUpdateDiscoveryChannel
+    public let items: [AppUpdateItem]
+    public let homebrewData: Data?
+
+    public init(
+        channel: AppUpdateDiscoveryChannel, items: [AppUpdateItem], homebrewData: Data? = nil
+    ) {
+        self.channel = channel
+        self.items = items
+        self.homebrewData = homebrewData
+    }
+}
+
+public struct AppMaintenanceSnapshot: Codable, Equatable, Sendable {
+    public var applications: [InstalledApplication]
+    public var updates: [AppUpdateItem]
+    public var homebrewOutdated: Data?
+    public var homebrewCachedAt: Date?
+
+    public init(
+        applications: [InstalledApplication] = [], updates: [AppUpdateItem] = [],
+        homebrewOutdated: Data? = nil, homebrewCachedAt: Date? = nil
+    ) {
+        self.applications = applications
+        self.updates = updates
+        self.homebrewOutdated = homebrewOutdated
+        self.homebrewCachedAt = homebrewCachedAt
+    }
+}
+
+public actor AppMaintenanceSnapshotStore {
+    public let fileURL: URL
+    private var token = UUID()
+
+    public init(fileURL: URL = defaultURL) {
+        self.fileURL = fileURL.standardizedFileURL
+    }
+
+    public static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Edith", isDirectory: true)
+            .appendingPathComponent("app-maintenance-snapshot.json")
+    }
+
+    public func load() -> AppMaintenanceSnapshot? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return try? JSONDecoder.updateCenter.decode(AppMaintenanceSnapshot.self, from: data)
+    }
+
+    public func claim() -> UUID {
+        let next = UUID()
+        token = next
+        return next
+    }
+
+    public func save(_ snapshot: AppMaintenanceSnapshot) throws {
+        token = UUID()
+        try write(snapshot)
+    }
+
+    public func save(_ snapshot: AppMaintenanceSnapshot, replacing token: UUID) throws {
+        guard token == self.token else { return }
+        try write(snapshot)
+    }
+
+    private func write(_ snapshot: AppMaintenanceSnapshot) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        let data = try JSONEncoder.updateCenter.encode(snapshot)
+        try data.write(to: fileURL, options: [.atomic])
+    }
+}
+
 public enum AppUpdateDiscovery {
     public typealias RunCommand = AppMaintenanceDiskImageInstaller.RunCommand
     public typealias Fetch = @Sendable (URL) async throws -> Data
@@ -236,20 +318,81 @@ public enum AppUpdateDiscovery {
         now: Date = Date(), run: @escaping RunCommand = AppMaintenanceDiskImageInstaller.liveRun,
         fetch: @escaping Fetch = liveFetch
     ) async -> [AppUpdateItem] {
-        async let managed = managedUpdates(
-            applications: applications, paths: brewPaths, now: now, run: run)
-        async let store = storeUpdates(
-            applications: applications, paths: masPaths, now: now, run: run)
-        async let feeds = feedUpdates(applications: applications, now: now, fetch: fetch)
-        return merged(await managed + store + feeds)
+        await discoverChannels(
+            applications: applications, brewPaths: brewPaths, masPaths: masPaths, now: now,
+            run: run, fetch: fetch)
+    }
+
+    public static func discoverChannels(
+        applications: [InstalledApplication],
+        brewPaths: [String] = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"],
+        masPaths: [String] = ["/opt/homebrew/bin/mas", "/usr/local/bin/mas"],
+        now: Date = Date(), run: @escaping RunCommand = AppMaintenanceDiskImageInstaller.liveRun,
+        fetch: @escaping Fetch = liveFetch, brewData: Data? = nil, brewFresh: Bool = false,
+        onBatch: @escaping @Sendable (AppUpdateDiscoveryBatch) async -> Void = { _ in }
+    ) async -> [AppUpdateItem] {
+        await withTaskGroup(of: AppUpdateDiscoveryBatch.self) { group in
+            group.addTask {
+                if brewFresh, let brewData {
+                    let executable =
+                        brewPaths.first(where: FileManager.default.isExecutableFile)
+                        ?? brewPaths.first ?? "brew"
+                    return AppUpdateDiscoveryBatch(
+                        channel: .homebrew,
+                        items: parseHomebrew(
+                            brewData, applications: applications, executable: executable, now: now),
+                        homebrewData: brewData)
+                }
+                let found = await homebrewDiscovery(
+                    applications: applications, paths: brewPaths, now: now, run: run)
+                return AppUpdateDiscoveryBatch(
+                    channel: .homebrew, items: found.items, homebrewData: found.data)
+            }
+            group.addTask {
+                let items = await storeUpdates(
+                    applications: applications, paths: masPaths, now: now, run: run)
+                return AppUpdateDiscoveryBatch(channel: .appStore, items: items)
+            }
+            group.addTask {
+                let items = await feedUpdates(
+                    applications: applications, now: now, fetch: fetch)
+                return AppUpdateDiscoveryBatch(channel: .feeds, items: items)
+            }
+            var collected: [AppUpdateItem] = []
+            for await batch in group {
+                collected = replacing(collected, with: batch)
+                await onBatch(batch)
+            }
+            return merged(collected)
+        }
+    }
+
+    public static func replacing(
+        _ existing: [AppUpdateItem], with batch: AppUpdateDiscoveryBatch
+    ) -> [AppUpdateItem] {
+        let replaced = sources(in: batch.channel)
+        let kept = existing.filter { !replaced.contains($0.source) }
+        return merged(kept + batch.items)
     }
 
     public static func managedUpdates(
         applications: [InstalledApplication], paths: [String], now: Date,
         run: @escaping RunCommand
     ) async -> [AppUpdateItem] {
+        await homebrewDiscovery(applications: applications, paths: paths, now: now, run: run).items
+    }
+
+    private struct HomebrewDiscoveryResult: Sendable {
+        var items: [AppUpdateItem]
+        var data: Data?
+    }
+
+    private static func homebrewDiscovery(
+        applications: [InstalledApplication], paths: [String], now: Date,
+        run: @escaping RunCommand
+    ) async -> HomebrewDiscoveryResult {
         guard let executable = paths.first(where: FileManager.default.isExecutableFile) else {
-            return []
+            return HomebrewDiscoveryResult(items: [], data: nil)
         }
         var environment = CLIToolEnvironment.sanitized()
         environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
@@ -257,9 +400,13 @@ public enum AppUpdateDiscovery {
             executableURL: URL(fileURLWithPath: executable),
             arguments: ["outdated", "--json=v2"], environment: environment, timeout: 60,
             maximumOutputBytes: 2 * 1_024 * 1_024, terminatesProcessGroup: true)
-        guard let result = try? await run(request), result.terminationStatus == 0 else { return [] }
-        return parseHomebrew(
-            result.outputData, applications: applications, executable: executable, now: now)
+        guard let result = try? await run(request), result.terminationStatus == 0 else {
+            return HomebrewDiscoveryResult(items: [], data: nil)
+        }
+        return HomebrewDiscoveryResult(
+            items: parseHomebrew(
+                result.outputData, applications: applications, executable: executable, now: now),
+            data: result.outputData)
     }
 
     public static func parseHomebrew(
@@ -479,6 +626,14 @@ public enum AppUpdateDiscovery {
             return (url, source)
         }
         return nil
+    }
+
+    private static func sources(in channel: AppUpdateDiscoveryChannel) -> Set<AppUpdateSource> {
+        switch channel {
+        case .homebrew: [.homebrewCask, .homebrewFormula]
+        case .appStore: [.appStore]
+        case .feeds: [.sparkle, .directFeed]
+        }
     }
 
     private static func merged(_ items: [AppUpdateItem]) -> [AppUpdateItem] {
