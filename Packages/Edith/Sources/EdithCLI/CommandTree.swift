@@ -484,6 +484,26 @@ public enum CommandTree {
             arguments: [.studioTool, .localPath], repeatingArgument: .localPath),
         "ed studio probe": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio record sources": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio record start": Spec(
+            options: [
+                "--json", "-h", "--help", "--version", "--display", "--window", "--microphone",
+                "--no-system-audio", "--no-cursor",
+            ],
+            optionValues: ["--display": .free, "--window": .free]),
+        "ed studio record stop": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio record status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio workflow ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio workflow save": Spec(
+            options: ["--json", "-h", "--help", "--version", "--step", "--set"],
+            optionValues: ["--step": .studioTool, "--set": .free], arguments: [.free]),
+        "ed studio workflow run": Spec(
+            options: ["--json", "-h", "--help", "--version", "--output-dir"],
+            optionValues: ["--output-dir": .localPath],
+            arguments: [.free, .localPath], repeatingArgument: .localPath),
+        "ed studio workflow rm": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
         "ed studio edit schema": Spec(
             options: ["--json", "--operation", "-h", "--help", "--version"],
             optionValues: ["--operation": .free]),

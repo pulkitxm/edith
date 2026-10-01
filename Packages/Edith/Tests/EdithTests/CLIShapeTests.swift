@@ -235,6 +235,7 @@ enum CommandCrawler {
             "ed studio edit", "ed studio edit audio", "ed studio edit markers",
             "ed studio edit media", "ed studio library",
             "ed studio edit captions",
+            "ed studio record", "ed studio workflow",
             "ed studio edit publications",
             "ed machines workspace",
             "ed usage machines",

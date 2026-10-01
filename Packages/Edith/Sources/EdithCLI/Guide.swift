@@ -639,6 +639,8 @@ public enum Guide {
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
         ed studio tools --kind pdf      Studio's tools for one kind of file
+        ed studio record status         screen, microphone, system audio and cursor
+        ed studio workflow ls           saved chains of Studio tools
         ed studio edit schema           Headless video edit-plan schema
         ed studio edit apply demo.openscreen --plan edit.json --dry-run --json
         ed studio edit render demo.openscreen --output demo.mp4 --json
