@@ -51,6 +51,76 @@ import Testing
         #expect(metadata.wordCount == 5)
     }
 
+    @MainActor
+    @Test func pageIndexFiltersOffMainAndCollapsesKeystrokes() async throws {
+        let model = SEOAuditModel()
+        let thread = SEOThreadFlag()
+        SEOPageIndex.recordThread = { thread.main = Thread.isMainThread }
+        defer { SEOPageIndex.recordThread = nil }
+        let project = seoProject(pages: 1_000)
+        await model.open(project)
+        let builds = model.indexBuildCount
+        #expect(thread.main == false)
+        #expect(model.visiblePages.count == 1_000)
+        let target = "https://example.test/p/12/end"
+        #expect(model.historyByURL[target]?.count == 2)
+        #expect(
+            model.historyByURL[target]?.map(\.auditedAt) == [
+                Date(timeIntervalSince1970: 200), Date(timeIntervalSince1970: 100),
+            ])
+
+        model.query = "p/1"
+        model.query = "p/12"
+        model.query = target
+        #expect(model.completedFilters.isEmpty)
+        #expect(model.indexBuildCount == builds)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        #expect(model.completedFilters == [target])
+        #expect(model.visiblePages.map(\.url) == [target])
+        #expect(model.indexBuildCount == builds)
+
+        model.severity = .error
+        try await Task.sleep(nanoseconds: 400_000_000)
+        #expect(model.completedFilters == [target, target])
+        #expect(model.visiblePages.map(\.url) == [target])
+        #expect(model.indexBuildCount == builds)
+    }
+
+    @Test func pageRowsUseTheHistoryDictionaryAndCachedSnapshots() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/SEOAudit")
+        let project = try String(
+            contentsOf: root.appendingPathComponent("Views/SEOAuditProjectView.swift"),
+            encoding: .utf8)
+        let accordion = try String(
+            contentsOf: root.appendingPathComponent("Views/SEOAuditPageAccordion.swift"),
+            encoding: .utf8)
+        let page = try String(
+            contentsOf: root.appendingPathComponent("Views/SEOAuditPage.swift"), encoding: .utf8)
+        #expect(project.contains("historyByURL[page.url]"))
+        #expect(!project.contains("history(for:"))
+        #expect(!accordion.contains("NSImage(contentsOf:"))
+        #expect(!page.contains("NSImage(contentsOf:"))
+        #expect(accordion.contains("SEOSnapshotCache.image"))
+        #expect(page.contains("SEOSnapshotCache.image"))
+    }
+
+    @Test func snapshotDecodeLeavesTheMainThread() async {
+        let thread = SEOThreadFlag()
+        let previous = SEOSnapshotCache.decode
+        SEOSnapshotCache.decode = { _ in
+            thread.main = Thread.isMainThread
+            return nil
+        }
+        defer { SEOSnapshotCache.decode = previous }
+        let url = URL(fileURLWithPath: "/tmp/edith-seo-\(UUID().uuidString).png")
+        _ = await SEOSnapshotCache.image(for: url)
+        #expect(thread.main == false)
+    }
+
     @Test func issueAnalyzerFindsMissingEssentials() {
         let issues = SEOIssueAnalyzer.issues(
             url: URL(string: "http://example.com")!, statusCode: 404, metadata: .empty)
@@ -363,6 +433,41 @@ import Testing
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,
             metadata: .empty, issues: [])
     }
+}
+
+private final class SEOThreadFlag: @unchecked Sendable {
+    var main = true
+}
+
+private func seoProject(pages: Int) -> SEOAuditProject {
+    func rows(_ stamp: TimeInterval, issues: Bool) -> [SEOAuditPageResult] {
+        (0..<pages).map { index in
+            let url = "https://example.test/p/\(index)/end"
+            let pageIssues =
+                issues && index == 12
+                ? [
+                    SEOAuditIssue(
+                        code: "title", severity: .error, title: "Missing", detail: "Add one")
+                ]
+                : []
+            return SEOAuditPageResult(
+                url: url, auditedAt: Date(timeIntervalSince1970: stamp), statusCode: 200,
+                responseMilliseconds: 20, bytes: 128, metadata: .empty, issues: pageIssues)
+        }
+    }
+    var project = SEOAuditProject(name: "Example", baseURL: "https://example.test")
+    project.runs = [
+        SEOAuditRun(
+            startedAt: Date(timeIntervalSince1970: 300), state: .completed,
+            discoveredPageCount: pages, pages: rows(300, issues: true)),
+        SEOAuditRun(
+            startedAt: Date(timeIntervalSince1970: 200), state: .completed,
+            discoveredPageCount: pages, pages: rows(200, issues: false)),
+        SEOAuditRun(
+            startedAt: Date(timeIntervalSince1970: 100), state: .completed,
+            discoveredPageCount: pages, pages: rows(100, issues: false)),
+    ]
+    return project
 }
 
 private final class SEOAuditImageURLProtocol: URLProtocol, @unchecked Sendable {
