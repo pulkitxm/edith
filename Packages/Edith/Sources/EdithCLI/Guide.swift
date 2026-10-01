@@ -609,6 +609,9 @@ public enum Guide {
         ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
+        ed skills ls                    Edith skills and detected agents
+        ed skills preview edith-remote-work
+        ed skills install edith-remote-work --agent cursor
         ed emoji ls --search rocket     the emoji this Mac can render
         ed emoji insert 1F600           type one into the app in front of you
         ed emoji tone medium            the default skin tone

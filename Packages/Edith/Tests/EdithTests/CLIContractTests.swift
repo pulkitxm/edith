@@ -91,6 +91,12 @@ enum JSONContract {
         JSONCase(
             "ed seo run",
             ["seo", "run", "00000000-0000-0000-0000-000000000000", "--offset", "0", "--json"]),
+        JSONCase("ed skills ls", ["skills", "ls", "--json"]),
+        JSONCase("ed skills preview", ["skills", "preview", "missing-skill", "--json"]),
+        JSONCase("ed skills copy", ["skills", "copy", "missing-skill", "--json"]),
+        JSONCase(
+            "ed skills install",
+            ["skills", "install", "edith-remote-work", "--agent", "cursor", "--json"]),
         JSONCase(
             "ed maintenance backup-updates",
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
