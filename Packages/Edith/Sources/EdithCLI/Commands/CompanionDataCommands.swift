@@ -5,7 +5,19 @@ import Foundation
 struct CompanionExportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
-        abstract: "Save everything the companion remembers as a restorable bundle.")
+        abstract: "Save everything the companion remembers as a restorable bundle.",
+        discussion: """
+            Saves everything the companion remembers into a directory you choose: one
+            `bundle.json` holding episodes, observations, conversations, beliefs,
+            claims, facts, core memory and the non-secret reasoner settings, plus, with
+            `--include-media`, a `media/` directory of the original voice notes, PDFs,
+            images and videos.
+
+            Reads everything the companion remembers and writes a restorable bundle.
+
+            ed companion export /tmp/companion-export
+            ed companion export /tmp/companion-export --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -66,7 +78,18 @@ struct CompanionExportCommand: AsyncParsableCommand {
 struct CompanionImportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "import",
-        abstract: "Restore a bundle written by `ed companion export`.")
+        abstract: "Restore a bundle written by `ed companion export`.",
+        discussion: """
+            Restores a bundle written by [`ed companion export`](./export.md): episodes,
+            observations, conversations, beliefs, claims, facts, core memory, the
+            non-secret reasoner settings, and any media files sitting next to the
+            bundle.
+
+            Changes the companion database by restoring a bundle from export.
+
+            ed companion import /tmp/notes.md
+            ed companion import /tmp/notes.md --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -146,7 +169,18 @@ struct CompanionImportCommand: AsyncParsableCommand {
 struct CompanionEraseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "erase",
-        abstract: "Delete one episode, its media, and everything derived from it.")
+        abstract: "Delete one episode, its media, and everything derived from it.",
+        discussion: """
+            Deletes one episode: its chunks, its claims and their corroborations, its
+            mention in belief evidence, and, when nothing else shares the source, the
+            original file in the vault.
+
+            Changes companion memory by deleting one episode and everything derived from
+            it.
+
+            ed companion erase 1
+            ed companion erase 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -193,7 +227,18 @@ struct CompanionEraseCommand: AsyncParsableCommand {
 struct CompanionWipeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "wipe",
-        abstract: "Delete every episode, observation, belief and conversation.")
+        abstract: "Delete every episode, observation, belief and conversation.",
+        discussion: """
+            Deletes the companion's entire memory: every episode, source, observation,
+            belief, claim, fact, conversation, entity, hypothesis and the vault files
+            behind them.
+
+            Changes companion memory by deleting every episode, observation, belief, and
+            conversation.
+
+            ed companion wipe
+            ed companion wipe --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

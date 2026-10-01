@@ -49,7 +49,15 @@ extension CompanionBridge {
 
 struct CompanionPersonasCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "personas", abstract: "List the lenses that can answer, and how each thinks.")
+        commandName: "personas", abstract: "List the lenses that can answer, and how each thinks.",
+        discussion: """
+            Lists the lenses that can answer you, and how each one thinks.
+
+            Reads the lenses that can answer. Does not change them.
+
+            ed companion personas
+            ed companion personas --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -101,7 +109,18 @@ struct CompanionPersonasCommand: AsyncParsableCommand {
 struct CompanionCouncilCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "council",
-        abstract: "Ask several lenses at once and find the crux they disagree on.")
+        abstract: "Ask several lenses at once and find the crux they disagree on.",
+        discussion: """
+            Asks several lenses the same question in sequence, then runs a synthesis
+            pass whose only job is to locate the crux: the one fact none of them has,
+            which would settle the disagreement if it were known.
+
+            Reads several lenses at once and writes one comparison of where they
+            disagree.
+
+            ed companion council what did I decide yesterday?
+            ed companion council what did I decide yesterday? --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -167,13 +186,29 @@ struct CompanionCoreCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "core",
         abstract: "Read or edit the standing summary of who you are.",
+        discussion: """
+            Reads or edits the standing summary of who you are: the small block that
+            sits in context on every answer.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion core show
+            """,
         subcommands: [CompanionCoreShowCommand.self, CompanionCoreSetCommand.self],
         defaultSubcommand: CompanionCoreShowCommand.self)
 }
 
 struct CompanionCoreShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "Print the standing summary section by section.")
+        commandName: "show", abstract: "Print the standing summary section by section.",
+        discussion: """
+            Print the standing summary section by section.
+
+            Reads the standing summary section by section. Does not change it.
+
+            ed companion core show
+            ed companion core show --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -215,7 +250,15 @@ struct CompanionCoreShowCommand: AsyncParsableCommand {
 
 struct CompanionCoreSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Rewrite one section of the standing summary yourself.")
+        commandName: "set", abstract: "Rewrite one section of the standing summary yourself.",
+        discussion: """
+            Rewrite one section of the standing summary yourself.
+
+            Changes one section of the standing summary.
+
+            ed companion core set voice "keep it short"
+            ed companion core set voice "keep it short" --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -253,7 +296,17 @@ struct CompanionCoreSetCommand: AsyncParsableCommand {
 struct CompanionWhyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "why",
-        abstract: "Print the whole chain behind a belief, theory or claim.")
+        abstract: "Print the whole chain behind a belief, theory or claim.",
+        discussion: """
+            Prints the whole chain behind anything the companion believes: the evidence
+            episodes, what argues against it, the prompt version that produced it, how
+            its confidence moved, and how it was checked against the record.
+
+            Reads the chain behind one belief, theory, or claim. Does not change it.
+
+            ed companion why 1
+            ed companion why 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -380,7 +433,14 @@ enum CompanionBrainOutput {
 struct CompanionHypothesesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hypotheses",
-        abstract: "The theories it holds about you, and how they are faring.",
+        abstract: "Show the theories it holds about you, and how they are faring.",
+        discussion: """
+            The theories the companion holds about you, and how they are faring.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion hypotheses ls
+            """,
         subcommands: [CompanionHypothesesListCommand.self, CompanionHypothesesRunCommand.self],
         defaultSubcommand: CompanionHypothesesListCommand.self)
 }
@@ -388,7 +448,15 @@ struct CompanionHypothesesCommand: AsyncParsableCommand {
 struct CompanionHypothesesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
-        abstract: "List the theories it holds about you, and how they are faring.")
+        abstract: "List the theories it holds about you, and how they are faring.",
+        discussion: """
+            List the theories it holds about you, and how they are faring.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed companion hypotheses ls
+            ed companion hypotheses ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -442,7 +510,15 @@ struct CompanionHypothesesListCommand: AsyncParsableCommand {
 struct CompanionHypothesesRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
-        abstract: "Resolve any predictions that are due, then form new theories.")
+        abstract: "Resolve any predictions that are due, then form new theories.",
+        discussion: """
+            Resolve any predictions that are due, then form new theories.
+
+            Changes stored theories by resolving due predictions and forming new ones.
+
+            ed companion hypotheses run
+            ed companion hypotheses run --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -466,7 +542,15 @@ struct CompanionHypothesesRunCommand: AsyncParsableCommand {
 
 struct CompanionPredictionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "predictions", abstract: "List what it expects to happen, and what did.")
+        commandName: "predictions", abstract: "List what it expects to happen, and what did.",
+        discussion: """
+            What the companion expects to happen, and what actually did.
+
+            Reads stored predictions and what actually happened. Does not change them.
+
+            ed companion predictions
+            ed companion predictions --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -515,7 +599,15 @@ struct CompanionPredictionsCommand: AsyncParsableCommand {
 
 struct CompanionCommitmentsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "commitments", abstract: "List what you said you would do, and what happened.")
+        commandName: "commitments", abstract: "List what you said you would do, and what happened.",
+        discussion: """
+            What you said you would do, and what the record says happened.
+
+            Reads what you said you would do. Does not change those records.
+
+            ed companion commitments
+            ed companion commitments --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -565,14 +657,30 @@ struct CompanionCommitmentsCommand: AsyncParsableCommand {
 struct CompanionDiscrepanciesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "discrepancies",
-        abstract: "Where your account and the record parted company.",
+        abstract: "Show where your account and the record parted company.",
+        discussion: """
+            Where your account of your own work and the record of it parted company, and
+            the way to tell the system when the record was simply not looking.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion discrepancies ls
+            """,
         subcommands: [CompanionDiscrepanciesListCommand.self, CompanionOverrideCommand.self],
         defaultSubcommand: CompanionDiscrepanciesListCommand.self)
 }
 
 struct CompanionDiscrepanciesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List where your account and the record parted company.")
+        commandName: "ls", abstract: "List where your account and the record parted company.",
+        discussion: """
+            List where your account and the record parted company.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed companion discrepancies ls
+            ed companion discrepancies ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -620,7 +728,15 @@ struct CompanionDiscrepanciesListCommand: AsyncParsableCommand {
 struct CompanionOverrideCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "override",
-        abstract: "Say the work was real and the record simply did not see it.")
+        abstract: "Say the work was real and the record simply did not see it.",
+        discussion: """
+            Say the work was real and the record simply did not see it.
+
+            Changes one discrepancy by recording which side was real.
+
+            ed companion discrepancies override 1 --real true
+            ed companion discrepancies override 1 --real true --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -651,7 +767,19 @@ struct CompanionOverrideCommand: AsyncParsableCommand {
 struct CompanionCalibrationCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "calibration",
-        abstract: "How your account of yourself compares with the record, in both directions.")
+        abstract: "Show how your account of yourself compares with the record, in both directions.",
+        discussion: """
+            How your account of yourself compares with the record, tracked in both
+            directions and scored separately per domain, because estimating work,
+            judging yourself and reading risk are different skills and you are probably
+            not equally miscalibrated across them.
+
+            Reads how your account of yourself compares with the record. Does not change
+            it.
+
+            ed companion calibration
+            ed companion calibration --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -693,7 +821,15 @@ struct CompanionCalibrationCommand: AsyncParsableCommand {
 struct CompanionInquireCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "inquire",
-        abstract: "The questions it wants to ask you, and your answers.",
+        abstract: "Show the questions it wants to ask you, and your answers.",
+        discussion: """
+            The questions the companion wants to ask you, ranked by the size of the hole
+            they would fill rather than picked at random.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion inquire next
+            """,
         subcommands: [
             CompanionInquireNextCommand.self, CompanionInquireAnswerCommand.self,
             CompanionInquireSkipCommand.self, CompanionInquireMuteCommand.self,
@@ -704,7 +840,15 @@ struct CompanionInquireCommand: AsyncParsableCommand {
 
 struct CompanionInquireNextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "next", abstract: "The one question worth asking right now.")
+        commandName: "next", abstract: "Show the one question worth asking right now.",
+        discussion: """
+            Show the one question worth asking right now.
+
+            Reads the one question worth asking now. Does not change the queue.
+
+            ed companion inquire next
+            ed companion inquire next --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -756,7 +900,15 @@ struct CompanionInquireNextCommand: AsyncParsableCommand {
 
 struct CompanionInquireAnswerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "answer", abstract: "Answer a question it asked, and see what it changed.")
+        commandName: "answer", abstract: "Answer a question it asked, and see what it changed.",
+        discussion: """
+            Answer a question it asked, and see what it changed.
+
+            Changes an open question by storing your answer.
+
+            ed companion inquire answer 1 we shipped it
+            ed companion inquire answer 1 we shipped it --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -793,7 +945,15 @@ struct CompanionInquireAnswerCommand: AsyncParsableCommand {
 
 struct CompanionInquireSkipCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "skip", abstract: "Pass on a question; it learns what you skip.")
+        commandName: "skip", abstract: "Pass on a question; it learns what you skip.",
+        discussion: """
+            Pass on a question; it learns what you skip.
+
+            Changes the question queue by passing on one question.
+
+            ed companion inquire skip 1
+            ed companion inquire skip 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -820,7 +980,15 @@ struct CompanionInquireSkipCommand: AsyncParsableCommand {
 
 struct CompanionInquireMuteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mute", abstract: "Never be asked about a topic again.")
+        commandName: "mute", abstract: "Never be asked about a topic again.",
+        discussion: """
+            Never be asked about a topic again.
+
+            Changes which topics the companion is allowed to ask about.
+
+            ed companion inquire mute salary
+            ed companion inquire mute salary --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -851,7 +1019,16 @@ struct CompanionInquireMuteCommand: AsyncParsableCommand {
 
 struct CompanionInquireListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "Every question it has queued, asked or been told to drop.")
+        commandName: "ls",
+        abstract: "Show every question it has queued, asked or been told to drop.",
+        discussion: """
+            Show every question it has queued, asked or been told to drop.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed companion inquire ls
+            ed companion inquire ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -904,7 +1081,16 @@ struct CompanionInquireListCommand: AsyncParsableCommand {
 struct CompanionEntitiesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "entities",
-        abstract: "The people, projects and places it knows, with every spelling.")
+        abstract: "Show the people, projects and places it knows, with every spelling.",
+        discussion: """
+            The people, projects, places, organisations and other named things the
+            companion has resolved, each with every spelling it has seen.
+
+            Reads the people, projects, and places it knows. Does not change them.
+
+            ed companion entities
+            ed companion entities --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -954,7 +1140,15 @@ struct CompanionEntitiesCommand: AsyncParsableCommand {
 struct CompanionLensesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "lenses",
-        abstract: "What each lens has learned about being useful to you.")
+        abstract: "Show what each lens has learned about being useful to you.",
+        discussion: """
+            Prints each lens's short nightly note about how to be useful in its role.
+
+            Reads what each lens has learned. Does not change that record.
+
+            ed companion lenses
+            ed companion lenses --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -995,14 +1189,30 @@ struct CompanionLensesCommand: AsyncParsableCommand {
 struct CompanionEvalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "eval",
-        abstract: "Score the friend layer against the cases it is meant to fail.",
+        abstract: "Run the friend-layer cases the companion is meant to fail.",
+        discussion: """
+            Scores the friend layer against the cases it is meant to fail.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion eval run
+            """,
         subcommands: [CompanionEvalRunCommand.self, CompanionEvalHistoryCommand.self],
         defaultSubcommand: CompanionEvalHistoryCommand.self)
 }
 
 struct CompanionEvalRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "run", abstract: "Run the suite now and print every case.")
+        commandName: "run", abstract: "Run the suite now and print every case.",
+        discussion: """
+            Run the suite now and print every case.
+
+            Reads every eval case by running the suite now. Writes the run into the eval
+            history.
+
+            ed companion eval run
+            ed companion eval run --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1051,7 +1261,15 @@ struct CompanionEvalRunCommand: AsyncParsableCommand {
 
 struct CompanionEvalHistoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "Past eval runs, so you can see a prompt change land.")
+        commandName: "ls", abstract: "Past eval runs, so you can see a prompt change land.",
+        discussion: """
+            Past eval runs, so you can see a prompt change land.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed companion eval ls
+            ed companion eval ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1099,6 +1317,14 @@ struct CompanionStandupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "standup",
         abstract: "Record a standup, and see what your standups have added up to.",
+        discussion: """
+            Records a standup and, on request, checks what you said against what the
+            record shows.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion standup record /tmp/notes.md
+            """,
         subcommands: [CompanionStandupRecordCommand.self, CompanionStandupReportCommand.self],
         defaultSubcommand: CompanionStandupRecordCommand.self)
 }
@@ -1106,7 +1332,15 @@ struct CompanionStandupCommand: AsyncParsableCommand {
 struct CompanionStandupRecordCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "record",
-        abstract: "Record a standup, and optionally check it against the record.")
+        abstract: "Record a standup, and optionally check it against the record.",
+        discussion: """
+            Record a standup, and optionally check it against the record.
+
+            Changes the standup log by storing one standup.
+
+            ed companion standup record /tmp/notes.md
+            ed companion standup record /tmp/notes.md --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1179,7 +1413,15 @@ struct CompanionStandupRecordCommand: AsyncParsableCommand {
 
 struct CompanionStandupReportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "report", abstract: "What your standups have added up to.")
+        commandName: "report", abstract: "Show what your standups have added up to.",
+        discussion: """
+            Show what your standups have added up to.
+
+            Reads what recorded standups add up to. Does not change them.
+
+            ed companion standup report
+            ed companion standup report --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1232,7 +1474,15 @@ struct CompanionStandupReportCommand: AsyncParsableCommand {
 struct CompanionMachinesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "machines",
-        abstract: "Where the companion stack runs, and what each machine can do.",
+        abstract: "Show where the companion stack runs, and what each machine can do.",
+        discussion: """
+            The companion backend's own machine inventory and multi-host placement
+            planner.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion machines ls
+            """,
         subcommands: [
             CompanionMachinesListCommand.self, CompanionMachinesAddCommand.self,
             CompanionMachinesProbeCommand.self, CompanionMachinesPlanCommand.self,
@@ -1243,7 +1493,15 @@ struct CompanionMachinesCommand: AsyncParsableCommand {
 
 struct CompanionMachinesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "Every machine registered, and what was found on it.")
+        commandName: "ls", abstract: "Every machine registered, and what was found on it.",
+        discussion: """
+            Every machine registered, and what was found on it.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed companion machines ls
+            ed companion machines ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1295,7 +1553,15 @@ extension CompanionBrainOutput {
 
 struct CompanionMachinesAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Register a machine the stack could run on.")
+        commandName: "add", abstract: "Register a machine the stack could run on.",
+        discussion: """
+            Register a machine the stack could run on.
+
+            Changes the companion host list by registering one machine.
+
+            ed companion machines add box
+            ed companion machines add box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1328,7 +1594,15 @@ struct CompanionMachinesAddCommand: AsyncParsableCommand {
 
 struct CompanionMachinesProbeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "probe", abstract: "Ask a machine what it is rather than assuming.")
+        commandName: "probe", abstract: "Ask a machine what it is rather than assuming.",
+        discussion: """
+            Ask a machine what it is rather than assuming.
+
+            Reads a machine by asking it what it is. Does not change the machine.
+
+            ed companion machines probe notes
+            ed companion machines probe notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1356,7 +1630,15 @@ struct CompanionMachinesProbeCommand: AsyncParsableCommand {
 
 struct CompanionMachinesPlanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "plan", abstract: "What would run where, before anything is started.")
+        commandName: "plan", abstract: "What would run where, before anything is started.",
+        discussion: """
+            What would run where, before anything is started.
+
+            Reads where work would run. Does not change any machine.
+
+            ed companion machines plan
+            ed companion machines plan --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1402,7 +1684,15 @@ struct CompanionMachinesPlanCommand: AsyncParsableCommand {
 
 struct CompanionMachinesProfileCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "profile", abstract: "Override the tier a machine was given.")
+        commandName: "profile", abstract: "Override the tier a machine was given.",
+        discussion: """
+            Override the tier a machine was given.
+
+            Changes the tier stored for one machine.
+
+            ed companion machines profile notes balanced
+            ed companion machines profile notes balanced --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1433,7 +1723,16 @@ struct CompanionMachinesProfileCommand: AsyncParsableCommand {
 struct CompanionBaselinesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "baselines",
-        abstract: "Your own delivery baselines, which every signal is measured against.")
+        abstract: "Show your own delivery baselines, which every signal is measured against.",
+        discussion: """
+            Your own delivery baselines: the median and spread of stored signals,
+            bucketed by recording context and language.
+
+            Reads your delivery baselines. Does not change them.
+
+            ed companion baselines
+            ed companion baselines --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1485,6 +1784,13 @@ struct CompanionConnectorsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connectors",
         abstract: "The tokens and exports the behavioural connectors run on.",
+        discussion: """
+            Companion connectors bring in two kinds of material.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion connectors show
+            """,
         subcommands: [
             CompanionConnectorsShowCommand.self, CompanionConnectorsSetCommand.self,
             CompanionConnectorsImportCommand.self,
@@ -1494,7 +1800,16 @@ struct CompanionConnectorsCommand: AsyncParsableCommand {
 
 struct CompanionConnectorsShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "Which connectors have a token, without printing it.")
+        commandName: "show", abstract: "Show which connectors have a token, without printing it.",
+        discussion: """
+            Show which connectors have a token, without printing it.
+
+            Reads which connectors have a token. Does not change them, and does not
+            print the token.
+
+            ed companion connectors show
+            ed companion connectors show --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1531,7 +1846,15 @@ struct CompanionConnectorsShowCommand: AsyncParsableCommand {
 
 struct CompanionConnectorsSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Store a connector token on the companion.")
+        commandName: "set", abstract: "Store a connector token on the companion.",
+        discussion: """
+            Store a connector token on the companion.
+
+            Changes a connector by storing its token on the companion.
+
+            ed companion connectors set
+            ed companion connectors set --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1571,7 +1894,15 @@ struct CompanionConnectorsSetCommand: AsyncParsableCommand {
 struct CompanionConnectorsImportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "import",
-        abstract: "Import a calendar, music or YouTube export as observations.")
+        abstract: "Import a calendar, music or YouTube export as observations.",
+        discussion: """
+            Import a calendar, music or YouTube export as observations.
+
+            Changes observations by importing a calendar, music, or YouTube export.
+
+            ed companion connectors import calendar /tmp/notes.md
+            ed companion connectors import calendar /tmp/notes.md --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1611,7 +1942,17 @@ struct CompanionConnectorsImportCommand: AsyncParsableCommand {
 struct CompanionFactsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "facts",
-        abstract: "What was true, and what the companion believed at the time.")
+        abstract: "Show what was true, and what the companion believed at the time.",
+        discussion: """
+            Structured claims with two independent timelines: when something was true in
+            the world, and when the system believed it.
+
+            Reads what was true, and what the companion believed then. Does not change
+            those records.
+
+            ed companion facts
+            ed companion facts --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1673,7 +2014,15 @@ struct CompanionFactsCommand: AsyncParsableCommand {
 struct CompanionForgetBeliefCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "correct",
-        abstract: "Retire a belief that is wrong, or rewrite it in your own words.")
+        abstract: "Retire a belief that is wrong, or rewrite it in your own words.",
+        discussion: """
+            Retires a belief that is wrong, or rewrites it in your own words.
+
+            Changes one belief by retiring it or rewriting it.
+
+            ed companion correct 1
+            ed companion correct 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1716,7 +2065,15 @@ struct CompanionForgetBeliefCommand: AsyncParsableCommand {
 struct CompanionWeeklyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "weekly",
-        abstract: "The wider pass: relate beliefs, reopen contested ones, retire unread ones.")
+        abstract: "The wider pass: relate beliefs, reopen contested ones, retire unread ones.",
+        discussion: """
+            The wider pass.
+
+            Changes derived beliefs by relating, reopening, and retiring them.
+
+            ed companion weekly
+            ed companion weekly --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1750,6 +2107,13 @@ struct CompanionDbCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "db",
         abstract: "Migrate, reindex, or rebuild everything derived from the episodes.",
+        discussion: """
+            The maintenance verbs.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion db migrate
+            """,
         subcommands: [
             CompanionDbMigrateCommand.self, CompanionDbReindexCommand.self,
             CompanionDbRebuildCommand.self,
@@ -1759,7 +2123,15 @@ struct CompanionDbCommand: AsyncParsableCommand {
 
 struct CompanionDbMigrateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "migrate", abstract: "Apply any migrations the backend has not run.")
+        commandName: "migrate", abstract: "Apply any migrations the backend has not run.",
+        discussion: """
+            Apply any migrations the backend has not run.
+
+            Changes the companion database by applying migrations that have not run.
+
+            ed companion db migrate
+            ed companion db migrate --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1774,7 +2146,15 @@ struct CompanionDbMigrateCommand: AsyncParsableCommand {
 
 struct CompanionDbReindexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reindex", abstract: "Drop the chunks so every episode is embedded again.")
+        commandName: "reindex", abstract: "Drop the chunks so every episode is embedded again.",
+        discussion: """
+            Drop the chunks so every episode is embedded again.
+
+            Changes the companion index by embedding every episode again.
+
+            ed companion db reindex
+            ed companion db reindex --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -1793,7 +2173,15 @@ struct CompanionDbReindexCommand: AsyncParsableCommand {
 struct CompanionDbRebuildCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rebuild-derived",
-        abstract: "Throw away everything derived and rebuild it from the episodes.")
+        abstract: "Throw away everything derived and rebuild it from the episodes.",
+        discussion: """
+            Throw away everything derived and rebuild it from the episodes.
+
+            Changes derived memory by throwing it away and rebuilding it from episodes.
+
+            ed companion db rebuild-derived
+            ed companion db rebuild-derived --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

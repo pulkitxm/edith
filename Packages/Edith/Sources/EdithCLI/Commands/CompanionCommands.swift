@@ -5,7 +5,7 @@ import Foundation
 struct CompanionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "companion",
-        abstract: "The companion memory backend.",
+        abstract: "Show the companion memory backend.",
         discussion: """
             Run `ed companion hosts` to inspect capable machines, `ed companion deploy`
             to install and remember the stack, and `ed companion stack` to control it.
@@ -13,6 +13,7 @@ struct CompanionCommand: AsyncParsableCommand {
 
             Pass --endpoint or set EDITH_COMPANION_URL to use another backend. The
             default endpoint is http://127.0.0.1:4820.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
             """,
         subcommands: [
             CompanionStatusCommand.self, CompanionDoctorCommand.self,
@@ -46,7 +47,15 @@ struct CompanionCommand: AsyncParsableCommand {
 
 struct CompanionRunsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "runs", abstract: "List the background learning runs.")
+        commandName: "runs", abstract: "List the background learning runs.",
+        discussion: """
+            Lists the background learning runs the scheduler has recorded.
+
+            Reads the background learning runs. Does not change them.
+
+            ed companion runs
+            ed companion runs --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -99,7 +108,15 @@ struct CompanionRunsCommand: AsyncParsableCommand {
 
 struct CompanionExtractCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "extract", abstract: "Pull typed claims out of recent episodes.")
+        commandName: "extract", abstract: "Pull typed claims out of recent episodes.",
+        discussion: """
+            Pulls the claims you made out of episodes that have none yet.
+
+            Changes the claim store by pulling typed claims out of recent episodes.
+
+            ed companion extract
+            ed companion extract --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -129,7 +146,16 @@ struct CompanionExtractCommand: AsyncParsableCommand {
 
 struct CompanionClaimsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "claims", abstract: "List the claims you have made, with verdicts.")
+        commandName: "claims", abstract: "List the claims you have made, with verdicts.",
+        discussion: """
+            Lists the extracted claims, newest first, with the latest verdict where one
+            exists.
+
+            Reads stored claims and their verdicts. Does not change them.
+
+            ed companion claims
+            ed companion claims --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -179,7 +205,16 @@ struct CompanionClaimsCommand: AsyncParsableCommand {
 
 struct CompanionCorroborateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "corroborate", abstract: "Check testable claims against the record.")
+        commandName: "corroborate", abstract: "Check testable claims against the record.",
+        discussion: """
+            Judges unchecked testable claims against the observations recorded around
+            when they were made.
+
+            Changes claim verdicts by checking them against the record.
+
+            ed companion corroborate
+            ed companion corroborate --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -211,7 +246,17 @@ struct CompanionCorroborateCommand: AsyncParsableCommand {
 
 struct CompanionAskCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ask", abstract: "Ask a question answered from your own memory.")
+        commandName: "ask", abstract: "Ask a question answered from your own memory.",
+        discussion: """
+            Answers a question from your own memory, citing the episodes the answer
+            rests on.
+
+            Reads your stored memory to answer the question. Does not change that
+            memory.
+
+            ed companion ask what did I decide yesterday?
+            ed companion ask what did I decide yesterday? --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -244,7 +289,16 @@ struct CompanionAskCommand: AsyncParsableCommand {
 
 struct CompanionReflectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reflect", abstract: "Distill fresh beliefs from recent episodes.")
+        commandName: "reflect", abstract: "Distill fresh beliefs from recent episodes.",
+        discussion: """
+            Asks the companion's reasoning provider to distill durable beliefs from
+            recent episodes.
+
+            Changes stored beliefs by distilling them from recent episodes.
+
+            ed companion reflect
+            ed companion reflect --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -275,7 +329,15 @@ struct CompanionReflectCommand: AsyncParsableCommand {
 
 struct CompanionBeliefsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "beliefs", abstract: "List what the companion believes about you.")
+        commandName: "beliefs", abstract: "List what the companion believes about you.",
+        discussion: """
+            Lists the beliefs the reflection pass has formed, newest first.
+
+            Reads the beliefs the companion holds. Does not change them.
+
+            ed companion beliefs
+            ed companion beliefs --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -326,7 +388,16 @@ struct CompanionBeliefsCommand: AsyncParsableCommand {
 
 struct CompanionSyncCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "sync", abstract: "Pull a connector's activity into observations.")
+        commandName: "sync", abstract: "Pull a connector's activity into observations.",
+        discussion: """
+            Pulls recent data from a live connector.
+
+            Changes companion memory by pulling a connector's activity in as
+            observations.
+
+            ed companion sync calendar
+            ed companion sync calendar --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -386,7 +457,15 @@ struct CompanionSyncCommand: AsyncParsableCommand {
 
 struct CompanionObservationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "observations", abstract: "List what the connectors saw you do.")
+        commandName: "observations", abstract: "List what the connectors saw you do.",
+        discussion: """
+            Lists the behavioural record the connectors have gathered.
+
+            Reads observations the connectors recorded. Does not change them.
+
+            ed companion observations
+            ed companion observations --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -530,7 +609,16 @@ enum CompanionBridge {
 
 struct CompanionStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Count what the companion remembers.")
+        commandName: "status", abstract: "Count what the companion remembers.",
+        discussion: """
+            Reports how much the companion currently stores and when an episode was most
+            recently ingested.
+
+            Reads how much the companion remembers. Does not change it.
+
+            ed companion status
+            ed companion status --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -565,7 +653,16 @@ struct CompanionStatusCommand: AsyncParsableCommand {
 
 struct CompanionSearchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "search", abstract: "Search companion memory with hybrid retrieval.")
+        commandName: "search", abstract: "Search companion memory with hybrid retrieval.",
+        discussion: """
+            Searches embedded memory chunks with hybrid vector and full-text retrieval.
+
+            Reads companion memory for matching episodes and beliefs. Does not change
+            them.
+
+            ed companion search nginx
+            ed companion search nginx --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -617,7 +714,15 @@ struct CompanionSearchCommand: AsyncParsableCommand {
 
 struct CompanionIndexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "index", abstract: "Embed pending companion episodes.")
+        commandName: "index", abstract: "Embed pending companion episodes.",
+        discussion: """
+            Embeds pending episodes and stores their searchable chunks.
+
+            Changes the companion index by embedding episodes that are still pending.
+
+            ed companion index
+            ed companion index --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -643,7 +748,16 @@ struct CompanionIndexCommand: AsyncParsableCommand {
 
 struct CompanionDoctorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "doctor", abstract: "Check the companion's dependencies.")
+        commandName: "doctor", abstract: "Check the companion's dependencies.",
+        discussion: """
+            Asks the backend to check each service it depends on.
+
+            Reads the companion's dependencies and reports what is missing. Does not
+            change them.
+
+            ed companion doctor
+            ed companion doctor --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -690,7 +804,16 @@ struct CompanionDoctorCommand: AsyncParsableCommand {
 struct CompanionIngestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ingest",
-        abstract: "Ingest notes, recordings, photos, video and PDFs as episodes.")
+        abstract: "Ingest notes, recordings, photos, video and PDFs as episodes.",
+        discussion: """
+            Scans Markdown, audio recordings, PDFs, photos and videos and posts them to
+            the companion.
+
+            Changes companion memory by storing the files you name as episodes.
+
+            ed companion ingest /tmp/notes.md
+            ed companion ingest /tmp/notes.md --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -801,7 +924,15 @@ struct CompanionIngestCommand: AsyncParsableCommand {
 
 struct CompanionEpisodesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "episodes", abstract: "List recent companion episodes.")
+        commandName: "episodes", abstract: "List recent companion episodes.",
+        discussion: """
+            Lists the most recent episodes ordered by occurrence time.
+
+            Reads recent episodes. Does not change them.
+
+            ed companion episodes
+            ed companion episodes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
