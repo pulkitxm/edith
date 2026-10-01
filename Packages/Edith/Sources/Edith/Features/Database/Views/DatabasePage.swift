@@ -275,20 +275,33 @@ struct DatabasePage: View {
     private var pageContent: some View {
         switch model.readiness {
         case .checking:
-            serviceProgress(
+            DatabaseServiceProgressView(
                 title: "Preparing Database",
-                detail: "Starting the local tools used by your connections.")
+                detail: "Starting the local tools used by your connections.",
+                compact: compact,
+                palette: palette,
+                theme: theme)
         case .installing(let fraction):
-            serviceProgress(
+            DatabaseServiceProgressView(
                 title: "Downloading Database",
                 detail: "Downloading the signed database pack for this version.",
-                fraction: fraction)
+                fraction: fraction,
+                compact: compact,
+                palette: palette,
+                theme: theme)
         case .repairing:
-            serviceProgress(
+            DatabaseServiceProgressView(
                 title: "Repairing Database",
-                detail: "Refreshing the local tools, then reopening your connections.")
+                detail: "Refreshing the local tools, then reopening your connections.",
+                compact: compact,
+                palette: palette,
+                theme: theme)
         case .failed(let detail):
-            serviceRecovery(detail)
+            DatabaseServiceRecoveryView(
+                detail: detail,
+                theme: theme,
+                showsDetails: $showsServiceDetails,
+                repair: { Task { await model.repair() } })
         case .ready:
             readyContent
         }
@@ -355,158 +368,6 @@ struct DatabasePage: View {
             workbench
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func serviceProgress(
-        title: String, detail: String, fraction: Double? = nil
-    ) -> some View {
-        SkeletonReplica("\(title). \(detail)") {
-            VStack(alignment: .leading, spacing: 0) {
-                if let fraction {
-                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text(title)
-                            .font(.system(size: UIScale.pt(15), weight: .semibold))
-                        Text(detail)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                        ProgressView(value: min(max(fraction, 0), 1))
-                            .accessibilityLabel(title)
-                    }
-                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-                    .padding(.top, UIScale.pt(16))
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                        Text("Connections")
-                            .font(
-                                .system(
-                                    size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.clockwise")
-                            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        Label("Add connection", systemImage: "plus")
-                            .frame(minHeight: UIScale.pt(28))
-                    }
-                    EdithTextField(
-                        placeholder: "Search saved connections",
-                        text: .constant(""),
-                        icon: "magnifyingglass",
-                        compact: true,
-                        clearable: true
-                    )
-                    .frame(maxWidth: UIScale.pt(560))
-                }
-                .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-                .padding(.vertical, UIScale.pt(compact ? 14 : 18))
-                .background(palette.panel.opacity(0.64))
-                Divider().opacity(0.35)
-                ScrollView {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(
-                                .adaptive(
-                                    minimum: UIScale.pt(compact ? 220 : 270),
-                                    maximum: UIScale.pt(360)),
-                                spacing: UIScale.pt(14),
-                                alignment: .top)
-                        ],
-                        alignment: .leading,
-                        spacing: UIScale.pt(14)
-                    ) {
-                        ForEach(0..<6, id: \.self) { index in
-                            serviceConnectionCard(index)
-                        }
-                    }
-                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-                    .padding(.vertical, UIScale.pt(compact ? 18 : 24))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(palette.canvas)
-        }
-    }
-
-    private func serviceConnectionCard(_ index: Int) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .fill(theme.opacity(0.11))
-                    Image(systemName: "cylinder")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
-                        .foregroundStyle(theme)
-                }
-                .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
-                        .lineLimit(2)
-                    Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "ellipsis.circle")
-                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-            }
-            HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: "cylinder")
-                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                Text("Connected")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
-            }
-        }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-        .background(
-            palette.panel.opacity(0.74),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
-    }
-
-    private func serviceRecovery(_ detail: String) -> some View {
-        VStack(spacing: UIScale.pt(18)) {
-            Image(systemName: "wrench.and.screwdriver.fill")
-                .font(.system(size: UIScale.pt(34), weight: .medium))
-                .foregroundStyle(DashSkin.warn)
-                .accessibilityHidden(true)
-            VStack(spacing: UIScale.pt(7)) {
-                Text("Database needs a quick repair")
-                    .font(.system(size: UIScale.pt(20), weight: .semibold))
-                Text(
-                    "Edith can repair its local database tools and reopen your saved connections."
-                )
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            Button("Repair and continue") {
-                Task { await model.repair() }
-            }
-            .buttonStyle(.edith(.primary, tint: theme))
-            DisclosureGroup("Technical details", isExpanded: $showsServiceDetails) {
-                Text(detail)
-                    .font(.system(size: UIScale.pt(11), design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, UIScale.pt(8))
-            }
-            .font(.system(size: UIScale.pt(11.5)))
-            .frame(maxWidth: UIScale.pt(420))
-        }
-        .frame(maxWidth: UIScale.pt(560))
-        .padding(UIScale.pt(36))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
     }
 
     private func beginConnectionCreation() {
