@@ -19,7 +19,7 @@ struct CameraCommand: AsyncParsableCommand {
             CameraSourcesCommand.self, CameraSourceCommand.self, CameraZoomCommand.self,
             CameraFrameCommand.self, CameraResetCommand.self, CameraLookCommand.self,
             CameraBackgroundCommand.self, CameraPauseCommand.self, CameraResumeCommand.self,
-            CameraSceneCommand.self,
+            CameraSceneCommand.self, CameraExtensionCommand.self,
         ],
         defaultSubcommand: CameraStatusCommand.self)
 }
@@ -489,17 +489,16 @@ struct CameraResumeCommand: AsyncParsableCommand {
 struct CameraSceneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "scene",
-        abstract: "List, apply and save camera scenes.",
+        abstract: "List, apply, save and edit camera scenes.",
         discussion: """
-            List, apply and save camera scenes.
-
             Reads nothing until a subcommand runs. Does not change anything by itself.
-
-            ed camera scene list
+            Scenes store framing, look and background. Example: `ed camera scene list --json`.
             """,
         subcommands: [
             CameraSceneListCommand.self, CameraSceneApplyCommand.self,
-            CameraSceneSaveCommand.self, CameraSceneNextCommand.self,
+            CameraSceneSaveCommand.self, CameraSceneRenameCommand.self,
+            CameraSceneDuplicateCommand.self, CameraSceneMoveCommand.self,
+            CameraSceneDeleteCommand.self, CameraSceneNextCommand.self,
             CameraScenePreviousCommand.self,
         ],
         defaultSubcommand: CameraSceneListCommand.self)
@@ -593,15 +592,13 @@ struct CameraSceneSaveCommand: AsyncParsableCommand {
 
 struct CameraSceneNextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "next", abstract: VirtualCameraOperation.sceneNext.descriptor.summary,
+        commandName: "next",
+        abstract: VirtualCameraOperation.sceneNext.descriptor.summary,
         discussion: """
-            Switch to the next camera scene.
-
-            Reads the one question worth asking now. Does not change the queue.
-
-            ed camera scene next
-            ed camera scene next --json
-            """, )
+            Steps to the next saved scene, which changes the live camera. Use it from a
+            hotkey or a stream deck. The Virtual Camera page picks a scene directly.
+            Example: `ed camera scene next`.
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -616,18 +613,124 @@ struct CameraScenePreviousCommand: AsyncParsableCommand {
         commandName: "previous",
         abstract: VirtualCameraOperation.scenePrevious.descriptor.summary,
         discussion: """
-            Switch to the previous camera scene.
-
-            Changes the state this command names.
-
-            ed camera scene previous
-            ed camera scene previous --json
-            """, aliases: ["prev"])
+            Steps to the previous saved scene, which changes the live camera. Use it from a
+            hotkey or a stream deck. The Virtual Camera page picks a scene directly.
+            Example: `ed camera scene previous`.
+            """,
+        aliases: ["prev"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
     func run() async throws {
         try await execute { try await CameraCLI.perform(.stepScene(-1), json: json) }
+    }
+}
+
+struct CameraSceneRenameCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rename",
+        abstract: "Rename a saved camera scene.",
+        discussion: """
+            Writes the new name, matching the scene name field in the inspector.
+            Example: `ed camera scene rename Close-up Desk`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Argument(help: "The new scene name.")
+    var name: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(.renameScene(scene, name), json: json)
+        }
+    }
+}
+
+struct CameraSceneDuplicateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "duplicate",
+        abstract: "Copy a saved camera scene.",
+        discussion: """
+            Writes a copy after the original, the way the scene menu does.
+            Example: `ed camera scene duplicate Close-up`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute { try await CameraCLI.perform(.duplicateScene(scene), json: json) }
+    }
+}
+
+struct CameraSceneMoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "move",
+        abstract: "Move a saved camera scene up or down the list.",
+        discussion: """
+            Writes the new order. `--by 1` moves it later. `--by -1` moves it earlier.
+            Example: `ed camera scene move Close-up --by 1`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Option(name: .long, help: "How many places to move. Negative moves earlier.")
+    var by: Int
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute { try await CameraCLI.perform(.moveScene(scene, by), json: json) }
+    }
+}
+
+struct CameraSceneDeleteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "delete",
+        abstract: "Delete a saved camera scene.",
+        discussion: """
+            Previews the scene, then --yes writes the deletion.
+            Example: `ed camera scene delete Close-up --yes`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Flag(name: .long, help: "Delete the scene after printing the plan.")
+    var yes = false
+
+    @Flag(name: .long, help: "Emit the plan, or the camera status, as JSON.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let snapshot = try await CameraCLI.status()
+            guard let match = VirtualCameraSceneLibrary.find(scene, in: snapshot.state.scenes)
+            else {
+                throw CLIFailure.notFound(
+                    "no scene matches \(scene)", hint: "run `ed camera scene list`")
+            }
+            let plan = CLIDestructivePlan(
+                action: "delete scene \(match.name)", targets: [match.name], confirmed: yes,
+                json: json)
+            guard plan.shouldApply() else { return }
+            let updated = try await CameraCLI.request(.deleteScene(match.id.uuidString))
+            if json {
+                CameraCLI.emit(updated, json: true)
+            } else {
+                plan.finish(changed: true, plain: "deleted \(match.name)")
+            }
+        }
     }
 }

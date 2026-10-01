@@ -71,6 +71,9 @@ import Testing
         "ed herdr close-right",
         "ed herdr close-tab",
         "ed herdr layout delete",
+        "ed camera extension install",
+        "ed camera extension remove",
+        "ed camera scene delete",
     ]
 
     static func nodes(

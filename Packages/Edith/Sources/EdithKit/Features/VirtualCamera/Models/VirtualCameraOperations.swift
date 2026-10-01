@@ -31,6 +31,13 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
     case sceneSave
     case sceneNext
     case scenePrevious
+    case sceneRename
+    case sceneDuplicate
+    case sceneMove
+    case sceneDelete
+    case extensionStatus
+    case extensionInstall
+    case extensionRemove
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -53,6 +60,19 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
         case .sceneNext: descriptor(["scene", "next"], "Switch to the next scene.", .write)
         case .scenePrevious:
             descriptor(["scene", "previous"], "Switch to the previous scene.", .write)
+        case .sceneRename: descriptor(["scene", "rename"], "Rename a saved scene.", .write)
+        case .sceneDuplicate:
+            descriptor(["scene", "duplicate"], "Copy a saved scene.", .write)
+        case .sceneMove: descriptor(["scene", "move"], "Reorder a saved scene.", .write)
+        case .sceneDelete: descriptor(["scene", "delete"], "Delete a saved scene.", .write)
+        case .extensionStatus:
+            descriptor(["extension", "status"], "Read the Edith Camera system extension.", .read)
+        case .extensionInstall:
+            descriptor(
+                ["extension", "install"], "Install the Edith Camera system extension.", .write)
+        case .extensionRemove:
+            descriptor(
+                ["extension", "remove"], "Remove the Edith Camera system extension.", .write)
         }
     }
 

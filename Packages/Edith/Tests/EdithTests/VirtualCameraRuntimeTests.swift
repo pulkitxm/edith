@@ -146,6 +146,13 @@ import Testing
             try apply(.saveScene("talk", replace: false), to: &state)
         }
         #expect(try apply(.stepScene(1), to: &state).hasPrefix("Scene "))
+        #expect(
+            try apply(.renameScene("Talk", "Interview"), to: &state)
+                == "Scene renamed to Interview.")
+        #expect(state.scenes.contains { $0.name == "Interview" })
+        #expect(try apply(.duplicateScene("Interview"), to: &state).hasPrefix("Scene "))
+        #expect(try apply(.moveScene("Interview", 1), to: &state) == "Scene Interview moved.")
+        #expect(try apply(.deleteScene("Interview"), to: &state) == "Scene Interview deleted.")
         var empty = VirtualCameraState(scenes: [])
         #expect(throws: VirtualCameraRequestError.self) { try apply(.stepScene(1), to: &empty) }
     }
@@ -171,6 +178,8 @@ import Testing
             .background(VirtualCameraBackgroundChange(mode: .color, color: .accent)),
             .pause(.card, message: "Hi"), .resume, .applyScene("Close-up"),
             .saveScene("Talk", replace: true), .stepScene(-1),
+            .renameScene("Talk", "Interview"), .duplicateScene("Talk"), .deleteScene("Talk"),
+            .moveScene("Talk", -1),
         ]
         for request in requests {
             let text = try #require(request.encoded)

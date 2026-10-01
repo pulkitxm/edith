@@ -57,6 +57,10 @@ public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case resume
     case applyScene(String)
     case saveScene(String, replace: Bool)
+    case renameScene(String, String)
+    case duplicateScene(String)
+    case deleteScene(String)
+    case moveScene(String, Int)
     case stepScene(Int)
 
     public var changesState: Bool { self != .status }
@@ -172,7 +176,40 @@ public enum VirtualCameraRequestReducer {
                 throw VirtualCameraRequestError.scene(.notFound(offset >= 0 ? "next" : "previous"))
             }
             return "Scene \(scene.name) applied."
+        case .renameScene(let query, let name):
+            let scene = try scene(query, in: state)
+            do {
+                try VirtualCameraSceneLibrary.rename(scene.id, to: name, in: &state)
+            } catch let error as VirtualCameraSceneError {
+                throw VirtualCameraRequestError.scene(error)
+            }
+            return "Scene renamed to \(name)."
+        case .duplicateScene(let query):
+            let scene = try scene(query, in: state)
+            let copy = try wrapScene {
+                try VirtualCameraSceneLibrary.duplicate(scene.id, in: &state)
+            }
+            return "Scene \(copy.name) saved."
+        case .deleteScene(let query):
+            let scene = try scene(query, in: state)
+            do {
+                try VirtualCameraSceneLibrary.delete(scene.id, in: &state)
+            } catch let error as VirtualCameraSceneError {
+                throw VirtualCameraRequestError.scene(error)
+            }
+            return "Scene \(scene.name) deleted."
+        case .moveScene(let query, let offset):
+            let scene = try scene(query, in: state)
+            VirtualCameraSceneLibrary.move(scene.id, by: offset, in: &state)
+            return "Scene \(scene.name) moved."
         }
+    }
+
+    static func scene(_ query: String, in state: VirtualCameraState) throws -> VirtualCameraScene {
+        guard let scene = VirtualCameraSceneLibrary.find(query, in: state.scenes) else {
+            throw VirtualCameraRequestError.scene(.notFound(query))
+        }
+        return scene
     }
 
     public static func resolveSource(_ query: String, in sources: [VirtualCameraSource]) throws

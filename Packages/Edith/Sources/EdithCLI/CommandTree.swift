@@ -261,6 +261,23 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version", "--replace"], arguments: [.free]),
         "ed camera scene next": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed camera scene previous": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera scene rename": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed camera scene duplicate": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed camera scene move": Spec(
+            options: ["--json", "-h", "--help", "--version", "--by"],
+            optionValues: ["--by": .free], arguments: [.free]),
+        "ed camera scene delete": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed camera extension status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera extension install": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed camera extension remove": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
         "ed permissions ls": Spec(options: ["--json", "--help", "--attention"]),
         "ed permissions request": Spec(options: ["--json"], arguments: [.permission]),
         "ed permissions refresh": Spec(options: ["--json"]),

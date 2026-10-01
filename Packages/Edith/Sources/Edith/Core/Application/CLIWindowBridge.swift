@@ -23,6 +23,7 @@ enum CLIWindowBridge {
         MachineTerminalBroadcastBridge.install()
         HerdrOpenBridge.install()
         HerdrLayoutBridge.install()
+        CameraExtensionBridge.install()
         VideoEditorOpenBridge.shared.install()
     }
 
