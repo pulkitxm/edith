@@ -76,10 +76,32 @@ final class MusicDetailPresenter {
     }
 }
 
+struct MusicListingCache: Sendable {
+    var load: @Sendable (String) -> MusicLibraryContentListing?
+    var save: @Sendable (String, MusicLibraryContentListing) -> Void
+
+    static let empty = MusicListingCache(load: { _ in nil }, save: { _, _ in })
+
+    static func disk() -> MusicListingCache {
+        MusicListingCache(
+            load: { MusicLibraryIndex.listing($0) },
+            save: { path, listing in
+                MusicLibraryIndex.storeListing(
+                    path, folders: listing.folders.map(\.relativePath),
+                    tracks: listing.tracks.map(\.relativePath))
+            })
+    }
+}
+
 @MainActor
 @Observable
 final class MusicRemote {
-    static let shared = MusicRemote()
+    static let shared: MusicRemote = {
+        MusicLibraryIndex.activate()
+        return MusicRemote(
+            listingCache: .disk(),
+            catalog: { TrackMeta.scanMusicFolder() })
+    }()
 
     private(set) var tracks: [Track] = []
     private(set) var entriesLoaded = false
@@ -138,40 +160,49 @@ final class MusicRemote {
     private var folderCache: [String: [MusicFolder]] = [:]
     private var favouritesTask: Task<Void, Never>?
     private var favouritesGeneration = 0
-    private var rescanTask: Task<Void, Never>?
+    private var catalogTask: Task<Void, Never>?
     private var entriesTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
-    private var rescanGeneration = 0
+    private var searchDebounceTask: Task<Void, Never>?
+    private var catalogGeneration = 0
     private var entriesGeneration = 0
     private var searchGeneration = 0
+    private var searchQuery = ""
+    var searchDelay: Duration = .milliseconds(200)
     private let scanFavourites: @Sendable () -> [Track]
     private let listSubfolders: @Sendable (String) -> [MusicFolder]
-    private let scanLibrary: @Sendable () -> [Track]
     private let listFolder: @Sendable (String) -> MusicLibraryContentListing
-    private let searchFolder: @Sendable (String) -> (tracks: [Track], folders: [MusicFolder])
+    private let listingCache: MusicListingCache
+    private let searchPage: @Sendable (String, String) -> MusicSearchPage
+    private let searchRemainder: @Sendable (String, String) -> MusicSearchPage
+    private let catalog: @Sendable () -> [Track]
 
     init(
         scanFavourites: @escaping @Sendable () -> [Track] = { Favourites.tracks() },
         listSubfolders: @escaping @Sendable (String) -> [MusicFolder] = {
             TrackMeta.subfolders(in: $0)
         },
-        scanLibrary: @escaping @Sendable () -> [Track] = {
-            MusicLibraryContentOperationExecution.rescan()
-        },
         listFolder: @escaping @Sendable (String) -> MusicLibraryContentListing = { path in
-            MusicLibraryContentOperationExecution.list(
-                MusicFolder(url: TrackMeta.url(for: path), relativePath: path))
+            MusicLibraryContentOperationExecution.openFolder(path)
         },
-        searchFolder: @escaping @Sendable (String) -> (tracks: [Track], folders: [MusicFolder]) = {
-            path in
-            (TrackMeta.tracks(under: path), TrackMeta.folders(under: path))
-        }
+        listingCache: MusicListingCache = .empty,
+        searchPage: @escaping @Sendable (String, String) -> MusicSearchPage = { path, query in
+            TrackMeta.searchPage(
+                under: path, query: query, skip: 0, limit: MusicLibraryIndex.searchPageSize)
+        },
+        searchRemainder: @escaping @Sendable (String, String) -> MusicSearchPage = { path, query in
+            TrackMeta.searchPage(
+                under: path, query: query, skip: MusicLibraryIndex.searchPageSize, limit: nil)
+        },
+        catalog: @escaping @Sendable () -> [Track] = { [] }
     ) {
         self.scanFavourites = scanFavourites
         self.listSubfolders = listSubfolders
-        self.scanLibrary = scanLibrary
         self.listFolder = listFolder
-        self.searchFolder = searchFolder
+        self.listingCache = listingCache
+        self.searchPage = searchPage
+        self.searchRemainder = searchRemainder
+        self.catalog = catalog
     }
 
     func start() {
@@ -241,9 +272,9 @@ final class MusicRemote {
         favouritesTask = nil
         favouritesGeneration &+= 1
         favouritesLoaded = false
-        rescanTask?.cancel()
-        rescanTask = nil
-        rescanGeneration &+= 1
+        catalogTask?.cancel()
+        catalogTask = nil
+        catalogGeneration &+= 1
         entriesTask?.cancel()
         entriesTask = nil
         entriesGeneration &+= 1
@@ -278,16 +309,9 @@ final class MusicRemote {
     }
 
     func rescan() {
-        rescanTask?.cancel()
-        rescanGeneration &+= 1
-        let generation = rescanGeneration
-        let scanLibrary = scanLibrary
         refreshFavourites()
-        entriesTask?.cancel()
-        entriesTask = nil
-        entriesGeneration &+= 1
         folderCache.removeAll()
-        let refreshSearch = searchScopePath != nil
+        let refreshSearch = !searchQuery.isEmpty
         invalidateSearchScope()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
@@ -296,13 +320,21 @@ final class MusicRemote {
             entriesLoaded = false
         }
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
-        rescanTask = Task { [weak self] in
-            let scanned = await Task.detached { scanLibrary() }.value
-            guard !Task.isCancelled, let self, self.rescanGeneration == generation else { return }
-            self.rescanTask = nil
+        refreshEntries()
+        refreshCatalog()
+        if refreshSearch { loadSearchScope() }
+    }
+
+    private func refreshCatalog() {
+        catalogTask?.cancel()
+        catalogGeneration &+= 1
+        let generation = catalogGeneration
+        let catalog = catalog
+        catalogTask = Task { [weak self] in
+            let scanned = await Task.detached { catalog() }.value
+            guard !Task.isCancelled, let self, self.catalogGeneration == generation else { return }
+            self.catalogTask = nil
             self.tracks = scanned
-            self.refreshEntries()
-            if refreshSearch { self.loadSearchScope() }
         }
     }
 
@@ -313,6 +345,7 @@ final class MusicRemote {
         let path = folderPath
         let listFolder = listFolder
         let listSubfolders = listSubfolders
+        let listingCache = listingCache
         var ancestor = path
         var missingAncestors: [String] = []
         while !ancestor.isEmpty {
@@ -323,6 +356,15 @@ final class MusicRemote {
         }
         let ancestorPaths = missingAncestors
         entriesTask = Task { [weak self] in
+            let cached = await Task.detached { listingCache.load(path) }.value
+            if let cached, !Task.isCancelled, let self, self.entriesGeneration == generation,
+                self.folderPath == path
+            {
+                self.folders = cached.folders
+                self.folderTracks = cached.tracks
+                self.entriesLoaded = true
+                self.folderCache[path] = cached.folders
+            }
             let result = await Task.detached {
                 (
                     entries: listFolder(path),
@@ -339,31 +381,63 @@ final class MusicRemote {
             self.entriesLoaded = true
             self.folderCache[path] = entries.folders
             for (ancestor, folders) in result.ancestors { self.folderCache[ancestor] = folders }
+            await Task.detached { listingCache.save(path, entries) }.value
+        }
+    }
+
+    func noteSearch(_ text: String) {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = nil
+        searchQuery = text
+        guard !text.isEmpty else {
+            invalidateSearchScope()
+            return
+        }
+        let delay = searchDelay
+        let query = text
+        let path = folderPath
+        searchDebounceTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, self.searchQuery == query, self.folderPath == path
+            else { return }
+            self.loadSearchScope(matching: query)
         }
     }
 
     func loadSearchScope() {
+        loadSearchScope(matching: searchQuery)
+    }
+
+    func loadSearchScope(matching query: String) {
         let path = folderPath
-        guard searchScopePath != path else { return }
         searchTask?.cancel()
         searchGeneration &+= 1
         let generation = searchGeneration
         searchScopePath = path
         searchLoaded = false
-        let searchFolder = searchFolder
+        let searchPage = searchPage
+        let searchRemainder = searchRemainder
         searchTask = Task { [weak self] in
-            let found = await Task.detached { searchFolder(path) }.value
+            let first = await Task.detached { searchPage(path, query) }.value
             guard !Task.isCancelled, let self, self.searchGeneration == generation,
                 self.searchScopePath == path
             else { return }
-            self.searchTask = nil
-            self.searchTracks = found.tracks
-            self.searchFolders = found.folders
+            self.searchTracks = first.tracks
+            self.searchFolders = first.folders
             self.searchLoaded = true
+            let rest = await Task.detached { searchRemainder(path, query) }.value
+            guard !Task.isCancelled, self.searchGeneration == generation,
+                self.searchScopePath == path
+            else { return }
+            self.searchTask = nil
+            self.searchTracks.append(contentsOf: rest.tracks)
+            self.searchFolders.append(contentsOf: rest.folders)
         }
     }
 
     private func invalidateSearchScope() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = nil
         searchTask?.cancel()
         searchTask = nil
         searchGeneration &+= 1
@@ -891,8 +965,8 @@ struct MusicPage: View {
         } message: {
             Text(remote.libraryError ?? "The music library operation failed.")
         }
-        .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
-        .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
+        .onChange(of: search) { remote.noteSearch(search) }
+        .onChange(of: remote.folderPath) { if !search.isEmpty { remote.noteSearch(search) } }
         .onChange(of: listQuery, initial: true) { _, query in
             selection = MusicListSelection(query: query)
         }
