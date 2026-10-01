@@ -19,14 +19,12 @@ public enum AgentJobTrigger: String, Codable, CaseIterable, Sendable {
 public enum AgentPowerPolicy: String, Codable, CaseIterable, Sendable {
     case any
     case pauseOnLock
-    case pauseOnSleep
     case pauseOnBattery
 
     public var title: String {
         switch self {
         case .any: "Always"
         case .pauseOnLock: "Paused while locked"
-        case .pauseOnSleep: "Paused while asleep"
         case .pauseOnBattery: "Paused on battery"
         }
     }
