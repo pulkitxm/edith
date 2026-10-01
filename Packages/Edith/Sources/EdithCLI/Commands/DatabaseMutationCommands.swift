@@ -191,6 +191,13 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mutations",
         abstract: "Preview, apply, and reconcile destructive database work.",
+        discussion: """
+            Preview, apply, and reconcile destructive database work.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed database mutations row-request 11111111-1111-1111-1111-111111111111 --action insert
+            """,
         subcommands: [
             DatabaseMutationRowRequestCommand.self,
             DatabaseMutationKeyRequestCommand.self,
@@ -208,8 +215,16 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "document-request",
         abstract:
-            "Build a safe MongoDB, Elasticsearch, or OpenSearch document mutation request as JSON."
-    )
+            "Build a safe MongoDB, Elasticsearch, or OpenSearch document mutation request as JSON.",
+        discussion: """
+            Build a safe MongoDB, Elasticsearch, or OpenSearch document mutation request
+            as JSON.
+
+            Changes the state this command names.
+
+            ed database mutations document-request 11111111-1111-1111-1111-111111111111 --action insert
+            ed database mutations document-request 11111111-1111-1111-1111-111111111111 --action insert --json
+            """, )
 
     @Option(name: .long, help: "Database product: mongodb, elasticsearch, or opensearch.")
     var product = "mongodb"
@@ -454,7 +469,15 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
 struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "key-request",
-        abstract: "Build a safe Redis or Valkey string-key mutation request as JSON.")
+        abstract: "Build a safe Redis or Valkey string-key mutation request as JSON.",
+        discussion: """
+            Build a safe Redis or Valkey string-key mutation request as JSON.
+
+            Changes the state this command names.
+
+            ed database mutations key-request 11111111-1111-1111-1111-111111111111 --action insert --key notes
+            ed database mutations key-request 11111111-1111-1111-1111-111111111111 --action insert --key notes --json
+            """, )
 
     @Option(name: .long, help: "Key action: insert, update or delete.")
     var action: String
@@ -555,7 +578,15 @@ struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {
 struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "row-request",
-        abstract: "Build a safe PostgreSQL row mutation request as JSON.")
+        abstract: "Build a safe PostgreSQL row mutation request as JSON.",
+        discussion: """
+            Build a safe PostgreSQL row mutation request as JSON.
+
+            Changes the state this command names.
+
+            ed database mutations row-request 11111111-1111-1111-1111-111111111111 --action insert
+            ed database mutations row-request 11111111-1111-1111-1111-111111111111 --action insert --json
+            """, )
 
     @Option(name: .long, help: "Row action: insert, update or delete.")
     var action: String
@@ -636,7 +667,15 @@ struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
 struct DatabaseMutationPreviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "preview",
-        abstract: "Preview a destructive request without applying it.")
+        abstract: "Preview a destructive request without applying it.",
+        discussion: """
+            Preview a destructive request without applying it.
+
+            Reads what a destructive request would change. Does not apply it.
+
+            ed database mutations preview
+            ed database mutations preview --json
+            """, )
 
     @Flag(name: .long, help: "Emit a reusable confirmation document as JSON.")
     var json = false
@@ -688,7 +727,15 @@ struct DatabaseMutationPreviewCommand: AsyncParsableCommand {
 struct DatabaseMutationApplyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "apply",
-        abstract: "Apply the exact request bound to a fresh preview.")
+        abstract: "Apply the exact request bound to a fresh preview.",
+        discussion: """
+            Apply the exact request bound to a fresh preview.
+
+            Changes the state this command names.
+
+            ed database mutations apply --request /tmp/request.json --confirmation /tmp/preview.json --yes
+            ed database mutations apply --request /tmp/request.json --confirmation /tmp/preview.json --yes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -760,7 +807,15 @@ struct DatabaseMutationApplyCommand: AsyncParsableCommand {
 struct DatabaseMutationStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "Check an accepted asynchronous database mutation.")
+        abstract: "Check an accepted asynchronous database mutation.",
+        discussion: """
+            Check an accepted asynchronous database mutation.
+
+            Reads the current state. Does not change it.
+
+            ed database mutations status --receipt /tmp/receipt.json
+            ed database mutations status --receipt /tmp/receipt.json --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -802,7 +857,15 @@ struct DatabaseMutationStatusCommand: AsyncParsableCommand {
 struct DatabaseMutationCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cancel",
-        abstract: "Request cancellation of an accepted asynchronous mutation.")
+        abstract: "Request cancellation of an accepted asynchronous mutation.",
+        discussion: """
+            Request cancellation of an accepted asynchronous mutation.
+
+            Changes the state this command names.
+
+            ed database mutations cancel --receipt /tmp/receipt.json
+            ed database mutations cancel --receipt /tmp/receipt.json --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -854,7 +917,15 @@ struct DatabaseMutationCancelCommand: AsyncParsableCommand {
 struct DatabaseMutationOutcomeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "outcome",
-        abstract: "Read the durable outcome for a mutation operation.")
+        abstract: "Read the durable outcome for a mutation operation.",
+        discussion: """
+            Read the durable outcome for a mutation operation.
+
+            Reads the current state. Does not change it.
+
+            ed database mutations outcome 11111111-1111-1111-1111-111111111111
+            ed database mutations outcome 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

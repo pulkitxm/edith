@@ -157,6 +157,13 @@ struct DatabaseOperationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "operations",
         abstract: "Inspect and cancel tracked database operations.",
+        discussion: """
+            Inspect and cancel tracked database operations.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed database operations list
+            """,
         subcommands: [
             DatabaseOperationsListCommand.self,
             DatabaseOperationsGetCommand.self,
@@ -169,6 +176,14 @@ struct DatabaseOperationsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List tracked database operations.",
+        discussion: """
+            List tracked database operations.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed database operations list
+            ed database operations list --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -215,7 +230,15 @@ struct DatabaseOperationsListCommand: AsyncParsableCommand {
 struct DatabaseOperationsGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Show one tracked database operation.")
+        abstract: "Show one tracked database operation.",
+        discussion: """
+            Show one tracked database operation.
+
+            Reads one tracked database operation. Does not change it.
+
+            ed database operations get 11111111-1111-1111-1111-111111111111
+            ed database operations get 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -247,7 +270,15 @@ struct DatabaseOperationsGetCommand: AsyncParsableCommand {
 struct DatabaseOperationsCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cancel",
-        abstract: "Request cancellation of one tracked database operation.")
+        abstract: "Request cancellation of one tracked database operation.",
+        discussion: """
+            Request cancellation of one tracked database operation.
+
+            Changes the state this command names.
+
+            ed database operations cancel 11111111-1111-1111-1111-111111111111
+            ed database operations cancel 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

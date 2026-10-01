@@ -6,6 +6,14 @@ struct DatabaseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "database",
         abstract: "Inspect saved database connections and their capabilities.",
+        discussion: """
+            `ed database` is the noninteractive surface for saved connections, bounded
+            reads, and guarded mutations.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed database connections list
+            """,
         subcommands: [
             DatabaseConnectionsCommand.self,
             DatabaseSavedQueriesCommand.self,
@@ -26,6 +34,13 @@ struct DatabaseConnectionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connections",
         abstract: "Inspect and create saved database connections.",
+        discussion: """
+            Groups read-only saved connection inspection.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed database connections list
+            """,
         subcommands: [
             DatabaseConnectionsListCommand.self,
             DatabaseConnectionsGetCommand.self,
@@ -547,7 +562,16 @@ enum DatabaseCLI {
 struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
-        abstract: "Test and save a database connection.")
+        abstract: "Test and save a database connection.",
+        discussion: """
+            Tests a database connection through the authenticated local broker, then
+            saves it only when the test succeeds.
+
+            Changes the saved list by adding one record.
+
+            ed database connections add notes --product postgresql
+            ed database connections add notes --product postgresql --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -677,6 +701,14 @@ struct DatabaseConnectionsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List saved database connections.",
+        discussion: """
+            Lists a bounded page of saved database connection summaries.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed database connections list
+            ed database connections list --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -757,7 +789,15 @@ struct DatabaseConnectionsListCommand: AsyncParsableCommand {
 struct DatabaseConnectionsGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Show one saved database connection without credentials.")
+        abstract: "Show one saved database connection without credentials.",
+        discussion: """
+            Shows the safe non-secret definition of one saved connection.
+
+            Reads one saved connection without its credentials. Does not change it.
+
+            ed database connections get 11111111-1111-1111-1111-111111111111
+            ed database connections get 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -804,7 +844,15 @@ struct DatabaseConnectionsGetCommand: AsyncParsableCommand {
 struct DatabaseCapabilitiesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "capabilities",
-        abstract: "Show the detected capabilities for one saved connection.")
+        abstract: "Show the detected capabilities for one saved connection.",
+        discussion: """
+            Shows the shared capability report for one saved connection.
+
+            Reads the current state. Does not change it.
+
+            ed database capabilities 11111111-1111-1111-1111-111111111111
+            ed database capabilities 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
