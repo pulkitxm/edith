@@ -6,7 +6,7 @@ import Foundation
 struct SkillsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "skills",
-        abstract: "The Edith skill library.",
+        abstract: "Read and install bundled skills.",
         discussion: """
             Reads the bundled skill catalog and the agents this Mac already has.
             `ed skills preview` and `ed skills copy` load SKILL.md from GitHub, falling
