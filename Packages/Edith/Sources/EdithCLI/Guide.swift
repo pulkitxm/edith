@@ -514,6 +514,9 @@ public enum Guide {
         ed herdr attach w3:p1N          attach this terminal to a live pane
         ed herdr models codex           models, effort levels and fast mode per agent
         ed herdr defaults set codex --model gpt-6-sol --effort high --fast on
+        ed herdr layout ls              tabs, saved layouts, and agent terminals
+        ed herdr split <agent> --side right
+        ed herdr close-tab --yes        close the selected Herdr tab
         ed permissions ls
         ed permissions request calendar
         ed permissions settings screenRecording

@@ -27,8 +27,21 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr defaults set <kind>` | Change those launch defaults for one kind |
 | `ed herdr send <pane> <message>` | Type a message now, when the agent finishes, or at a time |
 | `ed herdr hooks` | Messages waiting for an agent to finish |
+| `ed herdr layout` | Tabs, saved layouts, and agent terminals in the Edith window |
+| `ed herdr split <agent>` | Open an agent beside the focused pane |
+| `ed herdr move <agent>` | Move an agent into another tab |
+| `ed herdr swap <agent> <agent>` | Swap two agents in the same tab |
+| `ed herdr gather` | Gather every tab into one |
+| `ed herdr separate` | Turn a split into one tab per agent |
+| `ed herdr terminal` | Open a terminal in the selected tab |
+| `ed herdr close-tab` | Close one tab after `--yes` |
+| `ed herdr close-others` | Close every tab except one after `--yes` |
+| `ed herdr close-right` | Close tabs to the right after `--yes` |
+| `ed herdr close-all` | Close every agent tab after `--yes` |
 
-`ed herdr list` is an alias for `ed herdr ls`.
+`ed herdr list` is an alias for `ed herdr ls`. Layout commands talk to the
+open Edith window. The session commands above talk to the `herdr` binary and
+do not need that window.
 
 ## Commands
 
@@ -39,6 +52,21 @@ to the `herdr` CLI, not to the Edith window.
 - [`ed herdr defaults`](./defaults.md)
 - [`ed herdr send`](./send.md)
 - [`ed herdr hooks`](./hooks.md)
+- [`ed herdr layout`](./layout.md)
+- [`ed herdr layout save`](./layout-save.md)
+- [`ed herdr layout delete`](./layout-delete.md)
+- [`ed herdr layout apply`](./layout-apply.md)
+- [`ed herdr layout even`](./layout-even.md)
+- [`ed herdr split`](./split.md)
+- [`ed herdr move`](./move.md)
+- [`ed herdr swap`](./swap.md)
+- [`ed herdr gather`](./gather.md)
+- [`ed herdr separate`](./separate.md)
+- [`ed herdr terminal`](./terminal.md)
+- [`ed herdr close-tab`](./close-tab.md)
+- [`ed herdr close-others`](./close-others.md)
+- [`ed herdr close-right`](./close-right.md)
+- [`ed herdr close-all`](./close-all.md)
 - [Terminals in agent tabs](./terminals.md)
 
 ## Exit codes

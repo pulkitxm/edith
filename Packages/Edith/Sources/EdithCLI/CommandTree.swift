@@ -395,6 +395,48 @@ public enum CommandTree {
                 "--json", "-h", "--help", "--version", "--model", "--effort", "--fast",
             ],
             optionValues: ["--fast": .onOff], arguments: [.free]),
+        "ed herdr layout ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed herdr layout save": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free], arguments: [.free]),
+        "ed herdr layout delete": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed herdr layout apply": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free], arguments: [.free]),
+        "ed herdr layout even": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free]),
+        "ed herdr close-tab": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab", "--yes"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed herdr close-others": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab", "--yes"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed herdr close-right": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab", "--yes"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed herdr close-all": Spec(
+            options: ["--json", "-h", "--help", "--version", "--yes"],
+            destructivePolicy: .previewThenYes),
+        "ed herdr gather": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free]),
+        "ed herdr separate": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free]),
+        "ed herdr split": Spec(
+            options: ["--json", "-h", "--help", "--version", "--side"],
+            optionValues: ["--side": .free], arguments: [.free]),
+        "ed herdr move": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free], arguments: [.free]),
+        "ed herdr swap": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed herdr terminal": Spec(
+            options: ["--json", "-h", "--help", "--version", "--tab"],
+            optionValues: ["--tab": .free]),
         "ed studio tools": Spec(
             options: ["--json", "-h", "--help", "--version", "--kind"],
             optionValues: ["--kind": .studioKind]),

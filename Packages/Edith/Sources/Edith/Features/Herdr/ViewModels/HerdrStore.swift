@@ -1035,6 +1035,210 @@ final class HerdrStore {
         closeTabs { _, _ in true }
     }
 
+    func closeTabsConfirmed(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        var owners: [String] = []
+        for id in ids { owners.append(id) }
+        terminalPanels.closeAll(owners: owners)
+        closeTabs(withIDs: ids)
+    }
+
+    func closeTabConfirmed(_ tabID: String) -> String? {
+        guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        closeTabsConfirmed([tabID])
+        return nil
+    }
+
+    private func openTabIDs() -> Set<String> {
+        var ids = Set<String>()
+        for tab in tabs { ids.insert(tab.id) }
+        return ids
+    }
+
+    func closeOthersConfirmed(besides id: String) -> String? {
+        if id == Self.boardID {
+            closeTabsConfirmed(openTabIDs())
+            return nil
+        }
+        guard tab(id) != nil else { return "no tab matches \(id)" }
+        var ids = openTabIDs()
+        ids.remove(id)
+        closeTabsConfirmed(ids)
+        selectedTab = id
+        return nil
+    }
+
+    func closeRightConfirmed(of id: String) -> String? {
+        if id == Self.boardID {
+            closeTabsConfirmed(openTabIDs())
+            return nil
+        }
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+            return "no tab matches \(id)"
+        }
+        var ids = Set<String>()
+        for offset in tabs.indices where offset > index {
+            ids.insert(tabs[offset].id)
+        }
+        closeTabsConfirmed(ids)
+        return nil
+    }
+
+    func closeAllConfirmed() {
+        closeTabsConfirmed(openTabIDs())
+    }
+
+    func gatherConfirmed(into tabID: String) -> String? {
+        guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        gatherAll(into: tabID)
+        return nil
+    }
+
+    func separateConfirmed(_ tabID: String) -> String? {
+        guard let tab = tab(tabID) else { return "no tab matches \(tabID)" }
+        guard tab.isSplit else { return "this tab has only one agent" }
+        separate(tabID)
+        return nil
+    }
+
+    func evenConfirmed(_ tabID: String) -> String? {
+        guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        equalize(tabID)
+        return nil
+    }
+
+    func splitAgent(_ agentID: String, side: InsertSide) -> String? {
+        guard let agent = agent(matchingID: agentID) else { return "no agent matches \(agentID)" }
+        open(agent, beside: side)
+        return nil
+    }
+
+    func moveAgent(_ agentID: String, into tabID: String) -> String? {
+        guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        guard let agent = agent(matchingID: agentID) else { return "no agent matches \(agentID)" }
+        if tab(tabID)?.layout.contains(agentID) == true { return nil }
+        add(agent, into: tabID)
+        return nil
+    }
+
+    func swapAgents(_ first: String, _ second: String) -> String? {
+        guard let tab = tab(containing: first), tab.layout.contains(second) else {
+            return "those agents are not in the same tab"
+        }
+        swap(first, second)
+        return nil
+    }
+
+    func saveArrangementConfirmed(of tabID: String, named name: String) -> String? {
+        guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        guard saveArrangement(of: tabID, named: name) != nil else {
+            return "a saved layout needs at least two agents in the tab"
+        }
+        return nil
+    }
+
+    func deleteArrangement(matching token: String) -> String? {
+        if let id = UUID(uuidString: token), savedArrangements.contains(where: { $0.id == id }) {
+            deleteArrangement(id)
+            return nil
+        }
+        var matched: [HerdrSavedArrangement] = []
+        for item in savedArrangements where item.name.caseInsensitiveCompare(token) == .orderedSame
+        {
+            matched.append(item)
+        }
+        guard let saved = matched.first else { return "no saved layout matches \(token)" }
+        guard matched.count == 1 else { return "more than one saved layout is named \(token)" }
+        deleteArrangement(saved.id)
+        return nil
+    }
+
+    func applyArrangement(_ token: String, to tabID: String) -> String? {
+        guard let tab = tab(tabID) else { return "no tab matches \(tabID)" }
+        if let saved = savedArrangements.first(where: {
+            $0.id.uuidString.caseInsensitiveCompare(token) == .orderedSame
+                || $0.name.caseInsensitiveCompare(token) == .orderedSame
+        }) {
+            guard saved.count == tab.agentIDs.count else {
+                return "\(saved.name) is saved for \(saved.count) agents"
+            }
+            arrange(tabID, as: .saved(saved))
+            return nil
+        }
+        let arrangement =
+            HerdrArrangement(rawValue: token)
+            ?? HerdrArrangement.allCases.first {
+                $0.title.caseInsensitiveCompare(token) == .orderedSame
+            }
+        guard let arrangement else { return "no layout matches \(token)" }
+        guard HerdrLayoutTemplate.builtIn(arrangement).layout(tab.agentIDs) != nil else {
+            return "\(arrangement.title) does not fit this tab"
+        }
+        arrange(tabID, as: .builtIn(arrangement))
+        return nil
+    }
+
+    func openTerminalNow(in owner: String) -> String {
+        let origin = terminalOrigin(for: owner)
+        return terminalPanels.newTerminal(in: owner, host: origin.host, cwd: origin.cwd)
+    }
+
+    func agent(matchingID id: String) -> HerdrAgent? {
+        if let agent = session(id)?.agent { return agent }
+        return agents.first { $0.id == id }
+    }
+
+    func layoutSnapshot() -> HerdrLayoutSnapshot {
+        var tabStates: [HerdrLayoutTabState] = [
+            HerdrLayoutTabState(
+                id: Self.boardID, index: 0, title: "Board", agents: [], focused: "",
+                selected: selectedTab == Self.boardID)
+        ]
+        var index = 1
+        for tab in tabs {
+            var agentStates: [HerdrLayoutAgentState] = []
+            var title = ""
+            for agentID in tab.agentIDs {
+                let agent = session(agentID)?.agent ?? agents.first { $0.id == agentID }
+                let state = HerdrLayoutAgentState(
+                    id: agentID, title: agent?.title ?? agentID, pane: agent?.pane ?? "")
+                agentStates.append(state)
+                if !title.isEmpty { title += ", " }
+                title += state.title
+            }
+            tabStates.append(
+                HerdrLayoutTabState(
+                    id: tab.id, index: index, title: title, agents: agentStates,
+                    focused: tab.focused, selected: tab.id == selectedTab))
+            index += 1
+        }
+        var arrangements: [HerdrLayoutArrangementState] = []
+        for item in savedArrangements {
+            arrangements.append(
+                HerdrLayoutArrangementState(
+                    id: item.id.uuidString, name: item.name, panes: item.count))
+        }
+        var known: [HerdrLayoutAgentState] = []
+        for agent in agents {
+            known.append(
+                HerdrLayoutAgentState(id: agent.id, title: agent.title, pane: agent.pane))
+        }
+        var terminals: [HerdrLayoutTerminalState] = []
+        for owner in terminalPanels.panels.keys {
+            guard let panel = terminalPanels.panels[owner] else { continue }
+            for id in panel.terminalIDs {
+                guard let terminal = terminalPanels.terminals[id] else { continue }
+                terminals.append(
+                    HerdrLayoutTerminalState(
+                        id: id, owner: owner, title: terminal.title,
+                        selected: panel.selectedID == id))
+            }
+        }
+        return HerdrLayoutSnapshot(
+            selected: selectedTab, tabs: tabStates, arrangements: arrangements, agents: known,
+            terminals: terminals)
+    }
+
     func closeToTheRight(of id: String) {
         if id == Self.boardID {
             closeTabs { _, _ in true }

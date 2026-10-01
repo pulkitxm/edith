@@ -22,6 +22,7 @@ enum CLIWindowBridge {
         QuinjetSessionBridge.shared.install()
         MachineTerminalBroadcastBridge.install()
         HerdrOpenBridge.install()
+        HerdrLayoutBridge.install()
         VideoEditorOpenBridge.shared.install()
     }
 
