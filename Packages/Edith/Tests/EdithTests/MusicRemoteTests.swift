@@ -139,9 +139,15 @@ import Testing
         #expect(remote.entriesLoaded)
     }
 
-    @Test func newestRescanWinsAndStopRejectsAStaleScan() async {
+    @Test func newestRescanWinsAndStopRejectsAStaleCatalog() async {
         let fixture = MusicRemoteLoadFixture()
-        let remote = MusicRemote(scanLibrary: { fixture.scan() })
+        let remote = MusicRemote(
+            listFolder: { path in
+                MusicLibraryContentListing(
+                    folder: MusicFolder(
+                        url: URL(fileURLWithPath: "/tmp/\(path)"), relativePath: path),
+                    folders: [], tracks: [])
+            }, catalog: { fixture.scan() })
         remote.rescan()
         #expect(await fixture.waitForFirstStart())
 
@@ -153,7 +159,13 @@ import Testing
         #expect(remote.tracks.map(\.relativePath) == ["new.mp3"])
 
         let stoppedFixture = MusicRemoteLoadFixture()
-        let stopped = MusicRemote(scanLibrary: { stoppedFixture.scan() })
+        let stopped = MusicRemote(
+            listFolder: { path in
+                MusicLibraryContentListing(
+                    folder: MusicFolder(
+                        url: URL(fileURLWithPath: "/tmp/\(path)"), relativePath: path),
+                    folders: [], tracks: [])
+            }, catalog: { stoppedFixture.scan() })
         stopped.rescan()
         #expect(await stoppedFixture.waitForFirstStart())
         stopped.stop()
@@ -163,29 +175,27 @@ import Testing
         #expect(stopped.tracks.isEmpty)
     }
 
-    @Test func rescanRejectsAnOlderFolderListingBeforeTheScanFinishes() async {
+    @Test func rescanRejectsAnOlderFolderListing() async {
         let listing = MusicRemoteLoadFixture()
-        let scanning = MusicRemoteLoadFixture()
-        let remote = MusicRemote(
-            scanLibrary: { scanning.scan() }, listFolder: { listing.list($0) })
+        let remote = MusicRemote(listFolder: { listing.list($0) })
         remote.navigate(to: "")
         #expect(await listing.waitForFirstStart())
 
         remote.rescan()
-        #expect(await scanning.waitForFirstStart())
+        #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["/new.mp3"] })
         listing.releaseFirst()
         #expect(await listing.waitForFirstFinish())
         try? await Task.sleep(for: .milliseconds(50))
-        #expect(remote.folderTracks.isEmpty)
-
-        scanning.releaseFirst()
-        #expect(await scanning.waitForFirstFinish())
-        #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["/new.mp3"] })
+        #expect(remote.folderTracks.map(\.relativePath) == ["/new.mp3"])
     }
 
     @Test func searchGenerationHandlesFolderAtoBtoA() async {
         let fixture = MusicRemoteLoadFixture()
-        let remote = MusicRemote(searchFolder: { fixture.search($0) })
+        let remote = MusicRemote(
+            searchPage: { path, _ in
+                let found = fixture.search(path)
+                return MusicSearchPage(tracks: found.tracks, folders: found.folders)
+            }, searchRemainder: { _, _ in MusicSearchPage() })
         remote.navigate(to: "A")
         remote.loadSearchScope()
         #expect(await fixture.waitForFirstStart())
@@ -201,6 +211,92 @@ import Testing
 
         #expect(remote.searchTracks.map(\.relativePath) == ["A/new.mp3"])
         #expect(remote.searchLoaded)
+    }
+
+    @Test func openingAFolderDoesNotListSiblingTrees() async {
+        var listed: [String] = []
+        let root = URL(fileURLWithPath: "/tmp/music-siblings")
+        let remote = MusicRemote(
+            listSubfolders: { path in
+                listed.append("sub:\(path)")
+                return []
+            },
+            listFolder: { path in
+                listed.append(path)
+                return MusicLibraryContentListing(
+                    folder: MusicFolder(url: root.appendingPathComponent(path), relativePath: path),
+                    folders: [],
+                    tracks: [
+                        Track(
+                            url: root.appendingPathComponent("\(path)/one.mp3"),
+                            relativePath: "\(path)/one.mp3")
+                    ])
+            })
+        remote.navigate(to: "A")
+        #expect(await waitUntil { remote.entriesLoaded })
+        #expect(listed.contains("A"))
+        #expect(!listed.contains("B"))
+        #expect(remote.folderTracks.map(\.relativePath) == ["A/one.mp3"])
+    }
+
+    @Test func cachedFolderShowsBeforeRefreshFinishes() async {
+        let gate = MusicRemoteLoadFixture()
+        let root = URL(fileURLWithPath: "/tmp/music-cached-folder")
+        let cached = Track(
+            url: root.appendingPathComponent("A/cached.mp3"), relativePath: "A/cached.mp3")
+        let remote = MusicRemote(
+            listFolder: { gate.list($0) },
+            listingCache: MusicListingCache(
+                load: { path in
+                    guard path == "A" else { return nil }
+                    return MusicLibraryContentListing(
+                        folder: MusicFolder(
+                            url: root.appendingPathComponent(path), relativePath: path),
+                        folders: [], tracks: [cached])
+                }, save: { _, _ in }))
+        remote.navigate(to: "A")
+        #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["A/cached.mp3"] })
+        #expect(remote.entriesLoaded)
+        gate.releaseFirst()
+        #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["A/old.mp3"] })
+    }
+
+    @Test func searchWaitsUntilTypingPauses() async {
+        let calls = SearchCalls()
+        let remote = MusicRemote(
+            searchPage: { _, query in
+                calls.add(query)
+                return MusicSearchPage()
+            }, searchRemainder: { _, _ in MusicSearchPage() })
+        remote.searchDelay = .milliseconds(80)
+        remote.noteSearch("a")
+        remote.noteSearch("ab")
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(calls.values.isEmpty)
+        #expect(await waitUntil { calls.values == ["ab"] })
+    }
+
+    @Test func searchPublishesTheFirstPageBeforeTheRemainder() async {
+        let gate = MusicRemoteLoadFixture()
+        let root = URL(fileURLWithPath: "/tmp/music-search-page")
+        let remote = MusicRemote(
+            searchPage: { _, _ in
+                MusicSearchPage(tracks: [
+                    Track(url: root.appendingPathComponent("a.mp3"), relativePath: "a.mp3")
+                ])
+            },
+            searchRemainder: { _, _ in
+                _ = gate.scan()
+                return MusicSearchPage(tracks: [
+                    Track(url: root.appendingPathComponent("b.mp3"), relativePath: "b.mp3")
+                ])
+            })
+        remote.loadSearchScope(matching: "song")
+        #expect(await waitUntil { remote.searchTracks.map(\.relativePath) == ["a.mp3"] })
+        #expect(remote.searchLoaded)
+        #expect(await gate.waitForFirstStart())
+        gate.releaseFirst()
+        #expect(await waitUntil { remote.searchTracks.map(\.relativePath) == ["a.mp3", "b.mp3"] })
     }
 
     @Test func failedMutationPublishesAReadableError() {
@@ -219,6 +315,19 @@ import Testing
             try? await Task.sleep(for: .milliseconds(5))
         }
         return false
+    }
+}
+
+private final class SearchCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+
+    func add(_ query: String) {
+        lock.withLock { stored.append(query) }
+    }
+
+    var values: [String] {
+        lock.withLock { stored }
     }
 }
 

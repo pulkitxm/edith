@@ -100,6 +100,184 @@ enum ThumbnailStore {
     }
 }
 
+public struct MusicSearchPage: Equatable, Sendable {
+    public var tracks: [Track]
+    public var folders: [MusicFolder]
+
+    public init(tracks: [Track] = [], folders: [MusicFolder] = []) {
+        self.tracks = tracks
+        self.folders = folders
+    }
+}
+
+struct MusicFileStamp: Codable, Equatable, Sendable {
+    var identifier: String
+    var modified: TimeInterval
+}
+
+struct MusicDurationRecord: Codable, Equatable, Sendable {
+    var stamp: MusicFileStamp
+    var seconds: TimeInterval
+}
+
+struct MusicCountRecord: Codable, Equatable, Sendable {
+    var stamp: MusicFileStamp
+    var count: Int
+}
+
+struct MusicArtworkRecord: Codable, Equatable, Sendable {
+    var stamp: MusicFileStamp
+    var key: String
+}
+
+struct MusicListingRecord: Codable, Equatable, Sendable {
+    var folders: [String]
+    var tracks: [String]
+}
+
+struct MusicLibraryIndexSnapshot: Codable, Equatable, Sendable {
+    var durations: [String: MusicDurationRecord] = [:]
+    var counts: [String: MusicCountRecord] = [:]
+    var artwork: [String: MusicArtworkRecord] = [:]
+    var listings: [String: MusicListingRecord] = [:]
+}
+
+public enum MusicLibraryIndex {
+    public static let searchPageSize = 40
+    private static let lock = NSLock()
+    nonisolated(unsafe) static var fileURL: URL?
+    nonisolated(unsafe) private static var memory: MusicLibraryIndexSnapshot?
+    nonisolated(unsafe) static var directoryWalk: (@Sendable (URL) -> Void)?
+
+    public static func activate(
+        fileURL: URL = AppData.supportDir.appendingPathComponent("music-library-index.json")
+    ) {
+        lock.withLock {
+            self.fileURL = fileURL
+            memory = nil
+        }
+    }
+
+    static func reset() {
+        lock.withLock {
+            fileURL = nil
+            memory = nil
+        }
+        directoryWalk = nil
+    }
+
+    static func discardMemory() {
+        lock.withLock { memory = nil }
+    }
+
+    static func stamp(of url: URL) -> MusicFileStamp {
+        let values = try? url.resourceValues(forKeys: [
+            .fileResourceIdentifierKey, .contentModificationDateKey,
+        ])
+        let identifier: String
+        if let data = values?.fileResourceIdentifier as? Data {
+            identifier = data.base64EncodedString()
+        } else {
+            identifier = url.standardizedFileURL.path
+        }
+        return MusicFileStamp(
+            identifier: identifier,
+            modified: values?.contentModificationDate?.timeIntervalSince1970 ?? 0)
+    }
+
+    public static func duration(for url: URL) -> TimeInterval? {
+        let stamp = stamp(of: url)
+        guard let record = snapshot().durations[stamp.identifier],
+            record.stamp.modified == stamp.modified
+        else { return nil }
+        return record.seconds
+    }
+
+    static func store(duration seconds: TimeInterval, for url: URL) {
+        let stamp = stamp(of: url)
+        mutate {
+            $0.durations[stamp.identifier] = MusicDurationRecord(stamp: stamp, seconds: seconds)
+        }
+    }
+
+    static func count(of url: URL) -> Int? {
+        let stamp = stamp(of: url)
+        guard let record = snapshot().counts[stamp.identifier],
+            record.stamp.modified == stamp.modified
+        else { return nil }
+        return record.count
+    }
+
+    static func store(count: Int, of url: URL) {
+        let stamp = stamp(of: url)
+        mutate { $0.counts[stamp.identifier] = MusicCountRecord(stamp: stamp, count: count) }
+    }
+
+    static func invalidateCounts() {
+        mutate { $0.counts.removeAll() }
+    }
+
+    public static func artworkKey(for url: URL) -> String? {
+        let stamp = stamp(of: url)
+        guard let record = snapshot().artwork[stamp.identifier],
+            record.stamp.modified == stamp.modified
+        else { return nil }
+        return record.key
+    }
+
+    static func store(artworkKey key: String, for url: URL) {
+        let stamp = stamp(of: url)
+        mutate { $0.artwork[stamp.identifier] = MusicArtworkRecord(stamp: stamp, key: key) }
+    }
+
+    public static func listing(_ path: String) -> MusicLibraryContentListing? {
+        guard let record = snapshot().listings[path] else { return nil }
+        let base = TrackMeta.basePath
+        return MusicLibraryContentListing(
+            folder: MusicFolder(url: TrackMeta.url(for: path, base: base), relativePath: path),
+            folders: record.folders.map {
+                MusicFolder(url: TrackMeta.url(for: $0, base: base), relativePath: $0)
+            },
+            tracks: record.tracks.map {
+                Track(url: TrackMeta.url(for: $0, base: base), relativePath: $0)
+            })
+    }
+
+    public static func storeListing(_ path: String, folders: [String], tracks: [String]) {
+        mutate {
+            $0.listings[path] = MusicListingRecord(folders: folders, tracks: tracks)
+        }
+    }
+
+    private static func snapshot() -> MusicLibraryIndexSnapshot {
+        lock.withLock {
+            if let memory { return memory }
+            let loaded = loadFromDisk()
+            memory = loaded
+            return loaded
+        }
+    }
+
+    private static func loadFromDisk() -> MusicLibraryIndexSnapshot {
+        guard let fileURL, let data = try? Data(contentsOf: fileURL),
+            let decoded = try? JSONDecoder().decode(MusicLibraryIndexSnapshot.self, from: data)
+        else { return MusicLibraryIndexSnapshot() }
+        return decoded
+    }
+
+    private static func mutate(_ body: (inout MusicLibraryIndexSnapshot) -> Void) {
+        lock.withLock {
+            var current = memory ?? loadFromDisk()
+            body(&current)
+            memory = current
+            guard let fileURL, let data = try? JSONEncoder().encode(current) else { return }
+            try? FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: fileURL, options: .atomic)
+        }
+    }
+}
+
 actor LoadGate {
     private let limit: Int
     private var active = 0
@@ -134,6 +312,12 @@ public enum TrackMeta {
     nonisolated(unsafe) private static var durationCache: [URL: TimeInterval] = [:]
     nonisolated(unsafe) private static var artworkMisses: Set<URL> = []
     private static let gate = LoadGate(limit: 3)
+    nonisolated(unsafe) static var loadAssetDuration: @Sendable (URL) async -> TimeInterval? = {
+        url in
+        let asset = AVURLAsset(url: url)
+        guard let time = try? await asset.load(.duration), time.seconds.isFinite else { return nil }
+        return time.seconds
+    }
     private static let artworkCache: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
         cache.countLimit = 100
@@ -145,6 +329,15 @@ public enum TrackMeta {
             cachedBasePath = nil
             trackCounts.removeAll()
         }
+        MusicLibraryIndex.invalidateCounts()
+    }
+
+    static func discardTransientDurations() {
+        cacheLock.withLock { durationCache.removeAll() }
+    }
+
+    static func discardMemoryCounts() {
+        cacheLock.withLock { trackCounts.removeAll() }
     }
 
     static var basePath: String {
@@ -202,13 +395,19 @@ public enum TrackMeta {
     static func trackCount(under relativePath: String, base: String) -> Int {
         let root = url(for: relativePath, base: base)
         if let hit = cacheLock.withLock({ trackCounts[root] }) { return hit }
+        if let indexed = MusicLibraryIndex.count(of: root) {
+            cacheLock.withLock { trackCounts[root] = indexed }
+            return indexed
+        }
         var count = 0
         forEachPlayableFile(in: root) { _ in count += 1 }
         cacheLock.withLock { trackCounts[root] = count }
+        MusicLibraryIndex.store(count: count, of: root)
         return count
     }
 
     private static func forEachPlayableFile(in root: URL, _ body: (URL) -> Void) {
+        MusicLibraryIndex.directoryWalk?(root)
         guard
             let enumerator = FileManager.default.enumerator(
                 at: root, includingPropertiesForKeys: [.isRegularFileKey],
@@ -255,9 +454,11 @@ public enum TrackMeta {
     }
 
     static func folders(under relativePath: String, base: String) -> [MusicFolder] {
+        let root = url(for: relativePath, base: base)
+        MusicLibraryIndex.directoryWalk?(root)
         guard
             let enumerator = FileManager.default.enumerator(
-                at: url(for: relativePath, base: base),
+                at: root,
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return [] }
@@ -295,13 +496,18 @@ public enum TrackMeta {
 
     public static func duration(for track: Track) async -> TimeInterval? {
         if let hit = cacheLock.withLock({ durationCache[track.url] }) { return hit }
+        let indexed = await Task.detached { MusicLibraryIndex.duration(for: track.url) }.value
+        if let indexed {
+            cacheLock.withLock { durationCache[track.url] = indexed }
+            return indexed
+        }
         await gate.acquire()
         defer { Task { await gate.release() } }
         guard !Task.isCancelled else { return nil }
-        let asset = AVURLAsset(url: track.url)
-        guard let time = try? await asset.load(.duration), time.seconds.isFinite else { return nil }
-        cacheLock.withLock { durationCache[track.url] = time.seconds }
-        return time.seconds
+        guard let seconds = await loadAssetDuration(track.url) else { return nil }
+        cacheLock.withLock { durationCache[track.url] = seconds }
+        await Task.detached { MusicLibraryIndex.store(duration: seconds, for: track.url) }.value
+        return seconds
     }
 
     public static func durationLabel(for track: Track) async -> String? {
@@ -334,9 +540,15 @@ public enum TrackMeta {
     public static func artwork(for track: Track) async -> NSImage? {
         if let hit = artworkCache.object(forKey: track.url as NSURL) { return hit }
         if cacheLock.withLock({ artworkMisses.contains(track.url) }) { return nil }
-        let key = ThumbnailStore.key(for: track.url)
+        let indexedKey = await Task.detached { MusicLibraryIndex.artworkKey(for: track.url) }.value
+        let key = indexedKey ?? ThumbnailStore.key(for: track.url)
         if let stored = ThumbnailStore.read(key) {
             artworkCache.setObject(stored, forKey: track.url as NSURL)
+            if indexedKey == nil {
+                await Task.detached {
+                    MusicLibraryIndex.store(artworkKey: key, for: track.url)
+                }.value
+            }
             return stored
         }
         await gate.acquire()
@@ -345,10 +557,64 @@ public enum TrackMeta {
         if let image = await loadArtwork(for: track.url) {
             let thumbnail = ThumbnailStore.store(image, key: key) ?? image
             artworkCache.setObject(thumbnail, forKey: track.url as NSURL)
+            await Task.detached { MusicLibraryIndex.store(artworkKey: key, for: track.url) }.value
             return thumbnail
         }
         cacheLock.withLock { _ = artworkMisses.insert(track.url) }
         return nil
+    }
+
+    public static func searchPage(
+        under relativePath: String, base: String, query: String, skip: Int, limit: Int?
+    ) -> MusicSearchPage {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return MusicSearchPage() }
+        let root = url(for: relativePath, base: base)
+        MusicLibraryIndex.directoryWalk?(root)
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: root, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return MusicSearchPage() }
+        var tracks: [Track] = []
+        var folders: [MusicFolder] = []
+        var matched = 0
+        for case let item as URL in enumerator {
+            if Task.isCancelled { break }
+            if isDirectory(item) {
+                MusicLibraryIndex.directoryWalk?(item)
+                let folder = MusicFolder(
+                    url: item, relativePath: Self.relativePath(of: item, base: base))
+                guard folder.name.localizedCaseInsensitiveContains(needle) else { continue }
+                matched += 1
+                if matched <= skip { continue }
+                folders.append(folder)
+            } else if playableExtensions.contains(item.pathExtension.lowercased()),
+                (try? item.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+            {
+                let track = Track(url: item, relativePath: Self.relativePath(of: item, base: base))
+                guard track.title.localizedCaseInsensitiveContains(needle) else { continue }
+                matched += 1
+                if matched <= skip { continue }
+                tracks.append(track)
+            } else {
+                continue
+            }
+            if let limit, matched - skip >= limit { break }
+        }
+        folders.sort {
+            $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }
+        tracks.sort {
+            $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }
+        return MusicSearchPage(tracks: tracks, folders: folders)
+    }
+
+    public static func searchPage(under relativePath: String, query: String, skip: Int, limit: Int?)
+        -> MusicSearchPage
+    {
+        searchPage(under: relativePath, base: basePath, query: query, skip: skip, limit: limit)
     }
 
     private static func loadArtwork(for url: URL) async -> NSImage? {
