@@ -26,6 +26,50 @@ public enum Guide {
         subcommands: `ed` asks the remote shell what it would have offered, so any
         tool installed there completes, not just the ones `ed` knows about.
 
+        ## Map
+
+        Command families, the same names `ed --help` prints:
+
+        - App and settings: `ed config`, `ed app`, `ed agent`, `ed extensions`,
+          `ed permissions`, `ed install`, `ed uninstall`, `ed completions`,
+          `ed schema`, `ed version`, `ed status`, `ed mcp`.
+        - This Mac: `ed system`, `ed apps`, `ed music`, `ed calendar`,
+          `ed attention`, `ed clipboard`, `ed shelf`, `ed color`, `ed emoji`,
+          `ed bifrost`, `ed presenter`, `ed lid-awake`, `ed camera`,
+          `ed download`, `ed cleaner`, `ed brew`, `ed maintenance`, `ed tools`.
+        - Usage and projects: `ed usage`, `ed quinjet`, `ed herdr`, `ed studio`,
+          `ed docs`, `ed guide`.
+        - Other machines: `ed machines`, plus `ed <machine> <command...>` for a
+          remote shell.
+        - Memory, databases, decisions: `ed companion`, `ed database`, `ed jev`.
+
+        Global conventions, on every command:
+
+        - `--json` on a leaf prints one JSON document on stdout. Diagnostics stay
+          on stderr. `ed schema` and `ed config export` are already JSON, so they
+          have no switch. A remote shell, a container shell, completion scripts,
+          and MCP stdio are streams or another protocol: `ed <command> --help`
+          shows whether `--json` exists.
+        - Exit codes: 0 success, 1 failure, 2 bad usage, 3 not found, 4 unavailable
+          (the app is not running, or a machine is down).
+        - Destructive commands go through `CLIDestructivePlan`. Without `--yes`
+          they print the action and its targets and change nothing. Pass `--yes`
+          to apply that plan. With `--json`, the plan reports `applied` and
+          `changed`.
+        - Remote targeting: `ed machines ls` lists configured machines.
+          `ed <machine> <command...>` runs a shell there. Parsed machine commands
+          take the machine as an argument, as in `ed machines show <machine>`.
+          Where a command accepts `--machine`, `local` means this Mac.
+
+        Discover more:
+
+        - `ed --help` lists families. `ed <command> --help` lists that family's
+          subcommands. `ed <command> <subcommand> --help` is the leaf: what it
+          does, what it reads or changes, its arguments, and an example.
+        - `ed guide --json` is the whole parser catalog. `ed docs ls` and
+          `ed docs ask "<request>"` search the written reference.
+          `ed docs show <command>` prints one page.
+
         ## Discover, then act
 
         ```
@@ -672,12 +716,15 @@ public enum Guide {
         over ad hoc scripts for anything about this Mac, its settings, agent usage, or
         the machines it can reach over SSH.
 
-        - `ed guide` is the full manual. `ed --help` lists commands, `ed <command>
-          --help` drills in.
+        - `ed guide` is the full manual, including the command-family map.
+          `ed --help` lists commands, `ed <command> --help` drills in.
         - `ed guide --json` is the complete command, alias, argument, option and help
           catalog. Prefer `--json` when a command advertises it: stdout is exactly one
           JSON document, logs go to stderr, and the exit code is reliable (0 ok,
           1 failed, 2 bad usage, 3 not found, 4 unavailable). Gate on it.
+        - Destructive commands print a CLIDestructivePlan and change nothing until
+          `--yes`. `ed <machine> <command>` runs on a configured machine; `--machine
+          local` means this Mac.
         - `ed config ls --json`, `ed config get <key>`, `ed config set <key> <value>`
           reach every setting the UI exposes, and the running app picks changes up
           live. `ed schema` is the JSON Schema for the whole config document.

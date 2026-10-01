@@ -1,0 +1,577 @@
+ed __complete	discussion, effect, example, undoc:<words>
+ed agent	discussion, effect, example
+ed agent cancel	discussion, effect, example
+ed agent events	discussion, effect, example
+ed agent jobs	discussion, effect, example
+ed agent logs	discussion, effect, example
+ed agent restart	discussion, effect, example
+ed agent run	discussion, effect, example
+ed agent status	discussion, effect, example
+ed agent tasks	discussion, effect, example
+ed agent tasks cancel	discussion, effect, example, undoc:--json, undoc:<id>
+ed agent tasks exec	discussion, effect, example, undoc:--json, undoc:<command>
+ed agent tasks inspect	discussion, effect, example, undoc:--json, undoc:<id>
+ed agent tasks ls	discussion, effect, example, undoc:--json
+ed app	vague-abstract, effect, example
+ed app actions	discussion, effect, example
+ed app check-updates	discussion, effect, example
+ed app clean-keys	discussion, effect, example
+ed app clear-updates	discussion, effect, example
+ed app diagnostics	discussion, effect, example
+ed app info	discussion, effect, example
+ed app links	discussion, effect, example
+ed app open	discussion, effect, example
+ed app open-link	discussion, effect, example
+ed app open-path	discussion, effect, example
+ed app paths	discussion, effect, example
+ed app quit	discussion, effect, example
+ed app relaunch	discussion, effect, example
+ed app reveal	discussion, effect, example
+ed app snapshot	discussion, effect, example
+ed app test-notification	discussion, effect, example
+ed app updates	discussion, effect, example
+ed apps	effect, example
+ed apps ls	discussion, effect, example
+ed apps quit	discussion, effect, example
+ed attention	vague-abstract, discussion, effect, example
+ed attention agents	vague-abstract, discussion, effect, example
+ed attention breakdown	discussion, effect, example
+ed attention categories	discussion, effect, example
+ed attention categories auto	discussion, effect, example
+ed attention categories ls	discussion, effect, example
+ed attention categories set	discussion, effect, example
+ed attention doctor	discussion, effect, example
+ed attention focus	discussion, effect, example
+ed attention focus start	discussion, effect, example
+ed attention focus status	discussion, effect, example
+ed attention focus stop	discussion, effect, example
+ed attention music	discussion, effect, example
+ed attention status	discussion, effect, example
+ed attention summary	discussion, effect, example
+ed attention timeline	discussion, effect, example
+ed bifrost	vague-abstract, discussion, effect, example
+ed bifrost calc	discussion, effect, example
+ed bifrost clear	discussion, effect, example
+ed bifrost convert	discussion, effect, example
+ed bifrost ls	discussion, effect, example
+ed bifrost open	discussion, effect, example
+ed bifrost reindex	discussion, effect, example
+ed brew	effect, example
+ed brew install	discussion, effect, example
+ed brew ls	discussion, effect, example
+ed brew search	discussion, effect, example
+ed brew status	discussion, effect, example
+ed brew uninstall	discussion, effect, example
+ed brew upgrade	discussion, effect, example
+ed calendar	effect, example
+ed calendar directions	discussion, effect, example
+ed calendar join	discussion, effect, example
+ed calendar ls	vague-abstract, discussion, effect, example
+ed calendar open	vague-abstract, discussion, effect, example
+ed camera	discussion, effect, example
+ed camera background	discussion, effect, example
+ed camera frame	discussion, effect, example
+ed camera look	discussion, effect, example
+ed camera off	discussion, effect, example
+ed camera on	discussion, effect, example
+ed camera pause	discussion, effect, example
+ed camera reset	discussion, effect, example
+ed camera resume	discussion, effect, example
+ed camera scene	discussion, effect, example
+ed camera scene apply	discussion, effect, example
+ed camera scene list	discussion, effect, example
+ed camera scene next	discussion, effect, example
+ed camera scene previous	discussion, effect, example
+ed camera scene save	discussion, effect, example
+ed camera source	discussion, effect, example
+ed camera sources	discussion, effect, example
+ed camera status	discussion, effect, example
+ed camera zoom	discussion, effect, example
+ed cleaner	effect
+ed cleaner categories	discussion, effect, example
+ed cleaner clean	discussion, effect, example
+ed cleaner drives	vague-abstract, discussion, effect, example
+ed cleaner scan	discussion, effect, example
+ed clipboard	vague-abstract, effect, example
+ed clipboard clear	discussion, effect, example
+ed clipboard copy	discussion, effect, example
+ed clipboard get	discussion, effect, example
+ed clipboard ls	discussion, effect, example
+ed clipboard pin	discussion, effect, example
+ed clipboard rm	discussion, effect, example
+ed clipboard stats	vague-abstract, discussion, effect, example
+ed clipboard unpin	discussion, effect, example
+ed color	discussion, effect, example
+ed color clear	discussion, effect, example
+ed color copy	discussion, effect, example
+ed color ls	discussion, effect, example
+ed color pick	discussion, effect, example
+ed companion	vague-abstract, effect
+ed companion ask	discussion, effect, example
+ed companion baselines	vague-abstract, discussion, effect, example
+ed companion beliefs	discussion, effect, example
+ed companion calibration	vague-abstract, discussion, effect, example
+ed companion chat	discussion, effect, example
+ed companion claims	discussion, effect, example
+ed companion commitments	discussion, effect, example
+ed companion connectors	discussion, effect, example
+ed companion connectors import	discussion, effect, example
+ed companion connectors set	discussion, effect, example
+ed companion connectors show	vague-abstract, discussion, effect, example
+ed companion conversations	discussion, effect, example
+ed companion core	discussion, effect, example
+ed companion core set	discussion, effect, example
+ed companion core show	discussion, effect, example
+ed companion correct	discussion, effect, example
+ed companion corroborate	discussion, effect, example
+ed companion council	discussion, effect, example
+ed companion db	discussion, effect, example
+ed companion db migrate	discussion, effect, example
+ed companion db rebuild-derived	discussion, effect, example
+ed companion db reindex	discussion, effect, example
+ed companion deploy	discussion, effect, example
+ed companion discrepancies	vague-abstract, discussion, effect, example
+ed companion discrepancies ls	discussion, effect, example
+ed companion discrepancies override	discussion, effect, example
+ed companion doctor	discussion, effect, example
+ed companion entities	vague-abstract, discussion, effect, example
+ed companion episode	discussion, effect, example
+ed companion episodes	discussion, effect, example
+ed companion erase	discussion, effect, example
+ed companion eval	vague-abstract, discussion, effect, example
+ed companion eval ls	discussion, effect, example
+ed companion eval run	discussion, effect, example
+ed companion export	discussion, effect, example
+ed companion extract	discussion, effect, example
+ed companion facts	vague-abstract, discussion, effect, example
+ed companion forget	discussion, effect, example
+ed companion hosts	discussion, effect, example
+ed companion hypotheses	vague-abstract, discussion, effect, example
+ed companion hypotheses ls	discussion, effect, example
+ed companion hypotheses run	discussion, effect, example
+ed companion import	discussion, effect, example
+ed companion index	discussion, effect, example
+ed companion ingest	discussion, effect, example
+ed companion inquire	vague-abstract, discussion, effect, example
+ed companion inquire answer	discussion, effect, example
+ed companion inquire ls	vague-abstract, discussion, effect, example
+ed companion inquire mute	discussion, effect, example
+ed companion inquire next	vague-abstract, discussion, effect, example
+ed companion inquire skip	discussion, effect, example
+ed companion lenses	vague-abstract, discussion, effect, example
+ed companion machines	vague-abstract, discussion, effect, example
+ed companion machines add	discussion, effect, example
+ed companion machines ls	discussion, effect, example
+ed companion machines plan	discussion, effect, example
+ed companion machines probe	discussion, effect, example
+ed companion machines profile	discussion, effect, example
+ed companion nightly	discussion, effect, example
+ed companion observations	discussion, effect, example
+ed companion personas	discussion, effect, example
+ed companion predictions	discussion, effect, example
+ed companion reason	discussion, effect, example
+ed companion reason set	discussion, effect, example
+ed companion reason show	discussion, effect, example
+ed companion reason test	vague-abstract, discussion, effect, example
+ed companion reflect	discussion, effect, example
+ed companion runs	discussion, effect, example
+ed companion search	discussion, effect, example
+ed companion stack	discussion, effect, example
+ed companion stack down	discussion, effect, example
+ed companion stack env	discussion, effect, example
+ed companion stack logs	discussion, effect, example
+ed companion stack restart	discussion, effect, example
+ed companion stack status	discussion, effect, example
+ed companion stack up	discussion, effect, example
+ed companion standup	discussion, effect, example
+ed companion standup record	discussion, effect, example
+ed companion standup report	vague-abstract, discussion, effect, example
+ed companion status	discussion, effect, example
+ed companion sync	discussion, effect, example
+ed companion weekly	discussion, effect, example
+ed companion why	discussion, effect, example
+ed companion wipe	discussion, effect, example
+ed completions	discussion, effect, example
+ed completions bash	discussion, effect, example
+ed completions fish	discussion, effect, example
+ed completions install	discussion, effect, example
+ed completions source	discussion, effect, example
+ed completions zsh	discussion, effect, example
+ed config	discussion, effect, example
+ed config describe	discussion, effect, example
+ed config export	example
+ed config get	discussion, effect, example
+ed config import	discussion, effect, example
+ed config ls	discussion, effect, example
+ed config set	discussion, effect, example
+ed config unset	discussion, effect, example
+ed database	discussion, effect, example
+ed database browse	discussion, effect, example
+ed database capabilities	discussion, effect, example
+ed database connect	discussion, effect, example
+ed database connections	discussion, effect, example
+ed database connections add	discussion, effect, example
+ed database connections delete	discussion, effect, example
+ed database connections duplicate	discussion, effect, example
+ed database connections edit	discussion, effect, example
+ed database connections get	discussion, effect, example
+ed database connections list	discussion, effect, example
+ed database connections rename	discussion, effect, example
+ed database connections test	discussion, effect, example
+ed database disconnect	discussion, effect, example
+ed database mcp	discussion, effect, example
+ed database mutations	discussion, effect, example
+ed database mutations apply	discussion, effect, example
+ed database mutations cancel	discussion, effect, example
+ed database mutations document-request	discussion, effect, example
+ed database mutations key-request	discussion, effect, example
+ed database mutations outcome	discussion, effect, example
+ed database mutations preview	discussion, effect, example
+ed database mutations row-request	discussion, effect, example
+ed database mutations status	discussion, effect, example
+ed database operations	discussion, effect, example
+ed database operations cancel	discussion, effect, example
+ed database operations get	discussion, effect, example
+ed database operations list	discussion, effect, example
+ed database query	discussion, effect, example
+ed database saved-queries	vague-abstract, discussion, effect, example
+ed database saved-queries delete	discussion, effect, example
+ed database saved-queries duplicate	discussion, effect, example
+ed database saved-queries get	discussion, effect, example
+ed database saved-queries list	vague-abstract, discussion, effect, example
+ed database saved-queries rename	discussion, effect, example
+ed database saved-queries save	discussion, effect, example
+ed docs	discussion, effect, example
+ed docs ask	effect, example
+ed docs ls	discussion, effect, example
+ed docs show	discussion, effect, example
+ed download	effect, example
+ed download add	discussion, effect, example
+ed download cancel	discussion, effect, example
+ed download clear	discussion, effect, example
+ed download ls	discussion, effect, example
+ed download open	discussion, effect, example
+ed download retry	discussion, effect, example
+ed download reveal	discussion, effect, example
+ed download rm	discussion, effect, example
+ed download status	discussion, effect, example
+ed download tool	discussion, effect, example
+ed emoji	vague-abstract, discussion, effect, example
+ed emoji clear	discussion, effect, example
+ed emoji insert	discussion, effect, example
+ed emoji ls	discussion, effect, example
+ed emoji pick	discussion, effect, example
+ed emoji tone	discussion, effect, example
+ed extensions	discussion, effect, example
+ed extensions disable	discussion, effect, example
+ed extensions doctor	discussion, effect, example
+ed extensions enable	discussion, effect, example
+ed extensions info	discussion, effect, example
+ed extensions ls	discussion, effect, example
+ed extensions setup	discussion, effect, example
+ed extensions status	discussion, effect, example
+ed extensions verify	discussion, effect, example
+ed herdr	vague-abstract, effect, example
+ed herdr attach	discussion, effect, example
+ed herdr bridge	discussion, effect, example, undoc:<specification>
+ed herdr command	discussion, effect, example
+ed herdr defaults	vague-abstract, discussion, effect, example
+ed herdr defaults ls	discussion, effect, example
+ed herdr defaults set	discussion, effect, example
+ed herdr hooks	vague-abstract, discussion, effect, example
+ed herdr hooks ls	discussion, effect, example
+ed herdr hooks rm	discussion, effect, example
+ed herdr ls	discussion, effect, example
+ed herdr models	discussion, effect, example
+ed herdr send	discussion, effect, example
+ed install	discussion, effect, example
+ed jev	vague-abstract, discussion, effect, example
+ed jev ask	example
+ed jev key	discussion, effect, example
+ed jev key clear	discussion, effect, example
+ed jev key set	discussion, effect, example
+ed jev key show	discussion, effect, example
+ed jev status	discussion, effect, example
+ed lid-awake	discussion, effect, example
+ed lid-awake battery	discussion, effect, example
+ed lid-awake off	discussion, effect, example
+ed lid-awake on	discussion, effect, example
+ed lid-awake restore-on-quit	discussion, effect, example
+ed lid-awake status	discussion, effect, example
+ed machines	vague-abstract, effect
+ed machines add	effect, example
+ed machines broadcast	effect
+ed machines connect	discussion, effect, example
+ed machines control	discussion, effect, example
+ed machines control airplane	discussion, effect, example
+ed machines control bluetooth	discussion, effect, example
+ed machines control brightness	discussion, effect, example
+ed machines control caffeinate	discussion, effect, example
+ed machines control dnd	discussion, effect, example
+ed machines control keyboard-light	discussion, effect, example
+ed machines control mute	discussion, effect, example
+ed machines control status	discussion, effect, example
+ed machines control volume	discussion, effect, example
+ed machines control wifi	discussion, effect, example
+ed machines disconnect	discussion, effect, example
+ed machines docker	vague-abstract, effect, example
+ed machines docker compose	vague-abstract, discussion, effect, example
+ed machines docker compose down	discussion, effect, example
+ed machines docker compose logs	vague-abstract, discussion, effect, example, no-json
+ed machines docker compose ls	discussion, effect, example
+ed machines docker compose pull	discussion, effect, example
+ed machines docker compose restart	discussion, effect, example
+ed machines docker compose up	discussion, effect, example
+ed machines docker df	vague-abstract, discussion, effect, example
+ed machines docker images	discussion, effect, example
+ed machines docker inspect	discussion, effect, example
+ed machines docker logs	vague-abstract, discussion, effect, example, no-json
+ed machines docker networks	discussion, effect, example
+ed machines docker open	discussion, effect, example
+ed machines docker pause	discussion, effect, example
+ed machines docker prune	effect, example
+ed machines docker ps	discussion, effect, example
+ed machines docker restart	discussion, effect, example
+ed machines docker rm	discussion, effect, example
+ed machines docker rmi	discussion, effect, example
+ed machines docker shell	discussion, effect, example
+ed machines docker start	discussion, effect, example
+ed machines docker stop	discussion, effect, example
+ed machines docker top	discussion, effect, example
+ed machines docker unpause	discussion, effect, example
+ed machines docker volume-rm	effect, example
+ed machines docker volumes	discussion, effect, example
+ed machines edit	discussion, effect, example
+ed machines exec	discussion, effect, example
+ed machines files	discussion, effect, example
+ed machines files cp	discussion, effect, example
+ed machines files duplicate	effect, example
+ed machines files get	effect, example
+ed machines files get-many	effect, example
+ed machines files info	vague-abstract, discussion, effect, example
+ed machines files launch	discussion, effect, example
+ed machines files ls	discussion, effect, example
+ed machines files mkdir	discussion, effect, example
+ed machines files mv	discussion, effect, example
+ed machines files preview	discussion, effect, example
+ed machines files put	effect, example
+ed machines files rename	discussion, effect, example
+ed machines files reveal	discussion, effect, example
+ed machines files rm	effect, example
+ed machines files search	discussion, effect, example
+ed machines files transfer	effect, example
+ed machines files undo	effect, example
+ed machines forwards	discussion, effect, example
+ed machines forwards add	discussion, effect, example
+ed machines forwards ls	discussion, effect, example
+ed machines forwards off	discussion, effect, example
+ed machines forwards on	discussion, effect, example
+ed machines forwards open	discussion, effect, example
+ed machines forwards rm	discussion, effect, example
+ed machines kill	effect, example
+ed machines ls	discussion, effect, example
+ed machines metrics	discussion, effect, example
+ed machines mount	effect, example
+ed machines mount-reveal	discussion, effect, example
+ed machines mounts	vague-abstract, discussion, effect, example
+ed machines power	effect, example
+ed machines power reboot	discussion, effect, example
+ed machines power shutdown	discussion, effect, example
+ed machines power status	vague-abstract, discussion, effect, example
+ed machines power wake	discussion, effect, example
+ed machines rm	discussion, effect, example
+ed machines services	vague-abstract, discussion, effect, example
+ed machines services ls	discussion, effect, example
+ed machines services restart	discussion, effect, example
+ed machines services start	discussion, effect, example
+ed machines services stop	discussion, effect, example
+ed machines show	vague-abstract, discussion, effect, example
+ed machines snippets	discussion, effect, example
+ed machines snippets add	effect
+ed machines snippets ls	discussion, effect, example
+ed machines snippets rm	discussion, effect, example
+ed machines snippets run	discussion, effect, example
+ed machines terminal	discussion, effect, example
+ed machines terminal broadcast	effect, example
+ed machines thermal	discussion, effect, example
+ed machines thermal set	discussion, effect, example
+ed machines thermal status	discussion, effect, example
+ed machines unmount	discussion, effect, example
+ed machines workspace	effect, example
+ed machines workspace close	discussion, effect, example
+ed machines workspace equalize	discussion, effect, example
+ed machines workspace ls	discussion, effect, example
+ed machines workspace new	effect, example
+ed machines workspace panes	vague-abstract, discussion, effect, example
+ed machines workspace point	discussion, effect, example
+ed machines workspace rename	vague-abstract, discussion, effect, example
+ed machines workspace rm	discussion, effect, example
+ed machines workspace split	discussion, effect, example
+ed machines workspace use	discussion, effect, example
+ed maintenance	effect, example
+ed maintenance backup-updates	discussion, effect, example
+ed maintenance history	discussion, effect, example
+ed maintenance install	effect, example
+ed maintenance inventory	discussion, effect, example
+ed maintenance remove	discussion, effect, example
+ed maintenance scan	discussion, effect, example
+ed maintenance update	discussion, effect, example
+ed maintenance updates	discussion, effect, example
+ed mcp	effect, example
+ed music	effect
+ed music favorite	discussion, effect, example
+ed music library	discussion, effect, example
+ed music ls	discussion, effect, example
+ed music mkdir	discussion, effect, example
+ed music mv	discussion, effect, example
+ed music next	discussion, effect, example
+ed music open	discussion, effect, example
+ed music open-current	discussion, effect, example
+ed music pause	discussion, effect, example
+ed music play	vague-abstract, discussion, effect, example
+ed music players	vague-abstract, discussion, effect, example
+ed music previous	discussion, effect, example
+ed music rename	discussion, effect, example
+ed music repeat	discussion, effect, example
+ed music rescan	discussion, effect, example
+ed music reveal	discussion, effect, example
+ed music reveal-current	discussion, effect, example
+ed music rm	effect, example
+ed music seek	discussion, effect, example
+ed music shuffle	discussion, effect, example
+ed music start	effect, example
+ed music status	discussion, effect, example
+ed music stop	discussion, effect, example
+ed music toggle	discussion, effect, example
+ed music unfavorite	discussion, effect, example
+ed music volume	discussion, effect, example
+ed permissions	effect
+ed permissions ls	discussion, effect, example
+ed permissions refresh	discussion, effect, example
+ed permissions request	discussion, effect, example
+ed permissions settings	discussion, effect, example
+ed presenter	vague-abstract, discussion, effect, example
+ed presenter start	discussion, effect, example
+ed presenter status	discussion, effect, example
+ed presenter stop	discussion, effect, example
+ed quinjet	discussion, effect, example
+ed quinjet close	discussion, effect, example
+ed quinjet focus	discussion, effect, example
+ed quinjet launch	discussion, effect, example
+ed quinjet new	discussion, effect, example
+ed quinjet open	discussion, effect, example
+ed quinjet projects	discussion, effect, example
+ed quinjet restart	discussion, effect, example
+ed quinjet sessions	discussion, effect, example
+ed quinjet status	discussion, effect, example
+ed quinjet switch	discussion, effect, example
+ed quinjet worktrees	discussion, effect, example
+ed schema	discussion, effect, example
+ed shelf	vague-abstract, effect, example
+ed shelf add	discussion, effect, example
+ed shelf add-text	vague-abstract, discussion, effect, example
+ed shelf clear	discussion, effect, example
+ed shelf ls	discussion, effect, example
+ed shelf open	discussion, effect, example
+ed shelf path	discussion, effect, example
+ed shelf purge	discussion, effect, example
+ed shelf reveal	discussion, effect, example
+ed shelf rm	discussion, effect, example
+ed shelf share	discussion, effect, example
+ed shelf update	discussion, effect, example
+ed status	discussion, effect, example
+ed studio	effect, example
+ed studio edit	effect, example
+ed studio edit apply	discussion, effect, example, undoc:<project>
+ed studio edit audio	discussion, effect, example
+ed studio edit audio analyze	effect, example
+ed studio edit audio health	discussion, effect, example
+ed studio edit audio master	example, undoc:<project>
+ed studio edit audio measure	discussion, effect, example, undoc:<project>
+ed studio edit captions	discussion, effect, example
+ed studio edit captions add	discussion, effect, example
+ed studio edit captions list	discussion, effect, example
+ed studio edit captions remove	discussion, effect, example
+ed studio edit captions update	discussion, effect, example
+ed studio edit clone	discussion, effect, example, undoc:<project>
+ed studio edit contact-sheet	discussion, effect, example, undoc:<project>
+ed studio edit create	discussion, effect, example
+ed studio edit frame	discussion, effect, example, undoc:<project>
+ed studio edit library	discussion, effect, example
+ed studio edit list	discussion, effect, example
+ed studio edit markers	discussion, effect, example
+ed studio edit markers add	discussion, effect, example
+ed studio edit markers export	discussion, effect, example
+ed studio edit markers import	discussion, effect, example
+ed studio edit markers list	discussion, effect, example
+ed studio edit markers remove	discussion, effect, example
+ed studio edit markers snap	discussion, effect, example
+ed studio edit markers update	discussion, effect, example
+ed studio edit media	discussion, effect, example
+ed studio edit media chronology	discussion, effect, example
+ed studio edit media duplicates	discussion, effect, example
+ed studio edit media identity	discussion, effect, example
+ed studio edit media index	discussion, effect, example
+ed studio edit media open	discussion, effect, example
+ed studio edit media package	discussion, effect, example
+ed studio edit media probe	discussion, effect, example
+ed studio edit media provenance	discussion, effect, example
+ed studio edit media release	discussion, effect, example
+ed studio edit media relink	discussion, effect, example
+ed studio edit media reservations	discussion, effect, example
+ed studio edit media reserve	discussion, effect, example
+ed studio edit media usage	discussion, effect, example
+ed studio edit open	discussion, effect, example, undoc:<project>
+ed studio edit publications	vague-abstract, effect, example
+ed studio edit publications create	effect, example
+ed studio edit publications reorder	example
+ed studio edit publications show	effect, example
+ed studio edit register	discussion, effect, example, undoc:<project>
+ed studio edit render	effect, example, undoc:<project>
+ed studio edit render-audio	effect, example, undoc:<project>
+ed studio edit review-report	effect, example
+ed studio edit schema	discussion, effect, example
+ed studio edit show	discussion, effect, example, undoc:<project>
+ed studio edit trash	discussion, effect, example, undoc:<project>
+ed studio edit unregister	discussion, effect, example, undoc:<project>
+ed studio edit validate	discussion, effect, example, undoc:<project>
+ed studio info	discussion, effect, example
+ed studio library	vague-abstract, effect, example
+ed studio library add	discussion, effect, example
+ed studio library clear	discussion, effect, example
+ed studio library list	discussion, effect, example
+ed studio library remove	discussion, effect, example
+ed studio probe	discussion, effect, example
+ed studio run	discussion, effect, example
+ed studio tools	discussion, effect, example
+ed system	vague-abstract, discussion, effect, example
+ed system disks	discussion, effect, example
+ed system stats	discussion, effect, example
+ed tools	vague-abstract, effect, example
+ed tools install	discussion, effect, example
+ed tools ls	discussion, effect, example
+ed uninstall	discussion, effect, example
+ed usage alerts	discussion, effect, example
+ed usage attribution	vague-abstract, discussion, effect, example
+ed usage attribution ls	discussion, effect, example
+ed usage attribution reset	discussion, effect, example
+ed usage daily	vague-abstract, discussion, effect, example
+ed usage export	discussion, effect, example
+ed usage limits	vague-abstract, discussion, effect, example
+ed usage machines	vague-abstract
+ed usage machines collect	effect, example
+ed usage machines disable	discussion, effect, example
+ed usage machines enable	discussion, effect, example
+ed usage machines forget	discussion, effect, example
+ed usage machines ls	vague-abstract, discussion, effect, example
+ed usage models	vague-abstract, discussion, effect, example
+ed usage projects	discussion, effect, example
+ed usage projects copy-chat	discussion, effect, example
+ed usage projects copy-link	discussion, effect, example
+ed usage projects list	discussion, effect, example
+ed usage projects open	discussion, effect, example
+ed usage projects show	discussion, effect, example
+ed usage refresh	effect, example
+ed usage sources	vague-abstract, discussion, effect, example
+ed usage summary	vague-abstract, discussion, effect, example
+ed version	discussion, effect, example
