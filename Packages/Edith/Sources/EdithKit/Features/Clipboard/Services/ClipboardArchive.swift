@@ -65,6 +65,7 @@ public final class ClipboardArchive: @unchecked Sendable {
         else { throw AgentError(.refused, "The clipboard capture exceeds the supported limits.") }
         try Task.checkCancellation()
         let sha = ClipboardRepository.sha256Hex(capture.data)
+        try withLock { _ = try load() }
         try ensureDirectory(blobs)
         let staged = ClipboardEntry(
             id: capture.id, sha256: sha, types: capture.types, ext: capture.ext,
