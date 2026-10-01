@@ -32,6 +32,13 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
         }
     }
 
+    public func record(_ batch: AttentionBatch, now: Date) async throws {
+        guard !batch.events.isEmpty else { return }
+        try await store.awaitWrite { database in
+            try self.record(batch, in: database, now: now)
+        }
+    }
+
     func record(_ batch: AttentionBatch, in database: Database, now: Date) throws {
         for event in batch.events where !AttentionRetention.isExpired(event, now: now) {
             guard event.duration.isFinite, event.duration > 0, event.duration <= 172_800 else {

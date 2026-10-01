@@ -98,27 +98,32 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     private let lock = NSLock()
     private let maximumBytes: Int?
     private let onLine: (@Sendable (String) -> Void)?
+    private let onLimit: (@Sendable () -> Void)?
     private var pending = Data()
     private var complete = Data()
     private var exceededLimit = false
     private var readFailed = false
 
-    init(maximumBytes: Int?, onLine: (@Sendable (String) -> Void)?) {
+    init(
+        maximumBytes: Int?, onLine: (@Sendable (String) -> Void)?,
+        onLimit: (@Sendable () -> Void)? = nil
+    ) {
         self.maximumBytes = maximumBytes
         self.onLine = onLine
+        self.onLimit = onLimit
     }
 
     func receive(_ data: Data) {
-        let lines = lock.withLock { () -> [String] in
-            guard !exceededLimit else { return [] }
+        let limited = lock.withLock { () -> (Bool, [String]) in
+            guard !exceededLimit else { return (false, []) }
             if let maximumBytes, complete.count + data.count > maximumBytes {
                 complete.removeAll(keepingCapacity: false)
                 pending.removeAll(keepingCapacity: false)
                 exceededLimit = true
-                return []
+                return (true, [])
             }
             complete.append(data)
-            guard onLine != nil else { return [] }
+            guard onLine != nil else { return (false, []) }
             var lines: [String] = []
             var start = data.startIndex
             for index in data.indices where data[index] == 10 || data[index] == 13 {
@@ -128,9 +133,10 @@ private final class CLIStreamingOutput: @unchecked Sendable {
                 start = data.index(after: index)
             }
             pending.append(data[start..<data.endIndex])
-            return lines
+            return (false, lines)
         }
-        for line in lines { onLine?(line) }
+        if limited.0 { onLimit?() }
+        for line in limited.1 { onLine?(line) }
     }
 
     func finish() -> (output: Data, exceededLimit: Bool) {
@@ -205,8 +211,81 @@ private final class CLIProcessOutputReader: @unchecked Sendable {
 private final class CLICommandCancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
+    private var onCancel: (@Sendable () -> Void)?
     var isCancelled: Bool { lock.withLock { cancelled } }
-    func cancel() { lock.withLock { cancelled = true } }
+
+    func watch(_ handler: @escaping @Sendable () -> Void) {
+        let fire = lock.withLock { () -> Bool in
+            onCancel = handler
+            return cancelled
+        }
+        if fire { handler() }
+    }
+
+    func cancel() {
+        let handler = lock.withLock { () -> (@Sendable () -> Void)? in
+            cancelled = true
+            return onCancel
+        }
+        handler?()
+    }
+}
+
+private enum CommandStop {
+    case cancelled
+    case timedOut
+    case outputLimitExceeded
+}
+
+private final class CommandLifecycle: @unchecked Sendable {
+    private enum Settlement {
+        case pending
+        case done(CommandStop?)
+    }
+
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CommandStop?, Never>?
+    private var settlement = Settlement.pending
+    private var timer: DispatchSourceTimer?
+
+    func finish(_ reason: CommandStop?) {
+        lock.lock()
+        guard case .pending = settlement else {
+            lock.unlock()
+            return
+        }
+        settlement = .done(reason)
+        let continuation = self.continuation
+        self.continuation = nil
+        let timer = self.timer
+        self.timer = nil
+        lock.unlock()
+        timer?.cancel()
+        continuation?.resume(returning: reason)
+    }
+
+    func wait(deadline: TimeInterval?) async -> CommandStop? {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if case .done(let reason) = settlement {
+                lock.unlock()
+                continuation.resume(returning: reason)
+                return
+            }
+            self.continuation = continuation
+            guard let deadline else {
+                lock.unlock()
+                return
+            }
+            let source = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+            let delay = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            source.schedule(deadline: .now() + delay, leeway: .milliseconds(50))
+            source.setEventHandler { [weak self] in self?.finish(.timedOut) }
+            self.timer = source
+            lock.unlock()
+            source.activate()
+        }
+    }
 }
 
 public enum CLICommandRunner {
@@ -255,42 +334,43 @@ public enum CLICommandRunner {
     ) async throws -> CLICommandResult {
         let cancellation = CLICommandCancellation()
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
-                    do {
-                        let result = try runBlockingSeparated(
-                            request, streamsWhileRunning: streamsWhileRunning,
-                            onStandardOutputLine: onStandardOutputLine,
-                            onStandardErrorLine: onStandardErrorLine,
-                            cancellationRequested: { cancellation.isCancelled })
-                        continuation.resume(returning: result)
-                    } catch { continuation.resume(throwing: error) }
-                }
+            let running = try await BlockingWork.perform {
+                try launchSeparated(
+                    request, streamsWhileRunning: streamsWhileRunning,
+                    onStandardOutputLine: onStandardOutputLine,
+                    onStandardErrorLine: onStandardErrorLine,
+                    cancellationRequested: { cancellation.isCancelled })
             }
+            cancellation.watch { running.lifecycle.finish(.cancelled) }
+            let stop = await running.wait()
+            return try await BlockingWork.perform { try running.finish(stop) }
         } onCancel: {
             cancellation.cancel()
         }
     }
 
-    private static func runBlockingSeparated(
+    private static func launchSeparated(
         _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void,
         cancellationRequested: @escaping @Sendable () -> Bool
-    ) throws -> CLICommandResult {
+    ) throws -> LocalCommand {
         let deadline = request.timeout.map {
             ProcessInfo.processInfo.systemUptime + max(0, $0)
         }
+        let lifecycle = CommandLifecycle()
         let input = request.standardInputData.map { _ in Pipe() }
 
         let standardOutput = Pipe()
         let standardError = Pipe()
         let output = CLIStreamingOutput(
             maximumBytes: request.maximumOutputBytes,
-            onLine: streamsWhileRunning ? onStandardOutputLine : nil)
+            onLine: streamsWhileRunning ? onStandardOutputLine : nil,
+            onLimit: { lifecycle.finish(.outputLimitExceeded) })
         let error = CLIStreamingOutput(
             maximumBytes: request.maximumOutputBytes,
-            onLine: streamsWhileRunning ? onStandardErrorLine : nil)
+            onLine: streamsWhileRunning ? onStandardErrorLine : nil,
+            onLimit: { lifecycle.finish(.outputLimitExceeded) })
         let outputReader = CLIProcessOutputReader(
             handle: standardOutput.fileHandleForReading, output: output)
         let errorReader =
@@ -311,7 +391,10 @@ public enum CLICommandRunner {
                 error: request.discardsStandardError
                     ? FileHandle.nullDevice.fileDescriptor
                     : standardError.fileHandleForWriting.fileDescriptor,
-                onExit: { processFinished.signal() })
+                onExit: {
+                    processFinished.signal()
+                    lifecycle.finish(nil)
+                })
             try? standardOutput.fileHandleForWriting.close()
             try? standardError.fileHandleForWriting.close()
             try? input?.fileHandleForReading.close()
@@ -335,74 +418,117 @@ public enum CLICommandRunner {
         } else {
             inputFinished.signal()
         }
+        return LocalCommand(
+            lifecycle: lifecycle, deadline: deadline, process: process,
+            processFinished: processFinished, output: output, error: error,
+            outputReader: outputReader, errorReader: errorReader, input: input,
+            inputFinished: inputFinished, streamsWhileRunning: streamsWhileRunning,
+            onStandardOutputLine: onStandardOutputLine,
+            onStandardErrorLine: onStandardErrorLine,
+            cancellationRequested: cancellationRequested)
+    }
 
-        var stop: StopReason?
-        polling: while true {
-            if cancellationRequested() {
-                stop = .cancelled
-                break
-            }
-            if output.hasExceededLimit || error.hasExceededLimit {
-                stop = .outputLimitExceeded
-                break
-            }
-            switch pollForExit(processFinished, deadline: deadline) {
-            case .finished: break polling
-            case .timedOut: stop = .timedOut; break polling
-            case .running: continue
-            }
+    private final class LocalCommand: @unchecked Sendable {
+        let lifecycle: CommandLifecycle
+        let deadline: TimeInterval?
+        let process: CLIChildProcess
+        let processFinished: DispatchSemaphore
+        let output: CLIStreamingOutput
+        let error: CLIStreamingOutput
+        let outputReader: CLIProcessOutputReader
+        let errorReader: CLIProcessOutputReader?
+        let input: Pipe?
+        let inputFinished: DispatchSemaphore
+        let streamsWhileRunning: Bool
+        let onStandardOutputLine: @Sendable (String) -> Void
+        let onStandardErrorLine: @Sendable (String) -> Void
+        let cancellationRequested: @Sendable () -> Bool
+
+        init(
+            lifecycle: CommandLifecycle, deadline: TimeInterval?, process: CLIChildProcess,
+            processFinished: DispatchSemaphore, output: CLIStreamingOutput,
+            error: CLIStreamingOutput, outputReader: CLIProcessOutputReader,
+            errorReader: CLIProcessOutputReader?, input: Pipe?,
+            inputFinished: DispatchSemaphore, streamsWhileRunning: Bool,
+            onStandardOutputLine: @escaping @Sendable (String) -> Void,
+            onStandardErrorLine: @escaping @Sendable (String) -> Void,
+            cancellationRequested: @escaping @Sendable () -> Bool
+        ) {
+            self.lifecycle = lifecycle
+            self.deadline = deadline
+            self.process = process
+            self.processFinished = processFinished
+            self.output = output
+            self.error = error
+            self.outputReader = outputReader
+            self.errorReader = errorReader
+            self.input = input
+            self.inputFinished = inputFinished
+            self.streamsWhileRunning = streamsWhileRunning
+            self.onStandardOutputLine = onStandardOutputLine
+            self.onStandardErrorLine = onStandardErrorLine
+            self.cancellationRequested = cancellationRequested
         }
 
-        if let stop {
-            try? input?.fileHandleForWriting.close()
-            terminateProcessGroup(process, processFinished: processFinished)
-            _ = drain(outputReader)
-            _ = drain(errorReader)
-            _ = inputFinished.wait(timeout: .now() + terminationGrace)
-            switch stop {
-            case .cancelled:
-                throw CancellationError()
-            case .timedOut:
-                throw CLICommandRunnerError.timedOut
-            case .outputLimitExceeded:
+        func wait() async -> CommandStop? {
+            if cancellationRequested() { return .cancelled }
+            if output.hasExceededLimit || error.hasExceededLimit { return .outputLimitExceeded }
+            if processFinished.wait(timeout: .now()) == .success { return nil }
+            if let deadline, ProcessInfo.processInfo.systemUptime >= deadline { return .timedOut }
+            return await lifecycle.wait(deadline: deadline)
+        }
+
+        func finish(_ stop: CommandStop?) throws -> CLICommandResult {
+            if let stop {
+                try? input?.fileHandleForWriting.close()
+                terminateProcessGroup(process, processFinished: processFinished)
+                _ = drain(outputReader)
+                _ = drain(errorReader)
+                _ = inputFinished.wait(timeout: .now() + terminationGrace)
+                switch stop {
+                case .cancelled:
+                    throw CancellationError()
+                case .timedOut:
+                    throw CLICommandRunnerError.timedOut
+                case .outputLimitExceeded:
+                    throw CLICommandRunnerError.outputLimitExceeded
+                }
+            }
+            if process.ownsProcessGroup, process.groupIsAlive {
+                terminateProcessGroup(process, processFinished: processFinished)
+            }
+            guard drain(outputReader), drain(errorReader) else {
+                throw CLICommandRunnerError.streamFailed
+            }
+            guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
+                try? input?.fileHandleForWriting.close()
+                throw CLICommandRunnerError.streamFailed
+            }
+            let finishedOutput = output.finish()
+            let finishedError = error.finish()
+            guard !finishedOutput.exceededLimit, !finishedError.exceededLimit else {
                 throw CLICommandRunnerError.outputLimitExceeded
             }
-        }
-
-        if process.ownsProcessGroup, process.groupIsAlive {
-            terminateProcessGroup(process, processFinished: processFinished)
-        }
-        guard drain(outputReader),
-            drain(errorReader)
-        else { throw CLICommandRunnerError.streamFailed }
-        guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
-            try? input?.fileHandleForWriting.close()
-            throw CLICommandRunnerError.streamFailed
-        }
-        let finishedOutput = output.finish()
-        let finishedError = error.finish()
-        guard !finishedOutput.exceededLimit, !finishedError.exceededLimit else {
-            throw CLICommandRunnerError.outputLimitExceeded
-        }
-        guard !output.hasReadFailure, !error.hasReadFailure else {
-            throw CLICommandRunnerError.streamFailed
-        }
-        if !streamsWhileRunning {
-            for line in String(decoding: finishedOutput.output, as: UTF8.self).split(
-                whereSeparator: \.isNewline)
-            {
-                onStandardOutputLine(String(line))
+            guard !output.hasReadFailure, !error.hasReadFailure else {
+                throw CLICommandRunnerError.streamFailed
             }
-            for line in String(decoding: finishedError.output, as: UTF8.self).split(
-                whereSeparator: \.isNewline)
-            {
-                onStandardErrorLine(String(line))
+            if !streamsWhileRunning {
+                for line in String(decoding: finishedOutput.output, as: UTF8.self).split(
+                    whereSeparator: \.isNewline)
+                {
+                    onStandardOutputLine(String(line))
+                }
+                for line in String(decoding: finishedError.output, as: UTF8.self).split(
+                    whereSeparator: \.isNewline)
+                {
+                    onStandardErrorLine(String(line))
+                }
             }
+            return CLICommandResult(
+                terminationStatus: process.terminationStatus,
+                standardOutputData: finishedOutput.output,
+                standardErrorData: finishedError.output)
         }
-        return CLICommandResult(
-            terminationStatus: process.terminationStatus,
-            standardOutputData: finishedOutput.output,
-            standardErrorData: finishedError.output)
     }
 
     enum ExitPollResult: Equatable { case finished, timedOut, running }
@@ -425,10 +551,7 @@ public enum CLICommandRunner {
         _ process: CLIChildProcess, processFinished: DispatchSemaphore
     ) {
         process.signal(SIGTERM)
-        let deadline = ProcessInfo.processInfo.systemUptime + terminationGrace
-        while process.groupIsAlive, ProcessInfo.processInfo.systemUptime < deadline {
-            _ = processFinished.wait(timeout: .now() + lifecyclePoll)
-        }
+        _ = processFinished.wait(timeout: .now() + terminationGrace)
         if process.groupIsAlive { process.signal(SIGKILL) }
         if process.isRunning { _ = processFinished.wait(timeout: .now() + terminationGrace) }
     }

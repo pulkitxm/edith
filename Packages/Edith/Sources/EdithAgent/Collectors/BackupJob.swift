@@ -63,7 +63,15 @@ public final class BackupJob: @unchecked Sendable {
             return BackupCadence.shouldSnapshot(lastSnapshot: lastSnapshot, now: now)
         }
         if !due.isEmpty {
-            try writeSnapshots(tables: due, now: now)
+            let cancellation = WorkCancellation()
+            try await withTaskCancellationHandler {
+                try await BlockingWork.perform {
+                    try self.writeSnapshots(
+                        tables: due, now: now, isCancelled: { cancellation.isCancelled })
+                }
+            } onCancel: {
+                cancellation.cancel()
+            }
             for table in due {
                 defaults.set(
                     now.timeIntervalSince1970,
@@ -76,14 +84,16 @@ public final class BackupJob: @unchecked Sendable {
                 ranAt: now, classes: enabled.map(\.id), snapshotTables: due, skipped: false))
     }
 
-    private func writeSnapshots(tables: [String], now: Date) throws {
+    private func writeSnapshots(
+        tables: [String], now: Date, isCancelled: @escaping @Sendable () -> Bool
+    ) throws {
         guard let store else { throw AgentStoreError("The backup store is unavailable.") }
         let directory = cloudDirectory.appendingPathComponent("snapshots")
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let deadline = ContinuousClock.now.advanced(by: snapshotTimeout)
         var writtenBytes = 0
         for table in tables {
-            try Task.checkCancellation()
+            if isCancelled() { throw CancellationError() }
             guard ContinuousClock.now < deadline else {
                 throw AgentStoreError("The backup snapshot exceeded its time limit.")
             }
@@ -99,7 +109,7 @@ public final class BackupJob: @unchecked Sendable {
             try store.read { database in
                 let rows = try Row.fetchCursor(database, sql: "SELECT * FROM \(table)")
                 while let row = try rows.next() {
-                    try Task.checkCancellation()
+                    if isCancelled() { throw CancellationError() }
                     guard ContinuousClock.now < deadline else {
                         throw AgentStoreError("The backup snapshot exceeded its time limit.")
                     }
@@ -115,7 +125,7 @@ public final class BackupJob: @unchecked Sendable {
             }
             try handle.synchronize()
             try handle.close()
-            try Task.checkCancellation()
+            if isCancelled() { throw CancellationError() }
             guard ContinuousClock.now < deadline else {
                 throw AgentStoreError("The backup snapshot exceeded its time limit.")
             }

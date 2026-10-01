@@ -193,6 +193,15 @@ public enum JunkScanner {
         return JunkCategory(id: entry.id, name: entry.name, detail: entry.detail, items: items)
     }
 
+    public static func scanCategories(
+        _ entries: [JunkCatalog.Entry], home: URL,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) async -> [JunkCategory] {
+        await BlockingWork.value {
+            entries.compactMap { scanCategory($0, home: home, isCancelled: isCancelled) }
+        }
+    }
+
     public static func drives() -> [DriveInfo] {
         let keys: [URLResourceKey] = [
             .volumeNameKey, .volumeTotalCapacityKey, .volumeIsRemovableKey,

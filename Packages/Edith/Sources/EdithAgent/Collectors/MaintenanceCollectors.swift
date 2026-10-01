@@ -27,14 +27,14 @@ public struct MachineHealthJob: Sendable {
 
     public func run() async throws -> Data? {
         let snapshot = await monitor.run()
-        try? record(snapshot)
+        try? await record(snapshot)
         return try AgentPayload.encode(snapshot)
     }
 
-    private func record(_ snapshot: MachineHealthSnapshot) throws {
+    private func record(_ snapshot: MachineHealthSnapshot) async throws {
         guard let store, !snapshot.skipped else { return }
         let payload = try AgentPayload.encode(snapshot)
-        try store.write { database in
+        try await store.awaitWrite { database in
             for machine in snapshot.machines {
                 try database.execute(
                     sql: """
@@ -71,13 +71,13 @@ public struct UpdateDiscoveryJob: Sendable {
             checkedAt: Date(), available: items.count,
             sources: Array(Set(items.map { $0.source.rawValue })).sorted())
         SidebarBadgeStore.recordUpdates(available: items.count)
-        try? record(snapshot, items: items)
+        try? await record(snapshot, items: items)
         return try AgentPayload.encode(snapshot)
     }
 
-    private func record(_ snapshot: UpdateDiscoverySnapshot, items: [AppUpdateItem]) throws {
+    private func record(_ snapshot: UpdateDiscoverySnapshot, items: [AppUpdateItem]) async throws {
         guard let store else { return }
-        try store.write { database in
+        try await store.awaitWrite { database in
             try database.execute(sql: "DELETE FROM update_candidate")
             for item in items {
                 let payload = try AgentPayload.encode(item)
@@ -96,15 +96,13 @@ public struct UpdateDiscoveryJob: Sendable {
 
 public struct CleanerEstimateJob: Sendable {
     private let store: AgentStore?
-    private let scan: @Sendable () -> [JunkCategory]
+    private let scan: @Sendable () async -> [JunkCategory]
 
     public init(
         store: AgentStore?,
-        scan: @escaping @Sendable () -> [JunkCategory] = {
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            return JunkCatalog.entries.compactMap {
-                JunkScanner.scanCategory($0, home: home)
-            }
+        scan: @escaping @Sendable () async -> [JunkCategory] = {
+            await JunkScanner.scanCategories(
+                JunkCatalog.entries, home: FileManager.default.homeDirectoryForCurrentUser)
         }
     ) {
         self.store = store
@@ -112,19 +110,19 @@ public struct CleanerEstimateJob: Sendable {
     }
 
     public func run() async throws -> Data? {
-        let categories = await Task.detached(priority: .utility) { scan() }.value
+        let categories = await scan()
         let bytes = categories.flatMap(\.items).reduce(Int64(0)) { $0 + $1.sizeBytes }
         let snapshot = CleanerEstimateSnapshot(
             scannedAt: Date(), reclaimableBytes: bytes, categories: categories.count)
         SidebarBadgeStore.recordReclaimable(bytes: bytes)
-        try? record(snapshot)
+        try? await record(snapshot)
         return try AgentPayload.encode(snapshot)
     }
 
-    private func record(_ snapshot: CleanerEstimateSnapshot) throws {
+    private func record(_ snapshot: CleanerEstimateSnapshot) async throws {
         guard let store else { return }
         let payload = try AgentPayload.encode(snapshot)
-        try store.write { database in
+        try await store.awaitWrite { database in
             try database.execute(
                 sql: """
                     INSERT INTO cleaner_scan (startedAt, reclaimableBytes, payload)

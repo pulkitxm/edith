@@ -73,7 +73,7 @@ public final class SessionsJob: @unchecked Sendable {
         try await notify(collected)
         await observe(snapshot.hosts)
         SidebarBadgeStore.recordSessions(working: snapshot.working)
-        try? record(snapshot)
+        try? await record(snapshot)
         return try AgentPayload.encode(snapshot)
     }
 
@@ -101,11 +101,11 @@ public final class SessionsJob: @unchecked Sendable {
         }
     }
 
-    private func record(_ snapshot: SessionsSnapshot) throws {
+    private func record(_ snapshot: SessionsSnapshot) async throws {
         guard let store else { return }
         let payloads = try snapshot.hosts.map { try AgentPayload.encode($0) }
         guard lock.withLock({ recordedPayloads != payloads }) else { return }
-        try store.write { database in
+        try await store.awaitWrite { database in
             try database.execute(sql: "DELETE FROM session_snapshot")
             for (host, payload) in zip(snapshot.hosts, payloads) {
                 try database.execute(
