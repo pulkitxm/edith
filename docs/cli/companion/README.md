@@ -35,6 +35,7 @@ For the machinery behind these commands, start at
 | --- | --- |
 | `ed companion` | Runs `ed companion status`, the default subcommand. |
 | `ed companion status` | Counts stored records and episodes waiting to be indexed. |
+| `ed companion stop` | Stops a reply that is still being written. |
 | `ed companion doctor` | Checks storage, migrations, search dependencies, media tools and reasoning configuration. |
 | `ed companion search <query>` | Searches indexed memory with hybrid retrieval. |
 | `ed companion index` | Embeds episodes that are waiting to be indexed. |

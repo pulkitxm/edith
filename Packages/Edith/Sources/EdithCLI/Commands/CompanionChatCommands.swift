@@ -40,6 +40,9 @@ struct CompanionChatCommand: AsyncParsableCommand {
                     "no persona called \(persona)",
                     hint: "personas: " + known.map(\.id).joined(separator: ", "))
             }
+            let flight = CLIFlights.begin(
+                kind: "companion", action: "chat", target: conversation ?? "new")
+            defer { if let flight { CLIFlights.end(flight.id) } }
             var conversationId = conversation
             var model: String?
             var answer = ""

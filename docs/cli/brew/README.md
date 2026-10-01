@@ -12,5 +12,6 @@
 | [`ed brew install`](./install.md) | Installs one exact package. |
 | [`ed brew upgrade`](./upgrade.md) | Upgrades one exact package. |
 | [`ed brew uninstall`](./uninstall.md) | Previews an uninstall, or applies it with `--yes`. |
+| `ed brew cancel` | Cancels an install, upgrade, or uninstall that is already running. |
 
 Commands run locally without requiring Edith to be open. Automatic Homebrew updates, analytics, environment hints, and interactive prompts are disabled. Read operations have a 60-second limit, mutations have a 30-minute limit, retained output is capped at 2 MB, and cancellation terminates the complete process group.

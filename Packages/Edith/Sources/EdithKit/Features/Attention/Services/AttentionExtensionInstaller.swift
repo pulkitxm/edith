@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import Foundation
 
 public enum AttentionExtensionInstaller {
@@ -8,8 +9,10 @@ public enum AttentionExtensionInstaller {
         Bundle.module.url(forResource: "ChromeExtension", withExtension: nil)
     }
 
+    public static var installedDirectoryOverride: URL?
     public static var installedDirectory: URL {
-        AttentionPaths.directory.appendingPathComponent("chrome-extension")
+        installedDirectoryOverride
+            ?? AttentionPaths.directory.appendingPathComponent("chrome-extension")
     }
 
     @discardableResult
@@ -44,10 +47,70 @@ public enum AttentionExtensionInstaller {
         return (try? install()) != nil
     }
 
+    public static var revealDirectory: (URL) -> Void = {
+        NSWorkspace.shared.activateFileViewerSelecting([$0])
+    }
+    public static var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+
     public static func reveal() throws {
         let directory = try install()
-        NSWorkspace.shared.activateFileViewerSelecting([directory])
+        revealDirectory(directory)
     }
+
+    @discardableResult
+    public static func openExtensionsPage() -> Bool {
+        guard let url = URL(string: "chrome://extensions") else { return false }
+        return openURL(url)
+    }
+}
+
+public enum AttentionExtensionOperation: String, CaseIterable, Sendable {
+    case install
+    case open
+    case token
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .install:
+            descriptor(
+                ["extension", "install"],
+                "Install and reveal the attention browser extension.", .write)
+        case .open:
+            descriptor(
+                ["extension", "open"], "Open the browser extensions page.", .interactive)
+        case .token:
+            descriptor(
+                ["extension", "token"], "Print the attention browser setup token.", .read)
+        }
+    }
+
+    public var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .install:
+            userInterface("Attention setup", "install and reveal the browser extension")
+        case .open:
+            userInterface("Attention setup", "open the browser extensions page")
+        case .token:
+            userInterface("Attention setup", "copy the browser setup token")
+        }
+    }
+
+    private func descriptor(_ path: [String], _ summary: String, _ effect: UserOperationEffect)
+        -> UserOperationDescriptor
+    {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "attention.extension.\(rawValue)"), summary: summary,
+            cli: ["attention"] + path, effect: effect)
+    }
+}
+
+private func userInterface(_ surface: String, _ action: String, _ exampleArguments: [String] = [])
+    -> UserOperationExposure
+{
+    .userInterface([
+        UserInterfaceActionPlacement(
+            surface: surface, action: action, exampleArguments: exampleArguments)
+    ])
 }
 
 public enum AttentionExtensionInstallerError: LocalizedError {

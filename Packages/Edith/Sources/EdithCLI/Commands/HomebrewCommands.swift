@@ -11,6 +11,7 @@ struct HomebrewCommand: AsyncParsableCommand {
             Commands have fixed time and output limits, and never request a password.
 
             Reads the local Homebrew install. install and upgrade change packages. uninstall does not change anything until --yes.
+            `cancel` stops an install, upgrade, or uninstall that is already running.
 
             ed brew ls
             ed brew install ripgrep
@@ -18,7 +19,7 @@ struct HomebrewCommand: AsyncParsableCommand {
         subcommands: [
             HomebrewStatusCommand.self, HomebrewListCommand.self, HomebrewSearchCommand.self,
             HomebrewInstallCommand.self, HomebrewUpgradeCommand.self,
-            HomebrewUninstallCommand.self,
+            HomebrewUninstallCommand.self, HomebrewCancelCommand.self,
         ],
         defaultSubcommand: HomebrewListCommand.self)
 }
