@@ -17,10 +17,12 @@ struct AttentionViewRenderingTests {
             AttentionSettings(isEnabled: true, trackingEnabled: true))
         try repository.append(
             AttentionEvent(
-                startedAt: Date().addingTimeInterval(-600), duration: 300,
+                startedAt: Calendar.current.startOfDay(for: Date()).addingTimeInterval(-3_600),
+                duration: 300,
                 source: .application, appName: "Xcode", bundleID: "com.apple.dt.Xcode",
                 windowTitle: "Sample workspace"), pulseTime: 0)
         let model = AttentionPageModel(repository: repository)
+        model.select(.yesterday)
         #expect(!model.loaded)
         let host = NSHostingView(
             rootView: AttentionPage(model: model)
