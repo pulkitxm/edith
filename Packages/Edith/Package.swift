@@ -276,7 +276,6 @@ let targets: [Target] = [
             "EdithCLI", "Highlighter", "ed",
             .product(name: "EdithStudio", package: "EdithStudio"),
         ],
-        exclude: ["CLIHelpBaseline.txt"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
 ]

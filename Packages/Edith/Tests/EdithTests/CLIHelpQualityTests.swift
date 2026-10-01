@@ -5,12 +5,6 @@ import Testing
 @testable import EdithCLI
 
 enum CLIHelpQuality {
-    static let baselineURL: URL = {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .appendingPathComponent("CLIHelpBaseline.txt")
-    }()
-
     static let jsonExemptions: [String: String] = [
         "ed schema": "stdout is already one JSON Schema document",
         "ed config export": "stdout is already the settings JSON document",
@@ -245,29 +239,12 @@ enum CLIHelpQuality {
             in: trimmed, range: range, withTemplate: "")
         return cleared.trimmingCharacters(in: .whitespaces).isEmpty
     }
-
-    static func baselineLines() throws -> [String] {
-        let text = try String(contentsOf: baselineURL, encoding: .utf8)
-        return text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-            .filter { !$0.isEmpty }
-    }
 }
 
 @Suite struct CLIHelpQualityTests {
-    @Test func helpDeficienciesMatchTheShrinkingBaseline() throws {
+    @Test func everyCommandDocumentsItsHelp() {
         let current = CLIHelpQuality.findings().map(\.line).sorted()
-        let baseline = try CLIHelpQuality.baselineLines()
-        let currentSet = Set(current)
-        let baselineSet = Set(baseline)
-        let added = currentSet.subtracting(baselineSet).sorted()
-        let removed = baselineSet.subtracting(currentSet).sorted()
-        #expect(baseline == baseline.sorted(), "the baseline is not sorted")
-        #expect(
-            added.isEmpty,
-            "these commands are newly deficient: \(added)")
-        #expect(
-            removed.isEmpty,
-            "remove these from CLIHelpBaseline.txt, they pass now: \(removed)")
+        #expect(current.isEmpty, "these commands are deficient: \(current)")
     }
 
     @Test func jsonExemptionsAreStreamingOrAlreadyStructured() throws {
