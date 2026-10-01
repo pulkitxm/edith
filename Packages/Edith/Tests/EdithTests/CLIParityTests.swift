@@ -344,6 +344,12 @@ enum UIParity {
         UICapability(
             "Site audit", "stop a running audit",
             ["seo", "stop", "project", "--yes"]),
+        UICapability(
+            "Plugins", "copy a skill's Markdown",
+            ["skills", "copy", "edith-remote-work"]),
+        UICapability(
+            "Plugins", "install a skill into an agent",
+            ["skills", "install", "edith-remote-work", "--agent", "cursor", "--yes"]),
     ]
 
     static func operationCLI(for invocation: [String]) -> [String] {
@@ -396,6 +402,8 @@ enum UIParity {
         "ed quinjet projects --machine build",
         "ed seo start project",
         "ed seo stop project --yes",
+        "ed skills copy edith-remote-work",
+        "ed skills install edith-remote-work --agent cursor --yes",
     ]
 }
 

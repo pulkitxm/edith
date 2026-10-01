@@ -57,6 +57,7 @@ import Testing
         "ed shelf clear",
         "ed seo delete",
         "ed seo stop",
+        "ed skills install",
         "ed shelf purge",
         "ed shelf rm",
     ]
