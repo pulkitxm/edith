@@ -65,6 +65,10 @@ struct MachinesAddCommand: AsyncParsableCommand {
             passphrase is read from stdin with --password-stdin or --key-passphrase-stdin,
             never taken as an argument, and goes into the same login keychain item the app
             uses.
+            Changes the saved list by adding one record.
+
+            ed machines add box --host 10.0.0.4
+            ed machines add box --host 10.0.0.4 --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -145,7 +149,15 @@ struct MachinesAddCommand: AsyncParsableCommand {
 
 struct MachinesEditCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "edit", abstract: "Change a machine already on the list.")
+        commandName: "edit", abstract: "Change a machine already on the list.",
+        discussion: """
+            Changes a machine already on the list.
+
+            Changes one saved record.
+
+            ed machines edit box
+            ed machines edit box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -241,6 +253,14 @@ struct MachinesRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rm",
         abstract: "Forget a machine, its forwards, its snippets and its stored secrets.",
+        discussion: """
+            Forgets a machine and everything saved against it.
+
+            Changes the saved list by removing one record.
+
+            ed machines rm box
+            ed machines rm box --json
+            """,
         aliases: ["remove"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -296,6 +316,13 @@ struct MachinesForwardsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forwards",
         abstract: "The port forwards saved for a machine.",
+        discussion: """
+            The port forwards saved for a machine.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines forwards ls box
+            """,
         subcommands: [
             MachinesForwardsListCommand.self, MachinesForwardsAddCommand.self,
             MachinesForwardsRemoveCommand.self, MachinesForwardsToggleCommand.self,
@@ -341,7 +368,15 @@ enum ForwardBridge {
 
 struct MachinesForwardsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List a machine's port forwards.", aliases: ["list"])
+        commandName: "ls", abstract: "List a machine's port forwards.",
+        discussion: """
+            Lists the port forwards saved for a machine.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines forwards ls box
+            ed machines forwards ls box --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -378,7 +413,15 @@ struct MachinesForwardsListCommand: AsyncParsableCommand {
 
 struct MachinesForwardsAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Save a port forward for a machine.")
+        commandName: "add", abstract: "Save a port forward for a machine.",
+        discussion: """
+            Saves a port forward against a machine.
+
+            Changes the saved list by adding one record.
+
+            ed machines forwards add box --local 8080 --remote 5432
+            ed machines forwards add box --local 8080 --remote 5432 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -431,7 +474,15 @@ struct MachinesForwardsAddCommand: AsyncParsableCommand {
 
 struct MachinesForwardsRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Forget one saved port forward.", aliases: ["remove"])
+        commandName: "rm", abstract: "Forget one saved port forward.",
+        discussion: """
+            Forgets one saved forward.
+
+            Changes the saved list by removing one record.
+
+            ed machines forwards rm box 1
+            ed machines forwards rm box 1 --json
+            """, aliases: ["remove"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -474,6 +525,13 @@ struct MachinesSnippetsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "snippets",
         abstract: "The saved commands a machine offers.",
+        discussion: """
+            The saved commands a machine offers.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines snippets ls box
+            """,
         subcommands: [
             MachinesSnippetsListCommand.self, MachinesSnippetsAddCommand.self,
             MachinesSnippetsRemoveCommand.self, MachinesSnippetsRunCommand.self,
@@ -538,7 +596,16 @@ enum SnippetBridge {
 
 struct MachinesSnippetsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the snippets a machine offers.", aliases: ["list"])
+        commandName: "ls", abstract: "List the snippets a machine offers.",
+        discussion: """
+            Lists the saved commands a machine offers: the ones saved against it, plus
+            every shared one.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines snippets ls box
+            ed machines snippets ls box --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -580,6 +647,7 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
             Everything after the title is the command, verbatim, so `--shared` and `--json`
             have to come before the machine name: `ed machines snippets add --shared box
             logs journalctl -xe`.
+            Changes the saved list by adding one record.
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -625,7 +693,15 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
 
 struct MachinesSnippetsRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Forget one snippet.", aliases: ["remove"])
+        commandName: "rm", abstract: "Forget one snippet.",
+        discussion: """
+            Forgets one snippet.
+
+            Changes the saved list by removing one record.
+
+            ed machines snippets rm box 1
+            ed machines snippets rm box 1 --json
+            """, aliases: ["remove"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -666,7 +742,16 @@ struct MachinesSnippetsRemoveCommand: AsyncParsableCommand {
 
 struct MachinesSnippetsRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "run", abstract: "Run one saved command on a machine.")
+        commandName: "run", abstract: "Run one saved command on a machine.",
+        discussion: """
+            Runs one saved snippet on its selected machine through the same shared
+            execution used by the app's Run button.
+
+            Changes the machine by running one saved command, and reads its output.
+
+            ed machines snippets run box 1
+            ed machines snippets run box 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -726,7 +811,16 @@ struct MachinesSnippetsRunCommand: AsyncParsableCommand {
 struct MachinesForwardsToggleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "on",
-        abstract: "Open a saved port forward on the shared connection.")
+        abstract: "Open a saved port forward on the shared connection.",
+        discussion: """
+            Opens a saved forward on the shared connection, which is the switch on each
+            row of the Tools tab.
+
+            Changes the machine by opening one saved port forward.
+
+            ed machines forwards on box 1
+            ed machines forwards on box 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -744,7 +838,15 @@ struct MachinesForwardsToggleCommand: AsyncParsableCommand {
 
 struct MachinesForwardsOffCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "off", abstract: "Close a saved port forward.")
+        commandName: "off", abstract: "Close a saved port forward.",
+        discussion: """
+            Closes a saved forward.
+
+            Changes the machine by closing one saved port forward.
+
+            ed machines forwards off box 1
+            ed machines forwards off box 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -762,7 +864,15 @@ struct MachinesForwardsOffCommand: AsyncParsableCommand {
 
 struct MachinesForwardsOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open a forwarded service in the browser.")
+        commandName: "open", abstract: "Open a forwarded service in the browser.",
+        discussion: """
+            Opens the local side of a saved port forward in the default browser.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed machines forwards open box 1
+            ed machines forwards open box 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
