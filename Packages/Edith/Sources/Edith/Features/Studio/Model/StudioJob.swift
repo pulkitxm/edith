@@ -92,6 +92,7 @@ final class StudioJob: Identifiable {
                 if let status = progress.status { self.status = status }
             }
         }
+        StudioRunRegistry.track(self)
         task = Task { [weak self] in
             let outcome: Result<StudioRunResult, Error>
             do {
@@ -103,6 +104,7 @@ final class StudioJob: Identifiable {
                 outcome = .failure(error)
             }
             guard let self, !Task.isCancelled else { return }
+            StudioRunRegistry.release(self)
             self.task = nil
             switch outcome {
             case let .success(value):
@@ -120,6 +122,7 @@ final class StudioJob: Identifiable {
         task?.cancel()
         task = nil
         if phase == .running { phase = .failed(StudioError.cancelled.localizedDescription) }
+        StudioRunRegistry.release(self)
     }
 
     func reset() {
@@ -128,6 +131,26 @@ final class StudioJob: Identifiable {
         result = nil
         progress = 0
         status = nil
+    }
+}
+
+@MainActor
+enum StudioRunRegistry {
+    private static var jobs: [ObjectIdentifier: StudioJob] = [:]
+
+    static func track(_ job: StudioJob) {
+        jobs[ObjectIdentifier(job)] = job
+    }
+
+    static func release(_ job: StudioJob) {
+        jobs.removeValue(forKey: ObjectIdentifier(job))
+    }
+
+    @discardableResult
+    static func cancelRunning() -> [String] {
+        let active = jobs.values.filter(\.isRunning)
+        for job in active { job.cancel() }
+        return active.map(\.tool.id)
     }
 }
 

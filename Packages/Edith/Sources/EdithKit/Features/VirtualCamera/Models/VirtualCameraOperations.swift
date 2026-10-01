@@ -22,6 +22,7 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
     case zoom
     case frame
     case reset
+    case resetLook
     case look
     case background
     case pause
@@ -49,6 +50,7 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
         case .zoom: descriptor(["zoom"], "Set the zoom level.", .write)
         case .frame: descriptor(["frame"], "Set zoom, position, tilt and auto-framing.", .write)
         case .reset: descriptor(["reset"], "Reset the framing to the full picture.", .write)
+        case .resetLook: descriptor(["reset-look"], "Reset the camera look to neutral.", .write)
         case .look: descriptor(["look"], "Apply a color look.", .write)
         case .background: descriptor(["background"], "Blur or replace the background.", .write)
         case .pause:

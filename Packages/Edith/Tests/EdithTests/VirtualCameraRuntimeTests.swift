@@ -76,7 +76,14 @@ import Testing
         #expect(throws: VirtualCameraRequestError.self) {
             try apply(.frame(VirtualCameraFrameChange(tilt: 60)), to: &state)
         }
+        state.composition.look.preset = .film
+        state.composition.look.warmth = 0.4
         _ = try apply(.reset, to: &state)
+        #expect(state.composition.framing == VirtualCameraFraming())
+        #expect(state.composition.look.preset == .film)
+        #expect(state.composition.look.warmth == 0.4)
+        _ = try apply(.resetLook, to: &state)
+        #expect(state.composition.look == VirtualCameraLook())
         #expect(state.composition.framing == VirtualCameraFraming())
     }
 

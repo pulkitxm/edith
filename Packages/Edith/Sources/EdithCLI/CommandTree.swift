@@ -244,6 +244,7 @@ public enum CommandTree {
                 "--flip": .free, "--flip-vertical": .free, "--auto": .free,
             ]),
         "ed camera reset": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera reset-look": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed camera look": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "ed camera background": Spec(
@@ -478,6 +479,13 @@ public enum CommandTree {
         ]),
         "ed studio edit trash": Spec(
             options: ["--dry-run", "--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed studio cancel": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed studio reveal": Spec(
+            options: ["--json", "-h", "--help", "--version"],
+            arguments: [.localPath], repeatingArgument: .localPath),
+        "ed studio open": Spec(
+            options: ["--json", "-h", "--help", "--version"],
+            arguments: [.localPath], repeatingArgument: .localPath),
         "ed studio run": Spec(
             options: ["--json", "-h", "--help", "--version", "--set", "--output-dir"],
             optionValues: ["--set": .free, "--output-dir": .localPath],

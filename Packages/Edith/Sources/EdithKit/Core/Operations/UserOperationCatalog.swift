@@ -173,6 +173,9 @@ public enum UserOperationCatalog {
         registrations += StudioLibraryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += StudioResultOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += StudioRecordOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1023,6 +1026,8 @@ private extension VirtualCameraOperation {
                 ["--x", "0.4", "--auto", "medium"])
         case .reset:
             userInterface("Virtual Camera toolbar", "reset the framing")
+        case .resetLook:
+            userInterface("Virtual Camera inspector", "reset the look")
         case .look:
             userInterface("Virtual Camera looks", "apply a color look", ["studio"])
         case .background:

@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import Foundation
 import Testing
 

@@ -12,11 +12,13 @@ struct StudioCommand: AsyncParsableCommand {
             `info` shows a tool's settings, `run` applies one to files and `probe` describes a
             file. Results are saved next to the originals unless you pass --output-dir.
             `record` captures the screen and `workflow` saves a chain of tools.
+            `cancel` stops a run the Studio window started. `reveal` and `open` show a result file.
             Reads nothing until a subcommand runs. Does not change anything by itself.
             Example: `ed studio tools`.
             """,
         subcommands: [
             StudioToolsCommand.self, StudioInfoCommand.self, StudioRunCommand.self,
+            StudioCancelCommand.self, StudioRevealCommand.self, StudioOpenCommand.self,
             StudioProbeCommand.self, StudioEditCommand.self, StudioLibraryCommand.self,
             StudioRecordCommand.self, StudioWorkflowCommand.self,
         ],
