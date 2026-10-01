@@ -255,7 +255,6 @@ import Testing
             try await Task.sleep(for: .milliseconds(10))
         }
 
-
         #expect(reports.contains { $0.hasPrefix("[<35;") && $0.hasSuffix("M") })
         let leftCode = flags.contains(.option) ? 8 : flags.contains(.control) ? 16 : 0
         #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("M") })
