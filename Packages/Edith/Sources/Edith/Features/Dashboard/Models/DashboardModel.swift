@@ -1,3 +1,4 @@
+import EdithCore
 import EdithKit
 import Observation
 import SwiftUI
@@ -377,13 +378,13 @@ struct KPI: Identifiable {
     var usageSub = false
 }
 
-struct NamedValue: Identifiable {
+struct NamedValue: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     let value: Double
 }
 
-struct HeatDay {
+struct HeatDay: Codable, Equatable {
     var date: Date
     var tokens = 0.0
     var cost = 0.0
@@ -440,26 +441,31 @@ final class DashboardModel {
     private var restored = false
     private var knownSources: Set<String> = []
     private var knownModels: Set<String> = []
+    private var homeUsageStoreTask: Task<Void, Never>?
+    private let homeUsageStore: HomeUsageSnapshotStore
 
     private(set) var loaded = false
     private(set) var loadAttempted = false
-    private(set) var series: [DayDatum] = []
-    private(set) var kpis: [KPI] = []
-    private(set) var modelTotals: [ModelTotal] = []
-    private(set) var dow: [DOWDatum] = []
-    private(set) var hourlyAll: [HourDatum] = []
-    private(set) var hourlyUnattributedTokens = 0.0
-    private(set) var hourlyUnattributedCost = 0.0
-    private(set) var pathUnattributedTokens = 0.0
-    private(set) var pathUnattributedCost = 0.0
-    private(set) var modelUnfilterableCost = 0.0
-    private(set) var projects: [ProjectAgg] = []
-    private(set) var projectTree: [ProjTreeRow] = []
-    private(set) var meta = MetaLine()
+    private(set) var published = DashboardSnapshot()
+    private(set) var homeUsage = HomeUsageSnapshot()
     private(set) var calendarDays: [DayPoint] = []
     private(set) var heatDetail: [String: HeatDay] = [:]
-    private(set) var chartData = DashChartData()
-    private(set) var revision = 0
+
+    var series: [DayDatum] { published.series }
+    var kpis: [KPI] { published.kpis }
+    var modelTotals: [ModelTotal] { published.modelTotals }
+    var dow: [DOWDatum] { published.dow }
+    var hourlyAll: [HourDatum] { published.hourlyAll }
+    var hourlyUnattributedTokens: Double { published.hourlyUnattributedTokens }
+    var hourlyUnattributedCost: Double { published.hourlyUnattributedCost }
+    var pathUnattributedTokens: Double { published.pathUnattributedTokens }
+    var pathUnattributedCost: Double { published.pathUnattributedCost }
+    var modelUnfilterableCost: Double { published.modelUnfilterableCost }
+    var projects: [ProjectAgg] { published.projects }
+    var projectTree: [ProjTreeRow] { published.projectTree }
+    var meta: MetaLine { published.meta }
+    var chartData: DashChartData { published.chartData }
+    var revision: Int { published.revision }
 
     private(set) var allModels: [String] = []
     private(set) var allProjectPaths: [ProjectPath] = []
@@ -488,8 +494,12 @@ final class DashboardModel {
     private let cal = Calendar.current
     private let preferences: UserDefaults
 
-    init(preferences: UserDefaults = SharedDefaults.store) {
+    init(
+        preferences: UserDefaults = SharedDefaults.store,
+        homeUsageStore: HomeUsageSnapshotStore = .standard
+    ) {
         self.preferences = preferences
+        self.homeUsageStore = homeUsageStore
         syncExtensionState()
     }
 
@@ -576,6 +586,7 @@ final class DashboardModel {
         defer { PerformanceTrace.end(loadTrace) }
         syncExtensionState()
         guard extensionEnabled else { return }
+        await restoreCachedHomeUsage()
         let url = Repo.usageJSON
         defer { loadAttempted = true }
         for attempt in 0..<4 {
@@ -647,7 +658,27 @@ final class DashboardModel {
         }
         heatDetail = digest.heatDetail
         calendarDays = digest.calendarDays
+        homeUsage = HomeUsageSnapshot(
+            calendarDays: digest.calendarDays,
+            heatDetail: digest.heatDetail,
+            heatCuts: DashboardComputation.heatCuts(for: digest.calendarDays))
+        persistHomeUsage()
         loaded = true
+    }
+
+    func restoreCachedHomeUsage() async {
+        guard !homeUsage.hasDays else { return }
+        guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
+        homeUsage = cached
+    }
+
+    private func persistHomeUsage() {
+        homeUsageStoreTask?.cancel()
+        let snapshot = homeUsage
+        let store = homeUsageStore
+        homeUsageStoreTask = Task {
+            await store.store(snapshot)
+        }
     }
 
     func awaitPendingComputation() async {
@@ -912,29 +943,19 @@ final class DashboardModel {
     }
 
     private func publish(_ snapshot: DashboardSnapshot) {
-        revision &+= 1
-        series = snapshot.series
-        kpis = snapshot.kpis
-        modelTotals = snapshot.modelTotals
-        dow = snapshot.dow
-        hourlyAll = snapshot.hourlyAll
-        hourlyUnattributedTokens = snapshot.hourlyUnattributedTokens
-        hourlyUnattributedCost = snapshot.hourlyUnattributedCost
-        pathUnattributedTokens = snapshot.pathUnattributedTokens
-        pathUnattributedCost = snapshot.pathUnattributedCost
-        modelUnfilterableCost = snapshot.modelUnfilterableCost
-        projects = snapshot.projects
-        projectTree = snapshot.projectTree
-        meta = snapshot.meta
-        chartData = snapshot.chartData
+        var next = snapshot
+        next.revision = published.revision &+ 1
+        published = next
     }
 
     private func resortTotals() {
         guard !loading else { return }
-        modelTotals.sort {
+        var next = published
+        next.modelTotals.sort {
             DashboardComputation.modelTotalLess(
                 $0, $1, column: sortColumn, ascending: sortAscending)
         }
+        published = next
     }
 
     private func recompute() {
@@ -976,8 +997,10 @@ final class DashboardModel {
 
     private func resortProjectTree() {
         guard !loading, !projectTree.isEmpty else { return }
-        projectTree = DashboardComputation.sortTree(
+        var next = published
+        next.projectTree = DashboardComputation.sortTree(
             projectTree, key: projSortKey, ascending: projSortAscending)
+        published = next
     }
 }
 

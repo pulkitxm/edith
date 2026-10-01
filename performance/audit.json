@@ -315,6 +315,18 @@
         {
           "path": "Packages/Edith/Tests/EdithTests/DashboardWorkloadTests.swift",
           "contains": "denseInputPublishesOnlyTheLatestFilter"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/DashboardWorkloadTests.swift",
+          "contains": "longRangeDailyChartStaysWithinMarkBudget"
+        },
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Dashboard/Models/DashboardComputation.swift",
+          "contains": "static let chartMarkBudget = 90"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/DashboardWorkloadTests.swift",
+          "contains": "cachedHomeUsageShowsBeforeRefresh"
         }
       ]
     },
