@@ -76,8 +76,7 @@ enum SectionWindow {
     static func focusExisting(_ destination: MainDestination) -> Bool {
         guard let entry = entries.first(where: { $0.controller.destination == destination })
         else { return false }
-        entry.window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(entry.window)
         return true
     }
 
@@ -142,8 +141,7 @@ enum SectionWindow {
             if window.frame.origin == .zero { window.center() }
             offsetFromOverlappingWindows(window)
         }
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     private static func offsetFromOverlappingWindows(_ window: NSWindow) {
@@ -234,7 +232,7 @@ enum WindowTabs {
     static func selectTab(index: Int, in window: NSWindow?) -> Bool {
         let windows = tabbedWindows(for: window)
         guard index >= 0, index < windows.count else { return false }
-        windows[index].makeKeyAndOrderFront(nil)
+        WindowPresentation.makeKeyAndOrderFront(windows[index])
         return true
     }
 
@@ -245,7 +243,7 @@ enum WindowTabs {
         }
         let count = windows.count
         let next = backwards ? (current - 1 + count) % count : (current + 1) % count
-        windows[next].makeKeyAndOrderFront(nil)
+        WindowPresentation.makeKeyAndOrderFront(windows[next])
         return true
     }
 

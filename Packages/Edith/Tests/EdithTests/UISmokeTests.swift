@@ -332,9 +332,7 @@ private func settledBitmap(
         let session = MachineSession(
             machine: Machine(name: "This Mac", host: "localhost"), local: true)
         let holder = TerminalSessionHolder()
-        #expect(
-            renders(
-                MachineTerminalTab(session: session, holder: holder, allowsShellLaunch: false)))
+        #expect(renders(MachineTerminalTab(session: session, holder: holder)))
         #expect(!holder.started)
     }
 
@@ -363,7 +361,7 @@ private func settledBitmap(
             machine: Machine(name: "Remote", host: "203.0.113.1"), local: false,
             observesWakeRequests: false)
         let model = FinderModel(session: session)
-        #expect(renders(FinderPane(model: model, allowsConnections: false)))
+        #expect(renders(FinderPane(model: model)))
         try await Task.sleep(for: .milliseconds(100))
         #expect(session.state == .disconnected)
     }

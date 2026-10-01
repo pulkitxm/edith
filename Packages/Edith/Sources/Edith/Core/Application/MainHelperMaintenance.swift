@@ -44,7 +44,7 @@ func launchHelperIfNeeded() async {
     await MainActor.run {
         guard !Task.isCancelled else { return }
         NSWorkspace.shared.openApplication(
-            at: helperURL, configuration: NSWorkspace.OpenConfiguration())
+            at: helperURL, configuration: AppLaunchConfiguration.make())
     }
 }
 
@@ -74,7 +74,7 @@ private func relaunchHelper(at url: URL, after process: NSRunningApplication) as
             return
         }
         NSWorkspace.shared.openApplication(
-            at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            at: url, configuration: AppLaunchConfiguration.make(), completionHandler: nil)
     } catch {}
 }
 

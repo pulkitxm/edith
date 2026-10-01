@@ -271,8 +271,7 @@ enum TerminalWindow {
 
     static func open(session: MachineSession, model: TerminalTabsModel? = nil) {
         if let existing = windows[session.machine.id] {
-            existing.window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(existing.window)
             return
         }
         let window = NSWindow(
@@ -294,8 +293,7 @@ enum TerminalWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = TerminalWindowDelegate.shared
         windows[session.machine.id] = Entry(window: window, model: ownedModel)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func forget(_ window: NSWindow) {

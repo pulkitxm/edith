@@ -193,8 +193,7 @@ enum MachineWindow {
 
     static func open(machineID: UUID, title: String) {
         if let existing = windows[machineID] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(existing)
             return
         }
         let window = NSWindow(
@@ -215,8 +214,7 @@ enum MachineWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = MachineWindowDelegate.shared
         windows[machineID] = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func forget(_ window: NSWindow) {

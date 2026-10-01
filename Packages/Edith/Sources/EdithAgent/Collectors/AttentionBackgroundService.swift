@@ -305,21 +305,14 @@ public actor AttentionBackgroundService {
         return snapshot.trimmed(to: request.parts)
     }
 
-    private static let summaryKeyEncoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .millisecondsSince1970
-        encoder.outputFormatting = [.sortedKeys]
-        return encoder
-    }()
-
     private func summaryKey(_ request: AttentionSummaryRequest, settings: AttentionSettings)
         throws -> AttentionSummaryCacheKey
     {
         var settings = settings
         settings.serverToken = ""
         settings.serverPort = 0
-        let classifications = try Self.summaryKeyEncoder.encode(repository.loadClassifications())
-        let identity = try Self.summaryKeyEncoder.encode(
+        let classifications = try AgentPayload.encode(repository.loadClassifications())
+        let identity = try AgentPayload.encode(
             AttentionSummaryIdentity(
                 from: request.from, window: request.window, comparePeriod: request.comparePeriod,
                 settings: settings))

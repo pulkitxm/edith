@@ -5,18 +5,15 @@ import UniformTypeIdentifiers
 
 struct FinderPane: View {
     let model: FinderModel
-    var allowsConnections = true
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
-    private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
-
     var body: some View {
-        FinderBody(model: model, allowsConnections: allowsConnections)
+        FinderBody(model: model)
             .onAppear {
-                if connectionsAllowed { FinderUndoBridge.register(model) }
+                if connectionsEnabled { FinderUndoBridge.register(model) }
             }
             .onDisappear {
-                if connectionsAllowed { FinderUndoBridge.forget(model) }
+                if connectionsEnabled { FinderUndoBridge.forget(model) }
             }
     }
 }
@@ -36,14 +33,12 @@ struct FinderWindowView: View {
 struct FinderBody: View {
     @Environment(\.machineViewPresented) private var presented
     @Bindable var model: FinderModel
-    var allowsConnections = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
     @FocusState private var searchFocused: Bool
 
     private var dark: Bool { scheme == .dark }
-    private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,7 +60,7 @@ struct FinderBody: View {
         }
         .background(DashSkin.paper(dark))
         .task(id: presented) {
-            guard connectionsAllowed, presented else {
+            guard connectionsEnabled, presented else {
                 model.stopLoading()
                 return
             }
@@ -75,7 +70,7 @@ struct FinderBody: View {
             await model.load()
         }
         .onChange(of: model.session.state.isConnected) { _, connected in
-            if connectionsAllowed, presented, connected { model.refresh() }
+            if connectionsEnabled, presented, connected { model.refresh() }
         }
         .onDisappear { model.stopLoading() }
         .overlay {
@@ -490,8 +485,7 @@ enum FinderWindow {
     static func open(session: MachineSession, path: String? = nil) {
         let key = session.machine.id.uuidString + (path ?? "")
         if let existing = windows[key] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(existing)
             return
         }
         let window = NSWindow(
@@ -513,8 +507,7 @@ enum FinderWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = FinderWindowDelegate.shared
         windows[key] = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func forget(_ window: NSWindow) {

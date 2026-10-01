@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -181,7 +182,7 @@ enum CLIWindowBridge {
         }
         var files: [String] = []
         var used: [String: Int] = [:]
-        for window in NSApp.windows where window.isVisible {
+        for window in NSApp.windows where window.isVisible || BackgroundTesting.isActive {
             guard let image = render(window) else { continue }
             let base = slug(window.title.isEmpty ? "window" : window.title)
             let count = (used[base] ?? 0) + 1
@@ -207,8 +208,9 @@ enum CLIWindowBridge {
     }
 
     private static func render(_ window: NSWindow) -> Data? {
-        window.displayIfNeeded()
         guard let contentView = window.contentView else { return nil }
+        if !window.isVisible { return WindowPresentation.pngData(of: contentView) }
+        window.displayIfNeeded()
         let frameView = contentView.superview ?? contentView
         let bounds = frameView.bounds
         guard bounds.width > 40, bounds.height > 40,

@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import EdithCore
 import EdithKit
 import EventKit
 import SwiftUI
@@ -146,6 +147,7 @@ final class PermissionsModel {
     }
 
     private func performRequest(_ permission: ExtensionPermission) -> Bool {
+        guard !BackgroundTesting.isActive else { return false }
         guard !stopped, grants[permission] == nil, permission.grantRequest != nil else {
             return false
         }

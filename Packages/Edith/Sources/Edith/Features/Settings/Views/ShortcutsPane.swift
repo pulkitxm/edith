@@ -191,7 +191,7 @@ struct HotKeyRecorderControl: View {
 
     private func start() {
         recording = true
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.activate()
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event)
             return nil

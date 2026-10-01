@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import Foundation
 import UniformTypeIdentifiers
 
@@ -201,6 +202,10 @@ enum TerminalUntrustedURLPresenter {
         _ alert: NSAlert, from window: NSWindow?,
         completion: @escaping (NSApplication.ModalResponse) -> Void
     ) {
+        if BackgroundTesting.isActive {
+            completion(.abort)
+            return
+        }
         if let window {
             alert.beginSheetModal(for: window, completionHandler: completion)
         } else {

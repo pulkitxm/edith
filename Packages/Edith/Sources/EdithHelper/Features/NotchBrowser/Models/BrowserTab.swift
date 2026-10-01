@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import WebKit
 
 @MainActor
@@ -76,7 +77,7 @@ final class NotchWebView: WKWebView {
     override var needsPanelToBecomeKey: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        if window?.isKeyWindow == false { window?.makeKey() }
+        if window?.isKeyWindow == false, !BackgroundTesting.isActive { window?.makeKey() }
         super.mouseDown(with: event)
     }
 

@@ -101,8 +101,8 @@ enum BifrostActionRunner {
         alert.alertStyle = .warning
         alert.addButton(withTitle: action.title)
         alert.addButton(withTitle: "Cancel")
-        NSApp.activate()
-        return alert.runModal() == .alertFirstButtonReturn
+        WindowPresentation.activate(ignoringOtherApps: false)
+        return WindowPresentation.runModal(alert) == .alertFirstButtonReturn
     }
 
     private static func present(title: String, message: String) {
@@ -113,7 +113,7 @@ enum BifrostActionRunner {
         alert.informativeText = String(trimmed.prefix(2000))
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Done")
-        NSApp.activate()
-        _ = alert.runModal()
+        WindowPresentation.activate(ignoringOtherApps: false)
+        _ = WindowPresentation.runModal(alert)
     }
 }

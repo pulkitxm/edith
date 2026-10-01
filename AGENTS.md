@@ -15,6 +15,7 @@ run at once next to the installed Edith without touching it or each other.
   `com.pulkit.edith.dev.<slot>`, where the slot is the worktree folder name
   without the `edith-` prefix (`main` for the primary checkout). Use
   `./build.sh --no-open` to build without launching.
+  `./build.sh --background` builds the same way, then launches that development build hidden so its windows stay off-screen.
 - Each slot has its own background agent (`com.pulkit.edith.dev.<slot>.agent`),
   menu bar helper, preferences, keychain items and data under
   `~/Library/Application Support/Edith Dev/<slot>`, with caches and logs under

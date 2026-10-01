@@ -14,8 +14,8 @@ import Testing
         try page.captureSidebarEvidence("01-original")
         let first = try page.sidebarAgent(page.agents[0].id)
         let last = try page.sidebarAgent(page.agents[2].id)
-        page.drag(
-            .agent(page.agents[2]), from: CGPoint(x: last.midX, y: last.midY),
+        try await page.mouseDrag(
+            from: CGPoint(x: last.midX, y: last.midY),
             to: CGPoint(x: first.midX, y: first.minY + 2))
         #expect(
             page.store.listedAgents.map(\.id) == [
@@ -28,8 +28,8 @@ import Testing
         try page.captureSidebarEvidence("03-spaces-original")
         let alpha = try page.sidebarSpace("local|alpha")
         let beta = try page.sidebarSpace("local|beta")
-        page.drag(
-            .space("local|beta"), from: CGPoint(x: beta.minX + 80, y: beta.minY + 18),
+        try await page.mouseDrag(
+            from: CGPoint(x: beta.minX + 80, y: beta.minY + 18),
             to: CGPoint(x: alpha.minX + 80, y: alpha.minY + 2))
         #expect(page.store.agentSpaces.map(\.title) == ["beta", "alpha"])
         #expect(page.store.collapsedSpaces.isEmpty)
@@ -355,6 +355,31 @@ final class RenderedHerdrPage {
                     y: start.y + (end.y - start.y) * progress))
         }
         drag.finish(item, at: end)
+    }
+
+    func mouseDrag(from start: CGPoint, to end: CGPoint) async throws {
+        try mouse(.leftMouseDown, at: start)
+        for step in 1...12 {
+            let progress = CGFloat(step) / 12
+            try mouse(
+                .leftMouseDragged,
+                at: CGPoint(
+                    x: start.x + (end.x - start.x) * progress,
+                    y: start.y + (end.y - start.y) * progress))
+            await settle()
+        }
+        try mouse(.leftMouseUp, at: end)
+        await settle()
+    }
+
+    private func mouse(_ type: NSEvent.EventType, at point: CGPoint) throws {
+        let event = try #require(
+            NSEvent.mouseEvent(
+                with: type, location: CGPoint(x: point.x, y: host.bounds.height - point.y),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                pressure: type == .leftMouseUp ? 0 : 1))
+        window.sendEvent(event)
     }
 
     func captureSidebarEvidence(_ name: String) throws {
