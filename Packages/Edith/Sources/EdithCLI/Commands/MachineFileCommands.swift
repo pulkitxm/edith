@@ -6,6 +6,14 @@ struct MachinesFilesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "files",
         abstract: "Browse and transfer files on a machine.",
+        discussion: """
+            `ed machines files` is a file manager for a machine you have already told
+            Edith about.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines files ls box
+            """,
         subcommands: [
             MachineFilesListCommand.self, MachineFilesGetCommand.self,
             MachineFilesPutCommand.self, MachinesFilesCopyCommand.self,
@@ -22,7 +30,15 @@ struct MachinesFilesCommand: AsyncParsableCommand {
 
 struct MachineFilesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List a remote directory.", aliases: ["list"])
+        commandName: "ls", abstract: "List a remote directory.",
+        discussion: """
+            Lists one remote directory.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines files ls box
+            ed machines files ls box --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -75,6 +91,10 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
         discussion: """
             Existing files are kept by adding a number. Pass --replace to preview
             replacement, then add --yes to confirm it.
+            Reads a remote file and writes a copy on this Mac.
+
+            ed machines files get box /etc/hosts
+            ed machines files get box /etc/hosts --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -150,7 +170,15 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
 
 struct MachineFilesPreviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "preview", abstract: "Print a text preview of a remote file.")
+        commandName: "preview", abstract: "Print a text preview of a remote file.",
+        discussion: """
+            Prints the first 400 KiB of a remote text file.
+
+            Reads a short text preview of a remote file. Does not change the file.
+
+            ed machines files preview box /etc/os-release
+            ed machines files preview box /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -233,7 +261,16 @@ enum MachineFilePresentationCLI {
 
 struct MachineFilesLaunchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "launch", abstract: "Open a remote file in its default Mac app.")
+        commandName: "launch", abstract: "Open a remote file in its default Mac app.",
+        discussion: """
+            Downloads a remote file into Edith's preview cache and opens it in its
+            default Mac app.
+
+            Changes this Mac by opening the remote file in its default app.
+
+            ed machines files launch box /etc/os-release
+            ed machines files launch box /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -254,7 +291,15 @@ struct MachineFilesLaunchCommand: AsyncParsableCommand {
 
 struct MachineFilesRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reveal", abstract: "Reveal a downloaded remote file in Finder.")
+        commandName: "reveal", abstract: "Reveal a downloaded remote file in Finder.",
+        discussion: """
+            Downloads a remote file into Edith's preview cache and reveals it in Finder.
+
+            Changes Finder by revealing a file that was already downloaded.
+
+            ed machines files reveal box /etc/os-release
+            ed machines files reveal box /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -279,6 +324,10 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
         discussion: """
             Existing files are kept by adding a number. Pass --replace to preview
             replacement, then add --yes to confirm it.
+            Changes the machine by uploading a local file.
+
+            ed machines files put box hosts.txt /etc/hosts
+            ed machines files put box hosts.txt /etc/hosts --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

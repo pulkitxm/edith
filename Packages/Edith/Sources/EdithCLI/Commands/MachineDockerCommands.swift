@@ -5,11 +5,14 @@ import Foundation
 struct MachinesDockerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "docker",
-        abstract: "Containers on a machine, parsed into stable fields.",
+        abstract: "Query containers on a machine, parsed into stable fields.",
         discussion: """
             The machine name comes first: `ed machines tuf docker ps`. For anything
             this does not cover, the raw form sends a command through verbatim:
             `ed tuf docker buildx ls`.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines docker ps box
             """,
         subcommands: [
             DockerPsCommand.self, DockerShellCommand.self, DockerImagesCommand.self,
@@ -29,7 +32,15 @@ struct MachinesDockerCommand: AsyncParsableCommand {
 
 struct DockerOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open a published container port in the browser.")
+        commandName: "open", abstract: "Open a published container port in the browser.",
+        discussion: """
+            Open a published container port in the browser.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed machines docker open box api
+            ed machines docker open box api --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -111,7 +122,15 @@ struct DockerOpenCommand: AsyncParsableCommand {
 
 struct DockerShellCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "shell", abstract: "Open an interactive shell in a container.")
+        commandName: "shell", abstract: "Open an interactive shell in a container.",
+        discussion: """
+            Opens an interactive shell in a container on a configured machine.
+
+            Reads the container's terminal stream once you attach. Does not change
+            Docker until you type.
+
+            ed machines docker shell box api
+            """, )
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -188,7 +207,16 @@ enum DockerBridge {
 
 struct DockerPsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ps", abstract: "List containers with live stats.")
+        commandName: "ps", abstract: "List containers with live stats.",
+        discussion: """
+            Lists containers, merging `docker ps -a` with a one-shot `docker stats` so
+            each row carries live CPU and memory next to its state and ports.
+
+            Reads containers and their live CPU and memory. Does not change Docker.
+
+            ed machines docker ps box
+            ed machines docker ps box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -231,7 +259,15 @@ struct DockerPsCommand: AsyncParsableCommand {
 
 struct DockerImagesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "images", abstract: "List images.")
+        commandName: "images", abstract: "List images.",
+        discussion: """
+            Lists the images on the machine with their size.
+
+            Reads the Docker image list. Does not change Docker.
+
+            ed machines docker images box
+            ed machines docker images box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -260,7 +296,15 @@ struct DockerImagesCommand: AsyncParsableCommand {
 
 struct DockerVolumesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "volumes", abstract: "List volumes.")
+        commandName: "volumes", abstract: "List volumes.",
+        discussion: """
+            Lists the volumes on the machine.
+
+            Reads the Docker volume list. Does not change Docker.
+
+            ed machines docker volumes box
+            ed machines docker volumes box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -287,7 +331,15 @@ struct DockerVolumesCommand: AsyncParsableCommand {
 
 struct DockerNetworksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "networks", abstract: "List networks.")
+        commandName: "networks", abstract: "List networks.",
+        discussion: """
+            Lists the docker networks on the machine.
+
+            Reads the Docker network list. Does not change Docker.
+
+            ed machines docker networks box
+            ed machines docker networks box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -314,7 +366,16 @@ struct DockerNetworksCommand: AsyncParsableCommand {
 
 struct DockerDiskUsageCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "df", abstract: "Disk usage by object type.")
+        commandName: "df", abstract: "Show disk usage by object type.",
+        discussion: """
+            Reports docker's disk usage by object type, and how much of it is
+            reclaimable.
+
+            Reads Docker disk usage by object type. Does not change Docker.
+
+            ed machines docker df box
+            ed machines docker df box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -359,13 +420,24 @@ struct DockerDiskUsageCommand: AsyncParsableCommand {
 
 struct DockerLogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "logs", abstract: "Container logs.")
+        commandName: "logs", abstract: "Read container logs.",
+        discussion: """
+            Streams one container's logs to your terminal.
+
+            Reads trailing log lines. Does not change the container or the project.
+
+            ed machines docker logs box api
+            ed machines docker logs box api --json
+            """, )
 
     @Option(help: "How many trailing lines to show.")
     var tail: Int = 200
 
     @Flag(name: [.long, .short], help: "Keep streaming.")
     var follow = false
+
+    @Flag(name: .long, help: "Emit the captured lines as JSON. Cannot be combined with --follow.")
+    var json = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -376,11 +448,26 @@ struct DockerLogsCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let tail = try ArgumentChecks.nonNegative(self.tail, "--tail")
+            if json, follow {
+                throw CLIFailure.usage(
+                    "--json prints one document, so it cannot be combined with --follow")
+            }
             let runner = try await DockerBridge.runner(machine)
-            let status = await runner.passthrough(
-                DockerCommands.logs(
-                    container, tail: tail, follow: follow,
-                    platform: await runner.ssh.remotePlatform ?? .linux))
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let command = DockerCommands.logs(
+                container, tail: tail, follow: follow, platform: platform)
+            if json {
+                let output = try await runner.text(command, timeout: 60)
+                let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "container": .string(container),
+                        "lines": .strings(lines),
+                    ]))
+                return
+            }
+            let status = await runner.passthrough(command)
             guard status == 0 else { throw ExitCode(status) }
         }
     }
@@ -388,7 +475,15 @@ struct DockerLogsCommand: AsyncParsableCommand {
 
 struct DockerInspectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "inspect", abstract: "Inspect a container with stable fields.")
+        commandName: "inspect", abstract: "Inspect a container with stable fields.",
+        discussion: """
+            Reads the same structured container details as the app's Inspect tab.
+
+            Reads one container's stable fields. Does not change the container.
+
+            ed machines docker inspect box api
+            ed machines docker inspect box api --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -425,7 +520,17 @@ struct DockerInspectCommand: AsyncParsableCommand {
 
 struct DockerTopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "top", abstract: "Read processes running in a container.")
+        commandName: "top", abstract: "Read processes running in a container.",
+        discussion: """
+            Reads the processes running inside one container, using the same command and
+            parser as the app's Processes tab.
+
+            Reads the processes running inside a container. Does not change the
+            container.
+
+            ed machines docker top box api
+            ed machines docker top box api --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -554,7 +659,15 @@ extension DockerLifecycleCommand {
 
 struct DockerStartCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "start", abstract: "Start a container.")
+        commandName: "start", abstract: "Start a container.",
+        discussion: """
+            Starts a stopped container.
+
+            Changes the target by starting it.
+
+            ed machines docker start box api
+            ed machines docker start box api --json
+            """, )
     static let action = "start"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -571,7 +684,15 @@ struct DockerStartCommand: DockerLifecycleCommand {
 
 struct DockerStopCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Stop a container.")
+        commandName: "stop", abstract: "Stop a container.",
+        discussion: """
+            Stops a running container.
+
+            Changes the target by stopping it.
+
+            ed machines docker stop box api
+            ed machines docker stop box api --json
+            """, )
     static let action = "stop"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -588,7 +709,15 @@ struct DockerStopCommand: DockerLifecycleCommand {
 
 struct DockerRestartCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Restart a container.")
+        commandName: "restart", abstract: "Restart a container.",
+        discussion: """
+            Restarts a container.
+
+            Changes the target by restarting it.
+
+            ed machines docker restart box api
+            ed machines docker restart box api --json
+            """, )
     static let action = "restart"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -605,7 +734,15 @@ struct DockerRestartCommand: DockerLifecycleCommand {
 
 struct DockerRemoveCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Remove a container, forcing it down first.")
+        commandName: "rm", abstract: "Remove a container, forcing it down first.",
+        discussion: """
+            Removes a container, killing it first.
+
+            Changes the saved list by removing one record.
+
+            ed machines docker rm box api
+            ed machines docker rm box api --json
+            """, )
     static let action = "rm"
     static let isDestructive = true
 
@@ -628,7 +765,15 @@ struct DockerRemoveCommand: DockerLifecycleCommand {
 
 struct DockerPauseCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pause", abstract: "Freeze a container's processes.")
+        commandName: "pause", abstract: "Freeze a container's processes.",
+        discussion: """
+            Freezes a container's processes without stopping it.
+
+            Changes the container by freezing its processes.
+
+            ed machines docker pause box api
+            ed machines docker pause box api --json
+            """, )
     static let action = "pause"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -645,7 +790,15 @@ struct DockerPauseCommand: DockerLifecycleCommand {
 
 struct DockerUnpauseCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "unpause", abstract: "Let a frozen container run again.")
+        commandName: "unpause", abstract: "Let a frozen container run again.",
+        discussion: """
+            Lets a frozen container run again.
+
+            Changes the container by letting its processes run again.
+
+            ed machines docker unpause box api
+            ed machines docker unpause box api --json
+            """, )
     static let action = "unpause"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -662,7 +815,15 @@ struct DockerUnpauseCommand: DockerLifecycleCommand {
 
 struct DockerRemoveImageCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rmi", abstract: "Remove an image.", aliases: ["remove-image"])
+        commandName: "rmi", abstract: "Remove an image.",
+        discussion: """
+            Removes an image.
+
+            Changes Docker by removing one image.
+
+            ed machines docker rmi box alpine:3
+            ed machines docker rmi box alpine:3 --json
+            """, aliases: ["remove-image"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -707,6 +868,10 @@ struct DockerRemoveVolumeCommand: AsyncParsableCommand {
         discussion: """
             A volume is where a container keeps the data it means to survive a restart, so
             this is not undoable. Nothing is removed without --yes.
+            Changes Docker by removing one volume.
+
+            ed machines docker volume-rm box pgdata
+            ed machines docker volume-rm box pgdata --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -763,6 +928,10 @@ struct DockerPruneCommand: AsyncParsableCommand {
             `what` is one of images, volumes, networks, builder or system. Nothing is
             removed without --yes, and volumes hold data, so that one is spelled out
             rather than folded into system.
+            Changes Docker by deleting unused data.
+
+            ed machines docker prune box
+            ed machines docker prune box --json
             """)
 
     static let targets = DockerPruneTarget.allCases.map(\.rawValue)
@@ -827,7 +996,14 @@ struct DockerPruneCommand: AsyncParsableCommand {
 struct DockerComposeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "compose",
-        abstract: "Compose projects on a machine.",
+        abstract: "Query compose projects on a machine.",
+        discussion: """
+            Query compose projects on a machine.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines docker compose ls box
+            """,
         subcommands: [
             ComposeListCommand.self, ComposeUpCommand.self, ComposeDownCommand.self,
             ComposeRestartCommand.self, ComposePullCommand.self, ComposeLogsCommand.self,
@@ -857,7 +1033,15 @@ enum ComposeBridge {
 
 struct ComposeListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List compose projects.", aliases: ["list"])
+        commandName: "ls", abstract: "List compose projects.",
+        discussion: """
+            Lists the compose projects on the machine.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines docker compose ls box
+            ed machines docker compose ls box --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -921,7 +1105,15 @@ extension ComposeLifecycleCommand {
 
 struct ComposeUpCommand: ComposeLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "up", abstract: "Bring a compose project up in the background.")
+        commandName: "up", abstract: "Bring a compose project up in the background.",
+        discussion: """
+            Brings a compose project up in the background.
+
+            Changes the compose project by starting it in the background.
+
+            ed machines docker compose up box web
+            ed machines docker compose up box web --json
+            """, )
     static let action = "up -d"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -938,7 +1130,15 @@ struct ComposeUpCommand: ComposeLifecycleCommand {
 
 struct ComposeDownCommand: ComposeLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "down", abstract: "Take a compose project down.")
+        commandName: "down", abstract: "Take a compose project down.",
+        discussion: """
+            Takes a compose project down.
+
+            Changes the compose project by stopping it and removing its containers.
+
+            ed machines docker compose down box web
+            ed machines docker compose down box web --json
+            """, )
     static let action = "down"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -955,7 +1155,15 @@ struct ComposeDownCommand: ComposeLifecycleCommand {
 
 struct ComposeRestartCommand: ComposeLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Restart a compose project.")
+        commandName: "restart", abstract: "Restart a compose project.",
+        discussion: """
+            Restarts a compose project.
+
+            Changes the target by restarting it.
+
+            ed machines docker compose restart box web
+            ed machines docker compose restart box web --json
+            """, )
     static let action = "restart"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -972,7 +1180,15 @@ struct ComposeRestartCommand: ComposeLifecycleCommand {
 
 struct ComposePullCommand: ComposeLifecycleCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pull", abstract: "Pull the images a compose project uses.")
+        commandName: "pull", abstract: "Pull the images a compose project uses.",
+        discussion: """
+            Pulls the images a compose project uses.
+
+            Changes the machine by pulling the images the project uses.
+
+            ed machines docker compose pull box web
+            ed machines docker compose pull box web --json
+            """, )
     static let action = "pull"
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -989,13 +1205,24 @@ struct ComposePullCommand: ComposeLifecycleCommand {
 
 struct ComposeLogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "logs", abstract: "Logs for a whole compose project.")
+        commandName: "logs", abstract: "Read logs for a whole compose project.",
+        discussion: """
+            Streams the logs of every container in a compose project.
+
+            Reads trailing log lines. Does not change the container or the project.
+
+            ed machines docker compose logs box web
+            ed machines docker compose logs box web --json
+            """, )
 
     @Option(help: "How many trailing lines to show.")
     var tail: Int = 200
 
     @Flag(name: [.long, .short], help: "Keep streaming.")
     var follow = false
+
+    @Flag(name: .long, help: "Emit the captured lines as JSON. Cannot be combined with --follow.")
+    var json = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -1006,13 +1233,33 @@ struct ComposeLogsCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let tail = try ArgumentChecks.nonNegative(self.tail, "--tail")
+            if json, follow {
+                throw CLIFailure.usage(
+                    "--json prints one document, so it cannot be combined with --follow")
+            }
             let runner = try await DockerBridge.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            if json {
+                try await ComposeBridge.require(runner, project: project)
+                let output = try await runner.text(
+                    DockerCommands.composeAction(
+                        "logs --tail \(tail)", project: project, directory: nil,
+                        platform: platform),
+                    timeout: 60)
+                let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "project": .string(project),
+                        "lines": .strings(lines),
+                    ]))
+                return
+            }
             try await ComposeBridge.require(runner, project: project)
             let action = "logs --tail \(tail)" + (follow ? " -f" : "")
             let status = await runner.passthrough(
                 DockerCommands.composeAction(
-                    action, project: project, directory: nil,
-                    platform: await runner.ssh.remotePlatform ?? .linux))
+                    action, project: project, directory: nil, platform: platform))
             guard status == 0 else { throw ExitCode(status) }
         }
     }

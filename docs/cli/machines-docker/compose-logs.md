@@ -3,7 +3,7 @@
 Streams the logs of every container in a compose project.
 
 ```
-ed machines docker compose logs [--tail <n>] [--follow] <machine> <project>
+ed machines docker compose logs [--tail <n>] [--follow] [--json] <machine> <project>
 ```
 
 ## Arguments
@@ -19,10 +19,12 @@ ed machines docker compose logs [--tail <n>] [--follow] <machine> <project>
 | --- | --- | --- | --- |
 | `--tail` | integer, 0 or more | `200` | How many trailing lines to show, per service. |
 | `--follow`, `-f` | flag | off | Keep streaming until interrupted. |
+| `--json` | flag | off | Capture the bounded log and print one JSON document. Cannot be combined with `--follow`. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
-There is no `--json`, and unlike `ed machines docker logs` there are no
-timestamps: compose prefixes each line with the service name instead.
+Unlike `ed machines docker logs` there are no timestamps: compose prefixes each
+line with the service name instead. `--json` waits for that bounded log, then
+prints `{"machine","project","lines"}`.
 
 ## Examples
 
@@ -39,8 +41,9 @@ the same project check the other compose verbs make, so an unlisted project
 exits 3 before anything streams. `--tail` is validated first and a negative
 value exits 2.
 
-Like `ed machines docker logs`, this is a passthrough: stdout and stderr stay
-separate, there is no timeout, and the remote exit code becomes yours.
+Without `--json` this is a passthrough: stdout and stderr stay separate, there
+is no timeout, and the remote exit code becomes yours. `--json` cannot follow,
+and a remote failure on that path exits 1.
 
 ## Where to go next
 

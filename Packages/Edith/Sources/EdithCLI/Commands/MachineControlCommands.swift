@@ -6,6 +6,15 @@ struct MachinesControlCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "control",
         abstract: "Inspect and change live machine controls.",
+        discussion: """
+            `ed machines control` exposes the live controls shown in the Machine Control
+            Center through the same operation definitions and command builder used by
+            the app.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines control status box
+            """,
         subcommands: [
             MachinesControlStatusCommand.self,
             MachinesControlBrightnessCommand.self,
@@ -278,7 +287,15 @@ enum MachineControlCLI {
 
 struct MachinesControlStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Read the available live controls.")
+        commandName: "status", abstract: "Read the available live controls.",
+        discussion: """
+            Read the available live controls.
+
+            Reads the current state. Does not change it.
+
+            ed machines control status box
+            ed machines control status box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -290,7 +307,15 @@ struct MachinesControlStatusCommand: AsyncParsableCommand {
 
 struct MachinesControlBrightnessCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "brightness", abstract: "Set display brightness.")
+        commandName: "brightness", abstract: "Set display brightness.",
+        discussion: """
+            Set display brightness.
+
+            Changes the display brightness.
+
+            ed machines control brightness box 40
+            ed machines control brightness box 40 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -306,7 +331,15 @@ struct MachinesControlBrightnessCommand: AsyncParsableCommand {
 
 struct MachinesControlVolumeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "volume", abstract: "Set system output volume.")
+        commandName: "volume", abstract: "Set system output volume.",
+        discussion: """
+            Set system output volume.
+
+            Changes the system output volume.
+
+            ed machines control volume box 40
+            ed machines control volume box 40 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -322,7 +355,15 @@ struct MachinesControlVolumeCommand: AsyncParsableCommand {
 
 struct MachinesControlMuteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mute", abstract: "Mute or unmute system audio.")
+        commandName: "mute", abstract: "Mute or unmute system audio.",
+        discussion: """
+            Mute or unmute system audio.
+
+            Changes whether system audio is muted.
+
+            ed machines control mute box on
+            ed machines control mute box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -338,7 +379,15 @@ struct MachinesControlMuteCommand: AsyncParsableCommand {
 
 struct MachinesControlWiFiCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "wifi", abstract: "Turn Wi-Fi on or off.")
+        commandName: "wifi", abstract: "Turn Wi-Fi on or off.",
+        discussion: """
+            Turn Wi-Fi on or off.
+
+            Changes whether Wi-Fi is on.
+
+            ed machines control wifi box on
+            ed machines control wifi box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Flag(name: .long, help: "Apply a change that may disconnect the machine.") var yes = false
@@ -356,7 +405,15 @@ struct MachinesControlWiFiCommand: AsyncParsableCommand {
 
 struct MachinesControlBluetoothCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "bluetooth", abstract: "Turn Bluetooth on or off.")
+        commandName: "bluetooth", abstract: "Turn Bluetooth on or off.",
+        discussion: """
+            Turn Bluetooth on or off.
+
+            Changes whether Bluetooth is on.
+
+            ed machines control bluetooth box on
+            ed machines control bluetooth box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -372,7 +429,15 @@ struct MachinesControlBluetoothCommand: AsyncParsableCommand {
 
 struct MachinesControlAirplaneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "airplane", abstract: "Turn airplane mode on or off.")
+        commandName: "airplane", abstract: "Turn airplane mode on or off.",
+        discussion: """
+            Turn airplane mode on or off.
+
+            Changes whether airplane mode is on.
+
+            ed machines control airplane box on
+            ed machines control airplane box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Flag(name: .long, help: "Apply a change that may disconnect the machine.") var yes = false
@@ -390,7 +455,15 @@ struct MachinesControlAirplaneCommand: AsyncParsableCommand {
 
 struct MachinesControlDNDCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "dnd", abstract: "Turn Do Not Disturb on or off.")
+        commandName: "dnd", abstract: "Turn Do Not Disturb on or off.",
+        discussion: """
+            Turn Do Not Disturb on or off.
+
+            Changes whether Do Not Disturb is on.
+
+            ed machines control dnd box on
+            ed machines control dnd box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -406,7 +479,15 @@ struct MachinesControlDNDCommand: AsyncParsableCommand {
 
 struct MachinesControlCaffeinateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "caffeinate", abstract: "Prevent automatic sleep.")
+        commandName: "caffeinate", abstract: "Prevent automatic sleep.",
+        discussion: """
+            Prevent automatic sleep.
+
+            Changes whether the machine is allowed to sleep.
+
+            ed machines control caffeinate box on
+            ed machines control caffeinate box on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
@@ -422,7 +503,15 @@ struct MachinesControlCaffeinateCommand: AsyncParsableCommand {
 
 struct MachinesControlKeyboardLightCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "keyboard-light", abstract: "Set keyboard backlight brightness.")
+        commandName: "keyboard-light", abstract: "Set keyboard backlight brightness.",
+        discussion: """
+            Set keyboard backlight brightness.
+
+            Changes the keyboard backlight level.
+
+            ed machines control keyboard-light box 40
+            ed machines control keyboard-light box 40 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Machine name, or local for this Mac.") var machine: String
