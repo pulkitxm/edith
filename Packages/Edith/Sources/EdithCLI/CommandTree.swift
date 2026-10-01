@@ -200,7 +200,7 @@ public enum CommandTree {
             options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
         "ed app clear-updates": Spec(
             options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
-        "ed app reveal": Spec(options: ["--json", "--help", "--tab"]),
+        "ed app reveal": Spec(options: ["--json", "--help", "--tab", "--list"]),
         "ed app snapshot": Spec(options: ["--json", "--help", "--dir"]),
         "ed extensions ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed extensions enable": Spec(options: ["--json"], arguments: [.extensionID]),
@@ -459,6 +459,13 @@ public enum CommandTree {
             optionValues: ["--tab": .free], arguments: [.free]),
         "ed herdr swap": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed herdr space ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed herdr space terminal": Spec(
+            options: ["--json", "-h", "--help", "--version", "--window"],
+            optionValues: ["--window": .free]),
+        "ed herdr space split": Spec(
+            options: ["--json", "-h", "--help", "--version", "--window", "--side"],
+            optionValues: ["--window": .free, "--side": .free]),
         "ed herdr terminal": Spec(
             options: ["--json", "-h", "--help", "--version", "--tab"],
             optionValues: ["--tab": .free]),

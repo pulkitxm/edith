@@ -174,6 +174,10 @@ public enum IPC {
             "com.pulkit.edith.requestNotchBrowserAction")
         public static let notchBrowserActionResult = IPC.scopedName(
             "com.pulkit.edith.notchBrowserActionResult")
+        public static let requestHerdrSpaceAction = IPC.scopedName(
+            "com.pulkit.edith.requestHerdrSpaceAction")
+        public static let herdrSpaceActionResult = IPC.scopedName(
+            "com.pulkit.edith.herdrSpaceActionResult")
         public static let requestHerdrLayoutAction = IPC.scopedName(
             "com.pulkit.edith.requestHerdrLayoutAction")
         public static let herdrLayoutActionResult = IPC.scopedName(
