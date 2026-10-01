@@ -403,6 +403,7 @@ enum UIParity {
         "ed companion ingest /tmp/note.md",
         "ed companion ingest /tmp/notes",
         "ed companion ingest /tmp/voice-memo.wav",
+        "ed database pack install",
         "ed quinjet focus 1",
         "ed quinjet projects --machine build",
         "ed seo start project",
