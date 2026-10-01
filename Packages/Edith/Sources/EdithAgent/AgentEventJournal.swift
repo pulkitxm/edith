@@ -3,6 +3,8 @@ import Foundation
 import GRDB
 
 enum AgentEventJournal {
+    private static let pruneInterval: Int64 = 50
+
     static func load(store: AgentStore?) -> [AgentEvent] {
         guard let store else { return [] }
         return
@@ -26,13 +28,28 @@ enum AgentEventJournal {
         store.asyncWrite { database in
             try database.execute(
                 sql: "INSERT INTO agent_event (payload) VALUES (?)", arguments: [payload])
-            try database.execute(
-                sql:
-                    "DELETE FROM agent_event WHERE sequence <= (SELECT MAX(sequence) - ? FROM agent_event)",
-                arguments: [AgentDiagnostics.capacity])
+            if database.lastInsertedRowID % Self.pruneInterval == 0 {
+                try deleteOverflow(database)
+            }
         } failed: { error in
             logFailure(error)
         }
+    }
+
+    static func prune(store: AgentStore?) {
+        guard let store else { return }
+        store.asyncWrite { database in
+            try deleteOverflow(database)
+        } failed: { error in
+            logFailure(error)
+        }
+    }
+
+    private static func deleteOverflow(_ database: Database) throws {
+        try database.execute(
+            sql:
+                "DELETE FROM agent_event WHERE sequence <= (SELECT MAX(sequence) - ? FROM agent_event)",
+            arguments: [AgentDiagnostics.capacity])
     }
 
     private static func logFailure(_ error: Error) {
