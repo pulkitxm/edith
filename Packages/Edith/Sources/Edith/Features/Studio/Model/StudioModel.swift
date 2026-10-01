@@ -29,6 +29,58 @@ enum StudioRoute: Equatable {
     case videoEditor([URL], project: URL?)
     case commandVideoEditor(String)
     case compare(URL, URL)
+
+    var navigationToken: String {
+        switch self {
+        case .home:
+            ""
+        case let .tool(id):
+            "tool\n\(id.uuidString)"
+        case let .imageEditor(url):
+            "image\n\(url.path)"
+        case let .pdfEditor(url, mode):
+            "pdf\n\(url.path)\n\(mode.rawValue)"
+        case let .videoEditor(media, project):
+            "video\n\(project?.path ?? media.first?.path ?? "")"
+        case let .commandVideoEditor(id):
+            "command\n\(id)"
+        case let .compare(original, revised):
+            "compare\n\(original.path)\n\(revised.path)"
+        }
+    }
+
+    init?(navigationToken token: String) {
+        if token.isEmpty {
+            self = .home
+            return
+        }
+        let parts = token.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let kind = parts.first else { return nil }
+        switch kind {
+        case "tool":
+            guard parts.count == 2, let id = UUID(uuidString: parts[1]) else { return nil }
+            self = .tool(id)
+        case "image":
+            guard parts.count == 2, !parts[1].isEmpty else { return nil }
+            self = .imageEditor(URL(fileURLWithPath: parts[1]))
+        case "pdf":
+            guard parts.count == 3, let mode = StudioPDFEditorMode(rawValue: parts[2]) else {
+                return nil
+            }
+            self = .pdfEditor(URL(fileURLWithPath: parts[1]), mode)
+        case "video":
+            guard parts.count == 2, !parts[1].isEmpty else { return nil }
+            self = .videoEditor([], project: URL(fileURLWithPath: parts[1]))
+        case "command":
+            guard parts.count == 2, !parts[1].isEmpty else { return nil }
+            self = .commandVideoEditor(parts[1])
+        case "compare":
+            guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
+            self = .compare(URL(fileURLWithPath: parts[1]), URL(fileURLWithPath: parts[2]))
+        default:
+            return nil
+        }
+    }
 }
 
 @MainActor

@@ -7,6 +7,29 @@ struct SEOAuditPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
+    private var projectBinding: Binding<String> {
+        Binding(
+            get: {
+                guard model.projectDetailPresented, let id = model.selectedProject?.id else {
+                    return ""
+                }
+                return id.uuidString
+            },
+            set: { raw in
+                if raw.isEmpty {
+                    model.closeProject()
+                    return
+                }
+                guard let id = UUID(uuidString: raw) else { return }
+                Task { await model.selectProject(id: id) }
+            })
+    }
+
+    private func projectIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return model.projects.contains { $0.id == id } || model.selectedProject?.id == id
+    }
+
     var body: some View {
         Group {
             if model.projectDetailPresented, model.selectedProject != nil {
@@ -16,6 +39,7 @@ struct SEOAuditPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("project", selection: projectBinding, isValid: projectIsValid)
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshProjects()

@@ -18,6 +18,8 @@ struct StudioPage: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DashSkin.paper(scheme == .dark))
+            .navigationRoute("editor", selection: editorBinding, isValid: editorIsValid)
+            .navigationRoute("tab", selection: $model.tab)
             .navigationTitle("Studio")
             .dropDestination(for: URL.self) { urls, _ in
                 accept(urls)
@@ -73,6 +75,32 @@ struct StudioPage: View {
                     model.openCommandProject(presentation)
                 }
             }
+    }
+
+    private var editorBinding: Binding<String> {
+        Binding(
+            get: { model.route.navigationToken },
+            set: { model.route = StudioRoute(navigationToken: $0) ?? .home })
+    }
+
+    private func editorIsValid(_ token: String) -> Bool {
+        guard let route = StudioRoute(navigationToken: token) else { return false }
+        switch route {
+        case .home:
+            return true
+        case let .tool(id):
+            return model.job(id) != nil
+        case let .imageEditor(url), let .pdfEditor(url, _):
+            return FileManager.default.fileExists(atPath: url.path)
+        case let .videoEditor(_, project):
+            guard let project else { return false }
+            return FileManager.default.fileExists(atPath: project.path)
+        case .commandVideoEditor:
+            return model.commandEditor != nil
+        case let .compare(original, revised):
+            return FileManager.default.fileExists(atPath: original.path)
+                && FileManager.default.fileExists(atPath: revised.path)
+        }
     }
 
     @ViewBuilder private var content: some View {

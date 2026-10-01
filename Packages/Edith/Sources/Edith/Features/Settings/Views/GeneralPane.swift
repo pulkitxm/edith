@@ -103,6 +103,7 @@ struct SettingsPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("tab", selection: tab)
         .navigationTitle(tab.wrappedValue.label)
         .onAppear {
             if automaticActionsEnabled {

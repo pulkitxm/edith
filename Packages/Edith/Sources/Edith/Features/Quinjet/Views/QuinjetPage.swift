@@ -26,6 +26,7 @@ struct QuinjetPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
             model.setSessionLaunchEnabled(launchEnabled)
@@ -46,6 +47,20 @@ struct QuinjetPage: View {
             QuinjetSessionBridge.shared.detach(model)
             model.stopAll()
         }
+    }
+
+    private var sessionBinding: Binding<String> {
+        Binding(
+            get: { model.selected.uuidString },
+            set: { raw in
+                guard let id = UUID(uuidString: raw) else { return }
+                model.selectSession(id)
+            })
+    }
+
+    private func sessionIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return model.tabs.contains { $0.id == id }
     }
 
     private var tabBar: some View {

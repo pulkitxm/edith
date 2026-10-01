@@ -93,6 +93,10 @@ struct StudioImageEditorView: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute(
+            "panel",
+            selection: Binding(get: { editor.panel }, set: { editor.panel = $0 })
+        )
         .overlay(alignment: .topTrailing) {
             if editor.isRendering, editor.preview != nil {
                 ProgressView()

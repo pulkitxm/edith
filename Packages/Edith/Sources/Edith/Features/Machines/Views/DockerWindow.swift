@@ -137,6 +137,7 @@ struct DockerConsoleView: View {
     let session: MachineSession
     @Environment(\.machineViewPresented) private var presented
     @Environment(\.colorScheme) private var scheme
+    @State private var router = WindowRouter()
     @State private var screen = DockerScreen.containers
     @State private var query = ""
     @State private var selected: DockerContainer?
@@ -149,7 +150,32 @@ struct DockerConsoleView: View {
 
     private var dark: Bool { scheme == .dark }
 
+    private var containerBinding: Binding<String> {
+        Binding(
+            get: { screen == .containers ? selected?.id ?? "" : "" },
+            set: { raw in
+                if raw.isEmpty {
+                    selected = nil
+                    return
+                }
+                selected = session.containers.first { $0.id == raw }
+            })
+    }
+
+    private func containerIsValid(_ raw: String) -> Bool {
+        session.containers.contains { $0.id == raw }
+    }
+
     var body: some View {
+        NavigationRouteHost(router: router) {
+            console.navigationRoute(
+                "container", selection: containerBinding, isValid: containerIsValid
+            )
+            .navigationRoute("screen", selection: $screen)
+        }
+    }
+
+    private var console: some View {
         Group {
             if session.docker.isAvailable {
                 HStack(spacing: 0) {

@@ -36,6 +36,7 @@ struct MachinesPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+        .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
         .navigationTitle("Machines")
         .sheet(isPresented: $addSheetPresented) {
             AddMachineSheet { machine, secrets in
@@ -142,6 +143,33 @@ struct MachinesPage: View {
 
     private var mode: MachinesMode {
         MachinesMode(rawValue: modeRaw) ?? .fleet
+    }
+
+    private var placeBinding: Binding<String> {
+        Binding(
+            get: {
+                switch mode {
+                case .fleet: ""
+                case .workspace: "workspace"
+                case .machine: model.selection?.uuidString ?? ""
+                }
+            },
+            set: { value in
+                if value.isEmpty || value == "fleet" {
+                    modeRaw = MachinesMode.fleet.rawValue
+                } else if value == "workspace" {
+                    modeRaw = MachinesMode.workspace.rawValue
+                } else if let id = UUID(uuidString: value), model.knows(id) {
+                    modeRaw = MachinesMode.machine.rawValue
+                    model.selection = id
+                }
+            })
+    }
+
+    private func placeIsValid(_ value: String) -> Bool {
+        if value.isEmpty || value == "fleet" || value == "workspace" { return true }
+        guard let id = UUID(uuidString: value) else { return false }
+        return model.knows(id)
     }
 
     @ViewBuilder

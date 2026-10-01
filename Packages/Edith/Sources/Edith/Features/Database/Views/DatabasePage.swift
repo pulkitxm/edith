@@ -149,6 +149,19 @@ struct DatabasePage: View {
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+    private var connectionBinding: Binding<String> {
+        Binding(
+            get: { connectionWorkspace.selectedConnectionID?.rawValue.uuidString ?? "" },
+            set: { raw in
+                guard let id = UUID(uuidString: raw) else { return }
+                connectionWorkspace.selectConnection(DatabaseConnectionID(rawValue: id))
+            })
+    }
+
+    private func connectionIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return connectionWorkspace.listState.connections.contains { $0.id.rawValue == id }
+    }
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
     }
@@ -162,6 +175,7 @@ struct DatabasePage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
+        .navigationRoute("connection", selection: connectionBinding, isValid: connectionIsValid)
         .environment(\.databaseAppTheme, palette.theme)
         .task {
             guard automaticActionsEnabled else { return }

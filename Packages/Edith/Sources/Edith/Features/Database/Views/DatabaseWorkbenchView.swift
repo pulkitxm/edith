@@ -15,6 +15,35 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var objectListPresented = false
 
+    private var tableBinding: Binding<String> {
+        Binding(
+            get: { tabs.selectedID?.uuidString ?? "" },
+            set: { raw in
+                guard let id = UUID(uuidString: raw) else { return }
+                tabs.select(id)
+            })
+    }
+
+    private var modeBinding: Binding<String> {
+        Binding(
+            get: { tabs.selected?.mode.rawValue ?? "" },
+            set: { raw in
+                guard let mode = DatabaseWorkbenchMode(rawValue: raw), let tab = tabs.selected,
+                    let connection = connections.selectedConnection
+                else { return }
+                tab.selectMode(mode, connection: connection)
+            })
+    }
+
+    private func tableIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return tabs.tabs.contains { $0.id == id }
+    }
+
+    private func modeIsValid(_ raw: String) -> Bool {
+        DatabaseWorkbenchMode(rawValue: raw) != nil
+    }
+
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: scheme == .dark, theme: AppTheme(storedName: themeName))
     }
@@ -31,6 +60,8 @@ struct DatabaseWorkbenchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
+        .navigationRoute("mode", selection: modeBinding, isValid: modeIsValid)
+        .navigationRoute("table", selection: tableBinding, isValid: tableIsValid)
         .task(id: connections.selectedConnection) {
             guard automaticViewActionsEnabled else { return }
             tabs.prepare(for: connections.selectedConnection)

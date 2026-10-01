@@ -404,6 +404,7 @@ struct DockerContainerDetail: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .navigationRoute("tab", selection: $tab)
         .task(id: loadRequest) {
             guard presented else {
                 model.suspend()
