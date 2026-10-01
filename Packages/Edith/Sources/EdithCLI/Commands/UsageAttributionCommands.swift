@@ -5,7 +5,15 @@ import Foundation
 struct UsageAttributionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "attribution",
-        abstract: "How unknown and non-GitHub folders were matched to repositories.",
+        abstract: "Show how unknown and non-GitHub folders were matched to repositories.",
+        discussion: """
+            Review and reset how Edith matched unknown and non-GitHub folders in agent
+            usage to one of your GitHub repositories.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed usage attribution ls
+            """,
         subcommands: [UsageAttributionListCommand.self, UsageAttributionResetCommand.self],
         defaultSubcommand: UsageAttributionListCommand.self)
 
@@ -27,7 +35,15 @@ struct UsageAttributionCommand: AsyncParsableCommand {
 
 struct UsageAttributionListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: UsageAttributionOperation.list.descriptor.summary)
+        commandName: "ls", abstract: UsageAttributionOperation.list.descriptor.summary,
+        discussion: """
+            List folders Edith matched to GitHub repositories.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed usage attribution ls
+            ed usage attribution ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -69,7 +85,15 @@ struct UsageAttributionListCommand: AsyncParsableCommand {
 
 struct UsageAttributionResetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reset", abstract: UsageAttributionOperation.reset.descriptor.summary)
+        commandName: "reset", abstract: UsageAttributionOperation.reset.descriptor.summary,
+        discussion: """
+            Clear the saved folder-to-repository matches.
+
+            Changes the state this command names.
+
+            ed usage attribution reset
+            ed usage attribution reset --json
+            """, )
 
     @Flag(name: .long, help: "Confirm forgetting every decision.")
     var yes = false

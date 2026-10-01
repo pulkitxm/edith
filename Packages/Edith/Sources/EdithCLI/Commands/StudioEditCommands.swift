@@ -7,7 +7,14 @@ struct StudioEditCommand: AsyncParsableCommand {
         commandName: "edit",
         abstract: "Edit, render, and open native video projects.",
         discussion:
-            "Use schema for the versioned edit-plan format. Apply validates the entire plan before saving. Media stays local.",
+            """
+            Use schema for the versioned edit-plan format. Apply validates the entire
+            plan before saving. Media stays local.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio edit schema
+            """,
         subcommands: [
             StudioEditSchema.self, StudioEditCreate.self, StudioEditShow.self,
             StudioEditApply.self, StudioEditValidate.self, StudioEditRender.self,
@@ -81,7 +88,15 @@ enum StudioEditBridge {
 
 struct StudioEditSchema: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "schema", abstract: "Print the edit-plan JSON Schema.")
+        commandName: "schema", abstract: "Print the edit-plan JSON Schema.",
+        discussion: """
+            Print the edit-plan JSON Schema.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit schema
+            ed studio edit schema --json
+            """, )
     @Flag(help: "Emit JSON runtime errors. The schema is always JSON.") var json = false
     @Option(help: "Print only this edit-plan operation's schema.") var operation: String?
 
@@ -95,7 +110,14 @@ struct StudioEditSchema: AsyncParsableCommand {
 
 struct StudioEditCreate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "create", abstract: "Create an empty .openscreen project.")
+        commandName: "create", abstract: "Create an empty .openscreen project.",
+        discussion: """
+            Create an empty .openscreen project.
+
+            Changes the state this command names.
+
+            ed studio edit create web
+            """, )
     @Argument(help: "Destination .openscreen file.") var project: String
     @Option(help: "Project title.") var title = "Untitled video"
     @OptionGroup var options: StudioEditOutput
@@ -112,8 +134,16 @@ struct StudioEditCreate: AsyncParsableCommand {
 
 struct StudioEditShow: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "Print project JSON, including IDs for subsequent edits.")
-    @Argument var project: String
+        commandName: "show", abstract: "Print project JSON, including IDs for subsequent edits.",
+        discussion: """
+            Print project JSON, including IDs for subsequent edits.
+
+            Reads one record and its live facts. Does not change them.
+
+            ed studio edit show web
+            ed studio edit show web --json
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON runtime errors. The project is always JSON.") var json = false
     @Flag(help: "Return compact project IDs, settings and a revision for guarded edits.")
     var summary = false
@@ -135,8 +165,15 @@ struct StudioEditShow: AsyncParsableCommand {
 
 struct StudioEditApply: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "apply", abstract: "Validate and atomically apply a version 1 edit plan.")
-    @Argument var project: String
+        commandName: "apply", abstract: "Validate and atomically apply a version 1 edit plan.",
+        discussion: """
+            Validate and atomically apply a version 1 edit plan.
+
+            Changes the state this command names.
+
+            ed studio edit apply web --plan plan
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "JSON plan file, or - for stdin. Relative media paths resolve beside the file.")
     var plan: String
     @Option(help: "Base for relative media paths; stdin defaults to the current directory.")
@@ -163,8 +200,16 @@ struct StudioEditApply: AsyncParsableCommand {
 struct StudioEditValidate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "validate",
-        abstract: "Check project structure, local media and native composition.")
-    @Argument var project: String
+        abstract: "Check project structure, local media and native composition.",
+        discussion: """
+            Check project structure, local media and native composition.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit validate web
+            ed studio edit validate web --json
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
 
     func run() async throws {
@@ -177,8 +222,15 @@ struct StudioEditValidate: AsyncParsableCommand {
 
 struct StudioEditFrame: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "frame", abstract: "Render one composited frame as PNG.")
-    @Argument var project: String
+        commandName: "frame", abstract: "Render one composited frame as PNG.",
+        discussion: """
+            Render one composited frame as PNG.
+
+            Changes the state this command names.
+
+            ed studio edit frame web --output /tmp/out.png
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Output seconds, snapped to the preceding output frame; excludes --frame.")
     var time: Double?
     @Option(help: "Exact zero-based output frame index; excludes --time.") var frame: Int64?

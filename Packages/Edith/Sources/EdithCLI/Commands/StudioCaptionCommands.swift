@@ -5,6 +5,13 @@ import Foundation
 struct StudioCaptionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "captions", abstract: "Edit captions on the rendered output clock.",
+        discussion: """
+            [Back to the CLI reference](../README.md).
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio edit captions list web
+            """,
         subcommands: [
             StudioCaptionList.self, StudioCaptionAdd.self, StudioCaptionUpdate.self,
             StudioCaptionRemove.self,
@@ -72,7 +79,15 @@ enum StudioCaptionBridge {
 
 struct StudioCaptionList: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "list", abstract: "List stable caption IDs, clocks and exact frame anchors.")
+        commandName: "list", abstract: "List stable caption IDs, clocks and exact frame anchors.",
+        discussion: """
+            List stable caption IDs, clocks and exact frame anchors.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed studio edit captions list web
+            ed studio edit captions list web --json
+            """, )
     @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON runtime errors. Results are always JSON.") var json = false
 
@@ -86,7 +101,14 @@ struct StudioCaptionList: AsyncParsableCommand {
 
 struct StudioCaptionAdd: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Add an output-anchored caption and return its stable ID.")
+        commandName: "add", abstract: "Add an output-anchored caption and return its stable ID.",
+        discussion: """
+            Add an output-anchored caption and return its stable ID.
+
+            Changes the saved list by adding one record.
+
+            ed studio edit captions add web --text hello
+            """, )
     @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Caption content, 1 to 10000 UTF-8 bytes.") var text: String
     @Option(help: "Strict caption-style JSON file in reference-canvas pixels; see edit schema.")
@@ -117,7 +139,14 @@ struct StudioCaptionAdd: AsyncParsableCommand {
 struct StudioCaptionUpdate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "update",
-        abstract: "Update caption text, style or output boundaries by stable ID.")
+        abstract: "Update caption text, style or output boundaries by stable ID.",
+        discussion: """
+            Update caption text, style or output boundaries by stable ID.
+
+            Changes the state this command names.
+
+            ed studio edit captions update web 1
+            """, )
     @Argument(help: "Local .openscreen project.") var project: String
     @Argument(help: "Existing caption ID.") var id: String
     @Option(help: "Replacement caption content.") var text: String?
@@ -142,7 +171,14 @@ struct StudioCaptionUpdate: AsyncParsableCommand {
 
 struct StudioCaptionRemove: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "remove", abstract: "Remove one caption by stable ID; unknown IDs fail.")
+        commandName: "remove", abstract: "Remove one caption by stable ID; unknown IDs fail.",
+        discussion: """
+            Remove one caption by stable ID; unknown IDs fail.
+
+            Changes the state this command names.
+
+            ed studio edit captions remove web 1
+            """, )
     @Argument(help: "Local .openscreen project.") var project: String
     @Argument(help: "Existing caption ID.") var id: String
     @OptionGroup var options: StudioCaptionOptions

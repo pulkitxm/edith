@@ -7,6 +7,9 @@ struct MCPCommand: AsyncParsableCommand {
         discussion: """
             Each registered operation becomes one tool that runs its `ed` route and
             returns the JSON. Destructive routes preview until you pass confirm.
+            Changes the state this command names.
+
+            ed mcp
             """)
 
     func run() async throws {

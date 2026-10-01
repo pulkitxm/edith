@@ -98,7 +98,16 @@ enum HerdrMessageCLI {
 struct HerdrSendCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "send",
-        abstract: "Type a message into one agent, or into every working or stopped agent.")
+        abstract: "Type a message into one agent, or into every working or stopped agent.",
+        discussion: """
+            Types a message into a live agent and presses Return, through `herdr agent
+            prompt`.
+
+            Changes the state this command names.
+
+            ed herdr send shed what should I do next?
+            ed herdr send shed what should I do next? --json
+            """, )
 
     @Argument(help: "A pane id such as w3:p1N, or working, or stopped.")
     var target: String
@@ -209,7 +218,16 @@ struct HerdrSendCommand: AsyncParsableCommand {
 struct HerdrHooksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hooks",
-        abstract: "Messages waiting to be sent, and how the last ones went.",
+        abstract: "Show messages waiting to be sent, and how the last ones went.",
+        discussion: """
+            Messages waiting to go out, from `ed herdr send --when-finished`, `--in`,
+            `--at`, or the Herdr page, plus the result of the ones that already went
+            out.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed herdr hooks ls
+            """,
         subcommands: [HerdrHooksListCommand.self, HerdrHooksRemoveCommand.self],
         defaultSubcommand: HerdrHooksListCommand.self)
 }
@@ -217,6 +235,14 @@ struct HerdrHooksCommand: AsyncParsableCommand {
 struct HerdrHooksListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List waiting and recent finished-agent messages.",
+        discussion: """
+            List waiting and recent finished-agent messages.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed herdr hooks ls
+            ed herdr hooks ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -257,6 +283,14 @@ struct HerdrHooksListCommand: AsyncParsableCommand {
 struct HerdrHooksRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rm", abstract: "Cancel a waiting message or forget a finished one.",
+        discussion: """
+            Cancel a waiting message or forget a finished one.
+
+            Changes the saved list by removing one record.
+
+            ed herdr hooks rm 1
+            ed herdr hooks rm 1 --json
+            """,
         aliases: ["remove"])
 
     @Argument(help: "The hook id from `ed herdr hooks`, or a unique prefix of it.")
