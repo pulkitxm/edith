@@ -97,6 +97,26 @@ enum JSONContract {
         JSONCase(
             "ed skills install",
             ["skills", "install", "edith-remote-work", "--agent", "cursor", "--json"]),
+        JSONCase("ed browser ls", ["browser", "ls", "--json"]),
+        JSONCase(
+            "ed browser navigate", ["browser", "navigate", "https://example.com", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed browser reload", ["browser", "reload", "--json"], mutatesTheMachine: true),
+        JSONCase("ed browser copy", ["browser", "copy", "--json"], mutatesTheMachine: true),
+        JSONCase("ed browser close", ["browser", "close", "--json"]),
+        JSONCase("ed browser close-others", ["browser", "close-others", "--json"]),
+        JSONCase("ed browser close-right", ["browser", "close-right", "--json"]),
+        JSONCase("ed browser reopen", ["browser", "reopen", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed browser duplicate", ["browser", "duplicate", "--json"], mutatesTheMachine: true),
+        JSONCase("ed browser sync", ["browser", "sync", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed browser profile", ["browser", "profile", "Example", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed browser detach", ["browser", "detach", "--json"]),
+        JSONCase(
+            "ed browser tab", ["browser", "tab", "https://example.com", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed maintenance backup-updates",
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
