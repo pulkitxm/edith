@@ -373,6 +373,15 @@
 				EDITH_DISPLAY_NAME = "Edith Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					EdithCore,
+					"-framework",
+					EdithCameraSupport,
+					"-framework",
+					EdithLidAwakeSupport,
+				);
 				OTHER_SWIFT_FLAGS = (
 					"$(inherited)",
 					"-Xfrontend",
@@ -403,6 +412,15 @@
 				EDITH_DISPLAY_NAME = "Edith ($(EDITH_DEV_SLOT)) Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					EdithCore,
+					"-framework",
+					EdithCameraSupport,
+					"-framework",
+					EdithLidAwakeSupport,
+				);
 				OTHER_SWIFT_FLAGS = (
 					"$(inherited)",
 					"-Xfrontend",
@@ -434,6 +452,15 @@
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					EdithCore,
+					"-framework",
+					EdithCameraSupport,
+					"-framework",
+					EdithLidAwakeSupport,
+				);
 				OTHER_SWIFT_FLAGS = (
 					"$(inherited)",
 					"-Xfrontend",
@@ -601,6 +628,15 @@
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					EdithCore,
+					"-framework",
+					EdithCameraSupport,
+					"-framework",
+					EdithLidAwakeSupport,
+				);
 				OTHER_SWIFT_FLAGS = (
 					"$(inherited)",
 					"-Xfrontend",
