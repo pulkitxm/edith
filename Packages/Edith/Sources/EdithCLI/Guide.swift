@@ -612,6 +612,9 @@ public enum Guide {
         ed skills ls                    Edith skills and detected agents
         ed skills preview edith-remote-work
         ed skills install edith-remote-work --agent cursor
+        ed browser ls                  notch browser tabs and Chrome profiles
+        ed browser navigate https://example.com
+        ed browser detach               preview clearing the attached profile
         ed emoji ls --search rocket     the emoji this Mac can render
         ed emoji insert 1F600           type one into the app in front of you
         ed emoji tone medium            the default skin tone

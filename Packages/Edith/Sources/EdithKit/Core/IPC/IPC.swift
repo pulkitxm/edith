@@ -142,6 +142,10 @@ public enum IPC {
             "com.pulkit.edith.quinjetSessionOperationResult")
         public static let requestOpenHerdrAgent = IPC.scopedName(
             "com.pulkit.edith.requestOpenHerdrAgent")
+        public static let requestNotchBrowserAction = IPC.scopedName(
+            "com.pulkit.edith.requestNotchBrowserAction")
+        public static let notchBrowserActionResult = IPC.scopedName(
+            "com.pulkit.edith.notchBrowserActionResult")
         public static let requestNotchBrowserDetach = IPC.scopedName(
             "com.pulkit.edith.requestNotchBrowserDetach")
         public static let notchBrowserChanged = IPC.scopedName(

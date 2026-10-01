@@ -1178,7 +1178,7 @@ public enum CommandTree {
         "ed machines docker df": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
         "ed machines docker logs": Spec(
-            options: ["--tail", "-f", "--follow"], arguments: [.machine, .container]),
+            options: ["--tail", "-f", "--follow", "--json"], arguments: [.machine, .container]),
         "ed machines docker inspect": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .container]),
         "ed machines docker top": Spec(
@@ -1213,7 +1213,8 @@ public enum CommandTree {
         "ed machines docker compose pull": Spec(
             options: ["--json"], arguments: [.machine, .composeProject]),
         "ed machines docker compose logs": Spec(
-            options: ["--tail", "-f", "--follow", "--help"], arguments: [.machine, .composeProject]),
+            options: ["--tail", "-f", "--follow", "--help", "--json"],
+            arguments: [.machine, .composeProject]),
         "ed machines services ls": Spec(options: ["--json", "--failed"], arguments: [.machine]),
         "ed machines services start": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
@@ -1472,6 +1473,37 @@ public enum CommandTree {
             options: ["--json", "--yes", "--agent", "-h", "--help", "--version"],
             optionValues: ["--agent": .free], arguments: [.free],
             destructivePolicy: .previewThenYes),
+        "ed browser ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser navigate": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], arguments: [.free]),
+        "ed browser reload": Spec(
+            options: ["--json", "--hard", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser copy": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser close": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser close-others": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser close-right": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser reopen": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser duplicate": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser sync": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser profile": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed browser detach": Spec(
+            options: ["--json", "--yes", "-h", "--help", "--version"],
+            destructivePolicy: .previewThenYes),
+        "ed browser tab": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "help": Spec(arguments: [.free]),
     ]
 
