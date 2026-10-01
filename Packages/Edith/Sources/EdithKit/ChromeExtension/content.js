@@ -22,10 +22,12 @@ function mediaItems() {
 
 function pageTags() {
   const tags = {}
-  if (location.hostname.endsWith("youtube.com")) {
+  if (location.hostname.endsWith("youtube.com") && ["/watch", "/shorts/"].some(path => location.pathname.startsWith(path))) {
     const channel = document.querySelector("ytd-watch-metadata ytd-channel-name a, #owner #channel-name a, ytd-reel-player-overlay-renderer #channel-name a")
     const name = text(channel?.textContent) || text(document.querySelector('span[itemprop="author"] link[itemprop="name"]')?.getAttribute("content"))
-    if (name) tags.channel = name
+    const currentVideo = new URL(location.href).searchParams.get("v")
+    const renderedVideo = document.querySelector("ytd-watch-flexy[video-id]")?.getAttribute("video-id")
+    if (name && (!currentVideo || renderedVideo === currentVideo)) tags.channel = name
   }
   if (location.hostname === "github.com") {
     const title = text(document.querySelector(".js-issue-title, bdi.js-issue-title, [data-testid='issue-title']")?.textContent)
@@ -42,7 +44,7 @@ function publish(force) {
   if (!chrome.runtime?.id) return
   const media = mediaItems()
   const tags = pageTags()
-  const signature = JSON.stringify([media.map(item => [item.title, item.kind]), tags])
+  const signature = JSON.stringify([location.href, document.title, media.map(item => [item.title, item.kind]), tags])
   const changed = signature !== lastSignature
   const active = counters.keys || counters.clicks || counters.scrolls
   if (!force && !changed && !active) return
@@ -51,7 +53,7 @@ function publish(force) {
   counters.keys = 0
   counters.clicks = 0
   counters.scrolls = 0
-  chrome.runtime.sendMessage({ type: "edith-page", media, tags, signals, changed }).catch(() => {})
+  chrome.runtime.sendMessage({ type: "edith-page", url: location.href, title: document.title, media, tags, signals, changed }).catch(() => {})
 }
 
 document.addEventListener("keydown", () => { counters.keys += 1 }, { capture: true, passive: true })
