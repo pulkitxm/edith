@@ -6,6 +6,66 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func rapidRangeAndTabChangesPublishOnlyTheLatestSelection() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let now = Date()
+        let yesterday = Calendar.current.startOfDay(for: now).addingTimeInterval(-3_600)
+        for (date, title) in [
+            (now.addingTimeInterval(-200 * 86_400), "Old note"), (yesterday, "Recent note"),
+        ] {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: date, duration: 60, source: .application, appName: "Writing",
+                    bundleID: "app.writing", windowTitle: title))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.last7)
+        await model.waitForReload()
+        model.select(.allTime)
+        model.select(.last90)
+        model.select(.yesterday)
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.period.preset == .yesterday)
+        #expect(model.summary.from == Calendar.current.startOfDay(for: yesterday))
+        #expect(model.summary.activeDuration == 60)
+        #expect(
+            model.summary.dimensions.first { $0.key == AttentionDimension.title }?.rows.map(\.key)
+                == ["Recent note"])
+        #expect(!model.pending)
+        #expect(model.errorMessage == nil)
+        model.select(.today)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 0)
+        #expect(model.summary.dimensions.isEmpty)
+    }
+
+    @Test func missingTabReloadsRetainedDataWhenCategorizationChanges() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try fixture.repository.append(
+            AttentionEvent(
+                startedAt: Date().addingTimeInterval(-120), duration: 60, source: .application,
+                appName: "Writing", bundleID: "app.writing"))
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        let entity = try #require(model.summary.entities.first)
+        var settings = fixture.repository.loadSettings()
+        settings.assign(entityID: entity.id, categoryID: "focus")
+        try fixture.repository.saveSettings(settings)
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.summary.entities.first?.category.id == "focus")
+        #expect(model.summary.productiveDuration == 60)
+        #expect(
+            model.summary.dimensions.first { $0.key == AttentionDimension.entity }?
+                .rows.first?.categories["focus"] == 60)
+        model.section = .overview
+        #expect(!model.pending)
+    }
+
     @Test func allTimeCoversEveryRecordedDayWithoutComparisonsOrStepping() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }
@@ -144,11 +204,32 @@ import Testing
         await model.waitForReload()
         #expect(model.timeline.isEmpty)
         #expect(!model.dayRibbon.isEmpty)
+        let entities = model.summary.entities
+        let interval = DateInterval(start: model.summary.from, end: model.summary.to)
         model.section = .timeline
         #expect(model.pending)
         await model.waitForReload()
         #expect(!model.pending)
         #expect(model.timeline.first?.blocks.count == 2)
+        #expect(model.summary.entities == entities)
+        #expect(model.summary.from == interval.start)
+        #expect(model.summary.to == interval.end)
+        let spans = model.summary.spans
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.summary.entities == entities)
+        #expect(model.summary.spans == spans)
+        #expect(model.timeline.first?.blocks.count == 2)
+        #expect(model.summary.dimensions.contains { $0.key == AttentionDimension.entity })
+        let dimensions = model.summary.dimensions
+        model.section = .agents
+        await model.waitForReload()
+        #expect(model.summary.dimensions == dimensions)
+        #expect(model.summary.entities == entities)
+        model.section = .overview
+        #expect(!model.pending)
+        model.section = .timeline
+        #expect(!model.pending)
         model.searchText = "slack"
         try await Task.sleep(for: .milliseconds(400))
         await model.waitForReload()

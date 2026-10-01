@@ -97,6 +97,7 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                 arguments: [to, from.addingTimeInterval(-172_800)]
             )
             .compactMap { row -> AttentionEvent? in
+                try Task.checkCancellation()
                 guard let data: Data = row["payload"] else { return nil }
                 return try? AgentPayload.decode(AttentionEvent.self, from: data)
             }

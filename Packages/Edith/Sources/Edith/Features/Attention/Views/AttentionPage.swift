@@ -173,6 +173,7 @@ private struct AttentionPeriodControl: View {
             .disabled(!model.canStepForward)
             .help("Next period")
         }
+        .fixedSize(horizontal: true, vertical: true)
     }
 
     private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
@@ -193,6 +194,7 @@ private struct AttentionPeriodControl: View {
                 .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
         }
         .buttonStyle(.edith(.borderless))
+        .fixedSize()
     }
 }
 

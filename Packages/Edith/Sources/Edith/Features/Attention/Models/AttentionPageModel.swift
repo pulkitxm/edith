@@ -163,19 +163,24 @@ final class AttentionPageModel {
 
     private func ensurePart() {
         guard loaded, !loadedParts.contains(section.part) else { return }
+        let retained = pending ? [] : loadedParts
         pending = true
-        reload()
+        reload(retaining: retained)
     }
 
-    func reload(preserveSettings: Bool = false) {
+    func reload(preserveSettings: Bool = false, retaining retained: Set<AttentionSummaryPart> = [])
+    {
         reloadTask?.cancel()
         reloadGeneration &+= 1
         let generation = reloadGeneration
         let repository = repository
         let period = period
         let window = window
-        let parts = loadedParts.union([section.part])
+        let parts: Set<AttentionSummaryPart> =
+            retained.isEmpty ? loadedParts.union([section.part]) : [section.part]
+        let publishedParts = retained.union(parts)
         let knownSettings = settings
+        let knownClassifications = classifications
         let current = summary
         let filter = spanFilter
         reloadTask = Task.detached { [weak self] in
@@ -183,10 +188,11 @@ final class AttentionPageModel {
                 let state = try await AttentionPageModel.loadState(
                     repository: repository, period: period, window: window, parts: parts,
                     settings: preserveSettings ? knownSettings : nil, current: current,
-                    filter: filter)
+                    filter: filter, retaining: retained, knownSettings: knownSettings,
+                    knownClassifications: knownClassifications)
                 guard !Task.isCancelled else { return }
                 await self?.publish(
-                    state, parts: parts, preserveSettings: preserveSettings,
+                    state, parts: publishedParts, preserveSettings: preserveSettings,
                     generation: generation)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -236,31 +242,45 @@ final class AttentionPageModel {
     nonisolated private static func loadState(
         repository: AttentionRepository, period: AttentionPeriod, window: AttentionTimeWindow,
         parts: Set<AttentionSummaryPart>, settings: AttentionSettings?,
-        current: AttentionSummary, filter: AttentionSpanFilter
+        current: AttentionSummary, filter: AttentionSpanFilter,
+        retaining retained: Set<AttentionSummaryPart>, knownSettings: AttentionSettings,
+        knownClassifications: AttentionClassifications
     ) async throws -> AttentionPageState {
-        let interval = period.interval()
+        let interval =
+            retained.isEmpty
+            ? period.interval() : DateInterval(start: current.from, end: current.to)
         let request = AttentionSummaryRequest(
             from: interval.start, to: interval.end, settings: settings,
             comparePeriod: period.comparePeriod, window: window, parts: parts,
-            allTime: period.preset == .allTime)
-        let snapshot: AttentionPageSnapshot
-        if repository.resolvedEventSink is AgentAttentionSink {
-            snapshot = try await AttentionBackgroundClient.summary(request)
-        } else {
-            snapshot = AttentionPageSnapshot(request: request, repository: repository)
-                .trimmed(to: parts)
+            allTime: period.preset == .allTime && retained.isEmpty)
+        var snapshot = try await Self.snapshot(request, repository: repository)
+        try Task.checkCancellation()
+        if !retained.isEmpty {
+            if snapshot.settings == knownSettings, snapshot.classifications == knownClassifications
+            {
+                snapshot.summary = snapshot.summary.preserving(
+                    retained, from: current, loading: parts)
+            } else {
+                snapshot = try await Self.snapshot(
+                    AttentionSummaryRequest(
+                        from: interval.start, to: interval.end, settings: settings,
+                        comparePeriod: period.comparePeriod, window: window,
+                        parts: retained.union(parts)),
+                    repository: repository)
+            }
         }
         try Task.checkCancellation()
+        let summary = snapshot.summary
         let derived: AttentionPageDerivedState? =
-            snapshot.summary == current
+            summary == current && retained.isEmpty
             ? nil
             : AttentionPageDerivedState(
-                summary: snapshot.summary,
-                dayRibbon: period.isSingleDay
-                    ? AttentionPageDerived.dayRibbon(snapshot.summary) : [],
-                timeline: parts.contains(.timeline)
-                    ? AttentionPageDerived.timeline(snapshot.summary, filter: filter) : [],
-                triage: triage(snapshot.summary))
+                summary: summary,
+                dayRibbon: summary.to.timeIntervalSince(summary.from) <= 90_000
+                    ? AttentionPageDerived.dayRibbon(summary) : [],
+                timeline: retained.union(parts).contains(.timeline)
+                    ? AttentionPageDerived.timeline(summary, filter: filter) : [],
+                triage: triage(summary))
         return AttentionPageState(
             settings: snapshot.settings, derived: derived,
             activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
@@ -268,6 +288,17 @@ final class AttentionPageModel {
             hasStoredEvents: snapshot.hasStoredEvents,
             extensionInstalled: FileManager.default.fileExists(
                 atPath: AttentionExtensionInstaller.installedDirectory.path))
+    }
+
+    nonisolated private static func snapshot(
+        _ request: AttentionSummaryRequest, repository: AttentionRepository
+    ) async throws -> AttentionPageSnapshot {
+        if repository.resolvedEventSink is AgentAttentionSink {
+            return try await AttentionBackgroundClient.summary(request)
+        } else {
+            return AttentionPageSnapshot(request: request, repository: repository)
+                .trimmed(to: request.parts)
+        }
     }
 
     var spanFilter: AttentionSpanFilter {

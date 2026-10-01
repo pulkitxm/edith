@@ -460,14 +460,24 @@ struct AttentionSummaryBuilder {
         _ interval: AttentionEvent, _ classification: AttentionClassification,
         category: AttentionCategory
     ) {
+        let name = detailName(interval)
+        Self.updateEntity(
+            &entities[
+                classification.entityID,
+                default: AttentionEntityAccumulator(
+                    entity: AttentionEntity(
+                        id: classification.entityID, name: classification.entityName,
+                        category: category, source: interval.source, duration: 0,
+                        domain: classification.domain, visits: 1))
+            ], interval: interval, classification: classification, category: category,
+            name: name)
+    }
+
+    private static func updateEntity(
+        _ accumulator: inout AttentionEntityAccumulator, interval: AttentionEvent,
+        classification: AttentionClassification, category: AttentionCategory, name: String?
+    ) {
         let duration = interval.duration
-        var accumulator =
-            entities[classification.entityID]
-            ?? AttentionEntityAccumulator(
-                entity: AttentionEntity(
-                    id: classification.entityID, name: classification.entityName,
-                    category: category, source: interval.source, duration: 0,
-                    domain: classification.domain, visits: 1))
         accumulator.entity.duration += duration
         accumulator.entity.categoryDurations[category.id, default: 0] += duration
         accumulator.entity.levels[classification.productivity.key, default: 0] += duration
@@ -486,7 +496,7 @@ struct AttentionSummaryBuilder {
         if accumulator.sources[category.id] == nil {
             accumulator.sources[category.id] = (classification.source, classification.confidence)
         }
-        if let name = detailName(interval) {
+        if let name {
             let identity = AttentionDetail(
                 name: name, url: interval.url, duration: 0, categoryID: category.id,
                 productivity: classification.productivity)
@@ -494,7 +504,6 @@ struct AttentionSummaryBuilder {
             detail.duration += duration
             accumulator.details[identity.id] = detail
         }
-        entities[classification.entityID] = accumulator
     }
 
     private func detailName(_ interval: AttentionEvent) -> String? {

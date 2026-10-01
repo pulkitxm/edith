@@ -295,6 +295,14 @@ private enum AttentionSyntheticWeek {
         model.breakdownDimension = AttentionTag.repository
         await model.waitForReload()
         try render(model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
+
+        model.section = .overview
+        model.select(.allTime)
+        await model.waitForReload()
+        try render(model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
+        try render(
+            model, height: 2_200, to: output.appendingPathComponent("all-time-narrow.png"),
+            width: 760)
     }
 
     private func render(
