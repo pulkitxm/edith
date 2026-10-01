@@ -75,6 +75,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
 | [`ed shelf`](./shelf/README.md) | The notch shelf's staged files |
+| [`ed browser`](./browser/README.md) | The notch browser: tabs, navigation, Chrome profiles, and detach |
 | [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
 | [`ed brew`](./brew/README.md) | Searching and managing Homebrew formulae and casks |
 | [`ed maintenance`](./maintenance/README.md) | Verified app installs, updates, inventory, and review-first removal |

@@ -1472,6 +1472,37 @@ public enum CommandTree {
             options: ["--json", "--yes", "--agent", "-h", "--help", "--version"],
             optionValues: ["--agent": .free], arguments: [.free],
             destructivePolicy: .previewThenYes),
+        "ed browser ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser navigate": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], arguments: [.free]),
+        "ed browser reload": Spec(
+            options: ["--json", "--hard", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser copy": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser close": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser close-others": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser close-right": Spec(
+            options: ["--json", "--yes", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free], destructivePolicy: .previewThenYes),
+        "ed browser reopen": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser duplicate": Spec(
+            options: ["--json", "--tab", "-h", "--help", "--version"],
+            optionValues: ["--tab": .free]),
+        "ed browser sync": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed browser profile": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed browser detach": Spec(
+            options: ["--json", "--yes", "-h", "--help", "--version"],
+            destructivePolicy: .previewThenYes),
+        "ed browser tab": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "help": Spec(arguments: [.free]),
     ]
 

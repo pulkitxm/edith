@@ -58,6 +58,10 @@ import Testing
         "ed seo delete",
         "ed seo stop",
         "ed skills install",
+        "ed browser close",
+        "ed browser close-others",
+        "ed browser close-right",
+        "ed browser detach",
         "ed shelf purge",
         "ed shelf rm",
     ]

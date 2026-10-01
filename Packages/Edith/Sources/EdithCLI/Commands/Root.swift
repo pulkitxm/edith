@@ -82,6 +82,7 @@ public struct EdRoot: AsyncParsableCommand {
             MaintenanceCommand.self,
             SEOCommand.self,
             SkillsCommand.self,
+            BrowserCommand.self,
             QuinjetCommand.self,
             DatabaseCommand.self,
             MachinesCommand.self,

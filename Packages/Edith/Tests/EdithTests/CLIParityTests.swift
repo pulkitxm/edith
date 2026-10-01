@@ -355,6 +355,12 @@ enum UIParity {
         UICapability(
             "Extensions pane", "install the database driver pack",
             ["database", "pack", "install"]),
+        UICapability(
+            "Notch browser", "copy the selected tab's address",
+            ["browser", "copy"]),
+        UICapability(
+            "Notch browser", "close a tab",
+            ["browser", "close", "--yes"]),
     ]
 
     static func operationCLI(for invocation: [String]) -> [String] {
@@ -410,6 +416,8 @@ enum UIParity {
         "ed seo stop project --yes",
         "ed skills copy edith-remote-work",
         "ed skills install edith-remote-work --agent cursor --yes",
+        "ed browser copy",
+        "ed browser close --yes",
     ]
 }
 
