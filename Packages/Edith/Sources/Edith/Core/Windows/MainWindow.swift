@@ -3,17 +3,31 @@ import EdithKit
 import SwiftUI
 
 struct ZoomableRoot<Content: View>: View {
-    @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @ViewBuilder let content: Content
 
     var body: some View {
-        UIScale.apply(zoom)
-        return
-            content
+        content
             .font(.system(size: UIScale.pt(13)))
             .controlSize(UIScale.controlSize)
             .disclosureGroupStyle(EdithDisclosureGroupStyle())
             .tracksWindowVisibility()
+    }
+}
+
+enum WindowZoomCommit {
+    @MainActor
+    static func perform(_ next: Double, persist: (Double) -> Void) {
+        let previous = UIScale.current
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            persist(next)
+            UIScale.apply(next)
+        }
+        let applied = UIScale.current
+        guard abs(previous - applied) > 0.000_1 else { return }
+        MainWindow.resizeForZoom(from: previous, to: applied)
+        SectionWindow.resizeForZoom(from: previous, to: applied)
     }
 }
 
@@ -64,10 +78,26 @@ enum MainWindow {
     }
     #endif
 
+    static func resizeForZoom(from oldScale: Double, to newScale: Double) {
+        guard let window, oldScale > 0, abs(oldScale - newScale) > 0.000_1 else { return }
+        let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+        let minimum = MainWindowFramePolicy.minimumSize(visibleFrame: visible, scale: newScale)
+        window.contentMinSize = minimum
+        guard !window.styleMask.contains(.fullScreen) else { return }
+        let content = window.contentRect(forFrameRect: window.frame)
+        let size = MainWindowFramePolicy.zoomedContentSize(
+            current: content.size, minimum: minimum, visible: visible.size, from: oldScale,
+            to: newScale)
+        let rect = MainWindowFramePolicy.centeredContentRect(
+            current: content, size: size, visible: visible)
+        window.setFrame(window.frameRect(forContentRect: rect), display: true)
+    }
+
     static func open() {
         #if DEBUG
         installSnapshotHook()
         #endif
+        UIScale.install(from: SharedDefaults.store)
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -75,7 +105,9 @@ enum MainWindow {
         }
         let visibleFrame =
             NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let initialSize = MainWindowFramePolicy.defaultSize(visibleFrame: visibleFrame)
+        let scale = UIScale.current
+        let initialSize = MainWindowFramePolicy.defaultSize(
+            visibleFrame: visibleFrame, scale: scale)
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [
@@ -102,10 +134,11 @@ enum MainWindow {
         }
         w.setFrameAutosaveName(autosaveName)
         let launchFrame = MainWindowFramePolicy.normalizedFrame(
-            w.frame, visibleFrame: visibleFrame)
+            w.frame, visibleFrame: visibleFrame, scale: scale)
         if w.isZoomed { w.zoom(nil) }
         w.setFrame(launchFrame, display: false)
-        w.contentMinSize = MainWindowFramePolicy.minimumSize(visibleFrame: visibleFrame)
+        w.contentMinSize = MainWindowFramePolicy.minimumSize(
+            visibleFrame: visibleFrame, scale: scale)
         let hosting = NSHostingController(
             rootView: ZoomableRoot { MainWindowView(updater: updater) })
         hosting.sizingOptions = []
@@ -142,27 +175,63 @@ enum MainWindowFramePolicy {
         value?.contains("tilingState") == true
     }
 
-    static func minimumSize(visibleFrame: NSRect) -> NSSize {
-        NSSize(
-            width: min(960, visibleFrame.width),
-            height: min(640, visibleFrame.height)
-        )
-    }
-
-    static func defaultSize(visibleFrame: NSRect) -> NSSize {
-        let minimum = minimumSize(visibleFrame: visibleFrame)
+    static func minimumSize(visibleFrame: NSRect, scale: Double = 1) -> NSSize {
+        let factor = WindowZoom.clamp(scale)
         return NSSize(
-            width: min(1240, max(minimum.width, visibleFrame.width * 0.82)),
-            height: min(820, max(minimum.height, visibleFrame.height * 0.78))
+            width: min(960 * factor, visibleFrame.width),
+            height: min(640 * factor, visibleFrame.height)
         )
     }
 
-    static func normalizedFrame(_ frame: NSRect, visibleFrame: NSRect) -> NSRect {
-        let minimum = minimumSize(visibleFrame: visibleFrame)
+    static func defaultSize(visibleFrame: NSRect, scale: Double = 1) -> NSSize {
+        let minimum = minimumSize(visibleFrame: visibleFrame, scale: scale)
+        let factor = WindowZoom.clamp(scale)
+        return NSSize(
+            width: min(
+                visibleFrame.width,
+                max(minimum.width, min(1240 * factor, visibleFrame.width * 0.82))
+            ),
+            height: min(
+                visibleFrame.height,
+                max(minimum.height, min(820 * factor, visibleFrame.height * 0.78)))
+        )
+    }
+
+    static func scaled(_ size: NSSize, by scale: Double, visible: NSSize) -> NSSize {
+        let factor = max(scale, 0.01)
+        return NSSize(
+            width: min(visible.width, size.width * factor),
+            height: min(visible.height, size.height * factor))
+    }
+
+    static func zoomedContentSize(
+        current: NSSize, minimum: NSSize, visible: NSSize, from oldScale: Double,
+        to newScale: Double
+    ) -> NSSize {
+        let factor = newScale / max(oldScale, 0.01)
+        return NSSize(
+            width: min(visible.width, max(minimum.width, current.width * factor)),
+            height: min(visible.height, max(minimum.height, current.height * factor)))
+    }
+
+    static func centeredContentRect(current: NSRect, size: NSSize, visible: NSRect) -> NSRect {
+        var origin = NSPoint(
+            x: current.midX - size.width / 2,
+            y: current.midY - size.height / 2)
+        let maxX = max(visible.minX, visible.maxX - size.width)
+        let maxY = max(visible.minY, visible.maxY - size.height)
+        origin.x = min(max(origin.x, visible.minX), maxX)
+        origin.y = min(max(origin.y, visible.minY), maxY)
+        return NSRect(origin: origin, size: size)
+    }
+
+    static func normalizedFrame(_ frame: NSRect, visibleFrame: NSRect, scale: Double = 1) -> NSRect
+    {
+        let minimum = minimumSize(visibleFrame: visibleFrame, scale: scale)
         let undersized = frame.width < minimum.width || frame.height < minimum.height
         let size =
             undersized
-            ? defaultSize(visibleFrame: visibleFrame)
+            ? defaultSize(visibleFrame: visibleFrame, scale: scale)
             : NSSize(
                 width: min(visibleFrame.width, frame.width),
                 height: min(visibleFrame.height, frame.height)

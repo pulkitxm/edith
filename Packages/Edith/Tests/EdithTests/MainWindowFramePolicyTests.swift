@@ -28,6 +28,13 @@ import Testing
         #expect(display.contains(normalized))
     }
 
+    @Test func scaledMinimumStaysInsideACompactDisplay() {
+        let compactDisplay = NSRect(x: 0, y: 0, width: 800, height: 560)
+        let minimum = MainWindowFramePolicy.minimumSize(visibleFrame: compactDisplay, scale: 1.6)
+        #expect(minimum.width == 800)
+        #expect(minimum.height == 560)
+    }
+
     @Test func compactDisplaysBoundTheMinimumToTheVisibleArea() {
         let compactDisplay = NSRect(x: 0, y: 0, width: 800, height: 560)
         let minimum = MainWindowFramePolicy.minimumSize(visibleFrame: compactDisplay)

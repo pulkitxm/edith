@@ -31,10 +31,12 @@ struct BlitzTreeMap: View {
                             RoundedRectangle(cornerRadius: 5)
                                 .fill(entry == nil ? Color.gray.opacity(0.6) : color(index))
                                 .overlay(alignment: .topLeading) {
-                                    if rect.width > 58, rect.height > 38 {
+                                    if rect.width > UIScale.pt(58), rect.height > UIScale.pt(38) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(entry?.name ?? "Other")
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(
+                                                    .system(size: UIScale.pt(12), weight: .semibold)
+                                                )
                                                 .lineLimit(2)
                                             Text(
                                                 ByteCountFormatter.string(
@@ -42,7 +44,7 @@ struct BlitzTreeMap: View {
                                                         clamping: entry?.allocatedBytes ?? other),
                                                     countStyle: .file)
                                             )
-                                            .font(.system(size: 10))
+                                            .font(.system(size: UIScale.pt(10)))
                                         }
                                         .foregroundStyle(.white)
                                         .padding(8)

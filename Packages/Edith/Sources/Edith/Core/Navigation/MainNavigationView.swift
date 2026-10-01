@@ -49,24 +49,24 @@ struct TitlebarChrome: View {
                 sidebarOpen.toggle()
             } label: {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: UIScale.pt(15), weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
             .buttonStyle(.edith(.toolbar))
             .help("Toggle sidebar (⌘B)")
             .keyboardShortcut("b", modifiers: .command)
 
-            if sidebarOpen, width >= 130 {
+            if sidebarOpen, width >= UIScale.pt(130) {
                 HStack(alignment: .center, spacing: 6) {
                     if let icon = Brand.icon {
                         Image(nsImage: icon)
                             .resizable()
                             .interpolation(.high)
-                            .frame(width: 17, height: 17)
+                            .frame(width: UIScale.pt(17), height: UIScale.pt(17))
                     }
                     Text("Edith")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: UIScale.pt(13), weight: .medium))
                         .tracking(-0.2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -563,7 +563,7 @@ struct MainWindowView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let bandHeight = Self.chromeHeight + UIScale.pt(10)
+            let bandHeight = UIScale.pt(Self.chromeHeight + 10)
             VStack(spacing: 0) {
                 mainArea(bandHeight)
                 if musicFooterVisible, !musicBarCollapsed {
@@ -783,8 +783,10 @@ struct MainWindowView: View {
         let inset = windowFullScreen ? Self.fullScreenControlsInset : Self.trafficLightsInset
         return VStack(spacing: 0) {
             TitlebarChrome(
-                height: Self.chromeHeight,
-                width: sidebarOpen ? max(displaySidebarWidth - inset, 60) : UIScale.pt(200))
+                height: UIScale.pt(Self.chromeHeight),
+                width: sidebarOpen
+                    ? max(displaySidebarWidth - inset, UIScale.pt(60))
+                    : UIScale.pt(200))
             Spacer(minLength: 0)
         }
         .padding(.leading, inset)
@@ -1028,18 +1030,25 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
-                guard NSApp.keyWindow?.identifier?.rawValue == MainWindowIdentifier.value else {
-                    return false
-                }
-                guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
+                let keyWindow = NSApp.keyWindow
+                let main = keyWindow?.identifier?.rawValue == MainWindowIdentifier.value
+                let section = SectionWindow.contains(keyWindow)
+                guard main || section else { return false }
+                if main, WindowTabs.isTabbed(keyWindow) { return false }
                 guard
                     let command = WindowKeyCommand.resolve(
                         characters: characters, keyCode: code, modifiers: mods)
                 else { return false }
                 if let next = WindowZoom.adjusted(zoom, for: command) {
-                    zoom = next
+                    guard
+                        WindowZoomDispatch.consumes(
+                            command,
+                            terminalFocused: TerminalZoomFocus.owns(keyWindow?.firstResponder))
+                    else { return false }
+                    WindowZoomCommit.perform(next) { zoom = $0 }
                     return true
                 }
+                guard main else { return false }
                 let items = navigableItems
                 guard
                     let index = WindowKeyCommand.resolvedIndex(

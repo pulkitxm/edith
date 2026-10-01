@@ -2,6 +2,29 @@ import AppKit
 import EdithDatabase
 import SwiftUI
 
+enum DatabaseTableMetrics {
+    static let rowHeight = 30.0
+    static let headerHeight = 28.0
+    static let intercellWidth = 12.0
+    static let rowColumnWidth = 50.0
+    static let rowColumnMinimum = 46.0
+    static let rowColumnMaximum = 64.0
+    static let columnMinimum = 90.0
+    static let columnMaximum = 520.0
+    static let indexFont = 10.5
+    static let bodyFont = 11.0
+    static let headerFont = 11.0
+    static let keySide = 11.0
+
+    static func points(_ base: Double, scale: Double) -> CGFloat {
+        CGFloat(base * scale)
+    }
+
+    static func logical(_ display: CGFloat, scale: Double) -> CGFloat {
+        display / CGFloat(max(scale, 0.01))
+    }
+}
+
 struct DatabaseNativeTableView: NSViewRepresentable {
     let accent: Color
     let background: Color
@@ -28,6 +51,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     var appendedFrom: Int? = nil
     var editingEnabled = false
     var isActive = true
+    var scale = 1.0
     var scrollOffset = CGPoint.zero
     var saveScrollOffset: (CGPoint) -> Void = { _ in }
 
@@ -44,15 +68,19 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
         tableView.usesAlternatingRowBackgroundColors = false
-        tableView.rowHeight = 30
-        tableView.intercellSpacing = NSSize(width: 12, height: 0)
+        tableView.rowHeight = DatabaseTableMetrics.points(
+            DatabaseTableMetrics.rowHeight, scale: scale)
+        tableView.intercellSpacing = NSSize(
+            width: DatabaseTableMetrics.points(DatabaseTableMetrics.intercellWidth, scale: scale),
+            height: 0)
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.gridStyleMask = []
         tableView.style = .plain
         tableView.backgroundColor = NSColor(background)
         tableView.selectionHighlightStyle = .regular
         tableView.headerView?.menu = nil
-        tableView.headerView?.frame.size.height = 28
+        tableView.headerView?.frame.size.height = DatabaseTableMetrics.points(
+            DatabaseTableMetrics.headerHeight, scale: scale)
         tableView.setAccessibilityLabel("Database records")
 
         let scrollView = NSScrollView()
@@ -75,6 +103,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         let append = context.coordinator.canAppend(self)
         if reload && !append { context.coordinator.projection.invalidateRows() }
         context.coordinator.parent = self
+        let scaledScroll = context.coordinator.consumeScaleChange(in: scrollView)
         let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
@@ -88,9 +117,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             context.coordinator.hasLoadedData = true
         }
         context.coordinator.reloadSelection()
-        if reload || scrollView.contentView.bounds.origin != scrollOffset {
+        let scrollTarget = scaledScroll ?? scrollOffset
+        if scaledScroll != nil { saveScrollOffset(scrollTarget) }
+        if reload || scaledScroll != nil || scrollView.contentView.bounds.origin != scrollTarget {
             scrollView.layoutSubtreeIfNeeded()
-            scrollView.contentView.scroll(to: scrollOffset)
+            scrollView.contentView.scroll(to: scrollTarget)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         context.coordinator.isUpdating = false
@@ -146,9 +177,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         private var applyingColumnWidths = false
         private var observedContinuation: DatabaseContinuationToken?
         private var paginationGate = DatabaseTablePaginationGate()
+        private var appliedScale: Double
 
         init(parent: DatabaseNativeTableView) {
             self.parent = parent
+            appliedScale = parent.scale
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int {
@@ -227,7 +260,14 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 textField.stringValue = (row + 1).formatted()
                 textField.alignment = .right
                 textField.textColor = NSColor(parent.inkFaint)
-                textField.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+                textField.font = .monospacedDigitSystemFont(
+                    ofSize: DatabaseTableMetrics.points(
+                        DatabaseTableMetrics.indexFont, scale: parent.scale), weight: .medium)
+                for constraint in cell.imageView?.constraints ?? []
+                where constraint.firstAttribute == .width || constraint.firstAttribute == .height {
+                    constraint.constant = DatabaseTableMetrics.points(
+                        DatabaseTableMetrics.keySide, scale: parent.scale)
+                }
                 cell.imageView?.image =
                     parent.records[row].identity == nil
                     ? nil
@@ -252,10 +292,12 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             (textField as? DatabaseNativeValueField)?.editingValue = fullText
             textField.alignment = .left
             textField.textColor = NSColor(value.isAbsent ? parent.inkFaint : parent.ink)
+            let bodySize = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.bodyFont, scale: parent.scale)
             textField.font =
                 value.isAbsent
-                ? .monospacedSystemFont(ofSize: 11, weight: .light)
-                : .monospacedSystemFont(ofSize: 11, weight: .regular)
+                ? .monospacedSystemFont(ofSize: bodySize, weight: .light)
+                : .monospacedSystemFont(ofSize: bodySize, weight: .regular)
             textField.setAccessibilityLabel(field.displayName)
             textField.setAccessibilityValue(rendered)
             textField.tag = row
@@ -309,7 +351,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     $0.path.segments.joined(separator: ".") == column.identifier.rawValue
                 })
             else { return }
-            parent.resizeColumn(field.path, column.width)
+            parent.resizeColumn(
+                field.path, DatabaseTableMetrics.logical(column.width, scale: parent.scale))
         }
 
         @objc func openSelectedRow() {
@@ -365,9 +408,13 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 identifier: NSUserInterfaceItemIdentifier(Self.rowColumnIdentifier))
             rowColumn.title = "#"
             rowColumn.headerCell = makeHeaderCell(title: "#", alignment: .right)
-            rowColumn.width = 50
-            rowColumn.minWidth = 46
-            rowColumn.maxWidth = 64
+            let scale = parent.scale
+            rowColumn.width = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.rowColumnWidth, scale: scale)
+            rowColumn.minWidth = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.rowColumnMinimum, scale: scale)
+            rowColumn.maxWidth = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.rowColumnMaximum, scale: scale)
             rowColumn.resizingMask = .userResizingMask
             tableView.addTableColumn(rowColumn)
 
@@ -377,9 +424,13 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(name))
                 column.title = field.displayName
                 column.headerCell = makeHeaderCell(title: field.displayName)
-                column.width = parent.columnWidth(field.path) ?? initialWidth(for: field)
-                column.minWidth = 90
-                column.maxWidth = 520
+                let scale = parent.scale
+                let logical = parent.columnWidth(field.path) ?? initialWidth(for: field)
+                column.width = logical * CGFloat(scale)
+                column.minWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.columnMinimum, scale: scale)
+                column.maxWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.columnMaximum, scale: scale)
                 column.resizingMask = .userResizingMask
                 if field.isSortable {
                     column.sortDescriptorPrototype = NSSortDescriptor(key: name, ascending: true)
@@ -395,14 +446,54 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             guard let tableView else { return }
             applyingColumnWidths = true
             defer { applyingColumnWidths = false }
+            let scale = parent.scale
+            if let row = tableView.tableColumns.first(where: {
+                $0.identifier.rawValue == Self.rowColumnIdentifier
+            }) {
+                row.minWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.rowColumnMinimum, scale: scale)
+                row.maxWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.rowColumnMaximum, scale: scale)
+            }
             for field in parent.fields {
                 let name = field.path.segments.joined(separator: ".")
-                guard let width = parent.columnWidth(field.path),
-                    let column = columnsByName[name],
-                    abs(column.width - width) > 0.5
-                else { continue }
-                column.width = width
+                guard let column = columnsByName[name] else { continue }
+                column.minWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.columnMinimum, scale: scale)
+                column.maxWidth = DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.columnMaximum, scale: scale)
+                guard let width = parent.columnWidth(field.path) else { continue }
+                let display = width * CGFloat(scale)
+                guard abs(column.width - display) > 0.5 else { continue }
+                column.width = display
             }
+        }
+
+        func consumeScaleChange(in scrollView: NSScrollView) -> CGPoint? {
+            guard let tableView else { return nil }
+            let scale = parent.scale
+            let origin = scrollView.contentView.bounds.origin
+            tableView.rowHeight = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.rowHeight, scale: scale)
+            tableView.intercellSpacing = NSSize(
+                width: DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.intercellWidth, scale: scale),
+                height: 0)
+            tableView.headerView?.frame.size.height = DatabaseTableMetrics.points(
+                DatabaseTableMetrics.headerHeight, scale: scale)
+            guard abs(scale - appliedScale) > 0.000_1 else { return nil }
+            let ratio = appliedScale > 0 ? scale / appliedScale : 1
+            appliedScale = scale
+            let font = NSFont.systemFont(
+                ofSize: DatabaseTableMetrics.points(DatabaseTableMetrics.headerFont, scale: scale),
+                weight: .medium)
+            for column in tableView.tableColumns {
+                column.width *= ratio
+                column.headerCell.font = font
+            }
+            tableView.headerView?.needsDisplay = true
+            tableView.reloadData()
+            return CGPoint(x: origin.x * ratio, y: origin.y * ratio)
         }
 
         func reloadSelection() {
@@ -536,7 +627,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let cell = DatabaseNativeHeaderCell(textCell: title)
             cell.alignment = alignment
             cell.lineBreakMode = .byTruncatingTail
-            cell.font = .systemFont(ofSize: 11, weight: .medium)
+            cell.font = .systemFont(
+                ofSize: DatabaseTableMetrics.points(
+                    DatabaseTableMetrics.headerFont, scale: parent.scale), weight: .medium)
             return cell
         }
 
