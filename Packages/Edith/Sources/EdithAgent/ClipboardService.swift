@@ -68,10 +68,13 @@ public actor ClipboardService {
         let maxAge = age > 0 ? Double(age) * 86400 : nil
         let archive = archive
         let changed = changed
-        let predecessor = tail
+        let writes =
+            operation == AgentClipboardOperation.capture
+            || operation == AgentClipboardOperation.mutate
+        let predecessor = writes ? tail : nil
         let id = UUID()
         let worker = Task.detached(priority: .utility) {
-            await predecessor?.value
+            if writes { await predecessor?.value }
             try Task.checkCancellation()
             switch operation {
             case AgentClipboardOperation.capture:
@@ -106,12 +109,14 @@ public actor ClipboardService {
         }
         workers[id] = worker
         queuedBytes += payload.count
-        tail = Task { _ = try? await worker.value }
-        tailID = id
+        if writes {
+            tail = Task { _ = try? await worker.value }
+            tailID = id
+        }
         defer {
             workers[id] = nil
             queuedBytes -= payload.count
-            if tailID == id { tail = nil; tailID = nil }
+            if writes, tailID == id { tail = nil; tailID = nil }
         }
         return try await worker.value
     }

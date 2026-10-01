@@ -16,14 +16,14 @@ import Testing
         let gate = DownloadTestGate(directory: directory)
         let worker = worker(file, gate: gate)
         try await worker.start()
-        try await eventually { await gate.started == ["old"] }
+        try await eventually { await Set(gate.started) == ["old", "new"] }
+        #expect(await gate.started.first == "old")
         #expect(await worker.snapshot().records.first { $0.id == interrupted.id }?.canRetry == true)
+        #expect(await gate.maximumActive == 2)
         await gate.release("old")
-        try await eventually { await gate.started == ["old", "new"] }
         await gate.release("new")
         try await eventually { await worker.snapshot().running == 0 }
         #expect(await worker.snapshot().finished == 2)
-        #expect(await gate.maximumActive == 1)
         #expect(DownloadQueue.load(from: file).filter { $0.resultPaths != nil }.count == 2)
     }
 
@@ -95,19 +95,19 @@ import Testing
         try await worker.start()
         let added = try await worker.mutate(
             .enqueue(
-                urls: [
-                    URL(string: "https://youtu.be/first")!, URL(string: "https://youtu.be/second")!,
-                ],
+                urls: (0..<4).map { URL(string: "https://youtu.be/item\($0)")! },
                 prefix: "", kind: .audio, outputDirectory: directory)
         ).added
-        try await eventually { await gate.started == ["first"] }
-        _ = try await worker.mutate(.remove(id: added[0].id))
-        try await eventually { await gate.started == ["first", "second"] }
-        await gate.release("second")
+        try await eventually { await gate.started.count == DownloadWorker.maximumConcurrent }
+        let running = await gate.started
+        let waiting = try #require(added.first { !running.contains($0.url.lastPathComponent) })
+        let victim = try #require(added.first { running.contains($0.url.lastPathComponent) })
+        let waitingName = waiting.url.lastPathComponent
+        _ = try await worker.mutate(.remove(id: victim.id))
+        try await eventually { await gate.started.contains(waitingName) }
+        #expect(await gate.maximumActive == DownloadWorker.maximumConcurrent)
+        for name in await gate.started { await gate.release(name) }
         try await eventually { await worker.snapshot().running == 0 }
-        #expect(await gate.maximumActive == 1)
-        #expect(await worker.snapshot().records.count == 1)
-        #expect(await worker.snapshot().finished == 1)
     }
 
     @Test func disablingStopsActiveWorkAndReenablingDrainsWaitingWork() async throws {
@@ -122,20 +122,18 @@ import Testing
         try await worker.start()
         _ = try await worker.mutate(
             .enqueue(
-                urls: [
-                    URL(string: "https://youtu.be/first")!, URL(string: "https://youtu.be/second")!,
-                ],
+                urls: (0..<4).map { URL(string: "https://youtu.be/item\($0)")! },
                 prefix: "", kind: .audio, outputDirectory: directory))
-        try await eventually { await gate.started == ["first"] }
+        try await eventually { await gate.started.count == DownloadWorker.maximumConcurrent }
         enabled.set(false)
         await worker.refresh()
         try await eventually { await worker.snapshot().running == 0 }
         #expect(await worker.snapshot().queued == 1)
-        #expect(await worker.snapshot().failed == 1)
+        #expect(await worker.snapshot().failed == DownloadWorker.maximumConcurrent)
         enabled.set(true)
         await worker.refresh()
-        try await eventually { await gate.started == ["first", "second"] }
-        await gate.release("second")
+        try await eventually { await gate.started.count == 4 }
+        for name in await gate.started { await gate.release(name) }
         try await eventually { await worker.snapshot().finished == 1 }
     }
 

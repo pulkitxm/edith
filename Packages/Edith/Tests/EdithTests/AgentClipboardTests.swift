@@ -162,6 +162,38 @@ import Testing
         #expect(try fixture.archive.snapshot(.init()).total == 2)
     }
 
+    @Test func snapshotsRunWhileACaptureIsBlocked() async throws {
+        let fixture = try ClipboardArchiveFixture()
+        defer { fixture.cleanup() }
+        let gate = ClipboardWriteGate()
+        let archive = ClipboardArchive(root: fixture.archive.root) { data, url in
+            gate.wait()
+            try UsageDataFiles.write(data, to: url)
+        }
+        let service = fixture.service(archive: archive)
+        let capture = Task {
+            try await service.perform(
+                operation: AgentClipboardOperation.capture,
+                payload: try AgentPayload.encode(fixture.capture("slow")))
+        }
+        try await wait { gate.started }
+        let first = Task {
+            try await service.perform(
+                operation: AgentClipboardOperation.snapshot,
+                payload: try AgentPayload.encode(ClipboardSnapshotRequest()))
+        }
+        let second = Task {
+            try await service.perform(
+                operation: AgentClipboardOperation.snapshot,
+                payload: try AgentPayload.encode(ClipboardSnapshotRequest()))
+        }
+        _ = try await first.value
+        _ = try await second.value
+        #expect(!capture.isCancelled)
+        gate.release()
+        _ = try await capture.value
+    }
+
     @Test func shutdownCancelsQueuedRequestsAndAnUncommittedCapture() async throws {
         let fixture = try ClipboardArchiveFixture()
         defer { fixture.cleanup() }
@@ -178,7 +210,9 @@ import Testing
         let client = AgentClipboardClient(client: listener.client())
         let capture = Task { try await client.capture(fixture.capture("cancelled")) }
         try await wait { gate.started }
-        let reads = (0..<15).map { _ in Task { try await client.snapshot() } }
+        let reads = (0..<15).map { index in
+            Task { try await client.capture(fixture.capture("queued-\(index)")) }
+        }
         try await wait { await service.activeRequests == ClipboardService.maximumRequests }
         await #expect(throws: AgentError(.unavailable, "The clipboard request queue is full.")) {
             try await client.snapshot()
