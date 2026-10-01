@@ -36,11 +36,24 @@ public struct SEOAuditRepository {
             to: root.appendingPathComponent("projects.json"), options: .atomic)
     }
 
+    public func loadDraft(id: UUID) throws -> SEOAuditDraft {
+        let file = draftFile(id: id)
+        guard fileManager.fileExists(atPath: file.path) else { return SEOAuditDraft() }
+        return try decoder.decode(SEOAuditDraft.self, from: Data(contentsOf: file))
+    }
+
+    public func saveDraft(id: UUID, _ draft: SEOAuditDraft) throws {
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        try encoder.encode(draft).write(to: draftFile(id: id), options: .atomic)
+    }
+
     public func delete(id: UUID) throws {
         let assets = projectAssetsDirectory(id: id)
         if fileManager.fileExists(atPath: assets.path) { try fileManager.removeItem(at: assets) }
         let file = projectFile(id: id)
         if fileManager.fileExists(atPath: file.path) { try fileManager.removeItem(at: file) }
+        let draft = draftFile(id: id)
+        if fileManager.fileExists(atPath: draft.path) { try fileManager.removeItem(at: draft) }
         var summaries = (try? loadSummaries()) ?? []
         summaries.removeAll { $0.id == id }
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
@@ -50,6 +63,10 @@ public struct SEOAuditRepository {
 
     private func projectFile(id: UUID) -> URL {
         root.appendingPathComponent("project-\(id.uuidString.lowercased()).json")
+    }
+
+    private func draftFile(id: UUID) -> URL {
+        root.appendingPathComponent("draft-\(id.uuidString.lowercased()).json")
     }
 
     private func projectAssetsDirectory(id: UUID) -> URL {

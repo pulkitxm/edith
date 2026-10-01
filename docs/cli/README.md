@@ -77,6 +77,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
 | [`ed brew`](./brew/README.md) | Searching and managing Homebrew formulae and casks |
 | [`ed maintenance`](./maintenance/README.md) | Verified app installs, updates, inventory, and review-first removal |
+| [`ed seo`](./seo/README.md) | Site audits: projects, page selection, Lighthouse, and saved runs |
 | [`ed companion`](./companion/README.md) | Local memory health, status, Markdown ingest and episodes |
 
 ## Other machines

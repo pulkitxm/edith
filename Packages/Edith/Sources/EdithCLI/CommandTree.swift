@@ -1430,6 +1430,38 @@ public enum CommandTree {
         "ed companion wipe": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             destructivePolicy: .previewThenYes),
+        "ed seo ls": Spec(options: ["--json", "--help"]),
+        "ed seo create": Spec(
+            options: ["--json", "--help", "--name"], optionValues: ["--name": .free],
+            arguments: [.free]),
+        "ed seo rename": Spec(options: ["--json", "--help"], arguments: [.free, .free]),
+        "ed seo delete": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed seo show": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed seo pages": Spec(
+            options: [
+                "--json", "--help", "--refresh", "--all", "--none", "--only", "--add", "--remove",
+            ],
+            optionValues: ["--only": .free, "--add": .free, "--remove": .free],
+            arguments: [.free]),
+        "ed seo lighthouse": Spec(
+            options: ["--json", "--help"], arguments: [.free, .onOff]),
+        "ed seo start": Spec(
+            options: ["--json", "--help", "--lighthouse", "--no-lighthouse", "--wait"],
+            arguments: [.free]),
+        "ed seo stop": Spec(
+            options: ["--json", "--help", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed seo run": Spec(
+            options: [
+                "--json", "--help", "--run", "--offset", "--severity", "--query", "--platform",
+            ],
+            optionValues: [
+                "--run": .free, "--offset": .free, "--severity": .free, "--query": .free,
+                "--platform": .free,
+            ],
+            arguments: [.free]),
         "help": Spec(arguments: [.free]),
     ]
 
