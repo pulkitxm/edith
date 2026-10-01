@@ -47,8 +47,21 @@ public enum AttentionExtensionInstaller {
         return (try? install()) != nil
     }
 
+    public static let browserBundleIDs = [
+        "com.google.Chrome", "org.chromium.Chromium", "com.brave.Browser",
+        "com.microsoft.edgemac", "com.operasoftware.Opera",
+    ]
     public static var revealDirectory: (URL) -> Void = {
         NSWorkspace.shared.activateFileViewerSelecting([$0])
+    }
+    public static var applicationURL: (String) -> URL? = {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
+    }
+    public static var openWithApplication: (URL, URL) -> Void = { url, app in
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(
+            [url], withApplicationAt: app, configuration: configuration, completionHandler: nil)
     }
     public static var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
 
@@ -60,6 +73,11 @@ public enum AttentionExtensionInstaller {
     @discardableResult
     public static func openExtensionsPage() -> Bool {
         guard let url = URL(string: "chrome://extensions") else { return false }
+        for identifier in browserBundleIDs {
+            guard let app = applicationURL(identifier) else { continue }
+            openWithApplication(url, app)
+            return true
+        }
         return openURL(url)
     }
 }

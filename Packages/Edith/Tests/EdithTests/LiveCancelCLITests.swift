@@ -99,12 +99,17 @@ import Testing
 
     @Test func extensionOpenUsesTheSharedPage() async {
         let opened = FlightBox()
-        let previous = AttentionExtensionInstaller.openURL
+        let previousApps = AttentionExtensionInstaller.applicationURL
+        let previousOpen = AttentionExtensionInstaller.openURL
+        AttentionExtensionInstaller.applicationURL = { _ in nil }
         AttentionExtensionInstaller.openURL = { url in
             opened.add(url.absoluteString)
             return true
         }
-        defer { AttentionExtensionInstaller.openURL = previous }
+        defer {
+            AttentionExtensionInstaller.applicationURL = previousApps
+            AttentionExtensionInstaller.openURL = previousOpen
+        }
         let result = await CLIProbe.run(["attention", "extension", "open", "--json"])
         #expect(result.code == 0)
         #expect(result.object?["opened"] as? Bool == true)
