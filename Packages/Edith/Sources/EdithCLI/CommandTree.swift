@@ -1178,7 +1178,7 @@ public enum CommandTree {
         "ed machines docker df": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine]),
         "ed machines docker logs": Spec(
-            options: ["--tail", "-f", "--follow"], arguments: [.machine, .container]),
+            options: ["--tail", "-f", "--follow", "--json"], arguments: [.machine, .container]),
         "ed machines docker inspect": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .container]),
         "ed machines docker top": Spec(
@@ -1213,7 +1213,8 @@ public enum CommandTree {
         "ed machines docker compose pull": Spec(
             options: ["--json"], arguments: [.machine, .composeProject]),
         "ed machines docker compose logs": Spec(
-            options: ["--tail", "-f", "--follow", "--help"], arguments: [.machine, .composeProject]),
+            options: ["--tail", "-f", "--follow", "--help", "--json"],
+            arguments: [.machine, .composeProject]),
         "ed machines services ls": Spec(options: ["--json", "--failed"], arguments: [.machine]),
         "ed machines services start": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.machine, .free]),
