@@ -123,6 +123,32 @@ private final class HomebrewRequestRecorder: @unchecked Sendable {
         #expect(recorder.requests.isEmpty)
     }
 
+    @Test func installedPublishesPackagesBeforeOutdatedFinishes() async throws {
+        let gate = AsyncSuspendGate()
+        let seen = LockedStrings()
+        let client = HomebrewClient(
+            executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/brew")
+        ) { request, _ in
+            if request.arguments.first == "outdated" {
+                await gate.wait()
+                return CLICommandResult(terminationStatus: 0, output: outdatedJSON)
+            }
+            return CLICommandResult(terminationStatus: 0, output: installedJSON)
+        }
+
+        let finished = Task {
+            try await client.installed { packages in
+                seen.set(packages.map(\.name))
+                gate.open()
+            }
+        }
+        let names = await seen.wait(timeout: .seconds(3))
+
+        #expect(names == ["firefox", "ripgrep"])
+        let packages = try await finished.value
+        #expect(packages.first { $0.name == "ripgrep" }?.outdated == true)
+    }
+
     @Test func toolProvisioningTreatsHomebrewSetupAsManual() async throws {
         #expect(ToolProvisioning.spec(id: "homebrew") == .homebrew)
         await #expect(
@@ -131,6 +157,75 @@ private final class HomebrewRequestRecorder: @unchecked Sendable {
             )
         ) {
             try await ToolInstaller().install(.homebrew)
+        }
+    }
+}
+
+private final class AsyncSuspendGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if opened {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func open() {
+        lock.lock()
+        opened = true
+        let pending = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in pending { waiter.resume() }
+    }
+}
+
+private final class LockedStrings: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String]?
+    private var waiters: [CheckedContinuation<[String], Never>] = []
+
+    func set(_ values: [String]) {
+        lock.lock()
+        self.values = values
+        let pending = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in pending { waiter.resume(returning: values) }
+    }
+
+    func wait(timeout: Duration) async -> [String] {
+        await withTaskGroup(of: [String]?.self) { group in
+            group.addTask { await self.park() }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? []
+        }
+    }
+
+    private func park() async -> [String] {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if let values {
+                lock.unlock()
+                continuation.resume(returning: values)
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
         }
     }
 }

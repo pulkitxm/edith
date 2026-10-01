@@ -25,11 +25,18 @@ final class HomebrewPageModel {
     var output = ""
 
     private let client: HomebrewClient
+    private let store: HomebrewListingStore
     private var task: Task<Void, Never>?
     private var generation = UUID()
+    private var cachedPackages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
+    private var didRestoreSnapshot = false
 
-    init(client: HomebrewClient = HomebrewClient()) {
+    init(
+        client: HomebrewClient = HomebrewClient(),
+        store: HomebrewListingStore = HomebrewListingStore()
+    ) {
         self.client = client
+        self.store = store
     }
 
     var updateCount: Int { packages.count(where: \.outdated) }
@@ -37,6 +44,10 @@ final class HomebrewPageModel {
 
     func activate(kind: HomebrewPackageKind) {
         begin(title: "Checking Homebrew") { generation in
+            let token = await self.store.claim()
+            guard self.isCurrent(generation) else { return }
+            await self.restoreSnapshot(kind: kind, generation: generation)
+            guard self.isCurrent(generation) else { return }
             let status = await self.client.status()
             guard self.isCurrent(generation) else { return }
             self.status = status
@@ -45,14 +56,25 @@ final class HomebrewPageModel {
                 self.finish(generation)
                 return
             }
-            await self.loadInstalled(kind: kind, generation: generation)
+            await self.fetchInstalled(kind: kind, generation: generation, token: token)
         }
     }
 
     func loadInstalled(kind: HomebrewPackageKind) {
         mode = .installed
+        if let cached = cachedPackages[kind], !cached.isEmpty {
+            packages = cached
+            loaded = true
+        } else if !cachedPackages.isEmpty {
+            packages = []
+            loaded = false
+        }
         begin(title: "Reading installed \(kind.pluralTitle.lowercased())") { generation in
-            await self.loadInstalled(kind: kind, generation: generation)
+            let token = await self.store.claim()
+            guard self.isCurrent(generation) else { return }
+            await self.restoreSnapshot(kind: kind, generation: generation)
+            guard self.isCurrent(generation) else { return }
+            await self.fetchInstalled(kind: kind, generation: generation, token: token)
         }
     }
 
@@ -88,7 +110,8 @@ final class HomebrewPageModel {
                     guard self.isCurrent(generation) else { return }
                     self.packages = packages
                 } else {
-                    await self.loadInstalled(kind: kind, generation: generation)
+                    await self.fetchInstalled(
+                        kind: kind, generation: generation, token: await self.store.claim())
                     return
                 }
                 self.finish(generation)
@@ -111,15 +134,55 @@ final class HomebrewPageModel {
         output = ""
     }
 
-    private func loadInstalled(kind: HomebrewPackageKind, generation: UUID) async {
+    private func fetchInstalled(
+        kind: HomebrewPackageKind, generation: UUID, token: UUID
+    ) async {
         do {
-            let packages = try await client.installed(kind: kind)
+            let packages = try await client.installed(kind: kind) { inventory in
+                await self.publishInventory(inventory, kind: kind, generation: generation)
+            }
             guard isCurrent(generation) else { return }
             self.packages = packages
+            cachedPackages[kind] = packages
+            loaded = true
+            if let status {
+                let snapshot = HomebrewListingSnapshot(status: status, packages: cachedPackages)
+                try? await store.save(snapshot, replacing: token)
+            }
+            guard isCurrent(generation) else { return }
             finish(generation)
         } catch {
             fail(error, generation: generation)
         }
+    }
+
+    private func publishInventory(
+        _ inventory: [HomebrewPackage], kind: HomebrewPackageKind, generation: UUID
+    ) {
+        guard isCurrent(generation) else { return }
+        let visible = HomebrewPackageListing.preservingOutdatedFlags(inventory, from: packages)
+        packages = visible
+        cachedPackages[kind] = visible
+        loaded = true
+    }
+
+    private func restoreSnapshot(kind: HomebrewPackageKind, generation: UUID) async {
+        if !didRestoreSnapshot {
+            let loadedSnapshot = await store.load()
+            guard isCurrent(generation) else { return }
+            didRestoreSnapshot = true
+            if let loadedSnapshot {
+                if status == nil { status = loadedSnapshot.status }
+                for (key, value) in loadedSnapshot.packages where cachedPackages[key] == nil {
+                    cachedPackages[key] = value
+                }
+            }
+        }
+        guard isCurrent(generation), packages.isEmpty, let cached = cachedPackages[kind],
+            !cached.isEmpty
+        else { return }
+        packages = cached
+        loaded = true
     }
 
     private func begin(
@@ -130,7 +193,7 @@ final class HomebrewPageModel {
         self.generation = generation
         isBusy = true
         isCancelling = false
-        loaded = false
+        if packages.isEmpty { loaded = false }
         operationTitle = title
         errorMessage = nil
         resultMessage = nil

@@ -61,7 +61,7 @@ public enum AppMaintenanceOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct AppMaintenanceUpdate: Equatable, Sendable {
+public struct AppMaintenanceUpdate: Codable, Equatable, Sendable {
     public let source: String
     public let installedVersion: String
     public let latestVersion: String
@@ -73,7 +73,7 @@ public struct AppMaintenanceUpdate: Equatable, Sendable {
     }
 }
 
-public struct InstalledApplication: Identifiable, Equatable, Sendable {
+public struct InstalledApplication: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let name: String
     public let bundleID: String

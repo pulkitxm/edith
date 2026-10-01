@@ -53,7 +53,7 @@ public struct HomebrewPackage: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public struct HomebrewStatus: Equatable, Sendable {
+public struct HomebrewStatus: Codable, Equatable, Sendable {
     public let available: Bool
     public let executable: String?
     public let version: String?
