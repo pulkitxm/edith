@@ -63,6 +63,7 @@ import Testing
                     ["Companion library", "search the memory", "companion", "search", "warden"],
                     ["Companion library", "read a full episode", "companion", "episode", "abc"],
                     ["Companion library", "index pending episodes", "companion", "index"],
+                    ["Companion chat", "stop generating", "companion", "stop"],
                 ])
     }
 
