@@ -101,7 +101,7 @@ struct AgentTasksSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: UIScale.pt(220))
                 .padding(8)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
             }

@@ -424,7 +424,8 @@ struct CodePreview: View {
                     .padding(.vertical, UIScale.pt(6))
                     .background(DashSkin.gold.opacity(0.12))
             }
-            HighlightedTextView(attributed: highlighted, plain: text, dark: dark)
+            HighlightedTextView(
+                attributed: highlighted, plain: text, dark: dark, scale: UIScale.current)
         }
         .task(id: highlightKey) {
             highlighted = await SyntaxHighlighting.shared.highlight(
@@ -499,10 +500,27 @@ actor SyntaxHighlighting {
     }
 }
 
+enum PreviewTextScale {
+    static let body = 11.5
+    static let inset = 10.0
+
+    static func attributed(_ source: NSAttributedString, scale: Double) -> NSAttributedString {
+        guard abs(scale - 1) > 0.001, source.length > 0 else { return source }
+        let copy = NSMutableAttributedString(attributedString: source)
+        copy.enumerateAttribute(.font, in: NSRange(location: 0, length: copy.length)) {
+            value, range, _ in
+            guard let font = value as? NSFont else { return }
+            copy.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range)
+        }
+        return copy
+    }
+}
+
 private struct HighlightedTextView: NSViewRepresentable {
     let attributed: NSAttributedString?
     let plain: String
     let dark: Bool
+    var scale = 1.0
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -510,7 +528,8 @@ private struct HighlightedTextView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 10, height: 10)
+        textView.textContainerInset = NSSize(
+            width: PreviewTextScale.inset * scale, height: PreviewTextScale.inset * scale)
         scrollView.drawsBackground = false
         scrollView.hasHorizontalScroller = true
         textView.isHorizontallyResizable = true
@@ -522,11 +541,15 @@ private struct HighlightedTextView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        textView.textContainerInset = NSSize(
+            width: PreviewTextScale.inset * scale, height: PreviewTextScale.inset * scale)
+        textView.font = .monospacedSystemFont(
+            ofSize: PreviewTextScale.body * scale, weight: .regular)
         if let attributed {
-            textView.textStorage?.setAttributedString(attributed)
+            textView.textStorage?.setAttributedString(
+                PreviewTextScale.attributed(attributed, scale: scale))
         } else {
             textView.string = plain
-            textView.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
             textView.textColor = dark ? .white : .textColor
         }
     }

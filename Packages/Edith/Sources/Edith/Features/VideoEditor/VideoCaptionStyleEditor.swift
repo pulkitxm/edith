@@ -1,4 +1,5 @@
 import SwiftUI
+import EdithKit
 
 struct VideoCaptionStyleEditor: View {
     let caption: VideoProject.Annotation
@@ -36,7 +37,7 @@ struct VideoCaptionStyleEditor: View {
                 Text("RGBA channels use 0 through 1. Omit optional effects to remove them.")
                     .font(.caption).foregroundStyle(.secondary)
                 TextEditor(text: field("json")).font(.system(.caption, design: .monospaced)).frame(
-                    height: 240)
+                    height: UIScale.pt(240))
                 Button("Apply JSON") { draft.apply("json") }
             }
             Button("Discard caption drafts") { draft.refresh(discard: true) }

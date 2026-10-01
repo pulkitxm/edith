@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import EdithKit
 
 struct VideoCanvas: View {
     let model: VideoEditorModel
@@ -96,7 +97,7 @@ private struct VideoCanvasHandle: View {
         .highPriorityGesture(drag("move"))
         .overlay(alignment: .bottomTrailing) {
             if selected {
-                Rectangle().fill(.white).frame(width: 12, height: 12)
+                Rectangle().fill(.white).frame(width: UIScale.pt(12), height: UIScale.pt(12))
                     .overlay { Rectangle().stroke(.cyan) }
                     .gesture(drag("resize"))
                     .accessibilityLabel("Resize \(title)")

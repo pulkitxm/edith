@@ -131,12 +131,12 @@ struct HomebrewMaintenanceView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 filterLabel("Package")
-                    .frame(width: 52, alignment: .leading)
+                    .frame(width: UIScale.pt(52), alignment: .leading)
                 kindPicker
             }
             HStack(spacing: 8) {
                 filterLabel("View")
-                    .frame(width: 52, alignment: .leading)
+                    .frame(width: UIScale.pt(52), alignment: .leading)
                 modePicker
             }
         }
@@ -144,7 +144,7 @@ struct HomebrewMaintenanceView: View {
 
     private func filterLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: UIScale.pt(11), weight: .semibold))
             .foregroundStyle(.secondary)
             .fixedSize()
     }
@@ -157,7 +157,7 @@ struct HomebrewMaintenanceView: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
-        .frame(width: 190)
+        .frame(width: UIScale.pt(190))
         .disabled(model.isBusy)
     }
 
@@ -169,7 +169,7 @@ struct HomebrewMaintenanceView: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
-        .frame(width: 170)
+        .frame(width: UIScale.pt(170))
     }
 
     @ViewBuilder
@@ -199,7 +199,7 @@ struct HomebrewMaintenanceView: View {
         HomebrewCard {
             VStack(spacing: 16) {
                 Image(systemName: "shippingbox")
-                    .font(.system(size: 34, weight: .medium))
+                    .font(.system(size: UIScale.pt(34), weight: .medium))
                     .foregroundStyle(.secondary)
                 Text("Homebrew is not installed")
                     .font(DashSkin.heading(24))
@@ -208,7 +208,7 @@ struct HomebrewMaintenanceView: View {
                 )
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 520)
+                .frame(maxWidth: UIScale.pt(520))
                 HStack {
                     Link("Open brew.sh", destination: URL(string: "https://brew.sh")!)
                     Button("Check Again") { model.activate(kind: kind) }
@@ -264,16 +264,16 @@ struct HomebrewMaintenanceView: View {
                             model.operationTitle ?? model.resultMessage
                                 ?? "Homebrew could not finish"
                         )
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                         if let error = model.errorMessage {
                             Text(error)
-                                .font(.system(size: 12))
+                                .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
                         if !model.output.isEmpty {
                             Text(model.output)
-                                .font(.system(size: 10.5, design: .monospaced))
+                                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                                 .lineLimit(8)
@@ -299,10 +299,10 @@ struct HomebrewMaintenanceView: View {
                         model.mode == .installed
                             ? "Installed \(kind.pluralTitle)" : "Search Results"
                     )
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
                     Spacer()
                     Text("\(model.packages.count)")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: UIScale.pt(12), weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 12)
@@ -310,16 +310,16 @@ struct HomebrewMaintenanceView: View {
                 if model.packages.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: model.mode == .search ? "magnifyingglass" : "shippingbox")
-                            .font(.system(size: 25))
+                            .font(.system(size: UIScale.pt(25)))
                             .foregroundStyle(.tertiary)
                         Text(emptyTitle)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: UIScale.pt(14), weight: .semibold))
                         Text(emptyDetail)
-                            .font(.system(size: 12))
+                            .font(.system(size: UIScale.pt(12)))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 180)
+                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(180))
                 } else {
                     ForEach(Array(model.packages.enumerated()), id: \.element.id) {
                         index, package in
@@ -467,16 +467,16 @@ private struct HomebrewPackageRow: View {
                 Image(systemName: package.kind == .cask ? "app.fill" : "terminal.fill")
                     .foregroundStyle(accent)
             }
-            .frame(width: 38, height: 38)
+            .frame(width: UIScale.pt(38), height: UIScale.pt(38))
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Text(package.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                         .lineLimit(1)
                     if package.outdated {
                         Text("UPDATE")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: UIScale.pt(8), weight: .bold))
                             .foregroundStyle(.orange)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -484,11 +484,11 @@ private struct HomebrewPackageRow: View {
                     }
                 }
                 Text(package.description ?? package.name)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 Text(package.versionSummary)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 8)
@@ -519,18 +519,18 @@ private struct HomebrewMetric: View {
         HomebrewCard {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.system(size: UIScale.pt(20)))
                     .foregroundStyle(accent)
-                    .frame(width: 32)
+                    .frame(width: UIScale.pt(32))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
                     Text(value)
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .font(.system(size: UIScale.pt(20), weight: .semibold, design: .rounded))
                     Text(detail)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }

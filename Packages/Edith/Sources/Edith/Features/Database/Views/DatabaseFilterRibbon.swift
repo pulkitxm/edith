@@ -31,7 +31,7 @@ struct DatabaseFilterRibbon: View {
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(palette.line.opacity(0.72))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
         }
     }
 
@@ -358,7 +358,7 @@ struct DatabaseFilterRibbon: View {
     private var ribbonSeparator: some View {
         Rectangle()
             .fill(palette.line.opacity(0.72))
-            .frame(width: 1, height: UIScale.pt(18))
+            .frame(width: UIScale.pt(1), height: UIScale.pt(18))
     }
 
     private func railControlLabel(_ title: String, systemImage: String) -> some View {

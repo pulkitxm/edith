@@ -362,7 +362,7 @@ struct HerdrPage: View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
             HStack(spacing: UIScale.pt(8)) {
                 railToggle
                     .padding(.leading, PageMetrics.gutter(compact))
@@ -385,7 +385,7 @@ struct HerdrPage: View {
             }
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
         }
         .herdrDropFrame(HerdrDropGeometry.tabBarKey)
         .background(DashSkin.paper2(dark).opacity(0.4))

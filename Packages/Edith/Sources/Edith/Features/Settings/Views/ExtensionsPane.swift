@@ -609,7 +609,7 @@ private struct ExtensionSettingsSheet: View {
             Text(lidAwakeErrorMessage ?? "")
         }
         .frame(
-            minWidth: UIScale.pt(520), idealWidth: 560, maxWidth: UIScale.pt(560),
+            minWidth: UIScale.pt(520), idealWidth: UIScale.pt(560), maxWidth: UIScale.pt(560),
             minHeight: UIScale.pt(260),
             idealHeight: idealHeight, maxHeight: UIScale.pt(620))
     }

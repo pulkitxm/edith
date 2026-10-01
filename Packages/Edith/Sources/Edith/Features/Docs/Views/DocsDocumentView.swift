@@ -141,7 +141,7 @@ struct DocsBlockView: View {
         case .rule:
             Rectangle()
                 .fill(DashSkin.line(dark))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
                 .padding(.vertical, UIScale.pt(6))
         }
     }
@@ -170,7 +170,7 @@ private struct DocsHeadingView: View {
             )
             .padding(.horizontal, UIScale.pt(-8))
             if heading.level == 2 {
-                Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+                Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             }
         }
         .padding(.top, UIScale.pt(heading.level == 1 ? 0 : heading.level == 2 ? 18 : 8))
@@ -301,7 +301,7 @@ private struct DocsCodeBlock: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(6))
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             ScrollView(.horizontal) {
                 Text(highlighted ?? AttributedString(text))
                     .font(DashSkin.mono(12))
@@ -431,7 +431,7 @@ private struct DocsTableView: View {
             row(table.header, widths: widths, header: true)
                 .background(DashSkin.ink(dark).opacity(dark ? 0.07 : 0.04))
             ForEach(Array(table.rows.enumerated()), id: \.offset) { index, cells in
-                Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+                Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
                 row(cells, widths: widths, header: false)
                     .background(DashSkin.ink(dark).opacity(index.isMultiple(of: 2) ? 0 : 0.018))
             }
@@ -471,7 +471,9 @@ private struct DocsTableView: View {
                 )
                 .frame(maxHeight: .infinity, alignment: .top)
                 .overlay(alignment: .leading) {
-                    if column > 0 { Rectangle().fill(DashSkin.line(dark)).frame(width: 1) }
+                    if column > 0 {
+                        Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                    }
                 }
             }
         }

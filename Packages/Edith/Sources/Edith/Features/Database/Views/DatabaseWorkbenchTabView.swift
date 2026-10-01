@@ -279,7 +279,7 @@ struct DatabaseWorkbenchTabView: View {
                 data.browse(connection)
             }, resizeColumn: { columns.setWidth($1, for: $0) },
             contentRevision: data.recordsRevision, appendedFrom: data.recordsAppendedFrom,
-            editingEnabled: editingEnabled, isActive: isActive,
+            editingEnabled: editingEnabled, isActive: isActive, scale: UIScale.current,
             scrollOffset: tab?.scrollOffset ?? .zero,
             saveScrollOffset: { [tab] in tab?.scrollOffset = $0 })
     }

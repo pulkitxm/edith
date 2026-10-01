@@ -42,7 +42,7 @@ struct AgentEventRow: View {
                 )
                 .font(.system(size: event.level == .info ? 6 : 11))
                 .foregroundStyle(color)
-                .frame(width: 12)
+                .frame(width: UIScale.pt(12))
                 Text(event.date, format: .dateTime.hour().minute().second())
                     .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(.secondary)

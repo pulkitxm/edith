@@ -558,7 +558,7 @@ struct StudioPDFStyleControls: View {
                 Text("Line").font(.system(size: UIScale.pt(11)))
                 Slider(value: $style.lineWidth, in: 0.5...12, step: 0.5)
                 Text(String(format: "%.1f", style.lineWidth)).font(DashSkin.mono(10)).frame(
-                    width: 30)
+                    width: UIScale.pt(30))
             }
             Toggle(
                 "Fill shapes",
@@ -577,7 +577,8 @@ struct StudioPDFStyleControls: View {
                 HStack {
                     Text("Size").font(.system(size: UIScale.pt(11)))
                     Slider(value: $style.fontSize, in: 6...72, step: 1)
-                    Text("\(Int(style.fontSize))").font(DashSkin.mono(10)).frame(width: 30)
+                    Text("\(Int(style.fontSize))").font(DashSkin.mono(10)).frame(
+                        width: UIScale.pt(30))
                 }
             }
         }

@@ -3,6 +3,7 @@ import AppKit
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
+import EdithKit
 
 @MainActor @Observable
 final class VideoBeatPanelState {
@@ -156,7 +157,7 @@ struct VideoBeatPanel: View {
                     systemImage: "waveform",
                     description: Text("Measured peaks and detected transients appear here.")
                 )
-                .frame(height: 130)
+                .frame(height: UIScale.pt(130))
             }
             if let error = analysis.error {
                 Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
@@ -166,7 +167,7 @@ struct VideoBeatPanel: View {
             markerList
         }
         .padding(24)
-        .frame(width: 820, height: 720)
+        .frame(width: UIScale.pt(820), height: UIScale.pt(720))
         .onAppear {
             selectedAssetID = assets.first?.id ?? ""
             mapping.outputStart = model.playhead
@@ -207,13 +208,13 @@ struct VideoBeatPanel: View {
             }
             HStack {
                 Text("Sensitivity")
-                Slider(value: $sensitivity, in: 0...1).frame(width: 140)
+                Slider(value: $sensitivity, in: 0...1).frame(width: UIScale.pt(140))
                 Text(sensitivity.formatted(.percent.precision(.fractionLength(0))))
-                    .monospacedDigit().frame(width: 40)
+                    .monospacedDigit().frame(width: UIScale.pt(40))
                 Spacer()
                 Text("Minimum spacing (s)")
                 TextField("Minimum spacing", value: $spacing, format: .number)
-                    .frame(width: 65).textFieldStyle(.roundedBorder)
+                    .frame(width: UIScale.pt(65)).textFieldStyle(.roundedBorder)
             }
             .font(.caption)
         }
@@ -230,7 +231,7 @@ struct VideoBeatPanel: View {
                 guard output.isFinite else { return }
                 model.seek(to: output)
             }
-            .frame(height: 100)
+            .frame(height: UIScale.pt(100))
             HStack {
                 Text("Source 0.000s")
                 Spacer()
@@ -334,7 +335,7 @@ struct VideoBeatPanel: View {
             }
             HStack {
                 TextField("Marker label", text: $markerLabel).textFieldStyle(.roundedBorder)
-                    .frame(width: 140)
+                    .frame(width: UIScale.pt(140))
                 Button("Add at playhead") {
                     edit { project in
                         try project.addMarker(
@@ -423,7 +424,7 @@ private struct VideoBeatMarkerRow: View {
                 .foregroundStyle(marker.kind == .transient ? .orange : .secondary)
             TextField("Label", text: $label).textFieldStyle(.roundedBorder)
             TextField("Output frame", value: $frame, format: .number.grouping(.never))
-                .frame(width: 80).textFieldStyle(.roundedBorder)
+                .frame(width: UIScale.pt(80)).textFieldStyle(.roundedBorder)
                 .help("Output frame at the marker's saved frame rate")
             Button(marker.timecode, action: seek)
                 .font(.caption.monospacedDigit()).buttonStyle(.link)

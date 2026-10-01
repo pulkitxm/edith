@@ -1,0 +1,5 @@
+Packages/Edith/Sources/Edith/Core/Windows/WindowVisibility.swift	.frame(width: 0, height: 0)
+Packages/Edith/Sources/Edith/Features/Machines/Services/MachineViewActivity.swift	.frame(width: 0, height: 0)
+Packages/Edith/Sources/Edith/Features/Machines/Views/FinderWindow.swift	.frame(width: 1, height: 1)
+Packages/Edith/Sources/Edith/Features/Pages/Views/MusicPageView.swift	.frame(width: 0, height: 0)
+Packages/Edith/Sources/Edith/Features/Dashboard/Views/UsageShareSheet.swift	.frame(width: 0, height: 0)

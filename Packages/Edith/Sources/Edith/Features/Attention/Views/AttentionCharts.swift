@@ -398,7 +398,7 @@ struct AttentionWeekHeatmap: View {
                 }
             }
             HStack(spacing: UIScale.pt(3)) {
-                Color.clear.frame(width: UIScale.pt(28), height: 1)
+                Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(1))
                 ForEach(0..<24, id: \.self) { hour in
                     Text(hour % 3 == 0 ? String(format: "%02d", hour) : "")
                         .font(.system(size: UIScale.pt(8.5)))

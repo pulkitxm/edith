@@ -73,8 +73,10 @@ struct DatabaseSafetyReviewSheet: View {
             }
         }
         .frame(
-            minWidth: DatabaseSafetyReviewLayout.minimumSheetWidth, idealWidth: 780,
-            minHeight: DatabaseSafetyReviewLayout.minimumSheetHeight, idealHeight: 720
+            minWidth: UIScale.pt(DatabaseSafetyReviewLayout.minimumSheetWidth),
+            idealWidth: UIScale.pt(780),
+            minHeight: UIScale.pt(DatabaseSafetyReviewLayout.minimumSheetHeight),
+            idealHeight: UIScale.pt(720)
         )
         .background(palette.canvas)
         .interactiveDismissDisabled(activePhase.blocksInteractiveDismissal)

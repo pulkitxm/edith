@@ -262,10 +262,14 @@ final class TerminalSessionHolder {
         queuedGhosttyInput = ""
     }
 
-    func applyTheme(_ palette: TerminalPalette) {
-        guard palette != appliedPalette else { return }
+    private var appliedFontSize = 0.0
+
+    func applyTheme(_ palette: TerminalPalette, scale: Double = 1) {
+        let fontSize = 12.5 * scale
+        guard palette != appliedPalette || abs(fontSize - appliedFontSize) > 0.01 else { return }
         TerminalFontRegistry.register()
         appliedPalette = palette
+        appliedFontSize = fontSize
         themeApplicationCount += 1
         terminalView.configureNativeColors()
         terminalView.nativeBackgroundColor = palette.background
@@ -275,7 +279,7 @@ final class TerminalSessionHolder {
         terminalView.selectedTextForegroundColor = palette.selectionForeground
         terminalView.terminal.ansi256PaletteStrategy = .base16LabHarmonious
         terminalView.installColors(palette.ansi.map(Self.swiftTermColor))
-        terminalView.font = TerminalFontRegistry.monospacedFont(ofSize: 12.5)
+        terminalView.font = TerminalFontRegistry.monospacedFont(ofSize: fontSize)
     }
 
     private static func swiftTermColor(_ color: NSColor) -> SwiftTerm.Color {
@@ -563,7 +567,7 @@ struct TerminalPane: View {
         } else {
             SwiftTermPane(
                 holder: holder, palette: palette, active: active, wantsFocus: wantsFocus,
-                onDropFiles: onDropFiles
+                scale: UIScale.current, onDropFiles: onDropFiles
             )
             .id(holder.generation)
         }
@@ -575,10 +579,11 @@ struct SwiftTermPane: NSViewRepresentable {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var scale = 1.0
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     func makeNSView(context: Context) -> EdithTerminalView {
-        holder.applyTheme(palette)
+        holder.applyTheme(palette, scale: scale)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         let view = holder.terminalView
         view.onDropFiles = onDropFiles
@@ -587,7 +592,7 @@ struct SwiftTermPane: NSViewRepresentable {
     }
 
     func updateNSView(_ view: EdithTerminalView, context: Context) {
-        holder.applyTheme(palette)
+        holder.applyTheme(palette, scale: scale)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         view.onDropFiles = onDropFiles
     }

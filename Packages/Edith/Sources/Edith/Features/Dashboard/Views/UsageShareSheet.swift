@@ -39,7 +39,7 @@ struct UsageShareSheet: View {
         }
         .padding(.horizontal, 40)
         .padding(.vertical, 42)
-        .frame(width: 820, height: 610)
+        .frame(width: UIScale.pt(820), height: UIScale.pt(610))
         .background(sheetBackground)
         .overlay { escapeShortcut }
         .overlay(alignment: .bottomTrailing) { statusToast }
@@ -87,7 +87,7 @@ struct UsageShareSheet: View {
                     .accessibilityLabel("Preparing your cards")
                 }
             }
-            .frame(width: 600, height: 400)
+            .frame(width: UIScale.pt(600), height: UIScale.pt(400))
             .clipped()
             .shadow(color: .black.opacity(0.17), radius: 24, y: 14)
             .gesture(
@@ -118,7 +118,7 @@ struct UsageShareSheet: View {
                             width: item.offset == index ? 7 : 6,
                             height: item.offset == index ? 7 : 6
                         )
-                        .frame(width: 11, height: 11)
+                        .frame(width: UIScale.pt(11), height: UIScale.pt(11))
                 }
                 .buttonStyle(.edith(.borderless))
                 .help(item.element.title)
@@ -137,10 +137,10 @@ struct UsageShareSheet: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: UIScale.pt(14), weight: .medium))
                 .foregroundStyle(actionForeground)
                 .padding(.horizontal, 16)
-                .frame(height: 42)
+                .frame(height: UIScale.pt(42))
                 .background(modalInk, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(SharePressedButtonStyle())
@@ -148,9 +148,9 @@ struct UsageShareSheet: View {
             .help("Copy image (⌘C)")
             Button(action: downloadImage) {
                 Image(systemName: "arrow.down.to.line")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: UIScale.pt(16), weight: .semibold))
                     .foregroundStyle(actionForeground)
-                    .frame(width: 42, height: 42)
+                    .frame(width: UIScale.pt(42), height: UIScale.pt(42))
                     .background(modalInk, in: Circle())
             }
             .buttonStyle(SharePressedButtonStyle())
@@ -175,10 +175,10 @@ struct UsageShareSheet: View {
     @ViewBuilder private var statusToast: some View {
         if let status {
             Label(status.message, systemImage: status.systemImage)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: UIScale.pt(12), weight: .medium))
                 .foregroundStyle(status.error ? Color.white : actionForeground)
                 .padding(.horizontal, 14)
-                .frame(height: 36)
+                .frame(height: UIScale.pt(36))
                 .background(
                     status.error ? Color.red.opacity(0.92) : modalInk,
                     in: RoundedRectangle(cornerRadius: 7)
@@ -291,9 +291,9 @@ private struct ShareCarouselArrow: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: UIScale.pt(20), weight: .medium))
                 .foregroundStyle(color.opacity(0.88))
-                .frame(width: 48, height: 52)
+                .frame(width: UIScale.pt(48), height: UIScale.pt(52))
                 .background(
                     color.opacity(hovering ? 0.065 : 0),
                     in: RoundedRectangle(cornerRadius: 9, style: .continuous))

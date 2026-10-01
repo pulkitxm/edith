@@ -69,3 +69,9 @@ public enum WindowZoom {
         }
     }
 }
+
+public enum WindowZoomDispatch {
+    public static func consumes(_ command: WindowKeyCommand, terminalFocused: Bool) -> Bool {
+        WindowZoom.adjusted(1, for: command) != nil && !terminalFocused
+    }
+}
