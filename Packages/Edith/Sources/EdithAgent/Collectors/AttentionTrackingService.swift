@@ -189,22 +189,25 @@ final class AttentionTrackingService {
         guard settings.isEnabled, settings.trackingEnabled,
             let app = NSWorkspace.shared.frontmostApplication
         else { return nil }
+        let identity = FrontmostIdentityLookup.identity(pid: app.processIdentifier) {
+            (name: app.localizedName ?? "Unknown", bundleID: app.bundleIdentifier)
+        }
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
-        let away = app.bundleIdentifier.map(AttentionCatalog.awayBundleIDs.contains) ?? false
+        let away = identity.bundleID.map(AttentionCatalog.awayBundleIDs.contains) ?? false
         let presence: AttentionPresence =
             locked || away ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
-        let context = AttentionContextBoard.shared.context(for: app.bundleIdentifier, now: now)
+        let context = AttentionContextBoard.shared.context(for: identity.bundleID, now: now)
         let contextTitle = settings.windowTitlesEnabled ? context?.windowTitle : nil
         return AttentionHeartbeatSample(
             event: AttentionEvent(
                 startedAt: now, duration: 0, source: .application,
-                presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier,
+                presence: presence, appName: identity.name, bundleID: identity.bundleID,
                 windowTitle: contextTitle,
                 tags: AttentionTag.filtered(
                     context?.tags, privacyLevel: settings.privacyLevel,
                     allowed: AttentionTag.edithSafe)),
-            processID: app.processIdentifier,
+            processID: identity.pid,
             captureWindowTitle: settings.windowTitlesEnabled && contextTitle == nil,
             counters: AttentionInputCounters.read())
     }
