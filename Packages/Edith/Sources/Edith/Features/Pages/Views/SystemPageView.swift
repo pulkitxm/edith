@@ -29,6 +29,7 @@ struct SystemPage: View {
                     }
                 }
                 .pageContent(compact)
+                .background(ScrollPauseMonitor { model.setScrolling($0) })
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,7 +50,7 @@ struct SystemPage: View {
         }
         .task(id: windowVisible) {
             while windowVisible, !Task.isCancelled {
-                await model.refresh()
+                if !model.scrolling { await model.refresh() }
                 try? await Task.sleep(for: .seconds(2), tolerance: .milliseconds(500))
             }
         }
@@ -186,12 +187,14 @@ struct SystemPage: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, UIScale.pt(24))
             }
-            ForEach(model.apps) { app in
-                SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
-                    pendingQuit = app
-                }
-                if app.id != model.apps.last?.id {
-                    Divider().opacity(0.3)
+            LazyVStack(spacing: UIScale.pt(0)) {
+                ForEach(model.apps) { app in
+                    SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
+                        pendingQuit = app
+                    }
+                    if app.id != model.apps.last?.id {
+                        Divider().opacity(0.3)
+                    }
                 }
             }
         }
@@ -256,6 +259,50 @@ private struct SystemAppRowsSkeleton: View {
             }
         }
         .accessibilityLabel("Reading running apps")
+    }
+}
+
+private struct ScrollPauseMonitor: NSViewRepresentable {
+    var onChange: @MainActor (Bool) -> Void
+
+    func makeNSView(context: Context) -> Monitor {
+        Monitor(onChange: onChange)
+    }
+
+    func updateNSView(_ view: Monitor, context: Context) {
+        view.onChange = onChange
+    }
+
+    final class Monitor: NSView {
+        var onChange: @MainActor (Bool) -> Void
+        private var observers: [NSObjectProtocol] = []
+
+        init(onChange: @escaping @MainActor (Bool) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            for observer in observers { NotificationCenter.default.removeObserver(observer) }
+            observers = []
+            guard let scroll = enclosingScrollView else { return }
+            let center = NotificationCenter.default
+            observers.append(
+                center.addObserver(
+                    forName: NSScrollView.didLiveScrollNotification, object: scroll, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.onChange(true) }
+                })
+            observers.append(
+                center.addObserver(
+                    forName: NSScrollView.didEndLiveScrollNotification, object: scroll, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.onChange(false) }
+                })
+        }
     }
 }
 
