@@ -3,9 +3,7 @@ import Foundation
 import GRDB
 
 enum AgentEventJournal {
-    private static let pruneLock = NSLock()
-    private static var insertsSincePrune = 0
-    private static let pruneInterval = 50
+    private static let pruneInterval: Int64 = 50
 
     static func load(store: AgentStore?) -> [AgentEvent] {
         guard let store else { return [] }
@@ -27,18 +25,12 @@ enum AgentEventJournal {
             logFailure(error)
             return
         }
-        let prune = pruneLock.withLock {
-            insertsSincePrune += 1
-            if insertsSincePrune >= pruneInterval {
-                insertsSincePrune = 0
-                return true
-            }
-            return false
-        }
         store.asyncWrite { database in
             try database.execute(
                 sql: "INSERT INTO agent_event (payload) VALUES (?)", arguments: [payload])
-            if prune { try deleteOverflow(database) }
+            if database.lastInsertedRowID % Self.pruneInterval == 0 {
+                try deleteOverflow(database)
+            }
         } failed: { error in
             logFailure(error)
         }

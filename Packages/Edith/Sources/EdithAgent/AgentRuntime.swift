@@ -25,6 +25,9 @@ public actor AgentRuntime {
     private var busSubscribers: [UUID: Set<String>] = [:]
     private var busDemandObserver: (@Sendable (String, Int) async -> Void)?
     private var events: [AgentEvent] = []
+    private var firstEventSequence: UInt64 = 1
+    private var eventCursor = 0
+    private var eventDrops = 0
     public private(set) var isShuttingDown = false
     private var shutdownHandlers: [String: @Sendable () async -> Void] = [:]
     private var shutdownTasks: [String: Task<Void, Never>] = [:]
@@ -120,7 +123,11 @@ public actor AgentRuntime {
     public func record(_ event: AgentEvent) {
         events.append(event)
         if events.count > AgentDiagnostics.capacity {
-            events.removeFirst(events.count - AgentDiagnostics.capacity)
+            let trimmed = events.count - AgentDiagnostics.capacity
+            events.removeFirst(trimmed)
+            firstEventSequence += UInt64(trimmed)
+            eventCursor = max(0, eventCursor - trimmed)
+            eventDrops += trimmed
         }
         AgentEventJournal.append(event, store: store)
         AgentLog.logger.info(
@@ -147,9 +154,9 @@ public actor AgentRuntime {
         repeat {
             eventsNeedPublish = false
             guard subscribers.values.contains(where: { $0.topics.contains(.events) }) else { break }
-            let snapshot = events
+            guard let delta = takeEventDelta() else { continue }
             let payload = await Task.detached(priority: .utility) {
-                try? AgentPayload.encode(snapshot)
+                try? AgentPayload.encode(delta)
             }.value
             if let payload {
                 eventLogEncodes += 1
@@ -158,6 +165,22 @@ public actor AgentRuntime {
         } while eventsNeedPublish
         eventPublishTask = nil
         if eventsNeedPublish { scheduleEventPublish() }
+    }
+
+    private var eventThrough: UInt64 {
+        guard !events.isEmpty else { return 0 }
+        return firstEventSequence + UInt64(events.count) - 1
+    }
+
+    private func takeEventDelta() -> AgentEventDelta? {
+        let start = min(eventCursor, events.count)
+        let appended = Array(events[start...])
+        let dropped = eventDrops
+        let through = eventThrough
+        eventCursor = events.count
+        eventDrops = 0
+        guard dropped > 0 || !appended.isEmpty else { return nil }
+        return AgentEventDelta(dropped: dropped, appended: appended, through: through, reset: false)
     }
 
     public func setBusDemandObserver(
@@ -242,6 +265,19 @@ public actor AgentRuntime {
     }
 
     private func deliverSnapshot(peer: UUID, topic: AgentTopic) async {
+        if topic == .events {
+            let through = eventThrough
+            let snapshot = events
+            let payload = await Task.detached(priority: .utility) {
+                try? AgentPayload.encode(
+                    AgentEventDelta(dropped: 0, appended: snapshot, through: through, reset: true))
+            }.value
+            guard let payload, let subscriber = subscribers[peer],
+                subscriber.topics.contains(topic)
+            else { return }
+            subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
+            return
+        }
         guard let payload = try? await snapshot(topic: topic),
             let subscriber = subscribers[peer], subscriber.topics.contains(topic)
         else { return }
