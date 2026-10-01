@@ -5,10 +5,15 @@ import Foundation
 struct AppsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "apps",
-        abstract: "The applications running on this Mac.",
+        abstract: "List and quit the applications running on this Mac.",
         discussion: """
             Listing samples the process table and needs nothing. Quitting asks the Edith
             app to do it, waits for its result, and exits 4 when Edith is closed or silent.
+            Reads the process table. Quitting changes running apps only after --yes, and
+            does not change anything before that.
+
+            ed apps ls
+            ed apps quit Safari --yes
             """,
         subcommands: [AppsListCommand.self, AppsQuitCommand.self],
         defaultSubcommand: AppsListCommand.self)
@@ -124,7 +129,17 @@ enum AppsCLI {
 
 struct AppsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the apps with a window open.", aliases: ["list"])
+        commandName: "ls",
+        abstract: "List the apps with a window open.",
+        discussion: """
+            List apps that have a window, with pid, CPU, memory, and bundle id.
+            Reads the process table twice, a moment apart, to measure CPU. Does not change
+            which apps are running.
+
+            ed apps ls
+            ed apps ls --json
+            """,
+        aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -152,7 +167,16 @@ struct AppsListCommand: AsyncParsableCommand {
 struct AppsQuitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quit",
-        abstract: "Quit one app, or everything except Finder and Edith.")
+        abstract: "Quit one app, or everything except Finder and Edith.",
+        discussion: """
+            Resolve a running app by name or bundle id, or take every app except Finder
+            and Edith. Reads the process table. Without --yes, prints the plan and does
+            not change anything. With --yes, asks the menu bar app to quit those apps.
+
+            ed apps quit Safari
+            ed apps quit Safari --yes
+            ed apps quit --all --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

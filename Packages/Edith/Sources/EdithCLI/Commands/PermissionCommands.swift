@@ -11,6 +11,11 @@ struct PermissionsCommand: AsyncParsableCommand {
             what the Edith app itself last observed and mirrored into its preferences.
             `ed permissions refresh` asks the running app to re-read the real state
             first; `ed permissions request` asks it to raise the system prompt.
+
+            Reads the mirrored permission state. request and refresh ask the running app to change prompts or the mirror. ls and settings do not change grants.
+
+            ed permissions ls
+            ed permissions request calendar
             """,
         subcommands: [
             PermissionsListCommand.self, PermissionsRequestCommand.self,
@@ -65,6 +70,13 @@ enum PermissionLookup {
 struct PermissionsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List permissions as Edith last observed them.",
+        discussion: """
+            List macOS permissions as the app last mirrored them.
+            Reads the mirrored preference state. Does not change TCC and does not prompt.
+
+            ed permissions ls
+            ed permissions ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -97,7 +109,14 @@ struct PermissionsListCommand: AsyncParsableCommand {
 
 struct PermissionsRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "request", abstract: "Ask the running app to request a permission.")
+        commandName: "request", abstract: "Ask the running app to request a permission.",
+        discussion: """
+            Ask the running app to raise the system prompt for one permission.
+            Reads the permission name. Changes TCC only if you grant the prompt. Exits 4 when the app is not running.
+
+            ed permissions request calendar
+            ed permissions request screenRecording --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -144,7 +163,14 @@ struct PermissionsRequestCommand: AsyncParsableCommand {
 
 struct PermissionsRefreshCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "refresh", abstract: "Ask the running app to re-read the real TCC state.")
+        commandName: "refresh", abstract: "Ask the running app to re-read the real TCC state.",
+        discussion: """
+            Ask the running app to re-read TCC and refresh the mirror.
+            Reads the live TCC state through the app. Changes the mirrored preferences to match.
+
+            ed permissions refresh
+            ed permissions refresh --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -169,7 +195,14 @@ struct PermissionsRefreshCommand: AsyncParsableCommand {
 
 struct PermissionsSettingsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "settings", abstract: "Open System Settings for a permission.")
+        commandName: "settings", abstract: "Open System Settings for a permission.",
+        discussion: """
+            Open the System Settings pane for one permission.
+            Reads the permission id. Does not change the grant. Opens System Settings.
+
+            ed permissions settings screenRecording
+            ed permissions settings calendar --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

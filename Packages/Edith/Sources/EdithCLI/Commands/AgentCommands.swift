@@ -67,6 +67,13 @@ struct AgentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agent",
         abstract: "Inspect and control the Edith background agent.",
+        discussion: """
+            Inspect the headless LaunchAgent and run or cancel its jobs.
+            Reads launchd registration, the job table, logs, and events. restart, run, and cancel change the agent. status, jobs, logs, and events do not change anything.
+
+            ed agent status
+            ed agent logs --last 10m
+            """,
         subcommands: [
             AgentStatusCommand.self, AgentJobsCommand.self, AgentRestartCommand.self,
             AgentLogsCommand.self,
@@ -78,7 +85,14 @@ struct AgentCommand: AsyncParsableCommand {
 
 struct AgentStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Show whether the background agent is running.")
+        commandName: "status", abstract: "Show whether the background agent is running.",
+        discussion: """
+            Show registration, build, uptime, memory, and store schema.
+            Reads the agent snapshot. Does not change the process.
+
+            ed agent status
+            ed agent status --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -114,7 +128,14 @@ struct AgentStatusCommand: AsyncParsableCommand {
 
 struct AgentJobsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "jobs", abstract: "List the jobs the background agent runs.")
+        commandName: "jobs", abstract: "List the jobs the background agent runs.",
+        discussion: """
+            List the live job table with cadences and subscribers.
+            Reads the agent's job table. Does not change schedules.
+
+            ed agent jobs
+            ed agent jobs --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -142,7 +163,14 @@ struct AgentJobsCommand: AsyncParsableCommand {
 
 struct AgentRestartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Ask launchd to restart the background agent.")
+        commandName: "restart", abstract: "Ask launchd to restart the background agent.",
+        discussion: """
+            Stop the agent so launchd starts a fresh one.
+            Reads the current registration. Changes the running agent by restarting it.
+
+            ed agent restart
+            ed agent restart --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -165,7 +193,14 @@ struct AgentRestartCommand: AsyncParsableCommand {
 
 struct AgentLogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "logs", abstract: "Print recent background agent log lines.")
+        commandName: "logs", abstract: "Print recent background agent log lines.",
+        discussion: """
+            Print recent lines from the agent's log subsystem.
+            Reads unified logs. Does not change the agent. --last limits the window, as in 10m.
+
+            ed agent logs --last 10m
+            ed agent logs --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -192,7 +227,14 @@ struct AgentLogsCommand: AsyncParsableCommand {
 
 struct AgentEventsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "events", abstract: "Read the daemon's retained event timeline.")
+        commandName: "events", abstract: "Read the daemon's retained event timeline.",
+        discussion: """
+            Read the events the daemon kept.
+            Reads the event timeline. Does not change it.
+
+            ed agent events
+            ed agent events --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -216,7 +258,14 @@ struct AgentEventsCommand: AsyncParsableCommand {
 
 struct AgentRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "run", abstract: "Queue a registered background job immediately.")
+        commandName: "run", abstract: "Queue a registered background job immediately.",
+        discussion: """
+            Run one registered job now instead of waiting for its cadence.
+            Reads the job name from the job table. Changes the queue by starting that job.
+
+            ed agent run usage-refresh
+            ed agent run usage-refresh --json
+            """)
 
     @Argument(help: "Job identifier from ed agent jobs.")
     var job: String
@@ -239,7 +288,14 @@ struct AgentRunCommand: AsyncParsableCommand {
 
 struct AgentCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "cancel", abstract: "Cancel a running background job.")
+        commandName: "cancel", abstract: "Cancel a running background job.",
+        discussion: """
+            Cancel one running background job by name.
+            Reads the live job table. Changes that job by cancelling it.
+
+            ed agent cancel usage-refresh
+            ed agent cancel usage-refresh --json
+            """)
 
     @Argument(help: "Job identifier from ed agent jobs.")
     var job: String

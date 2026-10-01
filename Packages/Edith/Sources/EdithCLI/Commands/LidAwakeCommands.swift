@@ -6,6 +6,14 @@ struct LidAwakeCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "lid-awake",
         abstract: "Keep the Mac running with its lid closed.",
+        discussion: """
+            Turn closed-lid mode on or off, and read its session, battery floor, and helper.
+            Reads and changes power state through the running app. status does not change it.
+            on previews until --yes.
+
+            ed lid-awake status
+            ed lid-awake on --for 30m --yes
+            """,
         subcommands: [
             LidAwakeStatusCommand.self, LidAwakeOnCommand.self, LidAwakeOffCommand.self,
             LidAwakeBatteryCommand.self, LidAwakeRestoreOnQuitCommand.self,
@@ -149,7 +157,15 @@ enum LidAwakeCLI {
 
 struct LidAwakeStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: LidAwakeOperation.status.descriptor.summary)
+        commandName: "status",
+        abstract: LidAwakeOperation.status.descriptor.summary,
+        discussion: """
+            Show closed-lid state, the session, the battery floor, and whether the helper is up.
+            Reads Lid Awake through the running app. Does not change power state.
+
+            ed lid-awake status
+            ed lid-awake status --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -168,7 +184,16 @@ struct LidAwakeStatusCommand: AsyncParsableCommand {
 
 struct LidAwakeOnCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "on", abstract: LidAwakeOperation.on.descriptor.summary, aliases: ["start"])
+        commandName: "on",
+        abstract: LidAwakeOperation.on.descriptor.summary,
+        discussion: """
+            Keep the Mac awake with the lid closed, for 15m, 30m, 1h, 2h, or until the lid reopens.
+            Reads whether the extension can run. Without --yes, prints the plan and does not change power. With --yes, changes the power assertion.
+
+            ed lid-awake on
+            ed lid-awake on --for 30m --yes
+            """,
+        aliases: ["start"])
 
     @Option(name: .customLong("for"), help: "Stop after 15m, 30m, 1h or 2h.")
     var duration: String?
@@ -207,7 +232,16 @@ struct LidAwakeOnCommand: AsyncParsableCommand {
 
 struct LidAwakeOffCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "off", abstract: LidAwakeOperation.off.descriptor.summary, aliases: ["stop"])
+        commandName: "off",
+        abstract: LidAwakeOperation.off.descriptor.summary,
+        discussion: """
+            Stop closed-lid mode and release the power assertion.
+            Reads the current session through the running app. Changes power state by turning it off.
+
+            ed lid-awake off
+            ed lid-awake off --json
+            """,
+        aliases: ["stop"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -226,7 +260,15 @@ struct LidAwakeOffCommand: AsyncParsableCommand {
 
 struct LidAwakeBatteryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "battery", abstract: LidAwakeOperation.battery.descriptor.summary)
+        commandName: "battery",
+        abstract: LidAwakeOperation.battery.descriptor.summary,
+        discussion: """
+            Set the battery percent that pauses Lid Awake, or off to disable the floor.
+            Reads the requested percent. Changes the stored battery threshold.
+
+            ed lid-awake battery 20
+            ed lid-awake battery off --json
+            """)
 
     @Argument(help: "A percentage from 1 to 100, or off.")
     var threshold: String
@@ -254,7 +296,14 @@ struct LidAwakeBatteryCommand: AsyncParsableCommand {
 struct LidAwakeRestoreOnQuitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "restore-on-quit",
-        abstract: LidAwakeOperation.restoreOnQuit.descriptor.summary)
+        abstract: LidAwakeOperation.restoreOnQuit.descriptor.summary,
+        discussion: """
+            Choose whether quitting Edith restores the previous power state.
+            Reads true or false. Without --yes, prints the plan and does not change the policy. With --yes, changes the stored policy.
+
+            ed lid-awake restore-on-quit true
+            ed lid-awake restore-on-quit false --yes
+            """)
 
     @Argument(help: "true or false.")
     var enabled: String

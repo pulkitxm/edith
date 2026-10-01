@@ -5,14 +5,32 @@ import Foundation
 struct SystemCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "system",
-        abstract: "Metrics for this Mac.",
+        abstract: "Read CPU, memory, disk, and network metrics for this Mac.",
+        discussion: """
+            Sample this Mac locally. Reads host, CPU, memory, load, network, and volumes.
+            Does not change system settings.
+
+            ed system stats
+            ed system disks --json
+            """,
         subcommands: [SystemStatsCommand.self, SystemDisksCommand.self],
         defaultSubcommand: SystemStatsCommand.self)
 }
 
 struct SystemStatsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stats", abstract: "Sample CPU, memory, load and network for this Mac.")
+        commandName: "stats",
+        abstract: "Sample CPU, memory, load and network for this Mac.",
+        discussion: """
+            Take one sample of this Mac, or keep sampling with --follow. Reads the local
+            sampler. Does not change power, network, or processes. --processes adds the
+            busiest processes to each sample. With --json --follow, each sample is one
+            compact JSON line.
+
+            ed system stats
+            ed system stats --follow --interval 2 --processes 5
+            ed system stats --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -79,7 +97,15 @@ struct SystemStatsCommand: AsyncParsableCommand {
 
 struct SystemDisksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "disks", abstract: "Mounted volumes and their free space.")
+        commandName: "disks",
+        abstract: "List mounted volumes and their free space.",
+        discussion: """
+            List mounted volumes with size, free space, and used percent. Reads the local
+            disk sampler. Does not change mounts.
+
+            ed system disks
+            ed system disks --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

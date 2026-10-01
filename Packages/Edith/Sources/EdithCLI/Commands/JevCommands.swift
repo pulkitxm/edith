@@ -5,7 +5,14 @@ import Foundation
 struct JevCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "jev",
-        abstract: "The TypeSafe Jev decision model behind Edith's smart features.",
+        abstract: "Query the TypeSafe Jev decision model from the terminal.",
+        discussion: """
+            Use the TypeSafe Jev decision model behind Edith's smart features.
+            Reads the saved key and, with --probe, the Jev API. key set and key clear change the Keychain. status and ask do not store a new key.
+
+            ed jev status
+            ed jev ask --request req.json
+            """,
         subcommands: [JevStatusCommand.self, JevKeyCommand.self, JevAskCommand.self],
         defaultSubcommand: JevStatusCommand.self)
 }
@@ -71,7 +78,14 @@ struct JevStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
         abstract:
-            "Show whether a Jev key is set, which models it reaches and whether it has credits.")
+            "Show whether a Jev key is set, which models it reaches and whether it has credits.",
+        discussion: """
+            Show whether a key is saved, and with --probe the models, credits, and latency.
+            Reads the Keychain and, when probing, the Jev API. Does not change the key.
+
+            ed jev status
+            ed jev status --probe --json
+            """)
 
     @Flag(name: .long, help: "Send one tiny decision to confirm the key works and has credits.")
     var probe = false
@@ -101,14 +115,28 @@ struct JevStatusCommand: AsyncParsableCommand {
 struct JevKeyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "key", abstract: "Set or remove the TypeSafe API key Edith uses for Jev.",
+        discussion: """
+            Show, set, or clear the TypeSafe API key Edith uses for Jev.
+            Reads key presence. set writes the Keychain from stdin. clear removes it after --yes.
+
+            ed jev key show
+            printf %s "$KEY" | ed jev key set
+            """,
         subcommands: [JevKeyShowCommand.self, JevKeySetCommand.self, JevKeyClearCommand.self],
         defaultSubcommand: JevKeyShowCommand.self)
 }
 
 struct JevKeyShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "Show whether a key is saved and how it ends, never the key."
-    )
+        commandName: "show",
+        abstract: "Show whether a key is saved and how it ends, never the key.",
+        discussion: """
+            Show whether a key is saved and its last characters, never the secret.
+            Reads the Keychain metadata. Does not change the key and does not print it.
+
+            ed jev key show
+            ed jev key show --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -130,7 +158,14 @@ struct JevKeyShowCommand: AsyncParsableCommand {
 struct JevKeySetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set",
-        abstract: "Read a TypeSafe API key from stdin, keep it in the Keychain and check it.")
+        abstract: "Read a TypeSafe API key from stdin, keep it in the Keychain and check it.",
+        discussion: """
+            Read a TypeSafe API key from stdin, store it, and check it.
+            Reads the key from stdin, not from arguments. Writes it to the Keychain.
+
+            printf %s "$KEY" | ed jev key set
+            printf %s "$KEY" | ed jev key set --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -158,7 +193,14 @@ struct JevKeySetCommand: AsyncParsableCommand {
 struct JevKeyClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clear",
-        abstract: "Remove the TypeSafe API key, which turns every Jev feature off.")
+        abstract: "Remove the TypeSafe API key, which turns every Jev feature off.",
+        discussion: """
+            Remove the TypeSafe API key, which turns Jev features off.
+            Reads whether a key is present. With --yes, changes the Keychain by deleting it. Without --yes, does not change anything.
+
+            ed jev key clear
+            ed jev key clear --yes
+            """)
 
     @Flag(name: .long, help: "Confirm the removal.")
     var yes = false
@@ -191,8 +233,12 @@ struct JevAskCommand: AsyncParsableCommand {
         commandName: "ask",
         abstract: "Send a raw System One request (state plus questions) through Edith.",
         discussion: """
-            Reads a request document from --request or stdin:
-            {"state": {...} | "text", "questions": {"name": {"type": "noul"|"choice"|"score", ...}}}
+            Send one typed Jev request: state plus questions.
+            Reads a request document from --request or stdin. Does not change the saved key.
+            The document looks like {"state": {"text": "..."}, "questions": {"name": {"type": "noul"}}}.
+
+            ed jev ask --request req.json
+            ed jev ask --json
             """)
 
     @Option(help: "A JSON request file, or - for stdin.")

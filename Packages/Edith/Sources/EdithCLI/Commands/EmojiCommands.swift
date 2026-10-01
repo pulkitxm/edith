@@ -5,7 +5,14 @@ import Foundation
 struct EmojiCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "emoji",
-        abstract: "The emoji picker and the emoji it knows about.",
+        abstract: "Open the emoji picker and list the emoji this Mac can render.",
+        discussion: """
+            Open the emoji picker and list the emoji this Mac can render.
+            Reads the emoji catalog and the saved skin tone. pick opens UI. tone and clear change preferences. ls does not change anything.
+
+            ed emoji ls --search rocket
+            ed emoji insert 1F600
+            """,
         subcommands: [
             EmojiPickCommand.self, EmojiListCommand.self, EmojiInsertCommand.self,
             EmojiToneCommand.self, EmojiClearCommand.self,
@@ -48,7 +55,14 @@ enum EmojiBridge {
 
 struct EmojiPickCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pick", abstract: "Open Edith's emoji picker.")
+        commandName: "pick", abstract: "Open Edith's emoji picker.",
+        discussion: """
+            Open Edith's emoji picker on the desktop.
+            Reads nothing from the catalog until the picker does. Changes focus by opening the picker. Needs the running app.
+
+            ed emoji pick
+            ed emoji pick --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -75,7 +89,14 @@ struct EmojiPickCommand: AsyncParsableCommand {
 
 struct EmojiListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the emoji this Mac can render.", aliases: ["list"])
+        commandName: "ls", abstract: "List the emoji this Mac can render.",
+        discussion: """
+            List emoji this Mac can render, optionally filtered with --search.
+            Reads the emoji catalog. Does not change frequently used emoji.
+
+            ed emoji ls --search rocket
+            ed emoji ls --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -142,7 +163,14 @@ struct EmojiListCommand: AsyncParsableCommand {
 
 struct EmojiInsertCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "insert", abstract: "Type an emoji into the frontmost app.")
+        commandName: "insert", abstract: "Type an emoji into the frontmost app.",
+        discussion: """
+            Type one emoji into the frontmost app.
+            Reads the code point. Changes the frontmost app's text by inserting the character. Needs the running app.
+
+            ed emoji insert 1F600
+            ed emoji insert 1F600 --json
+            """)
 
     @Argument(help: "The emoji itself, its hexcode such as 1F600, or part of its name.")
     var emoji: String
@@ -195,7 +223,14 @@ struct EmojiInsertCommand: AsyncParsableCommand {
 
 struct EmojiToneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "tone", abstract: "Set the default skin tone for emoji that support one.")
+        commandName: "tone", abstract: "Set the default skin tone for emoji that support one.",
+        discussion: """
+            Set the default skin tone used for emoji that support one.
+            Reads the tone name. Changes the stored default tone.
+
+            ed emoji tone medium
+            ed emoji tone medium --json
+            """)
 
     @Argument(help: "default, light, medium-light, medium, medium-dark or dark.")
     var tone: String
@@ -224,7 +259,14 @@ struct EmojiToneCommand: AsyncParsableCommand {
 
 struct EmojiClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Forget the frequently used emoji.")
+        commandName: "clear", abstract: "Forget the frequently used emoji.",
+        discussion: """
+            Forget every frequently used emoji.
+            Reads the frequent list. Changes it by clearing every entry.
+
+            ed emoji clear
+            ed emoji clear --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

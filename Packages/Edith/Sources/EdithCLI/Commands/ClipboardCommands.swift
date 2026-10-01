@@ -6,11 +6,16 @@ import Foundation
 struct ClipboardCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clipboard",
-        abstract: "The clipboard history Edith keeps.",
+        abstract: "List and restore the clipboard history Edith keeps.",
         discussion: """
             Clipboard storage is owned by the Edith daemon and remains available when
             the app is closed. Entries are numbered from 1, newest first, and that
             number is what `get`, `copy` and `rm` take.
+
+            Reads the daemon's clipboard store. copy changes the pasteboard. pin, rm, and clear change history. ls, get, and stats do not change stored entries.
+
+            ed clipboard ls
+            ed clipboard copy 3
             """,
         subcommands: [
             ClipboardListCommand.self, ClipboardStatsCommand.self, ClipboardGetCommand.self,
@@ -109,6 +114,13 @@ enum ClipboardBridge {
 struct ClipboardListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the clipboard history, newest first.",
+        discussion: """
+            List clipboard history, pinned entries first, newest first.
+            Reads the daemon's clipboard store. Does not change entries. --search keeps rows that mention the text.
+
+            ed clipboard ls
+            ed clipboard ls --search token --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -165,7 +177,14 @@ struct ClipboardListCommand: AsyncParsableCommand {
 struct ClipboardStatsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stats",
-        abstract: "How many entries the history holds and what they weigh.",
+        abstract: "Count clipboard entries and how much they weigh.",
+        discussion: """
+            Count clipboard entries and how much they weigh.
+            Reads the history store. Does not change it.
+
+            ed clipboard stats
+            ed clipboard stats --json
+            """,
         aliases: ["size"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -224,7 +243,14 @@ struct ClipboardStatsCommand: AsyncParsableCommand {
 
 struct ClipboardPinCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pin", abstract: "Keep one entry at the top and out of the retention sweep.")
+        commandName: "pin", abstract: "Keep one entry at the top and out of the retention sweep.",
+        discussion: """
+            Pin one history entry so retention will not drop it.
+            Reads the entry by number. Changes that entry by pinning it. Numbers start at 1.
+
+            ed clipboard pin 3
+            ed clipboard pin 3 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -239,7 +265,14 @@ struct ClipboardPinCommand: AsyncParsableCommand {
 
 struct ClipboardUnpinCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "unpin", abstract: "Let one entry age out again.")
+        commandName: "unpin", abstract: "Let one entry age out again.",
+        discussion: """
+            Unpin one history entry so retention can drop it again.
+            Reads the entry by number. Changes that entry by clearing the pin.
+
+            ed clipboard unpin 3
+            ed clipboard unpin 3 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -254,7 +287,14 @@ struct ClipboardUnpinCommand: AsyncParsableCommand {
 
 struct ClipboardGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "get", abstract: "Print one entry as text.")
+        commandName: "get", abstract: "Print one entry as text.",
+        discussion: """
+            Print one history entry as text.
+            Reads that entry. Does not change the pasteboard or the history.
+
+            ed clipboard get 3
+            ed clipboard get 3 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -280,7 +320,14 @@ struct ClipboardGetCommand: AsyncParsableCommand {
 
 struct ClipboardCopyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "copy", abstract: "Put one entry back on the pasteboard.")
+        commandName: "copy", abstract: "Put one entry back on the pasteboard.",
+        discussion: """
+            Copy one history entry back onto the pasteboard.
+            Reads that entry. Changes the system pasteboard. Does not change the history row.
+
+            ed clipboard copy 3
+            ed clipboard copy 3 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -313,7 +360,14 @@ struct ClipboardCopyCommand: AsyncParsableCommand {
 
 struct ClipboardRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Forget one entry.")
+        commandName: "rm", abstract: "Forget one entry.",
+        discussion: """
+            Delete one history entry.
+            Reads the entry number. Without --yes, prints the plan and does not change anything. With --yes, changes the store by removing it.
+
+            ed clipboard rm 3
+            ed clipboard rm 3 --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -350,7 +404,14 @@ struct ClipboardRemoveCommand: AsyncParsableCommand {
 
 struct ClipboardClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Forget the whole history.")
+        commandName: "clear", abstract: "Forget the whole history.",
+        discussion: """
+            Delete clipboard history.
+            Reads how many entries exist. Without --yes, does not change anything. With --yes, changes the store. --keep-pinned leaves pinned rows.
+
+            ed clipboard clear
+            ed clipboard clear --yes --keep-pinned
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -390,7 +451,14 @@ struct ClipboardClearCommand: AsyncParsableCommand {
 struct ColorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "color",
-        abstract: "The colours picked with Edith's colour picker.",
+        abstract: "List, copy, and clear colours picked with Edith's colour picker.",
+        discussion: """
+            List, copy, and clear colours picked with Edith's colour picker.
+            Reads the colour store. copy changes the pasteboard. clear changes the store after --yes. ls does not change anything.
+
+            ed color ls
+            ed color copy 1 --format hex
+            """,
         subcommands: [
             ColorPickCommand.self, ColorListCommand.self, ColorCopyCommand.self,
             ColorClearCommand.self,
@@ -428,7 +496,14 @@ enum ColorBridge {
 
 struct ColorPickCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pick", abstract: "Open Edith's system colour sampler.")
+        commandName: "pick", abstract: "Open Edith's system colour sampler.",
+        discussion: """
+            Open the system colour sampler and store the colour you pick.
+            Reads nothing until you pick. Changes the colour store when a colour is chosen. Someone at the Mac has to select it.
+
+            ed color pick
+            ed color pick --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -462,7 +537,14 @@ struct ColorPickCommand: AsyncParsableCommand {
 
 struct ColorListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List picked colours, newest first.", aliases: ["list"])
+        commandName: "ls", abstract: "List picked colours, newest first.",
+        discussion: """
+            List picked colours, newest first.
+            Reads the colour store. Does not change it.
+
+            ed color ls
+            ed color ls --format hex --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -519,7 +601,14 @@ struct ColorListCommand: AsyncParsableCommand {
 
 struct ColorCopyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "copy", abstract: "Copy one picked colour to the pasteboard.")
+        commandName: "copy", abstract: "Copy one picked colour to the pasteboard.",
+        discussion: """
+            Copy one picked colour to the pasteboard.
+            Reads that colour. Changes the pasteboard. --format selects hex, css, or the configured default.
+
+            ed color copy 1
+            ed color copy 1 --format hex
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -573,7 +662,14 @@ struct ColorCopyCommand: AsyncParsableCommand {
 
 struct ColorClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Forget every picked colour.")
+        commandName: "clear", abstract: "Forget every picked colour.",
+        discussion: """
+            Delete every picked colour.
+            Reads the colour store. Without --yes, does not change anything. With --yes, changes the store by clearing it.
+
+            ed color clear
+            ed color clear --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

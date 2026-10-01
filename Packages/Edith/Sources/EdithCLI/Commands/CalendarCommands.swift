@@ -5,12 +5,15 @@ import Foundation
 struct CalendarCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "calendar",
-        abstract: "Your schedule, as the Edith app sees it.",
+        abstract: "Read and open your schedule as the Edith app sees it.",
         discussion: """
             The calendar grant belongs to the Edith app, not to this binary, so events
             are fetched from the running app. If the app is not running, or the Calendar
             extension is off, or macOS has not granted calendar access, this exits 4 and
-            says which.
+            says which. Reads events through that app. Does not change the calendar.
+
+            ed calendar ls --days 7
+            ed calendar join standup
             """,
         subcommands: [
             CalendarListCommand.self, CalendarOpenCommand.self, CalendarJoinCommand.self,
@@ -79,7 +82,16 @@ enum CalendarBridge {
 
 struct CalendarListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "Upcoming events.", aliases: ["list"])
+        commandName: "ls",
+        abstract: "List upcoming events from the running app.",
+        discussion: """
+            List events from today through --days, up to 120. Reads the calendar through
+            the menu bar app. Does not change events.
+
+            ed calendar ls --days 7
+            ed calendar ls --json
+            """,
+        aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -156,7 +168,15 @@ struct CalendarListCommand: AsyncParsableCommand {
 
 struct CalendarOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open Calendar.")
+        commandName: "open",
+        abstract: "Launch the Calendar application.",
+        discussion: """
+            Open the Calendar application. Reads nothing from Edith's store. Changes which
+            app is frontmost by launching Calendar.
+
+            ed calendar open
+            ed calendar open --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -179,7 +199,15 @@ struct CalendarOpenCommand: AsyncParsableCommand {
 
 struct CalendarJoinCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "join", abstract: "Join an event's meeting.")
+        commandName: "join",
+        abstract: "Join an event's meeting.",
+        discussion: """
+            Find one event by id or title and open its meeting link. Reads events from the
+            running app. Changes nothing in the calendar. Opens the link in the default app.
+
+            ed calendar join standup
+            ed calendar join <event-id> --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -215,7 +243,16 @@ struct CalendarJoinCommand: AsyncParsableCommand {
 
 struct CalendarDirectionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "directions", abstract: "Open directions to an event.", aliases: ["route"])
+        commandName: "directions",
+        abstract: "Open directions to an event.",
+        discussion: """
+            Find one event by id or title and open its location in Maps. Reads events from
+            the running app. Does not change the event. Fails when the event has no location.
+
+            ed calendar directions standup
+            ed calendar directions <event-id> --json
+            """,
+        aliases: ["route"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
