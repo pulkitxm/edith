@@ -5,6 +5,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
 
+typealias AppMaintenanceInventoryLoad = @Sendable (Data?) async -> [InstalledApplication]
+typealias AppMaintenanceDiscover =
+    @Sendable (
+        [InstalledApplication], Data?, Bool,
+        @escaping @Sendable (AppUpdateDiscoveryBatch) async -> Void
+    ) async -> [AppUpdateItem]
+
 @MainActor
 @Observable
 final class AppMaintenanceModel {
@@ -33,10 +40,38 @@ final class AppMaintenanceModel {
     var selectedUpdateIDs = Set<String>()
     var focusedUpdateID: String?
     var lastUpdateRefresh: Date?
+    var checkingUpdates = false
     private var updateState = AppUpdateCenterState()
-    private let updatePersistence = AppUpdatePersistence()
+    private let updatePersistence: AppUpdatePersistence
+    private let snapshots: AppMaintenanceSnapshotStore
+    private let inventory: AppMaintenanceInventoryLoad
+    private let discover: AppMaintenanceDiscover
     private let updateExecutor = AppUpdateExecutor()
     private var task: Task<Void, Never>?
+    private var generation = UUID()
+    private var discovered: [AppUpdateItem] = []
+    private var brewCache: Data?
+    private var brewCachedAt: Date?
+    private var reuseCachedBrew = false
+    private var refreshInterval: TimeInterval = 86_400
+
+    init(
+        persistence: AppUpdatePersistence = AppUpdatePersistence(),
+        snapshots: AppMaintenanceSnapshotStore = AppMaintenanceSnapshotStore(),
+        inventory: @escaping AppMaintenanceInventoryLoad = { data in
+            AppMaintenanceInventory.applications(updateData: data)
+        },
+        discover: @escaping AppMaintenanceDiscover = { applications, brewData, brewFresh, onBatch in
+            await AppUpdateDiscovery.discoverChannels(
+                applications: applications, brewData: brewData, brewFresh: brewFresh,
+                onBatch: onBatch)
+        }
+    ) {
+        updatePersistence = persistence
+        self.snapshots = snapshots
+        self.inventory = inventory
+        self.discover = discover
+    }
     private var securityScopedURL: URL?
     private var hasSecurityScopedAccess = false
 
@@ -65,56 +100,116 @@ final class AppMaintenanceModel {
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
 
-    func refresh(automatic: Bool = false) {
+    func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
         task?.cancel()
-        phase = .loading
+        let generation = UUID()
+        self.generation = generation
+        refreshInterval = interval
+        var previousIDs: Set<String> = []
+        previousIDs.reserveCapacity(updates.count)
+        for update in updates { previousIDs.insert(update.id) }
+        if applications.isEmpty, updates.isEmpty {
+            phase = .loading
+        }
+        checkingUpdates = true
         errorMessage = nil
         resultMessage = nil
         task = Task {
-            let loaded = await Task.detached(priority: .userInitiated) {
-                let applications = AppMaintenanceInventory.applications(updateData: Data())
-                let updates = await AppUpdateDiscovery.discover(applications: applications)
-                return (applications, updates)
+            await self.performRefresh(
+                generation: generation, automatic: automatic, interval: interval,
+                previousIDs: previousIDs)
+        }
+    }
+
+    private func performRefresh(
+        generation: UUID, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
+    ) async {
+        let claim = await snapshots.claim()
+        guard !Task.isCancelled, generation == self.generation else { return }
+        let snapshot = await snapshots.load()
+        let state = await Task.detached { [updatePersistence] in updatePersistence.load() }.value
+        guard !Task.isCancelled, generation == self.generation else { return }
+        updateState = state
+        updateHistory = state.history
+        lastUpdateRefresh = state.lastRefresh
+        if applications.isEmpty, updates.isEmpty, let snapshot {
+            applications = snapshot.applications
+            discovered = snapshot.updates
+            updates = updatePersistence.visible(snapshot.updates, state: state, now: Date())
+            brewCache = snapshot.homebrewOutdated
+            brewCachedAt = snapshot.homebrewCachedAt
+            if !applications.isEmpty || !updates.isEmpty {
+                phase = .ready
+            }
+        }
+        let brewFresh = brewCachedAt.map { Date().timeIntervalSince($0) < interval } ?? false
+        reuseCachedBrew = brewFresh
+        let scanned = await inventory(brewFresh ? brewCache : nil)
+        guard !Task.isCancelled, generation == self.generation else { return }
+        let keptSelection = selectedApplicationID
+        applications = scanned
+        phase = .ready
+        if let keptSelection, !scanned.contains(where: { $0.id == keptSelection }) {
+            selectedApplicationID = nil
+            plan = nil
+            selectedItemIDs = []
+        }
+        let found = await discover(scanned, brewFresh ? brewCache : nil, brewFresh) { batch in
+            await self.absorb(batch, generation: generation)
+        }
+        guard !Task.isCancelled, generation == self.generation else { return }
+        discovered = found
+        updates = updatePersistence.visible(found, state: updateState, now: Date())
+        reconcileUpdates()
+        updateState.lastRefresh = Date()
+        lastUpdateRefresh = updateState.lastRefresh
+        let stateToSave = updateState
+        let snapshotToSave = AppMaintenanceSnapshot(
+            applications: applications, updates: found, homebrewOutdated: brewCache,
+            homebrewCachedAt: brewCachedAt)
+        do {
+            try await Task.detached { [updatePersistence] in
+                try updatePersistence.save(stateToSave)
             }.value
-            guard !Task.isCancelled else { return }
-            var previousIDs: Set<String> = []
-            for update in updates { previousIDs.insert(update.id) }
-            updateState = updatePersistence.load()
-            updateState.lastRefresh = Date()
-            do {
-                try updatePersistence.save(updateState)
-            } catch {
-                errorMessage = error.localizedDescription
+            try await snapshots.save(snapshotToSave, replacing: claim)
+        } catch {
+            guard !Task.isCancelled, generation == self.generation else { return }
+            errorMessage = error.localizedDescription
+        }
+        guard !Task.isCancelled, generation == self.generation else { return }
+        checkingUpdates = false
+        phase = .ready
+        guard automatic else { return }
+        var freshCount = 0
+        for update in updates where !previousIDs.contains(update.id) { freshCount += 1 }
+        if freshCount > 0 { await notify(updateCount: freshCount) }
+    }
+
+    private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UUID) {
+        guard generation == self.generation, !Task.isCancelled else { return }
+        if batch.channel == .homebrew, let data = batch.homebrewData {
+            applications = AppMaintenanceInventory.applyingHomebrewUpdates(data, to: applications)
+            if brewCache != data || !reuseCachedBrew {
+                brewCachedAt = Date()
             }
-            applications = loaded.0
-            updates = updatePersistence.visible(
-                loaded.1, state: updateState, now: updateState.lastRefresh ?? Date())
-            updateHistory = updateState.history
-            lastUpdateRefresh = updateState.lastRefresh
-            var visibleIDs: Set<String> = []
-            for update in updates { visibleIDs.insert(update.id) }
-            selectedUpdateIDs.formIntersection(visibleIDs)
-            if selectedUpdateIDs.isEmpty { selectedUpdateIDs = visibleIDs }
-            if let focusedUpdateID {
-                if !visibleIDs.contains(focusedUpdateID) {
-                    self.focusedUpdateID = updates.first?.id
-                }
-            } else {
-                focusedUpdateID = updates.first?.id
+            brewCache = data
+        }
+        discovered = AppUpdateDiscovery.replacing(discovered, with: batch)
+        updates = updatePersistence.visible(discovered, state: updateState, now: Date())
+    }
+
+    private func reconcileUpdates() {
+        var visibleIDs: Set<String> = []
+        visibleIDs.reserveCapacity(updates.count)
+        for update in updates { visibleIDs.insert(update.id) }
+        selectedUpdateIDs.formIntersection(visibleIDs)
+        if selectedUpdateIDs.isEmpty { selectedUpdateIDs = visibleIDs }
+        if let focusedUpdateID {
+            if !visibleIDs.contains(focusedUpdateID) {
+                self.focusedUpdateID = updates.first?.id
             }
-            phase = .ready
-            if let selectedApplicationID,
-                !loaded.0.contains(where: { $0.id == selectedApplicationID })
-            {
-                self.selectedApplicationID = nil
-                plan = nil
-                selectedItemIDs = []
-            }
-            if automatic {
-                var freshCount = 0
-                for update in updates where !previousIDs.contains(update.id) { freshCount += 1 }
-                if freshCount > 0 { await notify(updateCount: freshCount) }
-            }
+        } else {
+            focusedUpdateID = updates.first?.id
         }
     }
 
@@ -145,7 +240,7 @@ final class AppMaintenanceModel {
                 let succeeded = results.filter { $0.status == .succeeded }.count
                 resultMessage = "Finished \(succeeded) of \(results.count) updates."
                 phase = .ready
-                refresh()
+                refresh(interval: refreshInterval)
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
@@ -176,7 +271,7 @@ final class AppMaintenanceModel {
         updateState.excludedBundleIDs = []
         do {
             try updatePersistence.save(updateState)
-            refresh()
+            refresh(interval: refreshInterval)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -480,14 +575,14 @@ struct AppMaintenanceView: View {
         }
         .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task { model.refresh() }
+        .task { model.refresh(interval: updateRefreshInterval) }
         .task(id: updateAutoRefresh) {
             guard updateAutoRefresh else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(
                     for: .seconds(max(updateRefreshInterval, 900)))
                 guard !Task.isCancelled else { return }
-                model.refresh(automatic: true)
+                model.refresh(automatic: true, interval: updateRefreshInterval)
             }
         }
         .onDisappear { model.cancel() }
@@ -566,6 +661,11 @@ struct AppMaintenanceView: View {
                         } label: {
                             Label(installDestination.title, systemImage: "folder")
                         }
+                        if model.checkingUpdates {
+                            Text("Checking updates")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(.secondary)
+                        }
                         Button {
                             showingDiskImagePicker = true
                         } label: {
@@ -573,7 +673,7 @@ struct AppMaintenanceView: View {
                         }
                         .disabled(model.phase != .ready)
                         Button {
-                            model.refresh()
+                            model.refresh(interval: updateRefreshInterval)
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
