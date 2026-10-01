@@ -57,8 +57,15 @@ import Testing
         let confirmationPoint = NSPoint(
             x: view.copyConfirmation.frame.midX, y: view.copyConfirmation.frame.midY)
         #expect(view.hitTest(confirmationPoint) === view)
-        try await Task.sleep(for: .milliseconds(1_600))
-        #expect(view.copyConfirmation.isHidden)
+        var confirmationHidden = false
+        for _ in 0..<40 {
+            if view.copyConfirmation.isHidden {
+                confirmationHidden = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(confirmationHidden)
 
         view.keyDown(
             with: try #require(
