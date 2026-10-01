@@ -328,7 +328,7 @@ struct HerdrLayoutApplyCommand: AsyncParsableCommand {
 struct HerdrLayoutEvenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "even",
-        abstract: "Give every pane in a tab the same share.",
+        abstract: "Equalize the panes in one Herdr tab.",
         discussion: """
             It writes equal shares for every pane, matching Even Out in the layout popover.
             Example: `ed herdr layout even --tab 1`.
