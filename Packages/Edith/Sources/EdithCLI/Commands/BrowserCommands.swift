@@ -187,7 +187,7 @@ struct BrowserNavigateCommand: AsyncParsableCommand {
 struct BrowserReloadCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reload",
-        abstract: "Reload a notch browser tab.",
+        abstract: "Refresh a notch browser tab.",
         discussion: """
             Reloads the selected tab, or `--tab`. `--hard` reloads from the origin.
             It writes a fresh load of that tab. Example: `ed browser reload --hard`.
@@ -425,7 +425,7 @@ struct BrowserProfileCommand: AsyncParsableCommand {
 struct BrowserDetachCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "detach",
-        abstract: "Detach the Chrome profile and clear its browser data.",
+        abstract: "Remove the attached Chrome profile and its browser data.",
         discussion: """
             Previews the attached profile, then `--yes` writes the detach and removes the
             website data for that profile, which is what the setup screen's detach does.
