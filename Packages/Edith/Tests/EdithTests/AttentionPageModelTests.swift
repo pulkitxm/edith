@@ -6,6 +6,35 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func refreshAndRangeChangesPreserveTheSelectedSectionAndFilters() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try fixture.repository.append(
+            AttentionEvent(
+                startedAt: Date().addingTimeInterval(-120), duration: 60,
+                source: .application, appName: "Xcode", bundleID: "com.apple.dt.Xcode"))
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        for section in [AttentionPageSection.overview, .timeline, .breakdown, .agents, .focus] {
+            model.section = section
+            await model.waitForReload()
+            model.toggle(level: .veryProductive)
+            let filter = model.levelFilter
+            model.reload()
+            await model.waitForReload()
+            #expect(model.section == section)
+            #expect(model.levelFilter == filter)
+            model.select(.last7)
+            await model.waitForReload()
+            #expect(model.section == section)
+            #expect(model.levelFilter == filter)
+            model.select(.today)
+            await model.waitForReload()
+            #expect(model.section == section)
+        }
+    }
+
     @Test func rapidRangeAndTabChangesPublishOnlyTheLatestSelection() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }

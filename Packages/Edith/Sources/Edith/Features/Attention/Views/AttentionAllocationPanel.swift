@@ -11,6 +11,15 @@ struct AttentionAllocationPanel: View {
         AttentionPalette.levels.filter { model.summary.duration($0) > 0 }
     }
 
+    private var hoveredLevel: AttentionProductivity? {
+        guard let selectedAngle else { return nil }
+        var accumulated = 0.0
+        return levels.first { level in
+            accumulated += model.summary.duration(level)
+            return selectedAngle < accumulated
+        }
+    }
+
     var body: some View {
         AttentionPanel(
             "Time allocation",
@@ -28,18 +37,6 @@ struct AttentionAllocationPanel: View {
                 }
             }
         }
-        .onChange(of: selectedAngle) {
-            guard let selectedAngle else { return }
-            var accumulated = 0.0
-            for level in levels {
-                accumulated += model.summary.duration(level)
-                if selectedAngle < accumulated {
-                    model.toggle(level: level)
-                    model.section = .breakdown
-                    break
-                }
-            }
-        }
     }
 
     private var allocation: some View {
@@ -51,6 +48,7 @@ struct AttentionAllocationPanel: View {
                     innerRadius: .ratio(0.74), angularInset: 2
                 )
                 .foregroundStyle(AttentionPalette.level(level, dark: dark))
+                .opacity(hoveredLevel == nil || hoveredLevel == level ? 1 : 0.35)
                 .cornerRadius(3)
                 .accessibilityLabel(level.title)
                 .accessibilityValue(AttentionFormat.duration(model.summary.duration(level)))
@@ -59,9 +57,14 @@ struct AttentionAllocationPanel: View {
             .chartAngleSelection(value: $selectedAngle)
             .chartBackground { _ in
                 VStack(spacing: 4) {
-                    Text(AttentionFormat.duration(model.summary.activeDuration))
-                        .font(DashSkin.heading(20)).monospacedDigit()
-                    Text("ACTIVE TIME").font(DashSkin.mono(9)).foregroundStyle(.secondary)
+                    Text(
+                        AttentionFormat.duration(
+                            hoveredLevel.map { model.summary.duration($0) }
+                                ?? model.summary.activeDuration)
+                    )
+                    .font(DashSkin.heading(20)).monospacedDigit()
+                    Text(hoveredLevel?.title.uppercased() ?? "ACTIVE TIME")
+                        .font(DashSkin.mono(9)).foregroundStyle(.secondary)
                 }
             }
             .frame(width: UIScale.pt(170), height: UIScale.pt(170))
@@ -78,6 +81,7 @@ struct AttentionAllocationPanel: View {
                                 model.summary.duration(level), of: model.summary.activeDuration))
                     }
                     .buttonStyle(.edith(.borderless))
+                    .help("Explore \(level.title.lowercased()) activity")
                 }
             }
             .frame(maxWidth: .infinity)
@@ -102,6 +106,7 @@ struct AttentionAllocationPanel: View {
                             color: sphere == .work ? DashSkin.accent(dark) : .secondary)
                     }
                     .buttonStyle(.edith(.borderless))
+                    .help("Explore \(sphere.title.lowercased()) activity")
                 }
             }
             if summary.unclassifiedDuration > 0 {
