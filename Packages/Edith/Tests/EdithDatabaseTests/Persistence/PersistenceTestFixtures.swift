@@ -1,6 +1,7 @@
 import Foundation
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 enum DatabasePersistenceFixtures {
     static func temporaryStorePath() throws -> (URL, String) {

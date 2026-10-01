@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 @Test func clickHouseValueCodecDistinguishesSmallIntegersFromBooleans() throws {
     let body = Data(

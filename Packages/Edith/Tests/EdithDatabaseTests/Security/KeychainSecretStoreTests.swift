@@ -4,6 +4,7 @@ import Security
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private final class DatabaseKeychainStub: @unchecked Sendable {
     private let lock = NSLock()

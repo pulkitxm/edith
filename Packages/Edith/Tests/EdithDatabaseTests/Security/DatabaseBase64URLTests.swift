@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 @Suite struct DatabaseBase64URLTests {
     @Test func encodeUsesTheURLAlphabetAndDropsPadding() {

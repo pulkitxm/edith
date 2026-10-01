@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private struct DatabaseAdapterRegistryFixture: DatabaseAdapter {
     let id: DatabaseAdapterID

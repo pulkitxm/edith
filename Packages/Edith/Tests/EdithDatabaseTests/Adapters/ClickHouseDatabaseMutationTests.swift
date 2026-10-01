@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum ClickHouseDatabaseMutationFixtures {
     static let identity = try! ClickHouseDatabaseDriverSupport.identity(

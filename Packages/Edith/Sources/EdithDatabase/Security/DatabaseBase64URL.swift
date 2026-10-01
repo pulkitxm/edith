@@ -1,14 +1,14 @@
 import Foundation
 
-enum DatabaseBase64URL {
-    static func encode(_ data: Data) -> String {
+package enum DatabaseBase64URL {
+    package static func encode(_ data: Data) -> String {
         data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
 
-    static func decode(_ value: String) -> Data? {
+    package static func decode(_ value: String) -> Data? {
         guard !value.isEmpty, value.unicodeScalars.allSatisfy(isURLAlphabet) else { return nil }
         var base64 = value.replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")

@@ -1,5 +1,6 @@
 import AppKit
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 import SwiftUI
 import Testing
 

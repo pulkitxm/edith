@@ -1,6 +1,7 @@
 import Foundation
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 actor DatabaseExecutorTestGate {
     private var isOpen: Bool

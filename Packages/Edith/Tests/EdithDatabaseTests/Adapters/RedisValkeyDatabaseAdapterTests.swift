@@ -5,6 +5,7 @@ import NIOPosix
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum RedisValkeyAdapterFixtures {
     static func definition(

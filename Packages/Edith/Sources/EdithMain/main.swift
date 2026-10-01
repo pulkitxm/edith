@@ -2,6 +2,7 @@ import Darwin
 import Edith
 import EdithCLI
 import EdithDatabase
+import EdithDatabaseDrivers
 import Foundation
 
 DatabaseExtensionReadiness.install()

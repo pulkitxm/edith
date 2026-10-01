@@ -1,6 +1,7 @@
 import EdithDatabase
 import Foundation
 import Testing
+@testable import EdithDatabaseDrivers
 
 @Suite struct DatabasePagingTests {
     @Test func pageSizeUsesProductBounds() throws {

@@ -4,6 +4,7 @@ import PackageDescription
 let products: [Product] = [
     .library(name: "EdithCore", targets: ["EdithCore"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
+    .library(name: "EdithDatabaseDrivers", targets: ["EdithDatabaseDrivers"]),
     .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
@@ -51,6 +52,15 @@ let targets: [Target] = [
         name: "EdithDatabase",
         dependencies: [
             "EdithCore",
+            .product(name: "GRDB", package: "GRDB.swift"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithDatabaseDrivers",
+        dependencies: [
+            "EdithCore",
+            "EdithDatabase",
             .product(name: "Crypto", package: "swift-crypto"),
             .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "RediStack", package: "RediStack"),
@@ -73,6 +83,7 @@ let targets: [Target] = [
         name: "EdithDatabaseTests",
         dependencies: [
             "EdithDatabase",
+            "EdithDatabaseDrivers",
             .product(name: "RediStack", package: "RediStack"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
@@ -222,7 +233,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
+        dependencies: ["Edith", "EdithCLI", "EdithDatabase", "EdithDatabaseDrivers"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([
@@ -239,7 +250,8 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithDatabase", "EdithDocs", "EdithKit", "EdithLidAwakeSupport",
+            "EdithCore", "Edith", "EdithDatabase", "EdithDatabaseDrivers", "EdithDocs", "EdithKit",
+            "EdithLidAwakeSupport",
             "EdithHelper", "EdithAgent", "EdithCameraSupport",
             "EdithCLI", "Highlighter", "ed",
             .product(name: "EdithStudio", package: "EdithStudio"),

@@ -1,6 +1,7 @@
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 @Suite("Database connection URL parser")
 struct DatabaseConnectionURLParserTests {
