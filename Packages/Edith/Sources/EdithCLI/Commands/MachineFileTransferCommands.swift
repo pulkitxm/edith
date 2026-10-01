@@ -131,6 +131,10 @@ struct MachineFilesGetManyCommand: AsyncParsableCommand {
         discussion: """
             Existing names are kept by adding a number. Pass --replace to preview
             replacement, then add --yes to confirm it.
+            Reads several remote files and writes copies on this Mac.
+
+            ed machines files get-many box /home/pi/notes.txt /var/backups
+            ed machines files get-many box /home/pi/notes.txt /var/backups --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -216,6 +220,10 @@ struct MachineFilesTransferCommand: AsyncParsableCommand {
         discussion: """
             Existing names are kept by adding a number. Pass --replace to preview
             replacement, then add --yes to confirm it.
+            Changes both machines by copying files from one to the other.
+
+            ed machines files transfer box /tmp /home/pi/notes.txt /var/backups --into /tmp
+            ed machines files transfer box /tmp /home/pi/notes.txt /var/backups --into /tmp --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

@@ -10,6 +10,9 @@ struct MachinesWorkspaceCommand: AsyncParsableCommand {
             A workspace is a saved arrangement of panes, each pointed at a machine and a
             screen. These read and write the same file the view does, so a layout built
             here shows up there and the other way round.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines workspace ls
             """,
         subcommands: [
             WorkspaceListCommand.self, WorkspaceUseCommand.self, WorkspaceNewCommand.self,
@@ -70,7 +73,15 @@ enum WorkspaceBridge {
 
 struct WorkspaceListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the saved workspaces.", aliases: ["list"])
+        commandName: "ls", abstract: "List the saved workspaces.",
+        discussion: """
+            Lists every saved workspace.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines workspace ls
+            ed machines workspace ls --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -110,7 +121,15 @@ struct WorkspaceListCommand: AsyncParsableCommand {
 
 struct WorkspaceUseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "use", abstract: "Make one workspace the current one.")
+        commandName: "use", abstract: "Make one workspace the current one.",
+        discussion: """
+            Makes one workspace the current one.
+
+            Changes which workspace is current.
+
+            ed machines workspace use Fleet
+            ed machines workspace use Fleet --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -144,6 +163,10 @@ struct WorkspaceNewCommand: AsyncParsableCommand {
             This is the Layout menu's presets as a command: name the machines and the
             screen each pane should show. With one machine you get a single pane, with
             several you get them tiled side by side.
+            Changes the saved workspaces by creating one.
+
+            ed machines workspace new box
+            ed machines workspace new box --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -189,7 +212,15 @@ struct WorkspaceNewCommand: AsyncParsableCommand {
 
 struct WorkspaceRenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rename", abstract: "Rename a workspace.")
+        commandName: "rename", abstract: "Rename one saved workspace.",
+        discussion: """
+            Renames a workspace.
+
+            Changes the machine by renaming one file.
+
+            ed machines workspace rename Fleet notes
+            ed machines workspace rename Fleet notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -223,7 +254,15 @@ struct WorkspaceRenameCommand: AsyncParsableCommand {
 
 struct WorkspaceRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Forget a workspace.", aliases: ["remove"])
+        commandName: "rm", abstract: "Forget a workspace.",
+        discussion: """
+            Forgets a workspace.
+
+            Changes the saved list by removing one record.
+
+            ed machines workspace rm Fleet
+            ed machines workspace rm Fleet --json
+            """, aliases: ["remove"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -318,7 +357,15 @@ enum PaneBridge {
 
 struct WorkspacePanesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "panes", abstract: "The panes in a workspace and what they show.")
+        commandName: "panes", abstract: "Show the panes in a workspace and what they show.",
+        discussion: """
+            Lists the panes in a workspace and what each one shows.
+
+            Reads the panes in a workspace. Does not change the layout.
+
+            ed machines workspace panes
+            ed machines workspace panes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -353,7 +400,15 @@ struct WorkspacePanesCommand: AsyncParsableCommand {
 
 struct WorkspaceSplitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "split", abstract: "Split a pane and point the new one somewhere.")
+        commandName: "split", abstract: "Split a pane and point the new one somewhere.",
+        discussion: """
+            Splits a pane in two and points the new one at a machine and a screen.
+
+            Changes the workspace by splitting one pane.
+
+            ed machines workspace split 1 box
+            ed machines workspace split 1 box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -403,7 +458,15 @@ struct WorkspaceSplitCommand: AsyncParsableCommand {
 
 struct WorkspaceClosePaneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "close", abstract: "Close a pane.")
+        commandName: "close", abstract: "Close a pane.",
+        discussion: """
+            Closes a pane.
+
+            Changes the workspace by closing one pane.
+
+            ed machines workspace close 1
+            ed machines workspace close 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -438,7 +501,16 @@ struct WorkspaceClosePaneCommand: AsyncParsableCommand {
 struct WorkspaceRetargetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "point",
-        abstract: "Point a pane at a different machine or screen.")
+        abstract: "Point a pane at a different machine or screen.",
+        discussion: """
+            Points a pane at a different machine, a different screen, or both, without
+            splitting anything.
+
+            Changes one pane so it shows a different machine or screen.
+
+            ed machines workspace point 1
+            ed machines workspace point 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -493,7 +565,15 @@ struct WorkspaceRetargetCommand: AsyncParsableCommand {
 
 struct WorkspaceEqualizeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "equalize", abstract: "Even out every split.", aliases: ["even"])
+        commandName: "equalize", abstract: "Even out every split.",
+        discussion: """
+            Evens out every split in a workspace.
+
+            Changes the workspace by making the panes the same size.
+
+            ed machines workspace equalize
+            ed machines workspace equalize --json
+            """, aliases: ["even"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

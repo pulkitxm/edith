@@ -3,7 +3,7 @@
 Streams one container's logs to your terminal.
 
 ```
-ed machines docker logs [--tail <n>] [--follow] <machine> <container>
+ed machines docker logs [--tail <n>] [--follow] [--json] <machine> <container>
 ```
 
 ## Arguments
@@ -19,10 +19,12 @@ ed machines docker logs [--tail <n>] [--follow] <machine> <container>
 | --- | --- | --- | --- |
 | `--tail` | integer, 0 or more | `200` | How many trailing lines to show. `0` shows none, which is what you want with `--follow`. |
 | `--follow`, `-f` | flag | off | Keep streaming until interrupted. |
+| `--json` | flag | off | Capture the bounded log and print one JSON document. Cannot be combined with `--follow`. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
-There is no `--json` here, and no `--since` or `--until`: this is a passthrough
-of docker's own output.
+There is no `--since` or `--until`. Without `--json` this passes docker's own
+output through. `--json` waits for the bounded log, then prints
+`{"machine","container","lines"}`.
 
 ```
 $ ed machines tuf docker logs lobe-chat --tail 3
@@ -46,10 +48,11 @@ The remote command is
 always on and cannot be turned off, which is the one way this differs from
 typing `docker logs` yourself.
 
-Output is streamed line by line as it arrives, with the container's stdout going
-to your stdout and its stderr going to your stderr, so redirecting one does not
-swallow the other. There is no timeout: `--follow` runs until you interrupt it
-or the container stops.
+Without `--json`, output is streamed line by line as it arrives, with the
+container's stdout going to your stdout and its stderr going to your stderr, so
+redirecting one does not swallow the other. There is no timeout: `--follow` runs
+until you interrupt it or the container stops. `--json` cannot follow, and a
+remote failure on that path exits 1 with the docker error in the hint.
 
 This is one of the two verbs on this page that propagate the remote exit code
 instead of mapping it into the 0 to 4 table. A container that does not exist is

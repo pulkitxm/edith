@@ -1257,6 +1257,12 @@ enum JSONContract {
             "ed machines docker compose pull",
             ["machines", "docker", "compose", "pull", "nowhere-at-all", "web", "--json"]),
         JSONCase(
+            "ed machines docker logs",
+            ["machines", "docker", "logs", "nowhere-at-all", "api", "--json"]),
+        JSONCase(
+            "ed machines docker compose logs",
+            ["machines", "docker", "compose", "logs", "nowhere-at-all", "web", "--json"]),
+        JSONCase(
             "ed machines forwards open",
             ["machines", "forwards", "open", "nowhere-at-all", "1", "--json"]),
         JSONCase(

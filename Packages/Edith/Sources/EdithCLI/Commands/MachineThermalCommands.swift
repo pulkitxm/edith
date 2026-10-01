@@ -6,6 +6,14 @@ struct MachinesThermalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "thermal",
         abstract: "Inspect and switch the platform thermal profile.",
+        discussion: """
+            `ed machines thermal` inspects and controls the Linux kernel platform
+            profile or Windows power scheme exposed by a machine.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines thermal status box
+            """,
         subcommands: [MachinesThermalStatusCommand.self, MachinesThermalSetCommand.self],
         defaultSubcommand: MachinesThermalStatusCommand.self)
 }
@@ -39,7 +47,16 @@ enum MachineThermalBridge {
 
 struct MachinesThermalStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Show the active and available thermal profiles.")
+        commandName: "status", abstract: "Show the active and available thermal profiles.",
+        discussion: """
+            `ed machines thermal status <machine>` reports the active Linux platform
+            profile or Windows power scheme and every choice offered by the machine.
+
+            Reads the current state. Does not change it.
+
+            ed machines thermal status box
+            ed machines thermal status box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -75,7 +92,16 @@ struct MachinesThermalStatusCommand: AsyncParsableCommand {
 
 struct MachinesThermalSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Switch the thermal profile permanently or for a while.")
+        commandName: "set", abstract: "Switch the thermal profile permanently or for a while.",
+        discussion: """
+            `ed machines thermal set <machine> <profile>` changes the Linux platform
+            profile or Windows power scheme.
+
+            Changes the saved setting to the value you pass.
+
+            ed machines thermal set box balanced
+            ed machines thermal set box balanced --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
