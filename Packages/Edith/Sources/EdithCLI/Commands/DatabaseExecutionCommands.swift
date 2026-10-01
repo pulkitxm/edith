@@ -327,7 +327,15 @@ extension DatabaseCLI {
 struct DatabaseConnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connect",
-        abstract: "Open a broker session for a saved database connection.")
+        abstract: "Open a broker session for a saved database connection.",
+        discussion: """
+            Open a broker session for a saved database connection.
+
+            Changes the broker by opening a session for one saved connection.
+
+            ed database connect 11111111-1111-1111-1111-111111111111
+            ed database connect 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -369,7 +377,15 @@ struct DatabaseConnectCommand: AsyncParsableCommand {
 struct DatabaseConnectionsTestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test",
-        abstract: "Test one saved database connection without opening a session.")
+        abstract: "Test one saved database connection without opening a session.",
+        discussion: """
+            Test one saved database connection without opening a session.
+
+            Reads whether one saved connection can be reached. Does not open a session.
+
+            ed database connections test 11111111-1111-1111-1111-111111111111
+            ed database connections test 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -429,7 +445,15 @@ struct DatabaseConnectionsTestCommand: AsyncParsableCommand {
 struct DatabaseDisconnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "disconnect",
-        abstract: "Close the broker session for a saved database connection.")
+        abstract: "Close the broker session for a saved database connection.",
+        discussion: """
+            Close the broker session for a saved database connection.
+
+            Changes the broker by closing the session for one saved connection.
+
+            ed database disconnect 11111111-1111-1111-1111-111111111111
+            ed database disconnect 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -471,7 +495,15 @@ struct DatabaseDisconnectCommand: AsyncParsableCommand {
 struct DatabaseBrowseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "browse",
-        abstract: "Read one bounded page from a database root or object.")
+        abstract: "Read one bounded page from a database root or object.",
+        discussion: """
+            Read one bounded page from a database root or object.
+
+            Reads the current state. Does not change it.
+
+            ed database browse 11111111-1111-1111-1111-111111111111
+            ed database browse 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit one JSON document on stdout.")
     var json = false
@@ -516,7 +548,15 @@ struct DatabaseBrowseCommand: AsyncParsableCommand {
 struct DatabaseQueryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "query",
-        abstract: "Execute one bounded read query from stdin or a UTF-8 file.")
+        abstract: "Execute one bounded read query from stdin or a UTF-8 file.",
+        discussion: """
+            Execute one bounded read query from stdin or a UTF-8 file.
+
+            Reads the current state. Does not change it.
+
+            ed database query 11111111-1111-1111-1111-111111111111
+            ed database query 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit one JSON document on stdout.")
     var json = false
