@@ -56,7 +56,7 @@ public actor DownloadWorker {
     private var stopping = false
     private let generation = UUID()
     private var revision = 0
-    private var pendingSnapshot: DownloadWorkerSnapshot?
+    private var snapshotDirty = false
     private var publicationTask: Task<Void, Never>?
 
     public init(
@@ -389,17 +389,20 @@ public actor DownloadWorker {
     }
 
     private func notify() {
-        pendingSnapshot = snapshot()
+        snapshotDirty = true
         guard publicationTask == nil else { return }
         publicationTask = Task { [weak self] in await self?.publishPending() }
     }
 
     private func publishPending() async {
-        while let snapshot = pendingSnapshot {
-            pendingSnapshot = nil
-            await publish(snapshot)
+        while snapshotDirty {
+            snapshotDirty = false
+            await publish(snapshot())
         }
         publicationTask = nil
+        if snapshotDirty {
+            publicationTask = Task { [weak self] in await self?.publishPending() }
+        }
     }
 
     public static func request(_ record: DownloadRecord, executable: URL) -> CLICommandRequest {

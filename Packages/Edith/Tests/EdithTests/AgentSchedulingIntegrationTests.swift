@@ -9,7 +9,8 @@ import Testing
     @Test func overlappingRefreshesShareOneExecutionAndOnePublication() async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let first = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -29,7 +30,8 @@ import Testing
     func explicitEnqueuesDuringCollectionProduceOneFollowUp(requests: Int) async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let first = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -102,7 +104,8 @@ import Testing
     @Test func stoppingDiscardsAnUncooperativeCollectorsLateResult() async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let task = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -376,6 +379,39 @@ import Testing
         #expect(await runtime.runtimeSnapshot().subscriberCount == 0)
     }
 
+    @Test func repeatedRevisionDoesNotDeliverThePayloadAgain() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let listener = DiagnosticSubscriber()
+        let payload = Data("log".utf8)
+        await runtime.publish(topic: .downloads, payload: payload, revision: 7)
+        await runtime.subscribe(peer: UUID(), topic: .downloads, subscriber: listener)
+        #expect(await waitUntil { listener.count(topic: AgentTopic.downloads.rawValue) == 1 })
+        await runtime.publish(
+            topic: .downloads, payload: Data(repeating: 9, count: 64_000), revision: 7)
+        #expect(listener.count(topic: AgentTopic.downloads.rawValue) == 1)
+        #expect(try await runtime.snapshot(topic: .downloads) == payload)
+    }
+
+    @Test func subscribedEventBurstsEncodeTheLogOnce() async {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        for index in 0..<20 {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "quiet", message: "\(index)"))
+        }
+        #expect(await runtime.eventLogEncodeCount == 0)
+        let gate = EventPublishGate()
+        await runtime.setEventPublishHold { await gate.wait() }
+        await runtime.subscribe(peer: UUID(), topic: .events, subscriber: DiagnosticSubscriber())
+        for index in 0..<AgentDiagnostics.capacity {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "step", message: "\(index)"))
+        }
+        #expect(await runtime.eventLogEncodeCount == 0)
+        gate.release()
+        #expect(await waitUntil { await runtime.eventLogEncodeCount == 1 })
+        #expect(await runtime.eventLogEncodeCount == 1)
+    }
+
     @Test func eventHistoryIsBoundedAndSurvivesARuntimeRestart() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -555,6 +591,33 @@ private final class SchedulerPolicy: @unchecked Sendable {
     var enabled: Bool { lock.withLock { active } }
     func enable() { lock.withLock { active = true } }
     func advance(_ seconds: TimeInterval) { lock.withLock { current += seconds } }
+}
+
+private final class EventPublishGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var released = false
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeNow = lock.withLock { () -> Bool in
+                if released { return true }
+                continuations.append(continuation)
+                return false
+            }
+            if resumeNow { continuation.resume() }
+        }
+    }
+
+    func release() {
+        let pending = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            released = true
+            let pending = continuations
+            continuations.removeAll()
+            return pending
+        }
+        for continuation in pending { continuation.resume() }
+    }
 }
 
 private final class DiagnosticSubscriber: NSObject, EdithAgentSubscriberXPC, @unchecked Sendable {

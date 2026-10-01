@@ -68,14 +68,15 @@ public enum AgentBoot {
         let downloads = DownloadWorker(
             publish: { snapshot in
                 if let payload = try? AgentPayload.encode(snapshot) {
-                    await runtime.publish(topic: .downloads, payload: payload)
+                    await runtime.publish(
+                        topic: .downloads, payload: payload, revision: UInt64(snapshot.revision))
                 }
             },
             completed: { IPC.post(IPC.Name.musicFolderChanged) })
         let power = LivePowerSource()
         let scheduler = JobScheduler(
-            publish: { topic, payload in
-                Task { await runtime.publish(topic: topic, payload: payload) }
+            publish: { topic, payload, revision in
+                Task { await runtime.publish(topic: topic, payload: payload, revision: revision) }
             },
             power: power,
             pauseAmbientOnBattery: SharedDefaults.store.bool(
@@ -100,9 +101,10 @@ public enum AgentBoot {
                 attention: attention)
             do {
                 let tasks = try AgentTaskService(
-                    publish: { snapshots in
+                    publish: { snapshots, revision in
                         if let payload = try? AgentPayload.encode(snapshots) {
-                            await runtime.publish(topic: .tasks, payload: payload)
+                            await runtime.publish(
+                                topic: .tasks, payload: payload, revision: revision)
                         }
                     }, record: { await runtime.record($0) })
                 await tasks.registerCommand()

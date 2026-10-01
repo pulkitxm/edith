@@ -64,7 +64,7 @@ private struct PersistedAgentTask: Codable {
 
 public actor AgentTaskService {
     public typealias Handler = @Sendable (Data, AgentTaskContext) async throws -> Data
-    public typealias Publish = @Sendable ([AgentTaskSnapshot]) async -> Void
+    public typealias Publish = @Sendable ([AgentTaskSnapshot], UInt64) async -> Void
     public typealias RecordEvent = @Sendable (AgentEvent) async -> Void
 
     private let directory: URL?
@@ -80,12 +80,15 @@ public actor AgentTaskService {
     private var output: [UUID: AgentTaskOutputBuffer] = [:]
     private var publishedSequence: [UUID: Int] = [:]
     private var progressTask: Task<Void, Never>?
+    private var snapshotRevision: UInt64 = 0
+    private var publishNeeded = false
+    private var publishTask: Task<Void, Never>?
     private var stopping = false
 
     public init(
         directory: URL? = AppData.supportDir.appendingPathComponent("Tasks", isDirectory: true),
         limits: AgentTaskLimits = AgentTaskLimits(),
-        publish: @escaping Publish = { _ in }, record: @escaping RecordEvent = { _ in }
+        publish: @escaping Publish = { _, _ in }, record: @escaping RecordEvent = { _ in }
     ) throws {
         self.directory = directory
         self.limits = limits
@@ -165,7 +168,8 @@ public actor AgentTaskService {
         progressTask?.cancel()
         progressTask = nil
         for worker in active { await worker.value }
-        await publish(snapshots())
+        scheduleSnapshotPublish()
+        await publishTask?.value
     }
 
     public func register(
@@ -407,7 +411,23 @@ public actor AgentTaskService {
                 changed = true
             }
         }
-        if changed { await publish(snapshots()) }
+        if changed { scheduleSnapshotPublish() }
+    }
+
+    private func scheduleSnapshotPublish() {
+        publishNeeded = true
+        guard publishTask == nil else { return }
+        publishTask = Task { await self.drainSnapshotPublish() }
+    }
+
+    private func drainSnapshotPublish() async {
+        while publishNeeded {
+            publishNeeded = false
+            snapshotRevision &+= 1
+            await publish(snapshots(), snapshotRevision)
+        }
+        publishTask = nil
+        if publishNeeded { scheduleSnapshotPublish() }
     }
 
     private func notify(_ snapshot: AgentTaskSnapshot, name: String) {
@@ -419,8 +439,7 @@ public actor AgentTaskService {
             }, taskID: snapshot.id)
         Task { [weak self, record] in
             await record(event)
-            guard let self else { return }
-            await publish(snapshots())
+            await self?.scheduleSnapshotPublish()
         }
     }
 

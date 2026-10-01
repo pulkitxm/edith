@@ -105,24 +105,23 @@ public enum AgentBusEncoding {
 }
 
 public enum AgentPayload {
-    public static var encoder: JSONEncoder {
+    private static let lock = NSLock()
+    private static let cachedEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
         return encoder
-    }
-
-    public static var decoder: JSONDecoder {
+    }()
+    private static let cachedDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
+    }()
 
     public static func encode(_ value: some Encodable) throws -> Data {
-        try encoder.encode(value)
+        try lock.withLock { try cachedEncoder.encode(value) }
     }
 
     public static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        try decoder.decode(type, from: data)
+        try lock.withLock { try cachedDecoder.decode(type, from: data) }
     }
 }
