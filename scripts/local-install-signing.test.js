@@ -40,6 +40,8 @@ function fixture() {
   );
   executable(join(bin, "python3"), "exit 0");
   executable(join(bin, "codesign"), "exit 0");
+  executable(join(bin, "find"), "exit 0");
+  executable(join(bin, "base64"), "cat >/dev/null; printf fixture");
   executable(
     join(bin, "security"),
     `printf '%s\\n' "$1" >> "$EDITH_FIXTURE_LOG"
