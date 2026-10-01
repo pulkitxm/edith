@@ -2,12 +2,11 @@
 import PackageDescription
 
 let products: [Product] = [
-    .library(name: "EdithCore", targets: ["EdithCore"]),
+    .library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
     .library(name: "EdithDatabaseDrivers", targets: ["EdithDatabaseDrivers"]),
     .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
     .library(name: "Edith", targets: ["Edith"]),
-    .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
     .library(name: "EdithAgent", targets: ["EdithAgent"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
@@ -126,6 +125,11 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
+        name: "EdithShared",
+        dependencies: ["EdithKit", "EdithCore", "EdithCameraSupport", "EdithLidAwakeSupport"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
         name: "EdithKit",
         dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [
@@ -185,7 +189,12 @@ let targets: [Target] = [
     .executableTarget(
         name: "edithd",
         dependencies: ["EdithAgent"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: [.swiftLanguageMode(.v5)],
+        linkerSettings: [
+            .unsafeFlags([
+                "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
+            ])
+        ]
     ),
     .executableTarget(
         name: "EdithLidAwakeHelper",
