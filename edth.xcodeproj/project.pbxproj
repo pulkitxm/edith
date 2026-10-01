@@ -382,11 +382,6 @@
 					"-framework",
 					EdithLidAwakeSupport,
 				);
-				OTHER_SWIFT_FLAGS = (
-					"$(inherited)",
-					"-Xfrontend",
-					"-disable-reflection-metadata",
-				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -420,11 +415,6 @@
 					EdithCameraSupport,
 					"-framework",
 					EdithLidAwakeSupport,
-				);
-				OTHER_SWIFT_FLAGS = (
-					"$(inherited)",
-					"-Xfrontend",
-					"-disable-reflection-metadata",
 				);
 				SWIFT_VERSION = 5.0;
 			};
@@ -460,11 +450,6 @@
 					EdithCameraSupport,
 					"-framework",
 					EdithLidAwakeSupport,
-				);
-				OTHER_SWIFT_FLAGS = (
-					"$(inherited)",
-					"-Xfrontend",
-					"-disable-reflection-metadata",
 				);
 				SWIFT_VERSION = 5.0;
 			};
@@ -636,11 +621,6 @@
 					EdithCameraSupport,
 					"-framework",
 					EdithLidAwakeSupport,
-				);
-				OTHER_SWIFT_FLAGS = (
-					"$(inherited)",
-					"-Xfrontend",
-					"-disable-reflection-metadata",
 				);
 				SWIFT_VERSION = 5.0;
 			};
