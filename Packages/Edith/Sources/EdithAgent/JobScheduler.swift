@@ -47,6 +47,7 @@ public actor JobScheduler {
     private struct Flight {
         let id: UUID
         let task: Task<Data?, Error>
+        let finished: Task<Data?, Never>
     }
 
     private struct State {
@@ -66,26 +67,33 @@ public actor JobScheduler {
 
     private var states: [String: State] = [:]
     private var order: [String] = []
+    private var launchWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private let publish: Publish
     private let observe: Observe
     private let power: AgentPowerSource
     private let clock: @Sendable () -> Date
+    private let maxConcurrent: Int
     private var pauseAmbientOnBattery: Bool
     private var started = false
     private var shuttingDown = false
-    private var shutdownFlights: [Task<Data?, Error>] = []
+    private var shutdownFlights: [Task<Data?, Never>] = []
     private var timer: Task<Void, Never>?
+
+    var concurrencyLimit: Int { maxConcurrent }
 
     public init(
         publish: @escaping Publish = { _, _ in },
         power: AgentPowerSource = StaticPowerSource(),
         pauseAmbientOnBattery: Bool = false,
+        maxConcurrent: Int? = nil,
         clock: @escaping @Sendable () -> Date = { Date() },
         observe: @escaping Observe = { _ in }
     ) {
         self.publish = publish
         self.power = power
         self.pauseAmbientOnBattery = pauseAmbientOnBattery
+        let processors = ProcessInfo.processInfo.activeProcessorCount
+        self.maxConcurrent = max(1, maxConcurrent ?? max(2, processors))
         self.clock = clock
         self.observe = observe
     }
@@ -96,6 +104,8 @@ public actor JobScheduler {
         let subscribers = states[id]?.subscribers ?? 0
         states[id]?.job.cancelPending()
         states[id]?.flight?.task.cancel()
+        states[id]?.flight?.finished.cancel()
+        resumeLaunchWaiters(id)
         if states[id] == nil { order.append(id) }
         states[id] = State(job: job, subscribers: subscribers)
         refreshSchedule()
@@ -123,7 +133,7 @@ public actor JobScheduler {
     public func shutdown() async {
         if !shuttingDown {
             shuttingDown = true
-            shutdownFlights = states.values.compactMap { $0.flight?.task }
+            shutdownFlights = states.values.compactMap { $0.flight?.finished }
             stop()
         }
         for flight in shutdownFlights { _ = await flight.result }
@@ -169,21 +179,17 @@ public actor JobScheduler {
 
     @discardableResult
     public func enqueue(_ id: String) -> Bool {
-        guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return false }
-        guard state.flight == nil else {
-            states[id]?.rerunRequested = true
+        guard !shuttingDown, var state = states[id], state.job.isEnabled() else { return false }
+        if state.flight != nil {
+            state.rerunRequested = true
+            states[id] = state
             return true
         }
         guard !state.enqueued else { return true }
-        states[id]?.enqueued = true
-        Task { await runEnqueued(id) }
+        state.enqueued = true
+        states[id] = state
+        pump()
         return true
-    }
-
-    private func runEnqueued(_ id: String) async {
-        guard states[id]?.enqueued == true else { return }
-        states[id]?.enqueued = false
-        await runNow(id)
     }
 
     @discardableResult
@@ -210,31 +216,94 @@ public actor JobScheduler {
         guard !shuttingDown, let state = states[id], state.job.isEnabled() else { return nil }
         if let flight = state.flight {
             states[id]?.joinedRuns += 1
-            return try? await flight.task.value
+            return await flight.finished.value
         }
+        if state.enqueued {
+            states[id]?.joinedRuns += 1
+            await waitForLaunch(id)
+            guard let flight = states[id]?.flight else { return nil }
+            return await flight.finished.value
+        }
+        states[id]?.enqueued = true
+        pump()
+        if states[id]?.flight == nil { await waitForLaunch(id) }
+        guard let flight = states[id]?.flight else { return nil }
+        return await flight.finished.value
+    }
+
+    public func cancel(_ id: String) {
+        states[id]?.job.cancelPending()
+        states[id]?.enqueued = false
+        states[id]?.rerunRequested = false
+        states[id]?.flight?.task.cancel()
+        resumeLaunchWaiters(id)
+    }
+
+    private var inFlightCount: Int {
+        states.values.reduce(into: 0) { count, state in
+            if state.flight != nil { count += 1 }
+        }
+    }
+
+    private func pump() {
+        guard !shuttingDown else { return }
+        while inFlightCount < maxConcurrent {
+            guard
+                let id = order.first(where: {
+                    states[$0]?.enqueued == true && states[$0]?.flight == nil
+                })
+            else { return }
+            guard states[id]?.job.isEnabled() == true else {
+                states[id]?.enqueued = false
+                continue
+            }
+            if !startFlight(id) {
+                states[id]?.enqueued = false
+            }
+        }
+    }
+
+    private func startFlight(_ id: String) -> Bool {
+        guard let state = states[id], state.flight == nil else { return false }
         let token = UUID()
         let began = clock()
-        let task = Task { try await state.job.run() }
-        states[id]?.flight = Flight(id: token, task: task)
+        let run = state.job.run
+        let task = Task.detached(priority: .utility) {
+            try await run()
+        }
+        let finished = Task { () -> Data? in
+            await self.observe(AgentEvent(category: "job", name: id, message: "Started"))
+            let result = await task.result
+            return await self.complete(id: id, token: token, began: began, result: result)
+        }
+        states[id]?.flight = Flight(id: token, task: task, finished: finished)
+        states[id]?.enqueued = false
         publishJobs()
-        await observe(AgentEvent(category: "job", name: id, message: "Started"))
-        let result = await task.result
+        resumeLaunchWaiters(id)
+        return true
+    }
+
+    private func complete(
+        id: String, token: UUID, began: Date, result: Result<Data?, Error>
+    ) async -> Data? {
         guard states[id]?.flight?.id == token else { return nil }
         states[id]?.lastRun = began
         let duration = max(0, clock().timeIntervalSince(began))
         states[id]?.lastDuration = duration
         var payload: Data?
+        let topic = states[id]?.job.descriptor.topic
         switch result {
         case .success(let value):
-            let failure = Self.payloadFailure(value, topic: state.job.descriptor.topic)
+            let failure = Self.payloadFailure(value, topic: topic)
             states[id]?.lastError = failure
             if failure == nil { states[id]?.runCount += 1 }
             payload = value
-            if let value, let topic = state.job.descriptor.topic { publish(topic, value) }
+            if let value, let topic { publish(topic, value) }
             await observe(
                 AgentEvent(
                     level: failure == nil ? .info : .error,
-                    category: "job", name: id, message: failure ?? "Completed", duration: duration))
+                    category: "job", name: id, message: failure ?? "Completed",
+                    duration: duration))
         case .failure(let error):
             let cancelled = error is CancellationError
             if cancelled { states[id]?.rerunRequested = false }
@@ -245,24 +314,31 @@ public actor JobScheduler {
                     message: cancelled ? "Cancelled" : error.localizedDescription,
                     duration: duration))
         }
-        guard states[id]?.flight?.id == token else { return nil }
-        states[id]?.flight = nil
-        let rerunRequested = states[id]?.rerunRequested == true
-        states[id]?.rerunRequested = false
-        if let interval = states[id].flatMap(interval(for:)) {
-            states[id]?.nextRun = clock().addingTimeInterval(interval)
+        guard var state = states[id], state.flight?.id == token else { return nil }
+        state.flight = nil
+        let rerunRequested = state.rerunRequested
+        state.rerunRequested = false
+        if let interval = interval(for: state) {
+            state.nextRun = clock().addingTimeInterval(interval)
         }
+        states[id] = state
         publishJobs()
         refreshSchedule()
         if rerunRequested { enqueue(id) }
+        pump()
         return payload
     }
 
-    public func cancel(_ id: String) {
-        states[id]?.job.cancelPending()
-        states[id]?.enqueued = false
-        states[id]?.rerunRequested = false
-        states[id]?.flight?.task.cancel()
+    private func waitForLaunch(_ id: String) async {
+        if states[id]?.flight != nil { return }
+        await withCheckedContinuation { continuation in
+            launchWaiters[id, default: []].append(continuation)
+        }
+    }
+
+    private func resumeLaunchWaiters(_ id: String) {
+        let waiters = launchWaiters.removeValue(forKey: id) ?? []
+        for waiter in waiters { waiter.resume() }
     }
 
     public func refreshSchedule() {
@@ -272,10 +348,12 @@ public actor JobScheduler {
         let now = clock()
         for id in order {
             guard let state = states[id] else { continue }
-            let current = interval(for: state, constrained: false)
+            let current = interval(for: state)
             if current != state.interval {
-                states[id]?.interval = current
-                states[id]?.nextRun = interval(for: state).map { now.addingTimeInterval($0) }
+                var updated = state
+                updated.interval = current
+                updated.nextRun = current.map { now.addingTimeInterval($0) }
+                states[id] = updated
             }
             if !state.job.isEnabled() { cancel(id) }
         }

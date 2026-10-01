@@ -15,19 +15,23 @@ public struct AgentServices {
     public let scheduler: JobScheduler
     public let watchers: [FileSystemWatcher]
     private let startup: Task<Void, Never>?
+    private let stopWatchingPower: @Sendable () -> Void
 
     public init(
         runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler,
-        watchers: [FileSystemWatcher], startup: Task<Void, Never>? = nil
+        watchers: [FileSystemWatcher], startup: Task<Void, Never>? = nil,
+        stopWatchingPower: @escaping @Sendable () -> Void = {}
     ) {
         self.runtime = runtime
         self.hub = hub
         self.scheduler = scheduler
         self.watchers = watchers
         self.startup = startup
+        self.stopWatchingPower = stopWatchingPower
     }
 
     public func stop() async {
+        stopWatchingPower()
         startup?.cancel()
         watchers.forEach { $0.stop() }
         async let runtimeStopped: Void = runtime.shutdown()
@@ -68,14 +72,17 @@ public enum AgentBoot {
                 }
             },
             completed: { IPC.post(IPC.Name.musicFolderChanged) })
+        let power = LivePowerSource()
         let scheduler = JobScheduler(
             publish: { topic, payload in
                 Task { await runtime.publish(topic: topic, payload: payload) }
             },
-            power: LivePowerSource(),
+            power: power,
             pauseAmbientOnBattery: SharedDefaults.store.bool(
                 forKey: AgentSettingsKeys.pauseAmbientOnBattery),
             observe: { await runtime.record($0) })
+        let powerWatch = PowerWatch()
+        powerWatch.start(power: power, scheduler: scheduler)
         let hub = AgentHub(runtime: runtime)
         let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
             Task { await scheduler.enqueueFileSystemChange("usage.refresh", topic: .usage) }
@@ -148,7 +155,8 @@ public enum AgentBoot {
             }
         }
         return AgentServices(
-            runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher], startup: startup)
+            runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher],
+            startup: startup, stopWatchingPower: { powerWatch.stop() })
     }
 }
 
@@ -170,6 +178,35 @@ public struct LivePowerSource: AgentPowerSource {
         return process.isLowPowerModeEnabled
             || process.thermalState == .serious || process.thermalState == .critical
     }
+
+    public func invalidate() {
+        cache.invalidate()
+    }
+}
+
+final class PowerWatch: @unchecked Sendable {
+    private var tokens: [any NSObjectProtocol] = []
+
+    func start(power: LivePowerSource, scheduler: JobScheduler) {
+        let names = [
+            Notification.Name.NSProcessInfoPowerStateDidChange,
+            ProcessInfo.thermalStateDidChangeNotification,
+        ]
+        for name in names {
+            tokens.append(
+                NotificationCenter.default.addObserver(
+                    forName: name, object: nil, queue: nil
+                ) { _ in
+                    power.invalidate()
+                    Task { await scheduler.refreshSchedule() }
+                })
+        }
+    }
+
+    func stop() {
+        for token in tokens { NotificationCenter.default.removeObserver(token) }
+        tokens.removeAll()
+    }
 }
 
 final class PowerStateCache: @unchecked Sendable {
@@ -187,6 +224,10 @@ final class PowerStateCache: @unchecked Sendable {
             sample = fresh
             return (fresh.1, fresh.2)
         }
+    }
+
+    func invalidate() {
+        lock.withLock { sample = nil }
     }
 }
 

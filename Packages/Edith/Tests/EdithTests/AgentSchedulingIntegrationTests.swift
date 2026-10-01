@@ -165,6 +165,204 @@ import Testing
         await scheduler.stop()
     }
 
+    @Test func theDefaultConcurrencyLimitFollowsActiveProcessors() async {
+        let scheduler = JobScheduler()
+        let expected = max(2, ProcessInfo.processInfo.activeProcessorCount)
+        #expect(await scheduler.concurrencyLimit == expected)
+        await scheduler.shutdown()
+    }
+
+    @Test func independentJobsRunTogether() async {
+        let count = 4
+        let gate = AdmissionGate()
+        let scheduler = JobScheduler(maxConcurrent: count)
+        for index in 0..<count {
+            let id = "job.\(index)"
+            await scheduler.register(
+                AgentJob(descriptor: descriptor(id: id)) {
+                    await gate.enter()
+                    return nil
+                })
+        }
+        for index in 0..<count {
+            #expect(await scheduler.enqueue("job.\(index)"))
+        }
+        let admitted = await waitUntil { await gate.entered >= count }
+        let running = await scheduler.snapshots.filter { $0.phase == .running }.count
+        await gate.release()
+        #expect(admitted)
+        #expect(running == count)
+        #expect(await waitForCompletions(scheduler, expected: count))
+        await scheduler.shutdown()
+    }
+
+    @Test func slowJobsFinishTogetherInsteadOfOneByOne() async {
+        let count = 4
+        let scheduler = JobScheduler(maxConcurrent: count)
+        for index in 0..<count {
+            let id = "sleep.\(index)"
+            await scheduler.register(
+                AgentJob(descriptor: descriptor(id: id)) {
+                    try await Task.sleep(for: .milliseconds(200))
+                    return nil
+                })
+        }
+        let started = ContinuousClock.now
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<count {
+                group.addTask { _ = await scheduler.runNow("sleep.\(index)") }
+            }
+        }
+        let elapsed = ContinuousClock.now - started
+        #expect(elapsed < .milliseconds(750))
+        #expect(await scheduler.snapshots.allSatisfy { $0.runCount == 1 })
+        await scheduler.shutdown()
+    }
+
+    @Test func theSchedulerNeverExceedsItsCap() async {
+        let cap = 2
+        let count = 6
+        let gate = AdmissionGate()
+        let scheduler = JobScheduler(maxConcurrent: cap)
+        for index in 0..<count {
+            let id = "job.\(index)"
+            await scheduler.register(
+                AgentJob(descriptor: descriptor(id: id)) {
+                    await gate.enter()
+                    return nil
+                })
+        }
+        for index in 0..<count {
+            #expect(await scheduler.enqueue("job.\(index)"))
+        }
+        let admitted = await waitUntil { await gate.entered >= cap }
+        let entered = await gate.entered
+        let running = await scheduler.snapshots.filter { $0.phase == .running }.count
+        #expect(admitted)
+        #expect(entered == cap)
+        #expect(running == cap)
+        await gate.release()
+        #expect(await waitForCompletions(scheduler, expected: count))
+        await scheduler.shutdown()
+    }
+
+    @Test func aClockJumpKeepsInFlightWorkInsideTheCap() async {
+        let cap = 2
+        let count = 8
+        let gate = AdmissionGate()
+        let policy = SchedulerPolicy()
+        let scheduler = JobScheduler(maxConcurrent: cap, clock: { policy.date })
+        for index in 0..<count {
+            let id = "job.\(index)"
+            await scheduler.register(
+                AgentJob(descriptor: descriptor(id: id, cadence: .every(ambient: 30))) {
+                    await gate.enter()
+                    return nil
+                })
+        }
+        await scheduler.start()
+        policy.advance(86_400)
+        await scheduler.tick()
+        let admitted = await waitUntil { await gate.entered >= cap }
+        let entered = await gate.entered
+        let running = await scheduler.snapshots.filter { $0.phase == .running }.count
+        #expect(admitted)
+        #expect(entered == cap)
+        #expect(running == cap)
+        await gate.release()
+        #expect(await waitForCompletions(scheduler, expected: count))
+        await scheduler.shutdown()
+    }
+
+    @Test func lowPowerStretchesAnAlreadyStoredNextRun() async {
+        let power = MutablePower()
+        let policy = SchedulerPolicy()
+        let counter = RunCounter()
+        let scheduler = JobScheduler(power: power, clock: { policy.date })
+        await scheduler.register(
+            AgentJob(descriptor: descriptor(cadence: .every(ambient: 900))) {
+                counter.bump()
+                return nil
+            })
+        await scheduler.start()
+        policy.advance(800)
+        power.set(constrained: true)
+        await scheduler.refreshSchedule()
+        policy.advance(200)
+        await scheduler.tick()
+        #expect(
+            await waitUntil(attempts: 15, pause: .milliseconds(10)) { counter.value > 0 } == false)
+        policy.advance(2_500)
+        await scheduler.tick()
+        #expect(await waitForCompletions(scheduler, expected: 1))
+        await scheduler.shutdown()
+    }
+
+    @Test func batteryPausesAScheduledJobWithoutWaitingForItToFinish() async {
+        let power = MutablePower()
+        let policy = SchedulerPolicy()
+        let counter = RunCounter()
+        let scheduler = JobScheduler(power: power, clock: { policy.date })
+        await scheduler.register(
+            AgentJob(
+                descriptor: descriptor(cadence: .every(ambient: 100), power: .pauseOnBattery)
+            ) {
+                counter.bump()
+                return nil
+            })
+        await scheduler.start()
+        #expect(await scheduler.snapshots.first?.phase == .idle)
+        power.set(battery: true)
+        await scheduler.refreshSchedule()
+        #expect(await scheduler.snapshots.first?.phase == .paused)
+        policy.advance(10_000)
+        await scheduler.tick()
+        #expect(
+            await waitUntil(attempts: 15, pause: .milliseconds(10)) { counter.value > 0 } == false)
+        await scheduler.shutdown()
+    }
+
+    @Test func lockingPausesAScheduledJobImmediately() async {
+        let power = MutablePower()
+        let policy = SchedulerPolicy()
+        let counter = RunCounter()
+        let scheduler = JobScheduler(power: power, clock: { policy.date })
+        await scheduler.register(
+            AgentJob(descriptor: descriptor(cadence: .every(ambient: 100), power: .pauseOnLock)) {
+                counter.bump()
+                return nil
+            })
+        await scheduler.start()
+        power.set(locked: true)
+        await scheduler.refreshSchedule()
+        #expect(await scheduler.snapshots.first?.phase == .paused)
+        policy.advance(10_000)
+        await scheduler.tick()
+        #expect(
+            await waitUntil(attempts: 15, pause: .milliseconds(10)) { counter.value > 0 } == false)
+        await scheduler.shutdown()
+    }
+
+    @Test func lowPowerLeavesLiveCadenceShort() async {
+        let power = MutablePower()
+        let policy = SchedulerPolicy()
+        let counter = RunCounter()
+        let scheduler = JobScheduler(power: power, clock: { policy.date })
+        await scheduler.register(
+            AgentJob(descriptor: descriptor(cadence: .every(ambient: 900, live: 10))) {
+                counter.bump()
+                return nil
+            })
+        await scheduler.addSubscriber(topic: .usage)
+        await scheduler.start()
+        power.set(constrained: true)
+        await scheduler.refreshSchedule()
+        policy.advance(10)
+        await scheduler.tick()
+        #expect(await waitForCompletions(scheduler, expected: 1))
+        await scheduler.shutdown()
+    }
+
     @Test func mixedBusAndTopicSubscriptionsKeepTheirRelayUntilBothAreRemoved() async {
         let runtime = AgentRuntime(build: "fixture", store: nil)
         let peer = UUID()
@@ -231,10 +429,30 @@ import Testing
         try old.close()
     }
 
-    private func descriptor(cadence: AgentCadence = .onDemand) -> AgentJobDescriptor {
+    private func descriptor(
+        id: String = "fixture.refresh", cadence: AgentCadence = .onDemand,
+        power: AgentPowerPolicy = .any
+    ) -> AgentJobDescriptor {
         AgentJobDescriptor(
-            id: "fixture.refresh", title: "Fixture", trigger: .timer, topic: .usage,
-            cadence: cadence)
+            id: id, title: id, trigger: .timer, topic: .usage, cadence: cadence, power: power)
+    }
+}
+
+private func waitUntil(
+    attempts: Int = 50, pause: Duration = .milliseconds(20),
+    _ ready: @Sendable () async -> Bool
+) async -> Bool {
+    for _ in 0..<attempts {
+        if await ready() { return true }
+        try? await Task.sleep(for: pause)
+    }
+    return false
+}
+
+private func waitForCompletions(_ scheduler: JobScheduler, expected: Int) async -> Bool {
+    await waitUntil {
+        let done = await scheduler.snapshots.filter { $0.runCount >= 1 }.count
+        return done >= expected
     }
 }
 
@@ -246,6 +464,29 @@ private func waitForJoin(
         await Task.yield()
     }
     Issue.record("no second caller joined the run in flight")
+}
+
+private actor AdmissionGate {
+    private(set) var entered = 0
+    private var parked: [CheckedContinuation<Void, Never>] = []
+    private var open = false
+
+    func enter() async {
+        entered += 1
+        if open {
+            entered -= 1
+            return
+        }
+        await withCheckedContinuation { parked.append($0) }
+        entered -= 1
+    }
+
+    func release() {
+        open = true
+        let waiting = parked
+        parked.removeAll()
+        for waiter in waiting { waiter.resume() }
+    }
 }
 
 private actor CollectorGate {
@@ -278,6 +519,32 @@ private final class SchedulerOutput: @unchecked Sendable {
 
     func append(_ topic: AgentTopic, _ data: Data) { lock.withLock { topics.append(topic) } }
     func count(topic: AgentTopic) -> Int { lock.withLock { topics.filter { $0 == topic }.count } }
+}
+
+private final class MutablePower: AgentPowerSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private var battery = false
+    private var locked = false
+    private var constrained = false
+
+    var isOnBattery: Bool { lock.withLock { battery } }
+    var isScreenLocked: Bool { lock.withLock { locked } }
+    var isConstrained: Bool { lock.withLock { constrained } }
+
+    func set(battery: Bool? = nil, locked: Bool? = nil, constrained: Bool? = nil) {
+        lock.withLock {
+            if let battery { self.battery = battery }
+            if let locked { self.locked = locked }
+            if let constrained { self.constrained = constrained }
+        }
+    }
+}
+
+private final class RunCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func bump() { lock.withLock { count += 1 } }
 }
 
 private final class SchedulerPolicy: @unchecked Sendable {
