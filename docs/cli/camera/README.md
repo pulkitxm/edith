@@ -22,6 +22,13 @@ ed camera scene apply <scene> [--json]
 ed camera scene save <name> [--replace] [--json]
 ed camera scene next [--json]
 ed camera scene previous [--json]
+ed camera scene rename <scene> <name> [--json]
+ed camera scene duplicate <scene> [--json]
+ed camera scene move <scene> --by <places> [--json]
+ed camera scene delete <scene> [--yes] [--json]
+ed camera extension status [--json]
+ed camera extension install [--yes] [--json]
+ed camera extension remove [--yes] [--json]
 ```
 
 A bare `ed camera` runs `status`, and a bare `ed camera scene` runs
@@ -157,7 +164,19 @@ stores the current setup, and `--replace` overwrites a scene with the same
 name. `scene apply` takes a name, a unique name prefix, the number from
 `scene list` or the scene id. When scene changes are set to **Smooth**, the
 framing glides to the new scene instead of cutting. On the page, ⌘1 to ⌘9
-switch to the first nine scenes.
+switch to the first nine scenes. `scene next` and `scene previous` step
+through that list for a hotkey or a stream deck. The page itself picks a scene
+directly. `scene rename`, `scene duplicate`, `scene move --by` and
+`scene delete` match the inspector's rename, duplicate, reorder and delete
+actions. Delete previews first and applies with `--yes`.
+
+## System extension
+
+`extension status` is Check again. `extension install` and `extension remove`
+are the Install Edith Camera and Remove buttons. They preview first. `--yes`
+asks the open Edith app to submit the system extension request. macOS may still
+ask you to approve it. A development build that is not in `/Applications`
+reports that it needs to be moved there instead of installing.
 
 ## Pausing
 

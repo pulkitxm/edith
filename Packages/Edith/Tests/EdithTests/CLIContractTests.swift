@@ -929,6 +929,19 @@ enum JSONContract {
         JSONCase("ed camera scene save", ["camera", "scene", "save", "Podcast", "--json"]),
         JSONCase("ed camera scene next", ["camera", "scene", "next", "--json"]),
         JSONCase("ed camera scene previous", ["camera", "scene", "previous", "--json"]),
+        JSONCase(
+            "ed camera scene rename", ["camera", "scene", "rename", "Close-up", "Desk", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed camera scene duplicate", ["camera", "scene", "duplicate", "Close-up", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed camera scene move", ["camera", "scene", "move", "Close-up", "--by", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed camera scene delete", ["camera", "scene", "delete", "Close-up", "--json"]),
+        JSONCase("ed camera extension status", ["camera", "extension", "status", "--json"]),
+        JSONCase("ed camera extension install", ["camera", "extension", "install", "--json"]),
+        JSONCase("ed camera extension remove", ["camera", "extension", "remove", "--json"]),
         JSONCase("ed lid-awake status", ["lid-awake", "status", "--json"]),
         JSONCase(
             "ed lid-awake on", ["lid-awake", "on", "--json"], mutatesTheMachine: true),

@@ -1037,6 +1037,22 @@ private extension VirtualCameraOperation {
             commandLineOnly(
                 "stepping back through scenes suits hotkeys and stream decks, the page picks one directly"
             )
+        case .sceneRename:
+            userInterface("Virtual Camera scenes", "rename a scene", ["Close-up", "Desk"])
+        case .sceneDuplicate:
+            userInterface("Virtual Camera scenes", "duplicate a scene", ["Close-up"])
+        case .sceneMove:
+            userInterface("Virtual Camera scenes", "reorder a scene", ["Close-up", "--by", "1"])
+        case .sceneDelete:
+            userInterface("Virtual Camera scenes", "delete a scene", ["Close-up", "--yes"])
+        case .extensionStatus:
+            userInterface("Virtual Camera inspector", "check the camera extension")
+        case .extensionInstall:
+            userInterface(
+                "Virtual Camera inspector", "install Edith Camera", ["--yes"])
+        case .extensionRemove:
+            userInterface(
+                "Virtual Camera inspector", "remove Edith Camera", ["--yes"])
         }
     }
 }

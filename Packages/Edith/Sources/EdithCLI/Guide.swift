@@ -171,6 +171,8 @@ public enum Guide {
         ed camera look studio
         ed camera background blur --blur 0.7
         ed camera scene apply Close-up
+        ed camera scene next             step scenes from a hotkey
+        ed camera extension status       Edith Camera system extension
         ed camera pause --style card --message "Back in 5"
         ed camera resume
         ```
