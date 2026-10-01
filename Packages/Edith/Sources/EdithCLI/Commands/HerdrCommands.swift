@@ -17,7 +17,11 @@ struct HerdrCommand: AsyncParsableCommand {
         subcommands: [
             HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
             HerdrModelsCommand.self, HerdrDefaultsCommand.self, HerdrSendCommand.self,
-            HerdrHooksCommand.self, HerdrBridgeCommand.self,
+            HerdrHooksCommand.self, HerdrBridgeCommand.self, HerdrLayoutCommand.self,
+            HerdrCloseTabCommand.self, HerdrCloseOthersCommand.self, HerdrCloseRightCommand.self,
+            HerdrCloseAllCommand.self, HerdrGatherCommand.self, HerdrSeparateCommand.self,
+            HerdrSplitCommand.self, HerdrMoveCommand.self, HerdrSwapCommand.self,
+            HerdrTerminalCommand.self,
         ],
         defaultSubcommand: HerdrListCommand.self)
 }

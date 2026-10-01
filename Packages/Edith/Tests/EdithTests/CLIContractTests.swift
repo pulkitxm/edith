@@ -1017,6 +1017,36 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
+        JSONCase("ed herdr layout ls", ["herdr", "layout", "ls", "--json"]),
+        JSONCase(
+            "ed herdr layout save", ["herdr", "layout", "save", "Pair", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed herdr layout delete", ["herdr", "layout", "delete", "Pair", "--json"]),
+        JSONCase(
+            "ed herdr layout apply", ["herdr", "layout", "apply", "columns", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr layout even", ["herdr", "layout", "even", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed herdr close-tab", ["herdr", "close-tab", "--json"]),
+        JSONCase("ed herdr close-others", ["herdr", "close-others", "--json"]),
+        JSONCase("ed herdr close-right", ["herdr", "close-right", "--json"]),
+        JSONCase("ed herdr close-all", ["herdr", "close-all", "--json"]),
+        JSONCase(
+            "ed herdr gather", ["herdr", "gather", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr separate", ["herdr", "separate", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr split", ["herdr", "split", "w9:p99", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr move", ["herdr", "move", "w9:p99", "--tab", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr swap", ["herdr", "swap", "w9:p99", "w9:p98", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed herdr terminal", ["herdr", "terminal", "--json"], mutatesTheMachine: true),
         JSONCase("ed docs ls", ["docs", "ls", "--json"]),
         JSONCase("ed docs show", ["docs", "show", "herdr", "ls", "--json"]),
         JSONCase("ed docs ask", ["docs", "ask", "restart the background agent", "--json"]),

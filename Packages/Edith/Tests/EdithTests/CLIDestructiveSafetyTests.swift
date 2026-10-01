@@ -66,6 +66,11 @@ import Testing
         "ed maintenance reset",
         "ed shelf purge",
         "ed shelf rm",
+        "ed herdr close-all",
+        "ed herdr close-others",
+        "ed herdr close-right",
+        "ed herdr close-tab",
+        "ed herdr layout delete",
     ]
 
     static func nodes(
