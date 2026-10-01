@@ -20,6 +20,7 @@ the collecting process; application duration does not.
 - [`ed attention timeline`](./timeline.md)
 - [`ed attention music`](./music.md)
 - [`ed attention categories`](./categories/README.md)
+- [`ed attention rules`](./rules/README.md)
 - [`ed attention focus`](./focus/README.md)
 - [`ed attention doctor`](./doctor.md)
 - `ed attention extension install`

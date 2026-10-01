@@ -161,7 +161,7 @@ public struct AttentionClassifier {
     public mutating func classify(_ event: AttentionEvent) -> AttentionClassification {
         let key = [
             event.source.rawValue, event.bundleID ?? event.appName ?? "", event.domain ?? "",
-            event.url ?? "", event.windowTitle ?? "",
+            event.url ?? "", event.windowTitle ?? "", event.browserProfile ?? "",
             (event.tags ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
                 .joined(separator: ","),
         ].joined(separator: "\u{1F}")
@@ -179,7 +179,7 @@ public struct AttentionClassifier {
     }
 
     private func resolve(_ event: AttentionEvent) -> AttentionClassification {
-        let bundleID = event.source == .browser ? nil : event.bundleID?.lowercased()
+        let bundleID = event.source == .browser ? nil : (event.bundleID ?? event.appName ?? "unknown").lowercased()
         let domain = AttentionText.domain(event.domain ?? event.url)
         let location = AttentionText.location(event.url)
         let title = event.windowTitle?.lowercased() ?? ""
@@ -221,7 +221,7 @@ public struct AttentionClassifier {
         let matching = specific.filter {
             matches(
                 $0.rule, bundleID: bundleID, domain: domain, location: location, title: title,
-                tags: tags)
+                tags: tags, browserProfile: event.browserProfile)
         }
         var userBroad: (candidate: Candidate, score: Int)?
         for candidate in broad where candidate.isUser {
@@ -242,8 +242,12 @@ public struct AttentionClassifier {
             decision: AttentionJevDecision? = nil
         ) -> AttentionClassification {
             let category = settings.category(categoryID)
+            let reportingRule = matching.first?.rule
+            let reportID = reportingRule.flatMap { $0.reportSeparately ? "rule:\($0.id)" : nil }
+            let reportName = reportingRule.flatMap { $0.reportSeparately ? $0.name : nil }
             return AttentionClassification(
-                entityID: entityID, entityName: entityName, categoryID: category.id,
+                entityID: reportID ?? entityID, entityName: reportName ?? entityName,
+                categoryID: category.id,
                 productivity: productivityOverride ?? decision?.productivity
                     ?? category.productivity,
                 sphere: sphereOverride ?? decision?.sphere ?? category.sphere, source: source,
@@ -295,8 +299,15 @@ public struct AttentionClassifier {
 
     private func matches(
         _ rule: AttentionIdentityRule, bundleID: String?, domain: String?, location: String?,
-        title: String, tags: [String: String]
+        title: String, tags: [String: String], browserProfile: String?
     ) -> Bool {
+        if !rule.browserProfiles.isEmpty {
+            guard let browserProfile,
+                rule.browserProfiles.contains(where: {
+                    $0.caseInsensitiveCompare(browserProfile) == .orderedSame
+                })
+            else { return false }
+        }
         if !rule.bundleIDs.isEmpty || !rule.domains.isEmpty {
             guard targetScore(rule, bundleID: bundleID, domain: domain) > 0 else { return false }
         }
@@ -348,6 +359,8 @@ extension AttentionSettings {
         let rename = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         var indices: [Int]
         switch parts[0] {
+        case "rule":
+            indices = rules.indices.filter { rules[$0].id == value }
         case "name":
             indices = rules.indices.filter {
                 rules[$0].isIdentity && rules[$0].name.lowercased() == value
@@ -387,7 +400,7 @@ extension AttentionSettings {
             }
             return rules[indices[0]]
         }
-        guard parts[0] != "name" else { return nil }
+        guard parts[0] != "name", parts[0] != "rule" else { return nil }
         rules.append(
             AttentionIdentityRule(
                 name: rename?.isEmpty == false ? rename! : value,
