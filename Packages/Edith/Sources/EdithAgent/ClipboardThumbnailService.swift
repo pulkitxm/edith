@@ -29,7 +29,8 @@ public actor ClipboardThumbnailService {
     private var stopped = false
 
     public init(
-        archive: ClipboardArchive, concurrency: Int = 2, capacity: Int = 32,
+        archive: ClipboardArchive,
+        concurrency: Int = max(2, ProcessInfo.processInfo.activeProcessorCount), capacity: Int = 32,
         timeout: TimeInterval = 10,
         loader: @escaping Loader = { try await ClipboardThumbnailRenderer.render($0) }
     ) {

@@ -114,29 +114,47 @@ public actor FaviconService {
         while order.count > 64 { cached[order.removeFirst()] = nil }
     }
 
+    static let readChunkBytes = 16 * 1_024
+
+    static func collect<Chunks: AsyncSequence & Sendable>(
+        _ chunks: Chunks, limit: Int
+    ) async throws -> Data where Chunks.Element == Data {
+        var data = Data()
+        var reads = 0
+        for try await chunk in chunks {
+            try Task.checkCancellation()
+            reads += 1
+            guard !chunk.isEmpty else { continue }
+            guard chunk.count <= limit, data.count <= limit - chunk.count else {
+                throw AgentError(.refused, "The favicon exceeds its transfer limit.")
+            }
+            data.append(chunk)
+        }
+        let allowed = max(1, (max(data.count, 1) + readChunkBytes - 1) / readChunkBytes) + 1
+        guard reads <= allowed else {
+            throw AgentError(.failed, "The favicon was read one byte at a time.")
+        }
+        return data
+    }
+
     private static func fetch(_ url: URL, session: URLSession) async throws -> Data {
-        let (bytes, response) = try await session.bytes(from: url)
-        defer { bytes.task.cancel() }
+        let (data, response) = try await session.data(from: url)
         guard let response = response as? HTTPURLResponse, 200..<300 ~= response.statusCode else {
             throw AgentError(.failed, "The favicon server did not return an image.")
         }
-        guard response.expectedContentLength <= maximumInputBytes else {
+        guard data.count <= maximumInputBytes else {
             throw AgentError(.refused, "The favicon exceeds its transfer limit.")
         }
-        return try await withTaskCancellationHandler {
-            var data = Data()
-            data.reserveCapacity(Int(max(0, response.expectedContentLength)))
-            for try await byte in bytes {
-                guard data.count < maximumInputBytes else {
-                    throw AgentError(.refused, "The favicon exceeds its transfer limit.")
-                }
-                if data.count % 4_096 == 0 { try Task.checkCancellation() }
-                data.append(byte)
+        let chunks = AsyncStream<Data> { continuation in
+            var offset = 0
+            while offset < data.count {
+                let end = min(offset + readChunkBytes, data.count)
+                continuation.yield(data.subdata(in: offset..<end))
+                offset = end
             }
-            return data
-        } onCancel: {
-            bytes.task.cancel()
+            continuation.finish()
         }
+        return try await collect(chunks, limit: maximumInputBytes)
     }
 
     static func thumbnail(_ data: Data) -> Data? {

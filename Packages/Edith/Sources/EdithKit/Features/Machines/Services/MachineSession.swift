@@ -410,7 +410,10 @@ public final class MachineSession {
                 guard !Task.isCancelled else { return }
                 apply(sample: next)
                 if tick % 15 == 0 {
-                    slow = sampler.slow()
+                    let measured = await Task.detached(priority: .utility) {
+                        sampler.slow()
+                    }.value
+                    slow = measured
                 }
                 tick += 1
                 try? await Task.sleep(for: .seconds(2))

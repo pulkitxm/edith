@@ -262,6 +262,45 @@ import UniformTypeIdentifiers
             try #require(values[kCGImagePropertyPixelHeight] as? Int)
         )
     }
+
+    @Test func thumbnailRendersOverlapUpToTheWidth() async throws {
+        let fixture = try ClipboardPreviewFixture()
+        defer { fixture.cleanup() }
+        let gate = ThumbnailOverlapGate()
+        let service = ClipboardThumbnailService(
+            archive: fixture.archive, concurrency: 4, timeout: 5
+        ) { _ in
+            await gate.enter()
+            return Data()
+        }
+        var ids: [String] = []
+        for index in 0..<4 {
+            let capture = fixture.capture(Data("image-\(index)".utf8), ext: "png")
+            try fixture.store(capture)
+            ids.append(capture.id)
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids {
+                group.addTask {
+                    _ = try? await service.read(ClipboardThumbnailRequest(entryID: id))
+                }
+            }
+        }
+        #expect(await gate.maximum == 4)
+        await service.stop()
+    }
+}
+
+private actor ThumbnailOverlapGate {
+    private(set) var maximum = 0
+    private var current = 0
+
+    func enter() async {
+        current += 1
+        maximum = max(maximum, current)
+        try? await Task.sleep(for: .milliseconds(150))
+        current -= 1
+    }
 }
 
 private actor ClipboardPreviewCounter {

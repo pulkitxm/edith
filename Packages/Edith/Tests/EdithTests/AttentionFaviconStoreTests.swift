@@ -91,6 +91,24 @@ import Testing
                 bytesPerRow: 0, bitsPerPixel: 0))
         return try #require(bitmap.representation(using: .png, properties: [:]))
     }
+
+    @Test func faviconReadsArriveInChunksNotBytes() async throws {
+        let chunk = Data(repeating: 7, count: FaviconService.readChunkBytes)
+        let stream = AsyncStream<Data> { continuation in
+            continuation.yield(chunk)
+            continuation.yield(chunk)
+            continuation.finish()
+        }
+        let data = try await FaviconService.collect(stream, limit: FaviconService.maximumInputBytes)
+        #expect(data.count == FaviconService.readChunkBytes * 2)
+        let bytes = AsyncStream<Data> { continuation in
+            for _ in 0..<100 { continuation.yield(Data([1])) }
+            continuation.finish()
+        }
+        await #expect(throws: AgentError.self) {
+            _ = try await FaviconService.collect(bytes, limit: FaviconService.maximumInputBytes)
+        }
+    }
 }
 
 private final class FaviconHTTPFixture: @unchecked Sendable {

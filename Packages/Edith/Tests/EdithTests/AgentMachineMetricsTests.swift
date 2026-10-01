@@ -5,6 +5,22 @@ import Testing
 @testable import EdithKit
 
 @Suite @MainActor struct AgentMachineMetricsTests {
+    @Test func metricsEncodeSucceedsOffTheMainActor() async throws {
+        let service = AgentMachineMetricsService(
+            lookup: { _ in nil },
+            makeSession: { machine in
+                MachineSession(machine: machine, local: false, observesWakeRequests: false)
+            })
+        let data = try await Task.detached {
+            try await service.snapshotData()
+        }.value
+        let snapshots = try AgentPayload.decode([AgentMachineMetricsSnapshot].self, from: data)
+        #expect(snapshots.isEmpty)
+        let sampler = LocalMachineSampler()
+        let slow = await Task.detached { sampler.slow() }.value
+        #expect(slow.disks.allSatisfy { $0.totalKB >= 0 })
+    }
+
     @Test func visibleClientReceivesRealDaemonSamplesAndHiddenClientStopsCollection() async throws {
         let runtime = AgentRuntime(build: "fixture", store: nil)
         let server = MachineSession(machine: .local, local: true, observesWakeRequests: false)

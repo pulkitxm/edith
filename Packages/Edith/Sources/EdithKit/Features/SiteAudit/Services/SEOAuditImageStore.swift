@@ -31,13 +31,13 @@ public actor SEOAuditImageStore {
                 openGraphImageURL: snapshot?.absoluteString,
                 twitterImageURL: snapshot?.absoluteString)
         }
-        let openGraphSnapshot = await capture(
+        async let openGraphSnapshot = capture(
             openGraphSource, projectID: projectID, runID: runID, runStartedAt: runStartedAt)
-        let twitterSnapshot = await capture(
+        async let twitterSnapshot = capture(
             twitterSource, projectID: projectID, runID: runID, runStartedAt: runStartedAt)
         return SEOAuditImageSnapshots(
-            openGraphImageURL: openGraphSnapshot?.absoluteString,
-            twitterImageURL: twitterSnapshot?.absoluteString)
+            openGraphImageURL: await openGraphSnapshot?.absoluteString,
+            twitterImageURL: await twitterSnapshot?.absoluteString)
     }
 
     private func capture(
