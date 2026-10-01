@@ -90,11 +90,48 @@ def link_flags(kit):
     return flags
 
 
-def object_list(intermediates):
+def object_list(derived, config):
+    roots = [
+        pathlib.Path(derived) / 'Build/Intermediates.noindex',
+        pathlib.Path(derived) / 'Build/Intermediates',
+    ]
     objects = []
+    missing = []
     for name in MODULES:
-        listing = intermediates / f'{name}-t.build/Objects-normal/arm64/{name}.LinkFileList'
-        objects.extend(listing.read_text().split())
+        listings = []
+        compiled = []
+        for root in roots:
+            if not root.exists():
+                continue
+            listings.extend(root.glob(f'**/{name}.LinkFileList'))
+            compiled.extend(root.glob(f'**/{name}-t.build/**/*.o'))
+        chosen = [
+            path for path in listings
+            if f'/{config}/' in str(path) and f'{name}-t.build' in str(path)
+        ]
+        if chosen:
+            objects.extend(chosen[0].read_text().split())
+            continue
+        module_objects = [
+            path for path in compiled
+            if f'/{config}/' in str(path)
+        ]
+        if module_objects:
+            objects.extend(str(path) for path in module_objects)
+            continue
+        missing.append(name)
+    if missing:
+        sample = []
+        for root in roots:
+            if not root.exists():
+                continue
+            sample.extend(str(path) for path in root.glob(f'**/{config}/**/EdithKit*'))
+        raise SystemExit(
+            'missing shared framework objects for '
+            + ', '.join(missing)
+            + '\n'
+            + '\n'.join(sample[:40])
+        )
     return objects
 
 
@@ -111,7 +148,7 @@ def merge(derived, config, app, release):
     if not kit.exists():
         kit = products / 'PackageFrameworks/EdithKit.framework/Versions/A/EdithKit'
     objects = pathlib.Path(derived) / 'shared-framework-objects.txt'
-    objects.write_text('\n'.join(object_list(intermediates)) + '\n')
+    objects.write_text('\n'.join(object_list(derived, config)) + '\n')
     developer = pathlib.Path(subprocess.check_output(['xcode-select', '-p'], text=True).strip())
     sdk = output(['xcrun', '--sdk', 'macosx', '--show-sdk-path']).strip()
     command = [
