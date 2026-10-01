@@ -108,7 +108,7 @@ enum SEOCLI {
         _ run: SEOAuditRun, query: String, severity: SEOAuditSeverity?,
         platform: SEOAuditSocialPlatform
     ) -> JSONValue {
-        let pages = SEOAuditSelection.filter(run.pages, query: query, severity: severity)
+        let pages = SEOAuditSelection.matching(run.pages, query: query, severity: severity)
         return .object([
             "id": .string(run.id.uuidString),
             "state": .string(run.state.rawValue),
@@ -610,7 +610,7 @@ struct SEORunCommand: AsyncParsableCommand {
                         audit, query: query, severity: parsedSeverity, platform: parsedPlatform))
                 return
             }
-            let pages = SEOAuditSelection.filter(
+            let pages = SEOAuditSelection.matching(
                 audit.pages, query: query, severity: parsedSeverity)
             CLIOut.out("\(audit.state.rawValue)  \(pages.count) pages")
             for page in pages {

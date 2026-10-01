@@ -44,9 +44,9 @@ import Testing
             name: "Example", baseURL: "https://example.com", runs: [older, newer])
         #expect(SEOAuditSelection.run(in: project, id: nil, offset: 0)?.id == newer.id)
         #expect(SEOAuditSelection.run(in: project, id: older.id, offset: 0)?.id == older.id)
-        let errors = SEOAuditSelection.filter(newer.pages, query: "", severity: .error)
+        let errors = SEOAuditSelection.matching(newer.pages, query: "", severity: .error)
         #expect(errors.map(\.url) == ["https://example.com/new"])
-        let titled = SEOAuditSelection.filter(newer.pages, query: "ok", severity: nil)
+        let titled = SEOAuditSelection.matching(newer.pages, query: "ok", severity: nil)
         #expect(titled.map(\.url) == ["https://example.com/ok"])
     }
 

@@ -155,7 +155,7 @@ public enum SEOAuditSelection {
         return urls
     }
 
-    public static func filter(
+    public static func matching(
         _ pages: [SEOAuditPageResult], query: String, severity: SEOAuditSeverity?
     ) -> [SEOAuditPageResult] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
