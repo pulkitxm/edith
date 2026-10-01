@@ -6,6 +6,13 @@ struct ExtensionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "extensions",
         abstract: "Turn Edith's extensions on and off.",
+        discussion: """
+            List extensions and turn them on or off.
+            Reads the extension registry and readiness. enable and disable change the enabled key. ls, info, status, verify, and doctor do not change it, except setup which can enable.
+
+            ed extensions ls
+            ed extensions status quinjet --json
+            """,
         subcommands: [
             ExtensionsListCommand.self, ExtensionsEnableCommand.self,
             ExtensionsDisableCommand.self, ExtensionsInfoCommand.self,
@@ -235,6 +242,13 @@ enum ExtensionLookup {
 struct ExtensionsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List extensions and whether they are on.",
+        discussion: """
+            List every extension, its suite, and whether it is enabled.
+            Reads the registry and enabled keys. Does not change them.
+
+            ed extensions ls
+            ed extensions ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -262,7 +276,14 @@ struct ExtensionsListCommand: AsyncParsableCommand {
 
 struct ExtensionsEnableCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "enable", abstract: "Turn an extension on.")
+        commandName: "enable", abstract: "Turn an extension on.",
+        discussion: """
+            Enable one extension by id.
+            Reads the registry. Changes that extension's enabled key. A permission may still be required before it runs.
+
+            ed extensions enable machines
+            ed extensions enable clipboard --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -290,7 +311,14 @@ struct ExtensionsEnableCommand: AsyncParsableCommand {
 
 struct ExtensionsDisableCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "disable", abstract: "Turn an extension off.")
+        commandName: "disable", abstract: "Turn an extension off.",
+        discussion: """
+            Disable one extension by id.
+            Reads the registry. Changes that extension's enabled key.
+
+            ed extensions disable notchShelf
+            ed extensions disable notchShelf --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -325,7 +353,14 @@ struct ExtensionsDisableCommand: AsyncParsableCommand {
 
 struct ExtensionsInfoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "info", abstract: "Describe one extension.")
+        commandName: "info", abstract: "Describe one extension.",
+        discussion: """
+            Describe one extension: summary, host, requirements, and state.
+            Reads the registry and current readiness. Does not change the extension.
+
+            ed extensions info clipboard
+            ed extensions info clipboard --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -389,7 +424,14 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
 
 struct ExtensionsStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Check extension readiness.")
+        commandName: "status", abstract: "Check extension readiness.",
+        discussion: """
+            Report whether an extension is verified and what phase it is in.
+            Reads live readiness. Does not change the extension. An unhealthy report still exits 0. Read verified, state.phase, and checks.
+
+            ed extensions status quinjet --json
+            ed extensions status
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -424,7 +466,14 @@ struct ExtensionsStatusCommand: AsyncParsableCommand {
 
 struct ExtensionsSetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "setup", abstract: "Enable an extension and report remaining setup.")
+        commandName: "setup", abstract: "Enable an extension and report remaining setup.",
+        discussion: """
+            Preview or apply noninteractive setup for one extension.
+            Reads requirements. --dry-run does not change anything. Without it, setup changes enablement and can install tools with --install-tools.
+
+            ed extensions setup quinjet --dry-run --json
+            ed extensions setup quinjet --install-tools
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -476,7 +525,14 @@ struct ExtensionsSetupCommand: AsyncParsableCommand {
 
 struct ExtensionsVerifyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "verify", abstract: "Run every readiness check for one extension.")
+        commandName: "verify", abstract: "Run every readiness check for one extension.",
+        discussion: """
+            Run the live readiness checks for one extension.
+            Reads the adapter. Does not change enablement.
+
+            ed extensions verify quinjet --json
+            ed extensions verify quinjet
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -500,7 +556,14 @@ struct ExtensionsVerifyCommand: AsyncParsableCommand {
 
 struct ExtensionsDoctorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "doctor", abstract: "Diagnose extension setup and runtime problems.")
+        commandName: "doctor", abstract: "Diagnose extension setup and runtime problems.",
+        discussion: """
+            Report recovery steps across every extension.
+            Reads each extension's checks. Does not change them.
+
+            ed extensions doctor
+            ed extensions doctor --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

@@ -5,7 +5,14 @@ import Foundation
 struct AttentionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "attention",
-        abstract: "Local attention, application, website, music and focus data.",
+        abstract: "Read local attention, application, website, music, and focus data.",
+        discussion: """
+            Read local attention, application, website, music, and focus data.
+            Reads attention files on disk. Most commands do not change history. categories set and focus start or stop change rules or the session.
+
+            ed attention status --json
+            ed attention summary --range today
+            """,
         subcommands: [
             AttentionStatusCommand.self, AttentionSummaryCommand.self,
             AttentionBreakdownCommand.self, AttentionAgentsCommand.self,
@@ -286,7 +293,14 @@ enum AttentionCLI {
 
 struct AttentionStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Show attention tracking, data and focus state.")
+        commandName: "status", abstract: "Show attention tracking, data and focus state.",
+        discussion: """
+            Show tracking, stored data, and the focus session.
+            Reads local attention files. Does not change them.
+
+            ed attention status
+            ed attention status --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
@@ -373,7 +387,14 @@ struct AttentionStatusCommand: AsyncParsableCommand {
 
 struct AttentionSummaryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "summary", abstract: "Summarize focus, distraction and top destinations.")
+        commandName: "summary", abstract: "Summarize focus, distraction and top destinations.",
+        discussion: """
+            Summarize a preset range: today, yesterday, 24h, 7d, 30d, week, month, or all.
+            Reads attention events. Does not change them.
+
+            ed attention summary --range today
+            ed attention summary --range 7d --json
+            """)
 
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
     var range = "today"
@@ -425,7 +446,14 @@ struct AttentionSummaryCommand: AsyncParsableCommand {
 struct AttentionBreakdownCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "breakdown",
-        abstract: "Group active time by app, title, URL, machine, agent, project and more.")
+        abstract: "Group active time by app, title, URL, machine, agent, project and more.",
+        discussion: """
+            Break active time down by app, title, URL, machine, agent, or project.
+            Reads attention events for --range. Does not change them. --by selects the grouping.
+
+            ed attention breakdown --by machine --range 7d
+            ed attention breakdown --by app --json
+            """)
 
     @Option(
         name: .customLong("by"),
@@ -490,7 +518,14 @@ struct AttentionBreakdownCommand: AsyncParsableCommand {
 struct AttentionAgentsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agents",
-        abstract: "Agent working and waiting time by machine, agent and project.")
+        abstract: "Show agent working and waiting time by machine, agent, and project.",
+        discussion: """
+            Show agent working and waiting time by machine, agent, and project.
+            Reads agent attention events. Does not change them.
+
+            ed attention agents --range week
+            ed attention agents --json
+            """)
 
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
     var range = "today"
@@ -550,7 +585,14 @@ struct AttentionAgentsCommand: AsyncParsableCommand {
 
 struct AttentionTimelineCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "timeline", abstract: "List raw observed attention events.")
+        commandName: "timeline", abstract: "List raw observed attention events.",
+        discussion: """
+            List raw attention events, newest within the range.
+            Reads the event log. Does not change it. --limit caps the rows.
+
+            ed attention timeline --range 24h --limit 100
+            ed attention timeline --json
+            """)
 
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
     var range = "today"
@@ -584,7 +626,14 @@ struct AttentionTimelineCommand: AsyncParsableCommand {
 
 struct AttentionMusicCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "music", abstract: "Summarize tracks, artists, albums and listening time.")
+        commandName: "music", abstract: "Summarize tracks, artists, albums and listening time.",
+        discussion: """
+            Summarize music listening in the attention store.
+            Reads music intervals. Does not change them.
+
+            ed attention music --range 30d
+            ed attention music --json
+            """)
 
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
     var range = "7d"
@@ -616,6 +665,13 @@ struct AttentionMusicCommand: AsyncParsableCommand {
 struct AttentionCategoriesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "categories", abstract: "List categories or classify an entity.",
+        discussion: """
+            List attention categories or classify one entity.
+            Reads category rules. set changes a rule. ls and auto's report do not rewrite raw history.
+
+            ed attention categories ls
+            ed attention categories set web:example.com focus
+            """,
         subcommands: [
             AttentionCategoryListCommand.self, AttentionCategorizeCommand.self,
             AttentionAutoCategorizeCommand.self,
@@ -625,7 +681,14 @@ struct AttentionCategoriesCommand: AsyncParsableCommand {
 
 struct AttentionCategoryListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List categories and identity rules.", aliases: ["list"])
+        commandName: "ls", abstract: "List categories and identity rules.",
+        discussion: """
+            List categories and the identity rules that assign them.
+            Reads the category store. Does not change rules.
+
+            ed attention categories ls
+            ed attention categories ls --json
+            """, aliases: ["list"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
@@ -668,7 +731,14 @@ struct AttentionCategoryListCommand: AsyncParsableCommand {
 struct AttentionAutoCategorizeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "auto",
-        abstract: "Ask Jev to categorize unclassified apps, sites and titles now.")
+        abstract: "Ask Jev to categorize unclassified apps, sites and titles now.",
+        discussion: """
+            Ask Jev to categorize unclassified apps, sites, and titles.
+            Reads unclassified entities. Changes category rules when Jev assigns them. Needs a Jev key.
+
+            ed attention categories auto
+            ed attention categories auto --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
@@ -695,7 +765,14 @@ struct AttentionAutoCategorizeCommand: AsyncParsableCommand {
 
 struct AttentionCategorizeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Assign an entity ID to a category.")
+        commandName: "set", abstract: "Assign an entity ID to a category.",
+        discussion: """
+            Assign one entity id to a category.
+            Reads the entity id from a summary. Changes the identity rule so past and future events reclassify. Does not rewrite raw history.
+
+            ed attention categories set web:example.com focus --name Example
+            ed attention categories set web:example.com focus --json
+            """)
     @Argument(help: "Entity ID from attention summary, such as app:com.example.App.")
     var entity: String
     @Argument(help: "Category ID or exact category name.") var category: String
@@ -748,6 +825,13 @@ struct AttentionCategorizeCommand: AsyncParsableCommand {
 struct AttentionFocusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "focus", abstract: "Start, inspect or finish a focus session.",
+        discussion: """
+            Start, read, or stop a focus session.
+            Reads the session file. start and stop change it. status does not change anything.
+
+            ed attention focus status
+            ed attention focus start --for 25m --name "Write proposal"
+            """,
         subcommands: [
             AttentionFocusStatusCommand.self, AttentionFocusStartCommand.self,
             AttentionFocusStopCommand.self,
@@ -756,7 +840,14 @@ struct AttentionFocusCommand: AsyncParsableCommand {
 
 struct AttentionFocusStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Show the active focus session.")
+        commandName: "status", abstract: "Show the active focus session.",
+        discussion: """
+            Show the active focus session, if one is running.
+            Reads the session file. Does not change it.
+
+            ed attention focus status
+            ed attention focus status --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
@@ -780,7 +871,14 @@ struct AttentionFocusStatusCommand: AsyncParsableCommand {
 
 struct AttentionFocusStartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "start", abstract: "Start a named focus session.")
+        commandName: "start", abstract: "Start a named focus session.",
+        discussion: """
+            Start a focus session with a duration and a name.
+            Reads whether a session is already active. Changes the session file by starting one.
+
+            ed attention focus start --for 25m --name "Write proposal"
+            ed attention focus start --for 25m --json
+            """)
     @Option(name: .customLong("for"), help: "Planned duration such as 25m, 1h or 90m.")
     var duration = "25m"
     @Option(help: "What this session is for.") var name = "Focus"
@@ -808,7 +906,14 @@ struct AttentionFocusStartCommand: AsyncParsableCommand {
 
 struct AttentionFocusStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Finish the active focus session.", aliases: ["end"])
+        commandName: "stop", abstract: "Finish the active focus session.",
+        discussion: """
+            Stop the active focus session.
+            Reads the active session. Changes it by finishing it.
+
+            ed attention focus stop
+            ed attention focus stop --json
+            """, aliases: ["end"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
@@ -832,8 +937,15 @@ struct AttentionFocusStopCommand: AsyncParsableCommand {
 
 struct AttentionDoctorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "doctor", abstract: "Check local collectors, data and browser extension files."
-    )
+        commandName: "doctor",
+        abstract: "Check local collectors, data and browser extension files.",
+        discussion: """
+            Check collectors, data files, and the browser extension folder.
+            Reads local files. Does not change them and does not install the extension.
+
+            ed attention doctor
+            ed attention doctor --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {

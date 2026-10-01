@@ -5,11 +5,15 @@ import Foundation
 struct ToolsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tools",
-        abstract: "The command line tools Edith's extensions rely on.",
+        abstract: "List and install the command line tools Edith's extensions rely on.",
         discussion: """
             These are the tools extensions need for downloads, agent usage and workspace
             review. `ls` checks what is on PATH; `install` fetches the one you name the same
-            way the extension sheet does.
+            way the extension sheet does. Reads PATH and each tool's version probe. Install
+            changes the tool on disk. Listing does not change anything.
+
+            ed tools ls
+            ed tools install yt-dlp
             """,
         subcommands: [ToolsListCommand.self, ToolsInstallCommand.self],
         defaultSubcommand: ToolsListCommand.self)
@@ -65,7 +69,15 @@ enum ToolsBridge {
 
 struct ToolsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the tools and whether they are installed.",
+        commandName: "ls",
+        abstract: "List the tools and whether they are installed.",
+        discussion: """
+            Probe each extension tool and report missing, installed, or broken. Reads PATH
+            and the tool's version command. Does not change installations.
+
+            ed tools ls
+            ed tools ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -115,7 +127,16 @@ struct ToolsListCommand: AsyncParsableCommand {
 
 struct ToolsInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "install", abstract: "Install one of the tools.")
+        commandName: "install",
+        abstract: "Install one of the tools.",
+        discussion: """
+            Install one tool by id, the same way the extension sheet does. Reads whether it
+            is already present. Changes disk by downloading and installing when it is missing.
+            Exits 4 when the menu bar app is not available to perform the install.
+
+            ed tools install yt-dlp
+            ed tools install yt-dlp --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

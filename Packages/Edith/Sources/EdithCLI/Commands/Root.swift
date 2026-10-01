@@ -212,7 +212,13 @@ struct GuideCommand: AsyncParsableCommand {
 struct SchemaCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "schema",
-        abstract: "Print the JSON Schema for the configuration document.")
+        abstract: "Print the JSON Schema for the configuration document.",
+        discussion: """
+            Print the JSON Schema for the document ed config import accepts.
+            Reads the settings catalog. Does not change settings. Stdout is already one JSON document, so there is no --json switch.
+
+            ed schema
+            """)
 
     func run() async throws {
         CLIOut.json(ConfigSchema.document())
@@ -221,7 +227,14 @@ struct SchemaCommand: AsyncParsableCommand {
 
 struct VersionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "version", abstract: "Print the Edith CLI version.")
+        commandName: "version", abstract: "Print the Edith CLI version.",
+        discussion: """
+            Print this CLI's version, and with --json whether the app is running.
+            Reads the binary version and a running-app probe. Does not change anything.
+
+            ed version
+            ed version --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -242,7 +255,14 @@ struct VersionCommand: AsyncParsableCommand {
 struct StatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "Inspect command-line tools and shell completions.")
+        abstract: "Inspect command-line tools and shell completions.",
+        discussion: """
+            Show whether ed is on PATH and which completion scripts are installed.
+            Reads PATH and the completion files. Does not change them.
+
+            ed status
+            ed status --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -279,6 +299,13 @@ struct CompletionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "completions",
         abstract: "Generate a shell completion script.",
+        discussion: """
+            Print or install shell completion scripts.
+            Reads the command tree. install writes completion files. zsh, bash, and fish print a script and do not change disk.
+
+            ed completions zsh
+            ed completions install
+            """,
         subcommands: [
             CompletionsZshCommand.self, CompletionsBashCommand.self,
             CompletionsFishCommand.self, CompletionsInstallCommand.self,
@@ -289,7 +316,13 @@ struct CompletionsCommand: AsyncParsableCommand {
 
 struct CompletionsZshCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "zsh", abstract: "Print the zsh completion script.")
+        commandName: "zsh", abstract: "Print the zsh completion script.",
+        discussion: """
+            Print the zsh completion script.
+            Reads the command tree. Does not change disk. Stdout is a shell script, not JSON.
+
+            ed completions zsh
+            """)
 
     func run() async throws {
         try await execute { CLIOut.out(CompletionScripts.script(for: .zsh)) }
@@ -298,7 +331,13 @@ struct CompletionsZshCommand: AsyncParsableCommand {
 
 struct CompletionsBashCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "bash", abstract: "Print the bash completion script.")
+        commandName: "bash", abstract: "Print the bash completion script.",
+        discussion: """
+            Print the bash completion script.
+            Reads the command tree. Does not change disk. Stdout is a shell script, not JSON.
+
+            ed completions bash
+            """)
 
     func run() async throws {
         try await execute { CLIOut.out(CompletionScripts.script(for: .bash)) }
@@ -307,7 +346,13 @@ struct CompletionsBashCommand: AsyncParsableCommand {
 
 struct CompletionsFishCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "fish", abstract: "Print the fish completion script.")
+        commandName: "fish", abstract: "Print the fish completion script.",
+        discussion: """
+            Print the fish completion script.
+            Reads the command tree. Does not change disk. Stdout is a shell script, not JSON.
+
+            ed completions fish
+            """)
 
     func run() async throws {
         try await execute { CLIOut.out(CompletionScripts.script(for: .fish)) }
@@ -317,7 +362,14 @@ struct CompletionsFishCommand: AsyncParsableCommand {
 struct CompletionsSourceCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "source",
-        abstract: "Print the fallback line that loads a completion script.")
+        abstract: "Print the fallback line that loads a completion script.",
+        discussion: """
+            Print the source line that loads a completion script.
+            Reads the install path for --shell. Does not change disk.
+
+            ed completions source
+            ed completions source --shell zsh --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -346,7 +398,14 @@ struct CompletionsSourceCommand: AsyncParsableCommand {
 struct CompletionsInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
-        abstract: "Write completion scripts for the shells found on this Mac.")
+        abstract: "Write completion scripts for the shells found on this Mac.",
+        discussion: """
+            Write completion scripts for the shells found on this Mac.
+            Reads which shells are present. Changes their completion directories by writing scripts. --shell limits it to one.
+
+            ed completions install
+            ed completions install --shell zsh --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -386,7 +445,14 @@ struct CompletionsInstallCommand: AsyncParsableCommand {
 struct InstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
-        abstract: "Link ed and edith into a directory on PATH.")
+        abstract: "Link ed and edith into a directory on PATH.",
+        discussion: """
+            Symlink ed and edith into a directory on PATH.
+            Reads the CLI binary path. Changes that directory by creating the links. --directory picks the folder.
+
+            ed install
+            ed install --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -428,7 +494,14 @@ struct InstallCommand: AsyncParsableCommand {
 
 struct UninstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "uninstall", abstract: "Remove the ed and edith links.")
+        commandName: "uninstall", abstract: "Remove the ed and edith links.",
+        discussion: """
+            Remove the ed and edith symlinks.
+            Reads the install directory. Changes it by deleting those links only.
+
+            ed uninstall
+            ed uninstall --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -493,12 +566,20 @@ private func completionInstallJSON(_ outcome: TerminalCompletionInstallOutcome) 
 
 struct CompleteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "__complete", abstract: "Emit completion candidates.", shouldDisplay: false)
+        commandName: "__complete", abstract: "Emit completion candidates.",
+        discussion: """
+            Emit shell completion candidates for the hidden completer.
+            Reads the words being completed and, when needed, machine names or shelf items. Does not change settings. Stdout is completer text, not JSON.
+
+            ed __complete --index 1 ed conf
+            """, shouldDisplay: false)
 
     @Option(help: "Zero based index of the word being completed.")
     var index: Int = 0
 
-    @Argument(parsing: .captureForPassthrough)
+    @Argument(
+        parsing: .captureForPassthrough,
+        help: "The words of the command line being completed.")
     var words: [String] = []
 
     func run() async throws {

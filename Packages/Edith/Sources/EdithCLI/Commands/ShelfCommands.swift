@@ -5,10 +5,15 @@ import Foundation
 struct ShelfCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "shelf",
-        abstract: "The files parked on the notch shelf.",
+        abstract: "List, add, and remove files parked on the notch shelf.",
         discussion: """
             The shelf is a folder plus an index on disk, so these commands work whether
             or not the app is running. Items are numbered from 1, newest first.
+
+            Reads the shelf folder and index. add and update change items. rm, clear, and purge change the shelf only after --yes. ls and path do not change anything.
+
+            ed shelf ls
+            ed shelf add ./report.pdf
             """,
         subcommands: [
             ShelfListCommand.self, ShelfPathCommand.self, ShelfAddCommand.self,
@@ -88,7 +93,14 @@ enum ShelfActionBridge {
 
 struct ShelfOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open selected shelf items.")
+        commandName: "open", abstract: "Open selected shelf items.",
+        discussion: """
+            Open selected shelf items in their default apps.
+            Reads those shelf rows. Does not change the shelf. Opens the files.
+
+            ed shelf open 1
+            ed shelf open 1 --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
@@ -98,7 +110,14 @@ struct ShelfOpenCommand: AsyncParsableCommand {
 
 struct ShelfRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reveal", abstract: "Reveal selected shelf items in Finder.")
+        commandName: "reveal", abstract: "Reveal selected shelf items in Finder.",
+        discussion: """
+            Reveal selected shelf items in Finder.
+            Reads those shelf rows. Does not change the shelf. Changes Finder focus.
+
+            ed shelf reveal 1
+            ed shelf reveal 1 --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
@@ -108,7 +127,14 @@ struct ShelfRevealCommand: AsyncParsableCommand {
 
 struct ShelfShareCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "share", abstract: "Open sharing for selected shelf items.")
+        commandName: "share", abstract: "Open sharing for selected shelf items.",
+        discussion: """
+            Open the share sheet for selected shelf items.
+            Reads those shelf rows. Does not change the shelf. Opens the share UI.
+
+            ed shelf share 1
+            ed shelf share 1 --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
@@ -230,7 +256,14 @@ enum ShelfBridge {
 
 struct ShelfListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List what is on the shelf.", aliases: ["list"])
+        commandName: "ls", abstract: "List what is on the shelf.",
+        discussion: """
+            List files parked on the notch shelf, newest first.
+            Reads the shelf index. Does not change it. Numbers start at 1.
+
+            ed shelf ls
+            ed shelf ls --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -264,7 +297,14 @@ struct ShelfListCommand: AsyncParsableCommand {
 
 struct ShelfPathCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "path", abstract: "Print the path of one shelf item.")
+        commandName: "path", abstract: "Print the path of one shelf item.",
+        discussion: """
+            Print the on-disk path of one shelf item.
+            Reads the shelf index. Does not change the item.
+
+            ed shelf path 1
+            ed shelf path 1 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -286,7 +326,14 @@ struct ShelfPathCommand: AsyncParsableCommand {
 
 struct ShelfAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Copy a file onto the shelf.")
+        commandName: "add", abstract: "Copy a file onto the shelf.",
+        discussion: """
+            Copy a file onto the shelf.
+            Reads the source file. Changes the shelf by adding a copy.
+
+            ed shelf add ./report.pdf
+            ed shelf add ./report.pdf --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -324,7 +371,14 @@ struct ShelfAddCommand: AsyncParsableCommand {
 
 struct ShelfAddTextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add-text", abstract: "Add text to the shelf.")
+        commandName: "add-text", abstract: "Store a typed snippet on the notch shelf.",
+        discussion: """
+            Store a text snippet on the shelf.
+            Reads the text argument. Changes the shelf by adding an item.
+
+            ed shelf add-text "ship notes"
+            ed shelf add-text "ship notes" --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -359,7 +413,14 @@ struct ShelfAddTextCommand: AsyncParsableCommand {
 
 struct ShelfUpdateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "update", abstract: "Update one shelf item's canvas position.")
+        commandName: "update", abstract: "Update one shelf item's canvas position.",
+        discussion: """
+            Move one shelf item on the notch canvas.
+            Reads the item number. Changes that item's stored position.
+
+            ed shelf update 1 --x 0.2 --y 0.4
+            ed shelf update 1 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -396,7 +457,14 @@ struct ShelfUpdateCommand: AsyncParsableCommand {
 
 struct ShelfRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Take selected items off the shelf.")
+        commandName: "rm", abstract: "Take selected items off the shelf.",
+        discussion: """
+            Remove selected shelf items.
+            Reads the item numbers. Without --yes, does not change anything. With --yes, changes the shelf by removing them.
+
+            ed shelf rm 1
+            ed shelf rm 1 --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -437,7 +505,14 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
 
 struct ShelfClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Empty the shelf.")
+        commandName: "clear", abstract: "Empty the shelf.",
+        discussion: """
+            Remove every shelf item.
+            Reads the index. Without --yes, does not change anything. With --yes, changes the shelf by clearing it.
+
+            ed shelf clear
+            ed shelf clear --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -469,7 +544,14 @@ struct ShelfClearCommand: AsyncParsableCommand {
 
 struct ShelfPurgeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "purge", abstract: "Remove shelf items past an expiry window.")
+        commandName: "purge", abstract: "Remove shelf items past an expiry window.",
+        discussion: """
+            Remove shelf items older than the expiry window.
+            Reads item ages. Without --yes, prints the plan and does not change anything. With --yes, changes the shelf.
+
+            ed shelf purge
+            ed shelf purge --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
