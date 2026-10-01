@@ -40,6 +40,7 @@ struct DocsScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.windowRouter) private var router
     @FocusState private var askFocused: Bool
     @FocusState private var filterFocused: Bool
 
@@ -64,6 +65,7 @@ struct DocsScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
         .background(shortcuts)
+        .navigationRoute("page", selection: pageBinding, isValid: pageIsValid)
         .navigationTitle("Docs")
         .task {
             guard automaticActionsEnabled else { return }
@@ -99,22 +101,45 @@ struct DocsScreen: View {
         }
     }
 
+    private var pageBinding: Binding<String> {
+        Binding(
+            get: {
+                if let anchor = browser.location.anchor, !anchor.isEmpty {
+                    return browser.location.path + "\n" + anchor
+                }
+                return browser.location.path
+            },
+            set: { token in
+                let parts = token.split(separator: "\n", maxSplits: 1).map(String.init)
+                let path = parts.first ?? token
+                let anchor = parts.count > 1 ? parts[1] : nil
+                browser.open(DocsLocation(path: path, anchor: anchor), reveal: false)
+            })
+    }
+
+    private func pageIsValid(_ token: String) -> Bool {
+        let path = token.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? token
+        guard !path.isEmpty else { return true }
+        guard let library = browser.library else { return true }
+        return library.page(path) != nil
+    }
+
     private var history: some View {
         HStack(spacing: UIScale.pt(14)) {
             Button {
-                browser.goBack()
+                router?.goBack()
             } label: {
                 Image(systemName: "chevron.left")
             }
-            .disabled(!browser.canGoBack)
+            .disabled(router?.canGoBack != true)
             .help("Back (\u{2318}[)")
             .accessibilityLabel("Back")
             Button {
-                browser.goForward()
+                router?.goForward()
             } label: {
                 Image(systemName: "chevron.right")
             }
-            .disabled(!browser.canGoForward)
+            .disabled(router?.canGoForward != true)
             .help("Forward (\u{2318}])")
             .accessibilityLabel("Forward")
         }

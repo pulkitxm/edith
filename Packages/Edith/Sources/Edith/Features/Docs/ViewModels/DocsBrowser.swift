@@ -20,8 +20,6 @@ final class DocsBrowser {
     private(set) var answer: DocsAnswer?
     private(set) var asking = false
     private(set) var resultsVisible = false
-    private var backStack: [DocsLocation] = []
-    private var forwardStack: [DocsLocation] = []
     private var askSerial = 0
     var expandedGroups: Set<String> = [""]
     var filter = ""
@@ -58,8 +56,6 @@ final class DocsBrowser {
     }
 
     var page: DocsPage? { library?.page(location.path) }
-    var canGoBack: Bool { !backStack.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
 
     func load() async {
         if suppliedLibrary { return }
@@ -138,10 +134,6 @@ final class DocsBrowser {
 
     func open(_ target: DocsLocation, reveal: Bool = true) {
         guard library?.page(target.path) != nil else { return }
-        if target != location {
-            backStack.append(location)
-            forwardStack.removeAll()
-        }
         show(target, reveal: reveal)
     }
 
@@ -150,22 +142,6 @@ final class DocsBrowser {
         case .page(let path, let anchor): open(DocsLocation(path: path, anchor: anchor))
         case .external(let url): NSWorkspace.shared.open(url)
         }
-    }
-
-    @discardableResult
-    func goBack() -> Bool {
-        guard let previous = backStack.popLast() else { return false }
-        forwardStack.append(location)
-        show(previous)
-        return true
-    }
-
-    @discardableResult
-    func goForward() -> Bool {
-        guard let next = forwardStack.popLast() else { return false }
-        backStack.append(location)
-        show(next)
-        return true
     }
 
     func toggle(_ group: String) {
