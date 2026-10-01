@@ -104,10 +104,11 @@ def object_list(derived, config):
             if not root.exists():
                 continue
             listings.extend(root.glob(f'**/{name}.LinkFileList'))
+            compiled.extend(root.glob(f'**/{name}.build/**/*.o'))
             compiled.extend(root.glob(f'**/{name}-t.build/**/*.o'))
         chosen = [
             path for path in listings
-            if f'/{config}/' in str(path) and f'{name}-t.build' in str(path)
+            if f'/{config}/' in str(path)
         ]
         if chosen:
             objects.extend(chosen[0].read_text().split())
