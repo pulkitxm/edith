@@ -51,6 +51,14 @@ import Testing
         view.selectionChanged()
         try await Task.sleep(for: .milliseconds(150))
         #expect(board.string(forType: .string) == "first\n\n    café 😀\n\(wrapped)")
+        #expect(!view.copyConfirmation.isHidden)
+        #expect(!view.copyConfirmation.acceptsFirstResponder)
+        view.layoutSubtreeIfNeeded()
+        let confirmationPoint = NSPoint(
+            x: view.copyConfirmation.frame.midX, y: view.copyConfirmation.frame.midY)
+        #expect(view.hitTest(confirmationPoint) === view)
+        try await Task.sleep(for: .milliseconds(1_600))
+        #expect(view.copyConfirmation.isHidden)
 
         view.keyDown(
             with: try #require(
