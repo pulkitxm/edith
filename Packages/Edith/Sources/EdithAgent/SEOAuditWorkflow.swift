@@ -92,8 +92,23 @@ public actor SEOAuditWorkflow {
             try requireIdle(id)
             try repository.delete(id: id)
             return Data()
+        case SEOAuditTaskOperation.draft:
+            let id = try AgentPayload.decode(UUID.self, from: payload)
+            _ = try load(id)
+            return try AgentPayload.encode(repository.loadDraft(id: id))
+        case SEOAuditTaskOperation.draftSet:
+            let request = try AgentPayload.decode(SEOAuditDraftWrite.self, from: payload)
+            _ = try load(request.id)
+            try repository.saveDraft(id: request.id, request.draft)
+            return try AgentPayload.encode(request.draft)
         default:
             throw AgentError(.unknownOperation, "Unknown project operation.")
+        }
+    }
+
+    private func load(_ id: UUID) throws -> SEOAuditProject {
+        do { return try repository.loadProject(id: id) } catch {
+            throw AgentError(.refused, "No site audit project \(id.uuidString).")
         }
     }
 

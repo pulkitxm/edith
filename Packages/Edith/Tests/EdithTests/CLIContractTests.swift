@@ -59,6 +59,38 @@ enum JSONContract {
             "ed maintenance update", ["maintenance", "update", "missing", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
+        JSONCase("ed seo ls", ["seo", "ls", "--json"]),
+        JSONCase(
+            "ed seo create",
+            ["seo", "create", "https://example.com", "--name", "Example", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo rename",
+            ["seo", "rename", "00000000-0000-0000-0000-000000000000", "Example", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo delete",
+            ["seo", "delete", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo show", ["seo", "show", "00000000-0000-0000-0000-000000000000", "--json"]),
+        JSONCase(
+            "ed seo pages", ["seo", "pages", "00000000-0000-0000-0000-000000000000", "--json"]),
+        JSONCase(
+            "ed seo lighthouse",
+            ["seo", "lighthouse", "00000000-0000-0000-0000-000000000000", "off", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo start",
+            ["seo", "start", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo stop",
+            ["seo", "stop", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo run",
+            ["seo", "run", "00000000-0000-0000-0000-000000000000", "--offset", "0", "--json"]),
         JSONCase(
             "ed maintenance backup-updates",
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],

@@ -338,6 +338,12 @@ enum UIParity {
         UICapability(
             "Quinjet cmux workspace", "show the external review",
             ["quinjet", "focus", "1"]),
+        UICapability(
+            "Site audit", "start an audit of the selected pages",
+            ["seo", "start", "project"]),
+        UICapability(
+            "Site audit", "stop a running audit",
+            ["seo", "stop", "project", "--yes"]),
     ]
 
     static func operationCLI(for invocation: [String]) -> [String] {
@@ -388,6 +394,8 @@ enum UIParity {
         "ed companion ingest /tmp/voice-memo.wav",
         "ed quinjet focus 1",
         "ed quinjet projects --machine build",
+        "ed seo start project",
+        "ed seo stop project --yes",
     ]
 }
 

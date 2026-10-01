@@ -408,19 +408,24 @@ import Testing
         #expect(SEOAuditSocialPlatform.facebook.formatLabel.contains("1200×630"))
         #expect(SEOAuditSocialPlatform.x.formatLabel.contains("large card"))
         #expect(SEOAuditSocialPlatform.linkedIn.formatLabel.contains("1200×627"))
-
-        let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent(
-                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditPageAccordion.swift"),
-            encoding: .utf8)
-
-        #expect(source.contains("usesXSummaryCard"))
-        #expect(source.contains("1:1 · summary"))
-        #expect(source.contains("twitterImageURL ?? page.metadata.openGraphImageURL"))
+        let metadata = SEOAuditMetadata(
+            title: "Page", description: "Page description", canonicalURL: nil, robots: nil,
+            language: "en", heading: nil, openGraphTitle: "Social title",
+            openGraphDescription: "Social description",
+            openGraphImageURL: "https://example.com/social.png", openGraphImageSnapshotURL: nil,
+            openGraphType: "website", twitterCard: "summary", twitterTitle: "X title",
+            twitterDescription: "X description", twitterImageURL: "https://example.com/x.png",
+            twitterImageSnapshotURL: nil, wordCount: 3)
+        let x = SEOAuditSocialCard(metadata: metadata, platform: .x)
+        #expect(x.usesSummaryCard)
+        #expect(x.title == "X title")
+        #expect(x.imageURL == "https://example.com/x.png")
+        #expect(x.formatLabel == "1:1 · summary")
+        let facebook = SEOAuditSocialCard(metadata: metadata, platform: .facebook)
+        #expect(!facebook.usesSummaryCard)
+        #expect(facebook.title == "Social title")
+        #expect(facebook.imageURL == "https://example.com/social.png")
+        #expect(facebook.formatLabel.contains("1200×630"))
     }
 
     private func client(repository: SEOAuditRepository) -> SEOAuditProjectClient {

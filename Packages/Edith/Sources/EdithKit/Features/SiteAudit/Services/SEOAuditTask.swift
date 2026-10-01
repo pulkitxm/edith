@@ -9,7 +9,11 @@ public enum SEOAuditTaskOperation {
     public static let create = "site.create"
     public static let rename = "site.rename"
     public static let delete = "site.delete"
-    public static let internalOperations = [projects, project, create, rename, delete]
+    public static let draft = "site.draft"
+    public static let draftSet = "site.draft.set"
+    public static let internalOperations = [
+        projects, project, create, rename, delete, draft, draftSet,
+    ]
 }
 
 public struct SEOAuditTaskRequest: Codable, Sendable {
@@ -70,6 +74,17 @@ public struct SEOAuditProjectClient: Sendable {
 
     public func delete(_ id: UUID) async throws {
         _ = try await perform(SEOAuditTaskOperation.delete, AgentPayload.encode(id))
+    }
+
+    public func draft(_ id: UUID) async throws -> SEOAuditDraft {
+        try await request(
+            SEOAuditDraft.self, SEOAuditTaskOperation.draft, AgentPayload.encode(id))
+    }
+
+    public func setDraft(_ id: UUID, _ draft: SEOAuditDraft) async throws -> SEOAuditDraft {
+        try await request(
+            SEOAuditDraft.self, SEOAuditTaskOperation.draftSet,
+            AgentPayload.encode(SEOAuditDraftWrite(id: id, draft: draft)))
     }
 
     private func request<T: Decodable>(_ type: T.Type, _ operation: String, _ payload: Data)
