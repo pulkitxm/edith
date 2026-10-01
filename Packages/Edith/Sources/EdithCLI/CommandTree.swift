@@ -1462,6 +1462,16 @@ public enum CommandTree {
                 "--platform": .free,
             ],
             arguments: [.free]),
+        "ed skills ls": Spec(
+            options: ["--json", "--all-agents", "-h", "--help", "--version"]),
+        "ed skills preview": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed skills copy": Spec(
+            options: ["--json", "--clipboard", "-h", "--help", "--version"], arguments: [.free]),
+        "ed skills install": Spec(
+            options: ["--json", "--yes", "--agent", "-h", "--help", "--version"],
+            optionValues: ["--agent": .free], arguments: [.free],
+            destructivePolicy: .previewThenYes),
         "help": Spec(arguments: [.free]),
     ]
 

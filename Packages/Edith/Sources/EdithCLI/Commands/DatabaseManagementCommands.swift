@@ -122,7 +122,15 @@ extension DatabaseCLI {
 struct DatabaseConnectionsEditCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "edit",
-        abstract: "Edit saved connection metadata and safety policies.")
+        abstract: "Edit saved connection metadata and safety policies.",
+        discussion: """
+            Edit saved connection metadata and safety policies.
+
+            Changes one saved record.
+
+            ed database connections edit 11111111-1111-1111-1111-111111111111
+            ed database connections edit 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -221,7 +229,15 @@ struct DatabaseConnectionsEditCommand: AsyncParsableCommand {
 struct DatabaseConnectionsDuplicateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "duplicate",
-        abstract: "Duplicate a saved database connection.")
+        abstract: "Duplicate a saved database connection.",
+        discussion: """
+            Duplicate a saved database connection.
+
+            Changes the saved connections by copying one of them.
+
+            ed database connections duplicate 11111111-1111-1111-1111-111111111111 notes
+            ed database connections duplicate 11111111-1111-1111-1111-111111111111 notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -268,7 +284,15 @@ struct DatabaseConnectionsDuplicateCommand: AsyncParsableCommand {
 struct DatabaseConnectionsRenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rename",
-        abstract: "Rename a saved database connection.")
+        abstract: "Rename a saved database connection.",
+        discussion: """
+            Rename a saved database connection.
+
+            Changes the saved name of one connection.
+
+            ed database connections rename 11111111-1111-1111-1111-111111111111 notes
+            ed database connections rename 11111111-1111-1111-1111-111111111111 notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -303,7 +327,15 @@ struct DatabaseConnectionsRenameCommand: AsyncParsableCommand {
 struct DatabaseConnectionsDeleteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "delete",
-        abstract: "Delete a saved database connection.")
+        abstract: "Delete a saved database connection.",
+        discussion: """
+            Delete a saved database connection.
+
+            Changes the saved connections by deleting one of them.
+
+            ed database connections delete 11111111-1111-1111-1111-111111111111
+            ed database connections delete 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -348,7 +380,14 @@ struct DatabaseConnectionsDeleteCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "saved-queries",
-        abstract: "Manage reusable database queries.",
+        abstract: "Store reusable query text for later runs.",
+        discussion: """
+            Store reusable query text for later runs.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed database saved-queries list
+            """,
         subcommands: [
             DatabaseSavedQueriesListCommand.self,
             DatabaseSavedQueriesGetCommand.self,
@@ -363,7 +402,15 @@ struct DatabaseSavedQueriesCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List saved database queries.",
+        abstract: "Show every reusable query and its name.",
+        discussion: """
+            Show every reusable query and its name.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed database saved-queries list
+            ed database saved-queries list --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -440,7 +487,15 @@ struct DatabaseSavedQueriesListCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Show one saved database query.")
+        abstract: "Show one saved database query.",
+        discussion: """
+            Show one saved database query.
+
+            Reads one saved query. Does not change it.
+
+            ed database saved-queries get 11111111-1111-1111-1111-111111111111
+            ed database saved-queries get 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -477,7 +532,15 @@ struct DatabaseSavedQueriesGetCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesSaveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "save",
-        abstract: "Save query text read from stdin or a UTF-8 file.")
+        abstract: "Save query text read from stdin or a UTF-8 file.",
+        discussion: """
+            Save query text read from stdin or a UTF-8 file.
+
+            Changes the state this command names.
+
+            ed database saved-queries save notes
+            ed database saved-queries save notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -546,7 +609,15 @@ struct DatabaseSavedQueriesSaveCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesDuplicateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "duplicate",
-        abstract: "Duplicate a saved database query.")
+        abstract: "Duplicate a saved database query.",
+        discussion: """
+            Duplicate a saved database query.
+
+            Changes the saved queries by copying one of them.
+
+            ed database saved-queries duplicate 11111111-1111-1111-1111-111111111111 notes
+            ed database saved-queries duplicate 11111111-1111-1111-1111-111111111111 notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -585,7 +656,15 @@ struct DatabaseSavedQueriesDuplicateCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesRenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rename",
-        abstract: "Rename a saved database query.")
+        abstract: "Rename a saved database query.",
+        discussion: """
+            Rename a saved database query.
+
+            Changes the saved name of one query.
+
+            ed database saved-queries rename 11111111-1111-1111-1111-111111111111 notes
+            ed database saved-queries rename 11111111-1111-1111-1111-111111111111 notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -618,7 +697,15 @@ struct DatabaseSavedQueriesRenameCommand: AsyncParsableCommand {
 struct DatabaseSavedQueriesDeleteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "delete",
-        abstract: "Delete a saved database query.")
+        abstract: "Delete a saved database query.",
+        discussion: """
+            Delete a saved database query.
+
+            Changes the state this command names.
+
+            ed database saved-queries delete 11111111-1111-1111-1111-111111111111
+            ed database saved-queries delete 11111111-1111-1111-1111-111111111111 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
