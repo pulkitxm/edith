@@ -74,6 +74,7 @@ import Testing
         "ed camera extension install",
         "ed camera extension remove",
         "ed camera scene delete",
+        "ed studio workflow rm",
     ]
 
     static func nodes(

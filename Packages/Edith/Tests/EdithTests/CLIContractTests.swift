@@ -243,6 +243,24 @@ enum JSONContract {
         JSONCase(
             "ed studio probe", ["studio", "probe", "/nonexistent/studio-probe.pdf", "--json"]),
         JSONCase("ed studio run", ["studio", "run", "pdf.nothing", "--json"]),
+        JSONCase("ed studio record sources", ["studio", "record", "sources", "--json"]),
+        JSONCase("ed studio record status", ["studio", "record", "status", "--json"]),
+        JSONCase(
+            "ed studio record start", ["studio", "record", "start", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed studio record stop", ["studio", "record", "stop", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed studio workflow ls", ["studio", "workflow", "ls", "--json"]),
+        JSONCase(
+            "ed studio workflow save",
+            ["studio", "workflow", "save", "Web photos", "--step", "pdf.ocr", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed studio workflow run",
+            ["studio", "workflow", "run", "Missing", "photo.png", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed studio workflow rm", ["studio", "workflow", "rm", "Missing", "--json"]),
         JSONCase("ed studio edit schema", ["studio", "edit", "schema", "--json"]),
         JSONCase("ed studio library list", ["studio", "library", "list", "--json"]),
         JSONCase("ed studio library add", ["studio", "library", "add", "--json"]) { world in

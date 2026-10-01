@@ -5,19 +5,10 @@ import Observation
 import SwiftUI
 
 enum StudioWorkflowStore {
-    static var url: URL { DataRoot.studio.appendingPathComponent("workflows.json") }
-
-    static func load() -> [StudioWorkflow] {
-        guard let data = try? Data(contentsOf: url) else { return StudioWorkflow.presets }
-        return (try? JSONDecoder().decode([StudioWorkflow].self, from: data))
-            ?? StudioWorkflow.presets
-    }
+    static func load() -> [StudioWorkflow] { StudioWorkflowFile.load(from: DataRoot.studio) }
 
     static func save(_ workflows: [StudioWorkflow]) {
-        try? FileManager.default.createDirectory(
-            at: DataRoot.studio, withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(workflows) else { return }
-        try? data.write(to: url, options: .atomic)
+        try? StudioWorkflowFile.save(workflows, to: DataRoot.studio)
     }
 }
 

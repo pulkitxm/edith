@@ -120,6 +120,10 @@ final class StudioModel {
 
     func observeLibrary() {
         guard librarySubscriptions.isEmpty else { return }
+        DistributedNotificationCenter.default().publisher(for: IPC.Name.studioWorkflowsChanged)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.loadWorkflows() }
+            }.store(in: &librarySubscriptions)
         DistributedNotificationCenter.default().publisher(for: IPC.Name.studioMediaLibraryChanged)
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in

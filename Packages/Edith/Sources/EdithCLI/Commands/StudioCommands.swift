@@ -11,13 +11,14 @@ struct StudioCommand: AsyncParsableCommand {
             Studio's tools run on this Mac, straight from the command line. `tools` lists them,
             `info` shows a tool's settings, `run` applies one to files and `probe` describes a
             file. Results are saved next to the originals unless you pass --output-dir.
+            `record` captures the screen and `workflow` saves a chain of tools.
             Reads nothing until a subcommand runs. Does not change anything by itself.
-
-            ed studio tools
+            Example: `ed studio tools`.
             """,
         subcommands: [
             StudioToolsCommand.self, StudioInfoCommand.self, StudioRunCommand.self,
             StudioProbeCommand.self, StudioEditCommand.self, StudioLibraryCommand.self,
+            StudioRecordCommand.self, StudioWorkflowCommand.self,
         ],
         defaultSubcommand: StudioToolsCommand.self)
 }
@@ -243,15 +244,14 @@ struct StudioInfoCommand: AsyncParsableCommand {
 
 struct StudioRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "run", abstract: "Run a Studio tool on files and save the results.",
+        commandName: "run",
+        abstract: "Run a Studio tool on files and save the results.",
         discussion: """
-            [Back to `ed studio`](./README.md).
-
             Changes the machine by running one saved command, and reads its output.
-
-            ed studio run tool /etc/os-release
-            ed studio run tool /etc/os-release --json
-            """, )
+            Image and PDF pixel editing stays on this command: crop, rotate and the other
+            document tools are `ed studio run`, not a separate editor.
+            Example: `ed studio run pdf.merge a.pdf b.pdf --json`.
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

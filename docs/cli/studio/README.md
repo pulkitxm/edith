@@ -18,7 +18,9 @@ need the app to be running: every tool runs inside `ed` itself.
 | `ed studio` | Runs `ed studio tools`, the default subcommand. |
 | [`ed studio tools`](./tools.md) | Lists every tool, optionally only those for one kind of file. |
 | [`ed studio info <tool>`](./info.md) | Shows what a tool does and every setting it takes. |
-| [`ed studio run <tool> <files...>`](./run.md) | Runs a tool and saves the results. |
+| [`ed studio run <tool> <files...>`](./run.md) | Runs a tool and saves the results. Image and PDF pixel editing stays here. |
+| `ed studio record` | Records the screen, with system audio, microphone and cursor. |
+| `ed studio workflow` | Lists, saves, runs and deletes a chain of tools. |
 | [`ed studio probe <file>`](./probe.md) | Describes a file and lists the tools that accept it. |
 | [`ed studio library`](./library.md) | Lists, adds, removes or clears Studio media references headlessly. |
 | [`ed studio edit`](./edit.md) | Creates, edits, validates and renders native video projects. |
