@@ -144,6 +144,13 @@ enum JSONContract {
         JSONCase("ed attention music", ["attention", "music", "--json"]),
         JSONCase("ed attention categories ls", ["attention", "categories", "ls", "--json"]),
         JSONCase(
+            "ed attention rules import", ["attention", "rules", "import", "--dry-run", "--json"],
+            fixtureArguments: { world in
+                let file = world.sandbox.appendingPathComponent("attention-rules.json")
+                try Data(#"{"categories":[],"rules":[]}"#.utf8).write(to: file)
+                return [file.path]
+            }),
+        JSONCase(
             "ed attention categories auto", ["attention", "categories", "auto", "--json"],
             mutatesTheMachine: true),
         JSONCase(

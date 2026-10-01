@@ -248,6 +248,7 @@ enum CommandCrawler {
             "ed lid-awake",
             "ed camera", "ed camera scene", "ed camera extension", "ed audio",
             "ed attention", "ed attention categories", "ed attention focus",
+            "ed attention rules", "ed attention rules export",
             "ed quinjet",
             "ed database", "ed database connections", "ed database saved-queries",
             "ed database mutations", "ed database operations", "ed database pack",

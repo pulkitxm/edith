@@ -44,6 +44,8 @@ enum UIParity {
 
     static let notReachableFromTheUI: [String: String] = [
         "ed config import": "the app restores from iCloud rather than from a JSON file",
+        "ed attention rules import":
+            "the app edits individual rules rather than importing a JSON file",
         "ed color clear": "the colour picker no longer offers a clear-history action",
         "ed companion machines add":
             "the companion setup no longer adds deployment machines from the app",
