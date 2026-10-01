@@ -4,6 +4,47 @@ import Testing
 @testable import EdithKit
 
 @Suite struct AttentionAnalyzerTests {
+    @Test func identicalTitlesKeepDistinctURLsAndClassifications() throws {
+        var settings = AttentionSettings()
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "Social call", categoryID: "social", domains: ["meet.example"],
+                urls: ["meet.example/social"])
+        ]
+        let events = ["work", "social"].enumerated().map { index, path in
+            AttentionEvent(
+                startedAt: start.addingTimeInterval(Double(index * 60)), duration: 60,
+                source: .browser, windowTitle: "Meeting",
+                url: "https://meet.example/\(path)", domain: "meet.example")
+        }
+        let result = summary(events, settings: settings)
+        let entity = try #require(result.entities.first)
+        #expect(entity.details.count == 2)
+        #expect(Set(entity.details.map(\.id)).count == 2)
+        #expect(Set(entity.details.map(\.url)).count == 2)
+        #expect(Set(entity.details.map(\.categoryID)).count == 2)
+        #expect(entity.details.reduce(0) { $0 + $1.duration } == entity.duration)
+    }
+
+    @Test func explorationKeepsEveryEntityTitleAndDimensionRow() throws {
+        let events = (0..<420).map { index in
+            AttentionEvent(
+                startedAt: start.addingTimeInterval(Double(index * 10)), duration: 10,
+                source: .browser, windowTitle: "Page \(index)",
+                url: "https://site\(index < 20 ? 0 : index).example/page\(index)",
+                domain: "site\(index < 20 ? 0 : index).example")
+        }
+        let result = summary(events)
+        #expect(result.entities.count == 401)
+        #expect(result.entities.reduce(0) { $0 + $1.duration } == result.activeDuration)
+        let site = try #require(result.entities.first { $0.domain == "site0.example" })
+        #expect(site.details.count == 20)
+        #expect(site.details.reduce(0) { $0 + $1.duration } == site.duration)
+        let titles = try #require(result.dimension(AttentionDimension.title))
+        #expect(titles.rows.count == 420)
+        #expect(titles.rows.reduce(0) { $0 + $1.duration } == titles.total)
+    }
+
     private let start = Date(timeIntervalSince1970: 1_800_000_000)
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)

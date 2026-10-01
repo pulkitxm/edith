@@ -8,7 +8,9 @@ public enum AttentionCategorySource: String, Codable, Sendable {
 }
 
 public struct AttentionDetail: Codable, Equatable, Identifiable, Sendable {
-    public var id: String { name }
+    public var id: String {
+        [name, url ?? "", categoryID, productivity.key].joined(separator: "\u{1F}")
+    }
     public var name: String
     public var url: String?
     public var duration: TimeInterval

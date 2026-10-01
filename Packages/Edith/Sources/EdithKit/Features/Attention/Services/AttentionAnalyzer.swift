@@ -315,14 +315,13 @@ struct AttentionSummaryBuilder {
             entity.categorySource = source?.source ?? .none
             entity.confidence = source?.confidence
             entity.details = accumulator.details.values.sorted { $0.duration > $1.duration }
-                .prefix(12).map { $0 }
             return entity
         }
         entityList.sort { $0.duration > $1.duration }
         let dimensionList = dimensions.map { key, rows in
             let values = rows.values.sorted { $0.duration > $1.duration }
             return AttentionDimension(
-                key: key, rows: Array(values.prefix(80)),
+                key: key, rows: values,
                 total: values.reduce(0) { $0 + $1.duration })
         }
         .sorted { lhs, rhs in
@@ -339,7 +338,7 @@ struct AttentionSummaryBuilder {
             from: from, to: to, activeDuration: active, idleDuration: idle, levels: levels,
             spheres: spheres, unclassifiedDuration: unclassified, contextSwitches: switches,
             medianStretch: median,
-            longestStretch: sorted.last ?? 0, entities: Array(entityList.prefix(400)),
+            longestStretch: sorted.last ?? 0, entities: entityList,
             categories: categoryTotals.map {
                 AttentionCategoryTotal(category: settings.category($0.key), duration: $0.value)
             }.sorted { $0.duration > $1.duration },
@@ -488,13 +487,12 @@ struct AttentionSummaryBuilder {
             accumulator.sources[category.id] = (classification.source, classification.confidence)
         }
         if let name = detailName(interval) {
-            var detail =
-                accumulator.details[name]
-                ?? AttentionDetail(
-                    name: name, url: interval.url, duration: 0, categoryID: category.id,
-                    productivity: classification.productivity)
+            let identity = AttentionDetail(
+                name: name, url: interval.url, duration: 0, categoryID: category.id,
+                productivity: classification.productivity)
+            var detail = accumulator.details[identity.id] ?? identity
             detail.duration += duration
-            accumulator.details[name] = detail
+            accumulator.details[identity.id] = detail
         }
         entities[classification.entityID] = accumulator
     }
