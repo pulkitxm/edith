@@ -224,8 +224,9 @@ import Testing
             (AgentTopic.usage, try AgentPayload.encode(usage), "usage collection failed"),
         ] {
             let box = PayloadBox()
-            let scheduler = JobScheduler(publish: { topic, payload, _ in box.record(topic, payload)
-                })
+            let scheduler = JobScheduler(publish: { topic, payload, _ in
+                box.record(topic, payload)
+            })
             await scheduler.register(
                 AgentJob(descriptor: descriptor("fixture.refresh", topic: topic)) { payload })
             #expect(await scheduler.runNow("fixture.refresh") == payload)
