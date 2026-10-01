@@ -71,3 +71,24 @@ private actor AttentionRecordedSamples {
         await collector.shutdown().value
     }
 }
+
+@Test func frontmostIdentityIsResolvedOncePerProcess() {
+    FrontmostIdentityLookup.reset()
+    var reads = 0
+    for _ in 0..<20 {
+        let identity = FrontmostIdentityLookup.identity(pid: 42) {
+            reads += 1
+            return (name: "Edith", bundleID: "com.example.edith")
+        }
+        #expect(identity.name == "Edith")
+        #expect(identity.bundleID == "com.example.edith")
+    }
+    #expect(reads == 1)
+    #expect(FrontmostIdentityLookup.lookups == 1)
+    _ = FrontmostIdentityLookup.identity(pid: 43) {
+        reads += 1
+        return (name: "Other", bundleID: nil)
+    }
+    #expect(reads == 2)
+    #expect(FrontmostIdentityLookup.lookups == 2)
+}
