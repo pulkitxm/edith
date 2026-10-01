@@ -13,6 +13,7 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticViewActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @State private var objectListPresented = false
 
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: scheme == .dark, theme: AppTheme(storedName: themeName))
@@ -172,30 +173,8 @@ struct DatabaseWorkbenchView: View {
 
     private func objectPicker(_ connection: DatabaseConnectionSummary) -> some View {
         HStack {
-            Menu {
-                ForEach(explorer.groups) { group in
-                    Section(group.title) {
-                        switch group.state {
-                        case .idle, .failed:
-                            Button("Load \(group.title)") {
-                                explorer.loadGroup(group.identifier, connection: connection)
-                            }
-                        case .loading:
-                            SkeletonReplica("Loading \(group.title)") { Text("Loading objects") }
-                        case .loaded:
-                            if group.objects.isEmpty { Text("No objects") }
-                        }
-                        ForEach(group.objects) { object in
-                            Button(object.title) { open(object.identifier, connection: connection) }
-                        }
-                        if group.nextContinuation != nil {
-                            Button("Load more objects") {
-                                explorer.loadGroup(
-                                    group.identifier, connection: connection, appending: true)
-                            }
-                        }
-                    }
-                }
+            Button {
+                objectListPresented = true
             } label: {
                 Label(
                     explorer.selectedObject?.path.last ?? "Select an object",
@@ -203,7 +182,42 @@ struct DatabaseWorkbenchView: View {
                 )
                 .font(.system(size: UIScale.pt(11), weight: .medium))
             }
-            .menuStyle(.borderlessButton).fixedSize().disabled(explorer.groups.isEmpty)
+            .popover(isPresented: $objectListPresented, arrowEdge: .bottom) {
+                List {
+                    ForEach(explorer.groups) { group in
+                        Section(group.title) {
+                            switch group.state {
+                            case .idle, .failed:
+                                Button("Load \(group.title)") {
+                                    explorer.loadGroup(group.identifier, connection: connection)
+                                }
+                            case .loading:
+                                SkeletonReplica("Loading \(group.title)") {
+                                    Text("Loading objects")
+                                }
+                            case .loaded:
+                                if group.objects.isEmpty { Text("No objects") }
+                            }
+                            ForEach(group.objects) { object in
+                                Button(object.title) {
+                                    open(object.identifier, connection: connection)
+                                    objectListPresented = false
+                                }
+                            }
+                            if group.nextContinuation != nil {
+                                Button("Load more objects") {
+                                    explorer.loadGroup(
+                                        group.identifier, connection: connection, appending: true)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(width: UIScale.pt(280), height: UIScale.pt(360))
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .disabled(explorer.groups.isEmpty)
             Spacer()
             Button {
                 explorer.load(connection, force: true)

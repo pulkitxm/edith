@@ -377,7 +377,7 @@ struct VideoEditorPage: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, UIScale.pt(8))
             ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     if let clips = model.project?.clips {
                         ForEach(Array(clips.enumerated()), id: \.element.id) { index, clip in
                             Button {
