@@ -66,7 +66,16 @@ enum HerdrLaunchCLI {
 
 struct HerdrModelsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "models", abstract: "List each agent's models, effort levels and fast mode.")
+        commandName: "models", abstract: "List each agent's models, effort levels and fast mode.",
+        discussion: """
+            Lists the models, effort levels and fast mode each agent kind offers when
+            Edith starts it.
+
+            Reads the current state. Does not change it.
+
+            ed herdr models
+            ed herdr models --json
+            """, )
 
     @Argument(help: "Agent kind, for example codex or \"Claude Code\". Every kind when omitted.")
     var kind: String?
@@ -116,7 +125,15 @@ struct HerdrModelsCommand: AsyncParsableCommand {
 struct HerdrDefaultsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "defaults",
-        abstract: "The model, effort and fast mode Edith passes when it starts an agent.",
+        abstract: "Show the model, effort and fast mode Edith passes when it starts an agent.",
+        discussion: """
+            The model, effort and fast mode Edith passes whenever it starts an agent of
+            a given kind.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed herdr defaults ls
+            """,
         subcommands: [HerdrDefaultsListCommand.self, HerdrDefaultsSetCommand.self],
         defaultSubcommand: HerdrDefaultsListCommand.self)
 }
@@ -124,6 +141,14 @@ struct HerdrDefaultsCommand: AsyncParsableCommand {
 struct HerdrDefaultsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "Show the launch defaults for every agent kind.",
+        discussion: """
+            Show the launch defaults for every agent kind.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed herdr defaults ls
+            ed herdr defaults ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -157,7 +182,15 @@ struct HerdrDefaultsListCommand: AsyncParsableCommand {
 
 struct HerdrDefaultsSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Choose the model, effort and fast mode for an agent kind.")
+        commandName: "set", abstract: "Choose the model, effort and fast mode for an agent kind.",
+        discussion: """
+            Choose the model, effort and fast mode for an agent kind.
+
+            Changes the saved setting to the value you pass.
+
+            ed herdr defaults set kind
+            ed herdr defaults set kind --json
+            """, )
 
     @Argument(help: "Agent kind, for example codex or \"Claude Code\".")
     var kind: String

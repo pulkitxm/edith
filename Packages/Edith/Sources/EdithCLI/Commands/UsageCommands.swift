@@ -76,7 +76,16 @@ struct UsageWindow: ParsableArguments {
 
 struct UsageLimitsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "limits", abstract: "Included rate limits per provider.")
+        commandName: "limits", abstract: "Show included rate limits per provider.",
+        discussion: """
+            Prints the most recent rate limit observation for each provider Edith
+            tracks.
+
+            Changes the state this command names.
+
+            ed usage limits
+            ed usage limits --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -161,7 +170,17 @@ struct UsageLimitsCommand: AsyncParsableCommand {
 struct UsageAlertsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "alerts",
-        abstract: "What each tracked limit window would alert about now, and why.")
+        abstract: "What each tracked limit window would alert about now, and why.",
+        discussion: """
+            Shows, for every limit window Edith tracks, the burn rate, the projected cap
+            time and which limit alert the planner would send right now, with the
+            reason.
+
+            Changes the state this command names.
+
+            ed usage alerts
+            ed usage alerts --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -206,7 +225,16 @@ struct UsageAlertsCommand: AsyncParsableCommand {
 
 struct UsageSummaryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "summary", abstract: "Cost and tokens over a window.")
+        commandName: "summary", abstract: "Show cost and tokens over a window.",
+        discussion: """
+            Totals cost and tokens over a window, then breaks the same totals down by
+            source.
+
+            Changes the state this command names.
+
+            ed usage summary
+            ed usage summary --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -249,7 +277,15 @@ struct UsageSummaryCommand: AsyncParsableCommand {
 
 struct UsageDailyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "daily", abstract: "Per-day cost and tokens.")
+        commandName: "daily", abstract: "Show per-day cost and tokens.",
+        discussion: """
+            One row per day in the window, cost and tokens.
+
+            Changes the state this command names.
+
+            ed usage daily
+            ed usage daily --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -281,7 +317,16 @@ struct UsageDailyCommand: AsyncParsableCommand {
 
 struct UsageModelsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "models", abstract: "Cost and tokens per model.")
+        commandName: "models", abstract: "Show cost and tokens per model.",
+        discussion: """
+            Tokens and attributable cost per model, plus any exact provider cost that
+            cannot be assigned to one model.
+
+            Changes the state this command names.
+
+            ed usage models
+            ed usage models --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -319,6 +364,13 @@ struct UsageProjectsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "projects",
         abstract: "Inspect usage by GitHub repository.",
+        discussion: """
+            Inspect the repository hierarchy behind the dashboard project drilldown.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed usage projects list
+            """,
         subcommands: [
             UsageProjectsListCommand.self, UsageProjectsShowCommand.self,
             UsageProjectsOpenCommand.self, UsageProjectsCopyLinkCommand.self,
@@ -359,7 +411,16 @@ struct UsageProjectsRange: ParsableArguments {
 
 struct UsageProjectsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "list", abstract: UsageProjectOperation.list.descriptor.summary)
+        commandName: "list", abstract: UsageProjectOperation.list.descriptor.summary,
+        discussion: """
+            List cost and tokens per repository, with matching folders grouped under
+            their stable repository identity.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed usage projects list
+            ed usage projects list --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -402,7 +463,15 @@ struct UsageProjectsListCommand: AsyncParsableCommand {
 
 struct UsageProjectsShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: UsageProjectOperation.show.descriptor.summary)
+        commandName: "show", abstract: UsageProjectOperation.show.descriptor.summary,
+        discussion: """
+            Show one repository and its full usage drilldown.
+
+            Reads one record and its live facts. Does not change them.
+
+            ed usage projects show repository
+            ed usage projects show repository --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -483,7 +552,15 @@ struct UsageProjectsShowCommand: AsyncParsableCommand {
 
 struct UsageProjectsOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: UsageProjectOperation.openRepository.descriptor.summary)
+        commandName: "open", abstract: UsageProjectOperation.openRepository.descriptor.summary,
+        discussion: """
+            Open one usage repository in the default browser.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed usage projects open repository
+            ed usage projects open repository --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -507,7 +584,15 @@ struct UsageProjectsOpenCommand: AsyncParsableCommand {
 struct UsageProjectsCopyLinkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "copy-link",
-        abstract: UsageProjectOperation.copyRepositoryLink.descriptor.summary)
+        abstract: UsageProjectOperation.copyRepositoryLink.descriptor.summary,
+        discussion: """
+            Copy one usage repository link to the macOS pasteboard.
+
+            Changes the state this command names.
+
+            ed usage projects copy-link repository
+            ed usage projects copy-link repository --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -530,7 +615,15 @@ struct UsageProjectsCopyLinkCommand: AsyncParsableCommand {
 
 struct UsageProjectsCopyChatCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "copy-chat", abstract: UsageProjectOperation.copyChatID.descriptor.summary)
+        commandName: "copy-chat", abstract: UsageProjectOperation.copyChatID.descriptor.summary,
+        discussion: """
+            Copy a chat identifier from the dashboard repository drilldown.
+
+            Changes the state this command names.
+
+            ed usage projects copy-chat chatid
+            ed usage projects copy-chat chatid --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -602,7 +695,16 @@ extension UsageProjectOperationResult {
 
 struct UsageSourcesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "sources", abstract: "The agents that produced the usage history.")
+        commandName: "sources", abstract: "Show the agents that produced the usage history.",
+        discussion: """
+            Lists the agents that produced the history, which is where the ids
+            `--source` expects come from.
+
+            Changes the state this command names.
+
+            ed usage sources
+            ed usage sources --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -652,6 +754,10 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             Machines counted towards usage are topped up first, if nothing has collected
             from them in the last half hour. `--machines` collects from all of them
             regardless, `--no-machines` leaves them alone.
+            Changes the state this command names.
+
+            ed usage refresh
+            ed usage refresh --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

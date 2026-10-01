@@ -35,9 +35,16 @@ struct StudioEditRender: AsyncParsableCommand {
         commandName: "render",
         abstract: "Encode native video and return a measured delivery report.",
         discussion:
-            "H.264 and HEVC use .mp4; ProRes uses .mov. SIGINT/SIGTERM cancel cooperatively without replacing the destination."
+            """
+            H.264 and HEVC use .mp4; ProRes uses .mov. SIGINT/SIGTERM cancel
+            cooperatively without replacing the destination.
+
+            Changes the state this command names.
+
+            ed studio edit render web --output /tmp/out.png
+            """
     )
-    @Argument var project: String
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Destination .mp4 or .mov file, matching the codec.") var output: String
     @Option(help: "Video codec. hevc10 and ProRes retain high-precision frames.")
     var codec: VideoDeliverySettings.Codec = .h264
@@ -99,9 +106,16 @@ struct StudioEditRenderAudio: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "render-audio", abstract: "Encode the native audio mix as WAV, AIFF, or M4A.",
         discussion:
-            "WAV and AIFF use 24-bit PCM; M4A uses AAC. The measured report includes the sample-frame count and SHA-256."
+            """
+            WAV and AIFF use 24-bit PCM; M4A uses AAC. The measured report includes the
+            sample-frame count and SHA-256.
+
+            Changes the state this command names.
+
+            ed studio edit render-audio web --output /tmp/out.png
+            """
     )
-    @Argument var project: String
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Destination file, with the extension matching --container.") var output: String
     @Option(help: "Audio output container.") var container: VideoAudioDeliverySettings.Container =
         .wav

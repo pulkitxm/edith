@@ -6,8 +6,16 @@ import Foundation
 struct StudioEditRegister: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "register",
-        abstract: "Register an external project reference without copying or modifying it.")
-    @Argument var project: String
+        abstract: "Register an external project reference without copying or modifying it.",
+        discussion: """
+            Register an external project reference without copying or modifying it.
+
+            Changes the state this command names.
+
+            ed studio edit register web
+            ed studio edit register web --json
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
 
     func run() async throws {
@@ -22,8 +30,16 @@ struct StudioEditRegister: AsyncParsableCommand {
 struct StudioEditUnregister: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unregister",
-        abstract: "Remove a registered reference, preserving the project and all media.")
-    @Argument var project: String
+        abstract: "Remove a registered reference, preserving the project and all media.",
+        discussion: """
+            Remove a registered reference, preserving the project and all media.
+
+            Changes the state this command names.
+
+            ed studio edit unregister web
+            ed studio edit unregister web --json
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
 
     func run() async throws {
@@ -38,7 +54,15 @@ struct StudioEditUnregister: AsyncParsableCommand {
 struct StudioEditLibrary: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "library",
-        abstract: "List native and registered projects, including stale reference errors.")
+        abstract: "List native and registered projects, including stale reference errors.",
+        discussion: """
+            List native and registered projects, including stale reference errors.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit library
+            ed studio edit library --json
+            """, )
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
 
     func run() async throws {
@@ -57,9 +81,17 @@ struct StudioEditOpen: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open",
         abstract:
-            "Open a specific project revision in the running native editor and await its mounted acknowledgment."
-    )
-    @Argument var project: String
+            "Open a specific project revision in the running native editor and await its mounted acknowledgment.",
+        discussion: """
+            Open a specific project revision in the running native editor and await its
+            mounted acknowledgment.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed studio edit open web
+            ed studio edit open web --json
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
     @Option(help: "Seconds to wait for the native editor, from 1 to 120.") var timeout: Double = 30
 
@@ -124,8 +156,16 @@ struct StudioEditTrash: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "trash",
         abstract: "Move a project document to Trash, preserving all source media and exports.",
+        discussion: """
+            Move a project document to Trash, preserving all source media and exports.
+
+            Changes the state this command names.
+
+            ed studio edit trash web
+            ed studio edit trash web --json
+            """,
         aliases: ["delete"])
-    @Argument var project: String
+    @Argument(help: "Local .openscreen project.") var project: String
     @Flag(help: "Validate without moving the project or changing its registration.") var dryRun =
         false
     @Flag(help: "Emit JSON results and runtime errors.") var json = false

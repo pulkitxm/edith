@@ -7,7 +7,16 @@ struct StudioEditReviewReport: AsyncParsableCommand {
         commandName: "review-report",
         abstract: "Report native composition timing, expectations and optional border geometry.",
         discussion:
-            "Results are always JSON. Completed failed, sampled or unavailable assessments exit 1 with diagnostics on stdout. Source frame coordinates use nominal FPS, not decoded VFR sample indices. Border samples never claim full coverage."
+            """
+            Results are always JSON. Completed failed, sampled or unavailable
+            assessments exit 1 with diagnostics on stdout. Source frame coordinates use
+            nominal FPS, not decoded VFR sample indices. Border samples never claim full
+            coverage.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit review-report web
+            """
     )
     @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Expected native composition duration in seconds.") var expectDuration: Double?

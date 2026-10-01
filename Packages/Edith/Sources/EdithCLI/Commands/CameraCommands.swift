@@ -6,6 +6,14 @@ struct CameraCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "camera",
         abstract: "Frame, style and control Edith's virtual camera.",
+        discussion: """
+            Frames, styles and controls Edith Camera, the virtual camera that Zoom,
+            Meet, FaceTime, OBS, Chrome and every other video app can pick.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed camera status
+            """,
         subcommands: [
             CameraStatusCommand.self, CameraOnCommand.self, CameraOffCommand.self,
             CameraSourcesCommand.self, CameraSourceCommand.self, CameraZoomCommand.self,
@@ -135,7 +143,15 @@ enum CameraCLI {
 
 struct CameraStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: VirtualCameraOperation.status.descriptor.summary)
+        commandName: "status", abstract: VirtualCameraOperation.status.descriptor.summary,
+        discussion: """
+            Show the virtual camera state.
+
+            Reads the current state. Does not change it.
+
+            ed camera status
+            ed camera status --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -151,7 +167,15 @@ struct CameraStatusCommand: AsyncParsableCommand {
 
 struct CameraOnCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "on", abstract: VirtualCameraOperation.on.descriptor.summary)
+        commandName: "on", abstract: VirtualCameraOperation.on.descriptor.summary,
+        discussion: """
+            Turn the virtual camera on.
+
+            Changes the machine by opening one saved port forward.
+
+            ed camera on
+            ed camera on --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -163,7 +187,15 @@ struct CameraOnCommand: AsyncParsableCommand {
 
 struct CameraOffCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "off", abstract: VirtualCameraOperation.off.descriptor.summary)
+        commandName: "off", abstract: VirtualCameraOperation.off.descriptor.summary,
+        discussion: """
+            Turn the virtual camera off.
+
+            Changes the machine by closing one saved port forward.
+
+            ed camera off
+            ed camera off --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -176,6 +208,14 @@ struct CameraOffCommand: AsyncParsableCommand {
 struct CameraSourcesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sources", abstract: VirtualCameraOperation.sources.descriptor.summary,
+        discussion: """
+            List the cameras Edith can use.
+
+            Reads the current state. Does not change it.
+
+            ed camera sources
+            ed camera sources --json
+            """,
         aliases: ["cameras"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -202,7 +242,15 @@ struct CameraSourcesCommand: AsyncParsableCommand {
 
 struct CameraSourceCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "source", abstract: VirtualCameraOperation.source.descriptor.summary)
+        commandName: "source", abstract: VirtualCameraOperation.source.descriptor.summary,
+        discussion: """
+            Choose the camera Edith frames.
+
+            Changes the state this command names.
+
+            ed camera source camera
+            ed camera source camera --json
+            """, )
 
     @Argument(help: "A camera name, its number from `ed camera sources`, or its id.")
     var camera: String
@@ -217,7 +265,15 @@ struct CameraSourceCommand: AsyncParsableCommand {
 
 struct CameraZoomCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "zoom", abstract: VirtualCameraOperation.zoom.descriptor.summary)
+        commandName: "zoom", abstract: VirtualCameraOperation.zoom.descriptor.summary,
+        discussion: """
+            Set the zoom level.
+
+            Changes the state this command names.
+
+            ed camera zoom 40
+            ed camera zoom 40 --json
+            """, )
 
     @Argument(help: "A zoom level from 1 to 8, such as 1.5 or 2x.")
     var level: String
@@ -234,7 +290,15 @@ struct CameraZoomCommand: AsyncParsableCommand {
 
 struct CameraFrameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "frame", abstract: VirtualCameraOperation.frame.descriptor.summary)
+        commandName: "frame", abstract: VirtualCameraOperation.frame.descriptor.summary,
+        discussion: """
+            Set zoom, position, tilt, and auto-framing.
+
+            Changes the state this command names.
+
+            ed camera frame
+            ed camera frame --json
+            """, )
 
     @Option(help: "Zoom level from 1 to 8.")
     var zoom: Double?
@@ -282,7 +346,15 @@ struct CameraFrameCommand: AsyncParsableCommand {
 
 struct CameraResetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reset", abstract: VirtualCameraOperation.reset.descriptor.summary)
+        commandName: "reset", abstract: VirtualCameraOperation.reset.descriptor.summary,
+        discussion: """
+            Reset the framing to the full picture.
+
+            Changes the state this command names.
+
+            ed camera reset
+            ed camera reset --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -294,7 +366,15 @@ struct CameraResetCommand: AsyncParsableCommand {
 
 struct CameraLookCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "look", abstract: VirtualCameraOperation.look.descriptor.summary)
+        commandName: "look", abstract: VirtualCameraOperation.look.descriptor.summary,
+        discussion: """
+            Apply a color look.
+
+            Changes the state this command names.
+
+            ed camera look preset
+            ed camera look preset --json
+            """, )
 
     @Argument(help: "natural, bright, studio, warm, cool, vivid, muted, film, mono or noir.")
     var preset: String
@@ -311,7 +391,15 @@ struct CameraLookCommand: AsyncParsableCommand {
 
 struct CameraBackgroundCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "background", abstract: VirtualCameraOperation.background.descriptor.summary)
+        commandName: "background", abstract: VirtualCameraOperation.background.descriptor.summary,
+        discussion: """
+            Blur or replace the background.
+
+            Changes the state this command names.
+
+            ed camera background on
+            ed camera background on --json
+            """, )
 
     @Argument(help: "none, blur, color or image.")
     var mode: String
@@ -351,7 +439,15 @@ struct CameraBackgroundCommand: AsyncParsableCommand {
 
 struct CameraPauseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pause", abstract: VirtualCameraOperation.pause.descriptor.summary)
+        commandName: "pause", abstract: VirtualCameraOperation.pause.descriptor.summary,
+        discussion: """
+            Hide the camera behind a card, a blank frame, or a frozen frame.
+
+            Changes the container by freezing its processes.
+
+            ed camera pause
+            ed camera pause --json
+            """, )
 
     @Option(help: "card, blank, freeze or stopped (stops capture and output completely).")
     var style = "card"
@@ -372,7 +468,15 @@ struct CameraPauseCommand: AsyncParsableCommand {
 
 struct CameraResumeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "resume", abstract: VirtualCameraOperation.resume.descriptor.summary)
+        commandName: "resume", abstract: VirtualCameraOperation.resume.descriptor.summary,
+        discussion: """
+            Show the live camera again.
+
+            Reads the current state. Does not change it.
+
+            ed camera resume
+            ed camera resume --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -386,6 +490,13 @@ struct CameraSceneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "scene",
         abstract: "List, apply and save camera scenes.",
+        discussion: """
+            List, apply and save camera scenes.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed camera scene list
+            """,
         subcommands: [
             CameraSceneListCommand.self, CameraSceneApplyCommand.self,
             CameraSceneSaveCommand.self, CameraSceneNextCommand.self,
@@ -397,6 +508,14 @@ struct CameraSceneCommand: AsyncParsableCommand {
 struct CameraSceneListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list", abstract: VirtualCameraOperation.sceneList.descriptor.summary,
+        discussion: """
+            List saved camera scenes.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed camera scene list
+            ed camera scene list --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -423,7 +542,15 @@ struct CameraSceneListCommand: AsyncParsableCommand {
 
 struct CameraSceneApplyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "apply", abstract: VirtualCameraOperation.sceneApply.descriptor.summary)
+        commandName: "apply", abstract: VirtualCameraOperation.sceneApply.descriptor.summary,
+        discussion: """
+            Switch to a saved camera scene.
+
+            Changes the state this command names.
+
+            ed camera scene apply scene
+            ed camera scene apply scene --json
+            """, )
 
     @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
     var scene: String
@@ -438,7 +565,15 @@ struct CameraSceneApplyCommand: AsyncParsableCommand {
 
 struct CameraSceneSaveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "save", abstract: VirtualCameraOperation.sceneSave.descriptor.summary)
+        commandName: "save", abstract: VirtualCameraOperation.sceneSave.descriptor.summary,
+        discussion: """
+            Save the current look as a camera scene.
+
+            Changes the state this command names.
+
+            ed camera scene save notes
+            ed camera scene save notes --json
+            """, )
 
     @Argument(help: "The scene name.")
     var name: String
@@ -458,7 +593,15 @@ struct CameraSceneSaveCommand: AsyncParsableCommand {
 
 struct CameraSceneNextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "next", abstract: VirtualCameraOperation.sceneNext.descriptor.summary)
+        commandName: "next", abstract: VirtualCameraOperation.sceneNext.descriptor.summary,
+        discussion: """
+            Switch to the next camera scene.
+
+            Reads the one question worth asking now. Does not change the queue.
+
+            ed camera scene next
+            ed camera scene next --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -471,7 +614,15 @@ struct CameraSceneNextCommand: AsyncParsableCommand {
 struct CameraScenePreviousCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "previous",
-        abstract: VirtualCameraOperation.scenePrevious.descriptor.summary, aliases: ["prev"])
+        abstract: VirtualCameraOperation.scenePrevious.descriptor.summary,
+        discussion: """
+            Switch to the previous camera scene.
+
+            Changes the state this command names.
+
+            ed camera scene previous
+            ed camera scene previous --json
+            """, aliases: ["prev"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

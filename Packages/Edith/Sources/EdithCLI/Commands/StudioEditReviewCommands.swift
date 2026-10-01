@@ -4,7 +4,15 @@ import Foundation
 
 struct StudioEditList: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "list", abstract: "List native project files in a directory.")
+        commandName: "list", abstract: "List native project files in a directory.",
+        discussion: """
+            List native project files in a directory.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed studio edit list /tmp/companion-export
+            ed studio edit list /tmp/companion-export --json
+            """, )
     @Argument(help: "Directory containing .openscreen projects.") var directory: String
     @Flag(help: "Emit JSON results and runtime errors.") var json = false
 
@@ -24,8 +32,15 @@ struct StudioEditList: AsyncParsableCommand {
 
 struct StudioEditClone: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clone", abstract: "Copy an edit with a fresh project identity and title.")
-    @Argument var project: String
+        commandName: "clone", abstract: "Copy an edit with a fresh project identity and title.",
+        discussion: """
+            Copy an edit with a fresh project identity and title.
+
+            Changes the state this command names.
+
+            ed studio edit clone web --output /tmp/out.png --title disk
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Destination .openscreen file.") var output: String
     @Option(help: "New project title.") var title: String
     @OptionGroup var options: StudioEditOutput
@@ -42,8 +57,15 @@ struct StudioEditClone: AsyncParsableCommand {
 
 struct StudioEditContactSheet: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "contact-sheet", abstract: "Render a labeled PNG grid of output frames.")
-    @Argument var project: String
+        commandName: "contact-sheet", abstract: "Render a labeled PNG grid of output frames.",
+        discussion: """
+            Render a labeled PNG grid of output frames.
+
+            Changes the state this command names.
+
+            ed studio edit contact-sheet web --time 0.5 --output /tmp/out.png
+            """, )
+    @Argument(help: "Local .openscreen project.") var project: String
     @Option(help: "Output seconds, one --time for each frame (maximum 64).") var time: [Double]
     @Option(help: "Number of columns, from 1 to 8.") var columns = 4
     @Option(help: "Maximum thumbnail dimension in pixels, from 64 to 1920.") var cellWidth = 320

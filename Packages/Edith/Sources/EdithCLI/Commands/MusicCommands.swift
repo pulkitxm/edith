@@ -15,6 +15,7 @@ struct MusicCommand: AsyncParsableCommand {
 
             Pass `--player builtin|spotify|apple` to force one. `ed music status --json`
             lists every player it can see and marks the active one.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
             """,
         subcommands: [
             MusicStatusCommand.self, MusicPlayCommand.self, MusicPauseCommand.self,
@@ -116,7 +117,15 @@ enum MusicCurrentVerb {
 
 struct MusicStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "What is playing right now, on whichever player.")
+        commandName: "status", abstract: "What is playing right now, on whichever player.",
+        discussion: """
+            Prints one line about whatever is playing, on whichever player.
+
+            Reads the current state. Does not change it.
+
+            ed music status
+            ed music status --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -142,7 +151,16 @@ struct MusicStatusCommand: AsyncParsableCommand {
 
 struct MusicPlayersCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "players", abstract: "Every player Edith can see, and which is active.")
+        commandName: "players", abstract: "List every player Edith can see, and which is active.",
+        discussion: """
+            Lists every player Edith can see, what state each is in, and which one the
+            other commands would target.
+
+            Changes the state this command names.
+
+            ed music players
+            ed music players --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -173,7 +191,15 @@ struct MusicPlayersCommand: AsyncParsableCommand {
 
 struct MusicOpenCurrentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open-current", abstract: "Open the active music player.")
+        commandName: "open-current", abstract: "Open the active music player.",
+        discussion: """
+            Opens whichever player `ed music status` considers active.
+
+            Changes the state this command names.
+
+            ed music open-current
+            ed music open-current --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -191,7 +217,16 @@ struct MusicOpenCurrentCommand: AsyncParsableCommand {
 struct MusicRevealCurrentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reveal-current",
-        abstract: "Reveal the current library track or open its player.")
+        abstract: "Reveal the current library track or open its player.",
+        discussion: """
+            Opens Edith's Music page at the folder containing the track currently loaded
+            in the built-in library player.
+
+            Changes the state this command names.
+
+            ed music reveal-current
+            ed music reveal-current --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -208,7 +243,15 @@ struct MusicRevealCurrentCommand: AsyncParsableCommand {
 
 struct MusicPlayCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "play", abstract: "Resume playback on the active player.")
+        commandName: "play", abstract: "Start playback on the active player.",
+        discussion: """
+            Resumes playback on the active player.
+
+            Changes the state this command names.
+
+            ed music play
+            ed music play --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -222,7 +265,15 @@ struct MusicPlayCommand: AsyncParsableCommand {
 
 struct MusicPauseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "pause", abstract: "Pause the active player.")
+        commandName: "pause", abstract: "Pause the active player.",
+        discussion: """
+            Pauses the active player.
+
+            Changes the container by freezing its processes.
+
+            ed music pause
+            ed music pause --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -236,7 +287,15 @@ struct MusicPauseCommand: AsyncParsableCommand {
 
 struct MusicStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Stop the active player and reset its position.")
+        commandName: "stop", abstract: "Stop the active player and reset its position.",
+        discussion: """
+            Stops the active player and resets its position to the start of the track.
+
+            Changes the target by stopping it.
+
+            ed music stop
+            ed music stop --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -250,7 +309,15 @@ struct MusicStopCommand: AsyncParsableCommand {
 
 struct MusicToggleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "toggle", abstract: "Toggle play and pause.", aliases: ["playpause"])
+        commandName: "toggle", abstract: "Toggle play and pause.",
+        discussion: """
+            Toggles play and pause on the active player.
+
+            Changes the state this command names.
+
+            ed music toggle
+            ed music toggle --json
+            """, aliases: ["playpause"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -266,7 +333,15 @@ struct MusicToggleCommand: AsyncParsableCommand {
 
 struct MusicNextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "next", abstract: "Skip to the next track.")
+        commandName: "next", abstract: "Skip to the next track.",
+        discussion: """
+            Skips to the next track.
+
+            Reads the one question worth asking now. Does not change the queue.
+
+            ed music next
+            ed music next --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -280,7 +355,15 @@ struct MusicNextCommand: AsyncParsableCommand {
 
 struct MusicPreviousCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "previous", abstract: "Go back to the previous track.", aliases: ["prev"])
+        commandName: "previous", abstract: "Go back to the previous track.",
+        discussion: """
+            Goes back to the previous track.
+
+            Changes the state this command names.
+
+            ed music previous
+            ed music previous --json
+            """, aliases: ["prev"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -296,7 +379,15 @@ struct MusicPreviousCommand: AsyncParsableCommand {
 
 struct MusicVolumeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "volume", abstract: "Set the active player's volume from 0 to 1.")
+        commandName: "volume", abstract: "Set the active player's volume from 0 to 1.",
+        discussion: """
+            Sets the active player's volume as a fraction from 0 to 1.
+
+            Changes the system output volume.
+
+            ed music volume 0.5
+            ed music volume 0.5 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

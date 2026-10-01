@@ -5,7 +5,7 @@ import Foundation
 struct UsageMachinesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "machines",
-        abstract: "Machines whose agent usage is counted with this Mac's.",
+        abstract: "Show machines whose agent usage is counted with this Mac's.",
         discussion: """
             `ed usage machines collect <machine>` runs the collector Edith runs here
             over SSH instead, brings the numbers back and folds them into the same
@@ -82,7 +82,15 @@ enum UsageMachineBridge {
 
 struct UsageMachinesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "Every machine, and what its usage adds up to.")
+        commandName: "ls", abstract: "Show every machine, and what its usage adds up to.",
+        discussion: """
+            Show every machine, and what its usage adds up to.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed usage machines ls
+            ed usage machines ls --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -129,6 +137,10 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
             With no machine named, every machine that takes part is collected. Naming
             one collects it and signs it up, unless `--once` is passed. The first run
             on a machine installs what it needs and can take a few minutes.
+            Changes the state this command names.
+
+            ed usage machines collect
+            ed usage machines collect --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -251,7 +263,15 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
 
 struct UsageMachinesEnableCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "enable", abstract: "Count this machine on every usage refresh.")
+        commandName: "enable", abstract: "Count this machine on every usage refresh.",
+        discussion: """
+            Count this machine on every usage refresh.
+
+            Reads the current state. Does not change it.
+
+            ed usage machines enable box
+            ed usage machines enable box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -277,7 +297,15 @@ struct UsageMachinesEnableCommand: AsyncParsableCommand {
 struct UsageMachinesDisableCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "disable",
-        abstract: "Stop collecting from this machine, keeping what it already gave.")
+        abstract: "Stop collecting from this machine, keeping what it already gave.",
+        discussion: """
+            Stop collecting from this machine, keeping what it already gave.
+
+            Changes the state this command names.
+
+            ed usage machines disable box
+            ed usage machines disable box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -303,7 +331,15 @@ struct UsageMachinesDisableCommand: AsyncParsableCommand {
 struct UsageMachinesForgetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forget",
-        abstract: "Drop what a machine gave and stop collecting from it.")
+        abstract: "Drop what a machine gave and stop collecting from it.",
+        discussion: """
+            Drop what a machine gave and stop collecting from it.
+
+            Changes companion memory by deleting one conversation and its messages.
+
+            ed usage machines forget box
+            ed usage machines forget box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

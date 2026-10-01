@@ -5,7 +5,15 @@ import Foundation
 struct UsageExportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
-        abstract: "Render branded usage cards as PNG images.")
+        abstract: "Render branded usage cards as PNG images.",
+        discussion: """
+            Render Edith's local agent usage as branded, high resolution PNG cards.
+
+            Reads everything the companion remembers and writes a restorable bundle.
+
+            ed usage export
+            ed usage export --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

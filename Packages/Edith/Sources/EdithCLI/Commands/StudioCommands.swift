@@ -11,6 +11,9 @@ struct StudioCommand: AsyncParsableCommand {
             Studio's tools run on this Mac, straight from the command line. `tools` lists them,
             `info` shows a tool's settings, `run` applies one to files and `probe` describes a
             file. Results are saved next to the originals unless you pass --output-dir.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio tools
             """,
         subcommands: [
             StudioToolsCommand.self, StudioInfoCommand.self, StudioRunCommand.self,
@@ -146,7 +149,15 @@ enum StudioBridge {
 
 struct StudioToolsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "tools", abstract: "List Studio's tools.", aliases: ["ls"])
+        commandName: "tools", abstract: "List Studio's tools.",
+        discussion: """
+            [Back to `ed studio`](./README.md).
+
+            Reads the current state. Does not change it.
+
+            ed studio tools
+            ed studio tools --json
+            """, aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -185,7 +196,15 @@ struct StudioToolsCommand: AsyncParsableCommand {
 
 struct StudioInfoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "info", abstract: "Show what a Studio tool does and its settings.")
+        commandName: "info", abstract: "Show what a Studio tool does and its settings.",
+        discussion: """
+            [Back to `ed studio`](./README.md).
+
+            Reads one file's metadata. Does not change the file.
+
+            ed studio info tool
+            ed studio info tool --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -224,7 +243,15 @@ struct StudioInfoCommand: AsyncParsableCommand {
 
 struct StudioRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "run", abstract: "Run a Studio tool on files and save the results.")
+        commandName: "run", abstract: "Run a Studio tool on files and save the results.",
+        discussion: """
+            [Back to `ed studio`](./README.md).
+
+            Changes the machine by running one saved command, and reads its output.
+
+            ed studio run tool /etc/os-release
+            ed studio run tool /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -322,7 +349,15 @@ struct StudioRunCommand: AsyncParsableCommand {
 
 struct StudioProbeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "probe", abstract: "Describe a file: kind, size, pages, pixels or duration.")
+        commandName: "probe", abstract: "Describe a file: kind, size, pages, pixels or duration.",
+        discussion: """
+            [Back to `ed studio`](./README.md).
+
+            Reads a machine by asking it what it is. Does not change the machine.
+
+            ed studio probe notes.md
+            ed studio probe notes.md --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
