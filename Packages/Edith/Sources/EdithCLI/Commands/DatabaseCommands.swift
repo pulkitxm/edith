@@ -16,6 +16,7 @@ struct DatabaseCommand: AsyncParsableCommand {
             DatabaseQueryCommand.self,
             DatabaseMutationsCommand.self,
             DatabaseOperationsCommand.self,
+            DatabasePackCommand.self,
             DatabaseMCPCommand.self,
         ],
         defaultSubcommand: DatabaseConnectionsCommand.self)

@@ -247,7 +247,8 @@ enum CommandCrawler {
             "ed attention", "ed attention categories", "ed attention focus",
             "ed quinjet",
             "ed database", "ed database connections", "ed database saved-queries",
-            "ed database mutations", "ed database operations", "ed database mcp",
+            "ed database mutations", "ed database operations", "ed database pack",
+            "ed database mcp",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {
             #expect(

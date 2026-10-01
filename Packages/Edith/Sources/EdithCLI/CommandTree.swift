@@ -1011,6 +1011,9 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "ed database operations cancel": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed database pack install": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed database pack status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed database pack remove": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed machines": Spec(arguments: [.machine]),
         "ed machines ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed machines show": Spec(

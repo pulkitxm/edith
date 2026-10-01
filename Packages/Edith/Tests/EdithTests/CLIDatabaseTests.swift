@@ -80,7 +80,7 @@ private actor CLIDatabaseMCPRunRecorder {
             plan(["ed", "database", ""], 2).candidates
                 == [
                     "connections", "saved-queries", "capabilities", "connect", "disconnect",
-                    "browse", "query", "mutations", "operations", "mcp",
+                    "browse", "query", "mutations", "operations", "pack", "mcp",
                 ])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
