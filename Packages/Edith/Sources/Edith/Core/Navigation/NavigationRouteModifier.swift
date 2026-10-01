@@ -1,3 +1,4 @@
+import EdithKit
 import AppKit
 import SwiftUI
 
@@ -246,7 +247,7 @@ struct RouteSlotAnchor: View {
         let _ = NavigationRouteMount.sync(
             router: router, depth: depth, name: name, value: value, accept: accept, apply: apply)
         Color.clear
-            .frame(width: 0, height: 0)
+            .frame(width: UIScale.pt(0), height: UIScale.pt(0))
             .accessibilityHidden(true)
             .background {
                 RouteSlotRepresentable(

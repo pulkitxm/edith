@@ -24,17 +24,15 @@ test("a raw font size and frame are rejected", () => {
 });
 
 test("scaled sizes and the fixed-size allowlist pass", () => {
-  const allow = loadAllowlist(
-    "Fixtures.swift\t.frame(width: 0, height: 0)\n",
-  );
+  const allow = loadAllowlist("Fixtures.swift\t.frame(width: 0, height: 0)\n");
   const text = [
     "Text(title).font(.system(size: UIScale.pt(13)))",
     ".frame(width: UIScale.pt(20), minHeight: UIScale.pt(4))",
     ".frame(width: 0, height: 0)",
   ].join("\n");
-  expect(lineAllowed("Fixtures.swift", ".frame(width: 0, height: 0)", allow)).toBe(
-    true,
-  );
+  expect(
+    lineAllowed("Fixtures.swift", ".frame(width: 0, height: 0)", allow),
+  ).toBe(true);
   expect(violationsIn("Fixtures.swift", text, allow)).toEqual([]);
 });
 
