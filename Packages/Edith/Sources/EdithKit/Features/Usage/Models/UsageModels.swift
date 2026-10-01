@@ -10,7 +10,7 @@ public struct SourceInfo: Identifiable {
     }
 }
 
-public struct DayPoint: Identifiable {
+public struct DayPoint: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let date: Date
     public let cost: Double

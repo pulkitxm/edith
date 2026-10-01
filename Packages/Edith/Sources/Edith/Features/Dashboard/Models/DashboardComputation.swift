@@ -34,6 +34,7 @@ struct DashboardSnapshot {
     var projectTree: [ProjTreeRow] = []
     var meta = MetaLine()
     var chartData = DashChartData()
+    var revision = 0
 }
 
 struct DashboardComputeRequest {
@@ -57,6 +58,13 @@ enum DashboardComputation {
     static let unattributedCostModel = "unattributed-cost"
     static let stackedSeriesLimit = 8
     static let weeklyBucketThresholdDays = 60
+    static let chartMarkBudget = 90
+
+    static func heatCuts(for days: [DayPoint]) -> [Double] {
+        let costs = days.map(\.cost).filter { $0 > 0 }.sorted()
+        guard !costs.isEmpty else { return [0, 0, 0] }
+        return [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
+    }
 
     static let ymd: DateFormatter = {
         let f = DateFormatter()
@@ -1481,6 +1489,10 @@ private struct DashboardFilterComputer {
     }
 
     private func stackBuckets(_ series: [DayDatum]) -> [StackBucket] {
+        capChartBuckets(groupedChartBuckets(series))
+    }
+
+    private func groupedChartBuckets(_ series: [DayDatum]) -> [StackBucket] {
         guard series.count > DashboardComputation.weeklyBucketThresholdDays else {
             return series.map { d in
                 var bucket = StackBucket(id: d.id, label: d.label)
@@ -1521,6 +1533,34 @@ private struct DashboardFilterComputer {
             buckets[key] = bucket
         }
         return order.compactMap { buckets[$0] }
+    }
+
+    private func capChartBuckets(_ buckets: [StackBucket]) -> [StackBucket] {
+        let budget = DashboardComputation.chartMarkBudget
+        guard buckets.count > budget else { return buckets }
+        let width = (buckets.count + budget - 1) / budget
+        var merged: [StackBucket] = []
+        var index = 0
+        while index < buckets.count {
+            let end = min(index + width, buckets.count)
+            var bucket = buckets[index]
+            for item in buckets[(index + 1)..<end] {
+                bucket.input += item.input
+                bucket.output += item.output
+                bucket.cacheCreate += item.cacheCreate
+                bucket.cacheRead += item.cacheRead
+                bucket.cost += item.cost
+                for (name, value) in item.byModel {
+                    bucket.byModel[name, default: 0] += value
+                }
+                for (name, value) in item.bySource {
+                    bucket.bySource[name, default: 0] += value
+                }
+            }
+            merged.append(bucket)
+            index = end
+        }
+        return merged
     }
 
     private func stackedSeries(
@@ -1565,8 +1605,11 @@ private struct DashboardFilterComputer {
         series: [DayDatum], dow: [DOWDatum], hourly: [HourDatum], projects: [ProjectAgg]
     ) -> DashChartData {
         var next = DashChartData()
-        next.daily = series.map {
-            ComboPoint(id: $0.id, label: $0.label, tokens: $0.tokens, cost: $0.cost)
+        let buckets = stackBuckets(series)
+        next.daily = buckets.map {
+            ComboPoint(
+                id: $0.id, label: $0.label,
+                tokens: $0.input + $0.output + $0.cacheCreate + $0.cacheRead, cost: $0.cost)
         }
         next.dow = dow.map {
             ComboPoint(id: $0.label, label: $0.label, tokens: $0.tokens, cost: $0.cost)
@@ -1588,7 +1631,6 @@ private struct DashboardFilterComputer {
                     cost: rest.reduce(0) { $0 + $1.cost }))
         }
         next.project = projectPoints
-        let buckets = stackBuckets(series)
         next.stackedCost = buckets.map {
             ComboPoint(
                 id: $0.id, label: $0.label,
@@ -1605,11 +1647,7 @@ private struct DashboardFilterComputer {
         }
         next.modelTime = stackedSeries(buckets, values: \.byModel, label: DashFmt.shortModel)
         next.source = stackedSeries(buckets, values: \.bySource, label: sourceLabel)
-        let costs = calendarDays.map(\.cost).filter { $0 > 0 }.sorted()
-        next.heatCuts =
-            costs.isEmpty
-            ? [0, 0, 0]
-            : [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
+        next.heatCuts = DashboardComputation.heatCuts(for: calendarDays)
         return next
     }
 }
