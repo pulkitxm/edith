@@ -206,6 +206,27 @@ verify-bundle: verify-release-build-settings
 	  test ! -e "$$install_dir/edh"; \
 	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
+	test 1 -eq "$$(find dist/Edith.app -name EdithShared.framework | wc -l | tr -d ' ')"
+	test -x dist/Edith.app/Contents/Frameworks/EdithShared.framework/Versions/A/EdithShared
+	test ! -e dist/Edith.app/Contents/Frameworks/EdithKit.framework
+	test ! -e dist/Edith.app/Contents/Frameworks/EdithCore.framework
+	test ! -e dist/Edith.app/Contents/Frameworks/EdithCameraSupport.framework
+	test ! -e dist/Edith.app/Contents/Frameworks/EdithLidAwakeSupport.framework
+	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Frameworks
+	test -d dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/Frameworks/EdithCameraSupport.framework
+	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
+	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/Sparkle.framework/'
+	! otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
+	! otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithKit.framework/'
+	otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithShared.framework/'
+	otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
+	! otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
+	otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithShared.framework/'
+	! otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithLidAwakeSupport.framework/'
+	otool -l dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@executable_path/../../Frameworks'
+	otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithCameraSupport.framework/'
+	! otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithShared.framework/'
+	! otool -l dist/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/MacOS/edithd dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '/Users/'
 	@! find dist/Edith.app -type f -perm -u+x -exec file {} + | grep -q 'universal binary'
 	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
 	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/ghostty/shell-integration/zsh/ghostty-integration' -type f | grep -q .

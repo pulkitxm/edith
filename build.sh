@@ -213,6 +213,17 @@ ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.
 rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
+mkdir -p "$APP/Contents/Frameworks"
+for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport; do
+  source="$HELPER/Contents/Frameworks/$framework.framework"
+  destination="$APP/Contents/Frameworks/$framework.framework"
+  if [ -d "$source" ] && [ ! -d "$destination" ]; then
+    mv "$source" "$destination"
+  else
+    rm -rf "$source"
+  fi
+done
+rmdir "$HELPER/Contents/Frameworks" 2>/dev/null || true
 
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
@@ -250,6 +261,10 @@ cp "$CAMERA_BUILD" "$CAMERA/Contents/MacOS/$CAMERA_IDENTIFIER"
 python3 scripts/camera_extension.py info "$CAMERA/Contents/Info.plist" "$APP_IDENTIFIER" \
   "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
   "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" "$TEAM_ID"
+python3 scripts/link-shared-framework.py \
+  "$DERIVED" "$CONFIG" "$APP" "$HELPER/Contents/MacOS/Edith" "$AGENT" \
+  "$PRIVILEGED_HELPER" "$CAMERA" "$CAMERA/Contents/MacOS/$CAMERA_IDENTIFIER" \
+  "$RELEASE"
 
 find "$APP" -type f -perm -u+x -print0 \
   | while IFS= read -r -d '' binary; do
@@ -307,15 +322,24 @@ sign_tool() {
 
 dot_clean -m "$APP"
 
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier "$AGENT_IDENTIFIER" "$AGENT"
 for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do
   [ -e "$library" ] || continue
   sign_tool "$library"
 done
-sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
+for framework in "$APP"/Contents/Frameworks/*.framework; do
+  [ -d "$framework" ] || continue
+  if [ -d "$framework/Versions/A" ]; then
+    find "$framework/Versions/A" -maxdepth 1 -type f -perm -u+x -print0 \
+      | while IFS= read -r -d '' binary; do
+          sign_tool "$binary"
+        done
+  fi
+  sign_tool "$framework"
+done
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier "$AGENT_IDENTIFIER" "$AGENT"
 sign "$HELPER"
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
@@ -334,6 +358,7 @@ if [ -n "${EDITH_CAMERA_PROVISIONING_PROFILE:-}" ]; then
 fi
 CAMERA_RUNTIME=""
 case "$SIGN_FLAGS" in *runtime*) ;; *) CAMERA_RUNTIME="--options runtime" ;; esac
+sign_tool "$CAMERA/Contents/Frameworks/EdithCameraSupport.framework"
 sign "$CAMERA" "$CAMERA_ENTITLEMENTS" "$CAMERA_RUNTIME"
 
 APP_ENTITLEMENTS=""

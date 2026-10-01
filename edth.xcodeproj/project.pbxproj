@@ -21,7 +21,8 @@
 		B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CCC83B99D6204A92B3072609 /* SwiftTerm */; };
 		E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
-		F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithKit */; };
+		F52F2ACA3C74115D1EADA87B /* EdithShared in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithShared */; };
+		B7E4A1C09D2F4B6E8A1C3D50 /* EdithShared in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithShared */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,7 +77,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */,
-				F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */,
+				F52F2ACA3C74115D1EADA87B /* EdithShared in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +103,7 @@
 				5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */,
 				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
 				B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */,
+				B7E4A1C09D2F4B6E8A1C3D50 /* EdithShared in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +201,7 @@
 				D09B7FAF0E894B2E88306846 /* Highlighter */,
 				50E40C33BF204D7FBD48418B /* Sparkle */,
 				CCC83B99D6204A92B3072609 /* SwiftTerm */,
+				92CD22FFF15A7E58164A819B /* EdithShared */,
 			);
 			productName = EdithMain;
 			productReference = C42196203122A2922205077A /* EdithMain.app */;
@@ -221,7 +224,7 @@
 			);
 			name = EdithHelper;
 			packageProductDependencies = (
-				92CD22FFF15A7E58164A819B /* EdithKit */,
+				92CD22FFF15A7E58164A819B /* EdithShared */,
 			);
 			productName = EdithHelper;
 			productReference = 10C5E37D0A600FE4AA48E586 /* EdithHelper.app */;
@@ -366,6 +369,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+					"@executable_path/../../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper.v2;
@@ -389,6 +393,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+					"@executable_path/../../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				EDITH_DEV_SLOT = xcode;
@@ -681,10 +686,10 @@
 			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithCLI;
 		};
-		92CD22FFF15A7E58164A819B /* EdithKit */ = {
+		92CD22FFF15A7E58164A819B /* EdithShared */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
-			productName = EdithKit;
+			productName = EdithShared;
 		};
 		CCC83B99D6204A92B3072609 /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;
