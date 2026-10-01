@@ -361,6 +361,9 @@ enum UIParity {
         UICapability(
             "Notch browser", "close a tab",
             ["browser", "close", "--yes"]),
+        UICapability(
+            "Emoji picker", "forget one frequently used emoji",
+            ["emoji", "forget", "1F600"]),
     ]
 
     static func operationCLI(for invocation: [String]) -> [String] {
@@ -418,6 +421,7 @@ enum UIParity {
         "ed skills install edith-remote-work --agent cursor --yes",
         "ed browser copy",
         "ed browser close --yes",
+        "ed emoji forget 1F600",
     ]
 }
 

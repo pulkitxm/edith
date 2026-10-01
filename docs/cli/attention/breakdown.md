@@ -5,7 +5,7 @@ title, the Edith machine or agent you were looking at, a GitHub repository, a
 YouTube channel or a search.
 
 ```
-ed attention breakdown [--by <dimension>] [--range <window>] [--limit <count>] [--json]
+ed attention breakdown [--by <dimension>] [--range <window>] [--from <date>] [--to <date>] [--limit <count>] [--csv] [--json]
 ```
 
 `--by` accepts `app`, `title`, `url`, `page`, `machine`, `agent`, `project`,
@@ -20,7 +20,10 @@ ed attention breakdown [--by <dimension>] [--range <window>] [--limit <count>] [
   GitHub issue or pull request title.
 
 The default range is `today` and the default limit is 25 rows. Pass `--limit 0`
-for every row the summary keeps, at most 80 per dimension.
+for every row the summary keeps, at most 80 per dimension. `--from` and `--to`
+together replace `--range`. Both are `yyyy-MM-dd`, and `--to` is inclusive.
+`--csv` prints `key,durationSeconds,interactions` and cannot be combined with
+`--json`.
 
 Each JSON row has the `key`, `durationSeconds`, `categorySeconds` keyed by
 category ID, the number of keystrokes, clicks and scrolls as `interactions`, and up

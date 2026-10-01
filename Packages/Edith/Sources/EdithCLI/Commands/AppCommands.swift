@@ -530,13 +530,12 @@ struct AppOpenCommand: AsyncParsableCommand {
 struct AppQuitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quit",
-        abstract: "Quit the Edith main window, leaving the menu bar running.",
+        abstract: "Quit the Edith main window, or Edith entirely with --completely.",
         discussion: """
-            Quit the main window and leave the menu bar running.
-            Without --yes, prints the plan and does not change anything. With --yes, changes the running app by closing the main window.
-
-            ed app quit
-            ed app quit --yes
+            Without --yes, prints the plan and does not change anything. With --yes,
+            changes the running app by closing the main window. --completely also quits
+            the menu bar app, the same as Quit Edith in the status item.
+            Example: `ed app quit --completely --yes`.
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -545,17 +544,29 @@ struct AppQuitCommand: AsyncParsableCommand {
     @Flag(help: "Actually quit it. Without this nothing is touched.")
     var yes = false
 
+    @Flag(
+        name: .long,
+        help: "Also quit the menu bar app, the same as Quit Edith in the status item.")
+    var completely = false
+
     func run() async throws {
         try await execute {
             let action = try AppActions.named("quit")
+            let target = completely ? "Edith" : AppBridge.mainBundleID
             let plan = CLIDestructivePlan(
-                action: "quit", targets: [AppBridge.mainBundleID], confirmed: yes, json: json,
-                fields: ["requested": .bool(false)])
+                action: completely ? "quit completely" : "quit", targets: [target], confirmed: yes,
+                json: json, fields: ["completely": .bool(completely), "requested": .bool(false)])
             guard plan.shouldApply() else { return }
-            try AppActions.require(action)
-            AppActions.runtime.request(action.operation)
+            if completely {
+                try AppBridge.requireHelper("quitting Edith")
+                AppBridge.post(IPC.Name.quitEdithCompletely)
+            } else {
+                try AppActions.require(action)
+                AppActions.runtime.request(action.operation)
+            }
             plan.finish(
-                changed: true, plain: "quit requested", fields: ["requested": .bool(true)])
+                changed: true, plain: completely ? "quit Edith requested" : "quit requested",
+                fields: ["completely": .bool(completely), "requested": .bool(true)])
         }
     }
 }

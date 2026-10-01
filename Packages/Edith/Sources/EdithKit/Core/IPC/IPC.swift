@@ -13,6 +13,8 @@ public enum IPC {
             "com.pulkit.edith.requestLimitsRefresh")
         public static let limitsUpdated = IPC.scopedName("com.pulkit.edith.limitsUpdated")
         public static let quitMainApp = IPC.scopedName("com.pulkit.edith.quitMainApp")
+        public static let quitEdithCompletely = IPC.scopedName(
+            "com.pulkit.edith.quitEdithCompletely")
         public static let updateReadyToInstall = IPC.scopedName(
             "com.pulkit.edith.updateReadyToInstall")
         public static let settingsChanged = IPC.scopedName("com.pulkit.edith.settingsChanged")

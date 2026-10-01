@@ -38,6 +38,7 @@ extension off. `ed emoji` with nothing after it is `ed emoji ls`.
 - [`ed emoji ls`](./ls.md)
 - [`ed emoji insert`](./insert.md)
 - [`ed emoji tone`](./tone.md)
+- [`ed emoji forget`](./forget.md)
 - [`ed emoji clear`](./clear.md)
 
 ## Exit codes
@@ -157,10 +158,10 @@ hint: categories: smileys-emotion, people-body, animals-nature, food-drink, trav
   macOS is asked to show its prompt, the command exits 4, and the attempt is not
   added to frequently used. An app with secure keyboard entry on, such as a
   password field, can still ignore an event that macOS accepted.
-- **There is no per-emoji forget from the command line.** `clear` empties the
-  ledger whole, and the only way to drop a single emoji from the frequently used
-  row is the panel's own context menu.
-- **`--help` works on the group and on all five verbs**, prints on stdout and
+- **`forget` drops one emoji.** `ed emoji forget 1F600` removes that character
+  from the frequently used ledger and leaves the rest. `clear` still empties
+  the whole ledger.
+- **`--help` works on the group and on every verb**, prints on stdout and
   exits 0.
 - **Completion knows the typed arguments.** `ed emoji tone <TAB>` offers the six
   tone tokens, `ed emoji ls --group <TAB>` offers the category ids that survived

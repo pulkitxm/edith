@@ -584,6 +584,14 @@ public enum Guide {
         ed brew search firefox          available casks matching a query
         ed brew install ripgrep         install one exact formula
         ed brew uninstall ripgrep       preview before removing anything
+        ed maintenance ignore <id> --available <version>
+        ed maintenance snooze <id> --for 7d
+        ed maintenance reset --yes
+        ed attention backup
+        ed attention breakdown --by app --from 2026-09-01 --to 2026-09-30 --csv
+        ed emoji forget 1F600
+        ed app quit --completely --yes
+        ed usage export --clipboard
         ed maintenance inventory        installed apps and Homebrew updates
         ed maintenance scan <app>       exact app and support-file Trash plan
         ed maintenance remove <app>     preview the reviewed selection

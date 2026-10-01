@@ -223,7 +223,9 @@ test("release builds and publishes the macOS assets", () => {
   );
   expect(buildScript).not.toContain("swift build");
   expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
-  expect(dmgJob).toContain("./scripts/package-database-pack.sh dist/edith-database .");
+  expect(dmgJob).toContain(
+    "./scripts/package-database-pack.sh dist/edith-database .",
+  );
   expect(dmgJob).toContain("xcrun notarytool submit edith-database.zip --wait");
   expect(dmgJob.indexOf("name: Package the database pack")).toBeLessThan(
     dmgJob.indexOf("name: Notarize and staple"),

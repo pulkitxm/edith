@@ -18,7 +18,8 @@ struct AttentionCommand: AsyncParsableCommand {
             AttentionBreakdownCommand.self, AttentionAgentsCommand.self,
             AttentionTimelineCommand.self, AttentionMusicCommand.self,
             AttentionCategoriesCommand.self, AttentionFocusCommand.self,
-            AttentionDoctorCommand.self,
+            AttentionDoctorCommand.self, AttentionBackupCommand.self,
+            AttentionRestoreCommand.self,
         ],
         defaultSubcommand: AttentionStatusCommand.self)
 }
@@ -86,6 +87,39 @@ enum AttentionCLI {
         case "h": return amount * 3_600
         default: throw CLIFailure.usage("\(raw) is not a duration like 25m, 1h or 90m")
         }
+    }
+
+    static func customInterval(
+        from rawStart: String, to rawEnd: String, calendar: Calendar = .current
+    )
+        throws -> DateInterval
+    {
+        let start = try day(rawStart, calendar: calendar)
+        let endDay = try day(rawEnd, calendar: calendar)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: endDay), start < end else {
+            throw CLIFailure.usage("--from must be on or before --to")
+        }
+        return DateInterval(start: start, end: end)
+    }
+
+    static func csv(_ value: String) -> String {
+        guard value.contains(",") || value.contains("\"") || value.contains("\n") else {
+            return value
+        }
+        return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+
+    static func day(_ raw: String, calendar: Calendar) throws -> Date {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: raw) else {
+            throw CLIFailure.usage(
+                "\(raw) is not a date like 2026-10-01", hint: "use yyyy-MM-dd")
+        }
+        return calendar.startOfDay(for: date)
     }
 
     static func summary(range: String, now: Date = Date()) throws -> AttentionSummary {
@@ -464,11 +498,23 @@ struct AttentionBreakdownCommand: AsyncParsableCommand {
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
     var range = "today"
     @Option(help: "Maximum rows. Pass 0 for all.") var limit = 25
+    @Option(name: .long, help: "Custom range start, yyyy-MM-dd. Requires --to.")
+    var from: String?
+    @Option(name: .long, help: "Custom range end, yyyy-MM-dd, inclusive. Requires --from.")
+    var to: String?
+    @Flag(name: .long, help: "Emit CSV instead of a table.")
+    var csv = false
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 
     func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
+            if csv && json {
+                throw CLIFailure.usage("--csv and --json cannot be combined")
+            }
+            if (from == nil) != (to == nil) {
+                throw CLIFailure.usage("pass both --from and --to, or neither")
+            }
             guard let key = AttentionCLI.dimensions[by.lowercased()] else {
                 throw CLIFailure.usage(
                     "\(by) is not a breakdown",
@@ -476,7 +522,18 @@ struct AttentionBreakdownCommand: AsyncParsableCommand {
                         "use one of \(AttentionCLI.dimensions.keys.sorted().joined(separator: ", "))"
                 )
             }
-            let summary = try AttentionCLI.summary(range: range)
+            let summary: AttentionSummary
+            if let from, let to {
+                let interval = try AttentionCLI.customInterval(from: from, to: to)
+                let repository = AttentionCLI.repository
+                summary = AttentionAnalyzer().summary(
+                    events: try AttentionCLI.events(from: interval.start, to: interval.end),
+                    settings: repository.loadSettings(),
+                    classifications: repository.loadClassifications(), from: interval.start,
+                    to: interval.end)
+            } else {
+                summary = try AttentionCLI.summary(range: range)
+            }
             let settings = AttentionCLI.repository.loadSettings()
             let dimension = summary.dimension(key)
             let all = dimension?.rows ?? []
@@ -497,6 +554,14 @@ struct AttentionBreakdownCommand: AsyncParsableCommand {
                                 ])
                             }),
                     ]))
+                return
+            }
+            if csv {
+                CLIOut.out("key,durationSeconds,interactions")
+                for row in rows {
+                    CLIOut.out(
+                        "\(AttentionCLI.csv(row.key)),\(row.duration),\(row.interactions)")
+                }
                 return
             }
             let total = dimension?.total ?? 0
@@ -1015,5 +1080,70 @@ struct AttentionDoctorCommand: AsyncParsableCommand {
             TextTable.render(
                 headers: ["CHECK", "STATE", "DETAIL"],
                 rows: checks.map { [$0.0, $0.1 ? "ok" : "not ready", $0.2] }))
+    }
+}
+
+struct AttentionBackupCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "backup",
+        abstract: "Upload the attention library to iCloud.",
+        discussion: """
+            Writes the attention library to iCloud, the same backup the Attention
+            settings run. Example: `ed attention backup --json`.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            do {
+                try await AttentionBackgroundClient.backup()
+            } catch {
+                throw CLIFailure.unavailable(
+                    error.localizedDescription, hint: "start Edith, then retry")
+            }
+            if json {
+                CLIOut.json(.object(["backedUp": .bool(true)]))
+            } else {
+                CLIOut.out("backed up attention")
+            }
+        }
+    }
+}
+
+struct AttentionRestoreCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "restore",
+        abstract: "Restore the attention library from iCloud.",
+        discussion: """
+            Previews the restore, then --yes writes the backup over local attention data.
+            Example: `ed attention restore --yes`.
+            """)
+
+    @Flag(name: .long, help: "Emit the plan, or the result, as JSON.")
+    var json = false
+
+    @Flag(name: .long, help: "Restore after printing the plan.")
+    var yes = false
+
+    func run() async throws {
+        try await execute {
+            let plan = CLIDestructivePlan(
+                action: "restore attention from backup", targets: ["attention"], confirmed: yes,
+                json: json)
+            guard plan.shouldApply() else { return }
+            do {
+                try await AttentionBackgroundClient.restore()
+            } catch {
+                throw CLIFailure.unavailable(
+                    error.localizedDescription, hint: "start Edith, then retry")
+            }
+            if json {
+                CLIOut.json(.object(["restored": .bool(true)]))
+            } else {
+                plan.finish(changed: true, plain: "restored attention")
+            }
+        }
     }
 }

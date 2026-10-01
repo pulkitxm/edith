@@ -4,7 +4,7 @@ Render Edith's local agent usage as branded, high resolution PNG cards. The
 command reads `usage.json` directly and does not need the Edith app to be open.
 
 ```text
-ed usage export [--card <card>]... [--output <path>] [--range <range>] [--source <source>]... [--machine <machine>]... [--json]
+ed usage export [--card <card>]... [--output <path>] [--range <range>] [--source <source>]... [--machine <machine>]... [--clipboard] [--json]
 ```
 
 With no `--card`, the command exports highlights, activity calendar, daily
@@ -13,7 +13,8 @@ values are `highlights`, `activity`, `daily`, `busiest` and `all`.
 
 `--output` accepts a directory. When exactly one card is selected, it can also
 be the full destination PNG path. Without it, the images are written to the
-current directory with timestamped filenames.
+current directory with timestamped filenames. `--clipboard` also copies the first
+rendered PNG to the pasteboard.
 
 ```bash
 ed usage export

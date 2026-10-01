@@ -1,3 +1,4 @@
+import AppKit
 import ArgumentParser
 import EdithKit
 import Foundation
@@ -24,6 +25,9 @@ struct UsageExportCommand: AsyncParsableCommand {
     @Option(name: [.short, .long], help: "Output directory, or a PNG path for one card.")
     var output: String?
 
+    @Flag(name: .long, help: "Also copy the first rendered card to the clipboard.")
+    var clipboard = false
+
     @OptionGroup var window: UsageWindow
 
     func run() async throws {
@@ -46,6 +50,7 @@ struct UsageExportCommand: AsyncParsableCommand {
                     fileURLWithPath: FileManager
                         .default.currentDirectoryPath, isDirectory: true))
             let files = try await UsageShareExport.write(snapshot: snapshot, plan: plan)
+            if clipboard { try UsageShareExport.copyToClipboard(files) }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -151,6 +156,18 @@ enum UsageShareExport {
             files.append(file)
         }
         return files
+    }
+
+    static func copyToClipboard(_ files: [URL]) throws {
+        guard let file = files.first else {
+            throw CLIFailure("there is no card to copy")
+        }
+        let data = try Data(contentsOf: file)
+        let board = CLIEnvironment.clipboardPasteboard
+        board.clearContents()
+        guard board.setData(data, forType: .png) else {
+            throw CLIFailure("could not copy the card to the clipboard")
+        }
     }
 
     private static func timestamp(_ date: Date) -> String {
