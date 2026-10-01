@@ -22,6 +22,7 @@ struct DatabaseBrokerExtensionReadinessAdapter: Sendable {
         coordinator: DatabaseBrokerClientCoordinator = .shared
     ) {
         self.init {
+            _ = try await DatabasePackInstaller.live().install()
             try await coordinator.ensureReady()
         }
     }
