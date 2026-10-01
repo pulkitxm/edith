@@ -216,6 +216,63 @@ private struct DocsListView: View {
     }
 }
 
+final class DocsCodeHighlight: @unchecked Sendable {
+    static let shared = DocsCodeHighlight()
+
+    private struct Key: Hashable {
+        let language: String
+        let dark: Bool
+        let hash: Int
+    }
+
+    private struct Entry {
+        let text: String
+        let value: AttributedString
+    }
+
+    var render: @Sendable (String, String, Bool) async -> AttributedString?
+    private let lock = NSLock()
+    private var cache: [Key: Entry] = [:]
+
+    init(render: (@Sendable (String, String, Bool) async -> AttributedString?)? = nil) {
+        self.render = render ?? Self.syntax
+    }
+
+    func highlight(text: String, language: String, dark: Bool) async -> AttributedString? {
+        if let hit = stored(text: text, language: language, dark: dark) { return hit }
+        guard let rendered = await render(text, language, dark) else { return nil }
+        return remember(text: text, language: language, dark: dark, value: rendered)
+    }
+
+    private func stored(text: String, language: String, dark: Bool) -> AttributedString? {
+        let key = Key(language: language, dark: dark, hash: text.hashValue)
+        lock.lock()
+        defer { lock.unlock() }
+        guard let hit = cache[key], hit.text == text else { return nil }
+        return hit.value
+    }
+
+    private func remember(text: String, language: String, dark: Bool, value: AttributedString)
+        -> AttributedString
+    {
+        let key = Key(language: language, dark: dark, hash: text.hashValue)
+        lock.lock()
+        defer { lock.unlock() }
+        if cache[key]?.text != text { cache[key] = Entry(text: text, value: value) }
+        return cache[key]?.value ?? value
+    }
+
+    private static func syntax(text: String, language: String, dark: Bool) async
+        -> AttributedString?
+    {
+        guard
+            let raw = await SyntaxHighlighting.shared.highlight(
+                text: text, language: language, dark: dark)
+        else { return nil }
+        return DocsTypography.highlighted(raw)
+    }
+}
+
 private struct DocsCodeBlock: View {
     let language: String?
     let text: String
@@ -261,12 +318,10 @@ private struct DocsCodeBlock: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark))
         )
-        .task(id: "\(dark)-\(text.hashValue)") {
-            guard let language = highlightLanguage,
-                let result = await SyntaxHighlighting.shared.highlight(
-                    text: text, language: language, dark: dark)
-            else { return }
-            highlighted = DocsTypography.highlighted(result)
+        .task(id: "\(dark)-\(highlightLanguage ?? "")-\(text.hashValue)") {
+            guard let language = highlightLanguage else { return }
+            highlighted = await DocsCodeHighlight.shared.highlight(
+                text: text, language: language, dark: dark)
         }
     }
 
