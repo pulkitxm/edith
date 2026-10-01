@@ -5,6 +5,7 @@ import Testing
 
 @testable import EdithDatabase
 @testable import EdithDatabaseDrivers
+import EdithCore
 
 private enum DatabaseBrokerExecutableLauncherSystemStubError: Error {
     case requestedFailure
@@ -160,6 +161,7 @@ private final class DatabaseBrokerExecutableCodeSigningSystemStub: @unchecked Se
 
     enum Requirement: Equatable, Sendable {
         case current
+        case pack
     }
 
     enum Failure: Equatable {
@@ -167,10 +169,10 @@ private final class DatabaseBrokerExecutableCodeSigningSystemStub: @unchecked Se
         case currentStaticCode
         case designatedRequirement
         case currentValidation
-        case currentUniqueIdentifier
+        case currentSigningIdentifier
         case candidateStaticCode
         case candidateValidation
-        case candidateUniqueIdentifier
+        case candidateRequirement
     }
 
     enum Call: Equatable {
@@ -188,12 +190,17 @@ private final class DatabaseBrokerExecutableCodeSigningSystemStub: @unchecked Se
             Requirement,
             DatabaseBrokerExecutableCodeValidationOptions
         )
-        case uniqueIdentifier(StaticCode)
+        case signingIdentifier(StaticCode)
+        case teamIdentifier(StaticCode)
+        case requirement(String)
     }
 
-    var uniqueIdentifiers: [StaticCode: Data] = [
-        .current: Data([0x10, 0x20, 0x30]),
-        .candidate: Data([0x10, 0x20, 0x30]),
+    var signingIdentifiers: [StaticCode: String] = [
+        .current: "com.pulkit.edith",
+        .candidate: "com.pulkit.edith.database",
+    ]
+    var teamIdentifiers: [StaticCode: String] = [
+        .current: "TEAMID"
     ]
     var failure: Failure?
     var candidateValidationAction: (() -> Void)?
@@ -242,18 +249,24 @@ private final class DatabaseBrokerExecutableCodeSigningSystemStub: @unchecked Se
         try failIfRequested(.candidateValidation)
     }
 
-    func uniqueIdentifier(for code: StaticCode) throws -> Data {
-        calls.append(.uniqueIdentifier(code))
-        switch code {
-        case .current:
-            try failIfRequested(.currentUniqueIdentifier)
-        case .candidate:
-            try failIfRequested(.candidateUniqueIdentifier)
-        }
-        guard let uniqueIdentifier = uniqueIdentifiers[code] else {
+    func signingIdentifier(for code: StaticCode) throws -> String {
+        calls.append(.signingIdentifier(code))
+        try failIfRequested(.currentSigningIdentifier)
+        guard let signingIdentifier = signingIdentifiers[code] else {
             throw DatabaseBrokerExecutableLauncherSystemStubError.requestedFailure
         }
-        return uniqueIdentifier
+        return signingIdentifier
+    }
+
+    func teamIdentifier(for code: StaticCode) throws -> String? {
+        calls.append(.teamIdentifier(code))
+        return teamIdentifiers[code]
+    }
+
+    func requirement(_ expression: String) throws -> Requirement {
+        calls.append(.requirement(expression))
+        try failIfRequested(.candidateRequirement)
+        return .pack
     }
 
     private func failIfRequested(_ requestedFailure: Failure) throws {
@@ -338,13 +351,16 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
                 .staticCode(.current),
                 .designatedRequirement(.current),
                 .validateCurrent(.current, .current, [.offline]),
-                .uniqueIdentifier(.current),
+                .signingIdentifier(.current),
+                .teamIdentifier(.current),
                 .candidateStaticCode(fileSystem.canonicalPath),
+                .requirement(
+                    "identifier \"com.pulkit.edith.database\" and anchor apple generic and certificate leaf[subject.OU] = \"TEAMID\""
+                ),
                 .validateCandidate(
                     .candidate,
-                    .current,
+                    .pack,
                     [.offline, .strict, .allArchitectures, .restrictSymlinks]),
-                .uniqueIdentifier(.candidate),
             ])
     }
 
@@ -502,10 +518,10 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
             .currentStaticCode,
             .designatedRequirement,
             .currentValidation,
-            .currentUniqueIdentifier,
+            .currentSigningIdentifier,
             .candidateStaticCode,
             .candidateValidation,
-            .candidateUniqueIdentifier,
+            .candidateRequirement,
         ])
     fileprivate func mapsCodeSigningFailures(
         failure: DatabaseBrokerExecutableCodeSigningSystemStub.Failure
@@ -522,14 +538,14 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
             expectedError = .currentDesignatedRequirementUnavailable
         case .currentValidation:
             expectedError = .currentCodeInvalid
-        case .currentUniqueIdentifier:
-            expectedError = .currentUniqueIdentifierUnavailable
+        case .currentSigningIdentifier:
+            expectedError = .currentSigningIdentifierUnavailable
         case .candidateStaticCode:
             expectedError = .candidateStaticCodeUnavailable
         case .candidateValidation:
             expectedError = .candidateCodeInvalid
-        case .candidateUniqueIdentifier:
-            expectedError = .candidateUniqueIdentifierUnavailable
+        case .candidateRequirement:
+            expectedError = .candidateCodeRequirementMismatch
         }
 
         #expect(throws: expectedError) {
@@ -540,28 +556,16 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
         }
     }
 
-    @Test func rejectsEmptyOrDifferentUniqueIdentifiers() {
+    @Test func rejectsAMissingSigningIdentifier() {
         let emptySystem = DatabaseBrokerExecutableCodeSigningSystemStub()
-        emptySystem.uniqueIdentifiers[.current] = Data()
+        emptySystem.signingIdentifiers[.current] = ""
         #expect(
             throws: DatabaseBrokerExecutableLauncherError
-                .currentUniqueIdentifierUnavailable
+                .currentSigningIdentifierUnavailable
         ) {
             try DatabaseBrokerExecutableResolver(
                 fileSystem: DatabaseBrokerExecutableFileSystemStub(),
                 codeSigningSystem: emptySystem
-            ).resolveCurrent()
-        }
-
-        let differentSystem = DatabaseBrokerExecutableCodeSigningSystemStub()
-        differentSystem.uniqueIdentifiers[.candidate] = Data([0x40])
-        #expect(
-            throws: DatabaseBrokerExecutableLauncherError
-                .candidateUniqueIdentifierMismatch
-        ) {
-            try DatabaseBrokerExecutableResolver(
-                fileSystem: DatabaseBrokerExecutableFileSystemStub(),
-                codeSigningSystem: differentSystem
             ).resolveCurrent()
         }
     }
@@ -623,6 +627,7 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
                 "LC_NUMERIC": "en_US.UTF-8",
                 "LC_TIME": "en_US.UTF-8",
                 "EDITH_DATABASE_BROKER": "1",
+                "EDITH_APPLICATION_IDENTIFIER": AppBuildIdentity.application,
             ])
         #expect(
             request.flags
@@ -753,6 +758,7 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
             request.environment == [
                 "LANG": "en_US.UTF-8",
                 "EDITH_DATABASE_BROKER": "1",
+                "EDITH_APPLICATION_IDENTIFIER": AppBuildIdentity.application,
             ])
     }
 }

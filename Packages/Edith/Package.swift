@@ -13,6 +13,7 @@ let products: [Product] = [
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
     .executable(name: "edithd", targets: ["edithd"]),
+    .executable(name: "edith-database", targets: ["edith-database"]),
     .executable(name: "EdithCameraExtension", targets: ["EdithCameraExtension"]),
 ]
 
@@ -241,8 +242,13 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(
+        name: "edith-database",
+        dependencies: ["EdithDatabaseDrivers"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith", "EdithCLI", "EdithDatabase", "EdithDatabaseDrivers"],
+        dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([

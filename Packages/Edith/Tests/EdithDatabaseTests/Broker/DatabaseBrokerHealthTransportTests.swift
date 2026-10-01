@@ -511,19 +511,19 @@ private enum DatabaseBrokerHealthTransportFixtures {
             socketDescriptor: 45,
             budgetNanoseconds: 1_000_000_000
         ) { _ in
-            throw DatabaseBrokerPeerAuthenticationError.uniqueIdentifierMismatch
+            throw DatabaseBrokerPeerAuthenticationError.codeRequirementMismatch
         }
 
         let system = DatabaseBrokerHealthTransportSystemStub()
-        system.authenticationResult = .failed(.uniqueIdentifierMismatch)
+        system.authenticationResult = .failed(.codeRequirementMismatch)
         let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
         let error = DatabaseBrokerHealthTransportFixtures.transportError {
             try transport.requestHealth(socketDescriptor: 46)
         }
 
-        #expect(workerResult == .failed(.uniqueIdentifierMismatch))
+        #expect(workerResult == .failed(.codeRequirementMismatch))
         #expect(closedDescriptors.value == [2_045])
-        #expect(error?.failure == .authenticationFailed(.uniqueIdentifierMismatch))
+        #expect(error?.failure == .authenticationFailed(.codeRequirementMismatch))
         #expect(error?.bytesWritten == 0)
     }
 
