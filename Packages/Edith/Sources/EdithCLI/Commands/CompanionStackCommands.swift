@@ -5,7 +5,16 @@ import Foundation
 struct CompanionHostsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hosts",
-        abstract: "Machines that could run the companion, and what each one needs.")
+        abstract: "Machines that could run the companion, and what each one needs.",
+        discussion: """
+            Lists every machine that could run the companion, this Mac first, and says
+            what each one still needs.
+
+            Reads machines that could run the companion. Does not change them.
+
+            ed companion hosts
+            ed companion hosts --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -106,6 +115,14 @@ struct CompanionStackCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stack",
         abstract: "Start, stop and inspect the companion stack on its host.",
+        discussion: """
+            Starts, stops and inspects the companion stack on whichever machine [`ed
+            companion deploy`](./deploy.md) put it on.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion stack status
+            """,
         subcommands: [
             CompanionStackStatusCommand.self, CompanionStackUpCommand.self,
             CompanionStackDownCommand.self, CompanionStackRestartCommand.self,
@@ -116,7 +133,15 @@ struct CompanionStackCommand: AsyncParsableCommand {
 
 struct CompanionStackStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Which host runs the stack, and which services are up.")
+        commandName: "status", abstract: "Which host runs the stack, and which services are up.",
+        discussion: """
+            Which host runs the stack, and which services are up.
+
+            Reads the current state. Does not change it.
+
+            ed companion stack status
+            ed companion stack status --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -165,7 +190,15 @@ struct CompanionStackStatusCommand: AsyncParsableCommand {
 
 struct CompanionStackUpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "up", abstract: "Start the companion stack on its host.")
+        commandName: "up", abstract: "Start the companion stack on its host.",
+        discussion: """
+            Start the companion stack on its host.
+
+            Changes the companion host by starting the stack there.
+
+            ed companion stack up
+            ed companion stack up --json
+            """, )
 
     @Flag(name: .long, help: "Rebuild the api image before starting.")
     var build = false
@@ -189,7 +222,15 @@ struct CompanionStackUpCommand: AsyncParsableCommand {
 
 struct CompanionStackDownCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "down", abstract: "Stop the companion stack on its host.")
+        commandName: "down", abstract: "Stop the companion stack on its host.",
+        discussion: """
+            Stop the companion stack on its host.
+
+            Changes the companion host by stopping the stack there.
+
+            ed companion stack down
+            ed companion stack down --json
+            """, )
 
     @Flag(name: .long, help: "Also delete its volumes. This destroys stored memory.")
     var wipe = false
@@ -226,7 +267,15 @@ struct CompanionStackDownCommand: AsyncParsableCommand {
 
 struct CompanionStackRestartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Restart the companion stack on its host.")
+        commandName: "restart", abstract: "Restart the companion stack on its host.",
+        discussion: """
+            Restart the companion stack on its host.
+
+            Changes the companion host by restarting the stack there.
+
+            ed companion stack restart
+            ed companion stack restart --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -246,7 +295,15 @@ struct CompanionStackRestartCommand: AsyncParsableCommand {
 
 struct CompanionStackLogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "logs", abstract: "Read the stack's logs from its host.")
+        commandName: "logs", abstract: "Read the stack's logs from its host.",
+        discussion: """
+            Read the stack's logs from its host.
+
+            Reads the companion stack logs from its host. Does not change the stack.
+
+            ed companion stack logs
+            ed companion stack logs --json
+            """, )
 
     @Argument(help: "One service, or leave empty for all of them.")
     var service: String?
@@ -281,7 +338,15 @@ struct CompanionStackLogsCommand: AsyncParsableCommand {
 
 struct CompanionStackEnvCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "env", abstract: "Print the environment the stack would be given.")
+        commandName: "env", abstract: "Print the environment the stack would be given.",
+        discussion: """
+            Print the environment the stack would be given.
+
+            Reads the environment the stack would be given. Does not change it.
+
+            ed companion stack env
+            ed companion stack env --json
+            """, )
 
     @Flag(name: .long, help: "Include secret values instead of hints.")
     var reveal = false
@@ -315,7 +380,16 @@ struct CompanionStackEnvCommand: AsyncParsableCommand {
 struct CompanionDeployCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "deploy",
-        abstract: "Choose the machine that runs the companion, and bring it up there.")
+        abstract: "Choose the machine that runs the companion, and bring it up there.",
+        discussion: """
+            Chooses the machine that runs the companion, brings the stack up there, and
+            remembers the choice so everything else knows where it lives.
+
+            Changes the chosen machine by bringing the companion up there.
+
+            ed companion deploy
+            ed companion deploy --json
+            """, )
 
     @Argument(help: "The machine to run it on. Omit to use the one that already hosts it.")
     var machine: String?

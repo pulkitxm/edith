@@ -6,6 +6,14 @@ struct QuinjetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quinjet",
         abstract: "Discover and open Quinjet review workspaces.",
+        discussion: """
+            Discover and open Quinjet review workspaces through the same client,
+            worktree selection and launch-request builder as Edith's Quinjet page.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed quinjet projects
+            """,
         subcommands: [
             QuinjetProjectsCommand.self, QuinjetWorktreesCommand.self,
             QuinjetOpenCommand.self, QuinjetLaunchCommand.self,
@@ -62,7 +70,15 @@ struct QuinjetLaunchOptions: ParsableArguments {
 
 struct QuinjetProjectsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "projects", abstract: QuinjetOperation.projects.descriptor.summary)
+        commandName: "projects", abstract: QuinjetOperation.projects.descriptor.summary,
+        discussion: """
+            List recent projects and their worktrees.
+
+            Reads the current state. Does not change it.
+
+            ed quinjet projects
+            ed quinjet projects --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -83,7 +99,15 @@ struct QuinjetProjectsCommand: AsyncParsableCommand {
 
 struct QuinjetWorktreesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "worktrees", abstract: QuinjetOperation.worktrees.descriptor.summary)
+        commandName: "worktrees", abstract: QuinjetOperation.worktrees.descriptor.summary,
+        discussion: """
+            List every worktree for a project path.
+
+            Reads the current state. Does not change it.
+
+            ed quinjet worktrees /etc/os-release
+            ed quinjet worktrees /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -107,7 +131,15 @@ struct QuinjetWorktreesCommand: AsyncParsableCommand {
 
 struct QuinjetOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: QuinjetOperation.open.descriptor.summary)
+        commandName: "open", abstract: QuinjetOperation.open.descriptor.summary,
+        discussion: """
+            Print the Quinjet launch command without running it.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed quinjet open /etc/os-release
+            ed quinjet open /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -129,7 +161,15 @@ struct QuinjetOpenCommand: AsyncParsableCommand {
 
 struct QuinjetLaunchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "launch", abstract: QuinjetOperation.launch.descriptor.summary)
+        commandName: "launch", abstract: QuinjetOperation.launch.descriptor.summary,
+        discussion: """
+            Run a Quinjet process for one project path.
+
+            Changes this Mac by opening the remote file in its default app.
+
+            ed quinjet launch /etc/os-release
+            ed quinjet launch /etc/os-release --json
+            """, )
 
     @OptionGroup var target: QuinjetTargetOptions
     @OptionGroup var launch: QuinjetLaunchOptions
@@ -319,7 +359,15 @@ enum QuinjetSessionCLI {
 
 struct QuinjetStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: QuinjetSessionOperation.status.descriptor.summary)
+        commandName: "status", abstract: QuinjetSessionOperation.status.descriptor.summary,
+        discussion: """
+            Show one native Quinjet session.
+
+            Reads the current state. Does not change it.
+
+            ed quinjet status
+            ed quinjet status --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -338,6 +386,14 @@ struct QuinjetStatusCommand: AsyncParsableCommand {
 struct QuinjetSessionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sessions", abstract: QuinjetSessionOperation.sessions.descriptor.summary,
+        discussion: """
+            List the native Quinjet sessions.
+
+            Reads the current state. Does not change it.
+
+            ed quinjet sessions
+            ed quinjet sessions --json
+            """,
         aliases: ["list", "ls"])
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
@@ -354,6 +410,14 @@ struct QuinjetSessionsCommand: AsyncParsableCommand {
 struct QuinjetNewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "new", abstract: QuinjetSessionOperation.create.descriptor.summary,
+        discussion: """
+            Create and select a native picker tab.
+
+            Changes the saved workspaces by creating one.
+
+            ed quinjet new
+            ed quinjet new --json
+            """,
         aliases: ["create"])
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
@@ -370,6 +434,14 @@ struct QuinjetNewCommand: AsyncParsableCommand {
 struct QuinjetFocusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "focus", abstract: QuinjetSessionOperation.focus.descriptor.summary,
+        discussion: """
+            Select a native tab and focus its workspace.
+
+            Changes which pane is focused.
+
+            ed quinjet focus session
+            ed quinjet focus session --json
+            """,
         aliases: ["select"])
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
@@ -388,7 +460,15 @@ struct QuinjetFocusCommand: AsyncParsableCommand {
 
 struct QuinjetCloseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "close", abstract: QuinjetSessionOperation.close.descriptor.summary)
+        commandName: "close", abstract: QuinjetSessionOperation.close.descriptor.summary,
+        discussion: """
+            Close a native tab and its workspace.
+
+            Changes the workspace by closing one pane.
+
+            ed quinjet close session
+            ed quinjet close session --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -422,7 +502,15 @@ struct QuinjetCloseCommand: AsyncParsableCommand {
 
 struct QuinjetRestartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: QuinjetSessionOperation.restart.descriptor.summary)
+        commandName: "restart", abstract: QuinjetSessionOperation.restart.descriptor.summary,
+        discussion: """
+            Restart a native review in the same tab.
+
+            Changes the target by restarting it.
+
+            ed quinjet restart
+            ed quinjet restart --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -440,7 +528,15 @@ struct QuinjetRestartCommand: AsyncParsableCommand {
 
 struct QuinjetSwitchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "switch", abstract: QuinjetSessionOperation.switchWorktree.descriptor.summary)
+        commandName: "switch", abstract: QuinjetSessionOperation.switchWorktree.descriptor.summary,
+        discussion: """
+            Switch a native tab to another worktree.
+
+            Changes the active workspace.
+
+            ed quinjet switch session /etc/os-release
+            ed quinjet switch session /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false

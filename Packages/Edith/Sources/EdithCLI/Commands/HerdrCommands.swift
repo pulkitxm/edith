@@ -5,11 +5,14 @@ import Foundation
 struct HerdrCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "herdr",
-        abstract: "Live Herdr sessions on this Mac and your SSH machines.",
+        abstract: "Show live Herdr sessions on this Mac and your SSH machines.",
         discussion: """
             Edith asks `herdr` on this Mac and on every configured machine. Missing
             binaries are reported rather than treated as a failure, so a Mac without
             Herdr still lists the machines that have it.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed herdr ls
             """,
         subcommands: [
             HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
@@ -95,7 +98,15 @@ enum HerdrCLI {
 
 struct HerdrListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List live Herdr sessions.", aliases: ["list"])
+        commandName: "ls", abstract: "List live Herdr sessions.",
+        discussion: """
+            Lists live Herdr panes on this Mac and on every configured SSH machine.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed herdr ls
+            ed herdr ls --json
+            """, aliases: ["list"])
 
     @Option(help: "Only this machine, or local for this Mac.")
     var machine: String?
@@ -143,7 +154,15 @@ struct HerdrListCommand: AsyncParsableCommand {
 
 struct HerdrAttachCommandCLI: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "attach", abstract: "Attach this terminal to a live pane.")
+        commandName: "attach", abstract: "Attach this terminal to a live pane.",
+        discussion: """
+            Attaches the current terminal to one live Herdr pane.
+
+            Changes the state this command names.
+
+            ed herdr attach 1
+            ed herdr attach 1 --json
+            """, )
 
     @Argument(help: "The pane id, for example w3:p1N.")
     var pane: String
@@ -198,7 +217,15 @@ struct HerdrAttachCommandCLI: AsyncParsableCommand {
 struct HerdrAttachLineCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "command",
-        abstract: "Print the command that attaches to a pane.")
+        abstract: "Print the command that attaches to a pane.",
+        discussion: """
+            Prints the command that attaches to one Herdr pane.
+
+            Reads the current state. Does not change it.
+
+            ed herdr command 1
+            ed herdr command 1 --json
+            """, )
 
     @Argument(help: "The pane id, for example w3:p1N.")
     var pane: String

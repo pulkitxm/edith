@@ -4,7 +4,15 @@ import Foundation
 
 struct CompanionChatCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "chat", abstract: "Talk with the companion, streamed as it thinks.")
+        commandName: "chat", abstract: "Talk with the companion, streamed as it thinks.",
+        discussion: """
+            Talks with the companion.
+
+            Reads stored memory to answer, and writes the turn into the conversation.
+
+            ed companion chat what should I do next?
+            ed companion chat what should I do next? --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -101,7 +109,16 @@ struct CompanionChatCommand: AsyncParsableCommand {
 
 struct CompanionConversationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "conversations", abstract: "List chats, or replay one by id.")
+        commandName: "conversations", abstract: "List chats, or replay one by id.",
+        discussion: """
+            Lists conversations newest-first, or replays one in full when an id is
+            given.
+
+            Reads saved chats. Does not change them.
+
+            ed companion conversations
+            ed companion conversations --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -198,7 +215,15 @@ struct CompanionConversationsCommand: AsyncParsableCommand {
 
 struct CompanionForgetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "forget", abstract: "Delete a conversation and its messages.")
+        commandName: "forget", abstract: "Delete a conversation and its messages.",
+        discussion: """
+            Deletes a conversation and every message in it.
+
+            Changes companion memory by deleting one conversation and its messages.
+
+            ed companion forget 1
+            ed companion forget 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -233,7 +258,16 @@ struct CompanionForgetCommand: AsyncParsableCommand {
 
 struct CompanionEpisodeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "episode", abstract: "Read one episode in full.")
+        commandName: "episode", abstract: "Read one episode in full.",
+        discussion: """
+            Reads one episode in full: the metadata the list view shows, plus the whole
+            body text.
+
+            Reads one episode in full. Does not change it.
+
+            ed companion episode 1
+            ed companion episode 1 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -317,7 +351,15 @@ struct CompanionEpisodeCommand: AsyncParsableCommand {
 
 struct CompanionNightlyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "nightly", abstract: "Run the nightly learning pipeline right now.")
+        commandName: "nightly", abstract: "Run the nightly learning pipeline right now.",
+        discussion: """
+            Runs the whole nightly pipeline immediately.
+
+            Changes derived memory by running the nightly learning pipeline.
+
+            ed companion nightly
+            ed companion nightly --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -344,6 +386,13 @@ struct CompanionNightlyCommand: AsyncParsableCommand {
 struct CompanionReasonCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reason", abstract: "Show or change how the companion reasons.",
+        discussion: """
+            Shows or changes how the companion reasons.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed companion reason show
+            """,
         subcommands: [
             CompanionReasonShowCommand.self, CompanionReasonSetCommand.self,
             CompanionReasonTestCommand.self,
@@ -378,7 +427,15 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
 
 struct CompanionReasonShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "Show the active reasoning provider.")
+        commandName: "show", abstract: "Show the active reasoning provider.",
+        discussion: """
+            Show the active reasoning provider.
+
+            Reads the active reasoning provider. Does not change it.
+
+            ed companion reason show
+            ed companion reason show --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -402,7 +459,15 @@ struct CompanionReasonShowCommand: AsyncParsableCommand {
 
 struct CompanionReasonSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Change the reasoning provider, model, URL, or API key.")
+        commandName: "set", abstract: "Change the reasoning provider, model, URL, or API key.",
+        discussion: """
+            Change the reasoning provider, model, URL, or API key.
+
+            Changes the reasoning provider, model, URL, or API key.
+
+            ed companion reason set
+            ed companion reason set --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -442,7 +507,15 @@ struct CompanionReasonSetCommand: AsyncParsableCommand {
 
 struct CompanionReasonTestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "test", abstract: "Round-trip one tiny completion through the reasoner.")
+        commandName: "test", abstract: "Test one tiny completion through the reasoner.",
+        discussion: """
+            Test one tiny completion through the reasoner.
+
+            Reads one tiny completion from the reasoner. Does not change stored memory.
+
+            ed companion reason test
+            ed companion reason test --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

@@ -5,6 +5,13 @@ import Foundation
 struct StudioMarkerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "markers", abstract: "Inspect and transactionally edit output-frame markers.",
+        discussion: """
+            [Back to `ed studio`](./README.md) · [All CLI commands](../README.md).
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio edit markers list
+            """,
         subcommands: [
             StudioMarkerList.self, StudioMarkerAdd.self, StudioMarkerUpdate.self,
             StudioMarkerRemove.self, StudioMarkerImport.self, StudioMarkerExport.self,
@@ -75,7 +82,14 @@ struct StudioMarkerFPS: ParsableArguments {
 
 struct StudioMarkerList: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "list", abstract: "List saved output frames and each marker's rational FPS.")
+        commandName: "list", abstract: "List saved output frames and each marker's rational FPS.",
+        discussion: """
+            List saved output frames and each marker's rational FPS.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed studio edit markers list
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     func run() async throws {
         try await target.emit { try VideoEditorService.listMarkers(target.url) }
@@ -84,7 +98,14 @@ struct StudioMarkerList: AsyncParsableCommand {
 
 struct StudioMarkerAdd: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Add one manual marker at an output frame.")
+        commandName: "add", abstract: "Add one manual marker at an output frame.",
+        discussion: """
+            Add one manual marker at an output frame.
+
+            Changes the saved list by adding one record.
+
+            ed studio edit markers add --frame 1
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @OptionGroup var rate: StudioMarkerFPS
     @Option(help: "Nonnegative output frame in the selected FPS.") var frame: Int64
@@ -102,7 +123,14 @@ struct StudioMarkerAdd: AsyncParsableCommand {
 struct StudioMarkerUpdate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "update",
-        abstract: "Update a marker by ID; FPS-only changes preserve output time.")
+        abstract: "Update a marker by ID; FPS-only changes preserve output time.",
+        discussion: """
+            Update a marker by ID; FPS-only changes preserve output time.
+
+            Changes the state this command names.
+
+            ed studio edit markers update --id 1
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @OptionGroup var rate: StudioMarkerFPS
     @Option(help: "Existing marker ID.") var id: String
@@ -121,7 +149,14 @@ struct StudioMarkerUpdate: AsyncParsableCommand {
 
 struct StudioMarkerRemove: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "remove", abstract: "Remove an existing marker by ID.")
+        commandName: "remove", abstract: "Remove an existing marker by ID.",
+        discussion: """
+            Remove an existing marker by ID.
+
+            Changes the state this command names.
+
+            ed studio edit markers remove --id 1
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @Option(help: "Existing marker ID.") var id: String
     @Flag(help: "Validate without publishing project changes.") var dryRun = false
@@ -136,7 +171,15 @@ struct StudioMarkerRemove: AsyncParsableCommand {
 struct StudioMarkerImport: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "import",
-        abstract: "Import a version 1 marker document, validating all entries before publication.")
+        abstract: "Import a version 1 marker document, validating all entries before publication.",
+        discussion: """
+            Import a version 1 marker document, validating all entries before
+            publication.
+
+            Changes the companion database by restoring a bundle from export.
+
+            ed studio edit markers import --input /tmp/out.png
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @Option(help: "Local JSON document with version and markers, at most 32 MiB.") var input: String
     @Flag(help: "Replace the marker list instead of appending; duplicate IDs are rejected.")
@@ -160,7 +203,14 @@ struct StudioMarkerImport: AsyncParsableCommand {
 struct StudioMarkerExport: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
-        abstract: "Export a version 1 marker document without replacing project dependencies.")
+        abstract: "Export a version 1 marker document without replacing project dependencies.",
+        discussion: """
+            Export a version 1 marker document without replacing project dependencies.
+
+            Reads everything the companion remembers and writes a restorable bundle.
+
+            ed studio edit markers export --output /tmp/out.png
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @Option(help: "Destination .json file.") var output: String
     @Flag(help: "Atomically replace an existing non-dependency destination.") var overwrite = false
@@ -176,8 +226,15 @@ struct StudioMarkerSnap: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "snap",
         abstract:
-            "Return the nearest marker within an inclusive output-frame threshold, without writing."
-    )
+            "Return the nearest marker within an inclusive output-frame threshold, without writing.",
+        discussion: """
+            Return the nearest marker within an inclusive output-frame threshold,
+            without writing.
+
+            Changes the state this command names.
+
+            ed studio edit markers snap --frame 1
+            """, )
     @OptionGroup var target: StudioMarkerTarget
     @OptionGroup var rate: StudioMarkerFPS
     @Option(help: "Requested nonnegative output frame.") var frame: Int64
@@ -195,6 +252,13 @@ struct StudioEditAudio: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "audio",
         abstract: "Analyze, measure and master soundtrack sources headlessly.",
+        discussion: """
+            [Back to `ed studio`](./README.md) · [All CLI commands](../README.md).
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio edit audio analyze --asset asset
+            """,
         subcommands: [
             StudioAudioAnalyze.self, StudioAudioHealth.self, StudioAudioMeasure.self,
             StudioAudioMaster.self,
@@ -207,7 +271,16 @@ struct StudioAudioAnalyze: AsyncParsableCommand {
         abstract:
             "Measure bounded waveform and transients; tempo is an estimate, not a confirmed beat grid.",
         discussion:
-            "All mapping times are seconds. Source range and rate map to output = output-start + (source - source-in) / playback-rate. Supply all four mapping options and an FPS choice together. Audio-track offsets and loops are not inferred."
+            """
+            All mapping times are seconds. Source range and rate map to output =
+            output-start + (source - source-in) / playback-rate. Supply all four mapping
+            options and an FPS choice together. Audio-track offsets and loops are not
+            inferred.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit audio analyze --asset asset
+            """
     )
     @OptionGroup var target: StudioMarkerTarget
     @OptionGroup var rate: StudioMarkerFPS

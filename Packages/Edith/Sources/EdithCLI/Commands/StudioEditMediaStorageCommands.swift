@@ -5,7 +5,14 @@ import Foundation
 struct StudioMediaPackage: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "package",
-        abstract: "Copy every original dependency into a new portable directory atomically.")
+        abstract: "Copy every original dependency into a new portable directory atomically.",
+        discussion: """
+            Copy every original dependency into a new portable directory atomically.
+
+            Changes the state this command names.
+
+            ed studio edit media package web --output /tmp/out.png
+            """, )
     @Argument(help: "Source .openscreen project.") var project: String
     @Option(help: "New package directory; existing destinations are never replaced.") var output:
         String
@@ -21,7 +28,14 @@ struct StudioMediaPackage: AsyncParsableCommand {
 struct StudioMediaOpen: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open",
-        abstract: "Verify and rebase a moved package without opening an editor window.")
+        abstract: "Verify and rebase a moved package without opening an editor window.",
+        discussion: """
+            Verify and rebase a moved package without opening an editor window.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed studio edit media open /tmp/companion-export
+            """, )
     @Argument(help: "Package directory containing project.openscreen and originals.") var directory:
         String
     @OptionGroup var options: StudioMediaWriteOptions
@@ -37,7 +51,14 @@ struct StudioMediaOpen: AsyncParsableCommand {
 struct StudioMediaRelink: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "relink",
-        abstract: "Relink a media reference with strict identity verification by default.")
+        abstract: "Relink a media reference with strict identity verification by default.",
+        discussion: """
+            Relink a media reference with strict identity verification by default.
+
+            Changes the state this command names.
+
+            ed studio edit media relink web --reference reference --path /etc/os-release
+            """, )
     @Argument(help: "Source .openscreen project.") var project: String
     @Option(
         help:

@@ -9,6 +9,8 @@ struct ClipboardPanelView: View {
 
     @State private var filterText = ""
     @State private var palette = ClipboardPalette()
+    @State private var clipboardQueryTask: Task<Void, Never>?
+    @State private var clipboardQueryGeneration: UInt = 0
     @State private var keyboardScrollTick = 0
     @State private var renderLimit = ClipboardPanelView.pageSize
     @State private var lastMouse = NSEvent.mouseLocation
@@ -55,9 +57,7 @@ struct ClipboardPanelView: View {
             resetForShow()
         }
         .onChange(of: filterText) { _, text in
-            palette.search(text)
-            renderLimit = Self.pageSize
-            keyboardScrollTick += 1
+            scheduleClipboardQuery(text)
         }
         .onChange(of: store.revision) { _, _ in
             palette.replace(store.entries)
@@ -386,6 +386,29 @@ struct ClipboardPanelView: View {
         entry.displayPreview
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
+    }
+
+    private func scheduleClipboardQuery(_ text: String) {
+        clipboardQueryTask?.cancel()
+        clipboardQueryGeneration &+= 1
+        let generation = clipboardQueryGeneration
+        let entries = palette.entries
+        let category = palette.category
+        let pin = pinToTop
+        clipboardQueryTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let result = await BackgroundQuery.shared.clipboardRows(
+                entries: entries, query: text, category: category, pinToTop: pin,
+                generation: generation)
+            guard !Task.isCancelled,
+                BackgroundQuery.shouldApply(
+                    generation: result.generation, current: clipboardQueryGeneration)
+            else { return }
+            palette.apply(query: text, rows: result.rows)
+            renderLimit = Self.pageSize
+            keyboardScrollTick += 1
+        }
     }
 
     private func resetForShow() {

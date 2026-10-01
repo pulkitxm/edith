@@ -79,7 +79,15 @@ enum LibraryBridge {
 
 struct MusicLibraryFolderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "library", abstract: "Choose the folder Edith uses as its music library.")
+        commandName: "library", abstract: "Choose the folder Edith uses as its music library.",
+        discussion: """
+            Chooses the folder Edith uses as its local music library.
+
+            Changes the state this command names.
+
+            ed music library /etc/os-release
+            ed music library /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -118,6 +126,14 @@ struct MusicListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
         abstract: "List the music library, a folder at a time.",
+        discussion: """
+            Lists Edith's library one folder at a time.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed music ls
+            ed music ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -189,7 +205,15 @@ struct MusicListCommand: AsyncParsableCommand {
 
 struct MusicNewFolderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mkdir", abstract: "Make a folder in the library.", aliases: ["newfolder"])
+        commandName: "mkdir", abstract: "Make a folder in the library.",
+        discussion: """
+            Makes a folder in the library.
+
+            Changes the machine by creating a directory.
+
+            ed music mkdir notes
+            ed music mkdir notes --json
+            """, aliases: ["newfolder"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -225,7 +249,15 @@ struct MusicNewFolderCommand: AsyncParsableCommand {
 
 struct MusicMoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mv", abstract: "Move a track into a folder.", aliases: ["move"])
+        commandName: "mv", abstract: "Move a track into a folder.",
+        discussion: """
+            Moves a track into a folder.
+
+            Changes the machine by moving files into a directory.
+
+            ed music mv track folder
+            ed music mv track folder --json
+            """, aliases: ["move"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -261,7 +293,15 @@ struct MusicMoveCommand: AsyncParsableCommand {
 
 struct MusicRenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rename", abstract: "Rename a track or a folder.")
+        commandName: "rename", abstract: "Rename a track or a folder.",
+        discussion: """
+            Renames a track or a folder in place.
+
+            Changes the machine by renaming one file.
+
+            ed music rename shed notes
+            ed music rename shed notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -309,6 +349,10 @@ struct MusicRemoveCommand: AsyncParsableCommand {
         discussion: """
             Nothing is deleted outright: this puts the file in the Trash, the same as the
             UI does, so it can be put back from Finder.
+            Changes the saved list by removing one record.
+
+            ed music rm shed
+            ed music rm shed --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -368,6 +412,10 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
             This drives Edith's own library player, so it needs the app running. `ed music
             play` without a track resumes whatever player is already going, including
             Spotify and Apple Music.
+            Changes the target by starting it.
+
+            ed music start shed
+            ed music start shed --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -408,7 +456,15 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
 
 struct MusicSeekCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "seek", abstract: "Jump to a point in the current track, from 0 to 1.")
+        commandName: "seek", abstract: "Jump to a point in the current track, from 0 to 1.",
+        discussion: """
+            Jumps to a point in the current track, as a fraction of its length.
+
+            Changes the state this command names.
+
+            ed music seek 0.5
+            ed music seek 0.5 --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -432,7 +488,15 @@ struct MusicSeekCommand: AsyncParsableCommand {
 
 struct MusicShuffleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "shuffle", abstract: "Turn shuffle on or off.")
+        commandName: "shuffle", abstract: "Turn shuffle on or off.",
+        discussion: """
+            Turns shuffle on or off for Edith's own player, or reports it.
+
+            Changes the state this command names.
+
+            ed music shuffle
+            ed music shuffle --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -449,7 +513,15 @@ struct MusicShuffleCommand: AsyncParsableCommand {
 
 struct MusicRepeatCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "repeat", abstract: "Turn repeat on or off.", aliases: ["loop"])
+        commandName: "repeat", abstract: "Turn repeat on or off.",
+        discussion: """
+            Turns repeat on or off for Edith's own player, or reports it.
+
+            Changes the state this command names.
+
+            ed music repeat
+            ed music repeat --json
+            """, aliases: ["loop"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -529,7 +601,15 @@ enum MusicFavouriteBridge {
 
 struct MusicFavoriteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "favorite", abstract: "Add a track to favourites.", aliases: ["favourite"])
+        commandName: "favorite", abstract: "Add a track to favourites.",
+        discussion: """
+            Adds a resolved library track to favourites.
+
+            Changes the state this command names.
+
+            ed music favorite track
+            ed music favorite track --json
+            """, aliases: ["favourite"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
     func run() async throws {
@@ -540,6 +620,14 @@ struct MusicFavoriteCommand: AsyncParsableCommand {
 struct MusicUnfavoriteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unfavorite", abstract: "Remove a track from favourites.",
+        discussion: """
+            Removes a resolved library track from favourites.
+
+            Changes the state this command names.
+
+            ed music unfavorite track
+            ed music unfavorite track --json
+            """,
         aliases: ["unfavourite"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
@@ -550,7 +638,15 @@ struct MusicUnfavoriteCommand: AsyncParsableCommand {
 
 struct MusicRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reveal", abstract: "Reveal a track in Finder.")
+        commandName: "reveal", abstract: "Reveal a track in Finder.",
+        discussion: """
+            Resolves a library track and reveals that exact file in Finder.
+
+            Changes Finder by revealing a file that was already downloaded.
+
+            ed music reveal track
+            ed music reveal track --json
+            """, )
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
     func run() async throws {
@@ -572,7 +668,15 @@ struct MusicRevealCommand: AsyncParsableCommand {
 
 struct MusicOpenLibraryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open the music library in Finder.")
+        commandName: "open", abstract: "Open the music library in Finder.",
+        discussion: """
+            Creates the configured library directory when needed and opens it in Finder.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed music open
+            ed music open --json
+            """, )
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     func run() async throws {
         try await execute {
@@ -593,7 +697,16 @@ struct MusicOpenLibraryCommand: AsyncParsableCommand {
 struct MusicRescanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rescan",
-        abstract: "Read the music folder again after changing it outside Edith.")
+        abstract: "Read the music folder again after changing it outside Edith.",
+        discussion: """
+            Reads the music folder again, which is what to run after adding or removing
+            files behind Edith's back.
+
+            Reads the current state. Does not change it.
+
+            ed music rescan
+            ed music rescan --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

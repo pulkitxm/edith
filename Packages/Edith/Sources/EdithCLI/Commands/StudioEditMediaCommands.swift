@@ -6,6 +6,13 @@ struct StudioEditMediaCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "media",
         abstract: "Inspect original media and maintain verified project identities.",
+        discussion: """
+            [Back to `ed studio`](./README.md) · [All CLI commands](../README.md).
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed studio edit media identity /etc/os-release
+            """,
         subcommands: [
             StudioMediaIdentity.self, StudioMediaProbe.self, StudioMediaDuplicates.self,
             StudioMediaChronology.self, StudioMediaIndex.self, StudioMediaProvenance.self,
@@ -36,7 +43,14 @@ enum StudioMediaBridge {
 
 struct StudioMediaIdentity: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "identity", abstract: "Stream an exact SHA-256 media identity.")
+        commandName: "identity", abstract: "Stream an exact SHA-256 media identity.",
+        discussion: """
+            Stream an exact SHA-256 media identity.
+
+            Changes the state this command names.
+
+            ed studio edit media identity /etc/os-release
+            """, )
     @Argument(help: "Local media file.") var path: String
     @OptionGroup var options: StudioMediaReadOptions
     func run() async throws {
@@ -49,7 +63,14 @@ struct StudioMediaIdentity: AsyncParsableCommand {
 struct StudioMediaUsage: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "usage",
-        abstract: "Audit every clip occurrence for within-cut and cross-project original reuse.")
+        abstract: "Audit every clip occurrence for within-cut and cross-project original reuse.",
+        discussion: """
+            Audit every clip occurrence for within-cut and cross-project original reuse.
+
+            Changes the state this command names.
+
+            ed studio edit media usage --project web
+            """, )
     @Option(help: "Local project path; repeat for each project, up to 100.") var project: [String]
     @Option(help: "visual excludes independent audio; all includes music and audio tracks.")
     var scope = "visual"
@@ -67,7 +88,14 @@ struct StudioMediaUsage: AsyncParsableCommand {
 
 struct StudioMediaProbe: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "probe", abstract: "Inspect actual formats and capture-date certainty.")
+        commandName: "probe", abstract: "Inspect actual formats and capture-date certainty.",
+        discussion: """
+            Inspect actual formats and capture-date certainty.
+
+            Reads a machine by asking it what it is. Does not change the machine.
+
+            ed studio edit media probe /etc/os-release
+            """, )
     @Argument(help: "Local media file.") var path: String
     @OptionGroup var options: StudioMediaReadOptions
     func run() async throws {
@@ -80,7 +108,14 @@ struct StudioMediaProbe: AsyncParsableCommand {
 struct StudioMediaDuplicates: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "duplicates",
-        abstract: "Find byte-identical copies across 2 to 1000 local paths.")
+        abstract: "Find byte-identical copies across 2 to 1000 local paths.",
+        discussion: """
+            Find byte-identical copies across 2 to 1000 local paths.
+
+            Reads the current state. Does not change it.
+
+            ed studio edit media duplicates /home/pi/notes.txt /var/backups
+            """, )
     @Argument(help: "Local files to compare.") var paths: [String]
     @OptionGroup var options: StudioMediaReadOptions
     func run() async throws {
@@ -93,7 +128,14 @@ struct StudioMediaDuplicates: AsyncParsableCommand {
 struct StudioMediaChronology: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "chronology",
-        abstract: "Order up to 1000 files by normalized capture time; unknown dates sort last.")
+        abstract: "Order up to 1000 files by normalized capture time; unknown dates sort last.",
+        discussion: """
+            Order up to 1000 files by normalized capture time; unknown dates sort last.
+
+            Changes the state this command names.
+
+            ed studio edit media chronology /home/pi/notes.txt /var/backups
+            """, )
     @Argument(help: "Local media files.") var paths: [String]
     @OptionGroup var options: StudioMediaReadOptions
     func run() async throws {
@@ -105,7 +147,14 @@ struct StudioMediaChronology: AsyncParsableCommand {
 
 struct StudioMediaIndex: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "index", abstract: "Record verified media identities in a project.")
+        commandName: "index", abstract: "Record verified media identities in a project.",
+        discussion: """
+            Record verified media identities in a project.
+
+            Changes the companion index by embedding episodes that are still pending.
+
+            ed studio edit media index web
+            """, )
     @Argument(help: "Source .openscreen project.") var project: String
     @Flag(help: "Also probe codec, dimensions, audio format and capture metadata.") var probe =
         false
@@ -123,7 +172,14 @@ struct StudioMediaIndex: AsyncParsableCommand {
 struct StudioMediaProvenance: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "provenance",
-        abstract: "Declare a shared source family for alternate exports explicitly.")
+        abstract: "Declare a shared source family for alternate exports explicitly.",
+        discussion: """
+            Declare a shared source family for alternate exports explicitly.
+
+            Changes the state this command names.
+
+            ed studio edit media provenance web --asset asset --family family --declaration declaration
+            """, )
     @Argument(help: "Source .openscreen project.") var project: String
     @Option(help: "Original asset ID, up to 1000 characters.") var asset: String
     @Option(help: "Shared source family ID, up to 1000 characters.") var family: String

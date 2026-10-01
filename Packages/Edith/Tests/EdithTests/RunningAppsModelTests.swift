@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import Edith
@@ -34,6 +35,30 @@ import Testing
         #expect(model.actionStatus?.message.contains("Resolve any open dialogs") == true)
     }
 
+    @Test func secondRefreshKeepsRowIdentityAndReadsSnapshotsOffTheMainActor() async {
+        let samples = AppSamples(snapshots: [Self.safari, Self.music])
+        let model = RunningAppsModel(
+            operations: RunningAppOperationCenter(
+                snapshot: {
+                    #expect(!Thread.isMainThread)
+                    return samples.snapshots
+                },
+                resource: { pid in
+                    RunningAppResourceSample(
+                        cpuNanoseconds: samples.nanos[pid] ?? 0, memoryMB: pid == 2 ? 80 : 20)
+                }))
+
+        await model.refresh()
+        let safari = model.apps.first { $0.pid == Self.safari.pid }
+        let music = model.apps.first { $0.pid == Self.music.pid }
+        samples.nanos[Self.safari.pid] = 3_000_000_000
+        await model.refresh()
+
+        #expect(model.apps.first { $0.pid == Self.safari.pid } === safari)
+        #expect(model.apps.first { $0.pid == Self.music.pid } === music)
+        #expect(model.apps.count == 2)
+    }
+
     @Test func partialQuitAllOutcomeReportsAcceptedAndRemainingCounts() {
         let model = RunningAppsModel(
             operations: RunningAppOperationCenter(
@@ -44,6 +69,15 @@ import Testing
 
         #expect(model.actionStatus == .partial(changed: 1, requested: 2, force: false))
         #expect(model.actionStatus?.message.contains("1 of 2 apps") == true)
+    }
+
+    private final class AppSamples: @unchecked Sendable {
+        var snapshots: [RunningAppSnapshot]
+        var nanos: [Int32: UInt64] = [:]
+
+        init(snapshots: [RunningAppSnapshot]) {
+            self.snapshots = snapshots
+        }
     }
 
     private static func row(_ app: RunningAppSnapshot) -> RunningAppRow {
