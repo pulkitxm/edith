@@ -16,7 +16,6 @@ Arguments:
 | --- | --- |
 | `<address>` | Passed through to the notch browser. |
 
-
 Options:
 
 | Name | Type / values | Default | What it does |
