@@ -51,6 +51,7 @@ public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case zoom(Double)
     case frame(VirtualCameraFrameChange)
     case reset
+    case resetLook
     case look(VirtualCameraLookPreset)
     case background(VirtualCameraBackgroundChange)
     case pause(VirtualCameraPrivacy, message: String?)
@@ -144,6 +145,9 @@ public enum VirtualCameraRequestReducer {
         case .reset:
             state.composition.framing = VirtualCameraFraming()
             return "Framing reset."
+        case .resetLook:
+            state.composition.look = VirtualCameraLook()
+            return "Look reset."
         case .look(let preset):
             state.composition.look.preset = preset
             state.composition.look.intensity = 1

@@ -132,6 +132,39 @@ final class FakeCameraHelper: @unchecked Sendable {
         #expect(result.stdout.isEmpty)
     }
 
+    @Test func resetLookClearsTheLookAndLeavesTheFrame() async {
+        await CLIProbe.inWorld { world in
+            var state = VirtualCameraState()
+            state.composition.look.preset = .film
+            state.composition.look.warmth = 0.4
+            state.composition.framing.zoom = 2
+            let helper = FakeCameraHelper(state: state)
+            Self.connect(world, to: helper)
+            let result = await CLIProbe.capture(["camera", "reset-look", "--json"])
+            #expect(result.code == 0)
+            #expect(helper.requests == [.resetLook])
+            #expect(helper.current.composition.look == VirtualCameraLook())
+            #expect(helper.current.composition.framing.zoom == 2)
+            #expect(result.object?["message"] as? String == "Look reset.")
+        }
+    }
+
+    @Test func framingResetLeavesTheLook() async {
+        await CLIProbe.inWorld { world in
+            var state = VirtualCameraState()
+            state.composition.look.preset = .noir
+            state.composition.framing.zoom = 3
+            let helper = FakeCameraHelper(state: state)
+            Self.connect(world, to: helper)
+            let result = await CLIProbe.capture(["camera", "reset", "--json"])
+            #expect(result.code == 0)
+            #expect(helper.requests == [.reset])
+            #expect(helper.current.composition.look.preset == .noir)
+            #expect(helper.current.composition.framing == VirtualCameraFraming())
+            #expect(result.object?["message"] as? String == "Framing reset.")
+        }
+    }
+
     @Test func zoomRoundTripsThroughTheHelper() async {
         await CLIProbe.inWorld { world in
             let helper = FakeCameraHelper()

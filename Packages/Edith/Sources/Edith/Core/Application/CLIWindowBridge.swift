@@ -15,6 +15,7 @@ enum CLIWindowBridge {
             }
         }
         StudioRecordInstaller.install()
+        StudioJobBridge.install()
         snapshotObserver = IPC.observe(IPC.Name.requestWindowSnapshot) { info in
             MainActor.assumeIsolated {
                 AppRuntimeCenter().perform(.snapshot) { snapshot(info) }

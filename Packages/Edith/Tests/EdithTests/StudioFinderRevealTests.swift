@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import Foundation
 import Testing
 
@@ -18,6 +19,13 @@ import Testing
         var error: NSDictionary?
         #expect(script.compileAndReturnError(&error))
         #expect(error == nil)
+    }
+
+    @Test func aScriptThatDoesNotReturnGivesUp() async {
+        let started = ContinuousClock.now
+        let finished = await StudioFinderReveal.runScript("delay 30", timeout: 0.3)
+        #expect(!finished)
+        #expect(started.duration(to: .now) < .seconds(3))
     }
 
     @Test func fallbackFoldersAreUnique() {

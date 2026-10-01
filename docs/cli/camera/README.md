@@ -13,6 +13,7 @@ ed camera source <camera> [--json]
 ed camera zoom <level> [--json]
 ed camera frame [--zoom <level>] [--x <0-1>] [--y <0-1>] [--tilt <degrees>] [--turns <0-3>] [--flip <bool>] [--flip-vertical <bool>] [--auto off|close|medium|wide] [--json]
 ed camera reset [--json]
+ed camera reset-look [--json]
 ed camera look <preset> [--json]
 ed camera background none|blur|color|image [--color <hex>] [--blur <0-1>] [--image <path>] [--json]
 ed camera pause [--style card|blank|freeze|stopped] [--message <text>] [--json]
@@ -50,7 +51,9 @@ menu bar app is not sending frames, apps see a card that says so instead of a
 frozen or black picture.
 
 The Virtual Camera page shows the same picture as a live preview. Drag it to move
-the shot, scroll or pinch to zoom, and double-click to reset. Every change
+the shot, scroll or pinch to zoom, and double-click to reset the framing.
+`ed camera reset-look` is the inspector's Reset the look button and leaves the
+framing alone. Every change
 reaches the apps that are using Edith Camera straight away.
 
 ## Installing Edith Camera

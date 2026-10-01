@@ -8,8 +8,10 @@ images, PDFs, videos, audio and documents into Studio, then pick **Edit**,
 on a site like iLovePDF or iLoveIMG, except that nothing leaves this Mac. `ed
 studio` runs the same tools from a terminal or a script.
 
-Enable **Studio** in Edith's Extensions screen under **Media**. The CLI does not
-need the app to be running: every tool runs inside `ed` itself.
+Enable **Studio** in Edith's Extensions screen under **Media**. Tools run inside
+`ed` itself. `ed studio cancel` talks to the open Studio window, the same way
+its Cancel button does. `ed studio reveal report.pdf` and
+`ed studio open report.pdf` show a result file.
 
 ## At a glance
 
@@ -19,8 +21,17 @@ need the app to be running: every tool runs inside `ed` itself.
 | [`ed studio tools`](./tools.md) | Lists every tool, optionally only those for one kind of file. |
 | [`ed studio info <tool>`](./info.md) | Shows what a tool does and every setting it takes. |
 | [`ed studio run <tool> <files...>`](./run.md) | Runs a tool and saves the results. Image and PDF pixel editing stays here. |
-| `ed studio record` | Records the screen, with system audio, microphone and cursor. |
-| `ed studio workflow` | Lists, saves, runs and deletes a chain of tools. |
+| `ed studio cancel` | Cancels the run the Studio window started. |
+| `ed studio reveal <files...>` | Selects result files in Finder. |
+| `ed studio open <files...>` | Opens result files in their default apps. |
+| `ed studio record sources` | Lists displays and windows that can be recorded. |
+| `ed studio record start` | Starts a screen recording. |
+| `ed studio record stop` | Stops the screen recording. |
+| `ed studio record status` | Reads whether a screen recording is in progress. |
+| `ed studio workflow ls` | Lists saved workflows. |
+| `ed studio workflow save` | Saves a chain of tools. |
+| `ed studio workflow run` | Runs a saved workflow on files. |
+| `ed studio workflow rm` | Deletes a saved workflow. |
 | [`ed studio probe <file>`](./probe.md) | Describes a file and lists the tools that accept it. |
 | [`ed studio library`](./library.md) | Lists, adds, removes or clears Studio media references headlessly. |
 | [`ed studio edit`](./edit.md) | Creates, edits, validates and renders native video projects. |

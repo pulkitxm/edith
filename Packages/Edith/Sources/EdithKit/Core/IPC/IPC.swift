@@ -140,6 +140,10 @@ public enum IPC {
             "com.pulkit.edith.studioMediaLibraryChanged")
         public static let studioWorkflowsChanged = IPC.scopedName(
             "com.pulkit.edith.studioWorkflowsChanged")
+        public static let requestStudioCancel = IPC.scopedName(
+            "com.pulkit.edith.requestStudioCancel")
+        public static let studioJobResult = IPC.scopedName(
+            "com.pulkit.edith.studioJobResult")
         public static let requestStudioRecord = IPC.scopedName(
             "com.pulkit.edith.requestStudioRecord")
         public static let studioRecordResult = IPC.scopedName(

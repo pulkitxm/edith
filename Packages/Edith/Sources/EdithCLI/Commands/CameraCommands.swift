@@ -17,7 +17,8 @@ struct CameraCommand: AsyncParsableCommand {
         subcommands: [
             CameraStatusCommand.self, CameraOnCommand.self, CameraOffCommand.self,
             CameraSourcesCommand.self, CameraSourceCommand.self, CameraZoomCommand.self,
-            CameraFrameCommand.self, CameraResetCommand.self, CameraLookCommand.self,
+            CameraFrameCommand.self, CameraResetCommand.self, CameraResetLookCommand.self,
+            CameraLookCommand.self,
             CameraBackgroundCommand.self, CameraPauseCommand.self, CameraResumeCommand.self,
             CameraSceneCommand.self, CameraExtensionCommand.self,
         ],
@@ -361,6 +362,27 @@ struct CameraResetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute { try await CameraCLI.perform(.reset, json: json) }
+    }
+}
+
+struct CameraResetLookCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reset-look",
+        abstract: VirtualCameraOperation.resetLook.descriptor.summary,
+        discussion: """
+            Puts the inspector look back to the natural preset and the default sliders.
+            This is the Reset the look button. Framing stays where `ed camera reset` left it.
+            Changes the camera look. Does not change framing.
+
+            ed camera reset-look
+            ed camera reset-look --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute { try await CameraCLI.perform(.resetLook, json: json) }
     }
 }
 
