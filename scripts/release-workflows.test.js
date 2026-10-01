@@ -270,6 +270,7 @@ test("one Xcode build produces every bundled executable", () => {
   );
   for (const product of [
     "edithd",
+    "edith-database",
     "EdithLidAwakeHelper",
     "EdithCameraExtension",
   ]) {
@@ -280,7 +281,7 @@ test("one Xcode build produces every bundled executable", () => {
   }
   expect(
     scheme.match(/ReferencedContainer = "container:Packages\/Edith"/g),
-  ).toHaveLength(3);
+  ).toHaveLength(4);
   expect(makefile).toContain("for target in EdithMain EdithHelper; do");
   expect(makefile).toContain("-derivedDataPath build");
 });
