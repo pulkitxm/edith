@@ -831,6 +831,10 @@ public enum CommandTree {
         "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),
         "ed attention focus stop": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention doctor": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention extension install": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention extension open": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention extension token": Spec(
+            options: ["--json", "--copy", "-h", "--help", "--version"]),
         "ed attention backup": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention restore": Spec(
             options: ["--json", "--yes", "-h", "--help", "--version"],
@@ -908,6 +912,7 @@ public enum CommandTree {
         "ed brew upgrade": Spec(
             options: ["--json", "--help", "--kind"], optionValues: ["--kind": .homebrewKind],
             arguments: [.free]),
+        "ed brew cancel": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed brew uninstall": Spec(
             options: ["--json", "--help", "--kind", "--yes"],
             optionValues: ["--kind": .homebrewKind], arguments: [.free],
@@ -1486,6 +1491,7 @@ public enum CommandTree {
             options: [
                 "--json", "-h", "--help", "--version", "--endpoint", "--conversation", "--persona",
             ], arguments: [.free]),
+        "ed companion stop": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed companion conversations": Spec(
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--limit"],
             arguments: [.free]),

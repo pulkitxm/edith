@@ -8,6 +8,7 @@ public enum HomebrewOperation: String, CaseIterable, Sendable {
     case install
     case upgrade
     case uninstall
+    case cancel
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -24,13 +25,14 @@ public enum HomebrewOperation: String, CaseIterable, Sendable {
         case .install: "Install a Homebrew package."
         case .upgrade: "Upgrade a Homebrew package."
         case .uninstall: "Uninstall a Homebrew package."
+        case .cancel: "Cancel an in-flight Homebrew install, upgrade, or uninstall."
         }
     }
 
     private var effect: UserOperationEffect {
         switch self {
         case .status, .list, .search: .read
-        case .install, .upgrade: .write
+        case .install, .upgrade, .cancel: .write
         case .uninstall: .destructive
         }
     }
@@ -103,6 +105,9 @@ public struct HomebrewClient: Sendable {
         onActivity: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> HomebrewMutationResult {
         let name = try HomebrewValidation.token(name)
+        let flight = CLIFlights.begin(
+            kind: "brew", action: action.rawValue, target: "\(kind.rawValue) \(name)")
+        defer { if let flight { CLIFlights.end(flight.id) } }
         var arguments = [action.rawValue]
         if kind == .cask { arguments.append("--cask") }
         arguments.append(name)

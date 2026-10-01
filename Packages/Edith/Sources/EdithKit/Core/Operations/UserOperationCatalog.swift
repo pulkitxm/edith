@@ -146,6 +146,9 @@ public enum UserOperationCatalog {
         registrations += ClipboardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += AttentionExtensionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += AttentionFocusOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1481,6 +1484,8 @@ private extension HomebrewOperation {
             userInterface(
                 "App Maintenance", "uninstall a package",
                 ["ripgrep", "--kind", "formula", "--yes"])
+        case .cancel:
+            userInterface("Homebrew page", "cancel the operation in progress")
         }
     }
 }

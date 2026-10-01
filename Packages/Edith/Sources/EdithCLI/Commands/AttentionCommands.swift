@@ -18,8 +18,8 @@ struct AttentionCommand: AsyncParsableCommand {
             AttentionBreakdownCommand.self, AttentionAgentsCommand.self,
             AttentionTimelineCommand.self, AttentionMusicCommand.self,
             AttentionCategoriesCommand.self, AttentionFocusCommand.self,
-            AttentionDoctorCommand.self, AttentionBackupCommand.self,
-            AttentionRestoreCommand.self,
+            AttentionDoctorCommand.self, AttentionExtensionCommand.self,
+            AttentionBackupCommand.self, AttentionRestoreCommand.self,
         ],
         defaultSubcommand: AttentionStatusCommand.self)
 }

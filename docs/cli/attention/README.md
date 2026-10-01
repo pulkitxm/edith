@@ -22,6 +22,9 @@ the collecting process; application duration does not.
 - [`ed attention categories`](./categories/README.md)
 - [`ed attention focus`](./focus/README.md)
 - [`ed attention doctor`](./doctor.md)
+- `ed attention extension install`
+- `ed attention extension open`
+- `ed attention extension token`
 - [`ed attention backup`](./backup.md)
 - [`ed attention restore`](./restore.md)
 

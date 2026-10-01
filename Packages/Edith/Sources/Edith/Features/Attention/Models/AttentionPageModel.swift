@@ -335,8 +335,7 @@ final class AttentionPageModel {
     }
 
     func openChromeExtensions() {
-        guard let url = URL(string: "chrome://extensions") else { return }
-        NSWorkspace.shared.open(url)
+        _ = AttentionExtensionInstaller.openExtensionsPage()
     }
 
     func copyToken() {
