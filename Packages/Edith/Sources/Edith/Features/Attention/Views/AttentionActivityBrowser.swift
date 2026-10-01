@@ -337,7 +337,7 @@ struct AttentionLabeledBar: View {
                 Text(AttentionFormat.duration(duration)).monospacedDigit().fixedSize()
                 Text(AttentionFormat.percent(duration, of: total))
                     .foregroundStyle(.secondary).monospacedDigit().frame(
-                        width: 40, alignment: .trailing)
+                        width: UIScale.pt(40), alignment: .trailing)
             }
             .font(.system(size: UIScale.pt(12), weight: .medium))
             GeometryReader { geometry in
