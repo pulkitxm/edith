@@ -190,7 +190,7 @@ import Testing
     }
 
     @Test(arguments: [NSEvent.ModifierFlags(), .option, .control]) @MainActor
-    func leftClicksAndRightClicksReachAMouseReportingChild(flags: NSEvent.ModifierFlags)
+    func clicksAndModifiedDragsReachAMouseReportingChild(flags: NSEvent.ModifierFlags)
         async throws
     {
         let output = FileManager.default.temporaryDirectory
@@ -230,7 +230,8 @@ import Testing
         view.mouseDown(with: try event(.leftMouseDown, number: 2))
         let jitter = try #require(
             NSEvent.mouseEvent(
-                with: .leftMouseDragged, location: NSPoint(x: 81, y: 500), modifierFlags: flags,
+                with: .leftMouseDragged, location: NSPoint(x: flags.isEmpty ? 81 : 200, y: 500),
+                modifierFlags: flags,
                 timestamp: 2.1, windowNumber: window.windowNumber, context: nil, eventNumber: 6,
                 clickCount: 1, pressure: 0))
         view.mouseDragged(with: jitter)
@@ -252,6 +253,9 @@ import Testing
         let leftCode = flags.contains(.option) ? 8 : flags.contains(.control) ? 16 : 0
         #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("m") })
+        if !flags.isEmpty {
+            #expect(reports.contains { $0.hasPrefix("[<\(leftCode + 32);") && $0.hasSuffix("M") })
+        }
         #expect(!view.selectionMouseReportingSuspended)
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
