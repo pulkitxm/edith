@@ -4,6 +4,7 @@ import Security
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum DatabaseBrokerPeerAuthenticationSystemStubError: Error {
     case requestedFailure

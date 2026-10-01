@@ -1,6 +1,7 @@
 import EdithDatabase
 import Foundation
 import Testing
+@testable import EdithDatabaseDrivers
 
 @Suite struct InMemoryDatabaseSecretStoreTests {
     @Test func storeReadUpdateAndDelete() async throws {

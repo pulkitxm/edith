@@ -6,6 +6,7 @@ import Darwin
 #endif
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum ElasticsearchDatabaseReadingFixtures {
     static let identity = DatabaseProductIdentity(

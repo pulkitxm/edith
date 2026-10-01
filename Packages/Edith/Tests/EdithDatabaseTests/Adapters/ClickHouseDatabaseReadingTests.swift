@@ -6,6 +6,7 @@ import Darwin
 #endif
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum ClickHouseDatabaseReadingFixtures {
     static let identity = try! ClickHouseDatabaseDriverSupport.identity(

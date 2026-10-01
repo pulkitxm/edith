@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private final class DatabaseContinuationTestClock: @unchecked Sendable {
     private let lock = NSLock()

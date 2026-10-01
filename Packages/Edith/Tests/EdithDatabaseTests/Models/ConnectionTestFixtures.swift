@@ -1,5 +1,6 @@
 import EdithDatabase
 import Foundation
+@testable import EdithDatabaseDrivers
 
 enum DatabaseConnectionFixtures {
     static let connectionID = DatabaseConnectionID(

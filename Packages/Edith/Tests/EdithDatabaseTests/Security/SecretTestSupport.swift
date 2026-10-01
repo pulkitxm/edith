@@ -1,5 +1,6 @@
 import EdithDatabase
 import Foundation
+@testable import EdithDatabaseDrivers
 
 enum DatabaseSecretTestFixtures {
     static let identifier = UUID(uuidString: "B00C8BC7-487F-4EEB-86D1-9391AA232270")!

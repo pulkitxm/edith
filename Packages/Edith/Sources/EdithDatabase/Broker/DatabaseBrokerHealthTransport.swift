@@ -19,12 +19,19 @@ enum DatabaseBrokerHealthTransportFailure: Equatable, Sendable {
     case responseValidationFailure(DatabaseBrokerHealthValidationError)
 }
 
-struct DatabaseBrokerHealthTransportError: Error, Equatable, Sendable {
+package struct DatabaseBrokerHealthTransportError: Error, Equatable, Sendable {
     let failure: DatabaseBrokerHealthTransportFailure
-    let bytesWritten: Int
+    package let bytesWritten: Int
 
-    var isReplaySafe: Bool {
+    package var isReplaySafe: Bool {
         bytesWritten == 0
+    }
+
+    package var indicatesUniqueIdentifierMismatch: Bool {
+        if case .authenticationFailed(.uniqueIdentifierMismatch) = failure {
+            return true
+        }
+        return false
     }
 }
 
@@ -33,10 +40,10 @@ enum DatabaseBrokerHealthServerResponseDisposition: Equatable, Sendable {
     case responseSinkDropped
 }
 
-struct DatabaseBrokerHealthServerResult: Equatable, Sendable {
-    let requestID: UUID
+package struct DatabaseBrokerHealthServerResult: Equatable, Sendable {
+    package let requestID: UUID
     let disposition: DatabaseBrokerHealthServerResponseDisposition
-    let responseBytesWritten: Int
+    package let responseBytesWritten: Int
 }
 
 enum DatabaseBrokerHealthTransportWaitInterest: Equatable, Sendable {
@@ -136,16 +143,16 @@ struct DatabaseBrokerHealthTransportDependencies: Sendable {
     }
 }
 
-struct DatabaseBrokerHealthTransport: Sendable {
-    static let maximumReadBytes = 64 * 1_024
-    static let authenticationBudgetNanoseconds: UInt64 = 2_000_000_000
-    static let firstByteBudgetNanoseconds: UInt64 = 5_000_000_000
-    static let frameBudgetNanoseconds: UInt64 = 5_000_000_000
-    static let writeProgressBudgetNanoseconds: UInt64 = 5_000_000_000
+package struct DatabaseBrokerHealthTransport: Sendable {
+    package static let maximumReadBytes = 64 * 1_024
+    package static let authenticationBudgetNanoseconds: UInt64 = 2_000_000_000
+    package static let firstByteBudgetNanoseconds: UInt64 = 5_000_000_000
+    package static let frameBudgetNanoseconds: UInt64 = 5_000_000_000
+    package static let writeProgressBudgetNanoseconds: UInt64 = 5_000_000_000
 
     let dependencies: DatabaseBrokerHealthTransportDependencies
 
-    init() throws {
+    package init() throws {
         try self.init(authenticator: DatabaseBrokerPeerAuthenticator())
     }
 
@@ -158,7 +165,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
         self.dependencies = dependencies
     }
 
-    func requestHealth(
+    package func requestHealth(
         socketDescriptor: Int32,
         requestID: UUID = UUID(),
         deadlineNanoseconds: UInt64? = nil
@@ -205,7 +212,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
         return response.payload
     }
 
-    func serveHealth(
+    package func serveHealth(
         socketDescriptor: Int32,
         response: @Sendable (DatabaseBrokerHealthRequest) -> DatabaseBrokerHealthResponse
     ) throws -> DatabaseBrokerHealthServerResult {
@@ -245,7 +252,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
             responseBytesWritten: writeOutcome.bytesWritten)
     }
 
-    func authenticatePeer(
+    package func authenticatePeer(
         socketDescriptor: Int32,
         absoluteDeadline: UInt64?
     ) throws {
@@ -290,7 +297,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
         }
     }
 
-    func readFrame<Payload: Codable & Sendable>(
+    package func readFrame<Payload: Codable & Sendable>(
         socketDescriptor: Int32,
         stream: DatabaseBrokerFrameStream,
         bytesWritten: Int,

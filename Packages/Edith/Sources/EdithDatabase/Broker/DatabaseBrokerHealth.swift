@@ -1,9 +1,9 @@
 import Foundation
 
-struct DatabaseBrokerHealthRequest: Codable, Equatable, Sendable {
-    init() {}
+package struct DatabaseBrokerHealthRequest: Codable, Equatable, Sendable {
+    package init() {}
 
-    init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         try DatabaseBrokerHealthPayloadCoding.validateFields(
             in: decoder,
             expected: ["type"])
@@ -17,7 +17,7 @@ struct DatabaseBrokerHealthRequest: Codable, Equatable, Sendable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    package func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(DatabaseBrokerHealthPayloadCoding.type, forKey: .type)
     }
@@ -27,11 +27,11 @@ struct DatabaseBrokerHealthRequest: Codable, Equatable, Sendable {
     }
 }
 
-struct DatabaseBrokerHealthResponse: Codable, Equatable, Sendable {
-    let brokerInstanceID: UUID
-    let isReady: Bool
+package struct DatabaseBrokerHealthResponse: Codable, Equatable, Sendable {
+    package let brokerInstanceID: UUID
+    package let isReady: Bool
 
-    init(
+    package init(
         brokerInstanceID: UUID = UUID(),
         isReady: Bool
     ) {
@@ -39,7 +39,7 @@ struct DatabaseBrokerHealthResponse: Codable, Equatable, Sendable {
         self.isReady = isReady
     }
 
-    init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         try DatabaseBrokerHealthPayloadCoding.validateFields(
             in: decoder,
             expected: ["type", "brokerInstanceID", "ready"])
@@ -55,7 +55,7 @@ struct DatabaseBrokerHealthResponse: Codable, Equatable, Sendable {
         isReady = try container.decode(Bool.self, forKey: .ready)
     }
 
-    func encode(to encoder: Encoder) throws {
+    package func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(DatabaseBrokerHealthPayloadCoding.type, forKey: .type)
         try container.encode(brokerInstanceID, forKey: .brokerInstanceID)

@@ -1,6 +1,7 @@
 import EdithDatabase
 import Foundation
 import Testing
+@testable import EdithDatabaseDrivers
 
 private struct DatabaseBrokerTestPayload: Codable, Equatable, Sendable {
     let index: Int

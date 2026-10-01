@@ -2,7 +2,7 @@ import Darwin
 import Dispatch
 import Foundation
 
-enum DatabaseBrokerSocketError: Error, Equatable, Sendable {
+package enum DatabaseBrokerSocketError: Error, Equatable, Sendable {
     case invalidSocketPath
     case invalidTimeout
     case unsafeSocketEntry
@@ -79,9 +79,9 @@ struct DatabaseBrokerSocketAddress {
     }
 }
 
-final class DatabaseBrokerSocketConnection: @unchecked Sendable {
-    static let defaultTimeoutMilliseconds: Int32 = 3_000
-    static let maximumTimeoutMilliseconds: Int32 = 60_000
+package final class DatabaseBrokerSocketConnection: @unchecked Sendable {
+    package static let defaultTimeoutMilliseconds: Int32 = 3_000
+    package static let maximumTimeoutMilliseconds: Int32 = 60_000
 
     private let descriptorState: DatabaseBrokerManagedSocketDescriptor
 
@@ -90,7 +90,7 @@ final class DatabaseBrokerSocketConnection: @unchecked Sendable {
             descriptor: descriptor)
     }
 
-    static func connect(
+    package static func connect(
         paths: DatabaseBrokerPaths = DatabaseBrokerPaths(),
         timeoutMilliseconds: Int32 = defaultTimeoutMilliseconds
     ) throws -> DatabaseBrokerSocketConnection {
@@ -128,19 +128,19 @@ final class DatabaseBrokerSocketConnection: @unchecked Sendable {
         }
     }
 
-    func withSocketDescriptor<Result>(
+    package func withSocketDescriptor<Result>(
         _ operation: (Int32) throws -> Result
     ) throws -> Result {
         try descriptorState.withDescriptor(operation)
     }
 
-    func withSocketDescriptor<Result: Sendable>(
+    package func withSocketDescriptor<Result: Sendable>(
         _ operation: @escaping @Sendable (Int32) async throws -> Result
     ) async throws -> Result {
         try await descriptorState.withDescriptor(operation)
     }
 
-    func close() {
+    package func close() {
         descriptorState.close()
     }
 
@@ -149,9 +149,9 @@ final class DatabaseBrokerSocketConnection: @unchecked Sendable {
     }
 }
 
-final class DatabaseBrokerSocketListener: @unchecked Sendable {
-    static let backlog: Int32 = 64
-    static let staleProbeTimeoutMilliseconds: Int32 = 250
+package final class DatabaseBrokerSocketListener: @unchecked Sendable {
+    package static let backlog: Int32 = 64
+    package static let staleProbeTimeoutMilliseconds: Int32 = 250
 
     let identity: DatabaseBrokerSocketIdentity
 
@@ -171,7 +171,7 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         identity = snapshot.identity
     }
 
-    static func listen(
+    package static func listen(
         paths: DatabaseBrokerPaths = DatabaseBrokerPaths()
     ) throws -> DatabaseBrokerSocketListener {
         try listen(paths: paths) { _ in }
@@ -189,7 +189,7 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
             observe: observe)
     }
 
-    static func acquireOwnership(
+    package static func acquireOwnership(
         paths: DatabaseBrokerPaths
     ) throws -> DatabaseRuntimeLock {
         do {
@@ -199,10 +199,17 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         }
     }
 
+    package static func listen(
+        paths: DatabaseBrokerPaths,
+        runtimeLock: DatabaseRuntimeLock
+    ) throws -> DatabaseBrokerSocketListener {
+        try listen(paths: paths, runtimeLock: runtimeLock) { _ in }
+    }
+
     static func listen(
         paths: DatabaseBrokerPaths,
         runtimeLock: DatabaseRuntimeLock,
-        observe: (DatabaseBrokerSocketListenerStage) throws -> Void = { _ in }
+        observe: (DatabaseBrokerSocketListenerStage) throws -> Void
     ) throws -> DatabaseBrokerSocketListener {
         var pendingListener: DatabaseBrokerPendingListener?
         do {
@@ -237,13 +244,13 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         }
     }
 
-    func accept() throws -> DatabaseBrokerSocketConnection? {
+    package func accept() throws -> DatabaseBrokerSocketConnection? {
         try accept { descriptor in
             Darwin.accept(descriptor, nil, nil)
         }
     }
 
-    func accept(
+    package func accept(
         performAccept: (Int32) -> Int32
     ) throws -> DatabaseBrokerSocketConnection? {
         try withSocketDescriptor { listenerDescriptor in
@@ -269,13 +276,13 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         }
     }
 
-    func withSocketDescriptor<Result>(
+    package func withSocketDescriptor<Result>(
         _ operation: (Int32) throws -> Result
     ) throws -> Result {
         try descriptorState.withDescriptor(operation)
     }
 
-    func close() {
+    package func close() {
         descriptorState.close { [runtimeLock, snapshot] in
             try? runtimeLock.withRuntimeDirectoryDescriptor { directoryDescriptor in
                 Self.unlinkIfUnchanged(
@@ -290,7 +297,7 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         close()
     }
 
-    static func safeSocketMetadata(
+    package static func safeSocketMetadata(
         _ metadata: stat,
         expectedUserID: uid_t = geteuid()
     ) -> Bool {

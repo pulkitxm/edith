@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 final class DatabaseConfirmationTestClock: @unchecked Sendable {
     private let lock = NSLock()

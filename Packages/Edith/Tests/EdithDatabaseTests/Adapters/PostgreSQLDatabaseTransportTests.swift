@@ -5,6 +5,7 @@ import NIOSSL
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 @Test func postgresqlTransportValidatorAcceptsSplitAndConsecutiveFrames() {
     var validator = PostgreSQLDatabaseFrameValidator(maximumFrameBytes: 32)
