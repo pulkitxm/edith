@@ -66,8 +66,7 @@ enum HerdrSpaceWindow {
     @discardableResult
     static func raise(_ spaceID: String) -> Bool {
         guard let entry = entries[spaceID] else { return false }
-        entry.window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(entry.window)
         return true
     }
 
@@ -76,8 +75,7 @@ enum HerdrSpaceWindow {
         guard let entry = entries.values.first(where: { $0.model.selectAgent(id) }) else {
             return false
         }
-        entry.window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(entry.window)
         return true
     }
 
@@ -107,8 +105,7 @@ enum HerdrSpaceWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = HerdrSpaceWindowDelegate.shared
         entries[space.id] = Entry(window: window, model: model)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func perform(

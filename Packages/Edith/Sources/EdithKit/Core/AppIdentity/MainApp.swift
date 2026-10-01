@@ -13,7 +13,7 @@ public enum MainApp {
                 withBundleIdentifier: bundleIdentifier)
         else { return }
         NSWorkspace.shared.openApplication(
-            at: url, configuration: NSWorkspace.OpenConfiguration())
+            at: url, configuration: AppLaunchConfiguration.make())
     }
 
     public static func open(section: String) {

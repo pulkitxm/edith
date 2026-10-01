@@ -594,10 +594,10 @@ final class NotchBrowserStore {
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.canChooseFiles = true
         let previous = NSWorkspace.shared.frontmostApplication
-        NSApp.activate()
+        WindowPresentation.activate(ignoringOtherApps: false)
         let response = await panel.begin()
         if let previous, previous != NSRunningApplication.current { previous.activate() }
-        window?.makeKey()
+        WindowPresentation.makeKey(window)
         return response == .OK ? panel.urls : nil
     }
 

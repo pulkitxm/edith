@@ -47,7 +47,7 @@ final class BifrostDragGuides {
         if let hosting = overlay.contentView as? NSHostingView<BifrostGuideOverlay> {
             hosting.rootView = BifrostGuideOverlay(size: frame.size)
         }
-        overlay.orderFront(nil)
+        WindowPresentation.orderFront(overlay)
         watchForRelease(onFinish: onFinish)
     }
 

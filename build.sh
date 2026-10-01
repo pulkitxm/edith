@@ -4,12 +4,13 @@ cd "$(dirname "$0")"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: ./build.sh [--install] [--no-open] [--release] [--pr N | --branch NAME]
+usage: ./build.sh [--install] [--no-open] [--background] [--release] [--pr N | --branch NAME]
        ./build.sh --release --install --from-app PATH [--no-open]
        ./build.sh --teardown | --gc
 
   --install      copy a Release build to /Applications and launch from there
   --no-open      build only, do not launch
+  --background   build without focusing, then launch the development app hidden
   --release      Release configuration, Developer ID signing required
   --from-app     install an existing production-signed bundle without rebuilding
   --pr N         build PR N's branch from its worktree, creating one if needed
@@ -55,12 +56,13 @@ team_id_for() {
     | sed -n 's/.*OU *= *\([^,/]*\).*/\1/p'
 }
 
-INSTALL=0 NO_OPEN=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
+INSTALL=0 NO_OPEN=0 BACKGROUND=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
 PREBUILT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) INSTALL=1 ;;
     --no-open) NO_OPEN=1 ;;
+    --background) BACKGROUND=1 ;;
     --release) RELEASE=1 ;;
     --from-app) PREBUILT="${2:?--from-app needs an application path}"; shift ;;
     --pr) PR="${2:?--pr needs a PR number}"; shift ;;
@@ -145,6 +147,7 @@ if [ -n "$BRANCH" ]; then
     BUILD_ARGUMENTS=()
     [ "$INSTALL" = 0 ] || BUILD_ARGUMENTS+=(--install)
     [ "$NO_OPEN" = 0 ] || BUILD_ARGUMENTS+=(--no-open)
+    [ "$BACKGROUND" = 0 ] || BUILD_ARGUMENTS+=(--background)
     [ "$RELEASE" = 0 ] || BUILD_ARGUMENTS+=(--release)
     exec "$ROOT/build.sh" "${BUILD_ARGUMENTS[@]}"
   fi
@@ -408,6 +411,9 @@ if [ "$INSTALL" = 1 ]; then
   [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
 elif [ "$RELEASE" = 1 ]; then
   echo "built $APP; Edith only runs from /Applications, install it with --release --install"
+elif [ "$BACKGROUND" = 1 ]; then
+  scripts/dev-slots.sh stop
+  open -g -j -F --env EDITH_BACKGROUND_TESTING=1 "$APP"
 elif [ "$NO_OPEN" != 1 ]; then
   scripts/dev-slots.sh stop
   open "$APP"

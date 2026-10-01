@@ -425,7 +425,7 @@ final class NotchShelfController: FeatureModule {
 
         panel.contentView = container
         panels[id] = panel
-        panel.orderFrontRegardless()
+        WindowPresentation.orderFrontRegardless(panel)
         return panel
     }
 
@@ -534,7 +534,7 @@ final class NotchShelfController: FeatureModule {
                 : nil
             guard !accepts, panel.isKeyWindow else { continue }
             panel.orderOut(nil)
-            panel.orderFrontRegardless()
+            WindowPresentation.orderFrontRegardless(panel)
         }
     }
 
@@ -542,7 +542,7 @@ final class NotchShelfController: FeatureModule {
         guard let id = expandedDisplay, let panel = panels[id] as? NotchPanel,
             panel.acceptsKeyFocus
         else { return }
-        panel.makeKey()
+        WindowPresentation.makeKey(panel)
     }
 
     func attachBrowser(_ store: NotchBrowserStore?) {

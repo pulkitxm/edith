@@ -61,8 +61,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
     private func finishShow(origin: NSPoint, generation: Int) {
         guard generation == showGeneration, let panel else { return }
         panel.setFrameOrigin(origin)
-        panel.orderFrontRegardless()
-        panel.makeKey()
+        WindowPresentation.orderFrontRegardless(panel, makeKey: true)
     }
 
     func hide() {

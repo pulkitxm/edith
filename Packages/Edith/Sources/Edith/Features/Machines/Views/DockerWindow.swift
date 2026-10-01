@@ -571,8 +571,7 @@ enum DockerWindow {
 
     static func open(session: MachineSession) {
         if let existing = windows[session.machine.id] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(existing)
             return
         }
         let window = NSWindow(
@@ -593,8 +592,7 @@ enum DockerWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = DockerWindowDelegate.shared
         windows[session.machine.id] = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func forget(_ window: NSWindow) {

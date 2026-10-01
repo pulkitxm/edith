@@ -156,7 +156,7 @@ final class SystemStore: FeatureModule {
             let window = CleaningOverlayWindow(
                 screen: screen,
                 rootView: CleaningOverlayView(store: self))
-            window.orderFrontRegardless()
+            WindowPresentation.orderFrontRegardless(window)
             overlays.append(window)
         }
     }

@@ -130,7 +130,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
 
     private func showPanel() {
         movePanelToPointerScreen()
-        panel?.orderFrontRegardless()
+        WindowPresentation.orderFrontRegardless(panel)
     }
 
     private func movePanelToPointerScreen() {

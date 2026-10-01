@@ -105,6 +105,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyConfiguredActivationPolicy() {
+        if BackgroundTesting.isActive {
+            NSApp.setActivationPolicy(.accessory)
+            return
+        }
         let showDockIcon =
             SharedDefaults.store.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool
             ?? true
@@ -112,10 +116,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showInitialWindow() {
-        if OnboardingFlow.shouldShowOnboarding() {
-            OnboardingWindow.open()
-        } else {
+        if BackgroundTesting.isActive || !OnboardingFlow.shouldShowOnboarding() {
             MainWindow.open()
+        } else {
+            OnboardingWindow.open()
         }
     }
 

@@ -490,8 +490,7 @@ enum FinderWindow {
     static func open(session: MachineSession, path: String? = nil) {
         let key = session.machine.id.uuidString + (path ?? "")
         if let existing = windows[key] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(existing)
             return
         }
         let window = NSWindow(
@@ -513,8 +512,7 @@ enum FinderWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = FinderWindowDelegate.shared
         windows[key] = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func forget(_ window: NSWindow) {

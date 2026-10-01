@@ -389,6 +389,10 @@ public final class GhosttyRuntime {
                 TerminalClipboard.complete(
                     requestData, surface: surface, state: pendingState, confirmed: true)
             }
+            if BackgroundTesting.isActive {
+                finish(.abort)
+                return
+            }
             if let window = view.window {
                 alert.beginSheetModal(for: window, completionHandler: finish)
             } else {
@@ -464,6 +468,10 @@ public final class GhosttyRuntime {
             let finish: (NSApplication.ModalResponse) -> Void = { response in
                 guard response == .alertFirstButtonReturn else { return }
                 if TerminalClipboard.write(entries, to: .general) { view.showCopyConfirmation() }
+            }
+            if BackgroundTesting.isActive {
+                finish(.abort)
+                return
             }
             if let window = view.window {
                 alert.beginSheetModal(for: window, completionHandler: finish)

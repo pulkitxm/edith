@@ -18,8 +18,7 @@ enum HerdrAgentWindow {
 
     static func raise(_ id: String) -> Bool {
         guard let window = windows[id] else { return false }
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
         return true
     }
 
@@ -55,8 +54,7 @@ enum HerdrAgentWindow {
         if window.frame.origin == .zero { window.center() }
         window.delegate = HerdrAgentWindowDelegate.shared
         windows[agent.id] = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(window)
     }
 
     static func addViewControls(

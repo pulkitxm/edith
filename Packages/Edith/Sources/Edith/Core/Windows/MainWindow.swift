@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EdithKit
 import SwiftUI
 
@@ -44,28 +45,18 @@ enum MainWindow {
         snapshotObserver = DistributedNotificationCenter.default().addObserver(
             forName: IPC.scopedName("com.pulkit.edith.debugSnapshot"), object: nil,
             queue: .main
-        ) { _ in
-            MainActor.assumeIsolated { snapshot() }
+        ) { notification in
+            let path = notification.userInfo?["path"] as? String
+            MainActor.assumeIsolated { snapshot(to: path) }
         }
     }
 
-    private static func snapshot() {
-        guard let window, let frameView = window.contentView?.superview,
-            let layer = frameView.layer
+    private static func snapshot(to path: String?) {
+        guard let window, let contentView = window.contentView,
+            let data = WindowPresentation.pngData(of: contentView)
         else { return }
-        let scale = window.backingScaleFactor
-        let size = frameView.bounds.size
-        guard
-            let ctx = CGContext(
-                data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
-                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
-        else { return }
-        ctx.scaleBy(x: scale, y: scale)
-        layer.render(in: ctx)
-        guard let cg = ctx.makeImage() else { return }
-        try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?
-            .write(to: URL(fileURLWithPath: "/tmp/edith-window.png"))
+        let destination = (path?.isEmpty == false ? path : nil) ?? "/tmp/edith-window.png"
+        try? data.write(to: URL(fileURLWithPath: destination))
         let insets = window.contentView?.safeAreaInsets ?? NSEdgeInsets()
         let info = """
             frame=\(window.frame)
@@ -99,8 +90,7 @@ enum MainWindow {
         #endif
         UIScale.install(from: SharedDefaults.store)
         if let window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(window)
             return
         }
         let visibleFrame =
@@ -146,12 +136,12 @@ enum MainWindow {
         w.tabbingMode = .disallowed
         w.delegate = MainWindowDelegate.shared
         window = w
-        w.makeKeyAndOrderFront(nil)
+        WindowPresentation.present(w)
         if w.isZoomed { w.zoom(nil) }
-        w.setFrame(launchFrame, display: true)
+        w.setFrame(launchFrame, display: w.isVisible)
         w.saveFrame(usingName: autosaveName)
-        NSApp.activate(ignoringOtherApps: true)
-        if UserDefaults.standard.bool(forKey: AppStorageKeys.General.editMainWindowFullScreen),
+        if !BackgroundTesting.isActive,
+            UserDefaults.standard.bool(forKey: AppStorageKeys.General.editMainWindowFullScreen),
             !w.styleMask.contains(.fullScreen)
         {
             w.toggleFullScreen(nil)

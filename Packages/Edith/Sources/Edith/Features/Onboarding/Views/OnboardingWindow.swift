@@ -8,8 +8,7 @@ enum OnboardingWindow {
 
     static func open() {
         if let window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            WindowPresentation.present(window)
             return
         }
         let onboardingWindow = NSWindow(
@@ -29,8 +28,7 @@ enum OnboardingWindow {
         onboardingWindow.center()
         onboardingWindow.delegate = OnboardingWindowDelegate.shared
         window = onboardingWindow
-        onboardingWindow.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowPresentation.present(onboardingWindow)
     }
 
     static func close() {

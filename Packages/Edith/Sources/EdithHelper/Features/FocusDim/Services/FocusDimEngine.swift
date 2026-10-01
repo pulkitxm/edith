@@ -229,9 +229,9 @@ final class FocusDimEngine: FeatureModule {
 
     private func applyOrder(_ overlay: NSWindow, below windowNumber: Int?) {
         if let windowNumber {
-            overlay.order(.below, relativeTo: windowNumber)
+            WindowPresentation.orderBelow(overlay, windowNumber: windowNumber)
         } else {
-            overlay.orderFront(nil)
+            WindowPresentation.orderFront(overlay)
         }
     }
 
