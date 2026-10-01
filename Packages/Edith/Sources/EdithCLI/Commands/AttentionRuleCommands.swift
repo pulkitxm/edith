@@ -23,7 +23,9 @@ struct AttentionRuleDocument: Codable {
         for rule in rules {
             guard !rule.id.isEmpty, !rule.name.trimmingCharacters(in: .whitespaces).isEmpty,
                 !rule.isEmpty, settings.categories.contains(where: { $0.id == rule.categoryID })
-            else { throw CLIFailure.usage("Rules need an ID, name, known category and match criteria") }
+            else {
+                throw CLIFailure.usage("Rules need an ID, name, known category and match criteria")
+            }
             if let index = settings.rules.firstIndex(where: { $0.id == rule.id }) {
                 settings.rules[index] = rule
             } else {
@@ -71,10 +73,11 @@ struct AttentionRulesImportCommand: AsyncParsableCommand {
             let settings = try document.applying(to: AttentionCLI.repository.loadSettings())
             if !dryRun { try AttentionCLI.save(settings: settings) }
             if json {
-                CLIOut.json(.object([
-                    "rules": .int(document.rules.count),
-                    "categories": .int(document.categories.count), "saved": .bool(!dryRun),
-                ]))
+                CLIOut.json(
+                    .object([
+                        "rules": .int(document.rules.count),
+                        "categories": .int(document.categories.count), "saved": .bool(!dryRun),
+                    ]))
             } else {
                 CLIOut.out("\(dryRun ? "validated" : "saved") \(document.rules.count) rules")
             }

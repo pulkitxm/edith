@@ -179,7 +179,9 @@ public struct AttentionClassifier {
     }
 
     private func resolve(_ event: AttentionEvent) -> AttentionClassification {
-        let bundleID = event.source == .browser ? nil : (event.bundleID ?? event.appName ?? "unknown").lowercased()
+        let bundleID =
+            event.source == .browser
+            ? nil : (event.bundleID ?? event.appName ?? "unknown").lowercased()
         let domain = AttentionText.domain(event.domain ?? event.url)
         let location = AttentionText.location(event.url)
         let title = event.windowTitle?.lowercased() ?? ""

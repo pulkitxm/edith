@@ -505,8 +505,10 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         urls = try container.decodeIfPresent([String].self, forKey: .urls) ?? []
         keywords = try container.decodeIfPresent([String].self, forKey: .keywords) ?? []
         contexts = try container.decodeIfPresent([String].self, forKey: .contexts) ?? []
-        browserProfiles = try container.decodeIfPresent([String].self, forKey: .browserProfiles) ?? []
-        reportSeparately = try container.decodeIfPresent(Bool.self, forKey: .reportSeparately) ?? false
+        browserProfiles =
+            try container.decodeIfPresent([String].self, forKey: .browserProfiles) ?? []
+        reportSeparately =
+            try container.decodeIfPresent(Bool.self, forKey: .reportSeparately) ?? false
         productivity = try container.decodeIfPresent(
             AttentionProductivity.self, forKey: .productivity)
         sphere = try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)

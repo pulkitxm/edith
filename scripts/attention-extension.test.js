@@ -426,7 +426,6 @@ test("a payload Edith rejects as malformed is dropped instead of blocking the qu
   expect(f.local.attentionQueue).toHaveLength(0);
 });
 
-
 test("page metadata never follows a tab to another URL or title", async () => {
   const f = fixture();
   f.tab("https://video.example/watch?v=first");
