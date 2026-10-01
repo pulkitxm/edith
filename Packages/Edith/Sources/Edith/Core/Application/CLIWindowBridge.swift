@@ -27,6 +27,7 @@ enum CLIWindowBridge {
         MachineTerminalBroadcastBridge.install()
         HerdrOpenBridge.install()
         HerdrLayoutBridge.install()
+        HerdrSpaceBridge.install()
         CameraExtensionBridge.install()
         VideoEditorOpenBridge.shared.install()
     }
@@ -36,6 +37,15 @@ enum CLIWindowBridge {
     }
 
     private static func reveal(_ info: [AnyHashable: Any]) {
+        if info["list"] as? Bool == true {
+            let sections = MainDestination.allCases.map {
+                ["id": $0.rawValue, "title": $0.title]
+            }
+            let data = try? JSONSerialization.data(withJSONObject: sections)
+            let text = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            IPC.post(IPC.Name.revealResult, userInfo: ["ok": true, "sections": text])
+            return
+        }
         let sectionRaw = info["section"] as? String ?? ""
         guard !sectionRaw.isEmpty else {
             MainWindow.open()

@@ -72,6 +72,63 @@ import Testing
         }
     }
 
+    @Test func listPrintsTheSidebarSections() async throws {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in
+                [
+                    "ok": true,
+                    "sections":
+                        #"[{"id":"home","title":"Home"},{"id":"studio","title":"Studio"}]"#,
+                ]
+            }
+            let result = await CLIProbe.capture(["app", "reveal", "--list", "--json"])
+            #expect(result.code == 0)
+            let sections = result.object?["sections"] as? [[String: Any]]
+            #expect(sections?.map { $0["id"] as? String } == ["home", "studio"])
+            #expect(world.posted.first?.info["list"] as? Bool == true)
+        }
+    }
+
+    @Test func listRefusesASection() async {
+        await CLIProbe.inWorld { _ in
+            CLIEnvironment.isMainAppRunning = { true }
+            let result = await CLIProbe.capture(["app", "reveal", "home", "--list"])
+            #expect(result.code == ExitCodes.usage)
+        }
+    }
+
+    @Test func spaceCommandsParseAndReportJSON() async throws {
+        #expect(try EdRoot.parseAsRoot(["herdr", "space"]) is HerdrSpaceListCommand)
+        #expect(try HerdrSpaceCLI.side("down") == "bottom")
+        #expect(try HerdrSpaceCLI.side("UP") == "top")
+        #expect(throws: CLIFailure.self) { try HerdrSpaceCLI.side("beside") }
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { name in
+                guard name == IPC.Name.herdrSpaceActionResult else { return nil }
+                let requestID =
+                    world.postedPayloads(for: IPC.Name.requestHerdrSpaceAction).last?["requestID"]
+                    as? String ?? ""
+                return [
+                    "ok": true, "requestID": requestID, "message": "opened a terminal",
+                    "windows": #"[{"id":"desk","title":"Desk","tabs":2,"panes":1}]"#,
+                ]
+            }
+            let result = await CLIProbe.capture([
+                "herdr", "space", "terminal", "--window", "desk", "--json",
+            ])
+            #expect(result.code == 0)
+            let windows = result.object?["windows"] as? [[String: Any]]
+            #expect(windows?.first?["id"] as? String == "desk")
+            #expect(windows?.first?["tabs"] as? Int == 2)
+            #expect(result.object?["message"] as? String == "opened a terminal")
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestHerdrSpaceAction).last?["action"]
+                    as? String == "terminal")
+        }
+    }
+
     @Test func revealNeedsTheMainWindow() async {
         let result = await CLIProbe.run(["app", "reveal", "companion"])
         #expect(result.code == ExitCodes.unavailable)

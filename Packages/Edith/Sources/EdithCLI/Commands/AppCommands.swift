@@ -775,22 +775,28 @@ struct AppRevealCommand: AsyncParsableCommand {
         abstract: "Show a section of the main window, and optionally a tab inside it.",
         discussion: """
             Bring a main-window section forward, and a tab inside it when you pass --tab.
-            Reads the section id. Changes which window and tab are visible. Section ids include home, docs, attention, dashboard, herdr, quinjet, music, calendar, system, machines, companion, and settings.
+            Reads the section id. Changes which window and tab are visible. --list reads the sidebar names and does not change the window.
+            Section ids: home, machines, docs, agents, dashboard, herdr, quinjet, companion, plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, extensions, settings, about.
 
             ed app reveal companion --tab chat
-            ed app reveal settings --json
+            ed app reveal --list --json
             """)
 
     @Argument(
         help: ArgumentHelp(
             "The section to show; without it the window comes up where it was.",
             discussion:
-                "One of home, docs, attention, dashboard, herdr, quinjet, music, calendar, system, "
-                + "appMaintenance, blitztree, machines, companion, extensions, settings, about."))
+                "One of home, machines, docs, agents, dashboard, herdr, quinjet, companion, "
+                + "plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, "
+                + "downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, "
+                + "extensions, settings, about."))
     var section: String?
 
     @Option(help: "A tab inside the section; companion and settings have them.")
     var tab: String?
+
+    @Flag(name: .long, help: "List every sidebar section instead of showing one.")
+    var list = false
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -799,6 +805,39 @@ struct AppRevealCommand: AsyncParsableCommand {
         try await execute {
             let action = try AppActions.named("reveal")
             try AppActions.require(action)
+            if list {
+                if section != nil || tab != nil {
+                    throw CLIFailure.usage(
+                        "--list prints the sections and does not show one",
+                        hint: "ed app reveal --list --json")
+                }
+                let reply = await AppBridge.awaitReply(IPC.Name.revealResult, timeout: 10) {
+                    AppActions.runtime.request(.reveal, userInfo: ["list": true])
+                }
+                guard let reply else { throw AppBridge.silence("the reveal") }
+                guard reply["ok"] as? Bool == true else {
+                    throw CLIFailure(reply["error"] as? String ?? "the app refused the list")
+                }
+                let sections = Self.sections(in: reply["sections"] as? String)
+                guard !json else {
+                    CLIOut.json(
+                        .object([
+                            "sections": .array(
+                                sections.map {
+                                    .object([
+                                        "id": .string($0["id"] as? String ?? ""),
+                                        "title": .string($0["title"] as? String ?? ""),
+                                    ])
+                                })
+                        ]))
+                    return
+                }
+                for section in sections {
+                    CLIOut.out(
+                        "\(section["id"] as? String ?? "")\t\(section["title"] as? String ?? "")")
+                }
+                return
+            }
             if tab != nil, section == nil {
                 throw CLIFailure.usage(
                     "--tab needs a section to go with it",
@@ -837,6 +876,13 @@ struct AppRevealCommand: AsyncParsableCommand {
             }
             CLIOut.out(shownTab.map { "showing \(shown) · \($0)" } ?? "showing \(shown)")
         }
+    }
+
+    private static func sections(in raw: String?) -> [[String: Any]] {
+        guard let raw, let data = raw.data(using: .utf8),
+            let value = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return [] }
+        return value
     }
 }
 

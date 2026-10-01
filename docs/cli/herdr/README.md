@@ -34,6 +34,9 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr gather` | Gather every tab into one |
 | `ed herdr separate` | Turn a split into one tab per agent |
 | `ed herdr terminal` | Open a terminal in the selected tab |
+| `ed herdr space ls` | List open space windows |
+| `ed herdr space terminal` | Open a terminal in a space window |
+| `ed herdr space split` | Split the focused pane in a space window |
 | `ed herdr close-tab` | Close one tab after `--yes` |
 | `ed herdr close-others` | Close every tab except one after `--yes` |
 | `ed herdr close-right` | Close tabs to the right after `--yes` |
