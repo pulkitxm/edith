@@ -72,6 +72,9 @@ enum UIParity {
             "Extensions pane", "turn an extension off", ["extensions", "disable", "clipboard"]),
         UICapability("Extensions pane", "browse registered extensions", ["extensions", "ls"]),
         UICapability(
+            "Database pack sheet", "download and verify database drivers",
+            ["database", "pack", "install"]),
+        UICapability(
             "Extension settings", "inspect metadata and requirements",
             ["extensions", "info", "clipboard"]),
         UICapability(
