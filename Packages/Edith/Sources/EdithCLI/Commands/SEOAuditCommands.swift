@@ -288,8 +288,9 @@ struct SEODeleteCommand: AsyncParsableCommand {
         commandName: "delete",
         abstract: "Delete a site-audit project and its runs.",
         discussion: """
-            Previews the project that would be removed. `--yes` deletes the project file, its \
-            page assets, and its page selection. Refused while an audit is running.
+            Previews the project that would be removed. `--yes` writes the deletion of the \
+            project file, its page assets, and its page selection. Refused while an audit is \
+            running.
             Example: ed seo delete 00000000-0000-0000-0000-000000000000 --yes --json
             """,
         aliases: ["rm"])
@@ -481,9 +482,9 @@ struct SEOStartCommand: AsyncParsableCommand {
         commandName: "start",
         abstract: "Start an audit of the selected pages.",
         discussion: """
-            Queues the same background audit as the project's start button, using the saved \
-            page selection and Lighthouse switch. `--wait` blocks until the run finishes. \
-            Without it, the command returns once the run is queued.
+            Queues the same background audit as the project's start button. It writes a new run \
+            from the saved page selection and Lighthouse switch. `--wait` blocks until the run \
+            finishes. Without it, the command returns once the run is queued.
             Example: ed seo start 00000000-0000-0000-0000-000000000000 --no-lighthouse --json
             """)
 
@@ -526,8 +527,9 @@ struct SEOStopCommand: AsyncParsableCommand {
         commandName: "stop",
         abstract: "Stop the audit running for a project.",
         discussion: """
-            Previews the running audit that would be cancelled. `--yes` cancels that background \
-            task, the same stop button as the project screen. A finished run is left in place.
+            Previews the running audit that would be cancelled. `--yes` writes the cancellation \
+            of that background task, the same stop button as the project screen. A finished run \
+            is left in place.
             Example: ed seo stop 00000000-0000-0000-0000-000000000000 --yes --json
             """)
 
