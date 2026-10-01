@@ -108,6 +108,9 @@ BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edi
 [ "$BUILT" = "$RELEASE_VERSION" ] \
   || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
+echo "==> packaging the database pack"
+./scripts/package-database-pack.sh dist/edith-database .
+
 echo "==> packaging the DMG"
 rm -rf dmg-root Edith.dmg && mkdir dmg-root
 ditto dist/Edith.app dmg-root/Edith.app
@@ -154,7 +157,7 @@ grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
   || { echo "release blocked: the cask rewrite did not take" >&2; exit 1; }
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "==> dry run complete: dist/Edith.app, Edith.dmg, and dist/appcast/appcast.xml are ready"
+  echo "==> dry run complete: dist/Edith.app, Edith.dmg, edith-database.zip, and dist/appcast/appcast.xml are ready"
   echo "    version files and cask are staged in the working tree and will be reverted on exit"
   exit 0
 fi
@@ -180,5 +183,7 @@ RELEASE_ID="$(gh api "repos/${REPO}/releases/tags/${RELEASE_TAG}" --jq .id)"
 [ -n "$RELEASE_ID" ] || { echo "release blocked: could not resolve the release id" >&2; exit 1; }
 pukbot release upload-asset "$RELEASE_ID" Edith.dmg --repo "$REPO" --json
 pukbot release upload-asset "$RELEASE_ID" dist/appcast/appcast.xml --repo "$REPO" --json
+pukbot release upload-asset "$RELEASE_ID" edith-database.zip --repo "$REPO" --json
+pukbot release upload-asset "$RELEASE_ID" edith-database.zip.sha256 --repo "$REPO" --json
 
 echo "==> released $RELEASE_TAG"

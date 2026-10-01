@@ -303,26 +303,19 @@ struct SEOAuditPageAccordion: View {
         }
     }
 
+    private var socialCard: SEOAuditSocialCard {
+        SEOAuditSocialCard(metadata: page.metadata, platform: socialPlatform)
+    }
+
     private var previewTitle: some View {
-        Text(
-            socialPlatform == .x
-                ? page.metadata.twitterTitle ?? page.metadata.openGraphTitle
-                    ?? page.metadata.title ?? "No social title"
-                : page.metadata.openGraphTitle ?? page.metadata.title ?? "No social title"
-        )
-        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+        Text(socialCard.title)
+            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
     }
 
     private var previewDescription: some View {
-        Text(
-            socialPlatform == .x
-                ? page.metadata.twitterDescription ?? page.metadata.openGraphDescription
-                    ?? page.metadata.description ?? "No social description"
-                : page.metadata.openGraphDescription ?? page.metadata.description
-                    ?? "No social description"
-        )
-        .font(.system(size: UIScale.pt(9.5)))
-        .foregroundStyle(.secondary)
+        Text(socialCard.detail)
+            .font(.system(size: UIScale.pt(9.5)))
+            .foregroundStyle(.secondary)
     }
 
     private var previewDomain: some View {
@@ -333,11 +326,7 @@ struct SEOAuditPageAccordion: View {
     }
 
     private var previewImageURL: URL? {
-        let value =
-            socialPlatform == .x
-            ? page.metadata.twitterImageURL ?? page.metadata.openGraphImageURL
-            : page.metadata.openGraphImageURL
-        return value.flatMap(URL.init(string:))
+        socialCard.imageURL.flatMap(URL.init(string:))
     }
 
     private var snapshotFileURL: URL? {
@@ -350,13 +339,9 @@ struct SEOAuditPageAccordion: View {
         return url
     }
 
-    private var usesXSummaryCard: Bool {
-        page.metadata.twitterCard?.lowercased() == "summary"
-    }
+    private var usesXSummaryCard: Bool { socialCard.usesSummaryCard }
 
-    private var previewFormatLabel: String {
-        usesXSummaryCard && socialPlatform == .x ? "1:1 · summary" : socialPlatform.formatLabel
-    }
+    private var previewFormatLabel: String { socialCard.formatLabel }
 
     private var previewFallback: some View {
         Image(systemName: "photo")

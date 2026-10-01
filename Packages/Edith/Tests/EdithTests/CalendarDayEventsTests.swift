@@ -296,3 +296,113 @@ import Testing
         #expect(MeetingLink.find(in: "") == nil)
     }
 }
+
+@MainActor
+@Suite struct CalendarSnapshotTests {
+    @Test func cachedAgendaShowsBeforeFetchReturns() async throws {
+        let snapshots = try temporaryAgendaStore()
+        let kept = agendaEvent(id: "kept", title: "Kept", start: 1_700_000_000)
+        await snapshots.save([kept])
+        let gate = CalendarFetchGate()
+        let store = CalendarStore(snapshotStore: snapshots) { _ in
+            await gate.wait()
+            return [agendaEvent(id: "fresh", title: "Fresh", start: 1_700_086_400)]
+        }
+        await store.restoreCachedAgenda()
+        #expect(store.events.map(\.id) == ["kept"])
+        #expect(!store.groupedDays.isEmpty)
+        let refresh = Task { await store.refreshAndWait() }
+        await gate.entered()
+        #expect(store.events.map(\.id) == ["kept"])
+        gate.release()
+        let refreshed = await refresh.value
+        #expect(refreshed.map(\.id) == ["fresh"])
+    }
+
+    @Test func loadMoreAppendsTheNextPage() async throws {
+        let snapshots = try temporaryAgendaStore()
+        let kept = agendaEvent(id: "kept", title: "Kept", start: 1_700_000_000)
+        let added = agendaEvent(id: "added", title: "Added", start: 1_701_209_600)
+        await snapshots.save([kept])
+        let store = CalendarStore(snapshotStore: snapshots) { _ in [added] }
+        await store.restoreCachedAgenda()
+        await store.loadMoreAndWait()
+        #expect(store.events.map(\.id) == ["kept", "added"])
+        #expect(store.groupedDays.flatMap(\.events).map(\.id) == ["kept", "added"])
+    }
+
+    @Test func agendaRowsAreLazyAndShareOneEventStore() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithKit/Features/Calendar")
+        let agenda = try String(
+            contentsOf: root.appendingPathComponent("UI/CalendarAgendaView.swift"), encoding: .utf8)
+        let store = try String(
+            contentsOf: root.appendingPathComponent("ViewModels/CalendarStore.swift"),
+            encoding: .utf8)
+        #expect(agenda.contains("LazyVStack(alignment: .leading, spacing: 0)"))
+        #expect(store.contains("private static let eventStore = EKEventStore()"))
+        #expect(!store.contains("let store = EKEventStore()"))
+    }
+
+    private func temporaryAgendaStore() throws -> CalendarAgendaSnapshotStore {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-calendar-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return CalendarAgendaSnapshotStore(
+            file: directory.appendingPathComponent("agenda.json"))
+    }
+}
+
+private func agendaEvent(id: String, title: String, start: TimeInterval) -> CalendarEventPayload {
+    let date = Date(timeIntervalSince1970: start)
+    return CalendarEventPayload(
+        id: id, title: title, start: date, end: date.addingTimeInterval(1800), isAllDay: false)
+}
+
+private final class CalendarFetchGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var hasEntered = false
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            hasEntered = true
+            releaseContinuation = continuation
+            let entered = enteredContinuation
+            enteredContinuation = nil
+            lock.unlock()
+            entered?.resume()
+        }
+    }
+
+    func entered() async {
+        let alreadyEntered: Bool = lock.withLock {
+            if hasEntered { return true }
+            return false
+        }
+        if alreadyEntered { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if hasEntered {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            enteredContinuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func release() {
+        lock.lock()
+        let continuation = releaseContinuation
+        releaseContinuation = nil
+        lock.unlock()
+        continuation?.resume()
+    }
+}

@@ -18,7 +18,14 @@ final class SEOAuditModel {
     var pageSelectionQuery = ""
     var severity: SEOAuditSeverity? { didSet { if severity != oldValue { schedulePageFilter() } } }
     var socialPreviewPlatform = SEOAuditSocialPlatform.facebook
-    var lighthouseEnabled = true
+    var lighthouseEnabled = true {
+        didSet {
+            guard !isApplyingDraft, selectedProject != nil, lighthouseEnabled != oldValue else {
+                return
+            }
+            persistDraft()
+        }
+    }
     var discoveredPageURLs: [String] = []
     var selectedPageURLs = Set<String>()
     var newProjectPresented = false
@@ -39,6 +46,7 @@ final class SEOAuditModel {
     private var filterGeneration = 0
     private var filterEntries: [SEOPageFilterEntry] = []
     private var pagesByID: [UUID: SEOAuditPageResult] = [:]
+    private var isApplyingDraft = false
 
     init(
         client: SEOAuditProjectClient = SEOAuditProjectClient(),
@@ -76,14 +84,13 @@ final class SEOAuditModel {
 
     func beginNewProject() async {
         guard !isRunning else { return }
-        guard let url = SEOAuditURLInput.normalize(input) else {
-            errorMessage = "Enter a valid site URL."
+        let project: SEOAuditProject
+        do {
+            project = try SEOAuditSelection.makeProject(url: input, name: projectName)
+        } catch {
+            errorMessage = error.localizedDescription
             return
         }
-        let name = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let project = SEOAuditProject(
-            name: name.isEmpty ? SEOAuditURLInput.projectName(for: url) : name,
-            baseURL: url.absoluteString)
         isMutatingProject = true
         do {
             selectedProject = try await client.create(project)
@@ -133,8 +140,7 @@ final class SEOAuditModel {
             selectedProject = project
             projectDetailPresented = true
             selectedRunID = project.latestRun?.id
-            discoveredPageURLs = Self.knownPageURLs(in: project)
-            selectedPageURLs = Set(discoveredPageURLs)
+            applyDraft(try? await client.draft(id), fallback: project)
             query = ""
             severity = nil
             await rebuildPageIndex()
@@ -220,11 +226,8 @@ final class SEOAuditModel {
 
     func auditSelectedPages() {
         guard var project = selectedProject, !isRunning else { return }
-        let selected = Set(selectedPageURLs)
-        var urls: [URL] = []
-        for value in discoveredPageURLs where selected.contains(value) {
-            if let url = URL(string: value) { urls.append(url) }
-        }
+        let urls = SEOAuditSelection.auditURLs(
+            discovered: discoveredPageURLs, selected: selectedPageURLs)
         guard !urls.isEmpty else {
             errorMessage = "Select at least one page to audit."
             return
@@ -244,14 +247,17 @@ final class SEOAuditModel {
         } else {
             selectedPageURLs.insert(url)
         }
+        persistDraft()
     }
 
     func selectAllPages() {
         selectedPageURLs = Set(discoveredPageURLs)
+        persistDraft()
     }
 
     func deselectAllPages() {
         selectedPageURLs.removeAll()
+        persistDraft()
     }
 
     func runLighthouse(for page: SEOAuditPageResult) {
@@ -412,10 +418,12 @@ final class SEOAuditModel {
                     payload: AgentPayload.encode(startURL)))
             let urls = try AgentPayload.decode([URL].self, from: data)
             try Task.checkCancellation()
-            let values = urls.map(\.absoluteString)
-            let previous = Set(discoveredPageURLs)
-            discoveredPageURLs = Self.unique(discoveredPageURLs + values)
-            selectedPageURLs.formUnion(Set(values).subtracting(previous))
+            let merged = SEOAuditSelection.mergeDiscovery(
+                discovered: discoveredPageURLs, selected: selectedPageURLs,
+                found: urls.map(\.absoluteString))
+            discoveredPageURLs = merged.discovered
+            selectedPageURLs = Set(merged.selected)
+            persistDraft()
         } catch is CancellationError {
         } catch {
             errorMessage = error.localizedDescription
@@ -515,17 +523,31 @@ final class SEOAuditModel {
         projects.sort { $0.updatedAt > $1.updatedAt }
     }
 
-    private static func knownPageURLs(in project: SEOAuditProject) -> [String] {
-        var values: [String] = []
-        for run in project.runs {
-            for page in run.pages { values.append(page.url) }
+    private func applyDraft(_ draft: SEOAuditDraft?, fallback: SEOAuditProject) {
+        isApplyingDraft = true
+        defer { isApplyingDraft = false }
+        if let draft, !draft.discoveredPageURLs.isEmpty {
+            discoveredPageURLs = draft.discoveredPageURLs
+            selectedPageURLs = Set(draft.selectedPageURLs)
+            lighthouseEnabled = draft.includeLighthouse
+        } else {
+            discoveredPageURLs = SEOAuditSelection.knownPageURLs(in: fallback)
+            selectedPageURLs = Set(discoveredPageURLs)
         }
-        return unique(values)
     }
 
-    private static func unique(_ values: [String]) -> [String] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0).inserted }
+    private func persistDraft() {
+        guard let id = selectedProject?.id, !isApplyingDraft else { return }
+        let discovered = discoveredPageURLs
+        let selected = discovered.filter { selectedPageURLs.contains($0) }
+        let lighthouse = lighthouseEnabled
+        Task { [client] in
+            guard var draft = try? await client.draft(id) else { return }
+            draft.discoveredPageURLs = discovered
+            draft.selectedPageURLs = selected
+            draft.includeLighthouse = lighthouse
+            _ = try? await client.setDraft(id, draft)
+        }
     }
 
     func refreshProjects() async {

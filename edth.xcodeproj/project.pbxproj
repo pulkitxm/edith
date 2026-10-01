@@ -373,6 +373,11 @@
 				EDITH_DISPLAY_NAME = "Edith Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xfrontend",
+					"-disable-reflection-metadata",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -398,6 +403,11 @@
 				EDITH_DISPLAY_NAME = "Edith ($(EDITH_DEV_SLOT)) Menu Bar";
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xfrontend",
+					"-disable-reflection-metadata",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -424,6 +434,11 @@
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xfrontend",
+					"-disable-reflection-metadata",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -586,6 +601,11 @@
 				PRODUCT_MODULE_NAME = EdithMainApp;
 				PRODUCT_NAME = Edith;
 				SDKROOT = macosx;
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xfrontend",
+					"-disable-reflection-metadata",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;

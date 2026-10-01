@@ -5,7 +5,7 @@ import Foundation
 struct MachinesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "machines",
-        abstract: "The computers Edith can reach over SSH.",
+        abstract: "List the computers Edith can reach over SSH.",
         discussion: """
             Machines come from Edith's own machine list. Transport is /usr/bin/ssh over a
             ControlMaster socket shared with the app, so a command lands on an already
@@ -18,6 +18,7 @@ struct MachinesCommand: AsyncParsableCommand {
             explicitly: `ed machines show docker`.
 
             `ed <machine> <command...>` is shorthand for `ed machines <machine> <command...>`.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
             """,
         subcommands: [
             MachinesListCommand.self, MachinesShowCommand.self, MachinesAddCommand.self,
@@ -64,7 +65,15 @@ enum MachineResolver {
 
 struct MachinesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List configured machines.", aliases: ["list"])
+        commandName: "ls", abstract: "List configured machines.",
+        discussion: """
+            Lists every configured machine.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines ls
+            ed machines ls --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -155,7 +164,15 @@ private final class FirstAnswerGate: @unchecked Sendable {
 
 struct MachinesShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "show", abstract: "One machine, with live facts.")
+        commandName: "show", abstract: "Show one machine, with live facts.",
+        discussion: """
+            Show one machine, with live facts.
+
+            Reads one record and its live facts. Does not change them.
+
+            ed machines show box
+            ed machines show box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -212,7 +229,16 @@ struct MachinesShowCommand: AsyncParsableCommand {
 
 struct MachinesMetricsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "metrics", abstract: "Sample a machine, once or continuously.")
+        commandName: "metrics", abstract: "Sample a machine, once or continuously.",
+        discussion: """
+            Samples a machine, once or continuously.
+
+            Reads one sample of CPU, memory, disks, and processes. Does not change the
+            machine.
+
+            ed machines metrics box
+            ed machines metrics box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -320,6 +346,15 @@ struct MachinesExecCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "exec",
         abstract: "Run a command on a machine, passing through both streams.",
+        discussion: """
+            Runs a command on a machine, passing stdin, stdout, stderr and the remote
+            exit code straight through.
+
+            Changes the machine by running the command there, and reads both of its
+            streams.
+
+            ed machines exec box uptime
+            """,
         aliases: ["run"])
 
     @Flag(
@@ -404,7 +439,15 @@ struct MachinesExecCommand: AsyncParsableCommand {
 
 struct MachinesServicesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List services on a machine.", aliases: ["list"])
+        commandName: "ls", abstract: "List services on a machine.",
+        discussion: """
+            Lists the systemd service units on a machine.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed machines services ls box
+            ed machines services ls box --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -454,7 +497,16 @@ enum MachineConnectionBridge {
 
 struct MachinesConnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "connect", abstract: "Open the shared SSH connection to a machine.")
+        commandName: "connect", abstract: "Open the shared SSH connection to a machine.",
+        discussion: """
+            Opens the shared SSH connection to a machine and reports the round trip
+            time.
+
+            Changes the shared SSH connection by opening it.
+
+            ed machines connect box
+            ed machines connect box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -484,7 +536,15 @@ struct MachinesConnectCommand: AsyncParsableCommand {
 
 struct MachinesDisconnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "disconnect", abstract: "Close the shared SSH connection to a machine.")
+        commandName: "disconnect", abstract: "Close the shared SSH connection to a machine.",
+        discussion: """
+            Closes the shared SSH connection to a machine.
+
+            Changes the shared SSH connection by closing it.
+
+            ed machines disconnect box
+            ed machines disconnect box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

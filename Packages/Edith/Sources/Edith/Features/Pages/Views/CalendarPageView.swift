@@ -59,7 +59,7 @@ struct CalendarPage: View {
 
     private var agenda: some View {
         CalendarAgendaView(
-            events: store.events,
+            days: store.groupedDays,
             style: calendarStyle,
             accentColor: theme,
             blurEvents: blurCalendar,

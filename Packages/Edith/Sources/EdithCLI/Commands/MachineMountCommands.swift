@@ -52,6 +52,10 @@ struct MachinesMountCommand: AsyncParsableCommand {
             `brew install --cask macos-fuse-t/cask/fuse-t macos-fuse-t/cask/fuse-t-sshfs`.
             macFUSE with `gromgit/fuse/sshfs-mac` works too, once its kernel extension
             is approved.
+            Changes this Mac by mounting the machine's files.
+
+            ed machines mount box
+            ed machines mount box --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -99,6 +103,14 @@ struct MachinesMountCommand: AsyncParsableCommand {
 struct MachinesUnmountCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unmount", abstract: "Unmount a machine's file system.",
+        discussion: """
+            Unmounts a machine's file system again.
+
+            Changes this Mac by unmounting the machine's files.
+
+            ed machines unmount box
+            ed machines unmount box --json
+            """,
         aliases: ["umount"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -126,7 +138,15 @@ struct MachinesUnmountCommand: AsyncParsableCommand {
 
 struct MachinesMountsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mounts", abstract: "Every machine file system mounted on this Mac.")
+        commandName: "mounts", abstract: "Show every machine file system mounted on this Mac.",
+        discussion: """
+            Lists every machine file system mounted on this Mac.
+
+            Reads the file systems currently mounted on this Mac. Does not change them.
+
+            ed machines mounts
+            ed machines mounts --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -177,7 +197,15 @@ struct MachinesMountsCommand: AsyncParsableCommand {
 
 struct MachinesMountRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mount-reveal", abstract: "Reveal a mounted machine file system in Finder.")
+        commandName: "mount-reveal", abstract: "Reveal a mounted machine file system in Finder.",
+        discussion: """
+            Reveal a mounted machine file system in Finder.
+
+            Changes Finder by revealing the mounted files.
+
+            ed machines mount-reveal box
+            ed machines mount-reveal box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

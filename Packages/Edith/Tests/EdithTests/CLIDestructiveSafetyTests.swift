@@ -55,6 +55,8 @@ import Testing
         "ed music rm",
         "ed quinjet close",
         "ed shelf clear",
+        "ed seo delete",
+        "ed seo stop",
         "ed shelf purge",
         "ed shelf rm",
     ]

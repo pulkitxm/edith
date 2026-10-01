@@ -92,7 +92,15 @@ enum WithinMachineTransferCLI {
 
 struct MachinesFilesCopyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "cp", abstract: "Copy files into a directory on the machine.")
+        commandName: "cp", abstract: "Copy files into a directory on the machine.",
+        discussion: """
+            Copies one or more paths into a directory on the machine.
+
+            Changes the machine by copying files into a directory.
+
+            ed machines files cp box /home/pi/notes.txt /var/backups
+            ed machines files cp box /home/pi/notes.txt /var/backups --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -128,7 +136,15 @@ struct MachinesFilesCopyCommand: AsyncParsableCommand {
 
 struct MachinesFilesMoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mv", abstract: "Move files into a directory on the machine.")
+        commandName: "mv", abstract: "Move files into a directory on the machine.",
+        discussion: """
+            Moves one or more paths into a directory on the machine.
+
+            Changes the machine by moving files into a directory.
+
+            ed machines files mv box /home/pi/notes.txt /var/backups
+            ed machines files mv box /home/pi/notes.txt /var/backups --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -166,7 +182,15 @@ struct MachinesFilesRenameCommand: AsyncParsableCommand {
     static let operation = MachineFileOperation.rename
 
     static let configuration = CommandConfiguration(
-        commandName: "rename", abstract: "Rename one file on the machine.")
+        commandName: "rename", abstract: "Rename one file on the machine.",
+        discussion: """
+            Renames one path, leaving it in the directory it is already in.
+
+            Changes the machine by renaming one file.
+
+            ed machines files rename box /etc/os-release notes
+            ed machines files rename box /etc/os-release notes --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -206,7 +230,15 @@ struct MachinesFilesRenameCommand: AsyncParsableCommand {
 
 struct MachinesFilesMakeDirectoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "mkdir", abstract: "Make a directory on the machine.")
+        commandName: "mkdir", abstract: "Make a directory on the machine.",
+        discussion: """
+            Makes a directory on the machine.
+
+            Changes the machine by creating a directory.
+
+            ed machines files mkdir box /home/pi/backup
+            ed machines files mkdir box /home/pi/backup --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -252,6 +284,10 @@ struct MachinesFilesRemoveCommand: AsyncParsableCommand {
             Without `--delete` this moves the files to the machine's own trash, the same as
             the Finder window does, so they can be put back. `--delete` removes them for
             good and needs `--yes`.
+            Changes the saved list by removing one record.
+
+            ed machines files rm box /home/pi/notes.txt /var/backups
+            ed machines files rm box /home/pi/notes.txt /var/backups --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -314,7 +350,15 @@ struct MachinesFilesSearchCommand: AsyncParsableCommand {
     static let operation = MachineFileOperation.search
 
     static let configuration = CommandConfiguration(
-        commandName: "search", abstract: "Find files under a directory by name.")
+        commandName: "search", abstract: "Find files under a directory by name.",
+        discussion: """
+            Finds files by name under a directory.
+
+            Reads file names under a directory. Does not change the files.
+
+            ed machines files search box /etc/os-release nginx
+            ed machines files search box /etc/os-release nginx --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -360,7 +404,15 @@ struct MachinesFilesInfoCommand: AsyncParsableCommand {
 
     static let configuration = CommandConfiguration(
         commandName: "info",
-        abstract: "How big something is on the machine, directories included.")
+        abstract: "Show how big something is on the machine, directories included.",
+        discussion: """
+            Measures how big something is, following a directory all the way down.
+
+            Reads one file's metadata. Does not change the file.
+
+            ed machines files info box /etc/os-release
+            ed machines files info box /etc/os-release --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -408,6 +460,10 @@ struct MachinesFilesDuplicateCommand: AsyncParsableCommand {
             The copy is named the way the window names it: `report copy`, then
             `report copy 2`, keeping any extension, so duplicating twice never overwrites
             the first one.
+            Changes the machine by copying one file next to itself.
+
+            ed machines files duplicate box /etc/os-release
+            ed machines files duplicate box /etc/os-release --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -457,6 +513,10 @@ struct MachinesFilesUndoCommand: AsyncParsableCommand {
             A move or rename made by `ed` itself is not on that history. Reverse it with
             `ed machines files mv` or `rename`, which is the same thing the window would
             have run.
+            Changes the machine by reversing the last file operation.
+
+            ed machines files undo box
+            ed machines files undo box --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

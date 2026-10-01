@@ -553,6 +553,10 @@ jobs:
           rm -rf dmg-root
           exit "$verify_status"
 
+      - name: Package the database pack
+        if: steps.release_build.outputs.superseded != 'true'
+        run: ./scripts/package-database-pack.sh dist/edith-database .
+
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         env:
@@ -566,6 +570,10 @@ jobs:
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER_ID"
           xcrun stapler staple Edith.dmg
+          xcrun notarytool submit edith-database.zip --wait \
+            --key "$RUNNER_TEMP/notary-key.p8" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID"
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
       - name: Generate the signed appcast
@@ -604,6 +612,8 @@ jobs:
           mkdir release-macos
           cp Edith.dmg release-macos/
           cp dist/appcast/appcast.xml release-macos/
+          cp edith-database.zip release-macos/
+          cp edith-database.zip.sha256 release-macos/
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.release_build.outputs.superseded != 'true'
@@ -674,6 +684,11 @@ jobs:
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/appcast.xml
+          test -f release-assets/edith-database.zip
+          test -f release-assets/edith-database.zip.sha256
+          expected="$(awk '{print $1}' release-assets/edith-database.zip.sha256)"
+          actual="$(sha256sum release-assets/edith-database.zip | awk '{print $1}')"
+          test "$expected" = "$actual"
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
 
@@ -713,10 +728,12 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" --clobber \
-              release-assets/Edith.dmg release-assets/appcast.xml
+              release-assets/Edith.dmg release-assets/appcast.xml \
+              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
           else
             gh release create "$RELEASE_TAG" --title "Edith $RELEASE_TAG" --generate-notes \
-              release-assets/Edith.dmg release-assets/appcast.xml
+              release-assets/Edith.dmg release-assets/appcast.xml \
+              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
           fi
 
       - name: Mirror the cask to the tap repository

@@ -80,6 +80,7 @@ public struct EdRoot: AsyncParsableCommand {
             CleanerCommand.self,
             HomebrewCommand.self,
             MaintenanceCommand.self,
+            SEOCommand.self,
             QuinjetCommand.self,
             DatabaseCommand.self,
             MachinesCommand.self,

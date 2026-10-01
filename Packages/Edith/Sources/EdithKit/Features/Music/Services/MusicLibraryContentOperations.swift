@@ -103,6 +103,15 @@ public enum MusicLibraryContentOperationExecution {
             tracks: recursive ? recursiveTracks(folder.relativePath) : contents.tracks)
     }
 
+    public static func openFolder(
+        _ path: String,
+        entries: Entries = TrackMeta.entries
+    ) -> MusicLibraryContentListing {
+        list(
+            MusicFolder(url: TrackMeta.url(for: path), relativePath: path),
+            recursive: false, entries: entries)
+    }
+
     public static func rescan(
         invalidate: () -> Void = TrackMeta.invalidateCaches,
         scan: () -> [Track] = TrackMeta.scanMusicFolder

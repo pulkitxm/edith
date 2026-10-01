@@ -14,6 +14,9 @@ struct MachinesPowerCommand: AsyncParsableCommand {
 
             Wake sends a wake-on-LAN packet to the machine's stored MAC address and needs
             nothing on the far side, so it is the one that works while the machine is off.
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines power status box
             """,
         subcommands: [
             MachinesPowerStatusCommand.self, MachinesRebootCommand.self,
@@ -25,7 +28,16 @@ struct MachinesPowerCommand: AsyncParsableCommand {
 struct MachinesPowerStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "Whether a machine is up, and what it can be told to do.")
+        abstract: "Show whether a machine is up, and what it can be told to do.",
+        discussion: """
+            Says whether the machine has a live shared connection, what MAC address is
+            stored for it, and which of wake and reboot are possible right now.
+
+            Reads the current state. Does not change it.
+
+            ed machines power status box
+            ed machines power status box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -150,7 +162,15 @@ enum PowerBridge {
 
 struct MachinesRebootCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reboot", abstract: "Restart a machine.", aliases: ["restart"])
+        commandName: "reboot", abstract: "Restart a machine.",
+        discussion: """
+            Restarts the machine through systemd.
+
+            Changes the machine by restarting the operating system.
+
+            ed machines power reboot box
+            ed machines power reboot box --json
+            """, aliases: ["restart"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -168,7 +188,15 @@ struct MachinesRebootCommand: AsyncParsableCommand {
 
 struct MachinesShutdownCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "shutdown", abstract: "Shut a machine down.", aliases: ["poweroff"])
+        commandName: "shutdown", abstract: "Shut a machine down.",
+        discussion: """
+            Powers the machine off through systemd.
+
+            Changes the machine by powering it off.
+
+            ed machines power shutdown box
+            ed machines power shutdown box --json
+            """, aliases: ["poweroff"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -187,7 +215,15 @@ struct MachinesShutdownCommand: AsyncParsableCommand {
 struct MachinesWakeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "wake",
-        abstract: "Send a wake-on-LAN packet to a machine.")
+        abstract: "Send a wake-on-LAN packet to a machine.",
+        discussion: """
+            Sends a wake-on-LAN magic packet to the machine's stored MAC address.
+
+            Changes the machine by sending a wake packet.
+
+            ed machines power wake box
+            ed machines power wake box --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -235,7 +271,14 @@ struct MachinesWakeCommand: AsyncParsableCommand {
 struct MachinesServicesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "services",
-        abstract: "System services on a machine.",
+        abstract: "Control system services on a machine.",
+        discussion: """
+            Control system services on a machine.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines services ls box
+            """,
         subcommands: [
             MachinesServicesListCommand.self, MachinesServiceStartCommand.self,
             MachinesServiceStopCommand.self, MachinesServiceRestartCommand.self,
@@ -297,7 +340,15 @@ enum ServiceBridge {
 
 struct MachinesServiceStartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "start", abstract: "Start a unit.")
+        commandName: "start", abstract: "Start a unit.",
+        discussion: """
+            Starts one unit.
+
+            Changes the target by starting it.
+
+            ed machines services start box nginx.service
+            ed machines services start box nginx.service --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -315,7 +366,15 @@ struct MachinesServiceStartCommand: AsyncParsableCommand {
 
 struct MachinesServiceStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Stop a unit.")
+        commandName: "stop", abstract: "Stop a unit.",
+        discussion: """
+            Stops one unit.
+
+            Changes the target by stopping it.
+
+            ed machines services stop box nginx.service
+            ed machines services stop box nginx.service --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -333,7 +392,15 @@ struct MachinesServiceStopCommand: AsyncParsableCommand {
 
 struct MachinesServiceRestartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Restart a unit.")
+        commandName: "restart", abstract: "Restart a unit.",
+        discussion: """
+            Restarts one unit.
+
+            Changes the target by restarting it.
+
+            ed machines services restart box nginx.service
+            ed machines services restart box nginx.service --json
+            """, )
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -357,6 +424,10 @@ struct MachinesKillCommand: AsyncParsableCommand {
             The default signal is TERM, which asks the process to stop. `--signal KILL` is
             the one it cannot refuse. `ed machines metrics <machine> --processes 20` lists
             the pids.
+            Changes the machine by signaling one process.
+
+            ed machines kill box 4213
+            ed machines kill box 4213 --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -462,6 +533,8 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
 
             Everything after the machine list is the command, verbatim, so flags belong
             before it: `ed machines broadcast --only tuf,box -- uptime`.
+            Changes each targeted machine by running one command, and reads every
+            result.
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -536,6 +609,14 @@ struct MachinesTerminalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "terminal",
         abstract: "Act on terminal tabs that are open in the Edith app.",
+        discussion: """
+            `ed machines terminal` acts on terminal tabs that are already open in the
+            Edith main app.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines terminal broadcast box uptime
+            """,
         subcommands: [MachinesTerminalBroadcastCommand.self])
 }
 
@@ -609,6 +690,11 @@ struct MachinesTerminalBroadcastCommand: AsyncParsableCommand {
             This uses the terminal sessions already open in the Edith main app. Use
             `ed machines broadcast` to run a separate SSH command across the configured fleet.
             Put `--` before a command that contains flags.
+            Changes each targeted machine by running one command, and reads every
+            result.
+
+            ed machines terminal broadcast box uptime
+            ed machines terminal broadcast box uptime --json
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

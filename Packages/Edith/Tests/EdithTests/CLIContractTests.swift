@@ -59,6 +59,38 @@ enum JSONContract {
             "ed maintenance update", ["maintenance", "update", "missing", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
+        JSONCase("ed seo ls", ["seo", "ls", "--json"]),
+        JSONCase(
+            "ed seo create",
+            ["seo", "create", "https://example.com", "--name", "Example", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo rename",
+            ["seo", "rename", "00000000-0000-0000-0000-000000000000", "Example", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo delete",
+            ["seo", "delete", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo show", ["seo", "show", "00000000-0000-0000-0000-000000000000", "--json"]),
+        JSONCase(
+            "ed seo pages", ["seo", "pages", "00000000-0000-0000-0000-000000000000", "--json"]),
+        JSONCase(
+            "ed seo lighthouse",
+            ["seo", "lighthouse", "00000000-0000-0000-0000-000000000000", "off", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo start",
+            ["seo", "start", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo stop",
+            ["seo", "stop", "00000000-0000-0000-0000-000000000000", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed seo run",
+            ["seo", "run", "00000000-0000-0000-0000-000000000000", "--offset", "0", "--json"]),
         JSONCase(
             "ed maintenance backup-updates",
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
@@ -595,6 +627,9 @@ enum JSONContract {
                 "database", "operations", "cancel",
                 "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
             ]),
+        JSONCase("ed database pack install", ["database", "pack", "install", "--json"]),
+        JSONCase("ed database pack status", ["database", "pack", "status", "--json"]),
+        JSONCase("ed database pack remove", ["database", "pack", "remove", "--json"]),
         JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),
@@ -1221,6 +1256,12 @@ enum JSONContract {
         JSONCase(
             "ed machines docker compose pull",
             ["machines", "docker", "compose", "pull", "nowhere-at-all", "web", "--json"]),
+        JSONCase(
+            "ed machines docker logs",
+            ["machines", "docker", "logs", "nowhere-at-all", "api", "--json"]),
+        JSONCase(
+            "ed machines docker compose logs",
+            ["machines", "docker", "compose", "logs", "nowhere-at-all", "web", "--json"]),
         JSONCase(
             "ed machines forwards open",
             ["machines", "forwards", "open", "nowhere-at-all", "1", "--json"]),
