@@ -540,4 +540,37 @@ private actor AgentSearchServiceProbe {
             AgentSearchRequest(query: "x", machineID: UUID().uuidString, targets: []))
         #expect(reply.error == "This machine is no longer in Edith.")
     }
+
+    @Test func transcriptReadsOverlapInsteadOfWaitingInLine() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "search-fanout-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let paths = (0..<4).map { root.appendingPathComponent("\($0).jsonl").path }
+        for path in paths { try Data("\n".utf8).write(to: URL(fileURLWithPath: path)) }
+        let jobs = paths.map {
+            AgentSessionSearch.TranscriptJob(id: $0, path: $0, kind: .claude, prior: nil)
+        }
+        let gate = TranscriptFanoutGate()
+        let started = ContinuousClock.now
+        let loaded = await AgentSessionSearch.loadTranscripts(
+            jobs, titles: [:], deadline: .distantFuture
+        ) { await gate.enter() }
+        let elapsed = ContinuousClock.now - started
+        #expect(loaded.count == 4)
+        #expect(await gate.maximum == 4)
+        #expect(elapsed < .milliseconds(700))
+    }
+}
+
+private actor TranscriptFanoutGate {
+    private(set) var maximum = 0
+    private var current = 0
+
+    func enter() async {
+        current += 1
+        maximum = max(maximum, current)
+        try? await Task.sleep(for: .milliseconds(200))
+        current -= 1
+    }
 }

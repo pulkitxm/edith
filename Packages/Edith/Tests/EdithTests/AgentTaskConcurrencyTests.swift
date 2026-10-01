@@ -72,6 +72,28 @@ import Testing
         _ = try await fixture.finished(serial[2].id)
         await fixture.runtime.shutdown()
     }
+
+    @Test func theCapFollowsTheMachineAndReservesOneSlot() async throws {
+        let cap = AgentTaskLimits.machineCap
+        #expect(AgentTaskLimits(concurrency: 10_000).concurrency == cap)
+        #expect(cap >= 4)
+        guard cap > 4 else { return }
+        let fixture = try await TaskConcurrencyFixture(concurrency: cap)
+        defer { fixture.listener.stop() }
+        await fixture.registerSerial(concurrency: cap)
+        let names = (0..<(cap - 1)).map { "s\($0)" }
+        _ = try await fixture.submit("serial", names: names + ["held"])
+        try await fixture.waitFor(Set(names))
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(await fixture.gate.names.contains("held") == false)
+        _ = try await fixture.submit("other", names: ["o0"])
+        try await fixture.waitFor(Set(names).union(["o0"]))
+        #expect(await fixture.gate.names.contains("held") == false)
+        #expect(await fixture.gate.maximum == cap)
+        for name in names { await fixture.gate.release(name) }
+        await fixture.gate.release("o0")
+        await fixture.runtime.shutdown()
+    }
 }
 
 private struct TaskConcurrencyFixture {

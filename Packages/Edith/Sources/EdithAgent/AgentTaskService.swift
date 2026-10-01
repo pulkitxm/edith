@@ -12,13 +12,20 @@ public struct AgentTaskLimits: Sendable {
     public let retainedResultBytes: Int
     public let retention: TimeInterval
 
+    public static var machineCap: Int {
+        max(4, ProcessInfo.processInfo.activeProcessorCount - 1)
+    }
+
+    public let reservesInteractiveSlot: Bool
+
     public init(
-        concurrency: Int = 4, queued: Int = 128, retained: Int = 100,
+        concurrency: Int = AgentTaskLimits.machineCap, queued: Int = 128, retained: Int = 100,
         payloadBytes: Int = 4 << 20, queuedPayloadBytes: Int = 16 << 20,
         resultBytes: Int = 8 << 20, retainedResultBytes: Int = 16 << 20,
         retention: TimeInterval = 86_400
     ) {
-        self.concurrency = max(1, min(4, concurrency))
+        self.concurrency = max(1, min(Self.machineCap, concurrency))
+        self.reservesInteractiveSlot = self.concurrency > 4
         self.queued = max(1, queued)
         self.retained = max(1, retained)
         self.payloadBytes = max(1, payloadBytes)
@@ -310,13 +317,22 @@ public actor AgentTaskService {
         while workers.count < limits.concurrency, !order.isEmpty {
             guard
                 let index = order.firstIndex(where: { id in
-                    guard let operation = entries[id]?.status.snapshot.operation,
-                        let maximum = operationConcurrency[operation]
-                    else { return true }
-                    let active = workers.keys.lazy.filter {
-                        self.entries[$0]?.status.snapshot.operation == operation
-                    }.count
-                    return active < maximum
+                    guard let operation = entries[id]?.status.snapshot.operation else {
+                        return true
+                    }
+                    if let maximum = operationConcurrency[operation] {
+                        let active = workers.keys.lazy.filter {
+                            self.entries[$0]?.status.snapshot.operation == operation
+                        }.count
+                        if active >= maximum { return false }
+                    }
+                    if limits.reservesInteractiveSlot, workers.count >= limits.concurrency - 1 {
+                        let same = workers.keys.contains {
+                            self.entries[$0]?.status.snapshot.operation == operation
+                        }
+                        if same { return false }
+                    }
+                    return true
                 })
             else { break }
             let id = order.remove(at: index)

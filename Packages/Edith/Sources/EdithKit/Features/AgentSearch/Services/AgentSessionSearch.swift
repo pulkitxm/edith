@@ -90,12 +90,12 @@ public actor AgentSessionSearch {
         let links = resolve(request.targets, herdrLinks: herdrLinks, deadline: deadline)
         var pending = 0
         var histories: [String: History] = [:]
+        var files: [TranscriptJob] = []
         for target in request.targets {
             switch links[target.id] ?? .terminal {
             case .file(let path, let kind):
-                let (digest, finished) = read(path, kind: kind, deadline: deadline)
-                if !finished { pending += 1 }
-                histories[target.id] = digest.map(History.transcript) ?? .missing
+                files.append(
+                    TranscriptJob(id: target.id, path: path, kind: kind, prior: digests[path]))
             case .opencode(let session):
                 histories[target.id] = .transcript(
                     AgentOpenCodeReader.digest(for: session, in: openCodeDatabase))
@@ -106,6 +106,16 @@ public actor AgentSessionSearch {
                 ])
                 histories[target.id] = text.map(History.terminal) ?? .missing
             }
+        }
+        let titles = codexTitles()
+        let loaded = await Self.loadTranscripts(files, titles: titles, deadline: deadline)
+        for item in loaded {
+            if item.changed, let digest = item.digest {
+                digests[digest.path] = digest
+                dirty = true
+            }
+            if !item.finished { pending += 1 }
+            histories[item.id] = item.digest.map(History.transcript) ?? .missing
         }
         let hits = rank(
             request.targets, histories: histories, query: request.query,
@@ -460,23 +470,64 @@ public actor AgentSessionSearch {
         return titles
     }
 
+    struct TranscriptJob: Sendable {
+        let id: String
+        let path: String
+        let kind: AgentTranscriptKind
+        let prior: AgentTranscriptDigest?
+    }
+
+    struct TranscriptLoad: Sendable {
+        let id: String
+        let digest: AgentTranscriptDigest?
+        let finished: Bool
+        let changed: Bool
+    }
+
+    static func loadTranscripts(
+        _ jobs: [TranscriptJob], titles: [String: String], deadline: Date,
+        hold: (@Sendable () async -> Void)? = nil
+    ) async -> [TranscriptLoad] {
+        await BoundedTaskRunner.map(jobs, limit: 4) { _, job in
+            if let hold { await hold() }
+            let outcome = readFile(
+                job.path, kind: job.kind, prior: job.prior, deadline: deadline, titles: titles)
+            return TranscriptLoad(
+                id: job.id, digest: outcome.digest, finished: outcome.finished,
+                changed: outcome.changed)
+        }
+    }
+
     private func read(_ path: String, kind: AgentTranscriptKind, deadline: Date)
         -> (AgentTranscriptDigest?, Bool)
     {
+        let outcome = Self.readFile(
+            path, kind: kind, prior: digests[path], deadline: deadline, titles: codexTitles())
+        if outcome.changed, let digest = outcome.digest {
+            digests[path] = digest
+            dirty = true
+        }
+        return (outcome.digest, outcome.finished)
+    }
+
+    private static func readFile(
+        _ path: String, kind: AgentTranscriptKind, prior: AgentTranscriptDigest?, deadline: Date,
+        titles: [String: String]
+    ) -> (digest: AgentTranscriptDigest?, finished: Bool, changed: Bool) {
         let url = URL(fileURLWithPath: path)
         guard
             let values = try? url.resourceValues(forKeys: [
                 .fileSizeKey, .contentModificationDateKey,
             ])
-        else { return (digests[path], true) }
+        else { return (prior, true, false) }
         let size = UInt64(values.fileSize ?? 0)
         let modified = values.contentModificationDate?.timeIntervalSince1970 ?? 0
-        var digest = digests[path] ?? AgentTranscriptDigest(path: path, kind: kind)
-        if digest.size == size, digest.modified == modified { return (digest, true) }
+        var digest = prior ?? AgentTranscriptDigest(path: path, kind: kind)
+        if digest.size == size, digest.modified == modified { return (digest, true, false) }
         if size < digest.offset { digest = AgentTranscriptDigest(path: path, kind: kind) }
         guard
             let finished = try? AgentTranscriptReader.update(&digest, url: url, deadline: deadline)
-        else { return (digests[path], true) }
+        else { return (prior, true, false) }
         if finished {
             digest.size = size
             digest.modified = modified
@@ -484,12 +535,10 @@ public actor AgentSessionSearch {
         if digest.sessionID.isEmpty {
             digest.sessionID = url.deletingPathExtension().lastPathComponent
         }
-        if kind == .codex, digest.namedTitle == nil, let title = codexTitles()[digest.sessionID] {
+        if kind == .codex, digest.namedTitle == nil, let title = titles[digest.sessionID] {
             digest.namedTitle = title
         }
-        digests[path] = digest
-        dirty = true
-        return (digest, finished)
+        return (digest, finished, digest != prior)
     }
 
     private func prune(keeping paths: Set<String>) {
