@@ -12,6 +12,7 @@ struct SEOAuditPageAccordion: View {
     let socialPlatform: SEOAuditSocialPlatform
     @Binding var expanded: Bool
     @Environment(\.colorScheme) private var scheme
+    @State private var snapshotImage: NSImage?
 
     private var dark: Bool { scheme == .dark }
 
@@ -274,8 +275,10 @@ struct SEOAuditPageAccordion: View {
     private var previewImage: some View {
         ZStack {
             Rectangle().fill(DashSkin.line(dark).opacity(0.45))
-            if let previewSnapshotImage {
-                Image(nsImage: previewSnapshotImage).resizable().scaledToFill()
+            if let snapshotImage {
+                Image(nsImage: snapshotImage).resizable().scaledToFill()
+            } else if snapshotFileURL != nil {
+                SEOAuditImageSkeleton()
             } else if let previewImageURL {
                 AsyncImage(url: previewImageURL) { phase in
                     if let image = phase.image {
@@ -291,6 +294,13 @@ struct SEOAuditPageAccordion: View {
             }
         }
         .clipped()
+        .task(id: snapshotFileURL) {
+            snapshotImage = nil
+            guard let url = snapshotFileURL else { return }
+            let loaded = await SEOSnapshotCache.image(for: url)
+            guard !Task.isCancelled else { return }
+            snapshotImage = loaded
+        }
     }
 
     private var previewTitle: some View {
@@ -330,14 +340,14 @@ struct SEOAuditPageAccordion: View {
         return value.flatMap(URL.init(string:))
     }
 
-    private var previewSnapshotImage: NSImage? {
+    private var snapshotFileURL: URL? {
         let value =
             socialPlatform == .x
             ? page.metadata.twitterImageSnapshotURL
                 ?? page.metadata.openGraphImageSnapshotURL
             : page.metadata.openGraphImageSnapshotURL
         guard let value, let url = URL(string: value), url.isFileURL else { return nil }
-        return NSImage(contentsOf: url)
+        return url
     }
 
     private var usesXSummaryCard: Bool {

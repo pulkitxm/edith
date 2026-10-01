@@ -14,9 +14,9 @@ final class SEOAuditModel {
     var stage = SEOAuditStage.idle
     var input = ""
     var projectName = ""
-    var query = ""
+    var query = "" { didSet { if query != oldValue { schedulePageFilter() } } }
     var pageSelectionQuery = ""
-    var severity: SEOAuditSeverity?
+    var severity: SEOAuditSeverity? { didSet { if severity != oldValue { schedulePageFilter() } } }
     var socialPreviewPlatform = SEOAuditSocialPlatform.facebook
     var lighthouseEnabled = true
     var discoveredPageURLs: [String] = []
@@ -32,7 +32,13 @@ final class SEOAuditModel {
     @ObservationIgnored private var projectRequestID = UUID()
     @ObservationIgnored private var progressTask: Task<Void, Never>?
     @ObservationIgnored private var activeTaskID: UUID?
+    @ObservationIgnored private var indexTask: Task<Void, Never>?
+    @ObservationIgnored private var filterTask: Task<Void, Never>?
     private var isMutatingProject = false
+    private var indexGeneration = 0
+    private var filterGeneration = 0
+    private var filterEntries: [SEOPageFilterEntry] = []
+    private var pagesByID: [UUID: SEOAuditPageResult] = [:]
 
     init(
         client: SEOAuditProjectClient = SEOAuditProjectClient(),
@@ -55,26 +61,17 @@ final class SEOAuditModel {
         return discoveredPageURLs.filter { $0.localizedCaseInsensitiveContains(value) }
     }
 
+    private(set) var visiblePages: [SEOAuditPageResult] = []
+    private(set) var historyByURL: [String: [SEOAuditPageResult]] = [:]
+    private(set) var indexBuildCount = 0
+    private(set) var completedFilters: [String] = []
+
     var selectedRun: SEOAuditRun? {
         guard let project = selectedProject else { return nil }
         if let selectedRunID, let run = project.runs.first(where: { $0.id == selectedRunID }) {
             return run
         }
         return project.latestRun
-    }
-
-    var visiblePages: [SEOAuditPageResult] {
-        guard let run = selectedRun else { return [] }
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return run.pages.filter { page in
-            let matchesQuery =
-                trimmedQuery.isEmpty
-                || page.url.localizedCaseInsensitiveContains(trimmedQuery)
-                || page.metadata.title?.localizedCaseInsensitiveContains(trimmedQuery) == true
-            let matchesSeverity =
-                severity == nil || page.issues.contains { $0.severity == severity }
-            return matchesQuery && matchesSeverity
-        }
     }
 
     func beginNewProject() async {
@@ -90,6 +87,7 @@ final class SEOAuditModel {
         isMutatingProject = true
         do {
             selectedProject = try await client.create(project)
+            await rebuildPageIndex()
             refreshSummary(project)
         } catch {
             isMutatingProject = false
@@ -139,6 +137,7 @@ final class SEOAuditModel {
             selectedPageURLs = Set(discoveredPageURLs)
             query = ""
             severity = nil
+            await rebuildPageIndex()
             if let run = project.runs.first(where: { $0.state == .running }) {
                 activeTaskID = run.id
                 stage = .auditing(
@@ -164,7 +163,10 @@ final class SEOAuditModel {
         defer { isMutatingProject = false }
         do {
             let project = try await client.rename(id, name: name)
-            if selectedProject?.id == id { selectedProject = project }
+            if selectedProject?.id == id {
+                selectedProject = project
+                await rebuildPageIndex()
+            }
             refreshSummary(project)
         } catch {
             errorMessage = error.localizedDescription
@@ -196,6 +198,7 @@ final class SEOAuditModel {
         selectedPageURLs = []
         query = ""
         severity = nil
+        scheduleIndexRebuild()
     }
 
     func runAgain() {
@@ -230,6 +233,7 @@ final class SEOAuditModel {
         project.runs.insert(newRun, at: 0)
         project.updatedAt = Date()
         selectedProject = project
+        scheduleIndexRebuild()
         selectedRunID = newRun.id
         run(project: project, runID: newRun.id, urls: urls)
     }
@@ -278,6 +282,7 @@ final class SEOAuditModel {
                 let completed = try AgentPayload.decode(SEOAuditProject.self, from: data)
                 guard selectedProject?.id == project.id else { return }
                 selectedProject = completed
+                scheduleIndexRebuild()
                 refreshSummary(completed)
             } catch {
                 if !(error is CancellationError) { errorMessage = error.localizedDescription }
@@ -303,11 +308,84 @@ final class SEOAuditModel {
         selectedRunID = id
         query = ""
         severity = nil
+        scheduleIndexRebuild()
+    }
+
+    func open(_ project: SEOAuditProject) async {
+        selectedProject = project
+        selectedRunID = project.latestRun?.id
+        query = ""
+        severity = nil
+        await rebuildPageIndex()
     }
 
     func history(for page: SEOAuditPageResult) -> [SEOAuditPageResult] {
-        guard let project = selectedProject, let run = selectedRun else { return [] }
-        return project.history(for: page.url, excluding: run.id)
+        historyByURL[page.url] ?? []
+    }
+
+    private func scheduleIndexRebuild() {
+        indexTask?.cancel()
+        let generation = beginIndexBuild()
+        let project = selectedProject
+        let runID = selectedRun?.id
+        indexTask = Task { [weak self] in
+            let built = await Task.detached {
+                SEOPageIndex.build(project: project, runID: runID)
+            }.value
+            guard let self, !Task.isCancelled, generation == self.indexGeneration else { return }
+            self.apply(built)
+        }
+    }
+
+    private func rebuildPageIndex() async {
+        indexTask?.cancel()
+        let generation = beginIndexBuild()
+        let project = selectedProject
+        let runID = selectedRun?.id
+        let built = await Task.detached {
+            SEOPageIndex.build(project: project, runID: runID)
+        }.value
+        guard generation == indexGeneration else { return }
+        apply(built)
+    }
+
+    private func beginIndexBuild() -> Int {
+        filterTask?.cancel()
+        indexGeneration &+= 1
+        indexBuildCount += 1
+        return indexGeneration
+    }
+
+    private func apply(_ built: SEOPageIndexSnapshot) {
+        filterEntries = built.entries
+        pagesByID = built.pages
+        historyByURL = built.history
+        visiblePages = built.ordered
+        if hasActiveFilter { schedulePageFilter() }
+    }
+
+    private var hasActiveFilter: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || severity != nil
+    }
+
+    private func schedulePageFilter() {
+        filterTask?.cancel()
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        let query = query
+        let severity = severity
+        let entries = filterEntries
+        let pages = pagesByID
+        filterTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let ids = await Task.detached {
+                SEOPageIndex.matchingIDs(entries, query: query, severity: severity)
+            }.value
+            guard !Task.isCancelled, generation == self.filterGeneration else { return }
+            self.visiblePages = ids.compactMap { pages[$0] }
+            self.completedFilters.append(query)
+        }
     }
 
     private func run(project: SEOAuditProject, runID: UUID, urls: [URL]) {
@@ -368,6 +446,7 @@ final class SEOAuditModel {
             if selectedProject?.id == projectID {
                 selectedProject = completed
                 refreshSummary(completed)
+                scheduleIndexRebuild()
             }
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
@@ -376,6 +455,7 @@ final class SEOAuditModel {
             {
                 selectedProject = saved
                 refreshSummary(saved)
+                scheduleIndexRebuild()
             }
         }
         stage = .idle
@@ -395,6 +475,7 @@ final class SEOAuditModel {
                 guard selectedProject?.id == projectID else { return }
                 selectedProject = saved
                 refreshSummary(saved)
+                scheduleIndexRebuild()
                 guard let run = saved.runs.first(where: { $0.id == runID }), run.state == .running
                 else { return }
                 stage = .auditing(
@@ -418,6 +499,7 @@ final class SEOAuditModel {
                 {
                     selectedProject = saved
                     refreshSummary(saved)
+                    scheduleIndexRebuild()
                     stage = .auditing(
                         current: run.pages.count, total: request.urls.count,
                         url: run.pages.last?.url ?? "Starting audit")

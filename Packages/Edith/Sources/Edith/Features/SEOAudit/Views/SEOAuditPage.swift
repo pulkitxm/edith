@@ -235,6 +235,7 @@ private struct SEOAuditProjectCard: View {
     let delete: () -> Void
     @Environment(\.colorScheme) private var scheme
     @State private var hovered = false
+    @State private var snapshotImage: NSImage?
 
     private var dark: Bool { scheme == .dark }
 
@@ -324,8 +325,8 @@ private struct SEOAuditProjectCard: View {
                 LinearGradient(
                     colors: [DashSkin.accent(dark).opacity(0.28), DashSkin.paper(dark)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            if let projectSnapshotImage {
-                Image(nsImage: projectSnapshotImage).resizable().scaledToFill()
+            if let snapshotImage {
+                Image(nsImage: snapshotImage).resizable().scaledToFill()
             } else if let value = project.imageURL, let url = URL(string: value) {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
@@ -377,12 +378,19 @@ private struct SEOAuditProjectCard: View {
                 .frame(height: UIScale.pt(3))
             }
         }
+        .task(id: snapshotFileURL) {
+            snapshotImage = nil
+            guard let url = snapshotFileURL else { return }
+            let loaded = await SEOSnapshotCache.image(for: url)
+            guard !Task.isCancelled else { return }
+            snapshotImage = loaded
+        }
     }
 
-    private var projectSnapshotImage: NSImage? {
+    private var snapshotFileURL: URL? {
         guard let value = project.imageSnapshotURL, let url = URL(string: value), url.isFileURL
         else { return nil }
-        return NSImage(contentsOf: url)
+        return url
     }
 
     private var activityLabel: String {
