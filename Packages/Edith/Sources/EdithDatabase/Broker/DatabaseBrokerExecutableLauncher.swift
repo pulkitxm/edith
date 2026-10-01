@@ -3,6 +3,7 @@ import Dispatch
 import Foundation
 import MachO
 import Security
+import EdithCore
 
 enum DatabaseBrokerExecutableLauncherError: Error, Equatable, Sendable {
     case executablePathUnavailable
@@ -337,6 +338,10 @@ struct DatabaseBrokerProcessSpawner: Sendable {
             sanitized[name] = value
         }
         sanitized["EDITH_DATABASE_BROKER"] = "1"
+        let identifier = AppBuildIdentity.application
+        if !identifier.utf8.contains(0) {
+            sanitized["EDITH_APPLICATION_IDENTIFIER"] = identifier
+        }
         return sanitized
     }
 

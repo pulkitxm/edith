@@ -364,7 +364,7 @@ else
     --identifier "$PACK_IDENTIFIER" "$PACK_DEST"
 fi
 if [ "$CONFIG" = Debug ]; then
-  PACK_DIR="$HOME/Library/Application Support/Edith Dev/$SLOT/Database/pack"
+  PACK_DIR="$HOME/Library/Application Support/Edith Dev/$SLOT/DatabasePack"
   mkdir -p "$PACK_DIR"
   cp "$PACK_DEST" "$PACK_DIR/edith-database"
   chmod 755 "$PACK_DIR/edith-database"

@@ -5,6 +5,7 @@ import Testing
 
 @testable import EdithDatabase
 @testable import EdithDatabaseDrivers
+import EdithCore
 
 private enum DatabaseBrokerExecutableLauncherSystemStubError: Error {
     case requestedFailure
@@ -626,6 +627,7 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
                 "LC_NUMERIC": "en_US.UTF-8",
                 "LC_TIME": "en_US.UTF-8",
                 "EDITH_DATABASE_BROKER": "1",
+                "EDITH_APPLICATION_IDENTIFIER": AppBuildIdentity.application,
             ])
         #expect(
             request.flags
@@ -756,6 +758,7 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
             request.environment == [
                 "LANG": "en_US.UTF-8",
                 "EDITH_DATABASE_BROKER": "1",
+                "EDITH_APPLICATION_IDENTIFIER": AppBuildIdentity.application,
             ])
     }
 }
