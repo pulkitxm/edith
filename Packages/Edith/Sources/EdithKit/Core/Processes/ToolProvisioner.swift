@@ -237,6 +237,23 @@ private enum CommandStop {
     case outputLimitExceeded
 }
 
+private final class ProcessExit: @unchecked Sendable {
+    private let lock = NSLock()
+    private let semaphore = DispatchSemaphore(value: 0)
+    private var finished = false
+
+    func signal() {
+        lock.withLock { finished = true }
+        semaphore.signal()
+    }
+
+    var isFinished: Bool { lock.withLock { finished } }
+
+    func wait(timeout: DispatchTime) -> DispatchTimeoutResult {
+        semaphore.wait(timeout: timeout)
+    }
+}
+
 private final class CommandLifecycle: @unchecked Sendable {
     private enum Settlement {
         case pending
@@ -379,7 +396,7 @@ public enum CLICommandRunner {
             : CLIProcessOutputReader(
                 handle: standardError.fileHandleForReading, output: error)
 
-        let processFinished = DispatchSemaphore(value: 0)
+        let processFinished = ProcessExit()
         let process: CLIChildProcess
         do {
             if cancellationRequested() { throw CancellationError() }
@@ -432,7 +449,7 @@ public enum CLICommandRunner {
         let lifecycle: CommandLifecycle
         let deadline: TimeInterval?
         let process: CLIChildProcess
-        let processFinished: DispatchSemaphore
+        let processFinished: ProcessExit
         let output: CLIStreamingOutput
         let error: CLIStreamingOutput
         let outputReader: CLIProcessOutputReader
@@ -446,7 +463,7 @@ public enum CLICommandRunner {
 
         init(
             lifecycle: CommandLifecycle, deadline: TimeInterval?, process: CLIChildProcess,
-            processFinished: DispatchSemaphore, output: CLIStreamingOutput,
+            processFinished: ProcessExit, output: CLIStreamingOutput,
             error: CLIStreamingOutput, outputReader: CLIProcessOutputReader,
             errorReader: CLIProcessOutputReader?, input: Pipe?,
             inputFinished: DispatchSemaphore, streamsWhileRunning: Bool,
@@ -473,7 +490,7 @@ public enum CLICommandRunner {
         func wait() async -> CommandStop? {
             if cancellationRequested() { return .cancelled }
             if output.hasExceededLimit || error.hasExceededLimit { return .outputLimitExceeded }
-            if processFinished.wait(timeout: .now()) == .success { return nil }
+            if processFinished.isFinished { return nil }
             if let deadline, ProcessInfo.processInfo.systemUptime >= deadline { return .timedOut }
             return await lifecycle.wait(deadline: deadline)
         }
@@ -548,7 +565,7 @@ public enum CLICommandRunner {
     }
 
     private static func terminateProcessGroup(
-        _ process: CLIChildProcess, processFinished: DispatchSemaphore
+        _ process: CLIChildProcess, processFinished: ProcessExit
     ) {
         process.signal(SIGTERM)
         _ = processFinished.wait(timeout: .now() + terminationGrace)
