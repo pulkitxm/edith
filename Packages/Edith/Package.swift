@@ -38,6 +38,11 @@ let dependencies: [Package.Dependency] = [
     .package(path: "../EdithStudio"),
 ]
 
+let shippedSwiftSettings: [SwiftSetting] = [
+    .swiftLanguageMode(.v5),
+    .unsafeFlags(["-Xfrontend", "-disable-reflection-metadata"]),
+]
+
 let targets: [Target] = [
     .target(
         name: "EdithCore",
@@ -54,7 +59,7 @@ let targets: [Target] = [
             "EdithCore",
             .product(name: "GRDB", package: "GRDB.swift"),
         ],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .target(
         name: "EdithDatabaseDrivers",
@@ -104,7 +109,7 @@ let targets: [Target] = [
             .product(name: "MCP", package: "swift-sdk"),
             .product(name: "Logging", package: "swift-log"),
         ],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .testTarget(
         name: "EdithDatabaseMCPTests",
@@ -142,7 +147,7 @@ let targets: [Target] = [
     .target(
         name: "EdithDocs",
         dependencies: ["EdithKit", .product(name: "Markdown", package: "swift-markdown")],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .target(
         name: "EdithLidAwakeSupport",
@@ -155,7 +160,7 @@ let targets: [Target] = [
         exclude: ["LICENCE.md"],
         sources: ["Sources"],
         resources: [.process("Resources")],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .target(
         name: "EdithCLI",
@@ -171,7 +176,7 @@ let targets: [Target] = [
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "EdithStudio", package: "EdithStudio"),
         ],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .executableTarget(
         name: "ed",
@@ -185,12 +190,12 @@ let targets: [Target] = [
             "EdithKit",
             .product(name: "GRDB", package: "GRDB.swift"),
         ],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .executableTarget(
         name: "edithd",
         dependencies: ["EdithAgent"],
-        swiftSettings: [.swiftLanguageMode(.v5)],
+        swiftSettings: shippedSwiftSettings,
         linkerSettings: [
             .unsafeFlags([
                 "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
@@ -221,7 +226,7 @@ let targets: [Target] = [
             .copy("Resources/Fonts"),
             .copy("../../vendor/GhosttyResources"),
         ],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .target(
         name: "Edith",
@@ -239,7 +244,7 @@ let targets: [Target] = [
             "Highlighter",
         ],
         exclude: ["Resources"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .executableTarget(
         name: "edith-database",
@@ -249,7 +254,7 @@ let targets: [Target] = [
     .executableTarget(
         name: "EdithMain",
         dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
-        swiftSettings: [.swiftLanguageMode(.v5)],
+        swiftSettings: shippedSwiftSettings,
         linkerSettings: [
             .unsafeFlags([
                 "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
@@ -260,7 +265,7 @@ let targets: [Target] = [
         name: "EdithHelper",
         dependencies: ["EdithCameraSupport", "EdithCore", "EdithKit", "EdithLidAwakeSupport"],
         resources: [.copy("MenuBar.png")],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: shippedSwiftSettings
     ),
     .testTarget(
         name: "EdithTests",
