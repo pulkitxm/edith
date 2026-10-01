@@ -74,9 +74,18 @@ public actor StorageInspectionWorkflow {
             let cloud = cloudDirectory
             let limit = maximumEntries
             let duration = maximumDuration
+            let cancellation = WorkCancellation()
             flight = Task.detached(priority: .utility) {
-                let reader = StorageInspectionReader(maximumEntries: limit, duration: duration)
-                return try reader.inspect(targets: targets, cloud: cloud, report: report)
+                try await withTaskCancellationHandler {
+                    try await BlockingWork.perform {
+                        let reader = StorageInspectionReader(
+                            maximumEntries: limit, duration: duration,
+                            isCancelled: { cancellation.isCancelled })
+                        return try reader.inspect(targets: targets, cloud: cloud, report: report)
+                    }
+                } onCancel: {
+                    cancellation.cancel()
+                }
             }
             work = flight
             workID = identifier
@@ -105,9 +114,19 @@ private final class StorageInspectionReader {
         .isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey,
     ]
 
-    init(maximumEntries: Int, duration: TimeInterval) {
+    private let isCancelled: @Sendable () -> Bool
+
+    init(
+        maximumEntries: Int, duration: TimeInterval,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) {
         self.maximumEntries = maximumEntries
+        self.isCancelled = isCancelled
         deadline = ContinuousClock.now.advanced(by: .seconds(duration))
+    }
+
+    private func checkCancelled() throws {
+        if isCancelled() { throw CancellationError() }
     }
 
     func inspect(
@@ -117,7 +136,7 @@ private final class StorageInspectionReader {
         self.targets = targets.map { canonicalURL($0.url) }
         var footprints: [BackupFootprint] = []
         for target in targets {
-            try Task.checkCancellation()
+            try checkCancelled()
             report("Inspecting \(target.title)")
             let bytes = try size(target.url)
             footprints.append(
@@ -136,7 +155,7 @@ private final class StorageInspectionReader {
                         options: [.skipsHiddenFiles])
                 else { throw AgentError(.failed, "The backup directory could not be read.") }
                 for case let child as URL in children {
-                    try Task.checkCancellation()
+                    try checkCancelled()
                     children.skipDescendants()
                     entries.append(child)
                     if entries.count > 256 { break }
@@ -144,7 +163,7 @@ private final class StorageInspectionReader {
                 for entry in entries.prefix(256).sorted(by: {
                     $0.lastPathComponent < $1.lastPathComponent
                 }) {
-                    try Task.checkCancellation()
+                    try checkCancelled()
                     restore.append(
                         StorageRestoreEntry(name: entry.lastPathComponent, bytes: try size(entry)))
                 }
@@ -160,7 +179,7 @@ private final class StorageInspectionReader {
     }
 
     private func size(_ source: URL) throws -> Int64 {
-        try Task.checkCancellation()
+        try checkCancelled()
         guard fileManager.fileExists(atPath: source.path) else { return 0 }
         let source = canonicalURL(source)
         if let measured = measurements[source] { return measured }
@@ -186,7 +205,7 @@ private final class StorageInspectionReader {
         let nested = targets.filter { $0.path.hasPrefix(source.path + "/") }
         var nestedSizes = Dictionary(nested.map { ($0, Int64(0)) }, uniquingKeysWith: max)
         for case let file as URL in files {
-            try Task.checkCancellation()
+            try checkCancelled()
             guard visited < maximumEntries, ContinuousClock.now < deadline else {
                 issue(
                     "The inspection limit was reached; sizes are partial. Open a folder to inspect it further."

@@ -58,7 +58,7 @@ import Testing
         let document = root.appendingPathComponent("usage.json")
         let snapshot = UsageTopicSnapshot(
             refreshedAt: Date(), seconds: 0, days: 1, totalCostCents: 1, failure: nil)
-        try UsageStoreWriter.record(
+        try await UsageStoreWriter.record(
             snapshot,
             days: [
                 UsageDayRow(

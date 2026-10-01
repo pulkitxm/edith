@@ -210,7 +210,7 @@ public actor AttentionBackgroundService {
             && settings.agentTrackingEnabled
     }
 
-    public func recordAgents(_ hosts: [HerdrHostSnapshot], now: Date = Date()) throws {
+    public func recordAgents(_ hosts: [HerdrHostSnapshot], now: Date = Date()) async throws {
         guard !stopped else { return }
         let settings = repository.loadSettings()
         guard defaults.bool(forKey: AppStorageKeys.Tabs.attentionEnabled), settings.isEnabled,
@@ -224,16 +224,16 @@ public actor AttentionBackgroundService {
         if !settings.windowTitlesEnabled {
             for index in observed.indices { observed[index].windowTitle = nil }
         }
-        try events.record(AttentionBatch(events: observed), now: now)
+        try await events.record(AttentionBatch(events: observed), now: now)
     }
 
     public nonisolated func updateContext(_ context: AttentionAppContext) {
         AttentionContextBoard.shared.update(context)
     }
 
-    public func record(_ batch: AttentionBatch) throws {
+    public func record(_ batch: AttentionBatch) async throws {
         try importSpool()
-        try events.record(batch)
+        try await events.record(batch, now: Date())
     }
 
     public func range(_ request: AttentionRangeRequest) throws -> AttentionRangeResponse {

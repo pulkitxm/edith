@@ -176,6 +176,19 @@ public final class AgentStore: @unchecked Sendable {
         }
     }
 
+    public func awaitRead<T: Sendable>(
+        _ body: @escaping @Sendable (Database) throws -> T
+    ) async throws -> T {
+        try await pool.read(body)
+    }
+
+    @discardableResult
+    public func awaitWrite<T: Sendable>(
+        _ body: @escaping @Sendable (Database) throws -> T
+    ) async throws -> T {
+        try await pool.write(body)
+    }
+
     public func flush() {
         try? pool.barrierWriteWithoutTransaction { _ in }
     }

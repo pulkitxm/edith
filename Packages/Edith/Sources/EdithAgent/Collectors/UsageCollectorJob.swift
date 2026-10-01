@@ -4,9 +4,9 @@ import Foundation
 public enum UsageStoreWriter {
     public static func record(
         _ snapshot: UsageTopicSnapshot, days: [UsageDayRow], store: AgentStore?
-    ) throws {
+    ) async throws {
         guard let store else { throw AgentStoreError("The usage store is unavailable.") }
-        try store.write { database in
+        try await store.awaitWrite { database in
             try database.execute(sql: "DELETE FROM usage_day")
             for day in days {
                 try database.execute(
@@ -207,7 +207,7 @@ public final class UsageCollectorJob: @unchecked Sendable {
             let snapshot = UsageTopicSnapshot(
                 refreshedAt: startedAt, seconds: result.seconds, days: days.count,
                 totalCostCents: total, failure: nil)
-            try UsageStoreWriter.record(snapshot, days: days, store: store)
+            try await UsageStoreWriter.record(snapshot, days: days, store: store)
             return try AgentPayload.encode(snapshot)
         } catch UsageRefreshFailure.busy {
             return nil

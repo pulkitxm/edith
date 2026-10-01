@@ -181,7 +181,7 @@ private struct AttentionDaemonFixture {
         defer { Task { await fixture.close() } }
         let start = AttentionPaths.utcCalendar.startOfDay(for: Date()).addingTimeInterval(3600)
         for index in 0..<300 {
-            try fixture.events.record(
+            try await fixture.events.record(
                 AttentionBatch(events: [
                     fixture.event(at: start.addingTimeInterval(Double(index) * 5))
                 ]),
@@ -197,7 +197,7 @@ private struct AttentionDaemonFixture {
         let fixture = try AttentionDaemonFixture()
         defer { Task { await fixture.close() } }
         let midnight = AttentionPaths.utcCalendar.startOfDay(for: Date())
-        try fixture.events.record(
+        try await fixture.events.record(
             AttentionBatch(events: [
                 fixture.event(at: midnight.addingTimeInterval(-5)), fixture.event(at: midnight),
             ]),
