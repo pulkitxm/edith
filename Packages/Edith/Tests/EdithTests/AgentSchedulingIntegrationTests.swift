@@ -36,10 +36,10 @@ import Testing
         for _ in 0..<requests { #expect(await scheduler.enqueue("fixture.refresh")) }
         await gate.release()
         #expect(await first.value == Data("result".utf8))
-        for _ in 0..<1_000 {
-            if await scheduler.snapshots.first?.runCount == 2 { break }
-            await Task.yield()
-        }
+        #expect(
+            await waitUntil {
+                await scheduler.snapshots.first?.runCount == 2
+            })
         #expect(await gate.executions == 2)
         #expect(output.count(topic: .usage) == 2)
         await scheduler.shutdown()
