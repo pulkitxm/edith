@@ -363,26 +363,46 @@ private func agendaEvent(id: String, title: String, start: TimeInterval) -> Cale
 }
 
 private final class CalendarFetchGate: @unchecked Sendable {
+    private let lock = NSLock()
     private var releaseContinuation: CheckedContinuation<Void, Never>?
     private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var hasEntered = false
 
     func wait() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            hasEntered = true
             releaseContinuation = continuation
-            enteredContinuation?.resume()
+            let entered = enteredContinuation
             enteredContinuation = nil
+            lock.unlock()
+            entered?.resume()
         }
     }
 
     func entered() async {
-        if releaseContinuation != nil { return }
+        let alreadyEntered: Bool = lock.withLock {
+            if hasEntered { return true }
+            return false
+        }
+        if alreadyEntered { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if hasEntered {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
             enteredContinuation = continuation
+            lock.unlock()
         }
     }
 
     func release() {
-        releaseContinuation?.resume()
+        lock.lock()
+        let continuation = releaseContinuation
         releaseContinuation = nil
+        lock.unlock()
+        continuation?.resume()
     }
 }
