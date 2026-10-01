@@ -192,7 +192,8 @@ public enum CommandTree {
         "ed app test-notification": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed app open": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed app quit": Spec(
-            options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
+            options: ["--json", "--help", "--yes", "--completely"],
+            destructivePolicy: .previewThenYes),
         "ed app check-updates": Spec(options: ["--json", "--help", "--no-wait"]),
         "ed app updates": Spec(options: ["--json", "--help", "--limit"]),
         "ed app relaunch": Spec(
@@ -296,6 +297,7 @@ public enum CommandTree {
         "ed usage export": Spec(
             options: [
                 "--json", "--help", "--range", "--source", "--machine", "--card", "-o", "--output",
+                "--clipboard",
             ],
             optionValues: [
                 "--card": .usageShareCard, "--machine": .machine, "--output": .localPath,
@@ -710,8 +712,13 @@ public enum CommandTree {
         "ed attention summary": Spec(
             options: ["--json", "--help", "--range"], optionValues: ["--range": .attentionRange]),
         "ed attention breakdown": Spec(
-            options: ["--json", "--help", "--range", "--limit", "--by"],
-            optionValues: ["--range": .attentionRange, "--by": .attentionBreakdown]),
+            options: [
+                "--json", "--help", "--range", "--limit", "--by", "--csv", "--from", "--to",
+            ],
+            optionValues: [
+                "--range": .attentionRange, "--by": .attentionBreakdown, "--from": .free,
+                "--to": .free,
+            ]),
         "ed attention agents": Spec(
             options: ["--json", "--help", "--range", "--limit"],
             optionValues: ["--range": .attentionRange]),
@@ -730,6 +737,10 @@ public enum CommandTree {
         "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),
         "ed attention focus stop": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention doctor": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention backup": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention restore": Spec(
+            options: ["--json", "--yes", "-h", "--help", "--version"],
+            destructivePolicy: .previewThenYes),
         "ed color pick": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed color copy": Spec(
             options: ["--json", "--help", "--format"], optionValues: ["--format": .colorFormat],
@@ -755,6 +766,8 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version"], arguments: [.emojiCharacter]),
         "ed emoji tone": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.emojiTone]),
+        "ed emoji forget": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.emojiCharacter]),
         "ed emoji clear": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed shelf ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed shelf path": Spec(
@@ -821,6 +834,17 @@ public enum CommandTree {
         "ed maintenance history": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed maintenance backup-updates": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed maintenance ignore": Spec(
+            options: ["--json", "--available", "-h", "--help", "--version"],
+            optionValues: ["--available": .free], arguments: [.free]),
+        "ed maintenance snooze": Spec(
+            options: ["--json", "--for", "-h", "--help", "--version"],
+            optionValues: ["--for": .free], arguments: [.free]),
+        "ed maintenance exclude": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed maintenance reset": Spec(
+            options: ["--json", "--yes", "-h", "--help", "--version"],
+            destructivePolicy: .previewThenYes),
         "ed quinjet projects": Spec(
             options: ["--json", "--help", "--machine"], optionValues: ["--machine": .quinjetMachine]
         ),

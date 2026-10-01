@@ -118,6 +118,19 @@ enum JSONContract {
             "ed browser tab", ["browser", "tab", "https://example.com", "--json"],
             mutatesTheMachine: true),
         JSONCase(
+            "ed maintenance ignore",
+            ["maintenance", "ignore", "firefox", "--available", "120.0", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance snooze",
+            ["maintenance", "snooze", "firefox", "--for", "7d", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance exclude",
+            ["maintenance", "exclude", "com.example.App", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed maintenance reset", ["maintenance", "reset", "--json"]),
+        JSONCase(
             "ed maintenance backup-updates",
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
             mutatesTheMachine: true),
@@ -145,6 +158,9 @@ enum JSONContract {
             "ed attention focus stop", ["attention", "focus", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed attention doctor", ["attention", "doctor", "--json"]),
+        JSONCase(
+            "ed attention backup", ["attention", "backup", "--json"], mutatesTheMachine: true),
+        JSONCase("ed attention restore", ["attention", "restore", "--json"]),
         JSONCase("ed install", ["install", "--json"], mutatesTheMachine: true),
         JSONCase("ed uninstall", ["uninstall", "--json"], mutatesTheMachine: true),
         JSONCase(
@@ -702,6 +718,8 @@ enum JSONContract {
             "ed emoji insert", ["emoji", "insert", "1F600", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed emoji tone", ["emoji", "tone", "medium", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed emoji forget", ["emoji", "forget", "1F600", "--json"], mutatesTheMachine: true),
         JSONCase("ed emoji clear", ["emoji", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),

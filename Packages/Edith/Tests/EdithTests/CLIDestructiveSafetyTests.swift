@@ -62,6 +62,8 @@ import Testing
         "ed browser close-others",
         "ed browser close-right",
         "ed browser detach",
+        "ed attention restore",
+        "ed maintenance reset",
         "ed shelf purge",
         "ed shelf rm",
     ]
