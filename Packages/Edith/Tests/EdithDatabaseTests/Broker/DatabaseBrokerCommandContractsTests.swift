@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum DatabaseBrokerCommandContractFixtures {
     static let requestID = UUID(uuidString: "D16E8863-A10B-485B-9B56-51D04C4B77F3")!

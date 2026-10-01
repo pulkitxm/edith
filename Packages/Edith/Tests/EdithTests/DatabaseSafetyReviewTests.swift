@@ -5,6 +5,8 @@ import Testing
 
 @testable import Edith
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
+@testable import EdithDatabaseDrivers
 
 @Suite struct DatabaseSafetyReviewTests {
     private static let connectionID = DatabaseConnectionID(

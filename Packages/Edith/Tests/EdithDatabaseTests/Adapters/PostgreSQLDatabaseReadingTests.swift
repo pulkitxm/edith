@@ -4,6 +4,7 @@ import PostgresNIO
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum PostgreSQLDatabaseReadingFixtures {
     static let identity = DatabaseProductIdentity(

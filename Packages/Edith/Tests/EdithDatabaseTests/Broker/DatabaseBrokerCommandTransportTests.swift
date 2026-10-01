@@ -4,6 +4,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 @Test(arguments: [UInt64(0), 6_000_000_000])
 func databaseBrokerCommandTransportRoundTripsOneBoundedCommand(responseDelay: UInt64) async throws {

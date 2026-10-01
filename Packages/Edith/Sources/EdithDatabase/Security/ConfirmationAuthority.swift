@@ -218,17 +218,17 @@ public struct DatabaseDestructiveRequest: Codable, Hashable, Sendable {
     }
 }
 
-struct DatabaseDestructivePlan: Codable, Hashable, Sendable {
-    let request: DatabaseDestructiveRequest
-    let action: DatabaseDestructiveAction
-    let scope: DatabaseMutationScope
-    let impact: DatabaseMutationImpact
-    let transactionBehavior: DatabaseTransactionBehavior
-    let rollbackAvailability: DatabaseRollbackAvailability
-    let executionMode: DatabaseExecutionMode
-    let warnings: [DatabaseWarning]
+package struct DatabaseDestructivePlan: Codable, Hashable, Sendable {
+    package let request: DatabaseDestructiveRequest
+    package let action: DatabaseDestructiveAction
+    package let scope: DatabaseMutationScope
+    package let impact: DatabaseMutationImpact
+    package let transactionBehavior: DatabaseTransactionBehavior
+    package let rollbackAvailability: DatabaseRollbackAvailability
+    package let executionMode: DatabaseExecutionMode
+    package let warnings: [DatabaseWarning]
 
-    init(
+    package init(
         request: DatabaseDestructiveRequest,
         action: DatabaseDestructiveAction,
         scope: DatabaseMutationScope,
@@ -430,30 +430,30 @@ public enum DatabaseConfirmationError: Error, Equatable, Sendable {
     case alreadyConsumedOrUnknown
 }
 
-actor DatabaseConfirmationAuthority {
-    static let tokenSchemaVersion = 1
-    static let tokenAudience = "com.pulkitxm.edith.database-confirmation"
-    static let signingKeyByteRange = 32...64
-    static let lifetimeSecondRange = 5...300
-    static let maximumClockSkewSeconds = 30
-    static let maximumTokenBytes = 4_096
-    static let maximumCommandBytes = 65_536
-    static let maximumCanonicalPayloadBytes = 1_048_576
-    static let maximumDisplayPayloadBytes = 131_072
-    static let maximumInputBytes = 1_048_576
-    static let maximumInputNodes = 10_000
-    static let maximumInputDepth = 32
-    static let maximumParameterCount = 512
-    static let maximumSelectedRecordCount = 2_000
-    static let maximumWarningCount = 32
-    static let maximumPathSegmentCount = 64
-    static let maximumCollectionCount = 10_000
-    static let maximumTextBytes = 65_536
-    static let maximumImpactDescriptionBytes = 2_048
-    static let maximumWarningMessageBytes = 8_192
-    static let maximumConfirmationTextBytes = 4_096
+package actor DatabaseConfirmationAuthority {
+    package static let tokenSchemaVersion = 1
+    package static let tokenAudience = "com.pulkitxm.edith.database-confirmation"
+    package static let signingKeyByteRange = 32...64
+    package static let lifetimeSecondRange = 5...300
+    package static let maximumClockSkewSeconds = 30
+    package static let maximumTokenBytes = 4_096
+    package static let maximumCommandBytes = 65_536
+    package static let maximumCanonicalPayloadBytes = 1_048_576
+    package static let maximumDisplayPayloadBytes = 131_072
+    package static let maximumInputBytes = 1_048_576
+    package static let maximumInputNodes = 10_000
+    package static let maximumInputDepth = 32
+    package static let maximumParameterCount = 512
+    package static let maximumSelectedRecordCount = 2_000
+    package static let maximumWarningCount = 32
+    package static let maximumPathSegmentCount = 64
+    package static let maximumCollectionCount = 10_000
+    package static let maximumTextBytes = 65_536
+    package static let maximumImpactDescriptionBytes = 2_048
+    package static let maximumWarningMessageBytes = 8_192
+    package static let maximumConfirmationTextBytes = 4_096
 
-    static let signingKeyReference = DatabaseSecretReference(
+    package static let signingKeyReference = DatabaseSecretReference(
         identifier: UUID(uuidString: "03E2EFA4-0654-4D8E-B0BC-4AB7610F44D8")!,
         purpose: .confirmationSigningKey)
 
@@ -463,7 +463,7 @@ actor DatabaseConfirmationAuthority {
     private let runtimeOwner: DatabaseRuntimeOwnerToken
     private let currentDate: @Sendable () -> Date
 
-    init(
+    package init(
         signingKey: Data,
         metadataStore: any DatabaseMetadataStore,
         secretStore: any DatabaseSecretStore,
@@ -480,7 +480,7 @@ actor DatabaseConfirmationAuthority {
         self.currentDate = currentDate
     }
 
-    static func create(
+    package static func create(
         secretStore: any DatabaseSecretStore,
         metadataStore: any DatabaseMetadataStore,
         runtimeOwner: DatabaseRuntimeOwnerToken,
@@ -502,7 +502,7 @@ actor DatabaseConfirmationAuthority {
             currentDate: currentDate)
     }
 
-    func issuePreview(
+    package func issuePreview(
         for plan: DatabaseDestructivePlan,
         lifetimeSeconds: Int = 120
     ) async throws -> DatabaseDestructivePreview {
@@ -552,7 +552,7 @@ actor DatabaseConfirmationAuthority {
             token: token)
     }
 
-    func authorizeAndExecute<Output: Sendable>(
+    package func authorizeAndExecute<Output: Sendable>(
         token: DatabaseConfirmationToken,
         plan: DatabaseDestructivePlan,
         confirmationText: String,

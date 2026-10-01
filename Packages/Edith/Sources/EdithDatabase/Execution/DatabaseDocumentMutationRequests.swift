@@ -97,20 +97,20 @@ public enum DatabaseDocumentMutationRequests {
                 body: .null))
     }
 
-    static func mongoDBIdentityValue(
+    package static func mongoDBIdentityValue(
         _ target: DatabaseTargetIdentifier
     ) throws -> DatabaseValue {
         try identityValue(target)
     }
 
-    static func elasticsearchIdentity(
+    package static func elasticsearchIdentity(
         _ target: DatabaseTargetIdentifier,
         requiresConcurrency: Bool
     ) throws -> DatabaseSearchDocumentIdentity {
         try searchIdentity(target, requiresConcurrency: requiresConcurrency)
     }
 
-    static func openSearchIdentity(
+    package static func openSearchIdentity(
         _ target: DatabaseTargetIdentifier,
         requiresConcurrency: Bool
     ) throws -> DatabaseSearchDocumentIdentity {
@@ -304,9 +304,9 @@ public enum DatabaseDocumentMutationRequests {
     }
 }
 
-struct DatabaseSearchDocumentIdentity: Equatable, Sendable {
-    let index: String
-    let identifier: String
-    let sequenceNumber: Int64?
-    let primaryTerm: Int64?
+package struct DatabaseSearchDocumentIdentity: Equatable, Sendable {
+    package let index: String
+    package let identifier: String
+    package let sequenceNumber: Int64?
+    package let primaryTerm: Int64?
 }

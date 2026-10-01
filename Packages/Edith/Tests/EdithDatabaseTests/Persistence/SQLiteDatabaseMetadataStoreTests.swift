@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws -> String {
     try JSONEncoder().encode(value).map { String(format: "%02x", $0) }.joined()

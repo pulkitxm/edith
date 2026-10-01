@@ -52,7 +52,7 @@ public struct DatabaseSecretRedactor: Sendable, CustomStringConvertible,
         try self.init(secrets: loaded, replacement: replacement)
     }
 
-    init(
+    package init(
         secrets: [Data],
         replacement: String = DatabaseSecretRedactor.defaultReplacement
     ) throws {

@@ -6,6 +6,7 @@ import PostgresNIO
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private struct PostgreSQLDatabaseFoundationUnknownFailure: Error {}
 

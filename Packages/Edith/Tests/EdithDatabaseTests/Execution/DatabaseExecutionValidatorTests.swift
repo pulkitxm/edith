@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum DatabaseExecutionValidatorFixtures {
     static let now = Date(timeIntervalSince1970: 1_800_000_000)

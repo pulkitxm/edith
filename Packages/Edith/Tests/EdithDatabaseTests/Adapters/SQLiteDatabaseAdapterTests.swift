@@ -3,6 +3,7 @@ import GRDB
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private typealias SQLiteAdapterValue = EdithDatabase.DatabaseValue
 

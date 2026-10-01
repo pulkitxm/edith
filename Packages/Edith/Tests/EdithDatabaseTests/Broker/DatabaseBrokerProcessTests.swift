@@ -4,6 +4,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum DatabaseBrokerProcessTestError: Error, Sendable {
     case appDirectories

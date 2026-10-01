@@ -1,6 +1,7 @@
 import EdithDatabase
 import Foundation
 import Testing
+@testable import EdithDatabaseDrivers
 
 @Suite struct DatabaseIdentityTests {
     @Test func everyProductHasTheExpectedFamily() {

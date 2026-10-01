@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 enum ClickHouseDatabaseHTTPStubAction: @unchecked Sendable {
     case response(statusCode: Int, headers: [String: String], body: Data)

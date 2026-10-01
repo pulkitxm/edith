@@ -1,5 +1,6 @@
 import EdithDatabase
 import Foundation
+@testable import EdithDatabaseDrivers
 
 func modelRoundTrip<Value: Codable>(_ value: Value) throws -> Value {
     let encoder = JSONEncoder()

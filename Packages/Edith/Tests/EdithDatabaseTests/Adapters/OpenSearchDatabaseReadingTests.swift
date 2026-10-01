@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum OpenSearchDatabaseReadingFixtures {
     static let identity = DatabaseProductIdentity(

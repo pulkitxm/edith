@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithDatabase
+@testable import EdithDatabaseDrivers
 
 private enum PostgreSQLDatabaseReadingLiveEnvironment {
     static let values = ProcessInfo.processInfo.environment

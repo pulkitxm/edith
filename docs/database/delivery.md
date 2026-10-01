@@ -1,86 +1,86 @@
-# Database delivery stack
+# Database pack delivery
 
-The stack is deliberately split by review boundary. Each branch is created from its predecessor with `gh stack`, kept coherent, tested, pushed normally, and represented on GitHub through Pukbot. Pull request descriptions contain exactly one line. Evidence is a later concise Pukbot comment.
+The database drivers leave the Edith executable. One downloadable pack contains every database product. The drivers share SwiftNIO and BoringSSL, so splitting the pack per product would duplicate that code. The app, the `ed` CLI, and the database MCP server keep a small client library and talk to a separate broker process.
 
-| Order | Branch | Pull request scope | Primary gates |
-| ---: | --- | --- | --- |
-| 1 | `feature/database-foundation` | Research, product contract, architecture, verification matrix, and stack plan | Documentation and repository policy checks |
-| 2 | `feature/database-contracts` | Extension registration, shared types, capabilities, values, paging, errors, persistence, secrets, safety, and operation center | Unit, migration, redaction, policy, lifecycle tests |
-| 3 | `feature/database-surfaces` | Canonical executor, fake adapter, CLI command family, MCP stdio server, and operation parity | CLI, MCP, completion, docs, cancellation, output tests |
-| 4 | `feature/database-postgres` | PostgreSQL adapter, metadata, SQL execution, transactions, editing, plans, and real-product contracts | PostgreSQL unit and TUF integration results |
-| 5 | `feature/database-relational-ui` | Native relational workbench, grid, SQL editor, staged edits, diagrams, plans, and responsive states | Render, accessibility, grid, interface journey tests |
-| 6 | `feature/database-keyspace` | Redis and Valkey adapters, keyspace workspace, commands, MCP, monitoring, and real-product tests | Redis and Valkey contract and TUF results |
-| 7 | `feature/database-mongodb` | MongoDB adapter, document workspace, pipelines, schema sampling, commands, MCP, and tests | MongoDB contract and TUF results |
-| 8 | `feature/database-search` | Elasticsearch and OpenSearch adapters, search workspace, product differences, tasks, commands, MCP, and tests | Separate Elasticsearch and OpenSearch TUF results |
-| 9 | `feature/database-clickhouse` | ClickHouse adapter, analytical workspace, plans, parts, mutations, commands, MCP, and tests | ClickHouse contract and TUF results |
-| 10 | `feature/database-sql-products` | MySQL, MariaDB, and SQLite adapters with product-native metadata, dialects, plans, and administration | Separate MySQL, MariaDB, SQLite results |
-| 11 | `feature/database-data-transfer` | Streaming import and export, monitoring, maintenance, saved work, and advanced operations | Format, backpressure, partial failure, and real-product tests |
-| 12 | `feature/database-hardening` | Million-record results, tunnel failures, performance, responsive polish, accessibility, documentation, and final evidence | Full local CI, all TUF matrix results, rendered inspection |
+The original product stack (foundation through hardening) has already landed. This file is the delivery plan for the pack.
 
-No pull request may exceed 5,000 changed lines. The target is below 2,000. A layer is split further if its production code and tests cannot stay reviewable under that target.
+## Modules
 
-## Checkpoint rule
+`EdithDatabase` is the client. The app, CLI, and `EdithDatabaseMCP` link it. It holds:
 
-Within every branch, checkpoints are made after each coherent passing boundary, such as contracts, persistence, policy, one adapter read path, one mutation path, one interface workspace, or one test family. Unrelated changes are staged separately. A checkpoint must compile and pass its relevant focused suite.
+- Models, command contracts, and the request and result types those commands carry
+- The broker client, socket transport, protocol frames, health probe, and executable launcher
+- Saved-connection persistence and Keychain secret storage
+- Confirmation and continuation types the interface and CLI encode
 
-## Branch gate
+It depends on `EdithCore` and GRDB for the metadata store. It does not depend on SwiftUI, ArgumentParser, `EdithKit`, or the driver libraries.
 
-Before a branch is pushed:
+`EdithDatabaseDrivers` holds the adapters, the executor, the session pool, and the broker runtime and process. The client does not depend on it. After the executable split, the main app does not link it either.
 
-1. Relevant focused tests pass.
-2. Swift formatting and comment policy pass for Swift changes.
-3. CLI parity, completion, and docs pass for command changes.
-4. Package build and tests pass.
-5. Real adapter results are recorded when the branch claims a product.
-6. Interface changes are run and inspected in representative widths and themes.
-7. No secret, credential, private endpoint, generated database, or result spool is staged.
-8. The diff contains only the intended layer and stays within line limits.
+`EdithDatabaseMCP` stays with the client. It sends broker commands and does not link drivers.
 
-## Stack gate
+```text
+Database views       ed database commands       MCP tools
+       |                      |                     |
+       +----------- EdithDatabase client ----------+
+                              |
+                    Unix socket, signed peer
+                              |
+                         edith-database
+                              |
+                   executor and adapters
+```
 
-After a lower branch changes, dependent branches are restacked and tested again. Rewritten remote branches use only `git push --force-with-lease`. `gh stack` is used for topology and restacking, never for GitHub mutations.
+## Executable
 
-For every pull request, Pukbot sets and later verifies:
+`edith-database` is a separate executable. It runs the broker process and links `EdithDatabaseDrivers`. The app and CLI launch that binary instead of re-entering the main executable with `EDITH_DATABASE_BROKER`.
 
-- Conventional lowercase title without a final period
-- Correct predecessor branch as base
-- Correct head branch
-- Exactly one description line
-- Ready state when the layer is complete
-- Repository-conventional labels and assignee when applicable
-- One concise final evidence comment when the outcome can be shown
+It is signed with the same team as Edith, with the hardened runtime, and notarized with the app. The code identifier is `com.pulkit.edith.database`. A development build uses `com.pulkit.edith.dev.<slot>.database`.
 
-Read-only GitHub inspection verifies base, head, commit range, diff, checks, title, description line count, state, labels, assignee, and branch-tip SHA after the final push.
+## Signature requirement
 
-## CI gate
+The launcher and the peer authenticator require a designated requirement of that identifier plus the Edith team identifier (`certificate leaf[subject.OU]`). They no longer require the broker to be the same binary as the app. A pack that fails the checksum or the signature is not installed and is not launched.
 
-Every required check on every layer must finish green. A lower-layer fix triggers restack, repush, metadata verification, and check verification for every dependent layer. Failed checks are reproduced and fixed at their owning layer. Required failures are never disabled, ignored, cancelled into success, or converted to allowed failures.
+## Install and version
 
-## Evidence plan
+The pack for the running app version is one zip on the matching GitHub release, with a SHA-256 checksum beside it.
 
-Evidence shows the finished outcome only:
+The app offers the download when the Database extension is enabled and the pack is missing. `ed database` does the same when a command needs the broker and the pack is missing. Progress is shown in the interface. The CLI commands are:
 
-- Foundation and contracts: clean targeted test output if there is no visual result.
-- CLI and MCP: concise bounded output from the Mac through a TUF forward.
-- Product adapters: real capability, browse, mutation preview, and cancellation result.
-- Interface layers: final wide and narrow screenshots, with light and dark split only when each shows a distinct outcome.
-- Hardening: concise performance and interruption result, plus final workbench view.
+- `ed database pack install`
+- `ed database pack status`
+- `ed database pack remove`
 
-One comment per pull request is the default and three is the absolute cap. Logs and intermediate debugging are not evidence.
+Each accepts `--json` and documents its flags in `--help`.
 
-## Completion audit
+Install location, using the same data root as the rest of the app:
 
-The final audit proves:
+- Production: `~/Library/Application Support/Edith/Database/pack`
+- Development: `~/Library/Application Support/Edith Dev/<slot>/Database/pack`
 
-1. Every local branch has the intended parent and clean commit range.
-2. Every remote branch tip equals its local tip.
-3. Every GitHub pull request has the intended base, head, title, one-line description, ready state, labels, assignee, and diff.
-4. No lower pull request includes a later layer.
-5. Every required check is green and none is pending or cancelled.
-6. Every claimed product has a separate real server result through a Mac loopback forward.
-7. Every family and SQL product has a reproducible near-million-record dataset.
-8. CLI, interface, and MCP parity results exist.
-9. Responsive, theme, accessibility, performance, cancellation, and reconnect results exist.
-10. Final evidence is posted through Pukbot and contains no secret or private material.
+The installed pack records the app version it was built for. A pack whose version differs from the running app is invalid. The next launch or `ed database` command replaces it. Removing the pack deletes that directory.
 
-Pull requests remain unmerged. Merging is outside this delivery authorization.
+Development builds do not download. `build.sh` builds `edith-database` and installs it into the slot.
+
+## Release
+
+The existing release workflow (`.github/workflows/ci.yml` and `scripts/release-local.sh`) builds the pack with the app, signs it with the same identity and hardened runtime, notarizes it, and uploads a versioned zip plus checksum as release assets. The pack version matches the app version. A dry run of the local release script packages the asset without publishing.
+
+## Pull request stack
+
+Each layer stays under about 2,000 changed lines. Later layers rebase onto the previous branch.
+
+| Order | Branch | Scope |
+| ---: | --- | --- |
+| 1 | `database-pack-modules` | Split `EdithDatabase` and `EdithDatabaseDrivers` with no behavior change. The app still links both, and the broker still starts inside `EdithMain`. |
+| 2 | `database-pack-executable` | `edith-database` executable, `build.sh` slot install, launcher and peer requirement relaxed to team plus identifier. The app stops linking the drivers. |
+| 3 | `database-pack-install` | Download, checksum, and signature verification, install and removal, version invalidation, CLI commands, and the extension download flow. |
+| 4 | `database-pack-release` | The release workflow publishes the pack zip and checksum. |
+
+## Tests
+
+Existing `EdithDatabaseTests` stay green. Suites that need driver internals move to `EdithDatabaseDriversTests` or import that module. New tests cover checksum mismatch, signature rejection, version mismatch, install, remove, and CLI `--json` output.
+
+## Gates
+
+A layer is pushed only when its focused tests, Swift format, and comment check pass. The release layer also dry-runs the pack packaging when the workflow supports it, and does not cut a release. Evidence is one comment on the finished stack: sanitized `ed database pack status --json`, a query against a synthetic SQLite file, and the Edith executable size before and after.
