@@ -6,7 +6,7 @@ enum DatabasePackIdentity {
     static let suffix = ".database"
 
     static func directory(in directories: AppDirectories = .current) -> URL {
-        directories.configuration.appendingPathComponent("Database/pack", isDirectory: true)
+        directories.configuration.appendingPathComponent("DatabasePack", isDirectory: true)
     }
 
     static func executableURL(in directories: AppDirectories = .current) -> URL {

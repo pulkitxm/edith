@@ -5,7 +5,9 @@ public enum AppBuildIdentity {
     public static let developmentPrefix = production + ".dev."
     public static let developmentDirectoryName = "Edith Dev"
 
-    public static let application = resolve(bundleURL: Bundle.main.bundleURL)
+    public static let application = resolve(
+        bundleURL: Bundle.main.bundleURL,
+        declaredIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"])
 
     public static var isDevelopment: Bool { application != production }
     public static var developmentSlot: String? { slot(of: application) }
@@ -32,7 +34,10 @@ public enum AppBuildIdentity {
         slot(of: identifier).map { developmentDirectoryName + "/" + $0 } ?? "Edith"
     }
 
-    public static func resolve(bundleURL: URL) -> String {
+    public static func resolve(
+        bundleURL: URL,
+        declaredIdentifier: String? = nil
+    ) -> String {
         var candidate = bundleURL.standardizedFileURL
         var outermost: String?
         while candidate.path != "/" {
@@ -43,7 +48,19 @@ public enum AppBuildIdentity {
             }
             candidate.deleteLastPathComponent()
         }
-        guard let outermost, outermost.hasPrefix(production + ".") else { return production }
-        return outermost
+        if let outermost, outermost.hasPrefix(production + ".") { return outermost }
+        if let declaredIdentifier, isAcceptedIdentifier(declaredIdentifier) {
+            return declaredIdentifier
+        }
+        return production
+    }
+
+    private static func isAcceptedIdentifier(_ identifier: String) -> Bool {
+        guard identifier == production || identifier.hasPrefix(production + ".") else {
+            return false
+        }
+        return identifier.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar) || scalar == "." || scalar == "-"
+        }
     }
 }
