@@ -74,6 +74,13 @@ public struct ClipboardPalette: Equatable, Sendable {
         rebuild(keepingSelectionNear: nil)
     }
 
+    public mutating func apply(query text: String, rows arranged: [ClipboardEntry]) {
+        query = text
+        rows = arranged
+        if let selectedID, rows.contains(where: { $0.id == selectedID }) { return }
+        selectedID = rows.first?.id
+    }
+
     public mutating func choose(_ category: ClipboardCategory?) {
         let target = category.flatMap { categories.contains($0) ? $0 : nil }
         guard target != self.category else { return }
