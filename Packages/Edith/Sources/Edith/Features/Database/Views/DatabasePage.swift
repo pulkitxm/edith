@@ -9,6 +9,7 @@ import SwiftUI
 final class DatabasePageModel {
     enum Readiness: Hashable {
         case checking
+        case installing(Double)
         case repairing
         case ready
         case failed(String)
@@ -17,6 +18,7 @@ final class DatabasePageModel {
     private(set) var readiness = Readiness.checking
     private let ensureReady: @Sendable () async throws -> Void
     private let repairService: @Sendable () async throws -> Void
+    private let preparePack: @Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void
     private var generation = UUID()
 
     init(
@@ -26,10 +28,18 @@ final class DatabasePageModel {
         repairService: @escaping @Sendable () async throws -> Void = {
             try await DatabaseBrokerServiceRepairer().repair()
             try await DatabaseBrokerClientCoordinator.shared.ensureReady()
-        }
+        },
+        preparePack:
+            @escaping @Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void = {
+                report in
+                _ = try await DatabasePackInstaller.live { fraction in
+                    report(fraction)
+                }.install()
+            }
     ) {
         self.ensureReady = ensureReady
         self.repairService = repairService
+        self.preparePack = preparePack
     }
 
     var failureDetail: String? {
@@ -53,6 +63,15 @@ final class DatabasePageModel {
         generation = requestGeneration
         readiness = pendingState
         do {
+            try await preparePack { fraction in
+                Task { @MainActor in
+                    guard self.generation == requestGeneration, self.readiness != .ready else {
+                        return
+                    }
+                    self.readiness = .installing(fraction)
+                }
+            }
+            guard generation == requestGeneration, !Task.isCancelled else { return }
             try await operation()
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .ready
@@ -73,6 +92,22 @@ final class DatabasePageModel {
     }
 
     private static func message(for error: Error) -> String {
+        if let pack = error as? DatabasePackInstallError {
+            switch pack {
+            case .checksumMismatch:
+                return "The database pack checksum did not match the published digest."
+            case .signatureRejected:
+                return "The database pack signature was rejected."
+            case .signatureUnavailable:
+                return "The database pack signature could not be checked."
+            case .archiveInvalid:
+                return "The database pack archive could not be read."
+            case .downloadFailed:
+                return "The database pack could not be downloaded."
+            case .developmentBuild:
+                return "This development build installs the database pack from the local build."
+            }
+        }
         guard let availability = error as? DatabaseBrokerAvailabilityError else {
             return "The local database service could not be reached."
         }
@@ -243,6 +278,11 @@ struct DatabasePage: View {
             serviceProgress(
                 title: "Preparing Database",
                 detail: "Starting the local tools used by your connections.")
+        case .installing(let fraction):
+            serviceProgress(
+                title: "Downloading Database",
+                detail: "Downloading the signed database pack for this version.",
+                fraction: fraction)
         case .repairing:
             serviceProgress(
                 title: "Repairing Database",
@@ -317,9 +357,24 @@ struct DatabasePage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func serviceProgress(title: String, detail: String) -> some View {
+    private func serviceProgress(
+        title: String, detail: String, fraction: Double? = nil
+    ) -> some View {
         SkeletonReplica("\(title). \(detail)") {
             VStack(alignment: .leading, spacing: 0) {
+                if let fraction {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        Text(title)
+                            .font(.system(size: UIScale.pt(15), weight: .semibold))
+                        Text(detail)
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(.secondary)
+                        ProgressView(value: min(max(fraction, 0), 1))
+                            .accessibilityLabel(title)
+                    }
+                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
+                    .padding(.top, UIScale.pt(16))
+                }
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     HStack(alignment: .center, spacing: UIScale.pt(12)) {
                         Text("Connections")
