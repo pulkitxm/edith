@@ -46,12 +46,16 @@ public actor DownloadWorker {
     private var records: [DownloadRecord]
     private let loadError: String?
     private var persistenceError: String?
+    private struct Flight {
+        var task: Task<Void, Never>
+        var progress: Task<Void, Never>?
+        var output: DownloadWorkerOutput
+        var publishedRevision: Int
+    }
+
+    static let maximumConcurrent = 3
     private var logs: [String: String] = [:]
-    private var currentID: UUID?
-    private var task: Task<Void, Never>?
-    private var progressTask: Task<Void, Never>?
-    private var output: DownloadWorkerOutput?
-    private var publishedRevision = 0
+    private var flights: [UUID: Flight] = [:]
     private var started = false
     private var stopping = false
     private let generation = UUID()
@@ -101,8 +105,10 @@ public actor DownloadWorker {
     }
 
     deinit {
-        task?.cancel()
-        progressTask?.cancel()
+        for flight in flights.values {
+            flight.task.cancel()
+            flight.progress?.cancel()
+        }
         publicationTask?.cancel()
     }
 
@@ -127,12 +133,14 @@ public actor DownloadWorker {
     public func stop() async {
         stopping = true
         started = false
-        let active = task
-        if let currentID { interrupt(currentID, reason: "The background agent stopped.") }
-        active?.cancel()
-        progressTask?.cancel()
-        progressTask = nil
-        await active?.value
+        let running = Array(flights.keys)
+        for id in running { interrupt(id, reason: "The background agent stopped.") }
+        let tasks = flights.values.map(\.task)
+        for flight in flights.values {
+            flight.task.cancel()
+            flight.progress?.cancel()
+        }
+        for task in tasks { await task.value }
         notify()
         await publicationTask?.value
     }
@@ -141,9 +149,10 @@ public actor DownloadWorker {
         revision += 1
         var snapshotRecords = records
         var snapshotLogs = logs
-        if let currentID, let buffer = output?.snapshot {
-            snapshotLogs[currentID.uuidString] = buffer.0
-            if let index = snapshotRecords.firstIndex(where: { $0.id == currentID }),
+        for (id, flight) in flights {
+            let buffer = flight.output.snapshot
+            snapshotLogs[id.uuidString] = buffer.0
+            if let index = snapshotRecords.firstIndex(where: { $0.id == id }),
                 !snapshotRecords[index].isFinished, let status = buffer.1
             {
                 snapshotRecords[index].status = status
@@ -151,14 +160,18 @@ public actor DownloadWorker {
         }
         return DownloadWorkerSnapshot(
             records: snapshotRecords, logs: snapshotLogs, enabled: isEnabled(),
-            running: task != nil, generation: generation, revision: revision,
+            running: !flights.isEmpty, generation: generation, revision: revision,
             problem: loadError ?? persistenceError, executable: executable()
         )
     }
 
     public func refresh() {
         guard !stopping else { return }
-        if !isEnabled(), let currentID { interrupt(currentID, reason: "Downloads are disabled.") }
+        if !isEnabled() {
+            for id in Array(flights.keys) {
+                interrupt(id, reason: "Downloads are disabled.")
+            }
+        }
         startNext()
         notify()
     }
@@ -168,7 +181,7 @@ public actor DownloadWorker {
         if let loadError { throw AgentError(.failed, loadError) }
         let previousRecords = records
         let previousLogs = logs
-        var shouldCancel = false
+        var cancelIDs = Set<UUID>()
         var changed = 0
         var added: [DownloadRecord] = []
         switch request {
@@ -193,7 +206,7 @@ public actor DownloadWorker {
         case let .retry(id, all):
             for index in records.indices
             where (all || records[index].id == id) && records[index].canRetry {
-                guard records[index].id != currentID else { continue }
+                guard flights[records[index].id] == nil else { continue }
                 records[index].status = .queued
                 changed += 1
             }
@@ -203,19 +216,19 @@ public actor DownloadWorker {
                 else { continue }
                 records[index].status = .interrupted(String(reason.prefix(200)))
                 changed += 1
-                if records[index].id == currentID { shouldCancel = true }
+                if flights[records[index].id] != nil { cancelIDs.insert(records[index].id) }
             }
         case let .remove(id):
             changed = records.count { $0.id == id }
             records.removeAll { $0.id == id }
             logs[id.uuidString] = nil
-            if currentID == id { shouldCancel = true }
+            if flights[id] != nil { cancelIDs.insert(id) }
         case let .clear(includeActive):
             let removed = records.filter { includeActive || $0.isFinished }
             let ids = Set(removed.map(\.id))
             records.removeAll { ids.contains($0.id) }
             for id in ids { logs[id.uuidString] = nil }
-            if let currentID, ids.contains(currentID) { shouldCancel = true }
+            cancelIDs.formUnion(ids.intersection(flights.keys))
             changed = removed.count
         }
         do {
@@ -225,7 +238,7 @@ public actor DownloadWorker {
             logs = previousLogs
             throw error
         }
-        if shouldCancel { task?.cancel() }
+        for id in cancelIDs { flights[id]?.task.cancel() }
         let result = AgentDownloadMutationResult(changed: changed, records: records, added: added)
         startNext()
         notify()
@@ -259,28 +272,29 @@ public actor DownloadWorker {
     }
 
     private func startNext() {
-        guard started, !stopping, task == nil, isEnabled(), let executable = executable() else {
-            return
-        }
+        while startOne() {}
+    }
+
+    private func startOne() -> Bool {
+        guard started, !stopping, flights.count < Self.maximumConcurrent, isEnabled(),
+            let executable = executable()
+        else { return false }
         let queued = records.indices.filter { records[$0].status == .queued }
         guard let index = queued.min(by: { records[$0].createdAt < records[$1].createdAt }) else {
-            return
+            return false
         }
         let record = records[index]
         records[index].status = .resolving
         do { try save() } catch {
             records[index].status = .error(error.localizedDescription)
             notify()
-            return
+            return false
         }
-        currentID = record.id
         let buffer = DownloadWorkerOutput()
-        output = buffer
-        publishedRevision = 0
         let request = Self.request(record, executable: executable)
         let gallery = galleryExecutable()
         let runCommand = runCommand
-        task = Task.detached(priority: .utility) { [weak self] in
+        let task = Task.detached(priority: .utility) { [weak self] in
             do {
                 let result: CLICommandResult
                 if record.kind == .images || record.kind == .post {
@@ -308,21 +322,33 @@ public actor DownloadWorker {
                 await self?.finish(record.id, result: .failure(error))
             }
         }
-        progressTask = Task { [weak self] in
+        let progress = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
                 guard let self else { return }
                 await tick()
             }
         }
+        flights[record.id] = Flight(
+            task: task, progress: progress, output: buffer, publishedRevision: 0)
         notify()
+        return true
     }
 
     private func tick() {
-        if !isEnabled(), let currentID { interrupt(currentID, reason: "Downloads are disabled.") }
-        guard let revision = output?.snapshot.2, revision != publishedRevision else { return }
-        publishedRevision = revision
-        notify()
+        if !isEnabled() {
+            for id in Array(flights.keys) { interrupt(id, reason: "Downloads are disabled.") }
+        }
+        var changed = false
+        for id in Array(flights.keys) {
+            guard var flight = flights[id] else { continue }
+            let revision = flight.output.snapshot.2
+            guard revision != flight.publishedRevision else { continue }
+            flight.publishedRevision = revision
+            flights[id] = flight
+            changed = true
+        }
+        if changed { notify() }
     }
 
     private func interrupt(_ id: UUID, reason: String) {
@@ -330,18 +356,14 @@ public actor DownloadWorker {
         else { return }
         records[index].status = .interrupted(reason)
         try? save()
-        task?.cancel()
+        flights[id]?.task.cancel()
         notify()
     }
 
     private func finish(_ id: UUID, result: Result<CLICommandResult, Error>) async {
-        guard currentID == id else { return }
-        progressTask?.cancel()
-        progressTask = nil
-        if let text = output?.snapshot.0 { logs[id.uuidString] = text }
-        output = nil
-        task = nil
-        currentID = nil
+        guard let flight = flights.removeValue(forKey: id) else { return }
+        flight.progress?.cancel()
+        logs[id.uuidString] = flight.output.snapshot.0
         var succeeded = false
         if let index = records.firstIndex(where: { $0.id == id }), !records[index].isFinished {
             switch result {

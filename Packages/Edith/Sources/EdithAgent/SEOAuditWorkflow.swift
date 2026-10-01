@@ -206,11 +206,13 @@ public actor SEOAuditWorkflow {
                         project.imageURL = image
                         project.imageSnapshotURL = page.metadata.openGraphImageSnapshotURL
                     }
-                    project.updatedAt = Date()
-                    try repository.save(project)
                     completed += 1
-                    context.report("Audited \(completed) of \(request.urls.count): \(page.url)")
                     if next < request.urls.count { schedule(next); next += 1 }
+                    if completed == 1 || completed.isMultiple(of: 4) {
+                        project.updatedAt = Date()
+                        try repository.save(project)
+                    }
+                    context.report("Audited \(completed) of \(request.urls.count): \(page.url)")
                 }
             }
             if !scoresOnly {

@@ -104,13 +104,15 @@ public enum HerdrCollector {
         }
         let sessions = HerdrListParser.sessions(from: sessionsResult.stdout)
         let names = sessions.isEmpty ? ["default"] : sessions
+        let listings = await fanOut(names) { session in
+            await agentsInSession(
+                runner: runner, session: session, machineID: machineID, machineName: machineName,
+                machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        }
         var agents: [HerdrAgent] = []
         var terminals: [HerdrSpacePane] = []
         var lastError: String?
-        for session in names {
-            let listed = await agentsInSession(
-                runner: runner, session: session, machineID: machineID, machineName: machineName,
-                machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        for listed in listings {
             if !listed.present {
                 return Listing(present: false, agents: [], error: listed.error)
             }
@@ -122,6 +124,15 @@ public enum HerdrCollector {
             present: true, agents: agents, terminals: terminals,
             error: agents.isEmpty
                 ? lastError ?? jsonOrProcessError(sessionsResult) : nil)
+    }
+
+    static let sessionFanout = 4
+
+    static func fanOut<Value: Sendable>(
+        _ names: [String], limit: Int = HerdrCollector.sessionFanout,
+        _ body: @escaping @Sendable (String) async -> Value
+    ) async -> [Value] {
+        await BoundedTaskRunner.map(names, limit: limit) { _, name in await body(name) }
     }
 
     private static func agentsInSession(

@@ -384,4 +384,31 @@ import Testing
         #expect(HerdrListParser.createdPane(from: "not json") == nil)
         #expect(HerdrListParser.createdPane(from: #"{"result":{"type":"ok"}}"#) == nil)
     }
+
+    @Test func sessionListingsOverlapUpToFour() async {
+        let gate = SessionFanoutGate()
+        let names = (0..<4).map(String.init)
+        let started = ContinuousClock.now
+        let listed = await HerdrCollector.fanOut(names) { name in
+            await gate.enter(name)
+            return name
+        }
+        let elapsed = ContinuousClock.now - started
+        #expect(listed == names)
+        #expect(await gate.maximum == 4)
+        #expect(elapsed < .milliseconds(700))
+    }
+}
+
+private actor SessionFanoutGate {
+    private(set) var maximum = 0
+    private var current = 0
+
+    func enter(_ name: String) async {
+        current += 1
+        maximum = max(maximum, current)
+        try? await Task.sleep(for: .milliseconds(200))
+        current -= 1
+        _ = name
+    }
 }
