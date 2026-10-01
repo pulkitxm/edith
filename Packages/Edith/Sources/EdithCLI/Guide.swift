@@ -84,6 +84,7 @@ public enum Guide {
         ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper
         ed camera status             virtual camera, apps using it, framing and scene
+        ed audio ls                  per-app volume for whatever is playing
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex

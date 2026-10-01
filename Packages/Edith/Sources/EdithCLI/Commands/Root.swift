@@ -60,6 +60,7 @@ public struct EdRoot: AsyncParsableCommand {
             ExtensionsCommand.self,
             LidAwakeCLICommand.self,
             CameraCommand.self,
+            AudioCommand.self,
             PermissionsCommand.self,
             UsageCommand.self,
             SystemCommand.self,

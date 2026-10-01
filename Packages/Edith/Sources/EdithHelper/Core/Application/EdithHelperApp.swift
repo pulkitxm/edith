@@ -287,6 +287,7 @@ struct EdithApp {
         LidAwakeActionBridge.shared.install(services: services)
         VirtualCameraActionBridge.shared.install(services: services)
         NotchBrowserActionBridge.shared.install(services: services)
+        AudioMixerActionBridge.shared.install()
         _ = IPC.observe(
             IPC.Name.requestCalendarEvents,
             info: { info in

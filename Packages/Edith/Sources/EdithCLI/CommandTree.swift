@@ -278,6 +278,13 @@ public enum CommandTree {
         "ed camera extension remove": Spec(
             options: ["--json", "-h", "--help", "--version", "--yes"],
             destructivePolicy: .previewThenYes),
+        "ed audio ls": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed audio volume": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed audio mute": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed audio unmute": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "ed permissions ls": Spec(options: ["--json", "--help", "--attention"]),
         "ed permissions request": Spec(options: ["--json"], arguments: [.permission]),
         "ed permissions refresh": Spec(options: ["--json"]),

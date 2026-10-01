@@ -61,6 +61,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed studio`](./studio/README.md) | Studio: edit, convert and compress images, PDFs, video, audio and documents |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed camera`](./camera/README.md) | Edith Camera: framing, looks, backgrounds, overlays, scenes and pausing for any video app |
+| [`ed audio`](./audio/README.md) | Per-app volume for whatever is playing, the notch mixer |
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |

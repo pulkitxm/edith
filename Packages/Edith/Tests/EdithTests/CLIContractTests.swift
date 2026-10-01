@@ -913,6 +913,13 @@ enum JSONContract {
         JSONCase("ed extensions verify", ["extensions", "verify", "clipboard", "--json"]),
         JSONCase("ed extensions doctor", ["extensions", "doctor", "--json"]),
         JSONCase("ed camera status", ["camera", "status", "--json"]),
+        JSONCase("ed audio ls", ["audio", "ls", "--json"]),
+        JSONCase(
+            "ed audio volume", ["audio", "volume", "Music", "40", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed audio mute", ["audio", "mute", "Music", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed audio unmute", ["audio", "unmute", "Music", "--json"], mutatesTheMachine: true),
         JSONCase("ed camera on", ["camera", "on", "--json"], mutatesTheMachine: true),
         JSONCase("ed camera off", ["camera", "off", "--json"], mutatesTheMachine: true),
         JSONCase("ed camera sources", ["camera", "sources", "--json"]),
