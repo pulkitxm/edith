@@ -8,14 +8,16 @@ enum HerdrLayoutBridge {
     static func install() {
         guard observer == nil else { return }
         observer = IPC.observe(IPC.Name.requestHerdrLayoutAction) { info in
-            MainActor.assumeIsolated {
-                Task { await receive(info) }
-            }
+            MainActor.assumeIsolated { begin(info) }
         }
     }
 
+    private static func begin(_ info: [AnyHashable: Any]) {
+        Task { await receive(info) }
+    }
+
     static func reply(
-        to info: [AnyHashable: Any], store: HerdrStore = .shared, now: Date = Date()
+        to info: [AnyHashable: Any], store: HerdrStore, now: Date = Date()
     ) -> [String: Any]? {
         let requestID = info[HerdrLayoutIPC.requestIDKey] as? String
         guard let runtime = HerdrLayoutRuntimeRequest(payload: info) else {
