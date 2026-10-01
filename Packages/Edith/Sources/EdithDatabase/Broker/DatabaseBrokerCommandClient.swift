@@ -380,7 +380,7 @@ private enum DatabaseBrokerCommandAttemptFailure: Error, Equatable, Sendable {
             } else if error.failure.isTimeout {
                 self = .timedOut
             } else if case .authenticationFailed = error.failure {
-                if error.failure == .authenticationFailed(.uniqueIdentifierMismatch) {
+                if error.failure == .authenticationFailed(.codeRequirementMismatch) {
                     self = .unavailable
                 } else {
                     self = .unsafePeer

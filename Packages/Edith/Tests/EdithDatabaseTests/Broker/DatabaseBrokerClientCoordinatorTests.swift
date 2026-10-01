@@ -938,7 +938,7 @@ private final class DatabaseBrokerClientCoordinatorStub: @unchecked Sendable {
 
     @Test func classifiesLiveTransportFailures() {
         let mismatch = DatabaseBrokerHealthTransportError(
-            failure: .authenticationFailed(.uniqueIdentifierMismatch),
+            failure: .authenticationFailed(.codeRequirementMismatch),
             bytesWritten: 0)
         #expect(
             DatabaseBrokerClientProbeOutcome.classify(mismatch)
@@ -957,8 +957,7 @@ private final class DatabaseBrokerClientCoordinatorStub: @unchecked Sendable {
             .currentDesignatedRequirementUnavailable,
             .currentCodeInvalid,
             .peerCodeInvalid,
-            .currentUniqueIdentifierUnavailable,
-            .peerUniqueIdentifierUnavailable,
+            .currentSigningIdentifierUnavailable,
         ]
         for failure in authenticationFailures {
             let error = DatabaseBrokerHealthTransportError(

@@ -25,6 +25,7 @@ private final class DatabaseBrokerPeerAuthenticationSystemStub: @unchecked Senda
 
     enum Requirement: Equatable, Sendable {
         case current
+        case pack
     }
 
     enum Failure: Equatable {
@@ -37,8 +38,8 @@ private final class DatabaseBrokerPeerAuthenticationSystemStub: @unchecked Senda
         case designatedRequirement
         case currentCodeValidation
         case peerCodeValidation
-        case currentUniqueIdentifier
-        case peerUniqueIdentifier
+        case currentSigningIdentifier
+        case peerRequirement
     }
 
     enum Call: Equatable {
@@ -50,7 +51,9 @@ private final class DatabaseBrokerPeerAuthenticationSystemStub: @unchecked Senda
         case staticCode(Code)
         case designatedRequirement(StaticCode)
         case validate(Code, Requirement)
-        case uniqueIdentifier(StaticCode)
+        case signingIdentifier(StaticCode)
+        case teamIdentifier(StaticCode)
+        case requirement(String)
     }
 
     var expectedUserIdentifier = uid_t(501)
@@ -58,9 +61,12 @@ private final class DatabaseBrokerPeerAuthenticationSystemStub: @unchecked Senda
     var auditToken = Data(
         repeating: 0xA5,
         count: MemoryLayout<audit_token_t>.size)
-    var uniqueIdentifiers: [StaticCode: Data] = [
-        .current: Data([0x10, 0x20, 0x30]),
-        .peer: Data([0x10, 0x20, 0x30]),
+    var signingIdentifiers: [StaticCode: String] = [
+        .current: "com.pulkit.edith",
+        .peer: "com.pulkit.edith.database",
+    ]
+    var teamIdentifiers: [StaticCode: String] = [
+        .current: "TEAMID"
     ]
     var failure: Failure?
     var calls: [Call] = []
@@ -122,18 +128,24 @@ private final class DatabaseBrokerPeerAuthenticationSystemStub: @unchecked Senda
         }
     }
 
-    func uniqueIdentifier(for code: StaticCode) throws -> Data {
-        calls.append(.uniqueIdentifier(code))
-        switch code {
-        case .current:
-            try failIfRequested(.currentUniqueIdentifier)
-        case .peer:
-            try failIfRequested(.peerUniqueIdentifier)
-        }
-        guard let uniqueIdentifier = uniqueIdentifiers[code] else {
+    func signingIdentifier(for code: StaticCode) throws -> String {
+        calls.append(.signingIdentifier(code))
+        try failIfRequested(.currentSigningIdentifier)
+        guard let signingIdentifier = signingIdentifiers[code] else {
             throw DatabaseBrokerPeerAuthenticationSystemStubError.requestedFailure
         }
-        return uniqueIdentifier
+        return signingIdentifier
+    }
+
+    func teamIdentifier(for code: StaticCode) throws -> String? {
+        calls.append(.teamIdentifier(code))
+        return teamIdentifiers[code]
+    }
+
+    func requirement(_ expression: String) throws -> Requirement {
+        calls.append(.requirement(expression))
+        try failIfRequested(.peerRequirement)
+        return .pack
     }
 
     private func failIfRequested(_ requestedFailure: Failure) throws {
@@ -206,21 +218,21 @@ private enum DatabaseBrokerLivePeerAuthenticationSupport {
                 .staticCode(.current),
                 .designatedRequirement(.current),
                 .validate(.current, .current),
-                .uniqueIdentifier(.current),
+                .signingIdentifier(.current),
+                .teamIdentifier(.current),
+                .requirement(
+                    "(identifier \"com.pulkit.edith\" or identifier \"com.pulkit.edith.database\") and anchor apple generic and certificate leaf[subject.OU] = \"TEAMID\""
+                ),
                 .effectiveUserIdentifier,
                 .peerUserIdentifier(41),
                 .peerAuditToken(41),
                 .peerCode(system.auditToken),
-                .staticCode(.peer),
-                .validate(.peer, .current),
-                .uniqueIdentifier(.peer),
+                .validate(.peer, .pack),
                 .effectiveUserIdentifier,
                 .peerUserIdentifier(42),
                 .peerAuditToken(42),
                 .peerCode(system.auditToken),
-                .staticCode(.peer),
-                .validate(.peer, .current),
-                .uniqueIdentifier(.peer),
+                .validate(.peer, .pack),
             ])
     }
 
@@ -319,16 +331,6 @@ private enum DatabaseBrokerLivePeerAuthenticationSupport {
         }
     }
 
-    @Test func rejectsPeerWhoseStaticCodeCannotBeResolved() throws {
-        let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        let authenticator = try DatabaseBrokerPeerAuthenticator(system: system)
-        system.failure = .peerStaticCode
-
-        #expect(throws: DatabaseBrokerPeerAuthenticationError.peerStaticCodeUnavailable) {
-            try authenticator.authenticatePeer(socketDescriptor: 12)
-        }
-    }
-
     @Test func rejectsUnavailableCurrentCodeDuringInitialization() {
         let system = DatabaseBrokerPeerAuthenticationSystemStub()
         system.failure = .currentCode
@@ -366,75 +368,51 @@ private enum DatabaseBrokerLivePeerAuthenticationSupport {
         #expect(throws: DatabaseBrokerPeerAuthenticationError.currentCodeInvalid) {
             _ = try DatabaseBrokerPeerAuthenticator(system: system)
         }
-        #expect(!system.calls.contains(.uniqueIdentifier(.current)))
+        #expect(!system.calls.contains(.signingIdentifier(.current)))
     }
 
-    @Test func rejectsPeerCodeThatFailsCurrentDesignatedRequirement() throws {
+    @Test func rejectsPeerThatFailsThePackRequirement() throws {
         let system = DatabaseBrokerPeerAuthenticationSystemStub()
         let authenticator = try DatabaseBrokerPeerAuthenticator(system: system)
         system.calls.removeAll()
         system.failure = .peerCodeValidation
 
-        #expect(throws: DatabaseBrokerPeerAuthenticationError.peerCodeInvalid) {
+        #expect(throws: DatabaseBrokerPeerAuthenticationError.codeRequirementMismatch) {
             try authenticator.authenticatePeer(socketDescriptor: 15)
         }
-        #expect(system.calls.contains(.validate(.peer, .current)))
-        #expect(!system.calls.contains(.uniqueIdentifier(.peer)))
+        #expect(system.calls.contains(.validate(.peer, .pack)))
     }
 
-    @Test func rejectsUnavailableCurrentUniqueIdentifierDuringInitialization() {
+    @Test func rejectsUnavailableCurrentSigningIdentifierDuringInitialization() {
         let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        system.failure = .currentUniqueIdentifier
+        system.failure = .currentSigningIdentifier
 
         #expect(
-            throws: DatabaseBrokerPeerAuthenticationError.currentUniqueIdentifierUnavailable
+            throws: DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
         ) {
             _ = try DatabaseBrokerPeerAuthenticator(system: system)
         }
     }
 
-    @Test func rejectsEmptyCurrentUniqueIdentifierDuringInitialization() {
+    @Test func rejectsEmptyCurrentSigningIdentifierDuringInitialization() {
         let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        system.uniqueIdentifiers[.current] = Data()
+        system.signingIdentifiers[.current] = ""
 
         #expect(
-            throws: DatabaseBrokerPeerAuthenticationError.currentUniqueIdentifierUnavailable
+            throws: DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
         ) {
             _ = try DatabaseBrokerPeerAuthenticator(system: system)
         }
     }
 
-    @Test func rejectsUnavailablePeerUniqueIdentifier() throws {
+    @Test func rejectsAPeerRequirementThatCannotBeBuilt() throws {
         let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        let authenticator = try DatabaseBrokerPeerAuthenticator(system: system)
-        system.failure = .peerUniqueIdentifier
+        system.failure = .peerRequirement
 
         #expect(
-            throws: DatabaseBrokerPeerAuthenticationError.peerUniqueIdentifierUnavailable
+            throws: DatabaseBrokerPeerAuthenticationError.currentSigningIdentifierUnavailable
         ) {
-            try authenticator.authenticatePeer(socketDescriptor: 18)
-        }
-    }
-
-    @Test func rejectsEmptyPeerUniqueIdentifier() throws {
-        let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        let authenticator = try DatabaseBrokerPeerAuthenticator(system: system)
-        system.uniqueIdentifiers[.peer] = Data()
-
-        #expect(
-            throws: DatabaseBrokerPeerAuthenticationError.peerUniqueIdentifierUnavailable
-        ) {
-            try authenticator.authenticatePeer(socketDescriptor: 19)
-        }
-    }
-
-    @Test func rejectsPeerWithDifferentExactUniqueIdentifier() throws {
-        let system = DatabaseBrokerPeerAuthenticationSystemStub()
-        let authenticator = try DatabaseBrokerPeerAuthenticator(system: system)
-        system.uniqueIdentifiers[.peer] = Data([0x10, 0x20, 0x31])
-
-        #expect(throws: DatabaseBrokerPeerAuthenticationError.uniqueIdentifierMismatch) {
-            try authenticator.authenticatePeer(socketDescriptor: 20)
+            _ = try DatabaseBrokerPeerAuthenticator(system: system)
         }
     }
 

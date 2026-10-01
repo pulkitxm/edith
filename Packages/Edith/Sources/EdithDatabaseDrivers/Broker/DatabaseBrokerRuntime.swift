@@ -37,7 +37,7 @@ enum DatabaseBrokerRuntimeClientResult: Equatable, Sendable {
 
     var requestsPeerVersionShutdown: Bool {
         guard case .failed(let error) = self else { return false }
-        return error.indicatesUniqueIdentifierMismatch
+        return error.indicatesCodeRequirementMismatch
     }
 }
 

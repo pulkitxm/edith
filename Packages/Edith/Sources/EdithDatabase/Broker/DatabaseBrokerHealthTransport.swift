@@ -27,8 +27,8 @@ package struct DatabaseBrokerHealthTransportError: Error, Equatable, Sendable {
         bytesWritten == 0
     }
 
-    package var indicatesUniqueIdentifierMismatch: Bool {
-        if case .authenticationFailed(.uniqueIdentifierMismatch) = failure {
+    package var indicatesCodeRequirementMismatch: Bool {
+        if case .authenticationFailed(.codeRequirementMismatch) = failure {
             return true
         }
         return false
