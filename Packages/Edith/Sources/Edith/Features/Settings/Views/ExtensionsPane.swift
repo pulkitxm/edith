@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import EdithCore
+import EdithDatabase
 import EdithKit
 import SwiftUI
 
@@ -46,6 +47,7 @@ struct ExtensionsPane: View {
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
+    @State private var installsDatabasePack = false
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -106,6 +108,9 @@ struct ExtensionsPane: View {
         }
         .sheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
+        }
+        .sheet(isPresented: $installsDatabasePack) {
+            DatabasePackInstallSheet()
         }
         .alert(
             "Lid Awake could not change state",
@@ -241,6 +246,7 @@ struct ExtensionsPane: View {
         switch coordinator.setEnabled(newValue) {
         case let .applied(_, missingRequiredTools):
             if !missingRequiredTools.isEmpty { provisioningEntry = entry }
+            if newValue { offerDatabasePack(for: entry) }
         case let .needsPermissions(plan):
             permissionRequest = ExtensionPermissionRequest(
                 entry: entry, required: plan.required, optional: plan.optional)
@@ -280,10 +286,19 @@ struct ExtensionsPane: View {
             entry: request.entry, mutationCenter: .application)
         let outcome = coordinator.enableAfterPermissions()
         permissionRequest = nil
-        guard case let .applied(_, missingRequiredTools) = outcome,
-            !missingRequiredTools.isEmpty
-        else { return }
-        DispatchQueue.main.async { provisioningEntry = request.entry }
+        guard case let .applied(_, missingRequiredTools) = outcome else { return }
+        if !missingRequiredTools.isEmpty {
+            DispatchQueue.main.async { provisioningEntry = request.entry }
+        }
+        offerDatabasePack(for: request.entry)
+    }
+
+    private func offerDatabasePack(for entry: ExtensionRegistryEntry) {
+        guard entry.id == "database" else { return }
+        let inspection = DatabasePackStore.inspect(
+            expectedVersion: DatabasePackVersion.current())
+        guard inspection.state != .current else { return }
+        installsDatabasePack = true
     }
 
     private var lidAwakeErrorMessage: String? {
@@ -493,6 +508,7 @@ private struct ExtensionSettingsSheet: View {
     @State private var grantedPermissions: [ExtensionPermission: Bool]
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
+    @State private var installsDatabasePack = false
     @State private var invalidation = 0
     @ObservedObject private var lidAwakeOperations: LidAwakeOperationModel
 
@@ -579,6 +595,9 @@ private struct ExtensionSettingsSheet: View {
                 invalidateReadiness()
             }
         }
+        .sheet(isPresented: $installsDatabasePack) {
+            DatabasePackInstallSheet()
+        }
         .alert(
             "Lid Awake could not change state",
             isPresented: Binding(
@@ -609,6 +628,7 @@ private struct ExtensionSettingsSheet: View {
                     enabled = result.enabled
                     invalidateReadiness()
                     if !missingRequiredTools.isEmpty { provisioningEntry = entry }
+                    if wanted { offerDatabasePack() }
                 case let .needsPermissions(plan):
                     permissionRequest = ExtensionPermissionRequest(
                         entry: entry, required: plan.required, optional: plan.optional)
@@ -650,8 +670,18 @@ private struct ExtensionSettingsSheet: View {
         enabled = result.enabled
         permissionRequest = nil
         invalidateReadiness()
-        guard !missingRequiredTools.isEmpty else { return }
-        DispatchQueue.main.async { provisioningEntry = entry }
+        if !missingRequiredTools.isEmpty {
+            DispatchQueue.main.async { provisioningEntry = entry }
+        }
+        offerDatabasePack()
+    }
+
+    private func offerDatabasePack() {
+        guard entry.id == "database" else { return }
+        let inspection = DatabasePackStore.inspect(
+            expectedVersion: DatabasePackVersion.current())
+        guard inspection.state != .current else { return }
+        installsDatabasePack = true
     }
 
     private func invalidateReadiness() {

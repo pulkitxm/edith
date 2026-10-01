@@ -79,6 +79,7 @@ public enum Guide {
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
         ed database connections     saved database connection summaries
+        ed database pack status     whether the driver pack matches this app
         ed database capabilities <id>  detected support for one connection id
         ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper

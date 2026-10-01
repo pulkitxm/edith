@@ -8,7 +8,7 @@ import Testing
 struct DatabasePageModelTests {
     @Test("Initial readiness succeeds without exposing service status")
     func initialReadiness() async {
-        let model = DatabasePageModel(ensureReady: {})
+        let model = DatabasePageModel(ensureReady: {}, preparePack: { _ in })
 
         await model.refresh()
 
@@ -18,9 +18,10 @@ struct DatabasePageModelTests {
 
     @Test("Authentication failures provide a repairable technical detail")
     func authenticationFailure() async {
-        let model = DatabasePageModel(ensureReady: {
-            throw DatabaseBrokerAvailabilityError.unsafePeer
-        })
+        let model = DatabasePageModel(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.unsafePeer
+            }, preparePack: { _ in })
 
         await model.refresh()
 
@@ -38,7 +39,8 @@ struct DatabasePageModelTests {
             },
             repairService: {
                 await calls.recordRepair()
-            })
+            },
+            preparePack: { _ in })
 
         await model.refresh()
         await model.repair()
@@ -49,12 +51,24 @@ struct DatabasePageModelTests {
 
     @Test("Cancelled readiness enters a recoverable terminal state")
     func cancelledReadiness() async {
-        let model = DatabasePageModel(ensureReady: { throw CancellationError() })
+        let model = DatabasePageModel(
+            ensureReady: { throw CancellationError() }, preparePack: { _ in })
 
         await model.refresh()
 
         #expect(model.readiness == .failed("The database readiness check was cancelled."))
         #expect(model.failureDetail == "The database readiness check was cancelled.")
+    }
+
+    @Test("A rejected pack checksum is shown on the page")
+    func packChecksumFailure() async {
+        let model = DatabasePageModel(
+            ensureReady: {},
+            preparePack: { _ in throw DatabasePackInstallError.checksumMismatch })
+        await model.refresh()
+        #expect(
+            model.failureDetail
+                == "The database pack checksum did not match the published digest.")
     }
 }
 

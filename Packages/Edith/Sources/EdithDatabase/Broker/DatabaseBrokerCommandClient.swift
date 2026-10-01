@@ -34,6 +34,7 @@ public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendabl
         _ request: DatabaseBrokerCommandRequest
     ) async throws -> DatabaseBrokerCommandResponse {
         do {
+            try await dependencies.ensurePack()
             try await dependencies.ensureReady()
         } catch is CancellationError {
             throw CancellationError()
@@ -128,6 +129,7 @@ public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendabl
 }
 
 struct DatabaseBrokerCommandClientDependencies: Sendable {
+    let ensurePack: @Sendable () async throws -> Void
     let ensureReady: @Sendable () async throws -> Void
     let monotonicNanoseconds: @Sendable () -> UInt64
     let transportBudgetNanoseconds: UInt64
@@ -148,8 +150,10 @@ struct DatabaseBrokerCommandClientDependencies: Sendable {
         queue: DispatchQueue = DispatchQueue(
             label: "com.edith.database.broker.command-client",
             qos: .userInitiated,
-            attributes: .concurrent)
+            attributes: .concurrent),
+        ensurePack: @escaping @Sendable () async throws -> Void = {}
     ) {
+        self.ensurePack = ensurePack
         self.ensureReady = ensureReady
         self.monotonicNanoseconds = monotonicNanoseconds
         self.transportBudgetNanoseconds = transportBudgetNanoseconds
@@ -457,6 +461,9 @@ extension DatabaseBrokerCommandClientDependencies {
                     close: {
                         socket.close()
                     })
+            },
+            ensurePack: {
+                _ = try await DatabasePackInstaller.live().install()
             })
     }
 }

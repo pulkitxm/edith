@@ -595,6 +595,9 @@ enum JSONContract {
                 "database", "operations", "cancel",
                 "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
             ]),
+        JSONCase("ed database pack install", ["database", "pack", "install", "--json"]),
+        JSONCase("ed database pack status", ["database", "pack", "status", "--json"]),
+        JSONCase("ed database pack remove", ["database", "pack", "remove", "--json"]),
         JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),

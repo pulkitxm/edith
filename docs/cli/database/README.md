@@ -47,6 +47,9 @@ The bare command runs `ed database connections`, which in turn runs
 | `ed database operations list` | Lists bounded operation history. |
 | `ed database operations get` | Shows one tracked operation. |
 | `ed database operations cancel` | Requests cancellation of one tracked operation. |
+| `ed database pack install` | Downloads, verifies, and installs the driver pack for this app version. |
+| `ed database pack status` | Reports whether the installed driver pack matches this app. |
+| `ed database pack remove` | Deletes the installed driver pack. |
 | [`ed database mcp`](./mcp.md) | Serves bounded read-only connection and capability tools over MCP stdio. |
 
 ## Safety boundary

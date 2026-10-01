@@ -393,6 +393,8 @@ if [ "$CONFIG" = Debug ]; then
   mkdir -p "$PACK_DIR"
   cp "$PACK_DEST" "$PACK_DIR/edith-database"
   chmod 755 "$PACK_DIR/edith-database"
+  PACK_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+  printf '%s\n' "$PACK_VERSION" > "$PACK_DIR/version"
 fi
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister

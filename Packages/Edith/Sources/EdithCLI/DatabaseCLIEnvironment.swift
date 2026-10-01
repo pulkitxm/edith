@@ -17,6 +17,14 @@ public enum DatabaseCLIEnvironment {
     nonisolated(unsafe) public static var readPassword: @Sendable () throws -> String = {
         try SecretInput.readFromStdin("database password")
     }
+    nonisolated(unsafe) public static var installPack:
+        @Sendable (@escaping @Sendable (Double) -> Void) async throws -> DatabasePackInspection = {
+            progress in
+            try await DatabasePackInstaller.live(
+                directories: DatabasePackCLI.directories(),
+                progress: progress
+            ).install()
+        }
     nonisolated(unsafe) public static var readQueryText: @Sendable (String?) throws -> String = {
         path in
         let data: Data
@@ -35,6 +43,12 @@ public enum DatabaseCLIEnvironment {
         makeSender = { DatabaseBrokerCommandClient() }
         runMCPServer = { try await DatabaseMCPServer().run() }
         makeSecretStore = { try DatabaseKeychainSecretStore() }
+        installPack = { progress in
+            try await DatabasePackInstaller.live(
+                directories: DatabasePackCLI.directories(),
+                progress: progress
+            ).install()
+        }
         readPassword = { try SecretInput.readFromStdin("database password") }
         readQueryText = { path in
             let data: Data
