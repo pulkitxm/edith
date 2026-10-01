@@ -2,14 +2,27 @@ import AppKit
 import EdithKit
 import Observation
 
-struct RunningAppRow: Identifiable {
+@Observable
+final class RunningAppRow: Identifiable {
     let pid: pid_t
-    let name: String
+    var name: String
     let bundleID: String?
-    let icon: NSImage?
+    var icon: NSImage?
     var cpuPercent: Double
     var memoryMB: Double
     var id: pid_t { pid }
+
+    init(
+        pid: pid_t, name: String, bundleID: String?, icon: NSImage?, cpuPercent: Double,
+        memoryMB: Double
+    ) {
+        self.pid = pid
+        self.name = name
+        self.bundleID = bundleID
+        self.icon = icon
+        self.cpuPercent = cpuPercent
+        self.memoryMB = memoryMB
+    }
 }
 
 enum AppSortKey: String {
@@ -64,9 +77,9 @@ final class RunningAppsModel {
     private(set) var actionStatus: RunningAppActionStatus?
     private(set) var loaded = false
     private(set) var refreshing = false
+    private(set) var scrolling = false
 
     private var resourceBaseline: RunningAppResourceBaseline?
-    @ObservationIgnored private var iconCache: [pid_t: NSImage] = [:]
     private let operations: RunningAppOperationCenter
 
     var quitAllTargetCount: Int {
@@ -117,38 +130,63 @@ final class RunningAppsModel {
         return ascending ? ordered : ordered.reversed()
     }
 
+    func setScrolling(_ value: Bool) {
+        if scrolling != value { scrolling = value }
+    }
+
     func refresh() async {
         refreshing = true
         defer {
             refreshing = false
             loaded = true
         }
-        let snapshots = operations.list()
         let operations = self.operations
-        var live = Set<pid_t>()
-        for snapshot in snapshots { live.insert(snapshot.pid) }
-        for pid in iconCache.keys where !live.contains(pid) { iconCache[pid] = nil }
-        for app in NSWorkspace.shared.runningApplications
-        where app.processIdentifier > 0 && live.contains(app.processIdentifier)
-            && iconCache[app.processIdentifier] == nil
-        {
-            iconCache[app.processIdentifier] = app.icon
-        }
-        let icons = iconCache
         let previous = resourceBaseline
         let now = Date()
         let measured = await Task.detached(priority: .utility) {
+            let snapshots = operations.list()
             let baseline = previous ?? operations.resourceBaseline(for: snapshots, at: now)
-            return operations.measureResources(for: snapshots, from: baseline, at: now)
+            let sample = operations.measureResources(for: snapshots, from: baseline, at: now)
+            return (sample, Self.icons(for: sample.apps))
         }.value
-        resourceBaseline = measured.baseline
-        totalMemoryMB = measured.apps.reduce(0) { $0 + $1.memoryMB }
-        apps = sorted(
-            measured.apps.map { app in
-                RunningAppRow(
-                    pid: app.pid, name: app.name, bundleID: app.bundleID,
-                    icon: icons[app.pid], cpuPercent: app.cpuPercent, memoryMB: app.memoryMB)
-            })
+        resourceBaseline = measured.0.baseline
+        publish(measured.0.apps, icons: measured.1)
+    }
+
+    private func publish(_ snapshots: [RunningAppSnapshot], icons: [pid_t: NSImage]) {
+        var existing: [pid_t: RunningAppRow] = [:]
+        for row in apps { existing[row.pid] = row }
+        var next: [RunningAppRow] = []
+        next.reserveCapacity(snapshots.count)
+        var memory = 0.0
+        for snapshot in snapshots {
+            let row =
+                existing[snapshot.pid]
+                ?? RunningAppRow(
+                    pid: snapshot.pid, name: snapshot.name, bundleID: snapshot.bundleID,
+                    icon: icons[snapshot.pid], cpuPercent: snapshot.cpuPercent,
+                    memoryMB: snapshot.memoryMB)
+            row.name = snapshot.name
+            row.cpuPercent = snapshot.cpuPercent
+            row.memoryMB = snapshot.memoryMB
+            if let icon = icons[snapshot.pid] { row.icon = icon }
+            memory += snapshot.memoryMB
+            next.append(row)
+        }
+        totalMemoryMB = memory
+        apps = sorted(next)
+    }
+
+    nonisolated private static func icons(for apps: [RunningAppSnapshot]) -> [pid_t: NSImage] {
+        var wanted: Set<pid_t> = []
+        for app in apps { wanted.insert(app.pid) }
+        var icons: [pid_t: NSImage] = [:]
+        for application in NSWorkspace.shared.runningApplications {
+            let pid = application.processIdentifier
+            guard pid > 0, wanted.contains(pid), let icon = application.icon else { continue }
+            icons[pid] = icon
+        }
+        return icons
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
