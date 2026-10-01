@@ -95,6 +95,16 @@ if [ -n "$PREBUILT" ]; then
   exit 0
 fi
 
+if [ "$INSTALL" = 1 ]; then
+  env_file=".env"
+  [ -f "$env_file" ] || env_file="$(git worktree list --porcelain | head -1 | cut -c10-)/.env"
+  if [ -f "$env_file" ]; then
+    set -a
+    . "$env_file"
+    set +a
+  fi
+fi
+
 if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
   case "$SIGN_IDENTITY" in
@@ -151,6 +161,12 @@ if [ -n "$BRANCH" ]; then
     [ "$RELEASE" = 0 ] || BUILD_ARGUMENTS+=(--release)
     exec "$ROOT/build.sh" "${BUILD_ARGUMENTS[@]}"
   fi
+fi
+
+if [ "$INSTALL" = 1 ] && [ -n "${EDITH_SIGN_IDENTITY:-}" ]; then
+  . scripts/signing-keychain.sh
+  trap signing_keychain_close EXIT
+  signing_keychain_open "$SIGN_IDENTITY"
 fi
 
 CONFIG=Debug
