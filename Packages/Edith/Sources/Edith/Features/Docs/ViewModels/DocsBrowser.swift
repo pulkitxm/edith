@@ -27,9 +27,34 @@ final class DocsBrowser {
     var filter = ""
     var question = ""
     var selection = 0
+    private(set) var sidebarGroups: [(DocsGroup, [DocsPage])] = []
+    private(set) var appliedFilter = ""
+    var filterDelay: Duration = .milliseconds(200)
+    var matchPages: @Sendable ([DocsGroup], String) -> [(DocsGroup, [DocsPage])] = {
+        groups, filter in
+        DocsNavigation.visibleGroups(groups, filter: filter)
+    }
 
-    init(library: DocsLibrary? = nil) {
-        self.library = library
+    private var filterGeneration = 0
+    private var filterTask: Task<Void, Never>?
+    private var suppliedLibrary = false
+    private var loadTask: Task<Void, Never>?
+
+    init(
+        library: DocsLibrary? = nil,
+        matchPages: (@Sendable ([DocsGroup], String) -> [(DocsGroup, [DocsPage])])? = nil,
+        filterDelay: Duration = .milliseconds(200)
+    ) {
+        if let library {
+            self.library = library
+            suppliedLibrary = true
+        } else if let ready = DocsLibrary.cached() {
+            self.library = ready
+            suppliedLibrary = true
+        }
+        self.filterDelay = filterDelay
+        if let matchPages { self.matchPages = matchPages }
+        if let groups = self.library?.groups { sidebarGroups = Self.listing(groups) }
     }
 
     var page: DocsPage? { library?.page(location.path) }
@@ -37,10 +62,78 @@ final class DocsBrowser {
     var canGoForward: Bool { !forwardStack.isEmpty }
 
     func load() async {
-        guard library == nil else { return }
+        if suppliedLibrary { return }
+        if let loadTask {
+            await loadTask.value
+            return
+        }
+        let task = Task { await loadFresh() }
+        loadTask = task
+        await task.value
+    }
+
+    private func loadFresh() async {
+        if let ready = DocsLibrary.cached() {
+            adopt(ready)
+            suppliedLibrary = true
+            return
+        }
+        if library == nil {
+            let index = await Task.detached(priority: .userInitiated) {
+                DocsLibrary.openingPage()
+            }.value
+            if let index { adopt(DocsLibrary(pages: [index])) }
+        }
         let loaded = await Task.detached(priority: .userInitiated) { DocsLibrary.bundled() }.value
-        guard library == nil else { return }
-        library = loaded
+        guard let loaded else { return }
+        adopt(loaded)
+        suppliedLibrary = true
+    }
+
+    private func adopt(_ next: DocsLibrary) {
+        library = next
+        let trimmed = filter.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            appliedFilter = ""
+            sidebarGroups = Self.listing(next.groups)
+        } else {
+            noteFilter(filter)
+        }
+    }
+
+    func noteFilter(_ text: String) {
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        filterTask?.cancel()
+        filterTask = nil
+        let groups = library?.groups ?? []
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+            appliedFilter = ""
+            sidebarGroups = Self.listing(groups)
+            return
+        }
+        let delay = filterDelay
+        let matchPages = matchPages
+        let query = text
+        filterTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+            let matched = await Task.detached { matchPages(groups, query) }.value
+            guard !Task.isCancelled, self.filterGeneration == generation else { return }
+            self.appliedFilter = query
+            self.sidebarGroups = matched
+        }
+    }
+
+    func settleFilter() async {
+        await filterTask?.value
+    }
+
+    private static func listing(_ groups: [DocsGroup]) -> [(DocsGroup, [DocsPage])] {
+        var rows: [(DocsGroup, [DocsPage])] = []
+        rows.reserveCapacity(groups.count)
+        for group in groups { rows.append((group, group.pages)) }
+        return rows
     }
 
     func open(_ target: DocsLocation, reveal: Bool = true) {

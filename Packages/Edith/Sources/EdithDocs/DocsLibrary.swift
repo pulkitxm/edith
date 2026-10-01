@@ -23,25 +23,86 @@ public struct DocsLibrary: Sendable {
     private let commandIndex: [String: Int]
 
     public init(sources: [DocsSource]) {
-        let parsed = sources.map { DocsParser.page(path: $0.path, markdown: $0.markdown) }
+        self.init(pages: sources.map { DocsParser.page(path: $0.path, markdown: $0.markdown) })
+    }
+
+    public init(pages: [DocsPage]) {
         let index = Dictionary(
-            parsed.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
-        pages = parsed
+            pages.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
+        self.pages = pages
         pageIndex = index
-        groups = Self.makeGroups(parsed, index: index)
-        let commands = DocsCommandIndexer(pages: parsed).commands()
+        groups = Self.makeGroups(pages, index: index)
+        let commands = DocsCommandIndexer(pages: pages).commands()
         self.commands = commands
         commandIndex = Dictionary(
             commands.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
-        search = DocsSearchIndex(commands: commands, pages: parsed, index: index)
+        search = DocsSearchIndex(commands: commands, pages: pages, index: index)
+    }
+
+    private static let memoryLock = NSLock()
+    private static var memory: DocsLibrary?
+    private static var sourceMemory: [DocsSource]?
+    private static var parsedPages: [String: DocsPage] = [:]
+    static var bundleReads = 0
+
+    public static func cached() -> DocsLibrary? {
+        memoryLock.lock()
+        defer { memoryLock.unlock() }
+        return memory
+    }
+
+    public static func openingPage() -> DocsPage? {
+        guard let sources = bundledSources() else { return nil }
+        return parsedPage(indexPath, in: sources)
     }
 
     public static func bundled() -> DocsLibrary? {
+        if let cached = cached() { return cached }
+        guard let sources = bundledSources() else { return nil }
+        let pages = sources.compactMap { parsedPage($0.path, in: sources) }
+        let library = DocsLibrary(pages: pages)
+        memoryLock.lock()
+        if memory == nil {
+            memory = library
+            bundleReads += 1
+        }
+        let stored = memory
+        memoryLock.unlock()
+        return stored
+    }
+
+    static func bundledSources() -> [DocsSource]? {
+        memoryLock.lock()
+        if let sourceMemory {
+            memoryLock.unlock()
+            return sourceMemory
+        }
+        memoryLock.unlock()
         guard let url = BundledResources.url(forResource: resourceName, withExtension: "json"),
             let data = try? Data(contentsOf: url),
             let sources = try? JSONDecoder().decode([DocsSource].self, from: data)
         else { return nil }
-        return DocsLibrary(sources: sources)
+        memoryLock.lock()
+        if sourceMemory == nil { sourceMemory = sources }
+        let stored = sourceMemory
+        memoryLock.unlock()
+        return stored
+    }
+
+    private static func parsedPage(_ path: String, in sources: [DocsSource]) -> DocsPage? {
+        memoryLock.lock()
+        if let page = parsedPages[path] {
+            memoryLock.unlock()
+            return page
+        }
+        memoryLock.unlock()
+        guard let source = sources.first(where: { $0.path == path }) else { return nil }
+        let page = DocsParser.page(path: source.path, markdown: source.markdown)
+        memoryLock.lock()
+        if parsedPages[path] == nil { parsedPages[path] = page }
+        let stored = parsedPages[path]
+        memoryLock.unlock()
+        return stored
     }
 
     public func page(_ path: String) -> DocsPage? {

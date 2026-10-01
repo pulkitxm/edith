@@ -79,7 +79,7 @@ struct DocsScreen: View {
                 GeometryReader { geometry in
                     HStack(spacing: 0) {
                         DocsNavigator(
-                            browser: browser, library: library, filter: $browser.filter,
+                            browser: browser, filter: $browser.filter,
                             filterFocused: $filterFocused, dark: dark
                         )
                         .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
@@ -302,25 +302,23 @@ private struct DocsAskResults: View {
 
 private struct DocsNavigator: View {
     let browser: DocsBrowser
-    let library: DocsLibrary
     @Binding var filter: String
     var filterFocused: FocusState<Bool>.Binding
     let dark: Bool
 
     var body: some View {
-        let filtering = !filter.trimmingCharacters(in: .whitespaces).isEmpty
+        let filtering = !browser.appliedFilter.trimmingCharacters(in: .whitespaces).isEmpty
         VStack(spacing: 0) {
             SearchField(
                 placeholder: "Filter pages  \u{2318}F", text: $filter, compact: true,
                 focus: filterFocused
             )
             .padding(UIScale.pt(10))
+            .onChange(of: filter) { browser.noteFilter(filter) }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                        ForEach(
-                            DocsNavigation.visibleGroups(library.groups, filter: filter), id: \.0.id
-                        ) {
+                        ForEach(browser.sidebarGroups, id: \.0.id) {
                             group, pages in
                             let expanded = filtering || browser.expandedGroups.contains(group.id)
                             header(group, count: pages.count, expanded: expanded)
