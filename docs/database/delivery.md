@@ -55,8 +55,10 @@ Each accepts `--json` and documents its flags in `--help`.
 
 Install location, using the same data root as the rest of the app:
 
-- Production: `~/Library/Application Support/Edith/Database/pack`
-- Development: `~/Library/Application Support/Edith Dev/<slot>/Database/pack`
+- Production: `~/Library/Application Support/Edith/DatabasePack`
+- Development: `~/Library/Application Support/Edith Dev/<slot>/DatabasePack`
+
+The directory is `DatabasePack`, not `database`, so it does not collide with the broker's data directory on a case-insensitive volume.
 
 The installed pack records the app version it was built for. A pack whose version differs from the running app is invalid. The next launch or `ed database` command replaces it. Removing the pack deletes that directory.
 

@@ -5,6 +5,13 @@ import Foundation
 struct AgentTasksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tasks", abstract: "Inspect and control background tasks.",
+        discussion: """
+            List, inspect, cancel, or exec tasks in the background agent.
+            Reads the agent's task store. cancel and exec change the queue. ls and inspect do not change anything.
+
+            ed agent tasks ls
+            ed agent tasks inspect <id>
+            """,
         subcommands: [
             AgentTasksListCommand.self, AgentTasksInspectCommand.self,
             AgentTasksCancelCommand.self, AgentTasksExecCommand.self,
@@ -13,8 +20,15 @@ struct AgentTasksCommand: AsyncParsableCommand {
 
 struct AgentTasksListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List active and completed background tasks.")
-    @Flag(name: .long) var json = false
+        commandName: "ls", abstract: "List active and completed background tasks.",
+        discussion: """
+            List tasks with id, state, and title.
+            Reads the task store. Does not change tasks.
+
+            ed agent tasks ls
+            ed agent tasks ls --json
+            """)
+    @Flag(name: .long, help: "Emit the task list as JSON.") var json = false
 
     func run() async throws {
         try await execute {
@@ -33,9 +47,16 @@ struct AgentTasksListCommand: AsyncParsableCommand {
 
 struct AgentTasksInspectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "inspect", abstract: "Read a task's progress and retained result.")
-    @Argument var id: String
-    @Flag(name: .long) var json = false
+        commandName: "inspect", abstract: "Read a task's progress and retained result.",
+        discussion: """
+            Read one task's progress, output, and failure.
+            Reads that task. Does not change it. The id is a UUID from ed agent tasks ls.
+
+            ed agent tasks inspect <id>
+            ed agent tasks inspect <id> --json
+            """)
+    @Argument(help: "Task UUID from ed agent tasks ls.") var id: String
+    @Flag(name: .long, help: "Emit the task as JSON.") var json = false
 
     func run() async throws {
         try await execute {
@@ -56,9 +77,16 @@ struct AgentTasksInspectCommand: AsyncParsableCommand {
 
 struct AgentTasksCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "cancel", abstract: "Cancel a queued or running background task.")
-    @Argument var id: String
-    @Flag(name: .long) var json = false
+        commandName: "cancel", abstract: "Cancel a queued or running background task.",
+        discussion: """
+            Cancel one queued or running task.
+            Reads the task id. Changes that task by requesting cancellation.
+
+            ed agent tasks cancel <id>
+            ed agent tasks cancel <id> --json
+            """)
+    @Argument(help: "Task UUID from ed agent tasks ls.") var id: String
+    @Flag(name: .long, help: "Emit the task as JSON.") var json = false
 
     func run() async throws {
         try await execute {
@@ -77,11 +105,19 @@ struct AgentTasksCancelCommand: AsyncParsableCommand {
 
 struct AgentTasksExecCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "exec", abstract: "Execute a command in the daemon's bounded task queue.")
-    @Flag(name: .long) var json = false
+        commandName: "exec", abstract: "Execute a command in the daemon's bounded task queue.",
+        discussion: """
+            Run an absolute executable inside the daemon's task queue.
+            Reads the command after --. Changes the queue by submitting it. --detach returns the task id immediately. Output is capped.
+
+            ed agent tasks exec -- /usr/bin/true
+            ed agent tasks exec --json --detach -- /usr/bin/true
+            """)
+    @Flag(name: .long, help: "Emit the task result as JSON.") var json = false
     @Flag(name: .long, help: "Return the task ID immediately.") var detach = false
     @Option(name: .long, help: "Maximum running time in seconds.") var timeout: Double = 300
-    @Argument(parsing: .postTerminator) var command: [String]
+    @Argument(parsing: .postTerminator, help: "Absolute executable and arguments, after --.")
+    var command: [String]
 
     mutating func validate() throws {
         guard let path = command.first, path.hasPrefix("/") else {

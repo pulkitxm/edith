@@ -6,6 +6,13 @@ struct ConfigCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
         abstract: "Read and write every setting the Edith UI exposes.",
+        discussion: """
+            Read and write the same defaults the settings UI uses.
+            Reads the catalog and current values. set and unset change the live app. ls, get, and describe do not change anything.
+
+            ed config ls --group presenter
+            ed config set preventSleep true
+            """,
         subcommands: [
             ConfigListCommand.self, ConfigGetCommand.self, ConfigSetCommand.self,
             ConfigUnsetCommand.self, ConfigDescribeCommand.self, ConfigExportCommand.self,
@@ -37,6 +44,13 @@ private func text(_ value: JSONValue) -> String {
 struct ConfigListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List settings and their current values.",
+        discussion: """
+            List catalog settings and the value each one has now.
+            Reads the defaults suite. Does not change settings. --group limits the list. --changed keeps only keys you have set.
+
+            ed config ls
+            ed config ls --group machines --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -97,7 +111,14 @@ struct ConfigListCommand: AsyncParsableCommand {
 
 struct ConfigGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "get", abstract: "Print one setting.")
+        commandName: "get", abstract: "Print one setting.",
+        discussion: """
+            Print the current value of one catalog key.
+            Reads that key from the defaults suite. Does not change it.
+
+            ed config get preventSleep
+            ed config get preventSleep --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -120,7 +141,14 @@ struct ConfigGetCommand: AsyncParsableCommand {
 
 struct ConfigSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "set", abstract: "Write one setting, live, to the running app.")
+        commandName: "set", abstract: "Write one setting, live, to the running app.",
+        discussion: """
+            Validate one catalog value and write it.
+            Reads the catalog to reject an unknown key or a bad value. Changes the live setting. The running app picks it up without a restart.
+
+            ed config set warnPercent 70
+            ed config set preventSleep true --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -155,7 +183,14 @@ struct ConfigSetCommand: AsyncParsableCommand {
 
 struct ConfigUnsetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "unset", abstract: "Restore one setting to its default.")
+        commandName: "unset", abstract: "Restore one setting to its default.",
+        discussion: """
+            Remove the stored value so the catalog default applies again.
+            Reads the catalog default. Changes the stored value by deleting it.
+
+            ed config unset preventSleep
+            ed config unset preventSleep --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -180,7 +215,14 @@ struct ConfigUnsetCommand: AsyncParsableCommand {
 
 struct ConfigDescribeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "describe", abstract: "Explain one setting.")
+        commandName: "describe", abstract: "Explain one setting.",
+        discussion: """
+            Explain one catalog key: type, scope, and allowed values.
+            Reads the catalog. Does not change the setting.
+
+            ed config describe preventSleep
+            ed config describe preventSleep --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -223,6 +265,11 @@ struct ConfigExportCommand: AsyncParsableCommand {
             describes. Only settings with a stored value are included, so importing it
             elsewhere changes nothing you never touched. Pass --defaults to include
             every writable setting at its current effective value.
+
+            Reads stored settings. Does not change them.
+
+            ed config export
+            ed config export --defaults
             """)
 
     @Flag(name: .long, help: "Include settings still at their default.")
@@ -240,7 +287,14 @@ struct ConfigExportCommand: AsyncParsableCommand {
 
 struct ConfigImportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "import", abstract: "Apply a JSON document of settings.")
+        commandName: "import", abstract: "Apply a JSON document of settings.",
+        discussion: """
+            Apply a settings document that ed schema describes.
+            Reads the JSON file and the catalog. Changes stored settings. --dry-run prints the plan and does not change anything.
+
+            ed config import edith.json --dry-run
+            ed config import edith.json --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

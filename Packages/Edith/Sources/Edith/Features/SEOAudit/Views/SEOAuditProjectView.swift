@@ -464,7 +464,7 @@ struct SEOAuditProjectView: View {
                 LazyVStack(spacing: UIScale.pt(8)) {
                     ForEach(model.visiblePages) { page in
                         SEOAuditPageAccordion(
-                            page: page, history: model.history(for: page),
+                            page: page, history: model.historyByURL[page.url] ?? [],
                             selected: Binding(
                                 get: { model.selectedPageURLs.contains(page.url) },
                                 set: { _ in model.togglePage(page.url) }),

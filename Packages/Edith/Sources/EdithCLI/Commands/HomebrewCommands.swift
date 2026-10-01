@@ -9,6 +9,11 @@ struct HomebrewCommand: AsyncParsableCommand {
         discussion: """
             Homebrew runs noninteractively with automatic updates and analytics disabled.
             Commands have fixed time and output limits, and never request a password.
+
+            Reads the local Homebrew install. install and upgrade change packages. uninstall does not change anything until --yes.
+
+            ed brew ls
+            ed brew install ripgrep
             """,
         subcommands: [
             HomebrewStatusCommand.self, HomebrewListCommand.self, HomebrewSearchCommand.self,
@@ -114,7 +119,14 @@ enum HomebrewCLI {
 
 struct HomebrewStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Inspect the local Homebrew installation.")
+        commandName: "status", abstract: "Inspect the local Homebrew installation.",
+        discussion: """
+            Show whether Homebrew is installed and healthy.
+            Reads the local brew binary and prefix. Does not change packages.
+
+            ed brew status
+            ed brew status --json
+            """)
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -140,7 +152,14 @@ struct HomebrewStatusCommand: AsyncParsableCommand {
 
 struct HomebrewListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List installed Homebrew packages.", aliases: ["list"])
+        commandName: "ls", abstract: "List installed Homebrew packages.",
+        discussion: """
+            List installed formulae and casks.
+            Reads Homebrew's installed set. Does not change packages. --outdated keeps ones with updates.
+
+            ed brew ls
+            ed brew ls --outdated --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -166,7 +185,14 @@ struct HomebrewListCommand: AsyncParsableCommand {
 
 struct HomebrewSearchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "search", abstract: "Search available Homebrew packages.")
+        commandName: "search", abstract: "Search available Homebrew packages.",
+        discussion: """
+            Search formulae and casks by name.
+            Reads the Homebrew index. Does not change installations.
+
+            ed brew search firefox
+            ed brew search ripgrep --json
+            """)
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -192,7 +218,14 @@ struct HomebrewSearchCommand: AsyncParsableCommand {
 
 struct HomebrewInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "install", abstract: "Install one exact Homebrew package.")
+        commandName: "install", abstract: "Install one exact Homebrew package.",
+        discussion: """
+            Install one formula or cask by exact name.
+            Reads the package name. Changes the Homebrew prefix by installing it. --kind is formula or cask.
+
+            ed brew install ripgrep
+            ed brew install firefox --kind cask
+            """)
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -213,7 +246,14 @@ struct HomebrewInstallCommand: AsyncParsableCommand {
 
 struct HomebrewUpgradeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "upgrade", abstract: "Upgrade one exact Homebrew package.")
+        commandName: "upgrade", abstract: "Upgrade one exact Homebrew package.",
+        discussion: """
+            Upgrade one installed formula or cask.
+            Reads the installed version. Changes that package by upgrading it.
+
+            ed brew upgrade ripgrep
+            ed brew upgrade ripgrep --json
+            """)
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false
@@ -234,7 +274,14 @@ struct HomebrewUpgradeCommand: AsyncParsableCommand {
 
 struct HomebrewUninstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "uninstall", abstract: "Preview or uninstall one exact Homebrew package.")
+        commandName: "uninstall", abstract: "Preview or uninstall one exact Homebrew package.",
+        discussion: """
+            Preview uninstalling one package, then do it with --yes.
+            Reads the installed package. Without --yes, does not change anything. With --yes, changes Homebrew by uninstalling it.
+
+            ed brew uninstall ripgrep
+            ed brew uninstall ripgrep --yes
+            """)
 
     @Flag(name: .long, help: "Emit stable JSON on stdout.")
     var json = false

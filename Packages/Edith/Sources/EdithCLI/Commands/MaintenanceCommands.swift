@@ -5,10 +5,15 @@ import Foundation
 struct MaintenanceCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "maintenance",
-        abstract: "Installed app inventory, updates, and review-first removal.",
+        abstract: "List installed apps, review updates, and remove support files.",
         discussion: """
             Inventory and scan run locally. Remove prints the exact Trash plan unless
             --yes is present. Only regular apps directly inside Applications are accepted.
+
+            Reads installed apps and update sources. remove changes disk only after --yes. inventory and scan do not change files.
+
+            ed maintenance inventory
+            ed maintenance scan Safari
             """,
         subcommands: [
             MaintenanceInventoryCommand.self, MaintenanceScanCommand.self,
@@ -179,7 +184,14 @@ enum MaintenanceCLI {
 
 struct MaintenanceUpdatesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "updates", abstract: "Discover updates from every available source.")
+        commandName: "updates", abstract: "Discover updates from every available source.",
+        discussion: """
+            List available app and Homebrew updates.
+            Reads update sources. Does not change installed apps.
+
+            ed maintenance updates
+            ed maintenance updates --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -204,7 +216,14 @@ struct MaintenanceUpdatesCommand: AsyncParsableCommand {
 
 struct MaintenanceUpdateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "update", abstract: "Review and run selected updates.")
+        commandName: "update", abstract: "Review and run selected updates.",
+        discussion: """
+            Run selected updates.
+            Reads the update list. Changes installed apps by updating them. --concurrency and --retries bound the run.
+
+            ed maintenance update
+            ed maintenance update --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -269,7 +288,14 @@ struct MaintenanceUpdateCommand: AsyncParsableCommand {
 
 struct MaintenanceUpdateHistoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "history", abstract: "Show recent update results.")
+        commandName: "history", abstract: "Show recent update results.",
+        discussion: """
+            Show recent update attempts and their results.
+            Reads update history. Does not change it.
+
+            ed maintenance history
+            ed maintenance history --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -296,7 +322,14 @@ struct MaintenanceUpdateHistoryCommand: AsyncParsableCommand {
 
 struct MaintenanceUpdateBackupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "backup-updates", abstract: "Back up update policy and history.")
+        commandName: "backup-updates", abstract: "Back up update policy and history.",
+        discussion: """
+            Copy update policy and history to a backup file.
+            Reads the policy and history. Writes a backup. Does not change the live policy.
+
+            ed maintenance backup-updates
+            ed maintenance backup-updates --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -325,6 +358,13 @@ struct MaintenanceInventoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "inventory",
         abstract: "List installed applications and available Homebrew updates.",
+        discussion: """
+            List installed applications and Homebrew updates.
+            Reads /Applications and Homebrew. Does not change them.
+
+            ed maintenance inventory
+            ed maintenance inventory --json
+            """,
         aliases: ["ls", "list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -359,7 +399,14 @@ struct MaintenanceInventoryCommand: AsyncParsableCommand {
 
 struct MaintenanceScanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "scan", abstract: "Preview an app and its exact support files.")
+        commandName: "scan", abstract: "Preview an app and its exact support files.",
+        discussion: """
+            Preview one app and the support files a removal would touch.
+            Reads the app bundle and its support files. Does not change disk.
+
+            ed maintenance scan Safari
+            ed maintenance scan Safari --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -381,7 +428,14 @@ struct MaintenanceScanCommand: AsyncParsableCommand {
 
 struct MaintenanceRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "remove", abstract: "Move a reviewed app selection to the Trash.")
+        commandName: "remove", abstract: "Move a reviewed app selection to the Trash.",
+        discussion: """
+            Move a reviewed app and its support files to the Trash.
+            Reads the scan. Without --yes, prints the plan and does not change anything. With --yes, changes disk by moving files to the Trash.
+
+            ed maintenance remove Safari
+            ed maintenance remove Safari --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -447,6 +501,11 @@ struct MaintenanceInstallCommand: AsyncParsableCommand {
         discussion: """
             The image is mounted read-only, and the one top-level app must pass code-signing
             and Gatekeeper checks. Without --yes, the image is ejected after printing the plan.
+
+            Reads the disk image and its signature. Without --yes, does not change /Applications. With --yes, changes disk by installing the app.
+
+            ed maintenance install ./App.dmg
+            ed maintenance install ./App.dmg --yes
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

@@ -5,7 +5,14 @@ import Foundation
 struct BifrostCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bifrost",
-        abstract: "The launcher bar, the applications it knows and the answers it gives.",
+        abstract: "Open the Bifrost launcher and query the apps, sums, and conversions it knows.",
+        discussion: """
+            Open the Bifrost launcher and query the apps, sums, and conversions it knows.
+            Reads the application index on disk. open and reindex ask the running app. calc and convert do not change the index. clear changes the frequent list.
+
+            ed bifrost ls --search code
+            ed bifrost calc "12 * 8"
+            """,
         subcommands: [
             BifrostOpenCommand.self, BifrostListCommand.self, BifrostCalcCommand.self,
             BifrostConvertCommand.self, BifrostReindexCommand.self, BifrostClearCommand.self,
@@ -37,7 +44,14 @@ enum BifrostBridge {
 
 struct BifrostOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open the Bifrost launcher bar.")
+        commandName: "open", abstract: "Open the Bifrost launcher bar.",
+        discussion: """
+            Open the Bifrost launcher bar.
+            Reads whether the extension is on. Changes focus by opening the bar. Needs the running app.
+
+            ed bifrost open
+            ed bifrost open --json
+            """)
 
     @Argument(help: "Text to put in the bar before it opens.")
     var query: String?
@@ -72,6 +86,13 @@ struct BifrostOpenCommand: AsyncParsableCommand {
 struct BifrostListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the applications Bifrost has indexed.",
+        discussion: """
+            List applications in the Bifrost index.
+            Reads the cached index. Does not change it. --search filters the names.
+
+            ed bifrost ls --search code
+            ed bifrost ls --json
+            """,
         aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -132,7 +153,14 @@ struct BifrostListCommand: AsyncParsableCommand {
 
 struct BifrostCalcCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "calc", abstract: "Evaluate an expression the way the bar does.")
+        commandName: "calc", abstract: "Evaluate an expression the way the bar does.",
+        discussion: """
+            Evaluate an arithmetic expression the way the bar does.
+            Reads the expression. Does not change the index or the frequent list.
+
+            ed bifrost calc "12 * 8 + 4%"
+            ed bifrost calc "12 * 8" --json
+            """)
 
     @Argument(help: "The expression, for example \"12 * 8 + 4%\".")
     var expression: String
@@ -163,7 +191,14 @@ struct BifrostCalcCommand: AsyncParsableCommand {
 
 struct BifrostConvertCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "convert", abstract: "Convert between units the way the bar does.")
+        commandName: "convert", abstract: "Convert between units the way the bar does.",
+        discussion: """
+            Convert units the way the bar does.
+            Reads the conversion phrase. Does not change the index.
+
+            ed bifrost convert "12 km in miles"
+            ed bifrost convert "12 km in miles" --json
+            """)
 
     @Argument(help: "The conversion, for example \"12 km in miles\".")
     var sentence: String
@@ -197,7 +232,14 @@ struct BifrostConvertCommand: AsyncParsableCommand {
 
 struct BifrostReindexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reindex", abstract: "Rebuild the Bifrost application index.")
+        commandName: "reindex", abstract: "Rebuild the Bifrost application index.",
+        discussion: """
+            Rebuild the application index by scanning application folders.
+            Reads the application folders. Changes the cached index. Needs the running app.
+
+            ed bifrost reindex
+            ed bifrost reindex --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -224,7 +266,14 @@ struct BifrostReindexCommand: AsyncParsableCommand {
 
 struct BifrostClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Forget what Bifrost ranks as frequently opened.")
+        commandName: "clear", abstract: "Forget what Bifrost ranks as frequently opened.",
+        discussion: """
+            Forget applications Bifrost ranks as frequently opened.
+            Reads the frequent list. Changes it by clearing it.
+
+            ed bifrost clear
+            ed bifrost clear --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

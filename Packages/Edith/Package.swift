@@ -2,18 +2,18 @@
 import PackageDescription
 
 let products: [Product] = [
-    .library(name: "EdithCore", targets: ["EdithCore"]),
+    .library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
     .library(name: "EdithDatabaseDrivers", targets: ["EdithDatabaseDrivers"]),
     .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
     .library(name: "Edith", targets: ["Edith"]),
-    .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
     .library(name: "EdithAgent", targets: ["EdithAgent"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
     .executable(name: "edithd", targets: ["edithd"]),
+    .executable(name: "edith-database", targets: ["edith-database"]),
     .executable(name: "EdithCameraExtension", targets: ["EdithCameraExtension"]),
 ]
 
@@ -126,6 +126,11 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
+        name: "EdithShared",
+        dependencies: ["EdithKit", "EdithCore", "EdithCameraSupport", "EdithLidAwakeSupport"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
         name: "EdithKit",
         dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport"],
         resources: [
@@ -185,7 +190,12 @@ let targets: [Target] = [
     .executableTarget(
         name: "edithd",
         dependencies: ["EdithAgent"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
+        swiftSettings: [.swiftLanguageMode(.v5)],
+        linkerSettings: [
+            .unsafeFlags([
+                "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
+            ])
+        ]
     ),
     .executableTarget(
         name: "EdithLidAwakeHelper",
@@ -232,8 +242,13 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(
+        name: "edith-database",
+        dependencies: ["EdithDatabaseDrivers"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith", "EdithCLI", "EdithDatabase", "EdithDatabaseDrivers"],
+        dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([

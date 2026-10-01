@@ -5,12 +5,17 @@ import Foundation
 struct CleanerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cleaner",
-        abstract: "The developer caches the disk cleaner can reclaim.",
+        abstract: "Scan and trash the developer caches the disk cleaner can reclaim.",
         discussion: """
             Scanning walks your home directory, so it runs in this process and needs no
             app. `ed cleaner clean` moves what it finds to the Trash, never deleting in
             place, and refuses to run without --yes so a stray tab cannot cost you a
             build cache.
+
+            Reads cache folders. scan does not change disk. clean changes disk by moving files to the Trash only after --yes.
+
+            ed cleaner scan
+            ed cleaner clean --yes
             """,
         subcommands: [
             CleanerScanCommand.self, CleanerCategoriesCommand.self, CleanerCleanCommand.self,
@@ -92,7 +97,15 @@ enum CleanerBridge {
 
 struct CleanerCategoriesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "categories", abstract: "The caches the cleaner knows how to reclaim.",
+        commandName: "categories",
+        abstract: "List the cache categories the cleaner knows how to reclaim.",
+        discussion: """
+            List the cache categories the cleaner knows how to reclaim.
+            Reads the built-in category list. Does not change disk.
+
+            ed cleaner categories
+            ed cleaner categories --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -125,7 +138,14 @@ struct CleanerCategoriesCommand: AsyncParsableCommand {
 
 struct CleanerScanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "scan", abstract: "Measure what could be reclaimed.")
+        commandName: "scan", abstract: "Measure what could be reclaimed.",
+        discussion: """
+            Measure developer caches that could be reclaimed.
+            Reads the home directory, or --root. Does not change files. Does not delete anything.
+
+            ed cleaner scan
+            ed cleaner scan --root ~/Library --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -178,7 +198,14 @@ struct CleanerScanCommand: AsyncParsableCommand {
 
 struct CleanerCleanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clean", abstract: "Move the scanned caches to the Trash.")
+        commandName: "clean", abstract: "Move the scanned caches to the Trash.",
+        discussion: """
+            Move scanned caches to the Trash.
+            Reads the last scan. Without --yes, prints the plan and does not change anything. With --yes, changes disk by moving files to the Trash, never deleting in place.
+
+            ed cleaner clean
+            ed cleaner clean --category xcode --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -245,7 +272,14 @@ struct CleanerCleanCommand: AsyncParsableCommand {
 
 struct CleanerDrivesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "drives", abstract: "The volumes the cleaner can scan.")
+        commandName: "drives", abstract: "List the volumes the cleaner can scan.",
+        discussion: """
+            List the volumes the cleaner can scan.
+            Reads mounted volumes. Does not change them.
+
+            ed cleaner drives
+            ed cleaner drives --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

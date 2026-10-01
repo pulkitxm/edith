@@ -9,6 +9,11 @@ struct DownloadCommand: AsyncParsableCommand {
         discussion: """
             The Edith daemon runs queued downloads even when the app is closed.
             Queue mutations require the daemon; saved history remains readable offline.
+
+            Reads the download store. add, retry, cancel, rm, and clear change the queue. ls, status, open, and reveal do not change it.
+
+            ed download ls
+            ed download add https://example.com/watch --kind audio
             """,
         subcommands: [
             DownloadListCommand.self, DownloadStatusCommand.self, DownloadAddCommand.self,
@@ -77,7 +82,14 @@ enum DownloadBridge {
 
 struct DownloadListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List the download queue, newest first.", aliases: ["list"])
+        commandName: "ls", abstract: "List the download queue, newest first.",
+        discussion: """
+            List the yt-dlp queue, newest first.
+            Reads the daemon's download store. Does not change the queue.
+
+            ed download ls
+            ed download ls --json
+            """, aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -125,7 +137,14 @@ struct DownloadListCommand: AsyncParsableCommand {
 
 struct DownloadStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Summarize every download lifecycle state.")
+        commandName: "status", abstract: "Summarize every download lifecycle state.",
+        discussion: """
+            Count downloads in each lifecycle state.
+            Reads the queue. Does not change it.
+
+            ed download status
+            ed download status --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -155,7 +174,14 @@ struct DownloadStatusCommand: AsyncParsableCommand {
 
 struct DownloadAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "add", abstract: "Queue one or more URLs.")
+        commandName: "add", abstract: "Queue one or more URLs.",
+        discussion: """
+            Add URLs to the download queue.
+            Reads the URLs. Changes the queue by adding items. --kind audio saves audio.
+
+            ed download add https://example.com/watch --kind audio
+            ed download add https://example.com/watch --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -216,7 +242,14 @@ struct DownloadAddCommand: AsyncParsableCommand {
 
 struct DownloadRetryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "retry", abstract: "Queue a failed download again.")
+        commandName: "retry", abstract: "Queue a failed download again.",
+        discussion: """
+            Retry one failed download, or every failure with --all.
+            Reads the queue. Changes failed items by queueing them again.
+
+            ed download retry 1
+            ed download retry --all
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -263,7 +296,14 @@ struct DownloadRetryCommand: AsyncParsableCommand {
 
 struct DownloadRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm", abstract: "Take one entry out of the queue.")
+        commandName: "rm", abstract: "Take one entry out of the queue.",
+        discussion: """
+            Remove one download from the queue.
+            Reads the entry number. Without --yes, does not change anything. With --yes, changes the queue by removing it.
+
+            ed download rm 1
+            ed download rm 1 --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -312,7 +352,14 @@ struct DownloadRemoveCommand: AsyncParsableCommand {
 
 struct DownloadClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear", abstract: "Forget everything that has finished.")
+        commandName: "clear", abstract: "Forget everything that has finished.",
+        discussion: """
+            Remove finished downloads from the history.
+            Reads finished rows. Without --yes, does not change anything. With --yes, changes the history.
+
+            ed download clear
+            ed download clear --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -353,7 +400,14 @@ struct DownloadClearCommand: AsyncParsableCommand {
 
 struct DownloadOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open the completed files for one download.")
+        commandName: "open", abstract: "Open the completed files for one download.",
+        discussion: """
+            Open the finished files for one download.
+            Reads that item. Does not change the queue. Opens the files.
+
+            ed download open 1
+            ed download open 1 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -368,7 +422,14 @@ struct DownloadOpenCommand: AsyncParsableCommand {
 
 struct DownloadRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "reveal", abstract: "Reveal the completed files for one download.")
+        commandName: "reveal", abstract: "Reveal the completed files for one download.",
+        discussion: """
+            Reveal the finished files for one download in Finder.
+            Reads that item. Does not change the queue. Changes Finder focus.
+
+            ed download reveal 1
+            ed download reveal 1 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -418,7 +479,14 @@ enum DownloadResultCommand {
 struct DownloadToolCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tool",
-        abstract: "Report or update the yt-dlp that does the work.")
+        abstract: "Report or update the yt-dlp that does the work.",
+        discussion: """
+            Show the yt-dlp Edith uses, or update it with --update.
+            Reads the tool path and version. --update changes the installed yt-dlp. Without it, does not change anything.
+
+            ed download tool
+            ed download tool --update
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -475,7 +543,14 @@ struct DownloadToolCommand: AsyncParsableCommand {
 struct DownloadCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cancel",
-        abstract: "Stop active downloads and keep them available to retry.")
+        abstract: "Stop active downloads and keep them available to retry.",
+        discussion: """
+            Cancel one active download, or every active download when no number is given.
+            Reads the queue. Changes active items by stopping them. They stay available to retry.
+
+            ed download cancel 1
+            ed download cancel
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

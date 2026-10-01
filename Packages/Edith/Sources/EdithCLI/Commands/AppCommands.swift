@@ -5,11 +5,16 @@ import Foundation
 struct AppCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "app",
-        abstract: "One-shot actions the Edith app performs.",
+        abstract: "Perform one-shot actions in the Edith app.",
         discussion: """
             Inspect the Edith installation and ask a running Edith process to perform
             one-shot actions. Commands that need a live process exit 4 and identify the
             missing app when it is not running.
+
+            Reads installation and runtime state. Commands that quit, relaunch, or clear history change the app only after --yes. Inspection does not change anything.
+
+            ed app info
+            ed app actions --json
             """,
         subcommands: [
             AppInfoCommand.self, AppDiagnosticsCommand.self, AppPathsCommand.self,
@@ -113,7 +118,14 @@ enum AppInspectionCLI {
 
 struct AppInfoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "info", abstract: "Show the installed Edith app identity and version.")
+        commandName: "info", abstract: "Show the installed Edith app identity and version.",
+        discussion: """
+            Show the installed Edith app's name, version, build, and bundle path.
+            Reads the app bundle beside the CLI, or /Applications/Edith.app. Does not change the installation.
+
+            ed app info
+            ed app info --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -138,7 +150,14 @@ struct AppInfoCommand: AsyncParsableCommand {
 
 struct AppDiagnosticsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "diagnostics", abstract: "Show live Edith helper process diagnostics.")
+        commandName: "diagnostics", abstract: "Show live Edith helper process diagnostics.",
+        discussion: """
+            Show the helper's pid, uptime, idle wakeups, and agent snapshot.
+            Reads the running helper. Does not change it. Exits 4 when the app is not running.
+
+            ed app diagnostics
+            ed app diagnostics --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -175,7 +194,14 @@ struct AppDiagnosticsCommand: AsyncParsableCommand {
 
 struct AppPathsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "paths", abstract: "List the folders and files Edith exposes.")
+        commandName: "paths", abstract: "List the folders and files Edith exposes.",
+        discussion: """
+            List data, cache, log, iCloud, and music locations.
+            Reads path names from the app. Does not change files.
+
+            ed app paths
+            ed app paths --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -199,7 +225,14 @@ struct AppPathsCommand: AsyncParsableCommand {
 
 struct AppLinksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "links", abstract: "List Edith's repository and people links.")
+        commandName: "links", abstract: "List Edith's repository and people links.",
+        discussion: """
+            List repository and profile URLs the app knows.
+            Reads the built-in link list. Does not change anything.
+
+            ed app links
+            ed app links --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -221,7 +254,14 @@ struct AppLinksCommand: AsyncParsableCommand {
 
 struct AppOpenPathCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open-path", abstract: "Open or reveal one Edith folder or file.")
+        commandName: "open-path", abstract: "Open or reveal one Edith folder or file.",
+        discussion: """
+            Reveal one named path in Finder, or open its folder.
+            Reads the path catalog from ed app paths. Changes Finder focus by revealing that path.
+
+            ed app open-path refresh-log
+            ed app open-path logs --json
+            """)
 
     @Argument(help: "The path name from `ed app paths`.")
     var path: AppPathID
@@ -248,7 +288,14 @@ struct AppOpenPathCommand: AsyncParsableCommand {
 
 struct AppOpenLinkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open-link", abstract: "Open Edith's repository or a profile link.")
+        commandName: "open-link", abstract: "Open Edith's repository or a profile link.",
+        discussion: """
+            Open one link from ed app links in the default browser.
+            Reads the link list. Changes nothing in Edith. Opens the URL.
+
+            ed app open-link repository
+            ed app open-link repository --json
+            """)
 
     @Argument(help: "The link name from `ed app links`.")
     var link: String
@@ -323,6 +370,13 @@ enum AppActions {
 struct AppActionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "actions", abstract: "List the one-shot actions and whether they can run.",
+        discussion: """
+            List one-shot actions and whether each can run right now.
+            Reads action availability from the running app. Does not change anything.
+
+            ed app actions
+            ed app actions --json
+            """,
         aliases: ["ls"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
@@ -361,7 +415,14 @@ struct AppActionsCommand: AsyncParsableCommand {
 struct AppCleanKeysCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clean-keys",
-        abstract: "Lock the keyboard so it can be wiped without typing.")
+        abstract: "Lock the keyboard so it can be wiped without typing.",
+        discussion: """
+            Lock the keyboard so keys can be cleaned without typing.
+            Reads nothing stored. Changes keyboard state until you finish. Needs the running app.
+
+            ed app clean-keys
+            ed app clean-keys --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -424,7 +485,14 @@ struct AppCleanKeysCommand: AsyncParsableCommand {
 struct AppTestNotificationCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test-notification",
-        abstract: "Send the same test notification the settings pane sends.")
+        abstract: "Send the same test notification the settings pane sends.",
+        discussion: """
+            Post the settings pane's test notification.
+            Reads notification permission state. Changes the notification center by posting one notification.
+
+            ed app test-notification
+            ed app test-notification --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -439,7 +507,14 @@ struct AppTestNotificationCommand: AsyncParsableCommand {
 
 struct AppOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "open", abstract: "Open Edith's panel.")
+        commandName: "open", abstract: "Open Edith's panel.",
+        discussion: """
+            Open Edith's panel.
+            Reads nothing. Changes window focus by opening the panel. Exits 4 when the app is not running.
+
+            ed app open
+            ed app open --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -455,7 +530,14 @@ struct AppOpenCommand: AsyncParsableCommand {
 struct AppQuitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quit",
-        abstract: "Quit the Edith main window, leaving the menu bar running.")
+        abstract: "Quit the Edith main window, leaving the menu bar running.",
+        discussion: """
+            Quit the main window and leave the menu bar running.
+            Without --yes, prints the plan and does not change anything. With --yes, changes the running app by closing the main window.
+
+            ed app quit
+            ed app quit --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -481,7 +563,14 @@ struct AppQuitCommand: AsyncParsableCommand {
 struct AppCheckUpdatesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "check-updates",
-        abstract: "Ask the running app to check for an update now.")
+        abstract: "Ask the running app to check for an update now.",
+        discussion: """
+            Ask Sparkle, through the running app, to look for an update.
+            Reads the update feed. Does not change installed bits unless Sparkle itself applies an update later.
+
+            ed app check-updates
+            ed app check-updates --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -527,7 +616,14 @@ struct AppCheckUpdatesCommand: AsyncParsableCommand {
 
 struct AppUpdatesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "updates", abstract: "The update checks Edith has already made.")
+        commandName: "updates", abstract: "List the update checks Edith has already made.",
+        discussion: """
+            List the update checks Edith has already recorded.
+            Reads the update history file. Does not change it.
+
+            ed app updates
+            ed app updates --limit 10 --json
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -572,7 +668,14 @@ struct AppUpdatesCommand: AsyncParsableCommand {
 struct AppRelaunchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "relaunch",
-        abstract: "Quit Edith and start it again, which is what a new permission needs.")
+        abstract: "Quit Edith and start it again, which is what a new permission needs.",
+        discussion: """
+            Quit Edith and start it again, which a new permission grant needs.
+            Without --yes, prints the plan and does not change anything. With --yes, changes the running processes by restarting them.
+
+            ed app relaunch
+            ed app relaunch --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -624,7 +727,14 @@ struct AppRelaunchCommand: AsyncParsableCommand {
 
 struct AppClearUpdateHistoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "clear-updates", abstract: "Forget the record of past update checks.")
+        commandName: "clear-updates", abstract: "Forget the record of past update checks.",
+        discussion: """
+            Clear the stored update-check history.
+            Without --yes, prints the plan and does not change anything. With --yes, changes the history file by removing the records.
+
+            ed app clear-updates
+            ed app clear-updates --yes
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -651,7 +761,14 @@ struct AppClearUpdateHistoryCommand: AsyncParsableCommand {
 struct AppRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reveal",
-        abstract: "Show a section of the main window, and optionally a tab inside it.")
+        abstract: "Show a section of the main window, and optionally a tab inside it.",
+        discussion: """
+            Bring a main-window section forward, and a tab inside it when you pass --tab.
+            Reads the section id. Changes which window and tab are visible. Section ids include home, docs, attention, dashboard, herdr, quinjet, music, calendar, system, machines, companion, and settings.
+
+            ed app reveal companion --tab chat
+            ed app reveal settings --json
+            """)
 
     @Argument(
         help: ArgumentHelp(
@@ -715,7 +832,14 @@ struct AppRevealCommand: AsyncParsableCommand {
 struct AppSnapshotCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "snapshot",
-        abstract: "Capture the app's open windows as PNG files.")
+        abstract: "Capture the app's open windows as PNG files.",
+        discussion: """
+            Write PNG snapshots of Edith's open windows.
+            Reads window contents from the running app. Writes PNG files. Does not change the windows. Needs no screen-recording permission.
+
+            ed app snapshot
+            ed app snapshot --json
+            """)
 
     @Option(help: "Write the images into this directory; /tmp/edith-snapshots without it.")
     var dir: String?

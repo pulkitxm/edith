@@ -41,6 +41,27 @@ import Testing
         #expect(AppBuildIdentity.resolve(bundleURL: probe) == AppBuildIdentity.production)
     }
 
+    @Test func aBareExecutableInheritsTheDeclaredApplication() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let binary = root.appendingPathComponent("edith-database")
+        #expect(
+            AppBuildIdentity.resolve(
+                bundleURL: binary,
+                declaredIdentifier: "com.pulkit.edith.dev.database-pack")
+                == "com.pulkit.edith.dev.database-pack")
+        #expect(
+            AppBuildIdentity.resolve(bundleURL: binary, declaredIdentifier: "com.example.other")
+                == AppBuildIdentity.production)
+        let app = root.appendingPathComponent("Edith.app")
+        try makeApp("com.pulkit.edith.dev.database-pack", at: app)
+        let inside = app.appendingPathComponent("Contents/MacOS/Edith")
+        #expect(
+            AppBuildIdentity.resolve(
+                bundleURL: inside, declaredIdentifier: "com.pulkit.edith.dev.other")
+                == "com.pulkit.edith.dev.database-pack")
+    }
+
     @Test func everyWorktreeSlotGetsItsOwnDirectories() {
         #expect(AppBuildIdentity.slot(of: AppBuildIdentity.production) == nil)
         #expect(AppBuildIdentity.slot(of: "com.pulkit.edith.dev.openscreen") == "openscreen")

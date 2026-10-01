@@ -7,6 +7,13 @@ struct DocsCommandGroup: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "docs",
         abstract: "Read the ed reference and ask which command handles a request.",
+        discussion: """
+            Browse the written ed reference and ask which command handles a request.
+            Reads the docs bundle shipped with the app. Does not change docs or settings.
+
+            ed docs ls
+            ed docs ask "restart the background agent"
+            """,
         subcommands: [DocsListCommand.self, DocsShowCommand.self, DocsAskCommand.self],
         defaultSubcommand: DocsListCommand.self)
 }
@@ -28,6 +35,13 @@ enum DocsCLI {
 struct DocsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the documentation pages, optionally for one group.",
+        discussion: """
+            List reference pages. --group keeps one folder, such as herdr or machines.
+            Reads the docs bundle. Does not change it.
+
+            ed docs ls
+            ed docs ls --group herdr --json
+            """,
         aliases: ["list"])
 
     @Option(help: "Only pages in this group, such as herdr or machines-docker.")
@@ -69,7 +83,14 @@ struct DocsListCommand: AsyncParsableCommand {
 struct DocsShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "show",
-        abstract: "Print one page, found by its path or by a command it documents.")
+        abstract: "Print one page, found by its path or by a command it documents.",
+        discussion: """
+            Print one reference page as markdown.
+            Reads that page from the docs bundle. Does not change it.
+
+            ed docs show ed config set
+            ed docs show config/set --json
+            """)
 
     @Argument(help: "A page path such as herdr/ls.md, or a command such as herdr ls.")
     var target: [String] = []
@@ -114,8 +135,14 @@ struct DocsAskCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ask",
         abstract: "Rank the commands that handle a plain-language request.",
-        discussion:
-            "Uses Jev when a TypeSafe key is saved and the local search index otherwise.")
+        discussion: """
+            Rank ed commands for a plain-language request. Uses Jev when a TypeSafe
+            key is saved, and the local search index otherwise.
+            Reads the docs bundle and, when a key exists, Jev. Does not change settings.
+
+            ed docs ask "restart the background agent"
+            ed docs ask "free up docker space" --json
+            """)
 
     @Argument(help: "What you want to do, such as \"free up docker space on my server\".")
     var request: [String] = []
