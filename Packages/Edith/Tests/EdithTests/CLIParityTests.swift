@@ -55,6 +55,8 @@ enum UIParity {
             "the Docker window restarts containers one at a time, never a whole project",
         "ed machines docker compose pull":
             "the Docker window never pulls images, for a project or otherwise",
+        "ed database pack remove":
+            "the extensions pane installs the driver pack but never deletes it",
     ]
 
     static let auditedCapabilities: [UICapability] = [
@@ -350,6 +352,9 @@ enum UIParity {
         UICapability(
             "Plugins", "install a skill into an agent",
             ["skills", "install", "edith-remote-work", "--agent", "cursor", "--yes"]),
+        UICapability(
+            "Extensions pane", "install the database driver pack",
+            ["database", "pack", "install"]),
     ]
 
     static func operationCLI(for invocation: [String]) -> [String] {
